@@ -4,6 +4,8 @@ packages:
   - 'apps/*'
   - '@react-vite-trpc/*'
 allowBuilds:
+  '@prisma/engines': true
+  prisma: true
   '@swc/core': true
   esbuild: true
 minimumReleaseAgeExclude:

@@ -5,6 +5,7 @@ node_modules/
 **/.dist/**
 **/.cache/**
 **/dist/**
+**/src/generated/**
 .env
 **/.env
 .turbo/

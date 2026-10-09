@@ -19,6 +19,10 @@
 
       "^env$",
 
+      "^database(.*)",
+
+      "^generated(.*)",
+
       "^@automatedLinkedIn(.*)",
 
       "^trpc(.*)",
