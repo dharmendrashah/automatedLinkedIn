@@ -83,6 +83,15 @@ Using AI tools to develop this project is welcome, with two requirements for eve
 
 You are responsible for everything you submit, AI-written or not. The repository ships agent instructions in [.github/copilot-instructions.md](.github/copilot-instructions.md), [AGENTS.md](AGENTS.md), and `.github/agents/`, and a living project log in [MEMORY.md](MEMORY.md); AI tools are expected to read them before working. See the [Code of Conduct](CODE_OF_CONDUCT.md#ai-assisted-development) for the full policy.
 
+## Container images
+
+Each app is published as its own image on GitHub Container Registry: `ghcr.io/<owner>/automatedlinkedin-brain` and `ghcr.io/<owner>/automatedlinkedin-body`.
+
+- Every push to `main` publishes `edge` and `sha-<commit>`.
+- Publishing a GitHub release publishes the version tags (`1.2.3`, `1.2`, `1`) and moves `latest`. Pre-releases only get their exact version tag.
+
+Deploy a released version by pinning its tag rather than using `latest` or `edge`.
+
 ## Support
 
 Need help? See [SUPPORT.md](SUPPORT.md) for common fixes and where to ask.

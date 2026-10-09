@@ -14,7 +14,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - 2026-10-10: Prisma 7.10 (stable) is the ORM. The npm `latest` CLI tag is an 8.0 release candidate; do not upgrade until 8.0 is stable.
 - 2026-10-10: PostgreSQL 18 (`postgres:18-alpine`) for local and compose; data volume mounts at `/var/lib/postgresql`.
 - 2026-10-10: Deployment target is Kubernetes only and stays platform agnostic. Cloud-specific details live in overlays, not in the app or base manifests.
-- 2026-10-10: Each app ships as its own image (`ghcr.io/<owner>/automatedlinkedin-brain` and `-body`), published from CI on pushes to `main`.
+- 2026-10-10: Each app ships as its own image (`ghcr.io/<owner>/automatedlinkedin-brain` and `-body`). `main` pushes publish `edge` and `sha-<commit>`; `latest` and version tags come only from published GitHub releases (`release.yml`, gated on `ci.yml` through `workflow_call`).
 - 2026-10-10: Migrations are additive only. Never reset or drop a database that holds data without being asked.
 - 2026-10-10: Shared Prettier config lives at the repo root; ESLint uses the shared flat config in `packages/eslint-config`; `apps/body` uses `oxlint`.
 - 2026-10-10: Non-trivial tasks follow a plan-first workflow: a plan in `.plan/`, edge cases reviewed, unconfirmed requirements locked by the user, then execution. Plans are committed.
@@ -39,7 +39,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - `Middlewares.serveWeb` in brain serves a `web/dist` folder that does not exist in the image; probably dead code now that `body` is its own image.
 - The database layer (`PrismaService`, `UserService`) is not exposed through tRPC yet; `getRole` still returns a static value.
 - Integration and e2e tests do not run in CI.
-- The first run of the `publish` job on GitHub has not been checked. GHCR packages are private by default.
+- The first run of the `publish` and release workflows has not been checked on GitHub. GHCR packages are private by default.
 - No Kubernetes manifests exist yet (`deploy/` is not created).
 - Security: the local git remote URL embeds a personal access token. It should be rotated and the remote reset to a clean URL.
 
@@ -51,3 +51,4 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - 2026-10-10: Added copilot instructions, `AGENTS.md`, and five custom agents under `.github/agents`.
 - 2026-10-10: Added `MEMORY.md` and the plan-first workflow (`.plan/_template.md`); documented the AI-assisted development policy in the README and code of conduct.
 - 2026-10-10: Added `SECURITY.md` (private reporting), `SUPPORT.md`, and a pull request template that asks what issue the change solves for the end user.
+- 2026-10-10: Added `release.yml` (container images on release) and made `ci.yml` reusable; `main` no longer moves `latest`.

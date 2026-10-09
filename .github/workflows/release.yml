@@ -1,45 +1,21 @@
-name: CI
+name: Release
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-  workflow_call:
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  release:
+    types: [published]
 
 permissions:
   contents: read
 
 jobs:
   check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7.0.1
-
-      - uses: pnpm/action-setup@v6.1.0
-
-      - uses: actions/setup-node@v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - run: pnpm lint
-
-      - run: pnpm ts:check
-
-      - run: pnpm test:unit:run
-
-      - run: pnpm build
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/ci.yml
 
   publish:
     needs: check
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -68,16 +44,19 @@ jobs:
         uses: docker/metadata-action@v6.2.0
         with:
           images: ${{ steps.image.outputs.name }}
-          flavor: latest=false
+          flavor: latest=auto
           tags: |
-            type=edge
-            type=sha
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=ref,event=tag
 
       - uses: docker/build-push-action@v7.4.0
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
           push: true
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.app }}
