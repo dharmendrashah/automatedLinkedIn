@@ -5,7 +5,7 @@
    "singleQuote": true,
    "arrowParens": "avoid",
    "trailingComma": "es5",
-   "plugins": ["./node_modules/@trivago/prettier-plugin-sort-imports"],
+   "plugins": ["@trivago/prettier-plugin-sort-imports"],
    "importOrderSeparation": true,
    "importOrderSortSpecifiers": true,
    "importOrder": [

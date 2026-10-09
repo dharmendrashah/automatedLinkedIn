@@ -10,9 +10,8 @@ export class HttpServer {
       const server = http.createServer(app)
 
       server.listen(PORT, '0.0.0.0', () => {
-
          console.log(`🚀 Server has launched`)
-         console.log('Please visit to http://localhost:'+PORT)
+         console.log(`Please visit to http://localhost:${PORT}`)
       })
 
       return { app }
