@@ -37,22 +37,21 @@ describe('Aliases', () => {
    })
 
    describe('.configInternalPackages', () => {
-      it('should read tsconfig.json file', () => {
+      it('should read package.json file', () => {
          Aliases.configInternalPackages()
 
-         expect(mockReadJsonSync).toBeCalledWith('tsconfig.json')
+         expect(mockReadJsonSync).toBeCalledWith('package.json')
       })
 
-      it('should add aliases for internal packages', () => {
-         const tsConfig = {
-            extends: '',
-            compilerOptions: {},
-            references: [{ path: '../../packages/config' }],
-         }
-
+      it('should add aliases only for internal packages', () => {
          const packageName = '@automatedLinkedIn/config'
 
-         mockReadJsonSync.mockReturnValueOnce(tsConfig).mockReturnValueOnce({ name: packageName })
+         const dependencies = {
+            [packageName]: 'workspace:*',
+            express: '^5.3.0',
+         }
+
+         mockReadJsonSync.mockReturnValueOnce({ dependencies })
 
          Aliases.configInternalPackages()
 

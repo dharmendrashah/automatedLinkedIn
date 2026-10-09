@@ -245,6 +245,9 @@ importers:
 
   apps/brain:
     dependencies:
+      '@automatedLinkedIn/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@trpc/client':
         specifier: ^11.19.0
         version: 11.19.0(@trpc/server@11.19.0(typescript@7.0.2))(typescript@7.0.2)
@@ -254,19 +257,28 @@ importers:
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
+      dotenv:
+        specifier: ^18.0.7
+        version: 18.0.7
+      envalid:
+        specifier: ^8.2.0
+        version: 8.2.0
       express:
         specifier: ^5.3.0
         version: 5.3.0(supports-color@5.5.0)
       express-serve-static-core:
         specifier: ^0.1.1
         version: 0.1.1
+      fs-extra:
+        specifier: ^11.4.1
+        version: 11.4.1
+      module-alias:
+        specifier: ^2.3.4
+        version: 2.3.4
       zod:
         specifier: ^4.6.5
         version: 4.6.5
     devDependencies:
-      '@automatedLinkedIn/config':
-        specifier: workspace:*
-        version: link:../../packages/config
       '@automatedLinkedIn/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
@@ -300,18 +312,6 @@ importers:
       cross-env:
         specifier: ^10.1.0
         version: 10.1.0
-      dotenv:
-        specifier: ^18.0.7
-        version: 18.0.7
-      envalid:
-        specifier: ^8.2.0
-        version: 8.2.0
-      fs-extra:
-        specifier: ^11.4.1
-        version: 11.4.1
-      module-alias:
-        specifier: ^2.3.4
-        version: 2.3.4
       nodemon:
         specifier: ^3.1.14
         version: 3.1.14

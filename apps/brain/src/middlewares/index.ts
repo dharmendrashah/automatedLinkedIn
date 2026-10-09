@@ -24,6 +24,6 @@ export class Middlewares {
 
       app.use(express.static(buildPath) as unknown as RequestHandler)
 
-      app.get('*', (_, res) => res.sendFile(join(buildPath, 'index.html')))
+      app.get('/{*splat}', (_, res) => res.sendFile(join(buildPath, 'index.html')))
    }
 }

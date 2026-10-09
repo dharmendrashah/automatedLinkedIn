@@ -2,10 +2,8 @@ import { readJsonSync, readdirSync } from 'fs-extra'
 import { addAliases } from 'module-alias'
 import path from 'path'
 
-type TsConfig = {
-   extends: string
-   compilerOptions: Record<string, string>
-   references: { path: string }[]
+type PackageJson = {
+   dependencies?: Record<string, string>
 }
 
 export class Aliases {
@@ -16,13 +14,11 @@ export class Aliases {
    }
 
    public static configInternalPackages() {
-      const tsConfig = readJsonSync('tsconfig.json') as TsConfig
+      const { dependencies = {} } = readJsonSync('package.json') as PackageJson
 
-      const aliases = tsConfig.references.map(({ path: referencePath }) => {
-         const { name } = readJsonSync(path.join(referencePath, 'package.json')) as { name: string }
-
-         return { [name]: `${name}/dist/index.js` }
-      })
+      const aliases = Object.keys(dependencies)
+         .filter(name => name.startsWith('@automatedLinkedIn/'))
+         .map(name => ({ [name]: `${name}/dist/index.js` }))
 
       const flatAliases = Object.assign({}, ...aliases)
 
@@ -30,7 +26,7 @@ export class Aliases {
    }
 
    public static configDirectories() {
-      const directories = readdirSync('./src', { withFileTypes: true })
+      const directories = readdirSync(__dirname, { withFileTypes: true })
          .filter(directory => directory.isDirectory())
          .map(({ name }) => name)
 
