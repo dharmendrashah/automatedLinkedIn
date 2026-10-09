@@ -1,7 +1,7 @@
 {
    "extends": "@automatedLinkedIn/tsconfig/node.json",
    "compilerOptions": {
-      "baseUrl": "src",
+      "paths": { "*": ["./src/*"] },
       "outDir": "dist"
    },
    "include": [
@@ -11,7 +11,7 @@
    ],
    "references": [
       {
-         "path": "../../@automatedLinkedIn/config/tsconfig.json"
+         "path": "../../packages/config"
       }
    ]
 }

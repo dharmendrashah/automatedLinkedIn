@@ -1,13 +1,13 @@
 import fs from 'fs-extra'
-import moduleAlias from 'module-alias'
-import { type SpyInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import * as moduleAlias from 'module-alias'
+import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { Aliases } from './aliases'
 
 describe('Aliases', () => {
-   let mockReadJsonSync: SpyInstance
-   let mockReaddirSync: SpyInstance
-   let mockAddAliases: SpyInstance
+   let mockReadJsonSync: MockInstance
+   let mockReaddirSync: MockInstance
+   let mockAddAliases: MockInstance
 
    beforeEach(() => {
       mockReadJsonSync = vi.spyOn(fs, 'readJsonSync')
@@ -41,27 +41,19 @@ describe('Aliases', () => {
       })
 
       it('should add aliases for internal packages', () => {
-         const references = [{ path: '../@automatedLinkedIn/config' }]
-
          const tsConfig = {
             extends: '',
             compilerOptions: {},
-            references,
+            references: [{ path: '../../packages/config' }],
          }
 
-         mockReadJsonSync.mockReturnValueOnce(tsConfig)
+         const packageName = '@automatedLinkedIn/config'
+
+         mockReadJsonSync.mockReturnValueOnce(tsConfig).mockReturnValueOnce({ name: packageName })
 
          Aliases.configInternalPackages()
 
-         expect(mockAddAliases).toBeCalled()
-
-         references.forEach(({ path }) => {
-            const [_, internalPackage] = path.split('@')
-
-            const packageName = `@${internalPackage}`
-
-            expect(mockAddAliases).toBeCalledWith({ [packageName]: `${packageName}/dist/index.js` })
-         })
+         expect(mockAddAliases).toBeCalledWith({ [packageName]: `${packageName}/dist/index.js` })
       })
    })
 

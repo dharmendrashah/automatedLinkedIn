@@ -12,7 +12,6 @@
       "forceConsistentCasingInFileNames": true,
       "strictPropertyInitialization": true,
       "isolatedModules": true,
-      "moduleResolution": "node",
       "preserveWatchOutput": true,
       "skipLibCheck": true,
       "useDefineForClassFields": true,

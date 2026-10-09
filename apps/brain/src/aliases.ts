@@ -1,5 +1,5 @@
 import { readJsonSync, readdirSync } from 'fs-extra'
-import moduleAlias from 'module-alias'
+import * as moduleAlias from 'module-alias'
 import path from 'path'
 
 type TsConfig = {
@@ -18,14 +18,10 @@ export class Aliases {
    public static configInternalPackages() {
       const tsConfig = readJsonSync('tsconfig.json') as TsConfig
 
-      const aliases = tsConfig.references.map(({ path }) => {
-         const [_, internalPackage] = path.split('@')
+      const aliases = tsConfig.references.map(({ path: referencePath }) => {
+         const { name } = readJsonSync(path.join(referencePath, 'package.json')) as { name: string }
 
-         const packageName = `@${internalPackage}`.replace('/tsconfig.json', '')
-
-         const packageEntry = `${packageName}/dist/index.js`
-
-         return { [packageName]: packageEntry }
+         return { [name]: `${name}/dist/index.js` }
       })
 
       const flatAliases = Object.assign({}, ...aliases)

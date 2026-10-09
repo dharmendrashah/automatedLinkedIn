@@ -1,7 +1,6 @@
 {
-   "extends": "@automatedLinkedIn/tsconfig/base.json",
+   "extends": "@automatedLinkedIn/tsconfig/node.json",
    "compilerOptions": {
-      "baseUrl": "src",
       "outDir": "dist",
       "composite": true
    },
