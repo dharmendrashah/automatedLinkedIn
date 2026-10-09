@@ -1,0 +1,11 @@
+node_modules/
+.git/
+
+**/node_modules/**
+**/.dist/**
+**/.cache/**
+**/dist/**
+.env
+**/.env
+.turbo/
+**/dist/

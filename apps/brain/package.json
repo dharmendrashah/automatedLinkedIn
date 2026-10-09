@@ -1,0 +1,52 @@
+{
+   "name": "@automatedLinkedIn/brain",
+   "version": "1.0.0",
+   "private": true,
+   "scripts": {
+      "start": "cross-env NODE_ENV=production node dist/src/server.js",
+      "dev": "tsx watch src/server.ts",
+      "lint": "eslint .",
+      "lint:fix": "eslint . --fix",
+      "ts:check": "tsc -b",
+      "check": "pnpm lint && pnpm ts:check",
+      "build": "tsc -b",
+      "test:unit": "vitest .unit.test.ts",
+      "test:unit:run": "pnpm test:unit --run",
+      "test:integration": "vitest .integration.test.ts",
+      "test:integration:run": "pnpm test:integration --run",
+      "test:e2e": "vitest .e2e.test.ts",
+      "test:e2e:run": "pnpm test:e2e --run",
+      "test:coverage": "pnpm pm2:start && vitest run --coverage && pnpm pm2:delete",
+      "test:coverage:preview": "pnpm test:coverage && vite preview --outDir ./coverage --open"
+   },
+   "dependencies": {
+      "@trpc/client": "^11.19.0",
+      "@trpc/server": "^11.19.0",
+      "cookie-parser": "^1.4.7",
+      "express": "^5.3.0",
+      "express-serve-static-core": "^0.1.1",
+      "zod": "^4.6.5"
+   },
+   "devDependencies": {
+      "@automatedLinkedIn/config": "workspace:*",
+      "@automatedLinkedIn/tsconfig": "workspace:*",
+      "@swc/core": "^1.16.13",
+      "@trivago/prettier-plugin-sort-imports": "^6.0.2",
+      "@types/cookie-parser": "^1.4.10",
+      "@types/express": "^5.0.6",
+      "@types/fs-extra": "^11.0.4",
+      "@types/module-alias": "^2.0.4",
+      "@types/node": "^26.6.4",
+      "@vitest/coverage-istanbul": "^5.0.3",
+      "cross-env": "^10.1.0",
+      "dotenv": "^18.0.7",
+      "envalid": "^8.2.0",
+      "fs-extra": "^11.4.1",
+      "module-alias": "^2.3.4",
+      "nodemon": "^3.1.14",
+      "pm2": "^7.0.4",
+      "ts-node": "^10.9.2",
+      "tsx": "^4.23.15",
+      "typescript": "^7.0.2"
+   }
+}

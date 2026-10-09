@@ -1,0 +1,14 @@
+packages:
+  # all packages in subdirs of packages/ and apps/
+  - 'packages/*'
+  - 'apps/*'
+  - '@react-vite-trpc/*'
+allowBuilds:
+  '@swc/core': true
+  esbuild: true
+minimumReleaseAgeExclude:
+  - dotenv@18.0.7
+  - express@5.3.0
+  - '@rollup/rollup-linux-ppc64-gnu@4.64.3'
+  - '@rollup/rollup-linux-s390x-gnu@4.64.3'
+  - '@rollup/rollup-win32-x64-msvc@4.64.3'
