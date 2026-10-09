@@ -1,0 +1,20 @@
+services:
+  brain:
+    build:
+      context: .
+      dockerfile: apps/brain/Dockerfile
+    environment:
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    restart: unless-stopped
+
+  body:
+    build:
+      context: .
+      dockerfile: apps/body/Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - brain
+    restart: unless-stopped
