@@ -1,18 +1,21 @@
 import fs from 'fs-extra'
-import * as moduleAlias from 'module-alias'
+import { addAliases } from 'module-alias'
 import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { Aliases } from './aliases'
 
+vi.mock('module-alias', () => ({ addAliases: vi.fn() }))
+
 describe('Aliases', () => {
    let mockReadJsonSync: MockInstance
    let mockReaddirSync: MockInstance
-   let mockAddAliases: MockInstance
+   const mockAddAliases = vi.mocked(addAliases)
 
    beforeEach(() => {
+      vi.clearAllMocks()
+
       mockReadJsonSync = vi.spyOn(fs, 'readJsonSync')
       mockReaddirSync = vi.spyOn(fs, 'readdirSync')
-      mockAddAliases = vi.spyOn(moduleAlias, 'addAliases')
    })
 
    afterEach(() => {

@@ -1,5 +1,5 @@
 import { readJsonSync, readdirSync } from 'fs-extra'
-import * as moduleAlias from 'module-alias'
+import { addAliases } from 'module-alias'
 import path from 'path'
 
 type TsConfig = {
@@ -26,7 +26,7 @@ export class Aliases {
 
       const flatAliases = Object.assign({}, ...aliases)
 
-      moduleAlias.addAliases(flatAliases)
+      addAliases(flatAliases)
    }
 
    public static configDirectories() {
@@ -38,7 +38,7 @@ export class Aliases {
 
       const flatAliases = Object.assign({}, ...aliases)
 
-      moduleAlias.addAliases(flatAliases)
+      addAliases(flatAliases)
    }
 }
 
