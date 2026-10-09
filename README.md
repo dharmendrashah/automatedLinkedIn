@@ -72,7 +72,7 @@ Automating LinkedIn activity can violate LinkedIn's Terms of Service and local p
 
 ## Contributing
 
-Contributions are welcome. Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before participating.
+Contributions are welcome. Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before participating. Every pull request answers one question first: what issue does it solve for the end user? (See the [pull request template](.github/pull_request_template.md).)
 
 ### AI-assisted development
 
@@ -82,6 +82,14 @@ Using AI tools to develop this project is welcome, with two requirements for eve
 2. **A plan file.** Add `.plan/<feature-name>.md` (start from [.plan/_template.md](.plan/_template.md)) describing what the feature contains: goal, confirmed requirements, scope, edge cases, steps, and outcome. Requirements are confirmed before implementation starts.
 
 You are responsible for everything you submit, AI-written or not. The repository ships agent instructions in [.github/copilot-instructions.md](.github/copilot-instructions.md), [AGENTS.md](AGENTS.md), and `.github/agents/`, and a living project log in [MEMORY.md](MEMORY.md); AI tools are expected to read them before working. See the [Code of Conduct](CODE_OF_CONDUCT.md#ai-assisted-development) for the full policy.
+
+## Support
+
+Need help? See [SUPPORT.md](SUPPORT.md) for common fixes and where to ask.
+
+## Security
+
+Please report vulnerabilities privately; see [SECURITY.md](SECURITY.md). Do not open public issues for security problems.
 
 ## License
 

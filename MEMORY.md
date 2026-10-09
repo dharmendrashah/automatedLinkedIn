@@ -50,3 +50,4 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - 2026-10-10: Added Dockerfiles, docker-compose, Prisma 7 database layer with initial migration, and ghcr.io publishing.
 - 2026-10-10: Added copilot instructions, `AGENTS.md`, and five custom agents under `.github/agents`.
 - 2026-10-10: Added `MEMORY.md` and the plan-first workflow (`.plan/_template.md`); documented the AI-assisted development policy in the README and code of conduct.
+- 2026-10-10: Added `SECURITY.md` (private reporting), `SUPPORT.md`, and a pull request template that asks what issue the change solves for the end user.
