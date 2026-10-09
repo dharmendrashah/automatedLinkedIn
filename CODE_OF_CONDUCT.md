@@ -30,6 +30,17 @@ This project automates professional outreach. Contributors and users are expecte
 
 Contributions designed to evade platform protections or enable abuse will not be accepted.
 
+## AI-Assisted Development
+
+Using AI tools (coding assistants, chat models, and agents) to develop this project is allowed. AI-assisted work is held to the same standard as any other contribution:
+
+- You are responsible for every line you submit. Read and understand it before opening a pull request.
+- Do not submit code you cannot license under the project's MIT license, and never paste secrets, credentials, or personal data into an AI tool.
+- **Full test coverage:** every line and branch you add or change must be covered by tests that you wrote alongside the code (tests first where practical), and the full test suite must pass.
+- **A plan file:** every new feature or behaviour change needs a plan in the `.plan/` folder (copy `.plan/_template.md`) that describes what the feature contains: goal, confirmed requirements, scope, edge cases, steps, and outcome. Requirements are confirmed before implementation starts.
+
+Pull requests that add or change behaviour without complete tests and a plan file may be declined.
+
 ## Scope
 
 This Code of Conduct applies to all project spaces (issues, pull requests, discussions, and any public space where someone represents the project).

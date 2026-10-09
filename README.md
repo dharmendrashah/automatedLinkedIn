@@ -74,6 +74,15 @@ Automating LinkedIn activity can violate LinkedIn's Terms of Service and local p
 
 Contributions are welcome. Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before participating.
 
+### AI-assisted development
+
+Using AI tools to develop this project is welcome, with two requirements for every new feature or behaviour change:
+
+1. **Full test coverage.** Every line and branch you add or change is covered by tests written with the code, and `pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build` passes. Add integration tests (`pnpm test:integration:run`) when the change touches the database.
+2. **A plan file.** Add `.plan/<feature-name>.md` (start from [.plan/_template.md](.plan/_template.md)) describing what the feature contains: goal, confirmed requirements, scope, edge cases, steps, and outcome. Requirements are confirmed before implementation starts.
+
+You are responsible for everything you submit, AI-written or not. The repository ships agent instructions in [.github/copilot-instructions.md](.github/copilot-instructions.md), [AGENTS.md](AGENTS.md), and `.github/agents/`, and a living project log in [MEMORY.md](MEMORY.md); AI tools are expected to read them before working. See the [Code of Conduct](CODE_OF_CONDUCT.md#ai-assisted-development) for the full policy.
+
 ## License
 
 [MIT](LICENSE) © 2026 Dharmedra Soni
