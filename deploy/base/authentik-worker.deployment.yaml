@@ -38,7 +38,7 @@ spec:
               command: [ak, healthcheck]
             periodSeconds: 10
             timeoutSeconds: 10
-            failureThreshold: 120
+            failureThreshold: 360
           livenessProbe:
             exec:
               command: [ak, healthcheck]
