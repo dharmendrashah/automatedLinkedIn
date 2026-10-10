@@ -34,24 +34,27 @@ spec:
               mountPath: /data
           # First boot runs authentik's full Django migration set, which takes many
           # minutes and answers /-/health/live/ with 500 until it finishes. The budget
-          # here is 20 minutes; anything tighter kills the pod mid-migration and it
-          # restarts into the same migration forever.
+          # here is 60 minutes, sized for a high-latency (cross-region) database; a
+          # tighter one kills the pod mid-migration and it restarts into the same
+          # migration forever. Co-locate the cluster with the database and this
+          # finishes in a couple of minutes.
           startupProbe:
             httpGet:
-              path: /-/health/live/
+              path: /-/health/ready/
               port: http
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 120
+            failureThreshold: 360
           readinessProbe:
             httpGet:
               path: /-/health/ready/
               port: http
             periodSeconds: 10
             timeoutSeconds: 5
+          # TCP, not HTTP: /-/health/live/ depends on the database, so a DB blip
+          # would restart the pod. Liveness should only catch a hung process.
           livenessProbe:
-            httpGet:
-              path: /-/health/live/
+            tcpSocket:
               port: http
             periodSeconds: 30
             timeoutSeconds: 5
