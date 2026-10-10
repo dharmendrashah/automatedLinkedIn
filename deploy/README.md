@@ -6,10 +6,15 @@ lives in an overlay. Plan and decisions: [`.plan/kubernetes-deploy.md`](../.plan
 ```
 deploy/
   base/                 platform-agnostic manifests
+  overlays/local/       minikube: plain HTTP, local images, compose database
   overlays/staging/     staging: hosts, image tags, Spot tolerations, TLS
   cluster/              cluster-scoped prerequisites (cert-manager issuers)
+  local.md              run the whole stack on minikube
   gcp-setup.md          one-time keyless GCP auth setup for CI
 ```
+
+Start with [`local.md`](local.md): it uses the same manifests as staging, so most mistakes
+surface on your laptop instead of in the cloud.
 
 ## What runs
 

@@ -70,7 +70,11 @@ spec:
             limits:
               memory: 512Mi
           securityContext:
+            # Numeric UID is required: the image declares `USER node`, and kubelet
+            # cannot verify a non-numeric user against runAsNonRoot.
             runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:

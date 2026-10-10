@@ -1,0 +1,13 @@
+# Republishes the compose PostgreSQL on all interfaces so a minikube node can reach it
+# at host.minikube.internal. docker-compose.yml binds it to 127.0.0.1 only, which the
+# minikube VM/container cannot reach.
+#
+#   docker compose -f docker-compose.yml -f infra/local-k8s/postgres-expose.yml up -d postgres
+#
+# WARNING: this exposes PostgreSQL with the public development credentials to every
+# interface on this machine. Use it on a trusted network only, and stop it with
+# `docker compose up -d postgres` (without this file) when you are done.
+services:
+  postgres:
+    ports: !override
+      - '5432:5432'

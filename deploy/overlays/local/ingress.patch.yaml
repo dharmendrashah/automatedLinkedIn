@@ -1,0 +1,37 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: automatedlinkedin
+spec:
+  # Plain HTTP locally: no tls block, no cert-manager annotation.
+  rules:
+    - host: app.automatedlinkedin.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: body
+                port:
+                  name: http
+    - host: api.automatedlinkedin.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: brain
+                port:
+                  name: http
+    - host: auth.automatedlinkedin.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: authentik-server
+                port:
+                  name: http
