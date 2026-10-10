@@ -123,7 +123,7 @@ the **whole file**:
 | --- | --- |
 | `GCP_PROJECT_ID` | `automate-linkedin-511215` |
 | `GKE_CLUSTER` | `staging` |
-| `GKE_LOCATION` | `us-central1-a` |
+| `GKE_LOCATION` | `asia-south1-b` (same region as the Cloud SQL instance) |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | `projects/<number>/locations/global/workloadIdentityPools/github/providers/github` |
 | `GCP_SERVICE_ACCOUNT` | `github-actions-staging@<project>.iam.gserviceaccount.com` |
 

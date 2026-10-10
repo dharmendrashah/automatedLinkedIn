@@ -83,7 +83,7 @@ gh variable set GCP_WORKLOAD_IDENTITY_PROVIDER \
   --body "projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/github/providers/github"
 
 gh variable set GKE_CLUSTER  --body "staging"
-gh variable set GKE_LOCATION --body "us-central1-a"
+gh variable set GKE_LOCATION --body "asia-south1-b"
 ```
 
 ## 6. Verify
