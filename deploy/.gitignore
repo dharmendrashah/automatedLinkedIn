@@ -1,0 +1,8 @@
+# Per-environment configuration and secrets are never committed.
+# Copy the matching *.example.env file and fill it in, or let CI materialise them
+# from GitHub secrets (see the deploy job in .github/workflows/staging.yml).
+#
+# Scoped to overlays on purpose: deploy/base/config.env holds the shared,
+# non-secret defaults and must stay committed.
+overlays/*/config.env
+overlays/*/secrets.env

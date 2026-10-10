@@ -24,7 +24,7 @@ const identity = {
    id: 'sub-1',
    name: 'Ada',
    username: 'ada',
-   email: 'ada@example.com',
+   email: 'ada@elitale.com',
    emailVerified: false,
    groups: [],
 }
@@ -65,7 +65,7 @@ describe('identity', () => {
          expect(mocks.provisionAuthentikAccount).toHaveBeenCalledWith({
             id: 'sub-1',
             name: 'Ada',
-            email: 'ada@example.com',
+            email: 'ada@elitale.com',
             emailVerified: false,
          })
       })

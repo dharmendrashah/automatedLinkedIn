@@ -1,0 +1,4 @@
+# minikube has less allocatable CPU and memory than the staging node, so drop the
+# requests and let everything schedule. Limits stay, so a runaway pod is still capped.
+- op: remove
+  path: /spec/template/spec/containers/0/resources/requests

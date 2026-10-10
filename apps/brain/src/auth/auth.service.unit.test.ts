@@ -174,7 +174,7 @@ describe('AuthService', () => {
                sub: 'sub-1',
                name: 'Ada Lovelace',
                preferred_username: 'ada',
-               email: 'ada@example.com',
+               email: 'ada@elitale.com',
                email_verified: true,
                groups: ['staff'],
                extra: 'ignored',
@@ -185,7 +185,7 @@ describe('AuthService', () => {
             id: 'sub-1',
             name: 'Ada Lovelace',
             username: 'ada',
-            email: 'ada@example.com',
+            email: 'ada@elitale.com',
             emailVerified: true,
             groups: ['staff'],
          })

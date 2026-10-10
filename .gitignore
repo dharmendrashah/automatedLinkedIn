@@ -10,3 +10,9 @@ node_modules/
 **/.env
 .turbo/
 **/dist/
+
+# Cloud credentials: never commit these.
+sa-key.json
+*-sa-key.json
+*.serviceaccount.json
+gha-creds-*.json
