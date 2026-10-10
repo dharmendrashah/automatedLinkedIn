@@ -9,7 +9,7 @@ describe('toProfile', () => {
             sub: 'abc',
             name: 'Ada Lovelace',
             preferred_username: 'ada',
-            email: 'ada@example.com',
+            email: 'ada@elitale.com',
             email_verified: true,
             groups: ['staff'],
          })
@@ -17,7 +17,7 @@ describe('toProfile', () => {
          id: 'abc',
          displayName: 'Ada Lovelace',
          username: 'ada',
-         email: 'ada@example.com',
+         email: 'ada@elitale.com',
          emailVerified: true,
          groups: ['staff'],
       })

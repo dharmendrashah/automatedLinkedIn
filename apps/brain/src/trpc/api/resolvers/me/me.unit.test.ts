@@ -25,14 +25,14 @@ const identity = {
    id: 'sub-1',
    name: 'Ada',
    username: 'ada',
-   email: 'ada@example.com',
+   email: 'ada@elitale.com',
    emailVerified: false,
    groups: [],
 }
 
 const row = {
    id: 'u1',
-   email: 'ada@example.com',
+   email: 'ada@elitale.com',
    name: 'Ada',
    role: 'USER',
    authentikId: 'sub-1',
@@ -42,7 +42,7 @@ const row = {
 
 const projection = {
    id: 'u1',
-   email: 'ada@example.com',
+   email: 'ada@elitale.com',
    name: 'Ada',
    role: 'USER',
 }

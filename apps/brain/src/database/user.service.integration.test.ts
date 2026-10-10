@@ -4,7 +4,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { PrismaService } from './prisma.service'
 import { AccountConflictError, UserService } from './user.service'
 
-const email = `${randomUUID()}@example.com`
+const email = `${randomUUID()}@elitale.com`
 
 describe('UserService (database)', () => {
    afterAll(async () => {
@@ -42,7 +42,7 @@ describe('UserService (database)', () => {
    })
 
    describe('linkAuthentikAccount', () => {
-      const linkEmail = `${randomUUID()}@example.com`
+      const linkEmail = `${randomUUID()}@elitale.com`
       const sub = randomUUID()
 
       afterAll(async () => {
@@ -99,7 +99,7 @@ describe('UserService (database)', () => {
    })
 
    describe('provisionAuthentikAccount', () => {
-      const newEmail = `${randomUUID()}@example.com`
+      const newEmail = `${randomUUID()}@elitale.com`
       const newSub = randomUUID()
 
       afterAll(async () => {
@@ -127,7 +127,7 @@ describe('UserService (database)', () => {
       })
 
       it('should create only one user when the same account is provisioned concurrently', async () => {
-         const raceEmail = `${randomUUID()}@example.com`
+         const raceEmail = `${randomUUID()}@elitale.com`
          const raceSub = randomUUID()
 
          try {
