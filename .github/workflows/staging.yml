@@ -155,6 +155,17 @@ jobs:
 
       - name: Apply
         run: |
+          # GHCR packages are private, so the cluster needs pull credentials.
+          # GHCR_PULL_TOKEN is a classic PAT with read:packages. GITHUB_TOKEN would
+          # work for this job but expires when it ends, so a node replacement later
+          # could no longer pull.
+          kubectl create namespace automatedlinkedin --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n automatedlinkedin create secret docker-registry ghcr \
+            --docker-server=ghcr.io \
+            --docker-username="${{ github.actor }}" \
+            --docker-password="${{ secrets.GHCR_PULL_TOKEN }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
           kustomize build --load-restrictor LoadRestrictionsNone deploy/overlays/staging \
             | kubectl apply -f -
           kubectl -n automatedlinkedin rollout status deploy/brain --timeout=5m

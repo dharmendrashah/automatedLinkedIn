@@ -34,6 +34,12 @@ secretGenerator:
 patches:
   - path: ingress.patch.yaml
 
+  # Only brain and body come from GHCR; the authentik image is public.
+  - path: imagepullsecret.patch.yaml
+    target:
+      kind: Deployment
+      name: (brain|body)
+
   # One Spot node, so every workload must tolerate the Spot taint and stay single-replica.
   - path: spot-toleration.patch.yaml
     target:

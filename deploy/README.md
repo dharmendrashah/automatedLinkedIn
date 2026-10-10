@@ -31,7 +31,23 @@ surface on your laptop instead of in the cloud.
 
 1. A cluster with **ingress-nginx** and **cert-manager** installed.
 2. The external PostgreSQL server must already have the app database plus the `authentik`
-   database and role, with `public` owned by `authentik`.
+   database, **and a role that owns the `authentik` database's `public` schema**. A role that can
+   merely connect is not enough: authentik runs its own migrations and needs `CREATE` on `public`.
+   Check with:
+   ```sh
+   psql "$AUTHENTIK_URL" -tAc "select has_schema_privilege(current_user,'public','CREATE')"
+   ```
+   If that returns `f`, run as a superuser on that server:
+   ```sql
+   CREATE ROLE authentik LOGIN PASSWORD '<strong-password>';
+   GRANT ALL ON DATABASE authentik TO authentik;
+   \c authentik
+   ALTER SCHEMA public OWNER TO authentik;
+   ```
+   Then set `AUTHENTIK_POSTGRESQL__USER=authentik`, `AUTHENTIK_POSTGRESQL__NAME=authentik` and the
+   matching `AUTHENTIK_POSTGRESQL__PASSWORD`. `NAME` is the **database**, `USER` is the **role** —
+   mixing them up produces `password authentication failed for user "<database>"`.
+
 3. Its firewall must allow the cluster's egress IP. On a Spot node the IP changes when the
    node is replaced, so pin it with Cloud NAT or a static external IP.
 4. DNS `A` records for `app.`, `api.` and `auth.` pointing at the ingress IP **before** the
@@ -94,6 +110,7 @@ the **whole file**:
 | --- | --- |
 | `STAGING_CONFIG_ENV` | all of `deploy/overlays/staging/config.env` |
 | `STAGING_SECRETS_ENV` | all of `deploy/overlays/staging/secrets.env` |
+| `GHCR_PULL_TOKEN` | classic PAT with `read:packages`, so the cluster can pull the private images |
 
 | Variable | Example |
 | --- | --- |
