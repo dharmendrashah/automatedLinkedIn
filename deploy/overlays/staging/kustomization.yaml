@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: automatedlinkedin
+
+resources:
+  - ../../base
+
+# Replace OWNER with the lowercase GitHub owner/repo that publishes the images.
+# The body image is environment specific: its VITE_* values are baked at build time,
+# so staging must use the image built by .github/workflows/staging.yml.
+images:
+  - name: automatedlinkedin-brain
+    newName: ghcr.io/dharmendrashah/automatedlinkedin-brain
+    newTag: staging
+  - name: automatedlinkedin-brain-migrate
+    newName: ghcr.io/dharmendrashah/automatedlinkedin-brain-migrate
+    newTag: staging
+  - name: automatedlinkedin-body
+    newName: ghcr.io/dharmendrashah/automatedlinkedin-body
+    newTag: staging
+
+configMapGenerator:
+  - name: app-config
+    behavior: merge
+    envs:
+      - config.env
+
+secretGenerator:
+  - name: app-secrets
+    envs:
+      - secrets.env
+
+patches:
+  - path: ingress.patch.yaml
+
+  # One Spot node, so every workload must tolerate the Spot taint and stay single-replica.
+  - path: spot-toleration.patch.yaml
+    target:
+      kind: Deployment

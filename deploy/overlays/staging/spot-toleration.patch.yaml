@@ -1,0 +1,7 @@
+- op: add
+  path: /spec/template/spec/tolerations
+  value:
+    - key: cloud.google.com/gke-spot
+      operator: Equal
+      value: 'true'
+      effect: NoSchedule

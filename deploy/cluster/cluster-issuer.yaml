@@ -1,0 +1,38 @@
+# Cluster-scoped prerequisites. These are NOT part of the kustomize overlays:
+# they are installed once per cluster, before the first deploy.
+#
+# Replace the e-mail address, then apply with:
+#   kubectl apply -f deploy/cluster/cluster-issuer.yaml
+#
+# Switch the overlay's cert-manager.io/cluster-issuer annotation to
+# letsencrypt-prod once issuance works against the staging endpoint.
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: soni@elitale.com
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: CHANGE_ME@elitale.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx

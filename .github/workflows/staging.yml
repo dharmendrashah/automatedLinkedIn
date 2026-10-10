@@ -1,0 +1,163 @@
+name: Staging images
+
+# Builds the three images the staging overlay deploys:
+#   -brain          the API
+#   -brain-migrate  the `migrate` Dockerfile stage, run as brain's init container
+#   -body           the SPA, which bakes its VITE_* values at build time and is
+#                   therefore environment specific
+#
+# Configure these repository variables before the first run:
+#   STAGING_API_URL   https://api.staging.<domain>
+#   STAGING_AUTH_URL  https://auth.staging.<domain>
+#   GCP_PROJECT_ID / GKE_CLUSTER / GKE_LOCATION           (deploy job)
+#   GCP_WORKLOAD_IDENTITY_PROVIDER / GCP_SERVICE_ACCOUNT  (deploy job)
+#
+# And these repository secrets:
+#   STAGING_CONFIG_ENV   full contents of deploy/overlays/staging/config.env
+#   STAGING_SECRETS_ENV  full contents of deploy/overlays/staging/secrets.env
+#
+# GCP authentication is keyless (Workload Identity Federation), so there is no
+# service account key to store or rotate. See deploy/README.md.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: staging-images
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: brain
+            suffix: brain
+            target: ''
+          - app: brain
+            suffix: brain-migrate
+            target: migrate
+          - app: body
+            suffix: body
+            target: ''
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Resolve lowercase image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}-${{ matrix.suffix }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4.4.1
+
+      - uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v6.2.0
+        with:
+          images: ${{ steps.image.outputs.name }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=staging
+            type=sha
+
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          target: ${{ matrix.target }}
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VITE_API_URL=${{ vars.STAGING_API_URL }}
+            VITE_AUTHENTIK_URL=${{ vars.STAGING_AUTH_URL }}
+            VITE_AUTHENTIK_CLIENT_ID=automatedlinkedin
+            VITE_AUTHENTIK_APP_SLUG=automatedlinkedin
+            VITE_AUTHENTIK_ENROLLMENT_SLUG=automatedlinkedin-enrollment
+          cache-from: type=gha,scope=${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.suffix }}
+
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    permissions:
+      contents: read
+      # required to mint the OIDC token Workload Identity Federation exchanges
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # config.env and secrets.env are git-ignored, so CI writes them back from
+      # the GitHub secrets that hold the whole file.
+      - name: Materialise the overlay environment files
+        working-directory: deploy/overlays/staging
+        run: |
+          printf '%s\n' "$STAGING_CONFIG_ENV" > config.env
+          printf '%s\n' "$STAGING_SECRETS_ENV" > secrets.env
+        env:
+          STAGING_CONFIG_ENV: ${{ secrets.STAGING_CONFIG_ENV }}
+          STAGING_SECRETS_ENV: ${{ secrets.STAGING_SECRETS_ENV }}
+
+      - uses: google-github-actions/auth@v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/get-gke-credentials@v3.0.1
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ vars.GKE_LOCATION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Install kustomize
+        run: |
+          curl -fsSL -o kustomize.tar.gz \
+            https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.7.1/kustomize_v5.7.1_linux_amd64.tar.gz
+          tar -xzf kustomize.tar.gz
+          sudo install kustomize /usr/local/bin/
+
+      # Pin the immutable sha tag instead of the mutable `staging` tag, so the
+      # Deployment actually changes and a rollback points at a known build.
+      - name: Pin the image tags to this commit
+        working-directory: deploy/overlays/staging
+        run: |
+          tag="sha-$(git rev-parse --short HEAD)"
+          repo="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          for image in brain brain-migrate body; do
+            kustomize edit set image "automatedlinkedin-$image=$repo-$image:$tag"
+          done
+
+      - name: Apply
+        run: |
+          kustomize build --load-restrictor LoadRestrictionsNone deploy/overlays/staging \
+            | kubectl apply -f -
+          kubectl -n automatedlinkedin rollout status deploy/brain --timeout=5m
+          kubectl -n automatedlinkedin rollout status deploy/body --timeout=5m
+          kubectl -n automatedlinkedin rollout status deploy/authentik-server --timeout=5m
+          kubectl -n automatedlinkedin rollout status deploy/authentik-worker --timeout=5m

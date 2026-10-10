@@ -11,6 +11,9 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Decisions
 
+- 2026-10-10: Kubernetes manifests live in `deploy/` as Kustomize (`base` + `overlays/staging`). PostgreSQL is **not** deployed: staging uses an existing external server on another cloud. Migrations run as an **init container** on the `brain` Deployment (not a Job), so `replicas` stays 1 with `strategy: Recreate`. Staging targets one zonal GKE Spot node with ingress-nginx on `hostNetwork` and cert-manager, three subdomains (`app.`/`api.`/`auth.`), ~$21/mo. Per-overlay `config.env` and `secrets.env` are git-ignored; CI writes them back from the GitHub secrets `STAGING_CONFIG_ENV` and `STAGING_SECRETS_ENV`, which hold each file verbatim.
+- 2026-10-10: Brain exposes `GET /healthz` (liveness, no database) and `GET /readyz` (503 when `PrismaService.isHealthy()` fails) from `src/middlewares/health.ts`, used by the Kubernetes probes.
+- 2026-10-10: Accepted risk — the staging `DATABASE_URL` uses **no TLS** to the cross-cloud PostgreSQL server, so credentials and rows cross the public internet in cleartext. Mitigated only by a firewall allowlist. Add `sslmode=require` before production.
 - 2026-10-10: Prisma 7.10 (stable) is the ORM. The npm `latest` CLI tag is an 8.0 release candidate; do not upgrade until 8.0 is stable.
 - 2026-10-10: PostgreSQL 18 (`postgres:18-alpine`) for local and compose; data volume mounts at `/var/lib/postgresql`.
 - 2026-10-10: Deployment target is Kubernetes only and stays platform agnostic. Cloud-specific details live in overlays, not in the app or base manifests.
@@ -40,7 +43,12 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - authentik flows only accept a relative `next` (absolute URLs fail with "Invalid next URL" when the flow finishes). Sign-up therefore builds the OIDC authorize URL first (`AppUserManager.createSigninUrl` in `apps/body/src/auth/userManager.ts`, which also stores the PKCE state) and passes its path and query as `next`.
 - authentik compose secrets (`AUTHENTIK_SECRET_KEY`, `AUTHENTIK_PG_PASS`) have public dev defaults on purpose (a required-variable error would break `docker compose up postgres`). Never reuse them outside local development. Set real values in the root `.env` (see `.env.example`).
 - Redirect URIs in the blueprint are hard-coded to `localhost:3000` and `localhost:5173`; a deployed host needs the blueprint and `VITE_AUTHENTIK_*` build args changed.
-- `infra/postgres/init/*` runs only when the `postgres` data volume is first created, so the `authentik` database is not added to a volume that already exists. On an existing volume create it by hand: `docker compose exec -e PGPASSWORD=postgres postgres psql -U postgres -c "CREATE ROLE authentik LOGIN PASSWORD 'authentik'" -c "CREATE DATABASE authentik OWNER authentik"`, then inside it `ALTER SCHEMA public OWNER TO authentik;`.
+- Building `deploy/` needs `kubectl kustomize --load-restrictor LoadRestrictionsNone deploy/overlays/staging`: the base reads the authentik blueprint from `infra/`, outside the kustomize root, to avoid a committed copy. It also needs `config.env` and `secrets.env` to exist in the overlay (both git-ignored); copy the `*.example.env` files first or the build fails.
+- GCP project `automate-linkedin-511215` enforces `constraints/iam.disableServiceAccountKeyCreation`, so `gcloud iam service-accounts keys create` fails with `FAILED_PRECONDITION`. CI authenticates with Workload Identity Federation instead (no stored key). The provider's `--attribute-condition` pinning `assertion.repository` is the security boundary — without it any GitHub repo could impersonate the service account.
+- `deploy/.gitignore` scopes the ignores to `overlays/*/config.env` and `overlays/*/secrets.env`. A bare `config.env` rule would also swallow `deploy/base/config.env`, which holds the shared non-secret defaults and must stay committed.
+- The authentik blueprint's redirect URIs and `meta_launch_url` come from `!Env [APP_URL]` (no trailing slash) via `!Format`, defaulting to `http://localhost:3000`. The `localhost:5173` vite entries are still hard-coded. A deployed host sets `APP_URL`; the `VITE_AUTHENTIK_*` build args still have to match, because the SPA bakes them at build time.
+- `apps/body` bakes `VITE_*` at build time, so its image is environment specific. `.github/workflows/staging.yml` builds a separate `staging`-tagged image from the repository variables `STAGING_API_URL` and `STAGING_AUTH_URL`; changing a URL means a rebuild, not a config change.
+- `infra/postgres/init/*` runs only when the `postgres` data volume is first created, so the `authentik` database is not added to a volume that already exists. On an existing volume create it by hand: `docker compose exec -e PGPASSWORD=postgres postgres psql -U postgres -c "CREATE ROLE authentik LOGIN PASSWORD 'authentik'" -c "CREATE DATABASE authentik OWNER authentik"`, then inside it `ALTER SCHEMA public OWNER TO authentik;`. It also never runs for Kubernetes, where the database is external and must be prepared by hand.
 - authentik blueprint: identify the `oauth2provider` by `client_id` (unique), not `name`. If a provider with that client_id already exists (e.g. the UI's "Provider for <app>" default), a `name` identifier makes the importer try to insert and fail with a client_id unique error, which aborts the whole blueprint (status `error`, no flow created, flow URL shows "Not Found").
 - authentik blueprint: when updating the default `default-authentication-identification` stage to add an `enrollment_flow`, also set `user_fields` (e.g. `[username, email]`), or it fails validation "When no user fields are selected, at least one source must be selected".
 - Blueprint apply errors are silent in the UI. Diagnose with `docker compose exec authentik-worker ak apply_blueprint custom/automatedlinkedin.yaml`; check `select name, status from authentik_blueprints_blueprintinstance`.
@@ -48,8 +56,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Open items
 
-- `brain` has no health endpoint yet. `PrismaService.isHealthy()` exists to back one; needed before Kubernetes probes.
-- `apps/body` nginx now has an SPA fallback (`apps/body/nginx.conf`).
+- `Middlewares.serveWeb` in brain serves a `web/dist` folder that does not exist in the image; probably dead code now that `body` is its own image.
 - The authentik stack boots and the `automatedLinkedIn` blueprint applies successfully; the `automatedlinkedin-enrollment` flow serves (verified via the executor API). Still verify login, profile and logout end to end in a browser, including that sign-up lands back in the app signed in, and logout returns to the app (`redirect_uri_type: logout`).
 - Access tokens last 5 minutes (authentik default) and the SPA does not refresh them yet; after expiry API calls get `UNAUTHORIZED` until the user logs in again. Consider `offline_access` or silent renew.
 - Add email verification (SMTP) before real users: JIT creation trusts the authentik email, so an unverified address can be claimed by whoever signs up first, and a legitimate owner then gets `CONFLICT`.
@@ -57,7 +64,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - The database layer (`PrismaService`, `UserService`) is not exposed through tRPC yet; `getRole` still returns a static value.
 - Integration and e2e tests do not run in CI.
 - The first run of the `publish` and release workflows has not been checked on GitHub. GHCR packages are private by default.
-- No Kubernetes manifests exist yet (`deploy/` is not created).
+- No Kubernetes cluster has run `deploy/` yet: the manifests render and the blueprint applies, but probes against the external database, cert-manager issuance, the `hostNetwork` ingress and the `deploy` job's GKE authentication are unverified. Do a kind dry run before the first GKE apply.
+- The staging `deploy` job needs the secrets `STAGING_CONFIG_ENV`, `STAGING_SECRETS_ENV` and the variables `GCP_PROJECT_ID`, `GKE_CLUSTER`, `GKE_LOCATION`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`; none are set yet. GCP auth is keyless (Workload Identity Federation) because the org enforces `constraints/iam.disableServiceAccountKeyCreation`; setup steps are in `deploy/gcp-setup.md`.
 - Security: the local git remote URL embeds a personal access token. It should be rotated and the remote reset to a clean URL.
 
 ## Changelog
@@ -75,3 +83,4 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - 2026-10-10: Enrollment now creates `internal` users (`user_type` on the user-write stage) so sign-ups can open authentik's user dashboard.
 - 2026-10-10: Brain verifies authentik access tokens, adds the `me` tRPC query and `User.authentikId` (additive migration), CORS for the SPA, and `apps/body` calls the API with the bearer token and shows the backend account on the profile page.
 - 2026-10-10: Brain now creates the local user just-in-time on a caller's first request (link by verified email, else create; `CONFLICT` on an email owned by an unlinked row).
+- 2026-10-10: Added `deploy/` (Kustomize base + staging overlay) for a minimal single-node GKE staging cluster with an external PostgreSQL, brain `/healthz` and `/readyz`, an `APP_URL`-driven authentik blueprint, and `staging.yml` to build the staging images.

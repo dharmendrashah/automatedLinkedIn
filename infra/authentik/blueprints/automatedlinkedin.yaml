@@ -22,14 +22,16 @@ entries:
         - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-openid]]
         - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-email]]
         - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-profile]]
+      # Deployed hosts come from APP_URL (no trailing slash), defaulting to the compose host.
+      # The vite dev server entries stay so `pnpm dev` keeps working.
       redirect_uris:
         - matching_mode: strict
-          url: http://localhost:3000/callback
+          url: !Format ['%s/callback', !Env [APP_URL, 'http://localhost:3000']]
+        - matching_mode: strict
+          url: !Format ['%s/', !Env [APP_URL, 'http://localhost:3000']]
+          redirect_uri_type: logout
         - matching_mode: strict
           url: http://localhost:5173/callback
-        - matching_mode: strict
-          url: http://localhost:3000/
-          redirect_uri_type: logout
         - matching_mode: strict
           url: http://localhost:5173/
           redirect_uri_type: logout
@@ -40,7 +42,7 @@ entries:
     attrs:
       name: automatedLinkedIn
       provider: !KeyOf provider
-      meta_launch_url: http://localhost:3000/
+      meta_launch_url: !Format ['%s/', !Env [APP_URL, 'http://localhost:3000']]
 
   # Sign-up flow: collect details, create the user, log them in
   - model: authentik_policies_password.passwordpolicy
