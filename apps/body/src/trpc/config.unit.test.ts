@@ -8,7 +8,7 @@ describe('createTrpcUrl', () => {
    })
 
    it('uses VITE_API_URL and trims trailing slashes', () => {
-      expect(createTrpcUrl({ VITE_API_URL: 'https://api.example.com//' })).toBe('https://api.example.com/trpc')
+      expect(createTrpcUrl({ VITE_API_URL: 'https://api.elitale.com//' })).toBe('https://api.elitale.com/trpc')
    })
 
    it('falls back to the default for an empty value', () => {

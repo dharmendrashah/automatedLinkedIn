@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: automatedlinkedin
+
+resources:
+  - ../../base
+
+# Images are built straight into the minikube daemon, so there is no registry and
+# no tag to pull. The base already sets imagePullPolicy: IfNotPresent.
+images:
+  - name: automatedlinkedin-brain
+    newTag: local
+  - name: automatedlinkedin-brain-migrate
+    newTag: local
+  - name: automatedlinkedin-body
+    newTag: local
+
+configMapGenerator:
+  - name: app-config
+    behavior: merge
+    envs:
+      - config.env
+
+secretGenerator:
+  - name: app-secrets
+    envs:
+      - secrets.env
+
+patches:
+  - path: ingress.patch.yaml
+
+  # A single-node minikube has less headroom than the staging node; trim the
+  # requests so all four workloads schedule.
+  - path: resources.patch.yaml
+    target:
+      kind: Deployment

@@ -24,7 +24,7 @@ describe('UserService', () => {
    })
 
    it('should create a user', async () => {
-      const data = { email: 'a@example.com' }
+      const data = { email: 'a@elitale.com' }
 
       user.create.mockResolvedValueOnce({
          id: '1',
@@ -46,9 +46,9 @@ describe('UserService', () => {
    })
 
    it('should find a user by email', async () => {
-      await UserService.findByEmail('a@example.com')
+      await UserService.findByEmail('a@elitale.com')
 
-      expect(user.findUnique).toHaveBeenCalledWith({ where: { email: 'a@example.com' } })
+      expect(user.findUnique).toHaveBeenCalledWith({ where: { email: 'a@elitale.com' } })
    })
 
    it('should list users oldest first', async () => {
@@ -75,7 +75,7 @@ describe('UserService', () => {
          await expect(
             UserService.linkAuthentikAccount({
                id: 'sub-1',
-               email: 'a@example.com',
+               email: 'a@elitale.com',
                emailVerified: true,
             })
          ).resolves.toBe(linked)
@@ -95,7 +95,7 @@ describe('UserService', () => {
             'has an unverified email',
             {
                id: 'sub-1',
-               email: 'a@example.com',
+               email: 'a@elitale.com',
                emailVerified: false,
             },
          ],
@@ -113,7 +113,7 @@ describe('UserService', () => {
          await expect(
             UserService.linkAuthentikAccount({
                id: 'sub-1',
-               email: 'A@Example.com',
+               email: 'A@elitale.com',
                emailVerified: true,
             })
          ).resolves.toBe(linked)
@@ -121,7 +121,7 @@ describe('UserService', () => {
          expect(user.updateMany).toHaveBeenCalledWith({
             where: {
                email: {
-                  equals: 'A@Example.com',
+                  equals: 'A@elitale.com',
                   mode: 'insensitive',
                },
                authentikId: null,
@@ -137,7 +137,7 @@ describe('UserService', () => {
          await expect(
             UserService.linkAuthentikAccount({
                id: 'sub-1',
-               email: 'a@example.com',
+               email: 'a@elitale.com',
                emailVerified: true,
             })
          ).resolves.toBeNull()
@@ -148,7 +148,7 @@ describe('UserService', () => {
       const account = {
          id: 'sub-1',
          name: 'Ada',
-         email: 'ada@example.com',
+         email: 'ada@elitale.com',
          emailVerified: false,
       }
 
@@ -175,7 +175,7 @@ describe('UserService', () => {
          expect(user.findFirst).toHaveBeenCalledWith({
             where: {
                email: {
-                  equals: 'ada@example.com',
+                  equals: 'ada@elitale.com',
                   mode: 'insensitive',
                },
             },
@@ -183,7 +183,7 @@ describe('UserService', () => {
          })
          expect(user.create).toHaveBeenCalledWith({
             data: {
-               email: 'ada@example.com',
+               email: 'ada@elitale.com',
                name: 'Ada',
                authentikId: 'sub-1',
             },

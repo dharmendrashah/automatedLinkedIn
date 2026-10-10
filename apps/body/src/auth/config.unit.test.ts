@@ -22,17 +22,17 @@ describe('createAuthConfig', () => {
    it('reads overrides from env and trims trailing slashes', () => {
       const config = createAuthConfig(
          {
-            VITE_AUTHENTIK_URL: 'https://auth.example.com//',
+            VITE_AUTHENTIK_URL: 'https://auth.elitale.com//',
             VITE_AUTHENTIK_CLIENT_ID: 'client-1',
             VITE_AUTHENTIK_APP_SLUG: 'app-1',
          },
-         'https://app.example.com'
+         'https://app.elitale.com'
       )
 
-      expect(config.oidc.authority).toBe('https://auth.example.com/application/o/app-1/')
+      expect(config.oidc.authority).toBe('https://auth.elitale.com/application/o/app-1/')
       expect(config.oidc.client_id).toBe('client-1')
-      expect(config.oidc.redirect_uri).toBe('https://app.example.com/callback')
-      expect(config.accountUrl).toBe('https://auth.example.com/if/user/')
+      expect(config.oidc.redirect_uri).toBe('https://app.elitale.com/callback')
+      expect(config.accountUrl).toBe('https://auth.elitale.com/if/user/')
    })
 
    it('builds a signup url whose next is the relative authorize path', () => {

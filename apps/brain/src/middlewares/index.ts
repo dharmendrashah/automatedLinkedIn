@@ -9,6 +9,8 @@ import { CORS_ORIGINS, isProd } from 'env'
 
 import { initializeTrpc } from 'trpc/api/router'
 
+import { Health } from './health'
+
 export class Middlewares {
    public static config(app: Application) {
       app.use(
@@ -21,6 +23,8 @@ export class Middlewares {
       )
 
       app.use(cookieParser() as RequestHandler)
+
+      Health.config(app)
 
       initializeTrpc(app)
 
