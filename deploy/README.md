@@ -30,23 +30,30 @@ surface on your laptop instead of in the cloud.
 ## Prerequisites
 
 1. A cluster with **ingress-nginx** and **cert-manager** installed.
-2. The external PostgreSQL server must already have the app database plus the `authentik`
-   database, **and a role that owns the `authentik` database's `public` schema**. A role that can
-   merely connect is not enough: authentik runs its own migrations and needs `CREATE` on `public`.
-   Check with:
+2. **Database privileges.** The external server needs the app database and the `authentik`
+   database, and the roles connecting to them must own (or have `CREATE` on) each database's
+   `public` schema. Connect permission alone is not enough — Prisma and authentik both create
+   their own tables. Verify per database:
    ```sh
-   psql "$AUTHENTIK_URL" -tAc "select has_schema_privilege(current_user,'public','CREATE')"
+   psql "<url>" -tAc "select has_schema_privilege(current_user,'public','CREATE')"
    ```
-   If that returns `f`, run as a superuser on that server:
+   `f` means the deploy will fail with `permission denied for schema public`. Fix as a superuser
+   (on Cloud SQL, the `postgres` user) on that server:
    ```sql
+   -- application database
+   \c automatelinkedin
+   ALTER SCHEMA public OWNER TO anpr_user;
+
+   -- authentik needs its own login role
    CREATE ROLE authentik LOGIN PASSWORD '<strong-password>';
-   GRANT ALL ON DATABASE authentik TO authentik;
+   ALTER DATABASE authentik OWNER TO authentik;
    \c authentik
    ALTER SCHEMA public OWNER TO authentik;
    ```
-   Then set `AUTHENTIK_POSTGRESQL__USER=authentik`, `AUTHENTIK_POSTGRESQL__NAME=authentik` and the
-   matching `AUTHENTIK_POSTGRESQL__PASSWORD`. `NAME` is the **database**, `USER` is the **role** —
-   mixing them up produces `password authentication failed for user "<database>"`.
+   Then set `AUTHENTIK_POSTGRESQL__NAME=authentik` (the **database**),
+   `AUTHENTIK_POSTGRESQL__USER=authentik` (the **role**) and the matching
+   `AUTHENTIK_POSTGRESQL__PASSWORD`. Swapping `NAME` and `USER` produces
+   `password authentication failed for user "<database>"`.
 
 3. Its firewall must allow the cluster's egress IP. On a Spot node the IP changes when the
    node is replaced, so pin it with Cloud NAT or a static external IP.
