@@ -59,6 +59,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - authentik blueprint: identify the `oauth2provider` by `client_id` (unique), not `name`. If a provider with that client_id already exists (e.g. the UI's "Provider for <app>" default), a `name` identifier makes the importer try to insert and fail with a client_id unique error, which aborts the whole blueprint (status `error`, no flow created, flow URL shows "Not Found").
 - authentik blueprint: when updating the default `default-authentication-identification` stage to add an `enrollment_flow`, also set `user_fields` (e.g. `[username, email]`), or it fails validation "When no user fields are selected, at least one source must be selected".
 - Blueprint apply errors are silent in the UI. Diagnose with `docker compose exec authentik-worker ak apply_blueprint custom/automatedlinkedin.yaml`; check `select name, status from authentik_blueprints_blueprintinstance`.
+- authentik blueprint: the OIDC provider must set `grant_types` (`authorization_code`, `refresh_token`). Left empty, every authorize request fails with "The request is otherwise malformed" (log: "Invalid grant_type for provider"), even though discovery looks correct.
 - authentik enrollment: the user-write stage must set `user_type: internal`, or sign-ups are created as `external` and get "Permission denied — Interface can only be accessed by internal users" on `/if/user/` (the "Manage account" link). Fix an existing external user with `update authentik_core_user set type='internal' where ...`.
 
 ## Open items
