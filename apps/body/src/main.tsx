@@ -5,12 +5,15 @@ import { BrowserRouter } from 'react-router'
 import App from './App.tsx'
 import { OidcProvider } from './auth/OidcProvider.tsx'
 import './index.css'
+import { TrpcProvider } from './trpc/TrpcProvider.tsx'
 
 createRoot(document.getElementById('root')!).render(
    <StrictMode>
       <BrowserRouter>
          <OidcProvider>
-            <App />
+            <TrpcProvider>
+               <App />
+            </TrpcProvider>
          </OidcProvider>
       </BrowserRouter>
    </StrictMode>

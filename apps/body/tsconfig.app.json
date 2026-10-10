@@ -12,7 +12,11 @@
     "moduleResolution": "bundler",
     "paths": {
       "trpc": ["../brain/src/trpc"],
-      "trpc/*": ["../brain/src/trpc/*"]
+      "trpc/*": ["../brain/src/trpc/*"],
+      "auth": ["../brain/src/auth"],
+      "database": ["../brain/src/database"],
+      "env": ["../brain/src/env"],
+      "generated/*": ["../brain/src/generated/*"]
     },
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,

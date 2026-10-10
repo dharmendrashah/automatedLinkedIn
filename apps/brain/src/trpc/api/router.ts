@@ -1,21 +1,16 @@
-import type { inferAsyncReturnType } from '@trpc/server'
-import type { CreateExpressContextOptions } from '@trpc/server/adapters/express'
 import { createExpressMiddleware } from '@trpc/server/adapters/express'
 import type { Application } from 'express'
 
 import { router } from 'trpc'
 
-import { getRole } from './resolvers'
+import { createContext } from './context'
+import { getRole, me } from './resolvers'
 
 export type AppRouter = typeof appRouter
 
-export type Context = inferAsyncReturnType<typeof createContext>
-
-const appRouter = router({ getRole })
-
-const createContext = ({ req, res }: CreateExpressContextOptions) => ({
-   req,
-   res,
+const appRouter = router({
+   getRole,
+   me,
 })
 
 export const initializeTrpc = async (app: Application) => {

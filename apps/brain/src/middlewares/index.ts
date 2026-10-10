@@ -1,15 +1,25 @@
 import cookieParser from 'cookie-parser'
+import cors from 'cors'
 import express, { type Application } from 'express'
 import { join, resolve } from 'path'
 
 import { type RequestHandler } from 'express-serve-static-core'
 
-import { isProd } from 'env'
+import { CORS_ORIGINS, isProd } from 'env'
 
 import { initializeTrpc } from 'trpc/api/router'
 
 export class Middlewares {
    public static config(app: Application) {
+      app.use(
+         cors({
+            origin: CORS_ORIGINS.split(',')
+               .map(origin => origin.trim())
+               .filter(Boolean),
+            allowedHeaders: ['authorization', 'content-type'],
+         }) as RequestHandler
+      )
+
       app.use(cookieParser() as RequestHandler)
 
       initializeTrpc(app)

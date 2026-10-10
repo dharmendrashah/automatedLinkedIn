@@ -21,6 +21,27 @@ export class Environment {
             example: 'postgresql://postgres:postgres@localhost:5432/automatedlinkedin',
             docs: 'https://www.prisma.io/docs/orm/reference/connection-urls',
          }),
+         AUTHENTIK_ISSUER: url({
+            desc: 'Issuer of authentik access tokens (browser-facing URL, with trailing slash)',
+            example: 'http://localhost:9000/application/o/automatedlinkedin/',
+            default: 'http://localhost:9000/application/o/automatedlinkedin/',
+            docs: 'https://docs.goauthentik.io/add-secure-apps/providers/oauth2/',
+         }),
+         AUTHENTIK_CLIENT_ID: string({
+            desc: 'OIDC client id of the authentik provider; access tokens must be issued for it',
+            example: 'automatedlinkedin',
+            default: 'automatedlinkedin',
+         }),
+         AUTHENTIK_INTERNAL_URL: string({
+            desc: 'Base URL brain uses to reach authentik when it differs from the issuer (for example inside Docker)',
+            example: 'http://authentik-server:9000',
+            default: '',
+         }),
+         CORS_ORIGINS: string({
+            desc: 'Comma-separated browser origins allowed to call the API',
+            example: 'http://localhost:3000,http://localhost:5173',
+            default: 'http://localhost:3000,http://localhost:5173',
+         }),
       })
    }
 }

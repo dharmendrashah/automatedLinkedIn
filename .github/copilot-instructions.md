@@ -58,12 +58,12 @@ Turborepo behaviour differs between versions: read the docs bundled in the insta
 - Services and config are static classes (`Environment.config()`, `HttpServer.create()`, `Middlewares.config(app)`, `PrismaService`, `UserService`). Follow that pattern.
 - Express 5: no bare `'*'` routes. Use `'/{*splat}'`.
 - tRPC: `trpc/trpc.ts` defines `router` and procedures. `trpc/api/router.ts` exports `AppRouter`. Resolvers live in `trpc/api/resolvers/<name>/<name>.ts` with their tests next to them.
-- `apps/body` consumes `AppRouter` as a type by importing brain source directly (`apps/body/src/trpc/trpc.ts`). `apps/body/tsconfig.app.json` maps `trpc` and `trpc/*` to brain so brain's bare imports resolve. A new bare alias used by the router chain needs the same mapping.
+- `apps/body` consumes `AppRouter` as a type by importing brain source directly (`apps/body/src/trpc/trpc.ts`). `apps/body/tsconfig.app.json` maps `trpc`, `trpc/*`, `auth`, `database`, `env` and `generated/*` to brain so brain's bare imports resolve. A new bare alias used by the router chain needs the same mapping.
 
 ## Environment
 
 - Copy `apps/brain/.env.example` to `apps/brain/.env`. Tests load `apps/brain/.env.test` (see `.env.test-example`). Never commit `.env*` files except the examples.
-- Variables are validated with `envalid` in `src/env/env.ts`: `DATABASE_URL` (required), `PORT` (default 3001), `NODE_ENV`.
+- Variables are validated with `envalid` in `src/env/env.ts`: `DATABASE_URL` (required), `PORT` (default 3001), `NODE_ENV`, `AUTHENTIK_ISSUER`, `AUTHENTIK_CLIENT_ID`, `AUTHENTIK_INTERNAL_URL` (set when brain reaches authentik on another host than the browser, as in Docker) and `CORS_ORIGINS`.
 - Local database: `docker compose up -d postgres`, then `postgresql://postgres:postgres@localhost:5432/automatedlinkedin`.
 
 ## Database (Prisma 7.10, stable; the npm `latest` CLI tag is an 8.0 RC, do not upgrade to it)

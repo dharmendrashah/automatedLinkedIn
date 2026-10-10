@@ -3,6 +3,7 @@ RUN npm install -g pnpm@12.10.1
 WORKDIR /repo
 COPY . .
 RUN pnpm install --frozen-lockfile
+ARG VITE_API_URL
 ARG VITE_AUTHENTIK_URL
 ARG VITE_AUTHENTIK_CLIENT_ID
 ARG VITE_AUTHENTIK_APP_SLUG
