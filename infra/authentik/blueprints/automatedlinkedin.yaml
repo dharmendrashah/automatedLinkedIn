@@ -1,0 +1,183 @@
+version: 1
+metadata:
+  name: automatedLinkedIn
+  labels:
+    blueprints.goauthentik.io/description: OIDC application and self-service sign-up flow for automatedLinkedIn
+entries:
+  # OIDC provider: public client with PKCE, tokens signed with the built-in certificate.
+  # Identified by client_id (unique) so the blueprint adopts a provider created in the UI.
+  - model: authentik_providers_oauth2.oauth2provider
+    id: provider
+    identifiers:
+      client_id: automatedlinkedin
+    attrs:
+      name: automatedLinkedIn
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      client_type: public
+      issuer_mode: per_provider
+      include_claims_in_id_token: true
+      signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-email]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-profile]]
+      redirect_uris:
+        - matching_mode: strict
+          url: http://localhost:3000/callback
+        - matching_mode: strict
+          url: http://localhost:5173/callback
+        - matching_mode: strict
+          url: http://localhost:3000/
+          redirect_uri_type: logout
+        - matching_mode: strict
+          url: http://localhost:5173/
+          redirect_uri_type: logout
+
+  - model: authentik_core.application
+    identifiers:
+      slug: automatedlinkedin
+    attrs:
+      name: automatedLinkedIn
+      provider: !KeyOf provider
+      meta_launch_url: http://localhost:3000/
+
+  # Sign-up flow: collect details, create the user, log them in
+  - model: authentik_policies_password.passwordpolicy
+    id: password-policy
+    identifiers:
+      name: automatedlinkedin-password-policy
+    attrs:
+      password_field: password
+      length_min: 8
+      error_message: Password must be at least 8 characters long.
+
+  - model: authentik_stages_prompt.prompt
+    id: prompt-username
+    identifiers:
+      name: automatedlinkedin-enrollment-username
+    attrs:
+      field_key: username
+      label: Username
+      type: username
+      required: true
+      placeholder: Username
+      order: 0
+
+  - model: authentik_stages_prompt.prompt
+    id: prompt-name
+    identifiers:
+      name: automatedlinkedin-enrollment-name
+    attrs:
+      field_key: name
+      label: Full name
+      type: text
+      required: true
+      placeholder: Full name
+      order: 1
+
+  - model: authentik_stages_prompt.prompt
+    id: prompt-email
+    identifiers:
+      name: automatedlinkedin-enrollment-email
+    attrs:
+      field_key: email
+      label: Email
+      type: email
+      required: true
+      placeholder: Email
+      order: 2
+
+  - model: authentik_stages_prompt.prompt
+    id: prompt-password
+    identifiers:
+      name: automatedlinkedin-enrollment-password
+    attrs:
+      field_key: password
+      label: Password
+      type: password
+      required: true
+      placeholder: Password
+      order: 3
+
+  - model: authentik_stages_prompt.prompt
+    id: prompt-password-repeat
+    identifiers:
+      name: automatedlinkedin-enrollment-password-repeat
+    attrs:
+      field_key: password_repeat
+      label: Password (repeat)
+      type: password
+      required: true
+      placeholder: Password (repeat)
+      order: 4
+
+  - model: authentik_stages_prompt.promptstage
+    id: stage-prompt
+    identifiers:
+      name: automatedlinkedin-enrollment-prompt
+    attrs:
+      fields:
+        - !KeyOf prompt-username
+        - !KeyOf prompt-name
+        - !KeyOf prompt-email
+        - !KeyOf prompt-password
+        - !KeyOf prompt-password-repeat
+      validation_policies:
+        - !KeyOf password-policy
+
+  - model: authentik_stages_user_write.userwritestage
+    id: stage-user-write
+    identifiers:
+      name: automatedlinkedin-enrollment-user-write
+    attrs:
+      user_creation_mode: always_create
+      create_users_as_inactive: false
+      # internal so sign-ups can use authentik's user dashboard (/if/user/)
+      user_type: internal
+      user_path_template: users
+
+  - model: authentik_stages_user_login.userloginstage
+    id: stage-user-login
+    identifiers:
+      name: automatedlinkedin-enrollment-user-login
+    attrs: {}
+
+  - model: authentik_flows.flow
+    id: enrollment-flow
+    identifiers:
+      slug: automatedlinkedin-enrollment
+    attrs:
+      name: Sign up
+      title: Create your account
+      designation: enrollment
+      authentication: require_unauthenticated
+
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf enrollment-flow
+      stage: !KeyOf stage-prompt
+      order: 10
+
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf enrollment-flow
+      stage: !KeyOf stage-user-write
+      order: 20
+
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf enrollment-flow
+      stage: !KeyOf stage-user-login
+      order: 30
+
+  # Show a "Need an account? Sign up" link on the default login page.
+  # user_fields is set to authentik's default so the stage stays valid on update.
+  - model: authentik_stages_identification.identificationstage
+    identifiers:
+      name: default-authentication-identification
+    attrs:
+      user_fields:
+        - username
+        - email
+      enrollment_flow: !KeyOf enrollment-flow

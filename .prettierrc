@@ -19,6 +19,8 @@
 
       "^env$",
 
+      "^auth(.*)",
+
       "^database(.*)",
 
       "^generated(.*)",
