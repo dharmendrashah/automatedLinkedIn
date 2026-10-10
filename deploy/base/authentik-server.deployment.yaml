@@ -32,12 +32,17 @@ spec:
               mountPath: /dev/shm
             - name: data
               mountPath: /data
+          # First boot runs authentik's full Django migration set, which takes many
+          # minutes and answers /-/health/live/ with 500 until it finishes. The budget
+          # here is 20 minutes; anything tighter kills the pod mid-migration and it
+          # restarts into the same migration forever.
           startupProbe:
             httpGet:
               path: /-/health/live/
               port: http
-            periodSeconds: 5
-            failureThreshold: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 120
           readinessProbe:
             httpGet:
               path: /-/health/ready/

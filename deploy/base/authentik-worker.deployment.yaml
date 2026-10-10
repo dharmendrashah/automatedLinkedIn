@@ -31,11 +31,14 @@ spec:
             - name: blueprints
               mountPath: /blueprints/custom
               readOnly: true
+          # Same reasoning as the server: the worker waits on the same first-boot
+          # migrations before it reports healthy.
           startupProbe:
             exec:
               command: [ak, healthcheck]
             periodSeconds: 10
-            failureThreshold: 30
+            timeoutSeconds: 10
+            failureThreshold: 120
           livenessProbe:
             exec:
               command: [ak, healthcheck]
