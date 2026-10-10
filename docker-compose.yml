@@ -1,5 +1,22 @@
 x-database-url: &database-url postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-automatedlinkedin}
 
+x-authentik: &authentik
+  image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2026.8.3}
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    AUTHENTIK_POSTGRESQL__HOST: postgres
+    AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_PG_DB:-authentik}
+    AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_PG_USER:-authentik}
+    AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASS:-authentik}
+    AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-dev-only-change-me-dev-only-change-me-dev-only-change-me}
+  depends_on:
+    postgres:
+      condition: service_healthy
+  shm_size: 512mb
+  restart: unless-stopped
+
 services:
   postgres:
     image: postgres:18-alpine
@@ -7,10 +24,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-automatedlinkedin}
+      AUTHENTIK_PG_USER: ${AUTHENTIK_PG_USER:-authentik}
+      AUTHENTIK_PG_PASS: ${AUTHENTIK_PG_PASS:-authentik}
+      AUTHENTIK_PG_DB: ${AUTHENTIK_PG_DB:-authentik}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -47,11 +68,32 @@ services:
     build:
       context: .
       dockerfile: apps/body/Dockerfile
+      args:
+        VITE_AUTHENTIK_URL: ${VITE_AUTHENTIK_URL:-http://localhost:9000}
+        VITE_AUTHENTIK_CLIENT_ID: ${VITE_AUTHENTIK_CLIENT_ID:-automatedlinkedin}
+        VITE_AUTHENTIK_APP_SLUG: ${VITE_AUTHENTIK_APP_SLUG:-automatedlinkedin}
+        VITE_AUTHENTIK_ENROLLMENT_SLUG: ${VITE_AUTHENTIK_ENROLLMENT_SLUG:-automatedlinkedin-enrollment}
     ports:
       - "3000:80"
     depends_on:
       - brain
     restart: unless-stopped
 
+  authentik-server:
+    <<: *authentik
+    command: server
+    ports:
+      - "127.0.0.1:${AUTHENTIK_PORT_HTTP:-9000}:9000"
+    volumes:
+      - authentik-data:/data
+
+  authentik-worker:
+    <<: *authentik
+    command: worker
+    volumes:
+      - authentik-data:/data
+      - ./infra/authentik/blueprints:/blueprints/custom:ro
+
 volumes:
   postgres-data:
+  authentik-data:

@@ -99,7 +99,7 @@ Turborepo behaviour differs between versions: read the docs bundled in the insta
 - Context is always the repo root: `docker build -f apps/brain/Dockerfile .` and `docker build -f apps/body/Dockerfile .`.
 - Brain stages: `build`, `migrate` (runs `prisma migrate deploy`), `prune` (`pnpm deploy --prod --ignore-scripts`), final (compiled `dist` plus production dependencies only, runs as `node`, port 3001). Body: Vite build served by `nginx`.
 - Anything imported at runtime by brain must be in `dependencies`, not `devDependencies`, because the image installs production dependencies only. `packages/config` ships only `dist` (`"files": ["dist"]`).
-- `docker compose up -d --build` starts `postgres`, runs `migrate`, then starts `brain` (3001) and `body` (3000). `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` override the defaults.
+- `docker compose up -d --build` starts `postgres`, runs `migrate`, then starts `brain` (3001) and `body` (3000), plus authentik (`authentik-server` on 9000 and `authentik-worker` that loads `infra/authentik/blueprints`). authentik shares the `postgres` service; its database is created on first init by `infra/postgres/init`. Compose variables live in the root `.env` (see `.env.example`). `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` override the defaults.
 
 ## CI and publishing
 

@@ -19,6 +19,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - 2026-10-10: Shared Prettier config lives at the repo root; ESLint uses the shared flat config in `packages/eslint-config`; `apps/body` uses `oxlint`.
 - 2026-10-10: Non-trivial tasks follow a plan-first workflow: a plan in `.plan/`, edge cases reviewed, unconfirmed requirements locked by the user, then execution. Plans are committed.
 - 2026-10-10: AI-assisted development is allowed (README and code of conduct) if the change has full test coverage and a plan file under `.plan/`. Not enforced by tooling; reviewers check it.
+- 2026-10-10: authentik (pinned `2026.8.3`, no Redis) is the identity provider. It shares the single `postgres:18-alpine` service; its own `authentik` database and role are created on first init by `infra/postgres/init/10-authentik-db.sh`. `body` signs in with OIDC code flow + PKCE as a public client (`oidc-client-ts`, `react-oidc-context`, tokens in sessionStorage). Provider, application and the sign-up flow come from `infra/authentik/blueprints/automatedlinkedin.yaml`, mounted into the worker. Sign-up is open self-registration without email verification. Brain does not verify tokens yet.
 
 ## Gotchas
 
@@ -31,11 +32,21 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - `apps/body` type-checks brain source through its `AppRouter` import, so it needs the `trpc` and `trpc/*` path mappings in `tsconfig.app.json`.
 - Long Docker commands run in a sync terminal can swallow output. Run them async with output redirected to a `/tmp` log, then read the log.
 - zsh: never put a literal `!` in a commit message.
+- authentik flows only accept a relative `next` (absolute URLs fail with "Invalid next URL" when the flow finishes). Sign-up therefore builds the OIDC authorize URL first (`AppUserManager.createSigninUrl` in `apps/body/src/auth/userManager.ts`, which also stores the PKCE state) and passes its path and query as `next`.
+- authentik compose secrets (`AUTHENTIK_SECRET_KEY`, `AUTHENTIK_PG_PASS`) have public dev defaults on purpose (a required-variable error would break `docker compose up postgres`). Never reuse them outside local development. Set real values in the root `.env` (see `.env.example`).
+- Redirect URIs in the blueprint are hard-coded to `localhost:3000` and `localhost:5173`; a deployed host needs the blueprint and `VITE_AUTHENTIK_*` build args changed.
+- `infra/postgres/init/*` runs only when the `postgres` data volume is first created, so the `authentik` database is not added to a volume that already exists. On an existing volume create it by hand: `docker compose exec -e PGPASSWORD=postgres postgres psql -U postgres -c "CREATE ROLE authentik LOGIN PASSWORD 'authentik'" -c "CREATE DATABASE authentik OWNER authentik"`, then inside it `ALTER SCHEMA public OWNER TO authentik;`.
+- authentik blueprint: identify the `oauth2provider` by `client_id` (unique), not `name`. If a provider with that client_id already exists (e.g. the UI's "Provider for <app>" default), a `name` identifier makes the importer try to insert and fail with a client_id unique error, which aborts the whole blueprint (status `error`, no flow created, flow URL shows "Not Found").
+- authentik blueprint: when updating the default `default-authentication-identification` stage to add an `enrollment_flow`, also set `user_fields` (e.g. `[username, email]`), or it fails validation "When no user fields are selected, at least one source must be selected".
+- Blueprint apply errors are silent in the UI. Diagnose with `docker compose exec authentik-worker ak apply_blueprint custom/automatedlinkedin.yaml`; check `select name, status from authentik_blueprints_blueprintinstance`.
+- authentik enrollment: the user-write stage must set `user_type: internal`, or sign-ups are created as `external` and get "Permission denied — Interface can only be accessed by internal users" on `/if/user/` (the "Manage account" link). Fix an existing external user with `update authentik_core_user set type='internal' where ...`.
 
 ## Open items
 
 - `brain` has no health endpoint yet. `PrismaService.isHealthy()` exists to back one; needed before Kubernetes probes.
-- `apps/body` has no SPA fallback in its nginx image; add one when client-side routing arrives.
+- `apps/body` nginx now has an SPA fallback (`apps/body/nginx.conf`).
+- The authentik stack boots and the `automatedLinkedIn` blueprint applies successfully; the `automatedlinkedin-enrollment` flow serves (verified via the executor API). Still verify login, profile and logout end to end in a browser, including that sign-up lands back in the app signed in, and logout returns to the app (`redirect_uri_type: logout`).
+- Brain does not validate access tokens yet, and authentik users are not linked to the Prisma `User` table (use `sub`).
 - `Middlewares.serveWeb` in brain serves a `web/dist` folder that does not exist in the image; probably dead code now that `body` is its own image.
 - The database layer (`PrismaService`, `UserService`) is not exposed through tRPC yet; `getRole` still returns a static value.
 - Integration and e2e tests do not run in CI.
@@ -52,3 +63,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - 2026-10-10: Added `MEMORY.md` and the plan-first workflow (`.plan/_template.md`); documented the AI-assisted development policy in the README and code of conduct.
 - 2026-10-10: Added `SECURITY.md` (private reporting), `SUPPORT.md`, and a pull request template that asks what issue the change solves for the end user.
 - 2026-10-10: Added `release.yml` (container images on release) and made `ci.yml` reusable; `main` no longer moves `latest`.
+- 2026-10-10: Added authentik to compose with a blueprint, and login, sign-up, logout and profile pages to `apps/body` (react-router, OIDC).
+- 2026-10-10: Dropped the separate authentik postgres service; authentik now shares the app `postgres` with its own database created by `infra/postgres/init`.
+- 2026-10-10: Fixed the authentik blueprint so sign-up works: identify the provider by `client_id` (adopts a UI-created provider) and set `user_fields` on the default identification stage.
+- 2026-10-10: Enrollment now creates `internal` users (`user_type` on the user-write stage) so sign-ups can open authentik's user dashboard.
