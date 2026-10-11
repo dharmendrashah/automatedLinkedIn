@@ -2,7 +2,7 @@ import 'dotenv/config'
 
 import './aliases'
 
-import { HttpServer } from 'core'
+import { HttpServer, MessageBroker } from 'core'
 
 import { PrismaService } from 'database'
 
@@ -14,9 +14,9 @@ Middlewares.config(app)
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
    process.once(signal, () =>
-      PrismaService.disconnect()
+      Promise.all([PrismaService.disconnect(), MessageBroker.disconnect()])
          .then(() => {
-            console.log(`database connection closed`)
+            console.log(`database and broker connections closed`)
          })
          .finally(() => {
             process.exit(0)

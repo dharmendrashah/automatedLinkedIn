@@ -30,6 +30,20 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      rabbitmq:
+        image: rabbitmq:4.3-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: automatedlinkedin
+          RABBITMQ_DEFAULT_PASS: automatedlinkedin
+          RABBITMQ_DEFAULT_VHOST: automatedlinkedin
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 20s
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -59,6 +73,7 @@ jobs:
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/automatedlinkedin
+          RABBITMQ_URL: amqp://automatedlinkedin:automatedlinkedin@localhost:5672/automatedlinkedin
 
       - run: pnpm build
 

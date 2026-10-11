@@ -51,6 +51,13 @@ export class Environment {
             example: 'http://localhost:3000,http://localhost:5173',
             default: 'http://localhost:3000,http://localhost:5173',
          }),
+         RABBITMQ_URL: url({
+            desc: 'AMQP URL of the RabbitMQ broker, including the vhost in the path',
+            example: 'amqp://user:password@rabbitmq:5672/automatedlinkedin',
+            // Matches the docker compose broker; production has no default and must set it.
+            devDefault: 'amqp://automatedlinkedin:automatedlinkedin@localhost:5672/automatedlinkedin',
+            docs: 'https://www.rabbitmq.com/docs/uri-spec',
+         }),
          LINKEDIN_CRED_ENC_KEY: encryptionKey({
             desc: 'Base64-encoded 32-byte key (AES-256-GCM) that encrypts stored LinkedIn secrets at rest',
             example: 'openssl rand -base64 32',

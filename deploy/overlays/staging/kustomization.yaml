@@ -55,3 +55,6 @@ patches:
   - path: spot-toleration.patch.yaml
     target:
       kind: Deployment
+  - path: spot-toleration.patch.yaml
+    target:
+      kind: StatefulSet
