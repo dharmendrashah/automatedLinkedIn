@@ -19,7 +19,10 @@ vi.mock('env', () => ({
    isDev: true,
 }))
 
-const anonymous: Partial<Context> = { auth: null, user: null }
+const anonymous: Partial<Context> = {
+   auth: null,
+   user: null,
+}
 
 // Every procedure registered on the public router must reject an anonymous caller.
 // A new procedure that forgets the guard fails here, not in production.

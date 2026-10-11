@@ -4,13 +4,14 @@ import type { Application } from 'express'
 import { router } from 'trpc'
 
 import { createContext } from './context'
-import { getRole, me } from './resolvers'
+import { getRole, linkedInAccount, me } from './resolvers'
 
 export type AppRouter = typeof appRouter
 
 export const appRouter = router({
    getRole,
    me,
+   linkedInAccount,
 })
 
 export const initializeTrpc = async (app: Application) => {

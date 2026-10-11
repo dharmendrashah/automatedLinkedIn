@@ -13,5 +13,13 @@ const { app } = HttpServer.create()
 Middlewares.config(app)
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
-   process.once(signal, () => PrismaService.disconnect().finally(() => process.exit(0)))
+   process.once(signal, () =>
+      PrismaService.disconnect()
+         .then(() => {
+            console.log(`database connection closed`)
+         })
+         .finally(() => {
+            process.exit(0)
+         })
+   )
 }
