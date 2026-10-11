@@ -7,12 +7,10 @@ resources:
   - ../../base
   - dns/cronjob.yaml
 
-# The spider component (deploy/components/spider) is written and renders cleanly, but is NOT included here
-# yet: the current node cannot fit Camoufox/Firefox (see MEMORY.md open items) and Workload Identity for its
-# GCS access is not bound yet (deploy/gcp-setup.md). To actually deploy it, once both are done, add:
-#   components:
-#     - ../../components/spider
-# and add its two images and a rollout check to .github/workflows/staging.yml's deploy job.
+# Deployed 2026-10-12: node pool has GKE_METADATA mode and spider-worker's GSA binding (deploy/gcp-setup.md);
+# one spider-worker replica fits the node with the current workloads (.plan/spider-staging-deploy.md).
+components:
+  - ../../components/spider
 
 # Replace OWNER with the lowercase GitHub owner/repo that publishes the images.
 # The body image is environment specific: its VITE_* values are baked at build time,

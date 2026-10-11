@@ -1,4 +1,4 @@
-"""Tests for update_dns.py against a local mock of the Cloudflare API and the metadata server.
+"""Tests for update_dns.py against a local mock of the Cloudflare API and the Kubernetes API.
 
 Run with: python3 -m unittest deploy/overlays/staging/dns/test_update_dns.py
 """
@@ -16,12 +16,13 @@ SCRIPT = Path(__file__).with_name("update_dns.py")
 TOKEN = "test-token-do-not-print"
 ZONE = "zone123"
 NAME = "app.staging.example.com"
+NODE_NAME = "gke-staging-asia-default-pool-test"
 
 
 class MockServers:
     def __init__(self) -> None:
         self.node_ip = "34.47.216.69"
-        self.metadata_status = 200
+        self.node_status = 200
         self.records: list[dict] = []
         self.api_status = 200
         self.api_errors: list[str] = []
@@ -29,15 +30,16 @@ class MockServers:
         self.next_id = 1
         servers = self
 
-        class Metadata(BaseHTTPRequestHandler):
+        class K8sApi(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
-                if self.headers.get("Metadata-Flavor") != "Google":
-                    self.send_response(403)
-                    self.end_headers()
-                    return
-                self.send_response(servers.metadata_status)
+                body = json.dumps(
+                    {"status": {"addresses": [{"type": "ExternalIP", "address": servers.node_ip}]}}
+                ).encode()
+                self.send_response(servers.node_status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
-                self.wfile.write(servers.node_ip.encode())
+                self.wfile.write(body)
 
             def log_message(self, *args) -> None:  # noqa: D401
                 return
@@ -87,21 +89,21 @@ class MockServers:
             def log_message(self, *args) -> None:  # noqa: D401
                 return
 
-        self.metadata = HTTPServer(("127.0.0.1", 0), Metadata)
+        self.k8s = HTTPServer(("127.0.0.1", 0), K8sApi)
         self.api = HTTPServer(("127.0.0.1", 0), Api)
-        for server in (self.metadata, self.api):
+        for server in (self.k8s, self.api):
             threading.Thread(target=server.serve_forever, daemon=True).start()
 
     @property
-    def metadata_url(self) -> str:
-        return f"http://127.0.0.1:{self.metadata.server_port}/external-ip"
+    def k8s_api_url(self) -> str:
+        return f"http://127.0.0.1:{self.k8s.server_port}"
 
     @property
     def api_base(self) -> str:
         return f"http://127.0.0.1:{self.api.server_port}/client/v4"
 
     def stop(self) -> None:
-        self.metadata.shutdown()
+        self.k8s.shutdown()
         self.api.shutdown()
 
 
@@ -111,7 +113,9 @@ def run_script(servers: MockServers, **overrides: str | None) -> subprocess.Comp
         "CF_API_TOKEN": TOKEN,
         "CF_ZONE_ID": ZONE,
         "RECORD_NAME": NAME,
-        "METADATA_URL": servers.metadata_url,
+        "NODE_NAME": NODE_NAME,
+        "K8S_API_URL": servers.k8s_api_url,
+        "K8S_API_TOKEN": "test-k8s-token",
         "CF_API_BASE": servers.api_base,
     }
     for key, value in overrides.items():
@@ -183,7 +187,7 @@ class UpdateDnsTests(unittest.TestCase):
         self.assertIn("2 A records", result.stderr)
         self.assertEqual(self.writes(), [])
 
-    def test_refuses_a_private_address_from_metadata(self) -> None:
+    def test_refuses_a_private_address_from_the_kubernetes_api(self) -> None:
         self.servers.node_ip = "10.160.0.3"
 
         result = run_script(self.servers)
@@ -192,13 +196,29 @@ class UpdateDnsTests(unittest.TestCase):
         self.assertIn("non-public", result.stderr)
         self.assertEqual(self.servers.calls, [])
 
-    def test_refuses_a_malformed_metadata_response(self) -> None:
+    def test_refuses_a_malformed_kubernetes_api_response(self) -> None:
         self.servers.node_ip = "not-an-ip"
 
         result = run_script(self.servers)
 
         self.assertEqual(result.returncode, 1)
         self.assertIn("invalid IPv4", result.stderr)
+        self.assertEqual(self.servers.calls, [])
+
+    def test_fails_when_the_node_has_no_external_ip(self) -> None:
+        self.servers.node_status = 404
+
+        result = run_script(self.servers)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("could not read node", result.stderr)
+        self.assertEqual(self.servers.calls, [])
+
+    def test_fails_when_node_name_is_missing(self) -> None:
+        result = run_script(self.servers, NODE_NAME=None)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("NODE_NAME is not set", result.stderr)
         self.assertEqual(self.servers.calls, [])
 
     def test_reports_api_errors_without_printing_the_token(self) -> None:

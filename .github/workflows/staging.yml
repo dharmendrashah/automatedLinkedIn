@@ -216,3 +216,5 @@ jobs:
           kubectl -n automatedlinkedin rollout status deploy/body --timeout=5m
           kubectl -n automatedlinkedin rollout status deploy/authentik-server --timeout=5m
           kubectl -n automatedlinkedin rollout status deploy/authentik-worker --timeout=5m
+          kubectl -n automatedlinkedin rollout status deploy/spider-api --timeout=5m
+          kubectl -n automatedlinkedin rollout status deploy/spider-worker --timeout=5m
