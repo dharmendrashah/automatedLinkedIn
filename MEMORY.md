@@ -32,6 +32,9 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Gotchas
 
+- Kubernetes: `app-secrets` is generated with a content hash in its name, so changing `STAGING_SECRETS_ENV` creates a new Secret and rolls every workload. A StatefulSet pod that is stuck (for example `CreateContainerConfigError` from a missing secret key) is NOT replaced by the rollout, because a StatefulSet waits for the old pod to become Ready. After fixing the secret, delete the stuck pod (`kubectl -n automatedlinkedin delete pod rabbitmq-0`); its PVC is kept. Seen on 2026-10-11 when staging was deployed before `LINKEDIN_CRED_ENC_KEY` and the RabbitMQ keys were in the secret: brain crash-looped on the missing key and `rabbitmq-0` stayed stuck.
+- Every new required production env var (no `devDefault`) must be added to `STAGING_SECRETS_ENV` (or `STAGING_CONFIG_ENV`) before the PR that needs it is merged, because merging to `main` deploys staging immediately. Set it with `gh secret set STAGING_SECRETS_ENV < deploy/overlays/staging/secrets.env` after adding the key to the local git-ignored file. `STAGING_SECRETS_ENV` now holds `LINKEDIN_CRED_ENC_KEY`, `RABBITMQ_DEFAULT_USER` and `RABBITMQ_DEFAULT_PASS`.
+
 - A brain unit test that imports the real `trpc` (for `router`/`userProcedure`) pulls in `trpc.ts` → `./api/identity` (a value import) → `auth` → `env`, so envalid runs `cleanEnv` and calls `process.exit(1)` if `DATABASE_URL` is missing (there is no committed `.env.test`). Such tests must `vi.mock('env', ...)` with a full env object (see `router.unit.test.ts` and `linkedInAccount.unit.test.ts`). Tests that mock `./identity` (like `me`) avoid loading `env` entirely because trpc.ts imports `Context` as a type only.
 - brain is CommonJS (`module: commonjs`), so top-level `await import(...)` is a TS1378 error. Use static imports in tests; `vi.mock` is hoisted above them anyway. A class referenced inside a `vi.mock` factory must be declared inside `vi.hoisted` (not a plain top-level `class`), or it hits the temporal dead zone.
 - `object-curly-newline` (brain ESLint) fights Prettier on a single-key object that Prettier is forced to wrap because the line exceeds 120. Fix by shortening the line (zod `.refine(pred, 'message')` string form, or a block body returning `{ key }`) rather than fighting the formatter.
@@ -82,7 +85,6 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Open items
 
-- Before the next staging deploy, add `RABBITMQ_DEFAULT_USER` and `RABBITMQ_DEFAULT_PASS` to the `STAGING_SECRETS_ENV` GitHub secret (and `LINKEDIN_CRED_ENC_KEY` if missing). Brain exits at boot in production without `RABBITMQ_URL`, and the broker pod cannot start without its two keys.
 - The RabbitMQ manifests were validated by rendering and by running the image with the same security context and probes, not on a real cluster. Watch the first staging rollout of `statefulset/rabbitmq`; GCE rounds the 2Gi volume up. Declare queues durable and publish persistent messages when features start using the broker (a Spot node replacement restarts the pod).
 
 - Resolve `.plan/linkedin-account-linking.md` (D1/B1: LinkedIn written permission, TOTP-seed storage) before building any LinkedIn login, session capture or verification worker; until then `status` only ever moves between `PENDING` and `DISABLED`.
@@ -106,6 +108,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-11: Staging recovered after the LinkedIn accounts and RabbitMQ merges: added the missing `LINKEDIN_CRED_ENC_KEY` and RabbitMQ keys to `STAGING_SECRETS_ENV`, deleted the stuck `rabbitmq-0` pod; brain `/health` reports database and broker up.
 - 2026-10-11: Introduced RabbitMQ for local (docker compose) and staging/minikube (StatefulSet in `deploy/base`): brain `RABBITMQ_URL`, `MessageBroker`, `broker` in `/health`, CI service container, staging rollout wait, docs. Also fixed compose brain missing `LINKEDIN_CRED_ENC_KEY` (production mode has no default).
 - 2026-10-11: `ci.yml` now runs brain integration tests: a `postgres:18-alpine` service, `prisma migrate deploy` on the empty database, then `test:integration:run`, via `pnpm --filter` rather than Turborepo (strict env mode would hide `DATABASE_URL`).
 - 2026-10-11: Added "Edit credentials" to `/accounts` (`EditAccountDialog`): replace or remove the password, two-step key or browser token and change the email at any time, using the existing `linkedInAccount.update`. Saved secrets are never shown; blank keeps, Remove sends `null`. The add and edit dialogs share `CredentialsFields`, and the rule/patch helpers live in `apps/body/src/components/accounts/credential-rules.ts`.
