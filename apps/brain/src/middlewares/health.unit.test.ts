@@ -2,9 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { Health } from './health'
 
-const mocks = vi.hoisted(() => ({ isHealthy: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+   isHealthy: vi.fn(),
+   brokerHealthy: vi.fn(),
+}))
 
 vi.mock('database', () => ({ PrismaService: { isHealthy: mocks.isHealthy } }))
+
+vi.mock('core', () => ({ MessageBroker: { isHealthy: mocks.brokerHealthy } }))
 
 vi.mock('env', () => ({
    GIT_SHA: 'a1b2c3d',
@@ -57,6 +62,7 @@ const createApp = () => {
 describe('Health', () => {
    beforeEach(() => {
       vi.clearAllMocks()
+      mocks.brokerHealthy.mockResolvedValue(true)
    })
 
    it('should register a single health route', () => {
@@ -85,6 +91,7 @@ describe('Health', () => {
          builtAt: '2026-10-11T10:00:00Z',
          startedAt: expect.any(String),
          database: 'up',
+         broker: 'up',
       })
       expect(Number.isNaN(Date.parse((response.body as { startedAt: string }).startedAt))).toBe(false)
       expect(response.headers['Cache-Control']).toBe('no-store')
@@ -107,6 +114,7 @@ describe('Health', () => {
          builtAt: '2026-10-11T10:00:00Z',
          startedAt: expect.any(String),
          database: 'down',
+         broker: 'up',
       })
       expect(response.headers['Cache-Control']).toBe('no-store')
    })
@@ -125,5 +133,37 @@ describe('Health', () => {
          status: 'error',
          database: 'down',
       })
+   })
+
+   it('should stay ready and report the broker down when only the broker is unreachable', async () => {
+      mocks.isHealthy.mockResolvedValue(true)
+      mocks.brokerHealthy.mockResolvedValue(false)
+
+      const { app, call } = createApp()
+
+      Health.config(app as never)
+
+      const response = await call('/health')
+
+      expect(response.statusCode).toBe(200)
+      expect(response.body).toMatchObject({
+         status: 'ok',
+         database: 'up',
+         broker: 'down',
+      })
+   })
+
+   it('should report the broker down when the broker check throws', async () => {
+      mocks.isHealthy.mockResolvedValue(true)
+      mocks.brokerHealthy.mockRejectedValue(new Error('boom'))
+
+      const { app, call } = createApp()
+
+      Health.config(app as never)
+
+      const response = await call('/health')
+
+      expect(response.statusCode).toBe(200)
+      expect(response.body).toMatchObject({ broker: 'down' })
    })
 })

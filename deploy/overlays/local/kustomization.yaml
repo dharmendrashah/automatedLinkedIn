@@ -35,3 +35,6 @@ patches:
   - path: resources.patch.yaml
     target:
       kind: Deployment
+  - path: resources.patch.yaml
+    target:
+      kind: StatefulSet

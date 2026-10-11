@@ -45,6 +45,21 @@ spec:
                 name: app-config
             - secretRef:
                 name: app-secrets
+          env:
+            # Built from the same two secret keys the broker starts with, so they cannot drift apart.
+            # $(VAR) only expands variables defined earlier in this list.
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: RABBITMQ_DEFAULT_PASS
+            - name: RABBITMQ_URL
+              value: amqp://$(RABBITMQ_DEFAULT_USER):$(RABBITMQ_DEFAULT_PASS)@rabbitmq:5672/automatedlinkedin
           startupProbe:
             httpGet:
               path: /health

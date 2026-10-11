@@ -1,5 +1,8 @@
 x-database-url: &database-url postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-automatedlinkedin}
 
+# The password sits inside a URL, so keep it URL-safe (letters and digits, for example `openssl rand -hex 16`).
+x-rabbitmq-url: &rabbitmq-url amqp://${RABBITMQ_DEFAULT_USER:-automatedlinkedin}:${RABBITMQ_DEFAULT_PASS:-automatedlinkedin}@rabbitmq:5672/${RABBITMQ_DEFAULT_VHOST:-automatedlinkedin}
+
 x-authentik: &authentik
   image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2026.8.3}
   env_file:
@@ -57,6 +60,29 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # Message broker for background work. Management UI: http://localhost:15672 (sign in with the
+  # RABBITMQ_DEFAULT_USER and RABBITMQ_DEFAULT_PASS below). Both ports bind to this machine only.
+  # The user, password and vhost are created on first start; changing them later needs a new volume
+  # (`docker compose down -v` also wipes the databases, so remove only `rabbitmq-data`).
+  rabbitmq:
+    image: rabbitmq:4.3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-automatedlinkedin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-automatedlinkedin}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST:-automatedlinkedin}
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
   migrate:
     build:
       context: .
@@ -79,11 +105,18 @@ services:
       AUTHENTIK_CLIENT_ID: ${AUTHENTIK_CLIENT_ID:-automatedlinkedin}
       AUTHENTIK_INTERNAL_URL: http://authentik-server:9000
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      RABBITMQ_URL: *rabbitmq-url
+      # NODE_ENV is production in the image, so the key has no built-in default there.
+      # This is the public development key: never reuse it outside local development.
+      LINKEDIN_CRED_ENC_KEY: ${LINKEDIN_CRED_ENC_KEY:-pqaZGClH/kqxNTLoLT4c0lMTloNIi2At3Jzz9a2rkIQ=}
     ports:
       - "3001:3001"
     depends_on:
       migrate:
         condition: service_completed_successfully
+      # Started, not healthy: brain keeps serving while the broker is down.
+      rabbitmq:
+        condition: service_started
     restart: unless-stopped
 
   body:
@@ -119,4 +152,5 @@ services:
 
 volumes:
   postgres-data:
+  rabbitmq-data:
   authentik-data:

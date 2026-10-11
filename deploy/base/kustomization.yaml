@@ -12,6 +12,8 @@ resources:
   - namespace.yaml
   - brain.deployment.yaml
   - brain.service.yaml
+  - rabbitmq.statefulset.yaml
+  - rabbitmq.service.yaml
   - body.deployment.yaml
   - body.service.yaml
   - authentik-server.deployment.yaml

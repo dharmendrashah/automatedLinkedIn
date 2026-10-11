@@ -24,6 +24,7 @@ surface on your laptop instead of in the cloud.
 | `body` | `-body` | SPA on nginx. Environment specific: `VITE_*` is baked at build time. |
 | `authentik-server` | `ghcr.io/goauthentik/server:2026.8.3` | Identity provider. |
 | `authentik-worker` | same | Applies the blueprint from `infra/authentik/blueprints/`. |
+| `rabbitmq` | `rabbitmq:4.3-management-alpine` | Message broker. Single-replica StatefulSet with a 2Gi volume, ClusterIP only (AMQP 5672, management 15672). |
 
 **PostgreSQL is not deployed.** It is an existing external server on another cloud.
 
@@ -96,7 +97,8 @@ kubectl -n automatedlinkedin logs deploy/brain -c migrate
 ## Secrets
 
 `config.env` and `secrets.env` are git-ignored and never committed. `secrets.env` holds
-`DATABASE_URL`, `AUTHENTIK_POSTGRESQL__PASSWORD` and `AUTHENTIK_SECRET_KEY`. Never reuse the
+`DATABASE_URL`, `AUTHENTIK_POSTGRESQL__PASSWORD`, `AUTHENTIK_SECRET_KEY`, `LINKEDIN_CRED_ENC_KEY` and
+`RABBITMQ_DEFAULT_USER` / `RABBITMQ_DEFAULT_PASS`. Never reuse the
 public development defaults from `docker-compose.yml`; generate the authentik key with:
 
 ```sh
@@ -106,6 +108,25 @@ openssl rand -base64 60 | tr -d '\n'
 > **Known risk.** The database connection uses no TLS (an accepted decision), so credentials
 > and row data cross the public internet in cleartext. Mitigate with a strict firewall
 > allowlist. The fix is adding `sslmode=require` to `DATABASE_URL`.
+
+## RabbitMQ
+
+The broker runs in the cluster from `base/rabbitmq.statefulset.yaml`. Brain builds `RABBITMQ_URL`
+from the same two secret keys the broker starts with, so they cannot drift apart.
+
+- **Credentials.** Generate a URL-safe password (it sits inside a URL): `openssl rand -hex 16`. Put
+  `RABBITMQ_DEFAULT_USER` and `RABBITMQ_DEFAULT_PASS` in `secrets.env` (for staging, in the
+  `STAGING_SECRETS_ENV` GitHub secret, **before** the first deploy, or the broker pod cannot start).
+  They are applied only when the volume is first created. To change them later, delete the
+  `data-rabbitmq-0` PVC (this drops all queued messages) and the pod, or change the user with
+  `rabbitmqctl change_password` inside the pod.
+- **Management UI.** Not exposed through the ingress. Use
+  `kubectl -n automatedlinkedin port-forward svc/rabbitmq 15672` and open http://localhost:15672.
+- **Spot node.** The pod is rescheduled when the node is replaced; the volume re-attaches because
+  the cluster is zonal. Messages that are not durable and persistent are lost on a restart, so
+  declare queues durable and publish persistent messages once real features use the broker.
+- **Health.** `GET /health` on brain reports `broker: up|down`. A broker outage does not make brain
+  not ready; only the database does.
 
 ## Deploying from GitHub Actions
 
