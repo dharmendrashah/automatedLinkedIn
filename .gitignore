@@ -16,3 +16,7 @@ sa-key.json
 *-sa-key.json
 *.serviceaccount.json
 gha-creds-*.json
+
+# Python bytecode from local test runs.
+__pycache__/
+*.pyc
