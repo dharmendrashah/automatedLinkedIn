@@ -3,7 +3,14 @@ import { z } from 'zod'
 
 import { extractLiAt, parseTotpSecret } from 'core'
 
-import { LinkedInAccountConflictError, LinkedInAccountService, LinkedInCredentialsError } from 'database'
+import {
+   LinkedInAccountConflictError,
+   LinkedInAccountPausedError,
+   LinkedInAccountService,
+   LinkedInAccountValidationService,
+   LinkedInCredentialsError,
+   LinkedInVerifyCooldownError,
+} from 'database'
 
 import { router, userProcedure } from 'trpc'
 
@@ -70,7 +77,31 @@ const asTrpcError = (error: unknown) => {
       })
    }
 
+   if (error instanceof LinkedInAccountPausedError) {
+      return new TRPCError({
+         code: 'PRECONDITION_FAILED',
+         message: error.message,
+      })
+   }
+
+   if (error instanceof LinkedInVerifyCooldownError) {
+      return new TRPCError({
+         code: 'TOO_MANY_REQUESTS',
+         message: error.message,
+      })
+   }
+
    return error
+}
+
+// The account is already saved, so a validation that cannot be queued must not fail the user's request: the account
+// stays PENDING and the owner can verify again.
+const requestValidation = async (id: string) => {
+   try {
+      await LinkedInAccountValidationService.request(id)
+   } catch (error) {
+      console.error(`Could not request the validation of account ${id}: ${(error as Error).message}`)
+   }
 }
 
 const notFound = () =>
@@ -101,11 +132,15 @@ const ownerProcedure = userProcedure.use(({ ctx, next }) => {
 export const linkedInAccount = router({
    create: ownerProcedure.input(createInput).mutation(async ({ ctx, input }) => {
       try {
-         return await LinkedInAccountService.create(ctx.user.id, input.email, {
+         const account = await LinkedInAccountService.create(ctx.user.id, input.email, {
             password: input.password,
             totpSecret: input.totpSecret,
             session: input.session,
          })
+
+         await requestValidation(account.id)
+
+         return account
       } catch (error) {
          throw asTrpcError(error)
       }
@@ -140,6 +175,15 @@ export const linkedInAccount = router({
             throw notFound()
          }
 
+         // The service sets the account back to PENDING when the login changed (and leaves a paused one alone).
+         const loginSent = [input.email, input.password, input.totpSecret, input.session].some(
+            value => value !== undefined
+         )
+
+         if (loginSent && updated.status === 'PENDING') {
+            await requestValidation(updated.id)
+         }
+
          return updated
       } catch (error) {
          throw asTrpcError(error)
@@ -160,8 +204,28 @@ export const linkedInAccount = router({
             throw notFound()
          }
 
+         // Resuming sets the account to PENDING; it has to be checked again.
+         if (!input.paused && account.status === 'PENDING') {
+            await requestValidation(account.id)
+         }
+
          return account
       }),
+
+   // Another check on request, at most one every few minutes.
+   verify: ownerProcedure.input(byId).mutation(async ({ ctx, input }) => {
+      try {
+         const account = await LinkedInAccountValidationService.verifyForUser(ctx.user.id, input.id)
+
+         if (!account) {
+            throw notFound()
+         }
+
+         return account
+      } catch (error) {
+         throw asTrpcError(error)
+      }
+   }),
 
    delete: ownerProcedure.input(byId).mutation(async ({ ctx, input }) => {
       const deleted = await LinkedInAccountService.deleteForUser(ctx.user.id, input.id)

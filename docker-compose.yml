@@ -135,6 +135,57 @@ services:
       - brain
     restart: unless-stopped
 
+  # Asynchronous scraper. Opt in with `docker compose --profile spider up -d spider-api spider-worker`.
+  # The API takes tasks on http://localhost:3002 and queues them in RabbitMQ; the worker runs them in Camoufox
+  # and writes the raw results and each account's session to a Google Cloud Storage bucket. Only the hosts in
+  # SPIDER_ALLOWED_HOSTS can be visited, robots.txt is honoured except for SPIDER_ROBOTS_EXEMPT_HOSTS, actions on
+  # one host keep a fixed gap (SPIDER_MIN_DELAY_MS) and only one task runs per account at a time. The worker also
+  # checks the LinkedIn logins brain asks it to (accounts.validate) and answers on accounts.validated.
+  spider-api:
+    profiles: ["spider"]
+    build:
+      context: .
+      dockerfile: apps/spider/Dockerfile
+      target: api
+    environment:
+      PORT: 3002
+      RABBITMQ_URL: *rabbitmq-url
+      SPIDER_ALLOWED_HOSTS: ${SPIDER_ALLOWED_HOSTS:-localhost,host.docker.internal,linkedin.com}
+    ports:
+      - "127.0.0.1:3002:3002"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  spider-worker:
+    profiles: ["spider"]
+    build:
+      context: .
+      dockerfile: apps/spider/Dockerfile
+      target: worker
+    init: true
+    # Firefox needs more shared memory than the container default.
+    shm_size: 1gb
+    environment:
+      RABBITMQ_URL: *rabbitmq-url
+      SPIDER_ALLOWED_HOSTS: ${SPIDER_ALLOWED_HOSTS:-localhost,host.docker.internal,linkedin.com}
+      SPIDER_ROBOTS_EXEMPT_HOSTS: ${SPIDER_ROBOTS_EXEMPT_HOSTS:-linkedin.com}
+      # Must equal brain's key: it opens the sealed credentials brain sends for account validation.
+      LINKEDIN_CRED_ENC_KEY: ${LINKEDIN_CRED_ENC_KEY:-pqaZGClH/kqxNTLoLT4c0lMTloNIi2At3Jzz9a2rkIQ=}
+      SPIDER_VALIDATION_MODE: ${SPIDER_VALIDATION_MODE:-full}
+      SPIDER_GCS_BUCKET: ${SPIDER_GCS_BUCKET:-}
+      SPIDER_MIN_DELAY_MS: ${SPIDER_MIN_DELAY_MS:-2000}
+      GOOGLE_APPLICATION_CREDENTIALS: /gcp/credentials.json
+    volumes:
+      # Application Default Credentials from `gcloud auth application-default login`, read-only.
+      - ${SPIDER_GCP_CREDENTIALS:-${HOME}/.config/gcloud/application_default_credentials.json}:/gcp/credentials.json:ro
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    # A lost broker connection ends the worker on purpose; the restart brings a clean one back.
+    restart: unless-stopped
+
   authentik-server:
     <<: *authentik
     command: server

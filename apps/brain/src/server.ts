@@ -2,9 +2,9 @@ import 'dotenv/config'
 
 import './aliases'
 
-import { HttpServer, MessageBroker } from 'core'
+import { AccountValidationQueue, HttpServer, MessageBroker } from 'core'
 
-import { PrismaService } from 'database'
+import { LinkedInAccountValidationService, PrismaService } from 'database'
 
 import { Middlewares } from 'middlewares'
 
@@ -12,9 +12,16 @@ const { app } = HttpServer.create()
 
 Middlewares.config(app)
 
+// The worker's answers to "is this LinkedIn login valid". It keeps trying if RabbitMQ is not up yet.
+const validationResults = AccountValidationQueue.consume(async result => {
+   await LinkedInAccountValidationService.applyResult(result)
+})
+
 for (const signal of ['SIGINT', 'SIGTERM']) {
    process.once(signal, () =>
-      Promise.all([PrismaService.disconnect(), MessageBroker.disconnect()])
+      validationResults
+         .then(consumer => consumer.stop())
+         .then(() => Promise.all([PrismaService.disconnect(), MessageBroker.disconnect()]))
          .then(() => {
             console.log(`database and broker connections closed`)
          })

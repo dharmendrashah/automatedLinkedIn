@@ -1,5 +1,6 @@
+export { AccountValidationQueue } from './accountValidationQueue'
 export { CryptoService } from './crypto.service'
 export { HttpServer } from './httpServer'
-export { extractLiAt } from './liAt'
+export { extractLiAt } from '@automatedLinkedIn/contracts'
 export { MessageBroker } from './messageBroker'
 export { parseTotpSecret } from './totp'

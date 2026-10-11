@@ -75,6 +75,13 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/automatedlinkedin
           RABBITMQ_URL: amqp://automatedlinkedin:automatedlinkedin@localhost:5672/automatedlinkedin
 
+      # The broker is only used by these tests, so purging its queues is safe in CI.
+      - name: Spider integration tests
+        run: pnpm --filter @automatedLinkedIn/spider test:integration:run
+        env:
+          NODE_ENV: test
+          RABBITMQ_URL: amqp://automatedlinkedin:automatedlinkedin@localhost:5672/automatedlinkedin
+
       - run: pnpm build
 
   publish:

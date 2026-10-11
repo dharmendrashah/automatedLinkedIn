@@ -357,10 +357,41 @@ describe('LinkedInAccountService', () => {
          expect(mocks.seal).toHaveBeenCalledWith(JSON.stringify({ session: 'li_at=abc' }))
       })
 
-      it('should not touch the status when only the email changes', async () => {
+      it('should reset a verified account to PENDING when its email changes, since it is another login', async () => {
          mocks.findFirst.mockResolvedValueOnce({
             ...storedRow,
             status: 'ACTIVE',
+            statusMessage: 'ok',
+         })
+         mocks.open.mockReturnValueOnce(JSON.stringify({ password: 'pw' }))
+         mocks.update.mockResolvedValueOnce({ id: 'a1' })
+
+         await LinkedInAccountService.updateForUser('u1', 'a1', { email: 'new@work.com' })
+
+         expect(mocks.update.mock.calls[0][0].data).toMatchObject({
+            status: 'PENDING',
+            statusMessage: null,
+            lastVerifiedAt: null,
+         })
+      })
+
+      it('should not touch the status when the email is sent but has not changed', async () => {
+         mocks.findFirst.mockResolvedValueOnce({
+            ...storedRow,
+            status: 'ACTIVE',
+         })
+         mocks.open.mockReturnValueOnce(JSON.stringify({ password: 'pw' }))
+         mocks.update.mockResolvedValueOnce({ id: 'a1' })
+
+         await LinkedInAccountService.updateForUser('u1', 'a1', { email: storedRow.email })
+
+         expect(mocks.update.mock.calls[0][0].data).not.toHaveProperty('status')
+      })
+
+      it('should keep a disabled account disabled when its email changes', async () => {
+         mocks.findFirst.mockResolvedValueOnce({
+            ...storedRow,
+            status: 'DISABLED',
          })
          mocks.open.mockReturnValueOnce(JSON.stringify({ password: 'pw' }))
          mocks.update.mockResolvedValueOnce({ id: 'a1' })

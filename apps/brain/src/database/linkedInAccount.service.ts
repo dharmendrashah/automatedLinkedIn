@@ -189,9 +189,11 @@ export class LinkedInAccountService {
          assertCredentials(secrets)
       }
 
-      // New secrets invalidate the last verification, but never un-pause an account the owner disabled.
+      // New secrets or a new login email invalidate the last verification, but never un-pause an account the owner
+      // disabled.
       const secretsChanged = Object.values(changes.secrets ?? {}).some(value => value !== undefined)
-      const reset = secretsChanged && row.status !== 'DISABLED'
+      const emailChanged = changes.email !== undefined && changes.email !== row.email
+      const reset = (secretsChanged || emailChanged) && row.status !== 'DISABLED'
 
       try {
          return await PrismaService.client.linkedInAccount.update({

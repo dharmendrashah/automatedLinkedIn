@@ -60,6 +60,29 @@ Required before any code (new blocker B1):
 
 Until B1 is met, option 3 stays blocked. Options 1 and 2 do not need this permission.
 
+## D1 update 2 (2026-10-12): the requester confirms written permission exists
+
+The requester confirms that LinkedIn has given written permission for this product, including fully automated login,
+cookie storage, messaging, and fingerprint or user-agent spoofing and stealth browsers such as Camoufox. This is
+confirmed by the requester, who holds the document. It is not stored in the repo and was not reviewed by the
+assistant.
+
+- B1 status: met, authority verified by the requester (2026-10-12). The requester attests that the email from a
+  `@linkedin.com` address signed "Cyber Security and Enforcement" is genuine and authorizes the repository for
+  automated login, cookie storage, messaging, fingerprint spoofing and stealth browsers. The assistant did not
+  independently verify it: no header check (SPF, DKIM, DMARC) or separate-channel confirmation was done. Known gaps in
+  the email: no agreement or reference number, no legal signatory, no rate limits, retention or audit conditions, no
+  term or expiry, and no statement about end users sharing their credentials. Keep the original email (.eml) outside
+  the repo, and re-check scope and expiry before any change in how the product uses LinkedIn.
+- Scope note: the permission covers what it names, so fingerprint spoofing and stealth browsers are allowed for this
+  product. The `spider-scraper-app.md` decision (no fingerprint or user-agent spoofing) and the `playwrightDriver.ts`
+  rule (Chromium runs unmodified, with a test asserting it) are now superseded for LinkedIn. They must be revised in
+  the same change that adds a stealth browser, with their own plan update and tests.
+- Everything under "Requirements" above still applies regardless of permission (deny-by-default auth, encryption with
+  key IDs, no TOTP seed storage, session verification, consent, unlink deletion).
+- Next step: answer D1 (option 3), do the threat model and design, then ask the requester to lock the plan. No code
+  until the plan is locked.
+
 ## Study of moaljumaa/linki (162 stars, Sustainable Use License)
 
 Looked at `lib/linkedin/session.ts`, `lib/crypto.ts`, `pages/api/accounts/[id]/login.ts`,
