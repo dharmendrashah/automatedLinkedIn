@@ -191,8 +191,15 @@ jobs:
             echo "::warning title=DNS updater not configured::CLOUDFLARE_API_TOKEN is not set, so staging DNS will not update when the node IP changes."
           fi
 
-          kustomize build --load-restrictor LoadRestrictionsNone deploy/overlays/staging \
-            | kubectl apply -f -
+          kustomize build --load-restrictor LoadRestrictionsNone deploy/overlays/staging > /tmp/staging-rendered.yaml
+          # Refuse to apply placeholder values (for example the base config's example database host,
+          # or CHANGE_ME). These reached a live pod once when an overlay merge was lost.
+          if grep -qE 'example\.invalid|CHANGE_ME' /tmp/staging-rendered.yaml; then
+            echo "::error title=Placeholder in rendered staging config::The rendered staging manifests still contain placeholder values. Check deploy/overlays/staging."
+            grep -nE 'example\.invalid|CHANGE_ME' /tmp/staging-rendered.yaml | cut -c1-160
+            exit 1
+          fi
+          kubectl apply -f /tmp/staging-rendered.yaml
           kubectl -n automatedlinkedin rollout status deploy/brain --timeout=5m
           kubectl -n automatedlinkedin rollout status deploy/body --timeout=5m
           kubectl -n automatedlinkedin rollout status deploy/authentik-server --timeout=5m
