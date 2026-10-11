@@ -19,6 +19,10 @@ WORKDIR /app
 COPY --from=prune /out/package.json ./
 COPY --from=prune /out/node_modules ./node_modules
 COPY --from=prune /repo/apps/brain/dist ./dist
+# Build info reported by GET /health. CI passes these; local builds report "unknown".
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+ENV GIT_SHA=${GIT_SHA} BUILD_TIME=${BUILD_TIME}
 USER node
 EXPOSE 3001
 CMD ["node", "dist/src/server.js"]

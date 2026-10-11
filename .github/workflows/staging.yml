@@ -63,6 +63,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
+      # Recorded in the image and reported by GET /health, so a deploy can be confirmed.
+      - id: buildinfo
+        run: echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Resolve lowercase image name
         id: image
         run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}-${{ matrix.suffix }}" >> "$GITHUB_OUTPUT"
@@ -94,6 +98,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.buildinfo.outputs.time }}
             VITE_API_URL=${{ vars.STAGING_API_URL }}
             VITE_AUTHENTIK_URL=${{ vars.STAGING_AUTH_URL }}
             VITE_AUTHENTIK_CLIENT_ID=automatedlinkedin
