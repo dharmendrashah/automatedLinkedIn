@@ -41,7 +41,7 @@ configMapGenerator:
       - update_dns.py=dns/update_dns.py
   - name: dns-config
     literals:
-      - CF_ZONE_ID=CHANGE_ME_CLOUDFLARE_ZONE_ID
+      - CF_ZONE_ID=e03351a934383e813f5becffec34b440
       - RECORD_NAME=app.staging.elitale.com
 
 patches:
