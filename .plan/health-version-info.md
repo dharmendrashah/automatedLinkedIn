@@ -4,6 +4,21 @@
 - Created: 2026-10-11
 - Locked by user: partly. The user asked for a JSON `/health` on both apps that shows version, commit SHA and deploy time, and said the path may change. The choices marked "proposed" below are mine and need the user's OK before merge.
 
+## Change request (2026-10-11): one brain route
+
+The user asked to merge brain's `/healthz`, `/readyz` and `/health` into one `GET /health`.
+
+- One route on brain: `GET /health`. It returns JSON with `status`, `service`, `commit`, `builtAt`,
+  `startedAt` and `database` (`up` or `down`). It answers 200 when the database answers and 503 when it does not.
+  `Cache-Control: no-store` stays.
+- This replaces P5 above for brain. `/health` now checks the database, so it is a readiness check, not a
+  liveness check.
+- Liveness must not depend on the database. A liveness probe that fails during a database outage restarts
+  every brain pod for nothing (the same failure we hit with authentik). So the brain liveness probe becomes a
+  TCP check on the port.
+- Startup and readiness probes move from `/readyz` to `/health`. `/healthz` and `/readyz` are removed.
+- Body is unchanged: `/health` stays a static file and does not check anything.
+
 ## Goal
 
 After each staging deploy, anyone can run `curl https://api.staging.elitale.com/health` and
@@ -66,7 +81,14 @@ Proposed (need confirmation):
 
 ## Outcome
 
-Done on 2026-10-11 (PR #6).
+Done on 2026-10-11 (PR #6). Brain was later changed to a single route (see the change request above).
+
+Single-route change, verified 2026-10-11:
+
+- Unit tests: 83/83 pass, including 4 new tests for `/health` (200 up, 503 down, 503 when the check throws, no-store).
+- Docker image run against the compose database: `GET /health` returns 200 with `database: up`. With an unreachable database it returns 503 with `database: down`. `/healthz` and `/readyz` return 404.
+- Kubernetes manifest: startup and readiness use `/health`, liveness is TCP.
+
 
 - Brain: `GET /health` with unit tests written first (85/85 passing). Body: `GET /health` served from a static
   file with an exact nginx location. Both images take `GIT_SHA` and `BUILD_TIME` as build args, and CI sets them.

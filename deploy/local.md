@@ -86,11 +86,11 @@ For a quick check without `sudo` or hosts entries, forward to 8080 and send the 
 kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80 &
 
 curl -H 'Host: app.automatedlinkedin.local' http://127.0.0.1:8080/
-curl -H 'Host: api.automatedlinkedin.local' http://127.0.0.1:8080/readyz
+curl -H 'Host: api.automatedlinkedin.local' http://127.0.0.1:8080/health
 curl -H 'Host: auth.automatedlinkedin.local' http://127.0.0.1:8080/-/health/live/
 ```
 
-`/readyz` returning `{"status":"ok","database":"up"}` proves Prisma reached the host database
+`/health` returning `"database":"up"` proves Prisma reached the host database
 through the cluster.
 
 ## 6. Apply the blueprint for the local hostnames
