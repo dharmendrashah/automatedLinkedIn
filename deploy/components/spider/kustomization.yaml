@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Opt-in, like docker compose's `spider` profile: only the overlays that need spider list this component
+# (currently staging). It needs an overlay that already declares the `app-config` ConfigMap and `app-secrets`
+# Secret generators (every overlay in this repo does) and RabbitMQ (every base does).
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: automatedlinkedin
+
+resources:
+  - spider-api.deployment.yaml
+  - spider-api.service.yaml
+  - spider-worker.serviceaccount.yaml
+  - spider-worker.deployment.yaml
+
+configMapGenerator:
+  - name: app-config
+    behavior: merge
+    envs:
+      - spider.config.env

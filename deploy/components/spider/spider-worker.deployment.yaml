@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spider-worker
+  labels:
+    app.kubernetes.io/name: spider-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: spider-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: spider-worker
+    spec:
+      # GKE Workload Identity gives GCS access with no mounted key file (deploy/gcp-setup.md).
+      serviceAccountName: spider-worker
+      containers:
+        - name: spider-worker
+          # Built from the Dockerfile's `worker` target; the published repo name is `-spider-worker`.
+          image: automatedlinkedin-spider-worker
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: app-secrets
+          env:
+            # Same two secret keys the broker starts with, so they cannot drift apart from brain's.
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: RABBITMQ_DEFAULT_PASS
+            - name: RABBITMQ_URL
+              value: amqp://$(RABBITMQ_DEFAULT_USER):$(RABBITMQ_DEFAULT_PASS)@rabbitmq:5672/automatedlinkedin
+          # No HTTP server and so no probes: a crash exits the process and the container restart brings a
+          # clean worker back, the same behaviour worker.ts already relies on for a lost broker connection.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: '1'
+              memory: 2Gi
+          securityContext:
+            # Numeric UID is required: the image declares `USER node`, and kubelet
+            # cannot verify a non-numeric user against runAsNonRoot.
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            # No readOnlyRootFilesystem, unlike brain and spider-api: Camoufox writes its GeoIP database and
+            # Firefox writes a profile under the container's own filesystem at run time.
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            # Firefox/Camoufox needs more shared memory than the container default, same as compose's shm_size.
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi

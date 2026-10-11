@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spider-api
+  labels:
+    app.kubernetes.io/name: spider-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: spider-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: spider-api
+    spec:
+      containers:
+        - name: spider-api
+          # Built from the Dockerfile's `api` target; the published repo name is `-spider` (see staging.yml).
+          image: automatedlinkedin-spider
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3002
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: app-secrets
+          env:
+            # app-config's PORT is brain's (3001); override it so spider-api matches its own containerPort.
+            - name: PORT
+              value: '3002'
+            # Same two secret keys the broker starts with, so they cannot drift apart from brain's.
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: RABBITMQ_DEFAULT_PASS
+            - name: RABBITMQ_URL
+              value: amqp://$(RABBITMQ_DEFAULT_USER):$(RABBITMQ_DEFAULT_PASS)@rabbitmq:5672/automatedlinkedin
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          # TCP, not HTTP: /health checks the broker, so a broker outage must not restart the pod.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            # Numeric UID is required: the image declares `USER node`, and kubelet
+            # cannot verify a non-numeric user against runAsNonRoot.
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
