@@ -1,6 +1,8 @@
+import { FailureCard } from '@/components/failure-card'
+import { PageStatus } from '@/components/page-status'
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
-import { Link, Navigate } from 'react-router'
+import { Navigate } from 'react-router'
 
 import { authConfig } from '../auth/authConfig'
 import { userManager } from '../auth/userManager'
@@ -21,15 +23,7 @@ export const Signup = () => {
 
    if (isAuthenticated) return <Navigate to="/" replace />
 
-   if (failure) {
-      return (
-         <section className="card">
-            <h1>Sign up failed</h1>
-            <p className="error">{failure}</p>
-            <Link to="/">Back to home</Link>
-         </section>
-      )
-   }
+   if (failure) return <FailureCard title="Sign up failed" message={failure} to="/" action="Back to home" />
 
-   return <p className="status">Redirecting to sign up…</p>
+   return <PageStatus>Redirecting to sign up…</PageStatus>
 }

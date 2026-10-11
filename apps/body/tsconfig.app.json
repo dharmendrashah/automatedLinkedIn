@@ -11,6 +11,7 @@
     /* Bundler mode */
     "moduleResolution": "bundler",
     "paths": {
+      "@/*": ["./src/*"],
       "trpc": ["../brain/src/trpc"],
       "trpc/*": ["../brain/src/trpc/*"],
       "auth": ["../brain/src/auth"],

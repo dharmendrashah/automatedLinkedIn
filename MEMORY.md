@@ -66,7 +66,12 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - Staging DNS: a CronJob (`overlays/staging/dns/`, every 5 minutes) keeps `app.staging.elitale.com` (DNS only, TTL 60) pointed at the node's external IP, read from the GCE metadata server. `api.` and `auth.` are CNAMEs to `app.`. It needs the GitHub secret `CLOUDFLARE_API_TOKEN` (Zone DNS Edit on elitale.com) and the zone ID in `kustomization.yaml`. Until both are set, the job fails and DNS does not change.
 - authentik enrollment: the user-write stage must set `user_type: internal`, or sign-ups are created as `external` and get "Permission denied — Interface can only be accessed by internal users" on `/if/user/` (the "Manage account" link). Fix an existing external user with `update authentik_core_user set type='internal' where ...`.
 
+- `apps/body` UI is Tailwind v4 + shadcn/ui (`components.json`, `@/` alias set in Vite and both tsconfigs; it does not collide with brain's bare aliases). Add components with `pnpm dlx shadcn@latest add <name>` from `apps/body`. The CLI mis-detected the utils import: it wrote `from "cn"` in generated files and added a bogus `cn` npm dependency. Fix by rewriting those imports to `@/lib/utils` and removing the `cn` dep. Dark mode is the `.dark` class driven by `next-themes` (system by default). Generated shadcn files produce oxlint warnings (react-refresh exports); leave them.
+- `apps/body` routes: `PublicLayout` (`/`, `/login`, `/signup`, `/callback`) and `DashboardLayout` (`/dashboard`, `/profile`, wrapped in `RequireAuth`). Profile data is read-only in the SPA; editing goes to authentik (`authConfig.accountUrl`).
+
 ## Open items
+
+- The dashboard chart, cards and table still show shadcn sample data; `@tabler/icons-react` is only there because the block uses it.
 
 - `Middlewares.serveWeb` in brain serves a `web/dist` folder that does not exist in the image; probably dead code now that `body` is its own image.
 - The authentik stack boots and the `automatedLinkedIn` blueprint applies successfully; the `automatedlinkedin-enrollment` flow serves (verified via the executor API). Still verify login, profile and logout end to end in a browser, including that sign-up lands back in the app signed in, and logout returns to the app (`redirect_uri_type: logout`).
@@ -82,6 +87,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - Security: the local git remote URL embeds a personal access token. It should be rotated and the remote reset to a clean URL.
 
 ## Changelog
+
+- 2026-10-11: `apps/body` got Tailwind, shadcn/ui, lucide, the `dashboard-01` shell, a rebuilt profile page and a logout button in the sidebar user menu.
 
 - 2026-10-10: Added MIT license, README, code of conduct, issue templates, and CI.
 - 2026-10-10: Migrated ESLint to flat config; fixed TypeScript 7 configs and Vitest setup.
