@@ -11,6 +11,16 @@ x-authentik: &authentik
     AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_PG_USER:-authentik}
     AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASS:-authentik}
     AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-dev-only-change-me-dev-only-change-me-dev-only-change-me}
+    # Outbound mail for sign-up verification and password reset. Defaults send to the local
+    # Mailpit catcher (http://localhost:8025). To use Resend, set the AUTHENTIK_EMAIL__* values in .env.
+    AUTHENTIK_EMAIL__HOST: ${AUTHENTIK_EMAIL__HOST:-mailpit}
+    AUTHENTIK_EMAIL__PORT: ${AUTHENTIK_EMAIL__PORT:-1025}
+    AUTHENTIK_EMAIL__USERNAME: ${AUTHENTIK_EMAIL__USERNAME:-}
+    AUTHENTIK_EMAIL__PASSWORD: ${AUTHENTIK_EMAIL__PASSWORD:-}
+    AUTHENTIK_EMAIL__USE_TLS: ${AUTHENTIK_EMAIL__USE_TLS:-false}
+    AUTHENTIK_EMAIL__USE_SSL: ${AUTHENTIK_EMAIL__USE_SSL:-false}
+    AUTHENTIK_EMAIL__TIMEOUT: ${AUTHENTIK_EMAIL__TIMEOUT:-10}
+    AUTHENTIK_EMAIL__FROM: ${AUTHENTIK_EMAIL__FROM:-no-reply@automatedlinkedin.local}
   depends_on:
     postgres:
       condition: service_healthy
@@ -18,6 +28,14 @@ x-authentik: &authentik
   restart: unless-stopped
 
 services:
+  # Local mail catcher. authentik sends sign-up verification and password reset e-mails here.
+  # Web UI: http://localhost:8025. Nothing is delivered outside this machine.
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "127.0.0.1:8025:8025"
+    restart: unless-stopped
+
   postgres:
     image: postgres:18-alpine
     environment:
