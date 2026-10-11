@@ -1,3 +1,5 @@
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { ThemeProvider } from 'next-themes'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
@@ -9,12 +11,16 @@ import { TrpcProvider } from './trpc/TrpcProvider.tsx'
 
 createRoot(document.getElementById('root')!).render(
    <StrictMode>
-      <BrowserRouter>
-         <OidcProvider>
-            <TrpcProvider>
-               <App />
-            </TrpcProvider>
-         </OidcProvider>
-      </BrowserRouter>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+         <TooltipProvider>
+            <BrowserRouter>
+               <OidcProvider>
+                  <TrpcProvider>
+                     <App />
+                  </TrpcProvider>
+               </OidcProvider>
+            </BrowserRouter>
+         </TooltipProvider>
+      </ThemeProvider>
    </StrictMode>
 )

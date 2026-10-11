@@ -1,6 +1,8 @@
+import { FailureCard } from '@/components/failure-card'
+import { PageStatus } from '@/components/page-status'
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
-import { Link, Navigate, useLocation } from 'react-router'
+import { Navigate, useLocation } from 'react-router'
 
 import { returnToOf } from '../auth/returnTo'
 
@@ -23,15 +25,7 @@ export const Login = () => {
 
    const message = failure ?? auth.error?.message
 
-   if (message) {
-      return (
-         <section className="card">
-            <h1>Sign in failed</h1>
-            <p className="error">{message}</p>
-            <Link to="/">Back to home</Link>
-         </section>
-      )
-   }
+   if (message) return <FailureCard title="Sign in failed" message={message} to="/" action="Back to home" />
 
-   return <p className="status">Redirecting to sign in…</p>
+   return <PageStatus>Redirecting to sign in…</PageStatus>
 }

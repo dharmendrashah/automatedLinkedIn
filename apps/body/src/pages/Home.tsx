@@ -1,31 +1,25 @@
+import { PageStatus } from '@/components/page-status'
+import { Button } from '@/components/ui/button'
 import { useAuth } from 'react-oidc-context'
-import { Link } from 'react-router'
-
-import { toProfile } from '../auth/profile'
+import { Link, Navigate } from 'react-router'
 
 export const Home = () => {
-   const { isAuthenticated, user } = useAuth()
+   const { isLoading, isAuthenticated } = useAuth()
 
-   if (isAuthenticated && user) {
-      return (
-         <section className="card">
-            <h1>Welcome, {toProfile(user.profile).displayName}</h1>
-            <p>
-               <Link to="/profile">View your profile</Link>
-            </p>
-         </section>
-      )
-   }
+   if (isLoading) return <PageStatus>Loading…</PageStatus>
+   if (isAuthenticated) return <Navigate to="/dashboard" replace />
 
    return (
-      <section className="card">
-         <h1>Automate your LinkedIn outreach</h1>
-         <p>Sign in or create an account to get started.</p>
-         <div className="actions">
-            <Link to="/login">Log in</Link>
-            <Link to="/signup" className="primary">
-               Sign up
-            </Link>
+      <section className="mx-auto flex max-w-2xl flex-1 flex-col items-center justify-center gap-6 text-center">
+         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">Automate your LinkedIn outreach</h1>
+         <p className="text-muted-foreground text-lg">Sign in or create an account to get started.</p>
+         <div className="flex gap-3">
+            <Button asChild size="lg">
+               <Link to="/signup">Sign up</Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+               <Link to="/login">Log in</Link>
+            </Button>
          </div>
       </section>
    )
