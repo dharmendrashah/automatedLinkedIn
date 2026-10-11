@@ -8,7 +8,7 @@ import { getRole, me } from './resolvers'
 
 export type AppRouter = typeof appRouter
 
-const appRouter = router({
+export const appRouter = router({
    getRole,
    me,
 })
