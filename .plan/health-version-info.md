@@ -1,6 +1,6 @@
 # Build info endpoint (`/health`) for brain and body
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: done <!-- draft | locked | in progress | done -->
 - Created: 2026-10-11
 - Locked by user: partly. The user asked for a JSON `/health` on both apps that shows version, commit SHA and deploy time, and said the path may change. The choices marked "proposed" below are mine and need the user's OK before merge.
 
@@ -66,4 +66,22 @@ Proposed (need confirmation):
 
 ## Outcome
 
-Filled in when done.
+Done on 2026-10-11 (PR #6).
+
+- Brain: `GET /health` with unit tests written first (85/85 passing). Body: `GET /health` served from a static
+  file with an exact nginx location. Both images take `GIT_SHA` and `BUILD_TIME` as build args, and CI sets them.
+- Local, with the built images: brain and body return JSON with the passed commit. Body `/` and deep links
+  still return HTML. Builds without args report `unknown`.
+- Staging, from workflow run 38119927959 on this branch (`e706847`): `https://api.staging.elitale.com/health` and
+  `https://app.staging.elitale.com/health` both return `"commit":"e706847180e409705a5b5ad36bcefacf7e1de535"`.
+  Brain's `startedAt` (07:05:29Z) is after `builtAt` (07:01:58Z), which shows the rollout replaced the pod.
+- Not verified: the cluster state from the laptop. The local `gcloud` login had expired, so `kubectl` could not
+  connect. The workflow's `rollout status` steps passed.
+
+Deviations from the plan: none to behaviour. The plan's "partly locked" choices (path `/health`, field names,
+`builtAt` as deploy time) are unchanged; the reviewer can still change them before merge.
+
+Follow-ups:
+
+- Release builds (`release.yml`) do not pass the build args, so release images report `unknown`. Add the same args there.
+- Optional: a `version` field from the git tag once releases are tagged.
