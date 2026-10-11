@@ -39,6 +39,27 @@ Options:
 
 **Question for the user:** which option? (The plan cannot move to code until this is answered.)
 
+## D1 update (2026-10-11): the requester says LinkedIn has agreed
+
+The requester says the product will be fully automated and that LinkedIn agreed to it, provided each user agrees to
+share their credentials.
+
+What the User Agreement says about this: section 8 limits the Dos and Don'ts "unless otherwise explicitly permitted by
+LinkedIn in a separate writing (e.g., through a research agreement)." So the only route that can cover option 3 is a
+written permission from LinkedIn that names this use. A user's consent to share credentials does not override LinkedIn's
+terms: the clauses on sharing log-in credentials and copying cookies bind the member, and a company cannot waive them for
+its users.
+
+Required before any code (new blocker B1):
+
+- A copy of the written LinkedIn permission (contract, research agreement, or signed approval) that explicitly covers:
+  fully automated login with user-provided passwords and TOTP, storage of session cookies, and sending messages or
+  connection requests.
+- The name and date of LinkedIn's approver, and the scope and any conditions (rate limits, data retention, audit).
+- Confirmation that the permission covers the product as built, not a different use.
+
+Until B1 is met, option 3 stays blocked. Options 1 and 2 do not need this permission.
+
 ## Study of moaljumaa/linki (162 stars, Sustainable Use License)
 
 Looked at `lib/linkedin/session.ts`, `lib/crypto.ts`, `pages/api/accounts/[id]/login.ts`,
