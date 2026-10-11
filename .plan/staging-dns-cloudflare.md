@@ -79,8 +79,11 @@ Built and live on staging on 2026-10-11 (branch `feat/staging-dns-cloudflare`, P
   `34.47.216.69`.
 - Live: the `CLOUDFLARE_API_TOKEN` secret is set, the zone ID is in the overlay, and the branch was deployed (run 38124369418).
   The CronJob runs every 5 minutes. A manual run reported `unchanged: A app.staging.elitale.com already points at 34.47.216.69`.
-  The live drift test (change the record to a wrong IP, then confirm the job corrects it) has not been run, because it
-  would briefly break staging.
+  Live drift test, 2026-10-11 (after PR #7 was merged and deployed; deploy run 38125740481): the record was changed from
+  `34.47.216.69` to the documentation address `203.0.113.10`. A manual run of the CronJob logged
+  `updated A app.staging.elitale.com: 203.0.113.10 -> 34.47.216.69` about 7 seconds after it started, and the record
+  was correct again. Resolvers 8.8.8.8 and 1.1.1.1 returned `34.47.216.69` after the 60-second TTL, and `app` and `api`
+  returned 200. Staging was wrong for roughly one minute.
 - Found and fixed during rollout: a duplicate `configMapGenerator` key silently dropped the `app-config` merge, and the new
   authentik pods used the base placeholder database host. The fix is in the same branch, and the deploy job now refuses to
   apply a rendered overlay that contains `example.invalid` or `CHANGE_ME`.
