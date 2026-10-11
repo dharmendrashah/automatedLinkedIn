@@ -1,6 +1,6 @@
 # Automatic DNS update for the staging node (Cloudflare)
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: done <!-- draft | locked | in progress | done -->
 - Created: 2026-10-11
 - Locked by user: partly. The user asked for automatic DNS updates with Cloudflare when the Spot node's IP changes.
   The choices marked "proposed" below are mine and need the user's OK.
@@ -69,7 +69,7 @@ Proposed (need confirmation):
 
 ## Outcome
 
-Built on 2026-10-11, not yet live: the Cloudflare token and zone ID are still needed.
+Built and live on staging on 2026-10-11 (branch `feat/staging-dns-cloudflare`, PR #7).
 
 - Unit tests: `python3 -m unittest deploy/overlays/staging/dns/test_update_dns.py`, 10 of 10 pass against a mock
   Cloudflare API and mock metadata server. They cover create, unchanged, update, proxy off, duplicate records,
@@ -77,7 +77,14 @@ Built on 2026-10-11, not yet live: the Cloudflare token and zone ID are still ne
 - Cluster path check: a one-off pod with the same image and script mount read the node IP from the metadata
   server and reached the real Cloudflare API. It got a normal API reply for a fake zone, and DNS stayed at
   `34.47.216.69`.
-- Still to do after the token and zone ID are set: `CF_ZONE_ID` in `overlays/staging/kustomization.yaml`
+- Live: the `CLOUDFLARE_API_TOKEN` secret is set, the zone ID is in the overlay, and the branch was deployed (run 38124369418).
+  The CronJob runs every 5 minutes. A manual run reported `unchanged: A app.staging.elitale.com already points at 34.47.216.69`.
+  The live drift test (change the record to a wrong IP, then confirm the job corrects it) has not been run, because it
+  would briefly break staging.
+- Found and fixed during rollout: a duplicate `configMapGenerator` key silently dropped the `app-config` merge, and the new
+  authentik pods used the base placeholder database host. The fix is in the same branch, and the deploy job now refuses to
+  apply a rendered overlay that contains `example.invalid` or `CHANGE_ME`.
+- Previously needed (now done): `CF_ZONE_ID` in `overlays/staging/kustomization.yaml`
   (currently `CHANGE_ME_CLOUDFLARE_ZONE_ID`), the `CLOUDFLARE_API_TOKEN` GitHub secret, then a manual job run
   to confirm the record is unchanged.
 - Until the zone ID is set, the CronJob fails every 5 minutes and DNS does not change.
