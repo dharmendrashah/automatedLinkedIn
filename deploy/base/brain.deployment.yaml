@@ -47,19 +47,20 @@ spec:
                 name: app-secrets
           startupProbe:
             httpGet:
-              path: /readyz
+              path: /health
               port: http
             periodSeconds: 5
             failureThreshold: 30
           readinessProbe:
             httpGet:
-              path: /readyz
+              path: /health
               port: http
             periodSeconds: 10
             timeoutSeconds: 3
+          # TCP, not HTTP: /health checks the database, so a database outage must not
+          # restart every brain pod. Liveness only catches a hung process.
           livenessProbe:
-            httpGet:
-              path: /healthz
+            tcpSocket:
               port: http
             periodSeconds: 20
             timeoutSeconds: 3

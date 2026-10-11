@@ -42,6 +42,16 @@ export class Environment {
             example: 'http://localhost:3000,http://localhost:5173',
             default: 'http://localhost:3000,http://localhost:5173',
          }),
+         GIT_SHA: string({
+            desc: 'Git commit the image was built from, reported by GET /health',
+            example: 'a1b2c3d',
+            default: 'unknown',
+         }),
+         BUILD_TIME: string({
+            desc: 'UTC time the image was built, reported by GET /health',
+            example: '2026-10-11T10:00:00Z',
+            default: 'unknown',
+         }),
       })
    }
 }

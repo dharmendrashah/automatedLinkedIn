@@ -6,6 +6,11 @@ const mocks = vi.hoisted(() => ({ isHealthy: vi.fn() }))
 
 vi.mock('database', () => ({ PrismaService: { isHealthy: mocks.isHealthy } }))
 
+vi.mock('env', () => ({
+   GIT_SHA: 'a1b2c3d',
+   BUILD_TIME: '2026-10-11T10:00:00Z',
+}))
+
 const createApp = () => {
    const routes = new Map<string, (request: unknown, response: unknown) => unknown>()
 
@@ -19,8 +24,14 @@ const createApp = () => {
       const response = {
          statusCode: 200,
          body: undefined as unknown,
+         headers: {} as Record<string, string>,
          status: vi.fn(function (this: typeof response, code: number) {
             this.statusCode = code
+
+            return this
+         }),
+         set: vi.fn(function (this: typeof response, name: string, value: string) {
+            this.headers[name] = value
 
             return this
          }),
@@ -48,70 +59,69 @@ describe('Health', () => {
       vi.clearAllMocks()
    })
 
-   it('should register the liveness and readiness routes', () => {
+   it('should register a single health route', () => {
       const { app, routes } = createApp()
 
       Health.config(app as never)
 
-      expect([...routes.keys()]).toEqual(['/healthz', '/readyz'])
-      expect(app.get).toHaveBeenCalledTimes(2)
+      expect([...routes.keys()]).toEqual(['/health'])
+      expect(app.get).toHaveBeenCalledTimes(1)
    })
 
-   it('should answer liveness without touching the database', async () => {
-      const { app, call } = createApp()
-
-      Health.config(app as never)
-
-      const response = await call('/healthz')
-
-      expect(response.statusCode).toBe(200)
-      expect(response.body).toEqual({ status: 'ok' })
-      expect(mocks.isHealthy).not.toHaveBeenCalled()
-   })
-
-   it('should report ready when the database answers', async () => {
+   it('should report 200 with build info and the database up when the database answers', async () => {
       mocks.isHealthy.mockResolvedValue(true)
 
       const { app, call } = createApp()
 
       Health.config(app as never)
 
-      const response = await call('/readyz')
+      const response = await call('/health')
 
       expect(response.statusCode).toBe(200)
       expect(response.body).toEqual({
          status: 'ok',
+         service: 'brain',
+         commit: 'a1b2c3d',
+         builtAt: '2026-10-11T10:00:00Z',
+         startedAt: expect.any(String),
          database: 'up',
       })
+      expect(Number.isNaN(Date.parse((response.body as { startedAt: string }).startedAt))).toBe(false)
+      expect(response.headers['Cache-Control']).toBe('no-store')
    })
 
-   it('should report unavailable when the database does not answer', async () => {
+   it('should report 503 with the database down when the database does not answer', async () => {
       mocks.isHealthy.mockResolvedValue(false)
 
       const { app, call } = createApp()
 
       Health.config(app as never)
 
-      const response = await call('/readyz')
+      const response = await call('/health')
 
       expect(response.statusCode).toBe(503)
       expect(response.body).toEqual({
          status: 'error',
+         service: 'brain',
+         commit: 'a1b2c3d',
+         builtAt: '2026-10-11T10:00:00Z',
+         startedAt: expect.any(String),
          database: 'down',
       })
+      expect(response.headers['Cache-Control']).toBe('no-store')
    })
 
-   it('should report unavailable when the health check throws', async () => {
+   it('should report 503 when the database check throws', async () => {
       mocks.isHealthy.mockRejectedValue(new Error('connection refused'))
 
       const { app, call } = createApp()
 
       Health.config(app as never)
 
-      const response = await call('/readyz')
+      const response = await call('/health')
 
       expect(response.statusCode).toBe(503)
-      expect(response.body).toEqual({
+      expect(response.body).toMatchObject({
          status: 'error',
          database: 'down',
       })
