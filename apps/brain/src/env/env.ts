@@ -1,4 +1,13 @@
-import { cleanEnv, port, str as string, url } from 'envalid'
+import { cleanEnv, makeValidator, port, str as string, url } from 'envalid'
+
+// Base64-encoded 32-byte key for AES-256-GCM. Validated at boot so a bad key fails fast.
+const encryptionKey = makeValidator<string>(value => {
+   if (Buffer.from(value, 'base64').length !== 32) {
+      throw new Error('must be a base64-encoded 32-byte key (generate with: openssl rand -base64 32)')
+   }
+
+   return value
+})
 
 export class Environment {
    public static config() {
@@ -41,6 +50,12 @@ export class Environment {
             desc: 'Comma-separated browser origins allowed to call the API',
             example: 'http://localhost:3000,http://localhost:5173',
             default: 'http://localhost:3000,http://localhost:5173',
+         }),
+         LINKEDIN_CRED_ENC_KEY: encryptionKey({
+            desc: 'Base64-encoded 32-byte key (AES-256-GCM) that encrypts stored LinkedIn secrets at rest',
+            example: 'openssl rand -base64 32',
+            // Insecure throwaway key for local and test only; production has no default and must set a real one.
+            devDefault: 'pqaZGClH/kqxNTLoLT4c0lMTloNIi2At3Jzz9a2rkIQ=',
          }),
          GIT_SHA: string({
             desc: 'Git commit the image was built from, reported by GET /health',

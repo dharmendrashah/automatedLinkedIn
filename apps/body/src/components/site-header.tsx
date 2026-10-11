@@ -4,6 +4,7 @@ import { useLocation } from 'react-router'
 
 const titles: Record<string, string> = {
    '/dashboard': 'Dashboard',
+   '/accounts': 'LinkedIn accounts',
    '/profile': 'Profile',
 }
 

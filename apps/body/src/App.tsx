@@ -3,6 +3,7 @@ import { Route, Routes } from 'react-router'
 
 import { DashboardLayout } from './layouts/DashboardLayout'
 import { PublicLayout } from './layouts/PublicLayout'
+import { Accounts } from './pages/Accounts'
 import { Callback } from './pages/Callback'
 import { Dashboard } from './pages/Dashboard'
 import { Home } from './pages/Home'
@@ -26,6 +27,7 @@ const App = () => (
       </Route>
       <Route element={<DashboardLayout />}>
          <Route path="/dashboard" element={<Dashboard />} />
+         <Route path="/accounts" element={<Accounts />} />
          <Route path="/profile" element={<Profile />} />
       </Route>
    </Routes>

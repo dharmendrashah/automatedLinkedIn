@@ -15,6 +15,21 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Throwaway database for the integration tests; it only lives for this job.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: automatedlinkedin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d automatedlinkedin"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -32,6 +47,18 @@ jobs:
       - run: pnpm ts:check
 
       - run: pnpm test:unit:run
+
+      # Straight through pnpm: Turborepo strict env mode would hide DATABASE_URL from the task.
+      - name: Apply database migrations
+        run: pnpm --filter @automatedLinkedIn/brain db:migrate:deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/automatedlinkedin
+
+      - name: Integration tests
+        run: pnpm --filter @automatedLinkedIn/brain test:integration:run
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/automatedlinkedin
 
       - run: pnpm build
 

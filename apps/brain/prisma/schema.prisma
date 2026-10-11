@@ -22,4 +22,43 @@ model User {
   authentikId String?  @unique
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  linkedInAccounts LinkedInAccount[]
+}
+
+enum LinkedInAccountStatus {
+  // Stored but not verified against LinkedIn yet.
+  PENDING
+  ACTIVE
+  NEEDS_REAUTH
+  ERROR
+  // Paused by the owner; automation must skip it.
+  DISABLED
+}
+
+// A LinkedIn login the user asks the tool to act as. Secrets live in one AES-256-GCM
+// encrypted JSON bundle ({ password?, totpSecret?, session? }); the booleans mirror which
+// secrets are set so metadata reads never decrypt.
+model LinkedInAccount {
+  id              String                @id @default(uuid(7))
+  userId          String
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email           String
+  secret          String
+  secretIv        String
+  secretTag       String
+  keyVersion      Int                   @default(1)
+  hasPassword     Boolean               @default(false)
+  hasTotp         Boolean               @default(false)
+  hasSession      Boolean               @default(false)
+  status          LinkedInAccountStatus @default(PENDING)
+  // Short, non-secret reason for the current status.
+  statusMessage   String?
+  statusUpdatedAt DateTime              @default(now())
+  lastVerifiedAt  DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@unique([userId, email])
+  @@index([userId])
 }

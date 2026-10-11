@@ -1,2 +1,3 @@
 export { getRole } from './getRole/getRole'
+export { linkedInAccount } from './linkedInAccount/linkedInAccount'
 export { me } from './me/me'
