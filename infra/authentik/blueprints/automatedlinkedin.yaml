@@ -1,3 +1,5 @@
+
+# yaml-language-server: $schema=https://goauthentik.io/blueprints/schema.json
 version: 1
 metadata:
   name: automatedLinkedIn
@@ -58,6 +60,22 @@ entries:
       password_field: password
       length_min: 8
       error_message: Password must be at least 8 characters long.
+
+  # authentik does not enforce unique e-mail addresses, so sign-up checks this itself.
+  # Case-insensitive, and only for new sign-ups (reset and sign-in are unaffected).
+  - model: authentik_policies_expression.expressionpolicy
+    id: policy-unique-email
+    identifiers:
+      name: automatedlinkedin-unique-email
+    attrs:
+      expression: |
+        from authentik.core.models import User
+
+        email = (request.context.get("prompt_data") or {}).get("email", "").strip()
+        if email and User.objects.filter(email__iexact=email).exists():
+            ak_message("An account with this e-mail already exists. Sign in, or reset your password if you forgot it.")
+            return False
+        return True
 
   - model: authentik_stages_prompt.prompt
     id: prompt-username
@@ -132,6 +150,7 @@ entries:
         - !KeyOf prompt-password-repeat
       validation_policies:
         - !KeyOf password-policy
+        - !KeyOf policy-unique-email
 
   - model: authentik_stages_user_write.userwritestage
     id: stage-user-write

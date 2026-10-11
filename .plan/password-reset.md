@@ -87,6 +87,7 @@ Deviations and notes:
 
 - The skip-if-restored policy from authentik's example was removed. It left a placeholder stage that
   showed a blank "consent" page after the link was opened. Without it the link flow works.
+- Found after go-live: authentik does not enforce unique e-mail addresses, so two sign-ups could use the same address. Fixed in `fix/unique-email-signup` (sign-up rejects an existing e-mail, case-insensitive). Usernames are already unique in authentik.
 - Staging is not updated yet. It needs the Resend API key (`AUTHENTIK_EMAIL__PASSWORD` in `secrets.env`),
   the sender address (`AUTHENTIK_EMAIL__FROM` in `config.env`) and the SPF/DKIM/DMARC records.
   Applying the blueprint before e-mail works would block new sign-ups, since their accounts start inactive.
