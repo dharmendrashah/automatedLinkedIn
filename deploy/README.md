@@ -118,6 +118,7 @@ the **whole file**:
 | `STAGING_CONFIG_ENV` | all of `deploy/overlays/staging/config.env` |
 | `STAGING_SECRETS_ENV` | all of `deploy/overlays/staging/secrets.env` |
 | `GHCR_PULL_TOKEN` | classic PAT with `read:packages`, so the cluster can pull the private images |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API token with `Zone → DNS → Edit` on `elitale.com`. A CronJob keeps `app.staging` pointed at the node IP (see `overlays/staging/dns/`) |
 
 | Variable | Example |
 | --- | --- |
