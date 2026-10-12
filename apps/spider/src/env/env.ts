@@ -89,6 +89,10 @@ export class Environment {
             desc: 'Include a video of the browser in a recording. Needs the ffmpeg build of Playwright in the image',
             default: true,
          }),
+         SPIDER_WORKER_HEALTH_PORT: port({
+            desc: 'Port of the worker health endpoint that the Service status page reads. Worker only',
+            default: 3003,
+         }),
          GIT_SHA: string({
             desc: 'Git commit the image was built from, reported by GET /health',
             example: 'a1b2c3d',

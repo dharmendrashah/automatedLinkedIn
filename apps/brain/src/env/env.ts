@@ -1,4 +1,4 @@
-import { cleanEnv, makeValidator, num, port, str as string, url } from 'envalid'
+import { bool, cleanEnv, makeValidator, num, port, str as string, url } from 'envalid'
 
 // Base64-encoded 32-byte key for AES-256-GCM. Validated at boot so a bad key fails fast.
 const encryptionKey = makeValidator<string>(value => {
@@ -78,6 +78,48 @@ export class Environment {
          SESSION_RECORDING_RETENTION_DAYS: num({
             desc: 'How many days a session recording stays available. Match the bucket lifecycle rule for recordings/',
             default: 7,
+         }),
+         STATUS_URL_WEBSITE: string({
+            desc: 'Address the Service status page asks to see whether the website is up. Empty: the module is left out',
+            example: 'http://body:80/health',
+            default: 'http://body:80/health',
+            devDefault: 'http://localhost:3000/health',
+         }),
+         STATUS_URL_SIGN_IN: string({
+            desc: 'Address the Service status page asks to see whether sign-in (authentik) is ready. Empty: left out',
+            example: 'http://authentik-server:9000/-/health/ready/',
+            default: 'http://authentik-server:9000/-/health/ready/',
+            devDefault: 'http://localhost:9000/-/health/ready/',
+         }),
+         STATUS_URL_SPIDER_API: string({
+            desc: 'Address the Service status page asks to see whether the spider API is up. Empty: left out',
+            example: 'http://spider-api:3002/health',
+            default: 'http://spider-api:3002/health',
+            devDefault: 'http://localhost:3002/health',
+         }),
+         STATUS_URL_SPIDER_WORKER: string({
+            desc: 'Health address of the spider worker, which also reports cloud storage. Empty: both are left out',
+            example: 'http://spider-worker:3003/health',
+            default: 'http://spider-worker:3003/health',
+            devDefault: 'http://localhost:3003/health',
+         }),
+         STATUS_AUTHENTIK_WORKER_DEPLOYMENT: string({
+            desc: "Kubernetes deployment of authentik's worker, which the Service status page asks Kubernetes about. Empty: left out",
+            example: 'authentik-worker',
+            default: 'authentik-worker',
+         }),
+         AUTHENTIK_EMAIL__HOST: string({
+            desc: 'SMTP server authentik sends mail through. The Service status page connects to it and reads its greeting. Empty: left out',
+            example: 'smtp.resend.com',
+            default: '',
+         }),
+         AUTHENTIK_EMAIL__PORT: port({
+            desc: 'Port of that SMTP server',
+            default: 465,
+         }),
+         AUTHENTIK_EMAIL__USE_SSL: bool({
+            desc: 'Whether that SMTP server speaks TLS from the first byte',
+            default: false,
          }),
          GIT_SHA: string({
             desc: 'Git commit the image was built from, reported by GET /health',

@@ -21,6 +21,11 @@ spec:
           # Built from the Dockerfile's `worker` target; the published repo name is `-spider-worker`.
           image: automatedlinkedin-spider-worker
           imagePullPolicy: IfNotPresent
+          ports:
+            # Read by brain for the Service status page. It is not a Kubernetes probe: a crashed worker already exits and
+            # restarts, and a probe that depended on the queue or the bucket would restart it for outages it cannot fix.
+            - name: health
+              containerPort: 3003
           envFrom:
             - configMapRef:
                 name: app-config

@@ -17,6 +17,7 @@
       "auth": ["../brain/src/auth"],
       "core": ["../brain/src/core"],
       "database": ["../brain/src/database"],
+      "serviceStatus": ["../brain/src/serviceStatus"],
       "env": ["../brain/src/env"],
       "generated/*": ["../brain/src/generated/*"]
     },

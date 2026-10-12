@@ -18,7 +18,9 @@ import {
    SPIDER_ROBOTS_EXEMPT_HOSTS,
    SPIDER_ROBOTS_USER_AGENT,
    SPIDER_VALIDATION_MODE,
+   SPIDER_WORKER_HEALTH_PORT,
 } from './env'
+import { createWorkerHealth, startHealthServer } from './health/workerHealth'
 import { Broker } from './messaging/broker'
 import { consumeQueue, consumeTasks } from './messaging/consumer'
 import { publishResult, publishValidationResult, republishTask, republishValidation } from './messaging/publisher'
@@ -147,6 +149,22 @@ const main = async () => {
    )
 
    let stopping = false
+
+   // What the Service status page reads: connected to the queue and consuming both queues, and able to read the bucket.
+   const consuming = () => !stopping
+
+   startHealthServer(
+      SPIDER_WORKER_HEALTH_PORT,
+      createWorkerHealth({
+         brokerIsUp: () => broker.isHealthy(),
+         isConsuming: consuming,
+         checkStorage: async () => {
+            await store.ping()
+
+            return true
+         },
+      })
+   )
 
    // A lost connection ends the process, so the container's restart policy brings a clean worker back.
    for (const open of [channel, validationChannel]) {

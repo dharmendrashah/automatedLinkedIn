@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: brain
+  labels:
+    app.kubernetes.io/name: brain
+---
+# Read-only, one namespace, one resource type: the Service status page asks Kubernetes whether authentik's worker
+# (which has no web address, only a command Kubernetes already runs as its probe) has a ready pod.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: brain-service-status
+  labels:
+    app.kubernetes.io/name: brain
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: brain-service-status
+  labels:
+    app.kubernetes.io/name: brain
+subjects:
+  - kind: ServiceAccount
+    name: brain
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: brain-service-status

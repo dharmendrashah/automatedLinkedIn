@@ -115,6 +115,11 @@ services:
       # (see apps/brain/.env.example).
       SPIDER_GCS_BUCKET: ${SPIDER_GCS_BUCKET:-}
       SESSION_RECORDING_RETENTION_DAYS: ${SESSION_RECORDING_RETENTION_DAYS:-7}
+      # The Service status page connects to the mail server authentik uses and reads its greeting (nothing is sent).
+      # The other modules are found by their service names, which are the defaults.
+      AUTHENTIK_EMAIL__HOST: ${AUTHENTIK_EMAIL__HOST:-mailpit}
+      AUTHENTIK_EMAIL__PORT: ${AUTHENTIK_EMAIL__PORT:-1025}
+      AUTHENTIK_EMAIL__USE_SSL: ${AUTHENTIK_EMAIL__USE_SSL:-false}
     ports:
       - "3001:3001"
     depends_on:

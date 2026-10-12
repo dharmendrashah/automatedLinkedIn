@@ -9,6 +9,8 @@ export class ObjectNotFoundError extends Error {
 
 // Where spider keeps sessions (read and write), raw results (write) and per-account locks.
 export interface ObjectStore {
+   // Rejects when the bucket cannot be read. Used by the health check.
+   ping: () => Promise<void>
    put: (key: string, body: string, contentType: string) => Promise<void>
    // Streams a local file to the key, so a video never has to fit in memory.
    upload: (key: string, localPath: string, contentType: string) => Promise<void>
