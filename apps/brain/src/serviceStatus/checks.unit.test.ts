@@ -1,7 +1,7 @@
 import { type Server, createServer } from 'node:net'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { deploymentCheck, httpCheck, smtpCheck, workerReport } from './checks'
+import { httpCheck, smtpCheck, workerReport } from './checks'
 
 const fetchMock = vi.fn()
 
@@ -228,101 +228,6 @@ describe('smtpCheck', () => {
       ).resolves.toEqual({
          state: 'dead',
          reason: 'Timed out',
-      })
-   })
-})
-
-describe('deploymentCheck', () => {
-   const credentials = {
-      token: 'T',
-      namespace: 'automatedlinkedin',
-      ca: 'CA',
-   }
-
-   const deps = (overrides: Record<string, unknown> = {}) => ({
-      credentials: vi.fn(async () => credentials),
-      get: vi.fn(async () => ({
-         status: 200,
-         body: JSON.stringify({
-            spec: { replicas: 1 },
-            status: { readyReplicas: 1 },
-         }),
-      })),
-      ...overrides,
-   })
-
-   it('should be live when Kubernetes says a pod of the deployment is ready', async () => {
-      const used = deps()
-
-      await expect(deploymentCheck('authentik-worker', used as never)()).resolves.toEqual({ state: 'live' })
-      expect(used.get).toHaveBeenCalledWith(
-         '/apis/apps/v1/namespaces/automatedlinkedin/deployments/authentik-worker',
-         credentials
-      )
-   })
-
-   it('should be dead when no pod is ready', async () => {
-      const used = deps({
-         get: vi.fn(async () => ({
-            status: 200,
-            body: JSON.stringify({
-               spec: { replicas: 1 },
-               status: {},
-            }),
-         })),
-      })
-
-      await expect(deploymentCheck('x', used as never)()).resolves.toEqual({
-         state: 'dead',
-         reason: 'Not answering',
-      })
-   })
-
-   it('should be dead when the deployment does not exist', async () => {
-      const used = deps({
-         get: vi.fn(async () => ({
-            status: 404,
-            body: '{}',
-         })),
-      })
-
-      await expect(deploymentCheck('x', used as never)()).resolves.toMatchObject({ state: 'dead' })
-   })
-
-   it('should be unknown, never live, outside Kubernetes', async () => {
-      const used = deps({ credentials: vi.fn(async () => null) })
-
-      await expect(deploymentCheck('x', used as never)()).resolves.toEqual({
-         state: 'unknown',
-         reason: 'Not running on Kubernetes',
-      })
-      expect(used.get).not.toHaveBeenCalled()
-   })
-
-   it.each([
-      [
-         'a refused request',
-         {
-            get: vi.fn(async () => ({
-               status: 403,
-               body: '{}',
-            })),
-         },
-      ],
-      [
-         'an answer that is not JSON',
-         {
-            get: vi.fn(async () => ({
-               status: 200,
-               body: 'oops',
-            })),
-         },
-      ],
-      ['a failure', { get: vi.fn(async () => Promise.reject(new Error('socket hang up'))) }],
-   ])('should be unknown when Kubernetes cannot be asked (%s)', async (_name, overrides) => {
-      await expect(deploymentCheck('x', deps(overrides) as never)()).resolves.toEqual({
-         state: 'unknown',
-         reason: 'Could not ask Kubernetes',
       })
    })
 })

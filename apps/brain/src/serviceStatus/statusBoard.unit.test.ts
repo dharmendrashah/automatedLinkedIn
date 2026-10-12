@@ -25,6 +25,21 @@ afterEach(() => {
 })
 
 describe('StatusBoard', () => {
+   it('should follow a list of modules that changes, as services come and go in the cluster', async () => {
+      let modules = [module('a', liveCheck())]
+      const board = new StatusBoard(async () => modules)
+
+      expect((await board.snapshot()).modules.map(item => item.key)).toEqual(['a'])
+
+      modules = [module('a', liveCheck()), module('new', liveCheck())]
+
+      expect((await board.snapshot()).modules.map(item => item.key)).toEqual(['a', 'new'])
+
+      modules = [module('new', liveCheck())]
+
+      expect((await board.snapshot()).modules.map(item => item.key)).toEqual(['new'])
+   })
+
    it('should list every module with its status, and nothing that is not meant to leave brain', async () => {
       const board = new StatusBoard([
          module('database', liveCheck(), { ttlMs: 60_000 }),

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { type StatusConfig, buildModules } from './modules'
+import { type StatusConfig, buildModules, coveredWorkloads } from './modules'
 
 const fetchMock = vi.fn()
 
@@ -27,7 +27,6 @@ const config = (overrides: Partial<StatusConfig> = {}): StatusConfig => ({
    signInUrl: 'http://authentik-server:9000/-/health/ready/',
    spiderApiUrl: 'http://spider-api:3002/health',
    spiderWorkerUrl: 'http://spider-worker:3003/health',
-   authentikWorkerDeployment: 'authentik-worker',
    smtp: {
       host: 'smtp.resend.com',
       port: 465,
@@ -56,7 +55,6 @@ describe('buildModules', () => {
          ['The app', 'api'],
          ['The app', 'database'],
          ['Sign-in', 'signIn'],
-         ['Sign-in', 'signInWorker'],
          ['Sign-in', 'email'],
          ['The spider', 'queue'],
          ['The spider', 'spiderApi'],
@@ -80,12 +78,17 @@ describe('buildModules', () => {
             signInUrl: '',
             spiderApiUrl: '',
             spiderWorkerUrl: '',
-            authentikWorkerDeployment: '',
             smtp: null,
          })
       ).map(item => item.key)
 
       expect(keys).toEqual(['api', 'database', 'queue', 'proxyLookup'])
+   })
+
+   it('should say which Kubernetes workloads the modules cover, so discovery adds no second card for them', () => {
+      expect(coveredWorkloads(buildModules(config()))).toEqual(
+         new Set(['body', 'brain', 'authentik-server', 'rabbitmq', 'spider-api', 'spider-worker'])
+      )
    })
 
    it('should leave out the worker and cloud storage together, since both come from the worker', () => {

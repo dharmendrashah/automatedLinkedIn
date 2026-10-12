@@ -46,14 +46,15 @@ const runWithLimit = async (module: StatusModule): Promise<CheckResult> => {
 // Checks every module at the same time and keeps each answer for a short while, so any number of open pages causes one
 // round of checks per ten seconds. Nothing is saved: a restart starts empty.
 export class StatusBoard {
-   private readonly modules: StatusModule[]
+   private readonly modules: () => Promise<StatusModule[]>
 
    private readonly entries = new Map<string, Entry>()
 
    private readonly running = new Map<string, Promise<Entry>>()
 
-   public constructor(modules: StatusModule[]) {
-      this.modules = modules
+   // The modules may be a fixed list, or a function asked each time, for a list that changes (services in a cluster).
+   public constructor(modules: StatusModule[] | (() => Promise<StatusModule[]>)) {
+      this.modules = typeof modules === 'function' ? modules : async () => modules
    }
 
    private current(module: StatusModule) {
@@ -95,7 +96,8 @@ export class StatusBoard {
    }
 
    public async snapshot(): Promise<StatusSnapshot> {
-      const entries = await Promise.all(this.modules.map(module => this.refresh(module)))
+      const modules = await this.modules()
+      const entries = await Promise.all(modules.map(module => this.refresh(module)))
       const states = entries.map(({ result }) => result.state)
 
       const overall: ModuleState = states.includes('dead') ? 'dead' : states.includes('unknown') ? 'unknown' : 'live'
@@ -103,7 +105,7 @@ export class StatusBoard {
       return {
          checkedAt: new Date(Math.max(0, ...entries.map(({ at }) => at))).toISOString(),
          overall,
-         modules: this.modules.map((module, index) => {
+         modules: modules.map((module, index) => {
             const { state, reason } = entries[index].result
 
             return {

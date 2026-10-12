@@ -103,11 +103,6 @@ export class Environment {
             default: 'http://spider-worker:3003/health',
             devDefault: 'http://localhost:3003/health',
          }),
-         STATUS_AUTHENTIK_WORKER_DEPLOYMENT: string({
-            desc: "Kubernetes deployment of authentik's worker, which the Service status page asks Kubernetes about. Empty: left out",
-            example: 'authentik-worker',
-            default: 'authentik-worker',
-         }),
          AUTHENTIK_EMAIL__HOST: string({
             desc: 'SMTP server authentik sends mail through. The Service status page connects to it and reads its greeting. Empty: left out',
             example: 'smtp.resend.com',

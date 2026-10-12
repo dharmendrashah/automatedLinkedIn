@@ -5,8 +5,9 @@ metadata:
   labels:
     app.kubernetes.io/name: brain
 ---
-# Read-only, one namespace, one resource type: the Service status page asks Kubernetes whether authentik's worker
-# (which has no web address, only a command Kubernetes already runs as its probe) has a ready pod.
+# Read-only, one namespace, two resource types: the Service status page lists the workloads so a new service shows up
+# there without any code. Its title, group and description come from `status.automatedlinkedin/*` annotations on the
+# workload's own manifest (see authentik-worker.deployment.yaml); `status.automatedlinkedin/hide: "true"` leaves one out.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -15,8 +16,8 @@ metadata:
     app.kubernetes.io/name: brain
 rules:
   - apiGroups: [apps]
-    resources: [deployments]
-    verbs: [get]
+    resources: [deployments, statefulsets]
+    verbs: [list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

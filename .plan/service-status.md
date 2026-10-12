@@ -86,7 +86,7 @@ A module is a small object: key, name, group, description and a `check()` that e
 | API | Live whenever this answers | It is the one answering |
 | Database | `PrismaService.isHealthy()` | Already exists |
 | Sign-in | `GET http://authentik-server:9000/-/health/ready/` | Ready, not live: live depends on the database |
-| Sign-in worker | Kubernetes: the `authentik-worker` Deployment has a ready pod | authentik's worker has no web address, only an `ak healthcheck` command that Kubernetes already runs as its probe. The status asks Kubernetes the result. Unknown outside Kubernetes (Compose) |
+| Sign-in worker | **Found by discovery** (see 1b), not hand-written | authentik's worker has no web address, only an `ak healthcheck` command that Kubernetes already runs as its probe. Its card (title, group, description) comes from annotations on its own manifest, and Live means Kubernetes says a pod is ready |
 | Email | Connect to the SMTP server authentik is configured with (`AUTHENTIK_EMAIL__HOST` and `__PORT`, which brain already receives from the shared config), over TLS when configured, and read the server's greeting. Nothing is sent | Proves the server is there; it does not prove the API key is valid |
 | Message queue | `MessageBroker.isHealthy()` | Already exists |
 | Spider API | `GET http://spider-api:3002/health` | 200 is Live; 503 means its queue is down, shown as Dead |
@@ -97,6 +97,17 @@ A module is a small object: key, name, group, description and a `check()` that e
 - The in-cluster addresses are the Kubernetes Service names, which are the same in Docker Compose, so the defaults work in both. Each can be overridden by an environment variable for a local run, and an empty value removes the module.
 - All checks run at the same time, each limited to 3 seconds, so the answer takes about 3 seconds at most. A module that hangs cannot hold up the others.
 - Addresses come from brain's settings, never from the request.
+
+### 1b. Discovery: a new service needs no code (added 2026-10-12, at the owner's request)
+
+Brain also lists every Deployment and StatefulSet in its namespace (one read-only call each, shared and kept 10 seconds) and adds a card for every workload that no explicit module above already covers. Each explicit module names the workload it covers (`workload: 'spider-api'`), so there is no second list to keep.
+
+- Opt-out: every workload appears. `status.automatedlinkedin/hide: "true"` on its manifest leaves it out.
+- The card's title, group and description come from the annotations `status.automatedlinkedin/title`, `/group` and `/description` on the workload. Without them the card still appears under "Other services", titled from the workload's name (`new-service` becomes "New service"). So a new service is one manifest edit and nothing in brain.
+- State: Live when a pod is ready, Dead ("No pod is ready") when none is, Unknown ("Switched off") when it is scaled to zero. This is Kubernetes' own readiness verdict, weaker than an actual HTTP answer; a workload that needs a deeper check gets an explicit module.
+- Outside Kubernetes (Docker Compose) discovery adds nothing. If Kubernetes cannot be asked (a missing permission), one Unknown "Service discovery" card says so, so missing cards are never a silent surprise.
+- Docker's own API is not used: reading it from a container means mounting `/var/run/docker.sock`, which gives that container root-level control of the host. Compose keeps the explicit list.
+- Things outside the cluster cannot be discovered, so the database (Cloud SQL), email, ipinfo.io and cloud storage (through the worker) stay explicit.
 
 ### 2. A health endpoint on the spider worker (new)
 
@@ -136,12 +147,12 @@ A tRPC query `status.get`, behind the existing `userProcedure` (a valid sign-in;
 
 ### 5. Kubernetes
 
-- **Brain asks Kubernetes about the authentik worker.** That needs a `ServiceAccount` for brain and a read-only `Role` (`get` and `list` on `deployments` and `statefulsets` in its own namespace only) with a `RoleBinding`. It follows the pattern the DNS updater CronJob already uses for reading the node. No write permission, no cluster-wide permission, no secrets.
+- **Brain lists the workloads of its namespace.** That needs a `ServiceAccount` for brain and a read-only `Role` (`list` on `deployments` and `statefulsets` in its own namespace only) with a `RoleBinding`. It follows the pattern the DNS updater CronJob already uses for reading the node. No write permission, no cluster-wide permission, no secrets.
 - **Spider worker gets a Service**: a new `spider-worker` ClusterIP Service for port 3003 (internal only), plus the container port. The Ingress is unchanged: the page is a route of the web app and the API is a route of brain, both on hosts that already exist.
 - Brain reaches the other modules by Service name inside the namespace. There is no NetworkPolicy in the cluster today; if one is added, brain must be allowed to reach `body`, `authentik-server`, `spider-api`, `spider-worker`, the SMTP server and ipinfo.io.
 - No migration and no new secret. Settings (module addresses, the ipinfo token brain already has) need no new values in `deploy/` unless a deployment wants different addresses.
 - Deploys with the normal staging pipeline after merge.
-- Compose: the worker's port stays inside the Compose network; the Kubernetes check for the sign-in worker answers Unknown there.
+- Compose: the worker's port stays inside the Compose network; discovery adds nothing there.
 
 ### Steps (each with its test first)
 
@@ -157,7 +168,7 @@ A tRPC query `status.get`, behind the existing `userProcedure` (a valid sign-in;
 
 - Access: the endpoint is behind sign-in, so a stranger gets nothing. Even so, the answer carries only names, status and fixed short reasons, never addresses, versions, tokens or error text, so a signed-in user learns nothing about the internals beyond what is up.
 - Load: every check is an outbound call. The shared 10 second cache and the single in-flight check bound the work however many pages are open. The ipinfo lookup is limited to once a minute so it cannot use up a quota. Addresses are fixed by configuration, so the endpoint cannot be used to make brain call anything else.
-- Kubernetes permission: the read-only `Role` is the only new permission and is limited to reading Deployments and StatefulSets in the namespace. If it is missing, the sign-in worker shows Unknown, never Live.
+- Kubernetes permission: the read-only `Role` is the only new permission and is limited to listing Deployments and StatefulSets in the namespace. If it is missing, one Unknown "Service discovery" card says so, and nothing is shown as Live by omission.
 - The queue: the worker's health endpoint reports its own connection, so brain does not open a channel against a queue that could close it. The worker reports Dead or Unknown when the queue is down.
 - Storage check: it reads, never writes, and uses a permission the worker already has. It is cached for 30 seconds so a busy status page does not call Google every 10 seconds per viewer.
 - Email: the check connects to the SMTP server and reads its greeting only; it sends nothing and never uses the API key. A bad or expired key is not detected, which the card's description says.
@@ -180,6 +191,7 @@ A tRPC query `status.get`, behind the existing `userProcedure` (a valid sign-in;
 
 Shipped as locked, with these differences:
 
+- Discovery (section 1b) was added afterwards at the owner's request: every Deployment and StatefulSet in the namespace gets a card with no code. It replaced the hand-written Sign-in worker check and the `STATUS_AUTHENTIK_WORKER_DEPLOYMENT` setting; the Role now allows `list` on `deployments` and `statefulsets` instead of `get` on one deployment. Opt-out, Compose unchanged, Docker's API not used (the owner accepted the recommendations).
 - When the API cannot be reached the page shows two cards (Website live, API dead) and the sentence, not a grey card for every other module: the page only knows the module list from the API, so it does not invent one.
 - The brain code lives in a new top-level `serviceStatus` folder (added to `.prettierrc` and the web app's `tsconfig.app.json`), not in `src/status`.
 - "Consuming" on the worker means the process is running and not shutting down: the worker exits when a queue channel closes, so a live process is a consuming one.

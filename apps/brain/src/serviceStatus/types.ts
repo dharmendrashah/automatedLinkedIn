@@ -12,6 +12,8 @@ export const REASONS = {
    error: 'Reports an error',
    notOnKubernetes: 'Not running on Kubernetes',
    cannotAskKubernetes: 'Could not ask Kubernetes',
+   noPodReady: 'No pod is ready',
+   switchedOff: 'Switched off',
    workerUnreachable: 'Cannot be checked while the spider worker is not answering',
 } as const
 
@@ -22,6 +24,8 @@ export type StatusModule = {
    description: string
    // How long an answer is reused. Defaults to ten seconds.
    ttlMs?: number
+   // The Kubernetes workload this module checks in its own, deeper way, so discovery does not add a second card for it.
+   workload?: string
    check: () => Promise<CheckResult>
 }
 

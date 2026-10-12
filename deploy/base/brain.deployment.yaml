@@ -16,7 +16,7 @@ spec:
       labels:
         app.kubernetes.io/name: brain
     spec:
-      # Lets the Service status page read, and only read, whether authentik's worker has a ready pod (brain.rbac.yaml).
+      # Lets the Service status page read, and only read, the workloads of this namespace (brain.rbac.yaml).
       serviceAccountName: brain
       # Migrations run as an init container rather than a separate Job: it guarantees
       # brain never starts against an unmigrated schema, `migrate deploy` is idempotent

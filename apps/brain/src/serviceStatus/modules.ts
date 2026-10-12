@@ -1,14 +1,13 @@
 import { REASONS, type StatusModule, dead, live, unknown } from './types'
 
-import { deploymentCheck, httpCheck, smtpCheck, workerReport } from './checks'
+import { httpCheck, smtpCheck, workerReport } from './checks'
 
 export type StatusConfig = {
-   // An empty address, deployment name or null removes that module: the deployment does not have it.
+   // An empty address or null removes that module: the deployment does not have it.
    websiteUrl: string
    signInUrl: string
    spiderApiUrl: string
    spiderWorkerUrl: string
-   authentikWorkerDeployment: string
    smtp: { host: string; port: number; tls: boolean } | null
    ipInfoToken: string
    databaseIsHealthy: () => Promise<boolean>
@@ -32,7 +31,8 @@ const fromBoolean = (check: () => Promise<boolean>) => async () => {
 const IPINFO_URL = 'https://api.ipinfo.io/lite/8.8.8.8'
 const IPINFO_TTL_MS = 60_000
 
-// Every module the product needs to work. The groups and descriptions are what the status page shows.
+// Every module that needs a check of its own. Anything else running in the cluster is found by discovery, with no code.
+// `workload` names the Kubernetes workload a module covers, so discovery does not add a second card for it.
 export const buildModules = (config: StatusConfig): StatusModule[] => {
    const modules: Array<StatusModule | false> = [
       Boolean(config.websiteUrl) && {
@@ -40,6 +40,7 @@ export const buildModules = (config: StatusConfig): StatusModule[] => {
          group: APP,
          name: 'Website',
          description: 'The page you are looking at',
+         workload: 'body',
          check: httpCheck(config.websiteUrl),
       },
       {
@@ -47,6 +48,7 @@ export const buildModules = (config: StatusConfig): StatusModule[] => {
          group: APP,
          name: 'API',
          description: 'Everything the app asks for',
+         workload: 'brain',
          // It is the one answering.
          check: async () => live(),
       },
@@ -62,14 +64,8 @@ export const buildModules = (config: StatusConfig): StatusModule[] => {
          group: SIGN_IN,
          name: 'Sign-in',
          description: 'Logging in and signing up',
+         workload: 'authentik-server',
          check: httpCheck(config.signInUrl),
-      },
-      Boolean(config.authentikWorkerDeployment) && {
-         key: 'signInWorker',
-         group: SIGN_IN,
-         name: 'Sign-in worker',
-         description: 'Background work for sign-in',
-         check: deploymentCheck(config.authentikWorkerDeployment),
       },
       config.smtp !== null && {
          key: 'email',
@@ -83,6 +79,7 @@ export const buildModules = (config: StatusConfig): StatusModule[] => {
          group: SPIDER,
          name: 'Message queue',
          description: 'Passes work to the spider',
+         workload: 'rabbitmq',
          check: fromBoolean(config.brokerIsHealthy),
       },
       Boolean(config.spiderApiUrl) && {
@@ -90,6 +87,7 @@ export const buildModules = (config: StatusConfig): StatusModule[] => {
          group: SPIDER,
          name: 'Spider API',
          description: 'Takes scraping tasks',
+         workload: 'spider-api',
          check: httpCheck(config.spiderApiUrl),
       },
    ]
@@ -104,6 +102,7 @@ export const buildModules = (config: StatusConfig): StatusModule[] => {
             group: SPIDER,
             name: 'Spider worker',
             description: 'The browser that checks LinkedIn accounts. Live means it is connected and waiting for work',
+            workload: 'spider-worker',
             check: async () => {
                const read = await report()
 
@@ -143,3 +142,7 @@ export const buildModules = (config: StatusConfig): StatusModule[] => {
 
    return modules.filter((module): module is StatusModule => module !== false)
 }
+
+// The workloads the modules above check in their own way.
+export const coveredWorkloads = (modules: StatusModule[]) =>
+   new Set(modules.flatMap(({ workload }) => (workload ? [workload] : [])))

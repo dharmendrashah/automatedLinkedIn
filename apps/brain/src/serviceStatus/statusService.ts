@@ -5,7 +5,6 @@ import {
    AUTHENTIK_EMAIL__PORT,
    AUTHENTIK_EMAIL__USE_SSL,
    IPINFO_TOKEN,
-   STATUS_AUTHENTIK_WORKER_DEPLOYMENT,
    STATUS_URL_SIGN_IN,
    STATUS_URL_SPIDER_API,
    STATUS_URL_SPIDER_WORKER,
@@ -14,23 +13,24 @@ import {
 
 import { PrismaService } from 'database'
 
-import { buildModules } from './modules'
+import { createDiscovery, discoveredModules } from './discovery'
+import { buildModules, coveredWorkloads } from './modules'
 import { StatusBoard, type StatusSnapshot } from './statusBoard'
 
 export type { StatusSnapshot }
 
 // What the Service status page shows. One board for the process, built from brain's settings the first time it is asked.
+// The explicit modules need a check of their own; every other workload in the cluster is added by discovery.
 export class StatusService {
    private static board: StatusBoard | undefined
 
    public static snapshot() {
-      this.board ??= new StatusBoard(
-         buildModules({
+      if (!this.board) {
+         const explicit = buildModules({
             websiteUrl: STATUS_URL_WEBSITE,
             signInUrl: STATUS_URL_SIGN_IN,
             spiderApiUrl: STATUS_URL_SPIDER_API,
             spiderWorkerUrl: STATUS_URL_SPIDER_WORKER,
-            authentikWorkerDeployment: STATUS_AUTHENTIK_WORKER_DEPLOYMENT,
             smtp: AUTHENTIK_EMAIL__HOST
                ? {
                     host: AUTHENTIK_EMAIL__HOST,
@@ -42,7 +42,11 @@ export class StatusService {
             databaseIsHealthy: () => PrismaService.isHealthy(),
             brokerIsHealthy: () => MessageBroker.isHealthy(),
          })
-      )
+         const covered = coveredWorkloads(explicit)
+         const discover = createDiscovery()
+
+         this.board = new StatusBoard(async () => [...explicit, ...discoveredModules(await discover(), covered)])
+      }
 
       return this.board.snapshot()
    }
