@@ -11,8 +11,16 @@ import { Notice } from './recording-gate'
 import { type TimelineStep, parseTimeline } from './recording'
 import { useSessionLink, useSessionText } from './use-session-file'
 
-export const Screenshot = ({ sessionId, name }: { sessionId: string; name: string }) => {
-   const link = useSessionLink(sessionId, `screenshots/${name}`)
+export const Screenshot = ({
+   session,
+   name,
+   alt = 'The page after this step',
+}: {
+   session: SessionDetail
+   name: string
+   alt?: string
+}) => {
+   const link = useSessionLink(session, `screenshots/${name}`)
 
    if (link.isPending) {
       return <Skeleton className="h-40 w-full rounded-lg" />
@@ -24,8 +32,8 @@ export const Screenshot = ({ sessionId, name }: { sessionId: string; name: strin
 
    return (
       <img
-         src={link.data.url}
-         alt="The page after this step"
+         src={link.data?.url}
+         alt={alt}
          loading="lazy"
          className="w-full rounded-lg border"
       />
@@ -39,7 +47,7 @@ const Fact = ({ label, children }: { label: string; children: string }) => (
    </div>
 )
 
-const StepCard = ({ sessionId, step }: { sessionId: string; step: TimelineStep }) => {
+const StepCard = ({ session, step }: { session: SessionDetail; step: TimelineStep }) => {
    // A failed step opens by itself: it is the one being looked for.
    const [open, setOpen] = useState(!step.ok)
 
@@ -66,7 +74,7 @@ const StepCard = ({ sessionId, step }: { sessionId: string; step: TimelineStep }
          {open ? (
             <div className="grid gap-3 border-t px-4 py-3">
                {step.error ? <p className="text-destructive font-mono text-xs break-words">{step.error}</p> : null}
-               {step.screenshot ? <Screenshot sessionId={sessionId} name={step.screenshot} /> : null}
+               {step.screenshot ? <Screenshot session={session} name={step.screenshot} /> : null}
                <dl className="grid gap-2 sm:grid-cols-2">
                   {step.selector ? <Fact label="Element">{step.selector}</Fact> : null}
                   {step.target ? <Fact label="Asked for">{step.target}</Fact> : null}
@@ -80,7 +88,7 @@ const StepCard = ({ sessionId, step }: { sessionId: string; step: TimelineStep }
 }
 
 export const StepsTab = ({ session }: { session: SessionDetail }) => {
-   const file = useSessionText(session.id, 'timeline.json')
+   const file = useSessionText(session, 'timeline.json')
 
    if (file.loading) {
       return <Skeleton className="h-40 w-full rounded-xl" />
@@ -108,7 +116,7 @@ export const StepsTab = ({ session }: { session: SessionDetail }) => {
          ) : (
             <ol className="grid gap-2" aria-label="Steps">
                {timeline.steps.map(step => (
-                  <StepCard key={step.n} sessionId={session.id} step={step} />
+                  <StepCard key={step.n} session={session} step={step} />
                ))}
             </ol>
          )}

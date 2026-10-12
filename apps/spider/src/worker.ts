@@ -1,8 +1,9 @@
 import 'dotenv/config'
 
-import { VALIDATE_QUEUE, validateAccountCommandSchema } from '@automatedLinkedIn/contracts'
+import { TASK_QUEUE, taskCommandSchema } from '@automatedLinkedIn/contracts'
 
 import {
+   GIT_SHA,
    LINKEDIN_CRED_ENC_KEY,
    RABBITMQ_URL,
    SPIDER_ACCOUNT_BUSY_DELAY_MS,
@@ -24,21 +25,23 @@ import {
 import { createWorkerHealth, startHealthServer } from './health/workerHealth'
 import { Broker } from './messaging/broker'
 import { consumeQueue, consumeTasks } from './messaging/consumer'
-import { publishResult, publishValidationResult, republishTask, republishValidation } from './messaging/publisher'
+import { publishCatalog, publishResult, publishRunResult, republishRun, republishTask } from './messaging/publisher'
 import { assertTopology } from './messaging/topology'
 import { Recorder } from './recording/recorder'
 import { AccountLock } from './scraping/accountLock'
 import { CamoufoxDriver } from './scraping/camoufoxDriver'
 import { ScrapeEngine } from './scraping/engine'
+import { Mutex } from './scraping/mutex'
 import { HostPolicy } from './scraping/policy'
 import { processTask } from './scraping/processTask'
 import { HostRateLimiter } from './scraping/rateLimiter'
 import { RobotsGuard } from './scraping/robots'
 import { GcsStore } from './storage/gcsStore'
-import { AccountValidator } from './validation/accountValidator'
-import { openCredentials } from './validation/credentials'
-import { Mutex } from './validation/mutex'
-import { processValidation } from './validation/processValidation'
+import { catalogOf } from './tasks/catalog'
+import { openCredentials } from './tasks/credentials'
+import { AccountValidator } from './tasks/linkedinLogin/accountValidator'
+import { buildTasks } from './tasks/registry'
+import { exhaustedResult, runTask } from './tasks/runner'
 
 const main = async () => {
    if (Buffer.from(LINKEDIN_CRED_ENC_KEY, 'base64').length !== 32) {
@@ -50,25 +53,13 @@ const main = async () => {
    const broker = new Broker(RABBITMQ_URL)
    const accountLock = new AccountLock(store, SPIDER_ACCOUNT_LOCK_TTL_MS)
    const limiter = new HostRateLimiter(SPIDER_MIN_DELAY_MS)
-   // Scrape tasks and validations each open a Firefox, so this worker does one of them at a time.
+   // Scrape tasks and every other task each open a Firefox, so this worker does one of them at a time.
    const oneBrowser = new Mutex()
    const recordingMode = SPIDER_RECORDING
-   // Off by default: a recording holds what the browser showed, so it is only made when it is switched on.
-   const startRecording =
-      recordingMode === 'off'
-         ? undefined
-         : (kind: 'validate' | 'task', id: string) =>
-              Recorder.start({
-                 kind,
-                 id,
-                 mode: recordingMode,
-                 video: SPIDER_RECORD_VIDEO,
-                 store,
-              })
-
+   // Off by default for tasks that do not insist on it: a recording holds what the browser showed.
    if (!policy.allowsUrl(SPIDER_LINKEDIN_BASE_URL)) {
       console.error(
-         `${SPIDER_LINKEDIN_BASE_URL} is not in SPIDER_ALLOWED_HOSTS: account validations will report an error`
+         `${SPIDER_LINKEDIN_BASE_URL} is not in SPIDER_ALLOWED_HOSTS: LinkedIn sign-in checks will report an error`
       )
    }
 
@@ -87,15 +78,20 @@ const main = async () => {
       maxRecords: SPIDER_MAX_RECORDS,
    })
 
-   const validator = new AccountValidator({
-      baseUrl: SPIDER_LINKEDIN_BASE_URL,
-      mode: SPIDER_VALIDATION_MODE,
-      pause: host => limiter.wait(host),
-      allowsCookieDomain: domain => policy.allowsCookieDomain(domain),
+   const tasks = buildTasks({
+      linkedin: {
+         validator: new AccountValidator({
+            baseUrl: SPIDER_LINKEDIN_BASE_URL,
+            mode: SPIDER_VALIDATION_MODE,
+            pause: host => limiter.wait(host),
+            allowsCookieDomain: domain => policy.allowsCookieDomain(domain),
+         }),
+         baseUrl: SPIDER_LINKEDIN_BASE_URL,
+      },
    })
 
    const channel = await broker.consumeChannel()
-   const validationChannel = await broker.consumeChannel()
+   const taskChannel = await broker.consumeChannel()
 
    await assertTopology(channel)
 
@@ -116,39 +112,52 @@ const main = async () => {
       }
    )
 
-   const validationConsumer = await consumeQueue(
-      validationChannel,
+   // Every task of the standard contract runs here: the runner records it, applies the limits and answers.
+   const taskConsumer = await consumeQueue(
+      taskChannel,
       {
-         queue: VALIDATE_QUEUE,
-         parse: content => validateAccountCommandSchema.parse(JSON.parse(content.toString())),
-         label: command => `Validation ${command.validation_id}`,
+         queue: TASK_QUEUE,
+         parse: content => taskCommandSchema.parse(JSON.parse(content.toString())),
+         label: command => `Task ${command.task} ${command.task_id}`,
          handler: command =>
             oneBrowser.runExclusive(() =>
-               processValidation(command, {
+               runTask(command, {
+                  tasks,
                   driver,
-                  validator,
+                  policy,
+                  robots: new RobotsGuard(SPIDER_ROBOTS_USER_AGENT),
+                  limiter,
                   store,
                   accountLock,
                   openCredentials: sealed => openCredentials(sealed, LINKEDIN_CRED_ENC_KEY),
-                  startRecording,
-                  publishResult: async result => publishValidationResult(await broker.publishChannel(), result),
+                  startRecording: ({ task, id, prefix, always, videoSize }) =>
+                     always || recordingMode !== 'off'
+                        ? Recorder.start({
+                             kind: task,
+                             id,
+                             prefix,
+                             mode: always ? 'always' : (recordingMode as 'failures' | 'always'),
+                             video: SPIDER_RECORD_VIDEO,
+                             ...(videoSize && { videoSize }),
+                             store,
+                          })
+                        : Promise.resolve(undefined),
+                  publishResult: async result => publishRunResult(await broker.publishChannel(), result),
+                  workerBuild: GIT_SHA,
                })
             ),
-         // An account must never stay PENDING because the worker kept failing: brain gets an answer instead.
+         // A session must never stay in progress because the worker kept failing: brain gets an answer instead.
          onExhausted: async command =>
-            publishValidationResult(await broker.publishChannel(), {
-               validation_id: command.validation_id,
-               account_id: command.account_id,
-               outcome: 'ERROR',
-               message: 'Verification could not run. Try again later.',
-               checked_at: new Date().toISOString(),
-            }),
+            publishRunResult(await broker.publishChannel(), exhaustedResult(command, GIT_SHA)),
       },
       {
-         republish: async (message, retries) => republishValidation(await broker.publishChannel(), message, retries),
+         republish: async (message, retries) => republishRun(await broker.publishChannel(), message, retries),
          busyDelayMs: SPIDER_ACCOUNT_BUSY_DELAY_MS,
       }
    )
+
+   // Brain keeps the latest, so a worker that starts later or newer simply replaces what brain knew.
+   await publishCatalog(await broker.publishChannel(), catalogOf(tasks, GIT_SHA))
 
    let stopping = false
 
@@ -169,7 +178,7 @@ const main = async () => {
    )
 
    // A lost connection ends the process, so the container's restart policy brings a clean worker back.
-   for (const open of [channel, validationChannel]) {
+   for (const open of [channel, taskChannel]) {
       open.on('close', () => {
          if (!stopping) {
             console.error('The broker channel closed; exiting so the worker restarts')
@@ -183,13 +192,13 @@ const main = async () => {
          stopping = true
 
          // Finish the task in progress, take no new one, then leave.
-         Promise.all([consumer.stop(), validationConsumer.stop()])
+         Promise.all([consumer.stop(), taskConsumer.stop()])
             .then(() => broker.close())
             .finally(() => process.exit(0))
       })
    }
 
-   console.log('spider worker is waiting for tasks and account validations')
+   console.log('spider worker is waiting for tasks')
 }
 
 main().catch((error: unknown) => {

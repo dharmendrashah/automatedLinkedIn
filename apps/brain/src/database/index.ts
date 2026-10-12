@@ -21,7 +21,11 @@ export {
 export { retryRefusal } from './sessionRetry'
 export {
    SpiderRecordingUnavailableError,
+   SpiderSensitiveFileError,
    SpiderSessionNotFoundError,
    SpiderSessionService,
 } from './spiderSession.service'
 export { AccountConflictError, UserService } from './user.service'
+export { TASK_HOOKS } from './taskHooks'
+export { TaskService } from './task.service'
+export { TaskNeedsProxyError, TaskOwnershipError, TaskRefusedError, TaskUnavailableError } from './taskErrors'

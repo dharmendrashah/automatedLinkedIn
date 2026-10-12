@@ -1,6 +1,6 @@
 import { SectionLabel } from '@/components/text-block'
 import { Button } from '@/components/ui/button'
-import { CheckCircle2, Loader2, TriangleAlert, XCircle } from 'lucide-react'
+import { CheckCircle2, CircleHelp, Loader2, TriangleAlert, XCircle } from 'lucide-react'
 import { type ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -11,6 +11,7 @@ import { actionLabel, describeStep, formatDuration, hintFor, proxyLabel, resultO
 import { type Timeline, parseTimeline } from './recording'
 import { Screenshot } from './steps-tab'
 import { useSessionText } from './use-session-file'
+import { useTaskCatalog } from './use-task-catalog'
 
 const Fact = ({ label, children }: { label: string; children: ReactNode }) => (
    <div className="grid gap-0.5">
@@ -18,6 +19,12 @@ const Fact = ({ label, children }: { label: string; children: ReactNode }) => (
       <dd className="text-sm break-words">{children}</dd>
    </div>
 )
+
+const startedBy = {
+   automatic: 'Automatically, after the proxy tested ok',
+   manual: 'You',
+   retry: 'You, running it again',
+} as const
 
 const bannerText = (session: SessionDetail) => {
    if (session.status === 'IN_PROGRESS') {
@@ -30,8 +37,10 @@ const bannerText = (session: SessionDetail) => {
 }
 
 const Banner = ({ session }: { session: SessionDetail }) => {
-   const { tone } = resultOf(session)
-   const Icon = { success: CheckCircle2, failure: XCircle, running: Loader2, unknown: TriangleAlert }[tone]
+   const { tone } = resultOf(session, useTaskCatalog())
+   const Icon = { success: CheckCircle2, failure: XCircle, running: Loader2, unknown: TriangleAlert, neutral: CircleHelp }[
+      tone
+   ]
    const hint = hintFor(session.message)
 
    return (
@@ -40,7 +49,8 @@ const Banner = ({ session }: { session: SessionDetail }) => {
             'flex gap-3 rounded-xl border p-4',
             tone === 'success' && 'border-emerald-500/30 bg-emerald-500/5',
             tone === 'failure' && 'border-destructive/30 bg-destructive/5',
-            tone === 'unknown' && 'border-amber-500/30 bg-amber-500/5'
+            tone === 'unknown' && 'border-amber-500/30 bg-amber-500/5',
+            tone === 'neutral' && 'bg-muted/40'
          )}
       >
          <Icon className={cn('mt-0.5 size-5 shrink-0', tone === 'running' && 'text-muted-foreground animate-spin')} />
@@ -54,7 +64,7 @@ const Banner = ({ session }: { session: SessionDetail }) => {
 
 // The first step that failed, with the page as it looked then. It is what a fix to the spider starts from.
 const WhereItWentWrong = ({ session }: { session: SessionDetail }) => {
-   const file = useSessionText(session.id, 'timeline.json')
+   const file = useSessionText(session, 'timeline.json')
    const timeline: Timeline | null = file.text ? parseTimeline(file.text) : null
    const step = timeline?.steps.find(item => !item.ok)
 
@@ -70,7 +80,7 @@ const WhereItWentWrong = ({ session }: { session: SessionDetail }) => {
                Step {step.n}: {describeStep(step)}
             </p>
             {step.error ? <p className="text-destructive font-mono text-xs break-words">{step.error}</p> : null}
-            {step.screenshot ? <Screenshot sessionId={session.id} name={step.screenshot} /> : null}
+            {step.screenshot ? <Screenshot session={session} name={step.screenshot} /> : null}
          </div>
       </section>
    )
@@ -82,7 +92,8 @@ type Props = {
 }
 
 export const SummaryTab = ({ session, onOpen }: Props) => {
-   const { label } = resultOf(session)
+   const catalog = useTaskCatalog()
+   const { label } = resultOf(session, catalog)
    const recordingAvailable = session.recordingsConfigured && session.hasRecording && !session.recordingExpired
 
    return (
@@ -94,14 +105,18 @@ export const SummaryTab = ({ session, onOpen }: Props) => {
          <section className="grid gap-3">
             <SectionLabel>What it was given</SectionLabel>
             <dl className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2">
-               <Fact label="Action">{actionLabel(session.kind)}</Fact>
-               <Fact label="LinkedIn account">{session.requestParams.email}</Fact>
+               <Fact label="Action">{actionLabel(session, catalog)}</Fact>
+               <Fact label="LinkedIn account">{session.linkedInAccount.email}</Fact>
                <Fact label="Proxy">
                   <span className="font-mono text-xs">{proxyLabel(session)}</span>
                   {session.proxyCountry ? <span className="text-muted-foreground"> · {session.proxyCountry}</span> : null}
                </Fact>
                <Fact label="Started">{new Date(session.startedAt).toLocaleString()}</Fact>
-               <Fact label="Credentials">Sent sealed to the spider. They are never shown or recorded.</Fact>
+               {session.requestParams.action === 'TASK' ? (
+                  <Fact label="Started by">{startedBy[session.requestParams.trigger]}</Fact>
+               ) : (
+                  <Fact label="Credentials">Sent sealed to the spider. They are never shown or recorded.</Fact>
+               )}
             </dl>
          </section>
 

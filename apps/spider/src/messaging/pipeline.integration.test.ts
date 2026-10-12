@@ -1,15 +1,16 @@
 import { type Channel, type GetMessage } from 'amqplib'
 import { createCipheriv, randomBytes, randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 
 import {
-   VALIDATED_QUEUE,
-   VALIDATE_DEAD_QUEUE,
-   VALIDATE_KEY,
-   VALIDATE_QUEUE,
-   type ValidateAccountCommand,
-   type ValidateAccountResult,
-   validateAccountCommandSchema,
+   TASK_DEAD_QUEUE as RUN_DEAD_QUEUE,
+   TASK_DONE_QUEUE as RUN_DONE_QUEUE,
+   TASK_KEY as RUN_KEY,
+   TASK_QUEUE as RUN_QUEUE,
+   type TaskCommand,
+   type TaskResult,
+   taskCommandSchema,
 } from '@automatedLinkedIn/contracts'
 
 import { type ScrapeTaskCommand, type ScrapeTaskResult } from '../types'
@@ -17,11 +18,12 @@ import { type ScrapeTaskCommand, type ScrapeTaskResult } from '../types'
 import { RABBITMQ_URL } from '../env'
 import { AccountBusyError, TaskError } from '../scraping/errors'
 import { processTask } from '../scraping/processTask'
-import { openCredentials } from '../validation/credentials'
-import { processValidation } from '../validation/processValidation'
+import { openCredentials } from '../tasks/credentials'
+import { defineTask } from '../tasks/defineTask'
+import { exhaustedResult, runTask } from '../tasks/runner'
 import { Broker } from './broker'
 import { MAX_RETRIES, type TaskHandler, consumeQueue, consumeTasks } from './consumer'
-import { publishResult, publishTask, publishValidationResult, republishTask, republishValidation } from './publisher'
+import { publishResult, publishRunResult, publishTask, republishRun, republishTask } from './publisher'
 import { DEAD_QUEUE, EXCHANGE, RESULT_QUEUE, TASK_KEY, TASK_QUEUE, assertTopology } from './topology'
 
 // Needs a RabbitMQ at RABBITMQ_URL. It purges the spider queues first, so run it against a scratch broker
@@ -83,7 +85,7 @@ beforeAll(async () => {
    channel = await broker.consumeChannel()
    await assertTopology(channel)
 
-   for (const queue of [TASK_QUEUE, DEAD_QUEUE, RESULT_QUEUE, VALIDATE_QUEUE, VALIDATE_DEAD_QUEUE, VALIDATED_QUEUE]) {
+   for (const queue of [TASK_QUEUE, DEAD_QUEUE, RESULT_QUEUE, RUN_QUEUE, RUN_DEAD_QUEUE, RUN_DONE_QUEUE]) {
       await channel.purgeQueue(queue)
    }
 })
@@ -108,86 +110,127 @@ const sealed = (bundle: object) => {
    }
 }
 
-const validation = (bundle: object = { password: 'hunter2' }): ValidateAccountCommand => ({
-   validation_id: randomUUID(),
-   account_id: 'acc-integration',
-   email: 'ada@work.com',
-   sealed: sealed(bundle),
+const runCommand = (bundle: object = { password: 'hunter2' }): TaskCommand => ({
+   contract: 1,
+   task_id: randomUUID(),
+   user_id: 'user-integration',
+   task: 'demo-login',
+   task_version: 1,
    requested_at: new Date().toISOString(),
+   trigger: 'manual',
+   proxy: { server: 'http://proxy.example.net:8080' },
+   account_id: 'acc-integration',
+   account_email: 'ada@work.com',
+   credentials: sealed(bundle),
+   input: {},
 })
 
-const sendValidation = async (command: ValidateAccountCommand) => {
+const sendRun = async (item: TaskCommand) => {
    const publisher = await broker.publishChannel()
 
-   publisher.publish('scraping.exchange', VALIDATE_KEY, Buffer.from(JSON.stringify(command)), {
+   publisher.publish('scraping.exchange', RUN_KEY, Buffer.from(JSON.stringify(item)), {
       persistent: true,
-      messageId: command.validation_id,
+      messageId: item.task_id,
    })
    await publisher.waitForConfirms()
 }
 
-const consumeValidations = async (handler: (command: ValidateAccountCommand) => Promise<void>) =>
+const consumeRuns = async (handler: (item: TaskCommand) => Promise<void>) =>
    consumeQueue(
       await broker.consumeChannel(),
       {
-         queue: VALIDATE_QUEUE,
-         parse: content => validateAccountCommandSchema.parse(JSON.parse(content.toString())),
-         label: item => `Validation ${item.validation_id}`,
+         queue: RUN_QUEUE,
+         parse: content => taskCommandSchema.parse(JSON.parse(content.toString())),
+         label: item => `Task ${item.task} ${item.task_id}`,
          handler,
-         onExhausted: async item =>
-            publishValidationResult(await broker.publishChannel(), {
-               validation_id: item.validation_id,
-               account_id: item.account_id,
-               outcome: 'ERROR',
-               message: 'Verification could not run. Try again later.',
-               checked_at: new Date().toISOString(),
-            }),
+         onExhausted: async item => publishRunResult(await broker.publishChannel(), exhaustedResult(item, 'test')),
       },
       {
-         republish: async (message, retries) => republishValidation(await broker.publishChannel(), message, retries),
+         republish: async (message, retries) => republishRun(await broker.publishChannel(), message, retries),
          backoffMs: [20, 20, 20],
          busyDelayMs: 20,
          log: { error: () => undefined },
       }
    )
 
-describe('account validation on a real RabbitMQ', () => {
-   it('should carry a validation from brain to the worker, open the sealed credentials, and answer on the results queue', async () => {
-      const task = validation({
+describe('the task contract on a real RabbitMQ', () => {
+   it('should carry a command from brain to the worker, open the sealed credentials, and answer on the results queue', async () => {
+      const seen = vi.fn()
+      const demo = defineTask({
+         name: 'demo-login',
+         version: 1,
+         title: 'Demo',
+         description: 'Only for this test.',
+         input: z.strictObject({}),
+         needs: {
+            proxy: 'required',
+            account: true,
+         },
+         hosts: ['example.com'],
+         verdicts: {
+            VALID: {
+               label: 'Signed in',
+               tone: 'success',
+            },
+         },
+         policy: {
+            cooldownMs: 0,
+            oneAtATime: 'account',
+         },
+         limits: { timeoutMs: 5000 },
+         run: async ({ account }) => {
+            seen(account?.credentials)
+
+            return {
+               status: 'SUCCEEDED',
+               verdict: 'VALID',
+               message: 'Signed in.',
+            }
+         },
+      })
+      const item = runCommand({
          password: 'hunter2',
          totpSecret: 'JBSWY3DPEHPK3PXP',
       })
-      const seen = vi.fn()
-      const consumer = await consumeValidations(item =>
-         processValidation(item, {
-            driver: { open: async () => ({ close: async () => undefined }) as never },
-            validator: {
-               validate: async (_session, { credentials }) => {
-                  seen(credentials)
-
-                  return {
-                     outcome: 'VALID',
-                     cookies: [],
-                  }
-               },
+      const consumer = await consumeRuns(command =>
+         runTask(command, {
+            tasks: [demo],
+            driver: {
+               open: async () =>
+                  ({
+                     close: async () => undefined,
+                     storageState: async () => ({
+                        cookies: [],
+                        origins: [],
+                     }),
+                  }) as never,
             },
+            policy: {
+               allowsUrl: () => true,
+               allowsCookieDomain: () => true,
+            },
+            robots: { check: async () => ({ allowed: true }) },
+            limiter: { wait: async () => undefined },
             store: { put: async () => undefined },
             accountLock: freeAccount,
             openCredentials: bundle => openCredentials(bundle, CRED_KEY),
-            publishResult: async result => publishValidationResult(await broker.publishChannel(), result),
+            startRecording: async () => undefined,
+            publishResult: async result => publishRunResult(await broker.publishChannel(), result),
+            workerBuild: 'test',
          })
       )
 
-      await sendValidation(task)
+      await sendRun(item)
 
-      const message = await next(VALIDATED_QUEUE, ({ properties }) => properties.messageId === task.validation_id)
+      const message = await next(RUN_DONE_QUEUE, ({ properties }) => properties.messageId === item.task_id)
 
       await consumer.stop()
 
       expect(JSON.parse(message.content.toString())).toMatchObject({
-         validation_id: task.validation_id,
-         account_id: 'acc-integration',
-         outcome: 'VALID',
+         task_id: item.task_id,
+         task: 'demo-login',
+         status: 'SUCCEEDED',
+         verdict: 'VALID',
       })
       expect(seen).toHaveBeenCalledWith({
          password: 'hunter2',
@@ -197,41 +240,42 @@ describe('account validation on a real RabbitMQ', () => {
       expect(message.properties.deliveryMode).toBe(2)
    })
 
-   it('should answer ERROR after the retries are used up, instead of dead-lettering, so the account is never left waiting', async () => {
-      const task = validation()
+   it('should answer CRASHED after the retries are used up, instead of dead-lettering, so a session is never left waiting', async () => {
+      const item = runCommand()
       let attempts = 0
-      const consumer = await consumeValidations(async () => {
+      const consumer = await consumeRuns(async () => {
          attempts += 1
 
          throw new Error('browser crashed')
       })
 
-      await sendValidation(task)
+      await sendRun(item)
 
-      const message = await next(VALIDATED_QUEUE, ({ properties }) => properties.messageId === task.validation_id)
+      const message = await next(RUN_DONE_QUEUE, ({ properties }) => properties.messageId === item.task_id)
 
       await consumer.stop()
 
-      expect(JSON.parse(message.content.toString()) as ValidateAccountResult).toMatchObject({
-         validation_id: task.validation_id,
-         outcome: 'ERROR',
+      expect(JSON.parse(message.content.toString()) as TaskResult).toMatchObject({
+         task_id: item.task_id,
+         status: 'FAILED',
+         verdict: 'CRASHED',
       })
       expect(attempts).toBe(MAX_RETRIES + 1)
-      expect(await channel.get(VALIDATE_DEAD_QUEUE, { noAck: true })).toBe(false)
+      expect(await channel.get(RUN_DEAD_QUEUE, { noAck: true })).toBe(false)
    })
 
-   it('should dead-letter a validation that does not match the contract, without a result', async () => {
+   it('should dead-letter a command that does not match the contract, without a result', async () => {
       const id = randomUUID()
-      const consumer = await consumeValidations(async () => undefined)
+      const consumer = await consumeRuns(async () => undefined)
       const publisher = await broker.publishChannel()
 
-      publisher.publish('scraping.exchange', VALIDATE_KEY, Buffer.from('{"not":"a validation"}'), {
+      publisher.publish('scraping.exchange', RUN_KEY, Buffer.from('{"not":"a command"}'), {
          persistent: true,
          messageId: id,
       })
       await publisher.waitForConfirms()
 
-      await next(VALIDATE_DEAD_QUEUE, ({ properties }) => properties.messageId === id)
+      await next(RUN_DEAD_QUEUE, ({ properties }) => properties.messageId === id)
       await consumer.stop()
    })
 })

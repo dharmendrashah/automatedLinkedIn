@@ -6,14 +6,23 @@ const mocks = vi.hoisted(() => {
    const events: string[] = []
    const page = {
       on: vi.fn(),
-      screenshot: vi.fn(async () => Buffer.from('png')),
+      screenshot: vi.fn(async (_options?: unknown) => Buffer.from('png')),
       content: vi.fn(async () => '<html>page</html>'),
+      mouse: { wheel: vi.fn(async () => undefined) },
+      evaluate: vi.fn(async (_script?: unknown): Promise<unknown> => undefined),
    }
    const context = {
       setDefaultTimeout: vi.fn(),
       setDefaultNavigationTimeout: vi.fn(),
       route: vi.fn(),
       newPage: vi.fn(async () => page),
+      storageState: vi.fn(
+         async () =>
+            ({
+               cookies: [],
+               origins: [],
+            }) as unknown
+      ),
       close: vi.fn(async () => {
          events.push('context closed')
       }),
@@ -39,8 +48,9 @@ const driver = new CamoufoxDriver({
    isAllowedNavigation: () => true,
 })
 
-const makeRecorder = (videoDir?: string) => ({
+const makeRecorder = (videoDir?: string, videoSize?: { width: number; height: number }) => ({
    videoDir,
+   videoSize,
    log: vi.fn(),
    network: vi.fn(),
    track: vi.fn(),
@@ -119,6 +129,91 @@ describe('CamoufoxDriver', () => {
       expect(mocks.browser.newContext).toHaveBeenCalledWith({ recordVideo: { dir: '/tmp/rec' } })
       expect(mocks.page.on).toHaveBeenCalledWith('response', expect.any(Function))
       expect(mocks.page.on).toHaveBeenCalledWith('console', expect.any(Function))
+   })
+
+   it('should record the video at the size the recorder asks for', async () => {
+      await driver.open({
+         recorder: makeRecorder('/tmp/rec', {
+            width: 1280,
+            height: 720,
+         }),
+      })
+
+      expect(mocks.browser.newContext).toHaveBeenCalledWith({
+         recordVideo: {
+            dir: '/tmp/rec',
+            size: {
+               width: 1280,
+               height: 720,
+            },
+         },
+      })
+   })
+
+   it('should scroll the page with the mouse wheel and say whether there is more below', async () => {
+      const session = await driver.open()
+
+      mocks.page.evaluate.mockResolvedValueOnce(true)
+
+      await expect(session.scrollBy(600)).resolves.toBe(true)
+      expect(mocks.page.mouse.wheel).toHaveBeenCalledWith(0, 600)
+
+      mocks.page.evaluate.mockResolvedValueOnce(false)
+
+      await expect(session.scrollBy(600)).resolves.toBe(false)
+   })
+
+   it('should hand out the cookies and the local storage the browser holds', async () => {
+      const session = await driver.open()
+      const state = {
+         cookies: [
+            {
+               name: 'li_at',
+               value: 'x',
+               domain: '.linkedin.com',
+               path: '/',
+            },
+         ],
+         origins: [
+            {
+               origin: 'https://www.linkedin.com',
+               localStorage: [
+                  {
+                     name: 'k',
+                     value: 'v',
+                  },
+               ],
+            },
+         ],
+      }
+
+      mocks.context.storageState.mockResolvedValueOnce(state)
+
+      await expect(session.storageState()).resolves.toEqual(state)
+   })
+
+   it('should hand out the visible text of the page, a picture of all of it, and what the browser reports', async () => {
+      const session = await driver.open()
+
+      mocks.page.evaluate.mockResolvedValueOnce('You are human!')
+
+      await expect(session.pageText()).resolves.toBe('You are human!')
+
+      await session.fullPageScreenshot()
+
+      expect(mocks.page.screenshot).toHaveBeenCalledWith(expect.objectContaining({ fullPage: true }))
+
+      mocks.page.evaluate.mockResolvedValueOnce({
+         userAgent: 'Mozilla/5.0',
+         platform: 'Win32',
+         screen: '1600x900',
+      })
+
+      await expect(session.identity()).resolves.toEqual({
+         userAgent: 'Mozilla/5.0',
+         platform: 'Win32',
+         screen: '1600x900',
+      })
    })
 
    it('should still accept the proxy certificate, next to the video, when both are set', async () => {

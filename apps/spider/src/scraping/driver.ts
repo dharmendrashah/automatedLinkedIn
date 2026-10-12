@@ -40,3 +40,31 @@ export interface LoginSession extends BrowserSession {
 export interface LoginDriver {
    open: (options?: OpenOptions) => Promise<LoginSession>
 }
+
+// What the browser reports about itself, kept in a browser test's report so results of different runs can be compared.
+export type BrowserIdentity = {
+   userAgent: string
+   platform: string
+   screen: string
+}
+
+// What a browser holds between runs: the cookies and the local storage of each site. It carries login tokens.
+export type StorageState = {
+   cookies: SessionCookie[]
+   origins: Array<{ origin: string; localStorage: Array<{ name: string; value: string }> }>
+}
+
+// What a browser test needs on top of a login session: scrolling, reading the page, and a picture of all of it.
+export interface DetectionSession extends LoginSession {
+   // Scrolls down by `pixels` and says whether there is more page below.
+   scrollBy: (pixels: number) => Promise<boolean>
+   pageText: () => Promise<string>
+   pageHtml: () => Promise<string>
+   fullPageScreenshot: () => Promise<Buffer>
+   identity: () => Promise<BrowserIdentity>
+   storageState: () => Promise<StorageState>
+}
+
+export interface DetectionDriver {
+   open: (options?: OpenOptions) => Promise<DetectionSession>
+}

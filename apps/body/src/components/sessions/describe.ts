@@ -1,17 +1,66 @@
 import { type TimelineStep } from './recording'
 
-type Kind = 'VALIDATE_ACCOUNT' | 'SCRAPE'
+type Kind = 'VALIDATE_ACCOUNT' | 'BROWSER_TEST' | 'TASK' | 'SCRAPE'
 
-export const actionLabel = (kind: Kind) => (kind === 'VALIDATE_ACCOUNT' ? 'Check account sign-in' : 'Collect data')
+export type VerdictInfo = {
+   label: string
+   tone: 'success' | 'failure' | 'neutral'
+}
+
+// What the worker announced, as brain hands it out: how each task and each of its verdicts is shown.
+export type Catalog = {
+   tasks: Array<{
+      task: string
+      title: string
+      verdicts: Record<string, VerdictInfo>
+   }>
+   // The answers the runner gives when a task could not even start.
+   runnerVerdicts: Record<string, VerdictInfo>
+}
+
+// "linkedin-read-post" before the worker's title is known.
+const prettyTask = (task: string) => {
+   const words = task.replace(/-/g, ' ')
+
+   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`
+}
+
+export const actionLabel = ({ kind, task }: { kind: Kind; task?: string | null }, catalog?: Catalog) => {
+   if (kind === 'TASK' && task) {
+      return catalog?.tasks.find(entry => entry.task === task)?.title ?? prettyTask(task)
+   }
+
+   return kind === 'VALIDATE_ACCOUNT' ? 'Check account sign-in' : 'Collect data'
+}
 
 type ResultInput = {
    status: 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED'
    noAnswer: boolean
+   kind?: Kind
+   task?: string | null
+   verdict?: string | null
 }
 
-export type ResultTone = 'success' | 'failure' | 'running' | 'unknown'
+// `neutral` is an answer that is neither good nor bad: the check ran but could not decide.
+export type ResultTone = 'success' | 'failure' | 'running' | 'unknown' | 'neutral'
 
-export const resultOf = ({ status, noAnswer }: ResultInput): { label: string; tone: ResultTone } => {
+export const resultOf = (
+   { status, noAnswer, kind, task, verdict }: ResultInput,
+   catalog?: Catalog
+): { label: string; tone: ResultTone } => {
+   if (kind === 'TASK' && status !== 'IN_PROGRESS' && verdict) {
+      // The task's own labels first, then the runner's for a task that never started.
+      const known =
+         catalog?.tasks.find(entry => entry.task === task)?.verdicts[verdict] ?? catalog?.runnerVerdicts[verdict]
+
+      if (known) {
+         return {
+            label: known.label,
+            tone: known.tone,
+         }
+      }
+   }
+
    if (status === 'SUCCEEDED') {
       return {
          label: 'Success',
@@ -80,6 +129,9 @@ export const describeStep = ({ call, ok, target, urlAfter, length, found, count 
 
       case 'extract':
          return ok ? `Read ${plural(count ?? 0, 'item', 'items')} from the page` : 'Could not read the page'
+
+      case 'scroll':
+         return 'Scrolled down the page'
 
       case 'cookies':
          return "Collected the browser's session"

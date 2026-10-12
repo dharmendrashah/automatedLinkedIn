@@ -29,6 +29,3 @@ export const resultKey = ({ task_type: type, task_id: id }: ScrapeTaskCommand) =
 export const sessionKey = (accountId: string) => `sessions/${accountId}/state.json`
 
 export const lockKey = (accountId: string) => `locks/${accountId}.json`
-
-// What the worker concluded about one validation. Holds no secret and no cookie.
-export const validationRecordKey = (validationId: string) => `results/validate/${validationId}.json`

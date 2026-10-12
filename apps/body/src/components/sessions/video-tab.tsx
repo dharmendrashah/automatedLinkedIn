@@ -6,7 +6,7 @@ import { Notice } from './recording-gate'
 import { useSessionLink } from './use-session-file'
 
 export const VideoTab = ({ session }: { session: SessionDetail }) => {
-   const video = useSessionLink(session.id, 'video.webm')
+   const video = useSessionLink(session, 'video.webm')
 
    if (video.isPending) {
       return <Skeleton className="aspect-video w-full rounded-xl" />
@@ -20,7 +20,7 @@ export const VideoTab = ({ session }: { session: SessionDetail }) => {
       <video
          controls
          preload="metadata"
-         src={video.data.url}
+         src={video.data?.url}
          className="aspect-video w-full rounded-xl border bg-black"
       >
          Your browser cannot play this video.

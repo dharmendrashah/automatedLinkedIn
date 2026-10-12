@@ -66,11 +66,23 @@ describe('RecordingLinks', () => {
       expect(options.expires).toBeLessThanOrEqual(Date.now() + 10 * 60 * 1000)
    })
 
+   it('should sign a file of a task run too', async () => {
+      mocks.getSignedUrl.mockResolvedValue(['https://storage.googleapis.com/b/x?sig=1'])
+
+      const RecordingLinks = await load()
+
+      await expect(RecordingLinks.urlFor('runs/browser-detection/u1/2026/10/13/s1/video.webm')).resolves.toBe(
+         'https://storage.googleapis.com/b/x?sig=1'
+      )
+      expect(mocks.file).toHaveBeenCalledWith('runs/browser-detection/u1/2026/10/13/s1/video.webm')
+   })
+
    it('should refuse to sign anything for a path outside recordings/', async () => {
       const RecordingLinks = await load()
 
       await expect(RecordingLinks.urlFor('sessions/acc1/state.json')).rejects.toThrow('recordings/')
       await expect(RecordingLinks.urlFor('recordings/../sessions/acc1/state.json')).rejects.toThrow('recordings/')
+      await expect(RecordingLinks.urlFor('runs/../sessions/acc1/state.json')).rejects.toThrow('runs/')
       expect(mocks.getSignedUrl).not.toHaveBeenCalled()
    })
 

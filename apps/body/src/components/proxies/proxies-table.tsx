@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { History, Loader2, MoreHorizontal, Network, Pencil, RefreshCw, Trash2 } from 'lucide-react'
+import { History, Loader2, MoreHorizontal, Network, Pencil, RefreshCw, ScanSearch, Trash2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -38,11 +38,25 @@ type Props = {
    busyId: string | undefined
    onEdit: (proxy: Proxy) => void
    onTest: (proxy: Proxy) => void
+   // The tasks the worker announced that work through a proxy and need nothing else.
+   tasks: Array<{ task: string; title: string }>
+   onRunTask: (proxy: Proxy, task: string) => void
    onHistory: (proxy: Proxy) => void
    onDelete: (proxy: Proxy) => void
 }
 
-export const ProxiesTable = ({ proxies, loading, error, busyId, onEdit, onTest, onHistory, onDelete }: Props) => (
+export const ProxiesTable = ({
+   proxies,
+   loading,
+   error,
+   busyId,
+   onEdit,
+   onTest,
+   tasks,
+   onRunTask,
+   onHistory,
+   onDelete,
+}: Props) => (
    <div className="overflow-hidden rounded-lg border">
       <Table>
          <TableHeader className="bg-muted/50">
@@ -105,6 +119,17 @@ export const ProxiesTable = ({ proxies, loading, error, busyId, onEdit, onTest, 
                               <RefreshCw />
                               Test now
                            </DropdownMenuItem>
+                           {/* A task needs a proxy that works: the spider never goes out from this server. */}
+                           {tasks.map(task => (
+                              <DropdownMenuItem
+                                 key={task.task}
+                                 disabled={proxy.status !== 'ACTIVE' && proxy.status !== 'GEO_MISMATCH'}
+                                 onSelect={() => onRunTask(proxy, task.task)}
+                              >
+                                 <ScanSearch />
+                                 {task.title}
+                              </DropdownMenuItem>
+                           ))}
                            <DropdownMenuItem onSelect={() => onHistory(proxy)}>
                               <History />
                               Test history

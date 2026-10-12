@@ -10,6 +10,7 @@ import {
    ProxyServerService,
    SessionRetryError,
    SpiderRecordingUnavailableError,
+   SpiderSensitiveFileError,
    SpiderSessionNotFoundError,
    SpiderSessionService,
    retryRefusal,
@@ -25,7 +26,17 @@ const listInput = z.object({
    cursor: z.string().min(1).max(100).optional(),
 })
 
-const fileInput = byId.extend({ file: z.string().max(100) })
+// An older session names its file; a task session names the id of one of its files, so no path or name comes from the browser.
+const fileInput = byId
+   .extend({
+      file: z.string().max(100).optional(),
+      artifactId: z.string().min(1).max(100).optional(),
+      // Needed for a file that holds login tokens.
+      reveal: z.boolean().optional(),
+   })
+   .refine(({ file, artifactId }) => (file === undefined) !== (artifactId === undefined), {
+      message: 'Name either a file or an artifact id',
+   })
 
 const retryInput = byId.extend({ proxyId: z.string().min(1).max(100) })
 
@@ -45,7 +56,11 @@ const asTrpcError = (error: unknown) => {
       })
    }
 
-   if (error instanceof SpiderRecordingUnavailableError || error instanceof LinkedInAccountPausedError) {
+   if (
+      error instanceof SpiderRecordingUnavailableError ||
+      error instanceof SpiderSensitiveFileError ||
+      error instanceof LinkedInAccountPausedError
+   ) {
       return new TRPCError({
          code: 'PRECONDITION_FAILED',
          message: error.message,
@@ -120,7 +135,9 @@ export const session = router({
       }
 
       try {
-         const key = await SpiderSessionService.fileKey(ctx.user.id, input.id, input.file)
+         const key = input.artifactId
+            ? await SpiderSessionService.artifactKey(ctx.user.id, input.id, input.artifactId, input.reveal ?? false)
+            : await SpiderSessionService.fileKey(ctx.user.id, input.id, input.file as string)
 
          return { url: await RecordingLinks.urlFor(key) }
       } catch (error) {

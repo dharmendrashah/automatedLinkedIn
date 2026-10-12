@@ -19,7 +19,11 @@ const mocks = vi.hoisted(() => {
       }
    }
 
+   class SpiderSensitiveFileError extends Error {}
+
    return {
+      SpiderSensitiveFileError,
+      artifactKey: vi.fn(),
       SpiderSessionNotFoundError,
       SpiderRecordingUnavailableError,
       LinkedInAccountPausedError,
@@ -37,6 +41,7 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('database', () => ({
+   SpiderSensitiveFileError: mocks.SpiderSensitiveFileError,
    SpiderSessionNotFoundError: mocks.SpiderSessionNotFoundError,
    SpiderRecordingUnavailableError: mocks.SpiderRecordingUnavailableError,
    LinkedInAccountPausedError: mocks.LinkedInAccountPausedError,
@@ -47,6 +52,7 @@ vi.mock('database', () => ({
       listForUser: mocks.listForUser,
       getForUser: mocks.getForUser,
       fileKey: mocks.fileKey,
+      artifactKey: mocks.artifactKey,
    },
    ProxyServerService: { listUsableForAccount: mocks.listUsableForAccount },
    LinkedInAccountValidationService: { retryForUser: mocks.retryForUser },
@@ -242,6 +248,63 @@ describe('session router', () => {
             code: 'PRECONDITION_FAILED',
             message: 'This recording expired after 7 days.',
          })
+      })
+
+      it('should give a link to a file of a task run by its id, without taking a name from the browser', async () => {
+         mocks.configured.mockReturnValue(true)
+         mocks.artifactKey.mockResolvedValue('runs/browser-detection/u1/2026/10/13/s1/video.webm')
+         mocks.urlFor.mockResolvedValue('https://storage.googleapis.com/b/x?sig=2')
+
+         await expect(
+            caller().fileUrl({
+               id: 's1',
+               artifactId: 'a1',
+            })
+         ).resolves.toEqual({ url: 'https://storage.googleapis.com/b/x?sig=2' })
+         expect(mocks.artifactKey).toHaveBeenCalledWith('u1', 's1', 'a1', false)
+         expect(mocks.fileKey).not.toHaveBeenCalled()
+      })
+
+      it('should only reveal a file with login tokens when the owner asks for it', async () => {
+         mocks.configured.mockReturnValue(true)
+         mocks.artifactKey.mockRejectedValue(new mocks.SpiderSensitiveFileError('This file holds login tokens.'))
+
+         await expect(
+            caller().fileUrl({
+               id: 's1',
+               artifactId: 'a1',
+            })
+         ).rejects.toMatchObject({
+            code: 'PRECONDITION_FAILED',
+            message: 'This file holds login tokens.',
+         })
+
+         mocks.artifactKey.mockResolvedValue('runs/x/u1/2026/10/13/s1/session.json')
+         mocks.urlFor.mockResolvedValue('https://storage.googleapis.com/b/y?sig=3')
+
+         await caller().fileUrl({
+            id: 's1',
+            artifactId: 'a1',
+            reveal: true,
+         })
+
+         expect(mocks.artifactKey).toHaveBeenLastCalledWith('u1', 's1', 'a1', true)
+      })
+
+      it.each([
+         ['neither a name nor an id', { id: 's1' }],
+         [
+            'both a name and an id',
+            {
+               id: 's1',
+               file: 'video.webm',
+               artifactId: 'a1',
+            },
+         ],
+      ])('should refuse %s', async (_name, input) => {
+         mocks.configured.mockReturnValue(true)
+
+         await expect(caller().fileUrl(input as never)).rejects.toMatchObject({ code: 'BAD_REQUEST' })
       })
 
       it('should say so when recordings are not set up, without touching the database', async () => {

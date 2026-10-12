@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
-import { LinkedInAccountValidationService, ProxyServerOwnershipError, ProxyServerService } from 'database'
+import { LinkedInAccountValidationService, ProxyServerOwnershipError, ProxyServerService, TaskService } from 'database'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -63,6 +63,17 @@ const validateWaitingAccount = async (proxy: { linkedInAccountId: string; status
    }
 }
 
+// A proxy that just tested ok is announced to the tasks that listen to it (the browser test, once a day at most). They are
+// started, not awaited: a failure there never reaches this request.
+const announceWorkingProxy = (proxy: { id: string; status: string }, changed = false) => {
+   if (proxy.status === 'ACTIVE') {
+      void TaskService.emit('proxy.active', {
+         proxyId: proxy.id,
+         changed,
+      })
+   }
+}
+
 // Every procedure scopes to ctx.user.id through the proxy's LinkedIn account, so one user can never reach
 // another's proxies by id.
 export const proxyServer = router({
@@ -73,6 +84,7 @@ export const proxyServer = router({
          const proxy = await ProxyServerService.create(ctx.user.id, input)
 
          await validateWaitingAccount(proxy)
+         announceWorkingProxy(proxy)
 
          return proxy
       } catch (error) {
@@ -91,6 +103,11 @@ export const proxyServer = router({
          })
 
          await validateWaitingAccount(proxy)
+         // Whatever the owner edited changes the connection, which makes an older result worthless.
+         announceWorkingProxy(
+            proxy,
+            [input.protocol, input.host, input.port, input.username, input.password].some(value => value !== undefined)
+         )
 
          return proxy
       } catch (error) {
@@ -104,6 +121,7 @@ export const proxyServer = router({
          const proxy = await ProxyServerService.test(ctx.user.id, input.id)
 
          await validateWaitingAccount(proxy)
+         announceWorkingProxy(proxy)
 
          return proxy
       } catch (error) {

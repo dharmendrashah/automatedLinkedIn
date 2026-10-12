@@ -1,9 +1,9 @@
 import { SECURITY_CHECK_MESSAGE, extractLiAt } from '@automatedLinkedIn/contracts'
 
-import { type SessionCookie } from '../types'
+import { type SessionCookie } from '../../types'
 
-import { type LoginSession } from '../scraping/driver'
-import { type Credentials } from './credentials'
+import { type LoginSession } from '../../scraping/driver'
+import { type Credentials } from '../credentials'
 import { totpCode } from './totp'
 
 export type Verdict =

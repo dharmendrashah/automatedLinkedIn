@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { CamoufoxDriver } from '../scraping/camoufoxDriver'
 import { HostPolicy } from '../scraping/policy'
 import { HostRateLimiter } from '../scraping/rateLimiter'
-import { AccountValidator } from '../validation/accountValidator'
+import { AccountValidator } from '../tasks/linkedinLogin/accountValidator'
 import { RecordedSession } from './recordedSession'
 import { Recorder } from './recorder'
 

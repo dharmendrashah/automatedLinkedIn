@@ -1,21 +1,15 @@
-import { randomUUID } from 'node:crypto'
-
-import { AccountValidationQueue } from 'core'
-
-import { type ValidateAccountResult } from '@automatedLinkedIn/contracts'
-
 import { LinkedInAccountService } from './linkedInAccount.service'
 import { PrismaService } from './prisma.service'
-import { ProxyServerService } from './proxyServer.service'
 import { retryRefusal } from './sessionRetry'
-import { SpiderSessionService } from './spiderSession.service'
+import { TaskService } from './task.service'
+import { TaskNeedsProxyError, TaskRefusedError } from './taskErrors'
+
+const TASK = 'linkedin-login'
 
 // Asking again right away would only repeat a login that LinkedIn may already be suspicious of.
 const VERIFY_COOLDOWN_MS = 5 * 60 * 1000
 
 const NEEDS_PROXY_MESSAGE = 'Add a proxy to verify this account.'
-
-const NOT_QUEUED_MESSAGE = 'The check could not be queued. Try again in a moment.'
 
 export class LinkedInAccountPausedError extends Error {
    public constructor() {
@@ -47,94 +41,58 @@ type RequestOptions = {
    proxyId?: string
    // The session this check retries.
    retryOfId?: string
-   validationId?: string
+   // The owner asked for it, as opposed to something about the account changing.
+   asked?: boolean
 }
 
-// Brain asks the worker to check an account's credentials, and applies the answer to the account's status.
+// The account side of the LinkedIn sign-in check: when to ask for one, and what the owner may do. The check itself is the
+// `linkedin-login` task, and what it changes in the account is in linkedInLogin.hooks.ts.
 export class LinkedInAccountValidationService {
-   // Notes a new validation on the account, then queues it. A failed publish does not fail the caller: the
-   // account just stays PENDING and the owner can verify again. Resolves to whether the task was queued.
-   public static async request(accountId: string, options: RequestOptions = {}) {
+   private static async start(accountId: string, options: RequestOptions) {
       const row = await PrismaService.client.linkedInAccount.findUnique({
          where: { id: accountId },
          select: {
             id: true,
             userId: true,
-            email: true,
-            secret: true,
-            secretIv: true,
-            secretTag: true,
-            keyVersion: true,
             status: true,
          },
       })
 
       if (!row || row.status === 'DISABLED') {
-         return false
+         return null
       }
-
-      const proxy = await ProxyServerService.pickForAccount(row.id, options.proxyId)
-
-      if (!proxy) {
-         // Never log in from this server's own network: wait until the owner adds a proxy that works.
-         await PrismaService.client.linkedInAccount.update({
-            where: { id: row.id },
-            data: {
-               statusMessage: NEEDS_PROXY_MESSAGE,
-               statusUpdatedAt: new Date(),
-            },
-         })
-
-         return false
-      }
-
-      const requestedAt = new Date()
-      const validationId = options.validationId ?? randomUUID()
-
-      await PrismaService.client.linkedInAccount.update({
-         where: { id: row.id },
-         data: {
-            validationId,
-            validationRequestedAt: requestedAt,
-         },
-      })
-      await SpiderSessionService.start({
-         id: validationId,
-         userId: row.userId,
-         linkedInAccountId: row.id,
-         email: row.email,
-         proxy: proxy.summary,
-         ...(options.retryOfId && { retryOfId: options.retryOfId }),
-      })
 
       try {
-         await AccountValidationQueue.publish({
-            validation_id: validationId,
-            account_id: row.id,
-            email: row.email,
-            // Forwarded as stored: brain never decrypts it to publish, only the worker can open it.
-            sealed: {
-               ciphertext: row.secret,
-               iv: row.secretIv,
-               tag: row.secretTag,
-               key_version: row.keyVersion,
-            },
-            proxy: proxy.config,
-            requested_at: requestedAt.toISOString(),
+         return await TaskService.request({
+            userId: row.userId,
+            task: TASK,
+            accountId: row.id,
+            proxyId: options.proxyId,
+            trigger: options.retryOfId ? 'retry' : options.asked ? 'manual' : 'automatic',
+            ...(options.retryOfId && { retryOfId: options.retryOfId }),
          })
-
-         return true
       } catch (error) {
-         console.error(`Could not queue the validation of account ${row.id}: ${(error as Error).message}`)
-
-         try {
-            await SpiderSessionService.fail(validationId, NOT_QUEUED_MESSAGE)
-         } catch {
-            // The session stays in progress and shows as having no answer.
+         if (error instanceof TaskNeedsProxyError) {
+            // Never log in from this server's own network: wait until the owner adds a proxy that works.
+            await PrismaService.client.linkedInAccount.update({
+               where: { id: row.id },
+               data: {
+                  statusMessage: NEEDS_PROXY_MESSAGE,
+                  statusUpdatedAt: new Date(),
+               },
+            })
+         } else if (!(error instanceof TaskRefusedError)) {
+            console.error(`Could not request the check of account ${row.id}: ${(error as Error).message}`)
          }
 
-         return false
+         return null
       }
+   }
+
+   // Notes a new check on the account, then queues it. A refusal or a failed publish does not fail the caller: the account
+   // just stays PENDING and the owner can verify again. Resolves to whether the task was queued.
+   public static async request(accountId: string, options: RequestOptions = {}) {
+      return (await this.start(accountId, options)) !== null
    }
 
    // A proxy just became healthy: validate the account if it was only waiting for one. An account that is active,
@@ -193,7 +151,7 @@ export class LinkedInAccountValidationService {
             statusUpdatedAt: new Date(),
          },
       })
-      await this.request(row.id)
+      await this.request(row.id, { asked: true })
 
       return LinkedInAccountService.getForUser(userId, id)
    }
@@ -275,53 +233,15 @@ export class LinkedInAccountValidationService {
          },
       })
 
-      const validationId = randomUUID()
-      const queued = await this.request(accountId, {
+      const started = await this.start(accountId, {
          proxyId,
          retryOfId: sessionId,
-         validationId,
       })
 
-      if (!queued) {
+      if (!started) {
          throw new SessionRetryError('REFUSED', 'The check could not be started. Try again in a moment.')
       }
 
-      return { id: validationId }
-   }
-
-   // Applies the worker's answer. One conditional update does the whole check: the account must still be waiting for
-   // this very validation (so an old or repeated answer changes nothing) and must not have been paused meanwhile.
-   // The session keeps its own verdict either way. Resolves to whether the account was updated.
-   public static async applyResult(result: ValidateAccountResult) {
-      await SpiderSessionService.finish(result)
-
-      const now = new Date()
-
-      const outcome =
-         result.outcome === 'VALID'
-            ? {
-                 status: 'ACTIVE' as const,
-                 statusMessage: null,
-                 lastVerifiedAt: now,
-              }
-            : {
-                 status: result.outcome === 'ERROR' ? ('ERROR' as const) : ('NEEDS_REAUTH' as const),
-                 statusMessage: result.message,
-              }
-
-      const { count } = await PrismaService.client.linkedInAccount.updateMany({
-         where: {
-            id: result.account_id,
-            validationId: result.validation_id,
-            status: { not: 'DISABLED' },
-         },
-         data: {
-            ...outcome,
-            statusUpdatedAt: now,
-            validationId: null,
-         },
-      })
-
-      return count > 0
+      return { id: started.id }
    }
 }

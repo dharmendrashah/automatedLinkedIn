@@ -9,6 +9,7 @@ import { type SessionRow } from './types'
 
 import { actionLabel, formatDuration, proxyLabel, timeAgo } from './describe'
 import { SessionStatusBadge } from './session-status-badge'
+import { useTaskCatalog } from './use-task-catalog'
 
 type Props = {
    sessions: SessionRow[] | undefined
@@ -30,7 +31,10 @@ export const SessionsTable = ({
    loadingMore,
    onOpen,
    onLoadMore,
-}: Props) => (
+}: Props) => {
+   const catalog = useTaskCatalog()
+
+   return (
    <div className="grid gap-3">
       <div className="overflow-hidden rounded-lg border">
          <Table>
@@ -84,9 +88,15 @@ export const SessionsTable = ({
                      }}
                   >
                      <TableCell>
-                        <SessionStatusBadge status={session.status} noAnswer={session.noAnswer} />
+                        <SessionStatusBadge
+                           status={session.status}
+                           noAnswer={session.noAnswer}
+                           kind={session.kind}
+                           task={session.task}
+                           verdict={session.verdict}
+                        />
                      </TableCell>
-                     <TableCell className="font-medium">{actionLabel(session.kind)}</TableCell>
+                     <TableCell className="font-medium">{actionLabel(session, catalog)}</TableCell>
                      <TableCell>{session.linkedInAccount.email}</TableCell>
                      <TableCell>
                         <div className="grid">
@@ -114,3 +124,4 @@ export const SessionsTable = ({
       ) : null}
    </div>
 )
+}

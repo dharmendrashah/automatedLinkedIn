@@ -21,10 +21,45 @@ const step = (overrides: Record<string, unknown> = {}) =>
       ...overrides,
    }) as Parameters<typeof describeStep>[0]
 
+const catalog = {
+   tasks: [
+      {
+         task: 'browser-detection',
+         title: 'Browser test',
+         verdicts: {
+            NOT_DETECTED: {
+               label: 'Not detected',
+               tone: 'success' as const,
+            },
+            DETECTED: {
+               label: 'Detected as a bot',
+               tone: 'failure' as const,
+            },
+            COULD_NOT_TELL: {
+               label: 'Could not tell',
+               tone: 'neutral' as const,
+            },
+         },
+      },
+   ],
+   runnerVerdicts: {
+      PROXY_FAILED: {
+         label: 'The proxy did not work',
+         tone: 'failure' as const,
+      },
+   },
+}
+
 describe('actionLabel', () => {
    it('should name what the run was for in plain words', () => {
-      expect(actionLabel('VALIDATE_ACCOUNT')).toBe('Check account sign-in')
-      expect(actionLabel('SCRAPE')).toBe('Collect data')
+      expect(actionLabel({ kind: 'VALIDATE_ACCOUNT', task: null })).toBe('Check account sign-in')
+      expect(actionLabel({ kind: 'SCRAPE', task: null })).toBe('Collect data')
+   })
+
+   it('should use the title the worker announced for a task, and a readable name before it is known', () => {
+      expect(actionLabel({ kind: 'TASK', task: 'browser-detection' }, catalog)).toBe('Browser test')
+      expect(actionLabel({ kind: 'TASK', task: 'linkedin-read-post' }, catalog)).toBe('Linkedin read post')
+      expect(actionLabel({ kind: 'TASK', task: 'browser-detection' })).toBe('Browser detection')
    })
 })
 
@@ -39,6 +74,27 @@ describe('resultOf', () => {
          label,
          tone,
       })
+   })
+
+   it.each([
+      ['NOT_DETECTED', 'SUCCEEDED', 'Not detected', 'success'],
+      ['DETECTED', 'FAILED', 'Detected as a bot', 'failure'],
+      ['COULD_NOT_TELL', 'FAILED', 'Could not tell', 'neutral'],
+      ['PROXY_FAILED', 'FAILED', 'The proxy did not work', 'failure'],
+   ] as const)('should show the verdict %s of a task with the label the worker announced', (verdict, status, label, tone) => {
+      expect(resultOf({ status, noAnswer: false, kind: 'TASK', task: 'browser-detection', verdict }, catalog)).toEqual({
+         label,
+         tone,
+      })
+   })
+
+   it('should fall back to the status for a verdict nobody announced, and while the run is not finished', () => {
+      expect(
+         resultOf({ status: 'FAILED', noAnswer: false, kind: 'TASK', task: 'x', verdict: 'SURPRISE' }, catalog)
+      ).toEqual({ label: 'Failed', tone: 'failure' })
+      expect(
+         resultOf({ status: 'IN_PROGRESS', noAnswer: false, kind: 'TASK', task: 'browser-detection', verdict: null }, catalog)
+      ).toEqual({ label: 'In progress', tone: 'running' })
    })
 })
 
@@ -56,6 +112,10 @@ describe('shortAddress', () => {
 })
 
 describe('describeStep', () => {
+   it('should say the page was scrolled down', () => {
+      expect(describeStep(step({ call: 'scroll' }))).toBe('Scrolled down the page')
+   })
+
    it('should say a page was opened, and where the browser ended up if it moved', () => {
       expect(
          describeStep(

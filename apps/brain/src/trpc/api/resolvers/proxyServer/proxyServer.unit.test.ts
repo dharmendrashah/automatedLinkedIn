@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => {
 
    return {
       ProxyServerOwnershipError,
+      emit: vi.fn(),
       listForUser: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
@@ -23,6 +24,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('database', () => ({
    ProxyServerOwnershipError: mocks.ProxyServerOwnershipError,
+   TaskService: { emit: mocks.emit },
    ProxyServerService: {
       listForUser: mocks.listForUser,
       create: mocks.create,
@@ -133,6 +135,61 @@ describe('proxyServer resolvers', () => {
 
       await expect(caller().test({ id: 'p1' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
       expect(mocks.requestIfWaiting).not.toHaveBeenCalled()
+   })
+
+   describe('tasks that listen to a working proxy', () => {
+      it.each([
+         ['create', () => caller().create(created), mocks.create, false],
+         ['test', () => caller().test({ id: 'p1' }), mocks.test, false],
+         [
+            'update of the address',
+            () =>
+               caller().update({
+                  id: 'p1',
+                  host: 'other.example.net',
+               }),
+            mocks.update,
+            true,
+         ],
+         [
+            'update of the password',
+            () =>
+               caller().update({
+                  id: 'p1',
+                  password: 'new',
+               }),
+            mocks.update,
+            true,
+         ],
+         ['update that changes nothing', () => caller().update({ id: 'p1' }), mocks.update, false],
+      ])('should announce proxy.active when %s ends with a working proxy', async (_name, run, service, changed) => {
+         service.mockResolvedValue(proxy('ACTIVE'))
+
+         await run()
+
+         expect(mocks.emit).toHaveBeenCalledWith('proxy.active', {
+            proxyId: 'p1',
+            changed,
+         })
+      })
+
+      it.each(['GEO_MISMATCH', 'UNREACHABLE', 'PENDING'])(
+         'should announce nothing when the proxy is %s',
+         async status => {
+            mocks.test.mockResolvedValue(proxy(status))
+
+            await caller().test({ id: 'p1' })
+
+            expect(mocks.emit).not.toHaveBeenCalled()
+         }
+      )
+
+      it('should not wait for the tasks to start, so the proxy is returned at once', async () => {
+         mocks.test.mockResolvedValue(proxy('ACTIVE'))
+         mocks.emit.mockReturnValue(new Promise(() => undefined))
+
+         await expect(caller().test({ id: 'p1' })).resolves.toMatchObject({ id: 'p1' })
+      })
    })
 
    describe('test history', () => {

@@ -11,6 +11,7 @@ const setup = () => {
    }
    const recorder = {
       videoDir: undefined,
+      videoSize: undefined,
       log: vi.fn(),
       network: vi.fn(),
       track: vi.fn(),

@@ -25,7 +25,8 @@ export class Environment {
             example: 'example.com,localhost',
             // Local runs only: production has no default and must list its targets on purpose. LinkedIn is allowed
             // here on the operator's attestation of LinkedIn's written permission (.plan/linkedin-account-linking.md).
-            devDefault: 'localhost,127.0.0.1,linkedin.com',
+            // The two hosts after it are the bot detection pages the browser test visits.
+            devDefault: 'localhost,127.0.0.1,linkedin.com,deviceandbrowserinfo.com,pixelscan.net',
          }),
          SPIDER_ROBOTS_EXEMPT_HOSTS: string({
             desc: 'Comma-separated hosts (a subset of SPIDER_ALLOWED_HOSTS) whose robots.txt is not checked',

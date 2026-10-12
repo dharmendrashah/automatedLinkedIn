@@ -167,7 +167,7 @@ in every environment that uses this project's GCP account.
 ## Session recordings (not done yet)
 
 The Sessions page (`/sessions`, `.plan/spider-session-recording.md`) plays each run's video, steps, requests and logs
-straight from the bucket. The worker writes them under `recordings/` (it already has `objectAdmin`, so it needs
+straight from the bucket. The worker writes them under `runs/<task>/<user>/<yyyy>/<mm>/<dd>/<task_id>/` (older sessions used `recordings/`; it already has `objectAdmin`, so it needs
 nothing new). The bucket stays private: **brain** hands the browser a signed link that works for ten minutes. These
 are the commands for that, not run as part of this change.
 
@@ -183,11 +183,11 @@ gcloud services enable iamcredentials.googleapis.com
 gcloud iam service-accounts create "$SIGNER_NAME" \
   --display-name="brain: links to session recordings"
 
-# Read access to recordings/ only, not to sessions/ (which holds login cookies) or results/.
+# Read access to runs/ and recordings/ only, not to sessions/ (which holds login cookies) or results/.
 gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" \
   --member="serviceAccount:$SIGNER_EMAIL" \
   --role="roles/storage.objectViewer" \
-  --condition="title=recordings-only,expression=resource.name.startsWith('projects/_/buckets/$BUCKET/objects/recordings/')"
+  --condition="title=runs-and-recordings-only,expression=resource.name.startsWith('projects/_/buckets/$BUCKET/objects/runs/') || resource.name.startsWith('projects/_/buckets/$BUCKET/objects/recordings/')"
 
 # A signed link is signed by this account through the IAM Credentials API, so it must be allowed to sign for itself.
 gcloud iam service-accounts add-iam-policy-binding "$SIGNER_EMAIL" \
@@ -201,7 +201,8 @@ gcloud iam service-accounts add-iam-policy-binding "$SIGNER_EMAIL" \
   --member="serviceAccount:$PROJECT_ID.svc.id.goog[automatedlinkedin/brain]"
 ```
 
-The browser fetches the JSON files (`timeline.json`, `network.json`, `logs.json`) with `fetch`, so the bucket needs CORS
+The browser fetches the JSON files (`timeline.json`, `network.json`, `logs.json`, and `detection.json` of a browser test) with
+`fetch`, so the bucket needs CORS
 for the app's address. The video and screenshots load as plain `<video>` and `<img>` and need nothing:
 
 ```sh
@@ -212,11 +213,11 @@ gcloud storage buckets update "gs://$BUCKET" --cors-file=/tmp/cors.json
 ```
 
 Recordings show what the browser showed, so they are deleted after seven days. This matches
-`SESSION_RECORDING_RETENTION_DAYS` in brain, and it only touches `recordings/`:
+`SESSION_RECORDING_RETENTION_DAYS` in brain, and it only touches `runs/` and the older `recordings/`:
 
 ```sh
 cat > /tmp/lifecycle.json <<EOF
-{"rule": [{"action": {"type": "Delete"}, "condition": {"age": 7, "matchesPrefix": ["recordings/"]}}]}
+{"rule": [{"action": {"type": "Delete"}, "condition": {"age": 7, "matchesPrefix": ["runs/", "recordings/"]}}]}
 EOF
 gcloud storage buckets update "gs://$BUCKET" --lifecycle-file=/tmp/lifecycle.json
 ```
@@ -238,3 +239,19 @@ gcloud auth application-default login --impersonate-service-account="$SIGNER_EMA
 | `Permission 'iam.serviceAccounts.signBlob' denied` | The service account is missing `roles/iam.serviceAccountTokenCreator` on itself. |
 | The video plays but the steps, network and logs tabs say the file could not be loaded | The bucket has no CORS rule for the app's address. |
 | The Video tab says the recording is not set up | `SPIDER_GCS_BUCKET` is empty in brain. |
+
+## Browser tests (staging prerequisites, not applied)
+
+A proxy's browser test (`.plan/spider-browser-test.md`) opens two public bot detection pages through the proxy and records
+it. Two things only an operator can do before staging shows its results:
+
+1. Everything in [Session recordings](#session-recordings-not-done-yet) above: the signing service account, the bucket
+   CORS rule (it covers `detection.json`) and the seven day lifecycle rule. Without them the Sessions page cannot open
+   the recording.
+2. Allow the two hosts in the worker's `SPIDER_ALLOWED_HOSTS`: add `deviceandbrowserinfo.com` and `pixelscan.net` to the
+   value in the `STAGING_CONFIG_ENV` secret (see `deploy/overlays/staging/config.example.env`), then let the next staging
+   deploy roll the worker. Until then a browser test ends with "Could not tell" and the note "The address is not on the
+   spider allowlist.".
+
+The test runs headless on staging (`SPIDER_HEADLESS=true`), which some detectors treat differently from a real display. The
+report does not record the display mode, so compare with a local run before drawing conclusions from one result.

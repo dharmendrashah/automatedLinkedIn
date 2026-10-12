@@ -152,7 +152,7 @@ services:
   # and writes the raw results and each account's session to a Google Cloud Storage bucket. Only the hosts in
   # SPIDER_ALLOWED_HOSTS can be visited, robots.txt is honoured except for SPIDER_ROBOTS_EXEMPT_HOSTS, actions on
   # one host keep a fixed gap (SPIDER_MIN_DELAY_MS) and only one task runs per account at a time. The worker also
-  # checks the LinkedIn logins brain asks it to (accounts.validate) and answers on accounts.validated.
+  # runs the named tasks brain asks it to (tasks.run: browser-detection, linkedin-login) and answers on tasks.done.
   spider-api:
     profiles: ["spider"]
     build:
@@ -181,7 +181,7 @@ services:
     shm_size: 1gb
     environment:
       RABBITMQ_URL: *rabbitmq-url
-      SPIDER_ALLOWED_HOSTS: ${SPIDER_ALLOWED_HOSTS:-localhost,host.docker.internal,linkedin.com}
+      SPIDER_ALLOWED_HOSTS: ${SPIDER_ALLOWED_HOSTS:-localhost,host.docker.internal,linkedin.com,deviceandbrowserinfo.com,pixelscan.net}
       SPIDER_ROBOTS_EXEMPT_HOSTS: ${SPIDER_ROBOTS_EXEMPT_HOSTS:-linkedin.com}
       # Must equal brain's key: it opens the sealed credentials brain sends for account validation.
       LINKEDIN_CRED_ENC_KEY: ${LINKEDIN_CRED_ENC_KEY:-pqaZGClH/kqxNTLoLT4c0lMTloNIi2At3Jzz9a2rkIQ=}

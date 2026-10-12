@@ -34,7 +34,7 @@ const Line = ({ entry }: { entry: LogEntry }) => (
 )
 
 export const LogsTab = ({ session }: { session: SessionDetail }) => {
-   const file = useSessionText(session.id, 'logs.json')
+   const file = useSessionText(session, 'logs.json')
    const [source, setSource] = useState<'all' | LogEntry['source']>('all')
    const [errorsOnly, setErrorsOnly] = useState(false)
 

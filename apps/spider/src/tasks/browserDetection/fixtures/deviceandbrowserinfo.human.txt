@@ -1,0 +1,32 @@
+Are you a bot?
+✅
+You are human!
+Raw detection details
+Copy
+{
+  "isBot": false,
+  "details": {
+    "hasBotUserAgent": false,
+    "hasWebdriverTrue": false,
+    "hasWebdriverInFrameTrue": false,
+    "isPlaywright": false,
+    "hasInconsistentChromeObject": false,
+    "isPhantom": false,
+    "isNightmare": false,
+    "isSequentum": false,
+    "isSeleniumChromeDefault": false,
+    "isHeadlessChrome": false,
+    "isWebGLInconsistent": false,
+    "hasInconsistentWebGLShaderLang": false,
+    "hasInconsistentTimingResolution": false,
+    "isAutomatedWithCDP": false,
+    "isAutomatedWithCDPInWebWorker": false,
+    "hasInconsistentClientHints": false,
+    "hasInconsistentGPUFeatures": false,
+    "isIframeOverridden": false,
+    "hasInconsistentWorkerValues": false,
+    "hasHighHardwareConcurrency": false,
+    "hasHeadlessChromeDefaultScreenResolution": false,
+    "hasSuspiciousWeakSignals": false
+  }
+}

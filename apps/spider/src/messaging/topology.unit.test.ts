@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { VALIDATED_KEY, VALIDATED_QUEUE, VALIDATE_KEY, VALIDATE_QUEUE } from '@automatedLinkedIn/contracts'
+import {
+   TASK_KEY as RUN_KEY,
+   TASK_QUEUE as RUN_QUEUE,
+   TASK_DONE_KEY,
+   TASK_DONE_QUEUE,
+} from '@automatedLinkedIn/contracts'
 
 import {
    DEAD_EXCHANGE,
@@ -65,15 +70,15 @@ describe('assertTopology', () => {
       expect(fake.bindQueue).toHaveBeenCalledWith(DEAD_QUEUE, DEAD_EXCHANGE, TASK_KEY)
    })
 
-   it('should also declare the queues of account validation, so either side can start first', async () => {
+   it('should also declare the queues of the task contract, so either side can start first', async () => {
       const fake = channel()
 
       await assertTopology(fake as never)
 
-      expect(fake.assertQueue).toHaveBeenCalledWith(VALIDATE_QUEUE, expect.anything())
-      expect(fake.assertQueue).toHaveBeenCalledWith(VALIDATED_QUEUE, expect.anything())
-      expect(fake.bindQueue).toHaveBeenCalledWith(VALIDATE_QUEUE, EXCHANGE, VALIDATE_KEY)
-      expect(fake.bindQueue).toHaveBeenCalledWith(VALIDATED_QUEUE, EXCHANGE, VALIDATED_KEY)
+      expect(fake.assertQueue).toHaveBeenCalledWith(RUN_QUEUE, expect.anything())
+      expect(fake.assertQueue).toHaveBeenCalledWith(TASK_DONE_QUEUE, expect.anything())
+      expect(fake.bindQueue).toHaveBeenCalledWith(RUN_QUEUE, EXCHANGE, RUN_KEY)
+      expect(fake.bindQueue).toHaveBeenCalledWith(TASK_DONE_QUEUE, EXCHANGE, TASK_DONE_KEY)
    })
 
    it('should expire and cap results so an unread queue cannot grow forever', async () => {

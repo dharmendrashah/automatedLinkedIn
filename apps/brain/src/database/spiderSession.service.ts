@@ -1,8 +1,14 @@
 import { SESSION_RECORDING_RETENTION_DAYS } from 'env'
 
-import { type ProxyProtocol, type SpiderSessionStatus } from 'generated/prisma/client'
+import { type Prisma, type ProxyProtocol, type SpiderSessionStatus } from 'generated/prisma/client'
 
-import { type ValidateAccountResult } from '@automatedLinkedIn/contracts'
+import {
+   type TaskReport,
+   type TaskResult,
+   type TaskTrigger,
+   artifactPathUnder,
+   runPrefix,
+} from '@automatedLinkedIn/contracts'
 
 import { PrismaService } from './prisma.service'
 
@@ -33,6 +39,13 @@ export class SpiderRecordingUnavailableError extends Error {
    }
 }
 
+// A file with login tokens in it is only handed out when the owner asked for it on purpose.
+export class SpiderSensitiveFileError extends Error {
+   public constructor() {
+      super('This file holds login tokens. Open it on purpose to see it.')
+   }
+}
+
 type SessionProxy = {
    id: string
    protocol: ProxyProtocol
@@ -41,20 +54,34 @@ type SessionProxy = {
    country: string | null
 }
 
-type StartInput = {
+type StartTaskInput = {
    id: string
    userId: string
    linkedInAccountId: string
-   email: string
-   proxy: SessionProxy
+   proxy?: SessionProxy
+   task: string
+   taskVersion: number
+   trigger: TaskTrigger
+   input: Record<string, unknown>
+   // The time of the command, which the worker uses for the folder of the run.
+   startedAt: Date
    retryOfId?: string
 }
 
-type SessionRequestParams = {
-   action: 'VALIDATE_ACCOUNT'
-   email: string
-   proxy: string
-}
+type SessionRequestParams =
+   | {
+        action: 'VALIDATE_ACCOUNT'
+        email: string
+        proxy: string
+     }
+   | {
+        action: 'TASK'
+        task: string
+        taskVersion: number
+        trigger: TaskTrigger
+        input: Record<string, unknown>
+        proxy: string | null
+     }
 
 const listSelect = {
    id: true,
@@ -62,6 +89,8 @@ const listSelect = {
    status: true,
    outcome: true,
    message: true,
+   task: true,
+   verdict: true,
    proxyProtocol: true,
    proxyHost: true,
    proxyPort: true,
@@ -97,40 +126,62 @@ const present = <T extends { recordingPrefix: string | null; startedAt: Date; st
 
 // One session is one run of the spider for one of the user's accounts. See .plan/spider-session-recording.md.
 export class SpiderSessionService {
-   // Notes that a check was queued. The check is already on its way, so a failure here is logged, never thrown.
-   public static async start({ id, userId, linkedInAccountId, email, proxy, retryOfId }: StartInput) {
-      try {
-         const params: SessionRequestParams = {
-            action: 'VALIDATE_ACCOUNT',
-            email,
-            proxy: `${proxy.protocol.toLowerCase()}://${proxy.host}:${proxy.port}`,
-         }
+   // Notes a task that is about to be queued. Unlike `start` it throws when the row cannot be saved: a run nobody can see
+   // the result of must not happen.
+   public static async startTask({
+      id,
+      userId,
+      linkedInAccountId,
+      proxy,
+      task,
+      taskVersion,
+      trigger,
+      input,
+      startedAt,
+      retryOfId,
+   }: StartTaskInput) {
+      const params: SessionRequestParams = {
+         action: 'TASK',
+         task,
+         taskVersion,
+         trigger,
+         input,
+         proxy: proxy ? `${proxy.protocol.toLowerCase()}://${proxy.host}:${proxy.port}` : null,
+      }
 
-         await PrismaService.client.spiderSession.create({
-            data: {
-               id,
-               userId,
-               linkedInAccountId,
-               kind: 'VALIDATE_ACCOUNT',
+      await PrismaService.client.spiderSession.create({
+         data: {
+            id,
+            userId,
+            linkedInAccountId,
+            kind: 'TASK',
+            task,
+            taskVersion,
+            trigger,
+            startedAt,
+            ...(proxy && {
                proxyServerId: proxy.id,
                proxyProtocol: proxy.protocol,
                proxyHost: proxy.host,
                proxyPort: proxy.port,
                proxyCountry: proxy.country,
-               requestParams: params,
-               ...(retryOfId && { retryOfId }),
-            },
-         })
-         const cutoff = new Date(Date.now() - ROW_RETENTION_DAYS * DAY_MS)
+            }),
+            requestParams: params as unknown as Prisma.InputJsonObject,
+            ...(retryOfId && { retryOfId }),
+         },
+      })
 
-         await PrismaService.client.spiderSession.deleteMany({ where: { startedAt: { lt: cutoff } } })
+      try {
+         await PrismaService.client.spiderSession.deleteMany({
+            where: { startedAt: { lt: new Date(Date.now() - ROW_RETENTION_DAYS * DAY_MS) } },
+         })
       } catch (error) {
-         console.error(`Could not save the session ${id}: ${(error as Error).message}`)
+         console.error(`Could not delete old sessions: ${(error as Error).message}`)
       }
    }
 
    // The check could not even be queued.
-   public static async fail(id: string, message: string) {
+   public static async fail(id: string, message: string, verdict?: string) {
       await PrismaService.client.spiderSession.updateMany({
          where: {
             id,
@@ -139,40 +190,100 @@ export class SpiderSessionService {
          data: {
             status: 'FAILED',
             outcome: 'ERROR',
+            ...(verdict && { verdict }),
             message,
             finishedAt: new Date(),
          },
       })
    }
 
-   // Records the worker's answer, once. Resolves to whether this answer was the one that ended the session.
-   public static async finish(result: ValidateAccountResult) {
-      const session = await PrismaService.client.spiderSession.findUnique({
-         where: { id: result.validation_id },
-         select: { startedAt: true },
-      })
-
-      if (!session) {
-         return false
-      }
-
-      const finishedAt = new Date(result.checked_at)
-      const { count } = await PrismaService.client.spiderSession.updateMany({
+   // Records a task's answer once, with the files it names. Only a file under the folder brain computes for this run is kept,
+   // so a result can never point at someone else's files. Resolves to the session that this answer finished, or null when it
+   // finished nothing (unknown, already finished, or another task's).
+   public static async finishTask(result: TaskResult) {
+      const session = await PrismaService.client.spiderSession.findFirst({
          where: {
-            id: result.validation_id,
+            id: result.task_id,
+            kind: 'TASK',
             status: 'IN_PROGRESS',
          },
-         data: {
-            status: result.outcome === 'VALID' ? 'SUCCEEDED' : 'FAILED',
-            outcome: result.outcome,
-            message: result.message,
-            finishedAt,
-            durationMs: Math.max(0, finishedAt.getTime() - session.startedAt.getTime()),
-            ...(result.recording_prefix && { recordingPrefix: result.recording_prefix }),
+         select: {
+            id: true,
+            userId: true,
+            linkedInAccountId: true,
+            task: true,
+            startedAt: true,
          },
       })
 
-      return count > 0
+      if (!session || session.task !== result.task) {
+         return null
+      }
+
+      const prefix = runPrefix({
+         task: result.task,
+         user_id: session.userId,
+         requested_at: session.startedAt.toISOString(),
+         task_id: result.task_id,
+      })
+      const kept = result.artifacts.filter(({ path }) => artifactPathUnder(prefix, path))
+
+      if (kept.length < result.artifacts.length) {
+         console.error(
+            `Dropped ${result.artifacts.length - kept.length} file(s) of ${result.task_id} outside its folder`
+         )
+      }
+
+      const finishedAt = new Date(result.finished_at)
+      const finished = await PrismaService.client.$transaction(async tx => {
+         const { count } = await tx.spiderSession.updateMany({
+            where: {
+               id: result.task_id,
+               status: 'IN_PROGRESS',
+            },
+            data: {
+               status: result.status,
+               outcome: result.verdict,
+               verdict: result.verdict,
+               message: result.message,
+               ...(result.report && { report: result.report }),
+               workerBuild: result.worker.build,
+               finishedAt,
+               durationMs: Math.max(0, finishedAt.getTime() - session.startedAt.getTime()),
+               ...(kept.length > 0 && { recordingPrefix: prefix }),
+            },
+         })
+
+         if (count === 0) {
+            return false
+         }
+
+         if (kept.length > 0) {
+            await tx.spiderSessionArtifact.createMany({
+               data: kept.map(file => ({
+                  sessionId: result.task_id,
+                  kind: file.kind,
+                  name: file.name,
+                  path: file.path,
+                  contentType: file.content_type,
+                  bytes: file.bytes,
+                  step: file.step ?? null,
+                  sensitive: file.sensitive ?? false,
+               })),
+               skipDuplicates: true,
+            })
+         }
+
+         return true
+      })
+
+      return finished
+         ? {
+              id: session.id,
+              userId: session.userId,
+              linkedInAccountId: session.linkedInAccountId,
+           }
+         : null
    }
 
    // A page of the user's sessions, newest first. `cursor` is the id of the last session of the previous page.
@@ -220,6 +331,23 @@ export class SpiderSessionService {
             ...listSelect,
             requestParams: true,
             proxyServerId: true,
+            taskVersion: true,
+            trigger: true,
+            report: true,
+            workerBuild: true,
+            // Never the bucket path: a file is opened through its id.
+            artifacts: {
+               orderBy: [{ kind: 'asc' }, { name: 'asc' }],
+               select: {
+                  id: true,
+                  kind: true,
+                  name: true,
+                  contentType: true,
+                  bytes: true,
+                  step: true,
+                  sensitive: true,
+               },
+            },
             retries: {
                orderBy: { startedAt: 'desc' },
                select: {
@@ -239,10 +367,43 @@ export class SpiderSessionService {
       return {
          ...present(row),
          requestParams: row.requestParams as unknown as SessionRequestParams,
+         report: row.report as unknown as TaskReport | null,
       }
    }
 
-   // Where one file of the user's own session lives in the bucket, for a signed link.
+   // Where one file of the user's own task session lives in the bucket, for a signed link.
+   public static async artifactKey(userId: string, id: string, artifactId: string, reveal = false) {
+      const row = await PrismaService.client.spiderSessionArtifact.findFirst({
+         where: {
+            id: artifactId,
+            sessionId: id,
+            session: { userId },
+         },
+         select: {
+            path: true,
+            sensitive: true,
+            session: { select: { startedAt: true } },
+         },
+      })
+
+      if (!row) {
+         throw new SpiderSessionNotFoundError()
+      }
+
+      if (row.sensitive && !reveal) {
+         throw new SpiderSensitiveFileError()
+      }
+
+      if (row.session.startedAt.getTime() + SESSION_RECORDING_RETENTION_DAYS * DAY_MS < Date.now()) {
+         throw new SpiderRecordingUnavailableError(
+            `These files expired after ${SESSION_RECORDING_RETENTION_DAYS} days.`
+         )
+      }
+
+      return row.path
+   }
+
+   // Where one file of the user's own account check lives in the bucket, for a signed link.
    public static async fileKey(userId: string, id: string, file: string) {
       const row = await PrismaService.client.spiderSession.findFirst({
          where: {

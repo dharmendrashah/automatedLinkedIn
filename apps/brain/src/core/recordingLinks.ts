@@ -6,7 +6,7 @@ import { SPIDER_GCS_BUCKET } from 'env'
 const LINK_TTL_MS = 10 * 60 * 1000
 
 // Links for the browser to load a session's recording straight from the bucket, which stays private. Only paths
-// under recordings/ are ever signed, and brain never reads the files itself. Credentials come from Application
+// under recordings/ (older sessions) or runs/ (every task run) are ever signed, and brain never reads the files itself. Credentials come from Application
 // Default Credentials: Workload Identity on GKE, service account impersonation locally.
 export class RecordingLinks {
    private static storage: Storage | undefined
@@ -20,8 +20,8 @@ export class RecordingLinks {
          throw new Error('Recordings are not set up here.')
       }
 
-      if (!key.startsWith('recordings/') || key.includes('..')) {
-         throw new Error('Only files under recordings/ can be linked.')
+      if (!(key.startsWith('recordings/') || key.startsWith('runs/')) || key.includes('..')) {
+         throw new Error('Only files under recordings/ or runs/ can be linked.')
       }
 
       RecordingLinks.storage ??= new Storage()
