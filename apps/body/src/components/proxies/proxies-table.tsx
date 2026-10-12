@@ -38,7 +38,9 @@ type Props = {
    busyId: string | undefined
    onEdit: (proxy: Proxy) => void
    onTest: (proxy: Proxy) => void
-   onBrowserTest: (proxy: Proxy) => void
+   // The tasks the worker announced that work through a proxy and need nothing else.
+   tasks: Array<{ task: string; title: string }>
+   onRunTask: (proxy: Proxy, task: string) => void
    onHistory: (proxy: Proxy) => void
    onDelete: (proxy: Proxy) => void
 }
@@ -50,7 +52,8 @@ export const ProxiesTable = ({
    busyId,
    onEdit,
    onTest,
-   onBrowserTest,
+   tasks,
+   onRunTask,
    onHistory,
    onDelete,
 }: Props) => (
@@ -116,14 +119,17 @@ export const ProxiesTable = ({
                               <RefreshCw />
                               Test now
                            </DropdownMenuItem>
-                           {/* A browser test needs a proxy that works: the spider never goes out from this server. */}
-                           <DropdownMenuItem
-                              disabled={proxy.status !== 'ACTIVE' && proxy.status !== 'GEO_MISMATCH'}
-                              onSelect={() => onBrowserTest(proxy)}
-                           >
-                              <ScanSearch />
-                              Browser test
-                           </DropdownMenuItem>
+                           {/* A task needs a proxy that works: the spider never goes out from this server. */}
+                           {tasks.map(task => (
+                              <DropdownMenuItem
+                                 key={task.task}
+                                 disabled={proxy.status !== 'ACTIVE' && proxy.status !== 'GEO_MISMATCH'}
+                                 onSelect={() => onRunTask(proxy, task.task)}
+                              >
+                                 <ScanSearch />
+                                 {task.title}
+                              </DropdownMenuItem>
+                           ))}
                            <DropdownMenuItem onSelect={() => onHistory(proxy)}>
                               <History />
                               Test history

@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { ProxyServerOwnershipError, TaskOwnershipError, TaskRefusedError, TaskService } from 'database'
 
-import { TASK_NAME_PATTERN } from '@automatedLinkedIn/contracts'
+import { RUNNER_VERDICTS, TASK_NAME_PATTERN } from '@automatedLinkedIn/contracts'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -46,8 +46,12 @@ const asTrpcError = (error: unknown) => {
 
 // Every task goes through these two procedures; a new task needs nothing here. Everything is scoped to ctx.user.id.
 export const task = router({
-   // The tasks the worker announced: titles, verdict labels and what each one needs.
-   catalog: ownerProcedure.query(() => TaskService.catalog()),
+   // The tasks the worker announced (titles, verdict labels, what each one needs) and the labels of the answers the runner
+   // gives when a task could not even start.
+   catalog: ownerProcedure.query(async () => ({
+      tasks: await TaskService.catalog(),
+      runnerVerdicts: RUNNER_VERDICTS as Record<string, { label: string; tone: 'success' | 'failure' | 'neutral' }>,
+   })),
 
    run: ownerProcedure.input(runInput).mutation(async ({ ctx, input }) => {
       try {

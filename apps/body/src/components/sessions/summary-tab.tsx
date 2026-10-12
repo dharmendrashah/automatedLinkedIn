@@ -11,6 +11,7 @@ import { actionLabel, describeStep, formatDuration, hintFor, proxyLabel, resultO
 import { type Timeline, parseTimeline } from './recording'
 import { Screenshot } from './steps-tab'
 import { useSessionText } from './use-session-file'
+import { useTaskCatalog } from './use-task-catalog'
 
 const Fact = ({ label, children }: { label: string; children: ReactNode }) => (
    <div className="grid gap-0.5">
@@ -21,7 +22,8 @@ const Fact = ({ label, children }: { label: string; children: ReactNode }) => (
 
 const startedBy = {
    automatic: 'Automatically, after the proxy tested ok',
-   manual: 'You, with Browser test on the Proxies page',
+   manual: 'You',
+   retry: 'You, running it again',
 } as const
 
 const bannerText = (session: SessionDetail) => {
@@ -35,7 +37,7 @@ const bannerText = (session: SessionDetail) => {
 }
 
 const Banner = ({ session }: { session: SessionDetail }) => {
-   const { tone } = resultOf(session)
+   const { tone } = resultOf(session, useTaskCatalog())
    const Icon = { success: CheckCircle2, failure: XCircle, running: Loader2, unknown: TriangleAlert, neutral: CircleHelp }[
       tone
    ]
@@ -62,7 +64,7 @@ const Banner = ({ session }: { session: SessionDetail }) => {
 
 // The first step that failed, with the page as it looked then. It is what a fix to the spider starts from.
 const WhereItWentWrong = ({ session }: { session: SessionDetail }) => {
-   const file = useSessionText(session.id, 'timeline.json')
+   const file = useSessionText(session, 'timeline.json')
    const timeline: Timeline | null = file.text ? parseTimeline(file.text) : null
    const step = timeline?.steps.find(item => !item.ok)
 
@@ -78,7 +80,7 @@ const WhereItWentWrong = ({ session }: { session: SessionDetail }) => {
                Step {step.n}: {describeStep(step)}
             </p>
             {step.error ? <p className="text-destructive font-mono text-xs break-words">{step.error}</p> : null}
-            {step.screenshot ? <Screenshot sessionId={session.id} name={step.screenshot} /> : null}
+            {step.screenshot ? <Screenshot session={session} name={step.screenshot} /> : null}
          </div>
       </section>
    )
@@ -90,7 +92,8 @@ type Props = {
 }
 
 export const SummaryTab = ({ session, onOpen }: Props) => {
-   const { label } = resultOf(session)
+   const catalog = useTaskCatalog()
+   const { label } = resultOf(session, catalog)
    const recordingAvailable = session.recordingsConfigured && session.hasRecording && !session.recordingExpired
 
    return (
@@ -102,14 +105,14 @@ export const SummaryTab = ({ session, onOpen }: Props) => {
          <section className="grid gap-3">
             <SectionLabel>What it was given</SectionLabel>
             <dl className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2">
-               <Fact label="Action">{actionLabel(session.kind)}</Fact>
+               <Fact label="Action">{actionLabel(session, catalog)}</Fact>
                <Fact label="LinkedIn account">{session.linkedInAccount.email}</Fact>
                <Fact label="Proxy">
                   <span className="font-mono text-xs">{proxyLabel(session)}</span>
                   {session.proxyCountry ? <span className="text-muted-foreground"> · {session.proxyCountry}</span> : null}
                </Fact>
                <Fact label="Started">{new Date(session.startedAt).toLocaleString()}</Fact>
-               {session.requestParams.action === 'BROWSER_TEST' ? (
+               {session.requestParams.action === 'TASK' ? (
                   <Fact label="Started by">{startedBy[session.requestParams.trigger]}</Fact>
                ) : (
                   <Fact label="Credentials">Sent sealed to the spider. They are never shown or recorded.</Fact>

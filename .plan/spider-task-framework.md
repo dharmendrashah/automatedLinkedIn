@@ -273,7 +273,7 @@ Old rows (`VALIDATE_ACCOUNT`) are not touched and keep their own display until a
   `standardTasks` registry; worker consumes `tasks.run` and publishes the catalog at start.
 - [x] T4 Brain: migration, `TaskQueue`, `TaskService`, catalog consumer, result consumer, artifacts, triggers, hooks, `task`
   router, generic `fileUrl`; remove `BrowserTestService`.
-- [ ] T5 Body: catalog-driven labels, artifact tabs, generic retry, proxies action; remove the browser-test specific code.
+- [x] T5 Body: catalog-driven labels, artifact tabs, generic retry, proxies action; remove the browser-test specific code.
 - [ ] T6 Account validation: move `validation/` to `tasks/linkedinLogin` (verdict codes `VALID`, `INVALID_CREDENTIALS`,
   `SECURITY_CHECK`, `NEEDS_REAUTH`, `ERROR`), the `linkedin-login` hooks in brain, replace the `/accounts` verify, add-account
   and retry flows' calls, remove `AccountValidationQueue`, the old contract, and the legacy-only code paths.

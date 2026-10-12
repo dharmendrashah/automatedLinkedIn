@@ -66,10 +66,16 @@ describe('task resolvers', () => {
       vi.spyOn(console, 'error').mockImplementation(() => undefined)
    })
 
-   it('should list the tasks the worker announced', async () => {
+   it('should list the tasks the worker announced, with the labels of the answers the runner gives itself', async () => {
       mocks.catalog.mockResolvedValue([{ task: 'browser-detection' }])
 
-      await expect(caller().catalog()).resolves.toEqual([{ task: 'browser-detection' }])
+      const catalog = await caller().catalog()
+
+      expect(catalog.tasks).toEqual([{ task: 'browser-detection' }])
+      expect(catalog.runnerVerdicts.NOT_QUEUED).toEqual({
+         label: expect.any(String),
+         tone: 'failure',
+      })
    })
 
    it('should run a task for the current user, and return the session that shows it', async () => {

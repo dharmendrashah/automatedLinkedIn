@@ -16,15 +16,21 @@ import { RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 
 import { trpc } from '../../trpc'
+import { type SessionDetail } from './types'
+
+import { type SessionTab, tabsFor } from './artifacts'
 import { actionLabel, formatDuration, timeAgo } from './describe'
-import { DetectionTab } from './detection-tab'
+import { FilesTab } from './files-tab'
 import { LogsTab } from './logs-tab'
 import { NetworkTab } from './network-tab'
 import { RecordingGate } from './recording-gate'
+import { ResultTab } from './result-tab'
+import { ScreenshotsTab } from './screenshots-tab'
 import { RetryDialog } from './retry-dialog'
 import { SessionStatusBadge } from './session-status-badge'
 import { StepsTab } from './steps-tab'
 import { SummaryTab } from './summary-tab'
+import { useTaskCatalog } from './use-task-catalog'
 import { VideoTab } from './video-tab'
 
 type Props = {
@@ -33,11 +39,52 @@ type Props = {
    onClose: () => void
 }
 
+// A check can be tried again through another proxy of the account; a task run can be run again the same way, once it is done.
+const retryOf = (session: SessionDetail) => {
+   if (session.kind !== 'TASK') {
+      return {
+         allowed: session.retry.allowed,
+         reason: session.retry.allowed
+            ? 'Run the same check again, through another proxy of this account.'
+            : session.retry.reason,
+      }
+   }
+
+   if (session.status === 'IN_PROGRESS') {
+      return {
+         allowed: false,
+         reason: 'Wait for this run to finish.',
+      }
+   }
+
+   return session.retryProxies.length > 0
+      ? {
+           allowed: true,
+           reason: 'Run the same task again with the same input, through any working proxy of this account.',
+        }
+      : {
+           allowed: false,
+           reason: 'This account has no working proxy. Add one on the Proxies page first.',
+        }
+}
+
 // A running session is refreshed every few seconds, so its result appears without a reload.
 const REFRESH_MS = 3000
 
+const TAB_LABELS: Record<SessionTab, string> = {
+   summary: 'Summary',
+   result: 'Result',
+   video: 'Video',
+   steps: 'Steps',
+   screenshots: 'Screenshots',
+   network: 'Network',
+   logs: 'Logs',
+   files: 'Files',
+}
+
 export const SessionDrawer = ({ sessionId, onOpen, onClose }: Props) => {
    const [retrying, setRetrying] = useState(false)
+   const catalog = useTaskCatalog()
    const detail = trpc.session.get.useQuery(
       { id: sessionId ?? '' },
       {
@@ -51,6 +98,7 @@ export const SessionDrawer = ({ sessionId, onOpen, onClose }: Props) => {
       }
    )
    const session = detail.data
+   const retry = session ? retryOf(session) : { allowed: false, reason: undefined }
 
    return (
       <Drawer open={Boolean(sessionId)} onOpenChange={open => (open ? undefined : onClose())} direction="right">
@@ -58,7 +106,7 @@ export const SessionDrawer = ({ sessionId, onOpen, onClose }: Props) => {
             <DrawerHeader className="flex-row items-start justify-between gap-3 border-b px-5 py-4">
                <div className="grid gap-1.5">
                   <DrawerTitle className="text-base">
-                     {session ? actionLabel(session.kind) : 'Session'}
+                     {session ? actionLabel(session, catalog) : 'Session'}
                   </DrawerTitle>
                   <DrawerDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
                      {session ? (
@@ -68,7 +116,8 @@ export const SessionDrawer = ({ sessionId, onOpen, onClose }: Props) => {
                               status={session.status}
                               noAnswer={session.noAnswer}
                               kind={session.kind}
-                              outcome={session.outcome}
+                              task={session.task}
+                              verdict={session.verdict}
                            />
                            <span title={new Date(session.startedAt).toLocaleString()}>
                               {timeAgo(new Date(session.startedAt))}
@@ -80,21 +129,17 @@ export const SessionDrawer = ({ sessionId, onOpen, onClose }: Props) => {
                      )}
                   </DrawerDescription>
                </div>
-               {session && session.kind !== 'BROWSER_TEST' ? (
+               {session ? (
                   <Tooltip>
                      <TooltipTrigger asChild>
-                        <span tabIndex={session.retry.allowed ? undefined : 0}>
-                           <Button size="sm" disabled={!session.retry.allowed} onClick={() => setRetrying(true)}>
+                        <span tabIndex={retry.allowed ? undefined : 0}>
+                           <Button size="sm" disabled={!retry.allowed} onClick={() => setRetrying(true)}>
                               <RotateCcw />
-                              Try again
+                              {session.kind === 'TASK' ? 'Run again' : 'Try again'}
                            </Button>
                         </span>
                      </TooltipTrigger>
-                     <TooltipContent className="max-w-xs">
-                        {session.retry.allowed
-                           ? 'Run the same check again, through another proxy of this account.'
-                           : session.retry.reason}
-                     </TooltipContent>
+                     <TooltipContent className="max-w-xs">{retry.reason}</TooltipContent>
                   </Tooltip>
                ) : null}
             </DrawerHeader>
@@ -106,23 +151,18 @@ export const SessionDrawer = ({ sessionId, onOpen, onClose }: Props) => {
                {session ? (
                   <Tabs defaultValue="summary" className="gap-5">
                      <TabsList className="w-full">
-                        <TabsTrigger value="summary">Summary</TabsTrigger>
-                        {session.kind === 'BROWSER_TEST' ? (
-                           <TabsTrigger value="detection">Detection</TabsTrigger>
-                        ) : null}
-                        <TabsTrigger value="video">Video</TabsTrigger>
-                        <TabsTrigger value="steps">Steps</TabsTrigger>
-                        <TabsTrigger value="network">Network</TabsTrigger>
-                        <TabsTrigger value="logs">Logs</TabsTrigger>
+                        {tabsFor(session).map(tab => (
+                           <TabsTrigger key={tab} value={tab}>
+                              {TAB_LABELS[tab]}
+                           </TabsTrigger>
+                        ))}
                      </TabsList>
 
                      <TabsContent value="summary">
                         <SummaryTab session={session} onOpen={onOpen} />
                      </TabsContent>
-                     <TabsContent value="detection">
-                        <RecordingGate session={session}>
-                           <DetectionTab session={session} />
-                        </RecordingGate>
+                     <TabsContent value="result">
+                        <ResultTab session={session} />
                      </TabsContent>
                      <TabsContent value="video">
                         <RecordingGate session={session}>
@@ -134,6 +174,11 @@ export const SessionDrawer = ({ sessionId, onOpen, onClose }: Props) => {
                            <StepsTab session={session} />
                         </RecordingGate>
                      </TabsContent>
+                     <TabsContent value="screenshots">
+                        <RecordingGate session={session}>
+                           <ScreenshotsTab session={session} />
+                        </RecordingGate>
+                     </TabsContent>
                      <TabsContent value="network">
                         <RecordingGate session={session}>
                            <NetworkTab session={session} />
@@ -142,6 +187,11 @@ export const SessionDrawer = ({ sessionId, onOpen, onClose }: Props) => {
                      <TabsContent value="logs">
                         <RecordingGate session={session}>
                            <LogsTab session={session} />
+                        </RecordingGate>
+                     </TabsContent>
+                     <TabsContent value="files">
+                        <RecordingGate session={session}>
+                           <FilesTab session={session} />
                         </RecordingGate>
                      </TabsContent>
                   </Tabs>

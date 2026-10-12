@@ -64,7 +64,7 @@ const Row = ({ entry }: { entry: NetworkEntry }) => {
 }
 
 export const NetworkTab = ({ session }: { session: SessionDetail }) => {
-   const file = useSessionText(session.id, 'network.json')
+   const file = useSessionText(session, 'network.json')
 
    if (file.loading) {
       return <Skeleton className="h-40 w-full rounded-xl" />

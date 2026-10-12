@@ -7,6 +7,8 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 
 import { type Proxy } from '@/components/proxies/types'
+import { runnableOnProxy } from '@/components/sessions/artifacts'
+import { useTaskCatalog } from '@/components/sessions/use-task-catalog'
 
 import { trpc } from '../trpc'
 
@@ -24,9 +26,12 @@ export const Proxies = () => {
    }
 
    const test = trpc.proxyServer.test.useMutation({ onSuccess: refresh })
-   const browserTest = trpc.proxyServer.browserTest.useMutation({
+   const catalog = useTaskCatalog()
+   const runTask = trpc.task.run.useMutation({
       onSuccess: () => void utils.session.list.invalidate(),
    })
+   // Any task that works through a proxy and asks for nothing shows in the row menu, so a new task needs no change here.
+   const tasks = catalog?.tasks.filter(runnableOnProxy) ?? []
    const remove = trpc.proxyServer.delete.useMutation({
       onSuccess: () => {
          setToDelete(null)
@@ -36,12 +41,12 @@ export const Proxies = () => {
 
    const busyId = test.isPending
       ? test.variables?.id
-      : browserTest.isPending
-        ? browserTest.variables?.id
+      : runTask.isPending
+        ? runTask.variables?.proxyId
         : remove.isPending
           ? remove.variables?.id
           : undefined
-   const actionError = test.error?.message ?? browserTest.error?.message ?? remove.error?.message
+   const actionError = test.error?.message ?? runTask.error?.message ?? remove.error?.message
 
    return (
       <div className="mx-auto grid w-full max-w-5xl gap-4 px-4 lg:px-6">
@@ -58,10 +63,10 @@ export const Proxies = () => {
 
          {actionError ? <p className="text-destructive text-sm">{actionError}</p> : null}
 
-         {browserTest.data ? (
+         {runTask.data ? (
             <p className="text-sm" role="status">
-               Browser test started.{' '}
-               <Link className="underline underline-offset-4" to={`/sessions?session=${browserTest.data.id}`}>
+               Started.{' '}
+               <Link className="underline underline-offset-4" to={`/sessions?session=${runTask.data.id}`}>
                   Follow it in Sessions
                </Link>
                .
@@ -75,7 +80,8 @@ export const Proxies = () => {
             busyId={busyId}
             onEdit={setToEdit}
             onTest={proxy => test.mutate({ id: proxy.id })}
-            onBrowserTest={proxy => browserTest.mutate({ id: proxy.id })}
+            tasks={tasks}
+            onRunTask={(proxy, task) => runTask.mutate({ task, proxyId: proxy.id })}
             onHistory={setToInspect}
             onDelete={setToDelete}
          />

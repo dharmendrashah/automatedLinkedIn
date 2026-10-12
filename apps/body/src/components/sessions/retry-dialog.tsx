@@ -34,14 +34,19 @@ export const RetryDialog = ({ session, open, onOpenChange, onStarted }: Props) =
    // The proxy it ran through is chosen to begin with, so "Try again" alone repeats it.
    const selected = chosen ?? (proxies.some(proxy => proxy.id === session.proxyServerId) ? session.proxyServerId : proxies[0]?.id)
 
-   const retry = trpc.session.retry.useMutation({
-      onSuccess: ({ id }) => {
+   const started = {
+      onSuccess: ({ id }: { id: string }) => {
          void utils.session.list.invalidate()
          void utils.session.get.invalidate({ id: session.id })
          onOpenChange(false)
          onStarted(id)
       },
-   })
+   }
+   const retryCheck = trpc.session.retry.useMutation(started)
+   const runAgain = trpc.task.run.useMutation(started)
+   // An older check is tried again through the account's own flow; a task run starts the same task with the same input.
+   const { requestParams } = session
+   const retry = requestParams.action === 'TASK' ? runAgain : retryCheck
 
    const close = (next: boolean) => {
       if (!next) {
@@ -56,10 +61,13 @@ export const RetryDialog = ({ session, open, onOpenChange, onStarted }: Props) =
       <Dialog open={open} onOpenChange={close}>
          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-               <DialogTitle>Try again with another proxy</DialogTitle>
+               <DialogTitle>
+                  {requestParams.action === 'TASK' ? 'Run again with a proxy' : 'Try again with another proxy'}
+               </DialogTitle>
                <DialogDescription>
-                  Same account, same action. Only the proxy changes, and the account's current saved credentials are
-                  used.
+                  {requestParams.action === 'TASK'
+                     ? 'Same task, same input. Only the proxy can change, and only to one of this account’s own.'
+                     : "Same account, same action. Only the proxy changes, and the account's current saved credentials are used."}
                </DialogDescription>
             </DialogHeader>
 
@@ -119,13 +127,24 @@ export const RetryDialog = ({ session, open, onOpenChange, onStarted }: Props) =
                </Button>
                <Button
                   disabled={!selected || retry.isPending}
-                  onClick={() =>
-                     selected &&
-                     retry.mutate({
-                        id: session.id,
-                        proxyId: selected,
-                     })
-                  }
+                  onClick={() => {
+                     if (!selected) {
+                        return
+                     }
+
+                     if (requestParams.action === 'TASK') {
+                        runAgain.mutate({
+                           task: session.task as string,
+                           proxyId: selected,
+                           input: requestParams.input,
+                        })
+                     } else {
+                        retryCheck.mutate({
+                           id: session.id,
+                           proxyId: selected,
+                        })
+                     }
+                  }}
                >
                   {retry.isPending ? <Loader2 className="animate-spin" /> : null}
                   Start

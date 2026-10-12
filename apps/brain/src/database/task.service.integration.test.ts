@@ -43,7 +43,12 @@ const entry: TaskCatalogEntry = {
    policy: {
       cooldown_ms: 5 * 60_000,
       one_at_a_time: 'proxy',
-      automatic: [{ on: 'proxy.active', every_ms: 24 * 3600_000 }],
+      automatic: [
+         {
+            on: 'proxy.active',
+            every_ms: 24 * 3600_000,
+         },
+      ],
    },
    hosts: ['example.com'],
 }
@@ -140,9 +145,14 @@ describe('TaskService (database)', () => {
          })
       )
 
-      await expect(TaskService.request({ userId, task: TASK, proxyId, trigger: 'manual' })).rejects.toThrow(
-         'already running'
-      )
+      await expect(
+         TaskService.request({
+            userId,
+            task: TASK,
+            proxyId,
+            trigger: 'manual',
+         })
+      ).rejects.toThrow('already running')
    })
 
    it('should keep the verdict, the report and only the files inside the run folder, once', async () => {
@@ -150,7 +160,8 @@ describe('TaskService (database)', () => {
       const secondProxy = (
          await PrismaService.client.proxyServer.create({
             data: {
-               linkedInAccountId: (await PrismaService.client.linkedInAccount.findFirstOrThrow({ where: { userId } })).id,
+               linkedInAccountId: (await PrismaService.client.linkedInAccount.findFirstOrThrow({ where: { userId } }))
+                  .id,
                protocol: 'HTTP',
                host: '203.0.113.6',
                port: 8080,
@@ -161,7 +172,12 @@ describe('TaskService (database)', () => {
             },
          })
       ).id
-      const { id } = await TaskService.request({ userId, task: TASK, proxyId: secondProxy, trigger: 'manual' })
+      const { id } = await TaskService.request({
+         userId,
+         task: TASK,
+         proxyId: secondProxy,
+         trigger: 'manual',
+      })
       const session = await PrismaService.client.spiderSession.findUniqueOrThrow({ where: { id } })
       const folder = runPrefix({
          task: TASK,
@@ -228,9 +244,14 @@ describe('TaskService (database)', () => {
    })
 
    it("should not test someone else's proxy", async () => {
-      await expect(TaskService.request({ userId: otherUserId, task: TASK, proxyId, trigger: 'manual' })).rejects.toBeInstanceOf(
-         ProxyServerOwnershipError
-      )
+      await expect(
+         TaskService.request({
+            userId: otherUserId,
+            task: TASK,
+            proxyId,
+            trigger: 'manual',
+         })
+      ).rejects.toBeInstanceOf(ProxyServerOwnershipError)
    })
 
    it('should start the tasks that listen to a working proxy, but not twice in a day', async () => {

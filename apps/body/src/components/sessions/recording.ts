@@ -53,42 +53,11 @@ const logSchema = z.object({
    message: z.string(),
 })
 
-// detection.json, written by a browser test: what each detection page said and the identity the browser had.
-const detectionPageSchema = z.object({
-   page: z.string(),
-   url: z.string(),
-   verdict: z.enum(['HUMAN', 'BOT', 'UNKNOWN']),
-   headline: z.string(),
-   signals: z.array(
-      z.object({
-         name: z.string(),
-         flagged: z.boolean(),
-      })
-   ),
-   note: z.string().optional(),
-})
-
-const detectionSchema = z.object({
-   outcome: z.string(),
-   through_proxy: z.boolean(),
-   note: z.string(),
-   browser: z
-      .object({
-         userAgent: z.string(),
-         platform: z.string(),
-         screen: z.string(),
-      })
-      .optional(),
-   pages: z.array(z.unknown()),
-})
-
 export type TimelineStep = z.infer<typeof stepSchema>
 export type Timeline = Omit<z.infer<typeof timelineSchema>, 'steps'> & { steps: TimelineStep[] }
 export type NetworkEntry = z.infer<typeof networkSchema>
 export type LogEntry = z.infer<typeof logSchema>
 
-export type DetectionPageReport = z.infer<typeof detectionPageSchema>
-export type DetectionReport = Omit<z.infer<typeof detectionSchema>, 'pages'> & { pages: DetectionPageReport[] }
 
 const json = (text: string): unknown => {
    try {
@@ -126,16 +95,3 @@ export const parseTimeline = (text: string): Timeline | null => {
 
 export const parseNetwork = (text: string) => list(text, networkSchema)
 export const parseLogs = (text: string) => list(text, logSchema)
-
-export const parseDetection = (text: string): DetectionReport | null => {
-   const parsed = detectionSchema.safeParse(json(text))
-
-   if (!parsed.success) {
-      return null
-   }
-
-   return {
-      ...parsed.data,
-      pages: valid(detectionPageSchema, parsed.data.pages),
-   }
-}
