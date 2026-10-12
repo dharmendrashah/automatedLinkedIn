@@ -186,7 +186,7 @@ environment definition together. Re-run `gh secret set` whenever you change a ho
 
 ## Images
 
-`.github/workflows/staging.yml` builds and pushes all three images on every push to `main`
+`.github/workflows/staging.yml` builds and pushes all five images on every push to `main`
 and on manual dispatch, tagged `staging` and `sha-<commit>`. Set the repository variables
 `STAGING_API_URL` and `STAGING_AUTH_URL` first — the SPA bakes them in, so a wrong value
 means a rebuild, not a config change.

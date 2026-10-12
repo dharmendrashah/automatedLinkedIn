@@ -103,7 +103,8 @@ Turborepo behaviour differs between versions: read the docs bundled in the insta
 
 ## CI and publishing
 
-- `.github/workflows/ci.yml`: job `check` (install, lint, `ts:check`, unit tests, build). On pushes to `main`, job `publish` then builds and pushes `ghcr.io/<owner>/automatedlinkedin-brain` and `-body` (tags `edge` and `sha-<commit>`) independently. The workflow is reusable (`workflow_call`).
+- `.github/workflows/ci.yml`: job `check` only (install, lint, `ts:check`, unit tests, integration tests, build); it publishes nothing. The workflow is reusable (`workflow_call`) and is called by `staging.yml` and `release.yml`.
+- `.github/workflows/staging.yml`: on pushes to `main`, job `check` then job `publish` builds and pushes the staging images (`-brain`, `-brain-migrate`, `-body`, `-spider`, `-spider-worker`; tags `staging` and `sha-<commit>`, body built with the staging `VITE_*` values), and job `deploy` applies them to the cluster.
 - `.github/workflows/release.yml`: when a GitHub release is published it re-runs `ci.yml`, then builds and pushes the same two images tagged with the release version (`X.Y.Z`, `X.Y`, `X`, and the exact tag; `latest` only for stable releases, never pre-releases). `linux/amd64` only.
 - Integration and e2e tests are not run in CI.
 

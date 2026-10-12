@@ -87,10 +87,10 @@ You are responsible for everything you submit, AI-written or not. The repository
 
 Each app is published as its own image on GitHub Container Registry: `ghcr.io/<owner>/automatedlinkedin-brain` and `ghcr.io/<owner>/automatedlinkedin-body`.
 
-- Every push to `main` publishes `edge` and `sha-<commit>`.
+- Every push to `main` publishes `staging` and `sha-<commit>` through `staging.yml`, with the staging `VITE_*` values baked into the body image.
 - Publishing a GitHub release publishes the version tags (`1.2.3`, `1.2`, `1`) and moves `latest`. Pre-releases only get their exact version tag.
 
-Deploy a released version by pinning its tag rather than using `latest` or `edge`.
+Deploy a released version by pinning its tag rather than using `latest` or `staging`.
 
 ## Support
 
