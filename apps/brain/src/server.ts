@@ -2,9 +2,9 @@ import 'dotenv/config'
 
 import './aliases'
 
-import { AccountValidationQueue, HttpServer, MessageBroker, StandardTaskQueue } from 'core'
+import { AccountValidationQueue, HttpServer, MessageBroker, TaskQueue } from 'core'
 
-import { LinkedInAccountValidationService, PrismaService, SpiderSessionService } from 'database'
+import { LinkedInAccountValidationService, PrismaService, TaskService } from 'database'
 
 import { Middlewares } from 'middlewares'
 
@@ -17,14 +17,17 @@ const validationResults = AccountValidationQueue.consume(async result => {
    await LinkedInAccountValidationService.applyResult(result)
 })
 
-// The worker's answers to standard tasks, such as a proxy's browser test: they finish the session that shows them.
-const standardResults = StandardTaskQueue.consume(async result => {
-   await SpiderSessionService.finishStandard(result)
+// The worker's answers to every task, and the list of tasks it can run.
+const taskResults = TaskQueue.consumeResults(async result => {
+   await TaskService.applyResult(result)
+})
+const taskCatalog = TaskQueue.consumeCatalog(async catalog => {
+   await TaskService.applyCatalog(catalog)
 })
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
    process.once(signal, () =>
-      Promise.all([validationResults, standardResults])
+      Promise.all([validationResults, taskResults, taskCatalog])
          .then(consumers => Promise.all(consumers.map(consumer => consumer.stop())))
          .then(() => Promise.all([PrismaService.disconnect(), MessageBroker.disconnect()]))
          .then(() => {

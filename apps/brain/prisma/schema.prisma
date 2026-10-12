@@ -155,6 +155,9 @@ enum SpiderSessionKind {
   VALIDATE_ACCOUNT
   // The spider opens its browser through a proxy and checks whether bot detection pages take it for a person.
   BROWSER_TEST
+  // Any task of the standard contract (.plan/spider-task-framework.md). Which task is in SpiderSession.task, so a new task
+  // never needs a new value here.
+  TASK
   // Reserved: scrape tasks join when brain starts creating them.
   SCRAPE
 }
@@ -194,6 +197,18 @@ model SpiderSession {
   durationMs        Int?
   // Where the recording lives in the bucket; null when nothing was recorded.
   recordingPrefix   String?
+  // The standard contract's fields; null for sessions made before it.
+  task              String?
+  taskVersion       Int?
+  // manual, automatic or retry.
+  trigger           String?
+  // The task's own verdict code (also copied to `outcome`), which brain stores and never interprets.
+  verdict           String?
+  // The task's own readable report, shown as text.
+  report            Json?
+  // Git sha of the worker that ran it, to reproduce a run.
+  workerBuild       String?
+  artifacts         SpiderSessionArtifact[]
   // The session this one is a retry of.
   retryOfId         String?
   retryOf           SpiderSession?      @relation("SessionRetries", fields: [retryOfId], references: [id], onDelete: SetNull)
@@ -201,4 +216,38 @@ model SpiderSession {
 
   @@index([userId, startedAt])
   @@index([linkedInAccountId, startedAt])
+  @@index([task, proxyServerId, startedAt])
+}
+
+// One file of a run in the bucket. `path` is checked against the folder brain computes for the run before it is saved, so a
+// result can never point at another user's files.
+model SpiderSessionArtifact {
+  id          String        @id @default(uuid(7))
+  sessionId   String
+  session     SpiderSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  // log, network, timeline, video, screenshot, report, session or file.
+  kind        String
+  name        String
+  path        String
+  contentType String
+  bytes       Int
+  // The recorded step a screenshot belongs to.
+  step        Int?
+  // Holds login tokens: shown to the owner only on request.
+  sensitive   Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+
+  @@unique([sessionId, path])
+  @@index([sessionId])
+}
+
+// What the worker announced about a task (title, verdict labels, what it needs, how often it may run), so brain and the web
+// app know every task without importing spider code.
+model TaskDefinition {
+  task     String
+  version  Int
+  manifest Json
+  seenAt   DateTime @default(now())
+
+  @@id([task, version])
 }

@@ -1,13 +1,7 @@
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
-import {
-   BrowserTestRefusedError,
-   BrowserTestService,
-   LinkedInAccountValidationService,
-   ProxyServerOwnershipError,
-   ProxyServerService,
-} from 'database'
+import { LinkedInAccountValidationService, ProxyServerOwnershipError, ProxyServerService, TaskService } from 'database'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -44,13 +38,6 @@ const asTrpcError = (error: unknown) => {
       })
    }
 
-   if (error instanceof BrowserTestRefusedError) {
-      return new TRPCError({
-         code: 'PRECONDITION_FAILED',
-         message: error.message,
-      })
-   }
-
    return error
 }
 
@@ -76,11 +63,14 @@ const validateWaitingAccount = async (proxy: { linkedInAccountId: string; status
    }
 }
 
-// A proxy that just tested ok also gets a browser test, once a day at most. The test runs in the worker and its failure never
-// reaches this request: it is queued, not awaited.
-const browserTestWorkingProxy = (proxy: { id: string; status: string }, changed = false) => {
+// A proxy that just tested ok is announced to the tasks that listen to it (the browser test, once a day at most). They are
+// started, not awaited: a failure there never reaches this request.
+const announceWorkingProxy = (proxy: { id: string; status: string }, changed = false) => {
    if (proxy.status === 'ACTIVE') {
-      void BrowserTestService.requestAutomatic(proxy.id, { changed })
+      void TaskService.emit('proxy.active', {
+         proxyId: proxy.id,
+         changed,
+      })
    }
 }
 
@@ -94,7 +84,7 @@ export const proxyServer = router({
          const proxy = await ProxyServerService.create(ctx.user.id, input)
 
          await validateWaitingAccount(proxy)
-         browserTestWorkingProxy(proxy)
+         announceWorkingProxy(proxy)
 
          return proxy
       } catch (error) {
@@ -114,7 +104,7 @@ export const proxyServer = router({
 
          await validateWaitingAccount(proxy)
          // Whatever the owner edited changes the connection, which makes an older result worthless.
-         browserTestWorkingProxy(
+         announceWorkingProxy(
             proxy,
             [input.protocol, input.host, input.port, input.username, input.password].some(value => value !== undefined)
          )
@@ -131,18 +121,9 @@ export const proxyServer = router({
          const proxy = await ProxyServerService.test(ctx.user.id, input.id)
 
          await validateWaitingAccount(proxy)
-         browserTestWorkingProxy(proxy)
+         announceWorkingProxy(proxy)
 
          return proxy
-      } catch (error) {
-         throw asTrpcError(error)
-      }
-   }),
-
-   // The owner asks for a browser test of one proxy. Resolves to the session that will show the result.
-   browserTest: ownerProcedure.input(byId).mutation(async ({ ctx, input }) => {
-      try {
-         return await BrowserTestService.requestForUser(ctx.user.id, input.id)
       } catch (error) {
          throw asTrpcError(error)
       }

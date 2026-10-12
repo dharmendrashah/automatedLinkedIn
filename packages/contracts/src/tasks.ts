@@ -182,6 +182,11 @@ export const RUNNER_VERDICTS = {
       label: 'Site not allowed',
       tone: 'failure',
    },
+   // Given by brain, when the command could not be queued at all.
+   NOT_QUEUED: {
+      label: 'Could not be queued',
+      tone: 'failure',
+   },
    PROXY_FAILED: {
       label: 'The proxy did not work',
       tone: 'failure',

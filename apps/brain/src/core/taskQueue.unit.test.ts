@@ -1,9 +1,9 @@
 import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { EXCHANGE, STANDARD_DONE_QUEUE, STANDARD_KEY } from '@automatedLinkedIn/contracts'
+import { EXCHANGE, TASK_CATALOG_QUEUE, TASK_DONE_QUEUE, TASK_KEY } from '@automatedLinkedIn/contracts'
 
-import { StandardTaskQueue } from './standardTaskQueue'
+import { TaskQueue } from './taskQueue'
 
 const mocks = vi.hoisted(() => ({
    confirmChannel: vi.fn(),
@@ -17,19 +17,40 @@ vi.mock('./messageBroker', () => ({
    },
 }))
 
+const TASK_ID = '0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11'
+
 const command = {
-   task: 'browser_detection' as const,
-   task_id: '0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11',
+   contract: 1 as const,
+   task_id: TASK_ID,
+   user_id: 'user-1',
+   task: 'browser-detection',
+   task_version: 1,
+   requested_at: '2026-10-13T10:00:00.000Z',
+   trigger: 'manual' as const,
    proxy: { server: 'http://proxy.example.com:8080' },
-   requested_at: '2026-10-12T10:00:00.000Z',
+   input: {},
 }
 
 const result = {
-   task: 'browser_detection' as const,
-   task_id: command.task_id,
-   outcome: 'NOT_DETECTED' as const,
+   contract: 1 as const,
+   task_id: TASK_ID,
+   task: 'browser-detection',
+   task_version: 1,
+   status: 'SUCCEEDED' as const,
+   verdict: 'NOT_DETECTED',
    message: 'Every detection page took this browser for a person.',
-   finished_at: '2026-10-12T10:01:00.000Z',
+   artifacts: [],
+   artifacts_truncated: false,
+   worker: { build: 'abc1234' },
+   started_at: '2026-10-13T10:00:00.000Z',
+   finished_at: '2026-10-13T10:01:00.000Z',
+}
+
+const catalog = {
+   contract: 1 as const,
+   announced_at: '2026-10-13T10:00:00.000Z',
+   worker: { build: 'abc1234' },
+   tasks: [],
 }
 
 const fakeChannel = () =>
@@ -46,26 +67,26 @@ const fakeChannel = () =>
       close: vi.fn().mockResolvedValue(undefined),
    })
 
-describe('StandardTaskQueue.publish', () => {
+describe('TaskQueue.publish', () => {
    beforeEach(() => {
       vi.resetAllMocks()
    })
 
-   it('should publish a persistent message on the standard key and wait for the broker to confirm', async () => {
+   it('should publish a persistent message on the task key and wait for the broker to confirm', async () => {
       const channel = fakeChannel()
 
       mocks.confirmChannel.mockResolvedValue(channel)
 
-      await StandardTaskQueue.publish(command)
+      await TaskQueue.publish(command)
 
       expect(channel.publish).toHaveBeenCalledWith(
          EXCHANGE,
-         STANDARD_KEY,
+         TASK_KEY,
          Buffer.from(JSON.stringify(command)),
          expect.objectContaining({
             persistent: true,
             contentType: 'application/json',
-            messageId: command.task_id,
+            messageId: TASK_ID,
          })
       )
       expect(channel.publish.mock.invocationCallOrder[0]).toBeLessThan(
@@ -79,9 +100,9 @@ describe('StandardTaskQueue.publish', () => {
       mocks.confirmChannel.mockResolvedValue(channel)
 
       await expect(
-         StandardTaskQueue.publish({
+         TaskQueue.publish({
             ...command,
-            task_id: 'nope',
+            task: '../x',
          })
       ).rejects.toThrow()
       expect(channel.publish).not.toHaveBeenCalled()
@@ -93,14 +114,14 @@ describe('StandardTaskQueue.publish', () => {
       channel.waitForConfirms.mockRejectedValue(new Error('nack from broker'))
       mocks.confirmChannel.mockResolvedValue(channel)
 
-      await expect(StandardTaskQueue.publish(command)).rejects.toThrow('nack from broker')
+      await expect(TaskQueue.publish(command)).rejects.toThrow('nack from broker')
    })
 })
 
-describe('StandardTaskQueue.consume', () => {
+describe('TaskQueue consumers', () => {
    let deliver: (msg: unknown) => Promise<void>
 
-   const start = async (handler = vi.fn().mockResolvedValue(undefined)) => {
+   const start = async (kind: 'results' | 'catalog', handler = vi.fn().mockResolvedValue(undefined)) => {
       const channel = fakeChannel()
       const log = { error: vi.fn() }
 
@@ -110,49 +131,62 @@ describe('StandardTaskQueue.consume', () => {
          return { consumerTag: 'tag' }
       })
       mocks.channel.mockResolvedValue(channel)
-      await StandardTaskQueue.consume(handler, log)
+
+      if (kind === 'results') {
+         await TaskQueue.consumeResults(handler, log)
+      } else {
+         await TaskQueue.consumeCatalog(handler, log)
+      }
 
       return {
          channel,
          handler,
-         log,
       }
    }
+
+   const message = (body: unknown) => ({
+      content: Buffer.from(JSON.stringify(body)),
+      fields: { redelivered: false },
+   })
 
    beforeEach(() => {
       vi.resetAllMocks()
    })
 
-   it('should take results from the standard results queue and acknowledge after the handler finished', async () => {
-      const { channel, handler } = await start()
-      const message = {
-         content: Buffer.from(JSON.stringify(result)),
-         fields: { redelivered: false },
-      }
+   it('should take results from the results queue and acknowledge after the handler finished', async () => {
+      const { channel, handler } = await start('results')
+      const delivered = message(result)
 
-      expect(channel.consume).toHaveBeenCalledWith(STANDARD_DONE_QUEUE, expect.any(Function), { noAck: false })
+      expect(channel.consume).toHaveBeenCalledWith(TASK_DONE_QUEUE, expect.any(Function), { noAck: false })
 
-      await deliver(message)
+      await deliver(delivered)
 
       expect(handler).toHaveBeenCalledWith(result)
-      expect(channel.ack).toHaveBeenCalledWith(message)
+      expect(channel.ack).toHaveBeenCalledWith(delivered)
    })
 
    it('should drop a result that does not match the contract', async () => {
-      const { channel, handler } = await start()
-      const message = {
-         content: Buffer.from(
-            JSON.stringify({
-               ...result,
-               outcome: 'VALID',
-            })
-         ),
-         fields: { redelivered: false },
-      }
+      const { channel, handler } = await start('results')
+      const delivered = message({
+         ...result,
+         verdict: 'not a code',
+      })
 
-      await deliver(message)
+      await deliver(delivered)
 
       expect(handler).not.toHaveBeenCalled()
-      expect(channel.nack).toHaveBeenCalledWith(message, false, false)
+      expect(channel.nack).toHaveBeenCalledWith(delivered, false, false)
+   })
+
+   it('should take the catalog from its own queue', async () => {
+      const { channel, handler } = await start('catalog')
+      const delivered = message(catalog)
+
+      expect(channel.consume).toHaveBeenCalledWith(TASK_CATALOG_QUEUE, expect.any(Function), { noAck: false })
+
+      await deliver(delivered)
+
+      expect(handler).toHaveBeenCalledWith(catalog)
+      expect(channel.ack).toHaveBeenCalledWith(delivered)
    })
 })

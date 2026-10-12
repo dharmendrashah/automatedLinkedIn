@@ -271,7 +271,7 @@ Old rows (`VALIDATE_ACCOUNT`) are not touched and keep their own display until a
   tasks.
 - [x] T3 Move browser detection to `tasks/browserDetection` on the framework; delete `src/detection` wiring and the
   `standardTasks` registry; worker consumes `tasks.run` and publishes the catalog at start.
-- [ ] T4 Brain: migration, `TaskQueue`, `TaskService`, catalog consumer, result consumer, artifacts, triggers, hooks, `task`
+- [x] T4 Brain: migration, `TaskQueue`, `TaskService`, catalog consumer, result consumer, artifacts, triggers, hooks, `task`
   router, generic `fileUrl`; remove `BrowserTestService`.
 - [ ] T5 Body: catalog-driven labels, artifact tabs, generic retry, proxies action; remove the browser-test specific code.
 - [ ] T6 Account validation: move `validation/` to `tasks/linkedinLogin` (verdict codes `VALID`, `INVALID_CREDENTIALS`,

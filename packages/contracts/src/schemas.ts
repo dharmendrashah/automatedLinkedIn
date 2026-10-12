@@ -56,37 +56,8 @@ export const validateAccountResultSchema = z.strictObject({
    checked_at: z.iso.datetime(),
 })
 
-// Standard tasks are jobs that need no LinkedIn account: the command carries only what the task itself needs. A union on
-// `task`, so a new task is one more member (see .plan/spider-browser-test.md).
-export const standardTaskCommandSchema = z.discriminatedUnion('task', [
-   z.strictObject({
-      task: z.literal('browser_detection'),
-      task_id: z.uuid(),
-      // The proxy to test the browser through; the test never falls back to a direct connection.
-      proxy: proxySchema.optional(),
-      requested_at: z.iso.datetime(),
-   }),
-])
-
-// Not detected: every detection page took the browser for a person. Could not tell: a page did not load or its answer was
-// not understood, and no page said bot.
-export const BROWSER_TEST_OUTCOMES = ['NOT_DETECTED', 'DETECTED', 'COULD_NOT_TELL'] as const
-
-// What spider answers. The details of a run live in a file under the recording prefix, not on the wire.
-export const standardTaskResultSchema = z.strictObject({
-   task: z.literal('browser_detection'),
-   task_id: z.uuid(),
-   outcome: z.enum(BROWSER_TEST_OUTCOMES),
-   message: z.string().max(200),
-   recording_prefix: recordingPrefixSchema.optional(),
-   finished_at: z.iso.datetime(),
-})
-
 export type Sealed = z.infer<typeof sealedSchema>
 export type ProxyConfig = z.infer<typeof proxySchema>
 export type ValidateAccountCommand = z.infer<typeof validateAccountCommandSchema>
 export type ValidateAccountResult = z.infer<typeof validateAccountResultSchema>
 export type ValidationOutcome = (typeof VALIDATION_OUTCOMES)[number]
-export type StandardTaskCommand = z.infer<typeof standardTaskCommandSchema>
-export type StandardTaskResult = z.infer<typeof standardTaskResultSchema>
-export type BrowserTestOutcome = (typeof BROWSER_TEST_OUTCOMES)[number]

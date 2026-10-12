@@ -3,11 +3,6 @@ import { describe, expect, it, vi } from 'vitest'
 import {
    DEAD_EXCHANGE,
    EXCHANGE,
-   STANDARD_DEAD_QUEUE,
-   STANDARD_DONE_KEY,
-   STANDARD_DONE_QUEUE,
-   STANDARD_KEY,
-   STANDARD_QUEUE,
    VALIDATED_KEY,
    VALIDATED_QUEUE,
    VALIDATE_DEAD_QUEUE,
@@ -15,8 +10,6 @@ import {
    VALIDATE_QUEUE,
    accountIdSchema,
    assertAccountTopology,
-   standardTaskCommandSchema,
-   standardTaskResultSchema,
    validateAccountCommandSchema,
    validateAccountResultSchema,
 } from './index'
@@ -226,133 +219,6 @@ describe('validateAccountResultSchema', () => {
    })
 })
 
-describe('standardTaskCommandSchema', () => {
-   const browserTest = {
-      task: 'browser_detection',
-      task_id: '0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a22',
-      requested_at: '2026-10-12T10:00:00.000Z',
-   }
-
-   it('should accept a browser detection task, with or without a proxy', () => {
-      const proxy = {
-         server: 'http://proxy.example.net:8080',
-         username: 'alice',
-         password: 'hunter2',
-      }
-
-      expect(standardTaskCommandSchema.parse(browserTest)).toEqual(browserTest)
-      expect(
-         standardTaskCommandSchema.parse({
-            ...browserTest,
-            proxy,
-         }).proxy
-      ).toEqual(proxy)
-   })
-
-   it.each([
-      [
-         'an unknown task',
-         {
-            ...browserTest,
-            task: 'scrape_everything',
-         },
-      ],
-      [
-         'a task id that is not a uuid',
-         {
-            ...browserTest,
-            task_id: 'abc',
-         },
-      ],
-      [
-         'a proxy with an unsupported scheme',
-         {
-            ...browserTest,
-            proxy: { server: 'ftp://proxy.example.net' },
-         },
-      ],
-      [
-         'an unknown key, such as credentials of an account',
-         {
-            ...browserTest,
-            password: 'plaintext',
-         },
-      ],
-      [
-         'a bad timestamp',
-         {
-            ...browserTest,
-            requested_at: 'yesterday',
-         },
-      ],
-   ])('should reject %s', (_name, input) => {
-      expect(standardTaskCommandSchema.safeParse(input).success).toBe(false)
-   })
-})
-
-describe('standardTaskResultSchema', () => {
-   const done = {
-      task: 'browser_detection',
-      task_id: '0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a22',
-      outcome: 'NOT_DETECTED',
-      message: 'Both detection pages took this browser for a person.',
-      finished_at: '2026-10-12T10:01:00.000Z',
-   }
-
-   it.each(['NOT_DETECTED', 'DETECTED', 'COULD_NOT_TELL'])('should accept the outcome %s', outcome => {
-      expect(
-         standardTaskResultSchema.safeParse({
-            ...done,
-            outcome,
-         }).success
-      ).toBe(true)
-   })
-
-   it('should accept the recording of a browser test', () => {
-      const prefix = 'recordings/browser-test/0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a22/20261012T100000Z'
-
-      expect(
-         standardTaskResultSchema.parse({
-            ...done,
-            recording_prefix: prefix,
-         }).recording_prefix
-      ).toBe(prefix)
-   })
-
-   it.each([
-      [
-         'an unknown outcome',
-         {
-            ...done,
-            outcome: 'MAYBE',
-         },
-      ],
-      [
-         'a message that is too long',
-         {
-            ...done,
-            message: 'x'.repeat(201),
-         },
-      ],
-      [
-         'a parent folder in the recording',
-         {
-            ...done,
-            recording_prefix: 'recordings/browser-test/abc/..',
-         },
-      ],
-      [
-         'an unknown key',
-         {
-            ...done,
-            cookies: [],
-         },
-      ],
-   ])('should reject %s', (_name, input) => {
-      expect(standardTaskResultSchema.safeParse(input).success).toBe(false)
-   })
-})
-
 describe('assertAccountTopology', () => {
    const setup = () => ({
       assertExchange: vi.fn().mockResolvedValue(undefined),
@@ -402,31 +268,6 @@ describe('assertAccountTopology', () => {
       expect(channel.bindQueue).toHaveBeenCalledWith(VALIDATE_QUEUE, EXCHANGE, VALIDATE_KEY)
       expect(channel.bindQueue).toHaveBeenCalledWith(VALIDATE_DEAD_QUEUE, DEAD_EXCHANGE, VALIDATE_KEY)
       expect(channel.bindQueue).toHaveBeenCalledWith(VALIDATED_QUEUE, EXCHANGE, VALIDATED_KEY)
-   })
-
-   it('should declare and bind the standard task queues like the validation ones', async () => {
-      const channel = setup()
-
-      await assertAccountTopology(channel)
-
-      expect(channel.assertQueue).toHaveBeenCalledWith(
-         STANDARD_QUEUE,
-         expect.objectContaining({
-            durable: true,
-            arguments: expect.objectContaining({
-               'x-queue-type': 'quorum',
-               'x-dead-letter-exchange': DEAD_EXCHANGE,
-            }),
-         })
-      )
-      expect(channel.assertQueue).toHaveBeenCalledWith(STANDARD_DEAD_QUEUE, { durable: true })
-      expect(channel.assertQueue).toHaveBeenCalledWith(
-         STANDARD_DONE_QUEUE,
-         expect.objectContaining({ arguments: expect.objectContaining({ 'x-message-ttl': expect.any(Number) }) })
-      )
-      expect(channel.bindQueue).toHaveBeenCalledWith(STANDARD_QUEUE, EXCHANGE, STANDARD_KEY)
-      expect(channel.bindQueue).toHaveBeenCalledWith(STANDARD_DEAD_QUEUE, DEAD_EXCHANGE, STANDARD_KEY)
-      expect(channel.bindQueue).toHaveBeenCalledWith(STANDARD_DONE_QUEUE, EXCHANGE, STANDARD_DONE_KEY)
    })
 
    it('should be safe to run twice, with the same arguments both times', async () => {
