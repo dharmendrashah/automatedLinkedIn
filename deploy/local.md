@@ -61,6 +61,7 @@ cp secrets.example.env secrets.env
 cd -
 
 kubectl kustomize --load-restrictor LoadRestrictionsNone deploy/overlays/local | kubectl apply -f -
+kubectl apply -f deploy/cluster/brain-status-rbac.yaml   # lets the Service status page list the workloads
 kubectl -n automatedlinkedin get pods -w
 ```
 

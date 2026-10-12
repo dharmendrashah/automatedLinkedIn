@@ -45,7 +45,7 @@ spec:
                   key: RABBITMQ_DEFAULT_PASS
             - name: RABBITMQ_URL
               value: amqp://$(RABBITMQ_DEFAULT_USER):$(RABBITMQ_DEFAULT_PASS)@rabbitmq:5672/automatedlinkedin
-          # No HTTP server and so no probes: a crash exits the process and the container restart brings a
+          # Only the health port above, read by brain, and no probes: a crash exits the process and the container restart brings a
           # clean worker back, the same behaviour worker.ts already relies on for a lost broker connection.
           resources:
             requests:

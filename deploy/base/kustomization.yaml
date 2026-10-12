@@ -12,7 +12,7 @@ resources:
   - namespace.yaml
   - brain.deployment.yaml
   - brain.service.yaml
-  - brain.rbac.yaml
+  - brain.serviceaccount.yaml
   - rabbitmq.statefulset.yaml
   - rabbitmq.service.yaml
   - body.deployment.yaml
