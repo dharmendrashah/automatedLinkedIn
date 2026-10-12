@@ -129,6 +129,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-12: `ts:check` in `turbo.json` now depends on `^ts:check`. A CI run failed once with brain missing exports of `@automatedLinkedIn/contracts` and passed on re-run; brain's `tsc -b` builds `contracts` through its project reference while turbo ran `contracts`' own `tsc -b` at the same time. The race was not reproduced locally, so the cause is likely but unproven.
 - 2026-10-12: Removed the `publish` job from `ci.yml` (it pushed `edge` and a second `sha-<commit>` to the same repos as `staging.yml`, which could overwrite staging's body image). Docs updated; staging and release publishing are unchanged.
 
 - 2026-10-12: Cleanup of dead code. Removed brain `Middlewares.serveWeb` (served a `web/dist` that is not in the image), the `isProd` and `isDev` env exports, and the unused `getRole` procedure with its tests; un-exported types and helpers nothing imports (`StatusSnapshot`, `ModuleStatus`, `SessionProxy`, `SessionRequestParams`, `RecordingMode`, `isSafeSessionKey`, `StateBadge`, `SESSION_FILE_PATTERN` from the database index); removed `REASONS.notOnKubernetes`, body `ui/breadcrumb.tsx` and `ui/sonner.tsx`, `packages/eslint-config/react.js` with `eslint-plugin-react`; the mail server settings in `docker-compose.yml` now come from one anchor. Left on purpose: `packages/ui` (empty home for shared components), the dashboard sample blocks, `apps/brain/src/types/index.ts` (type augmentation).
