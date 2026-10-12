@@ -77,7 +77,7 @@ const proxy = (status: string) => ({
 
 const created = {
    linkedInAccountId: 'acc1',
-   protocol: 'HTTP' as const,
+   protocol: 'HTTPS' as const,
    host: 'proxy.example.net',
    port: 8080,
 }
@@ -127,6 +127,39 @@ describe('proxyServer resolvers', () => {
 
          await expect(run()).resolves.toMatchObject({ id: 'p1' })
          expect(console.error).toHaveBeenCalledWith(expect.stringContaining('ECONNREFUSED'))
+      })
+   })
+
+   describe('protocols', () => {
+      it.each(['HTTPS', 'SOCKS5'] as const)('should accept a %s proxy', async protocol => {
+         mocks.create.mockResolvedValue(proxy('UNREACHABLE'))
+
+         await expect(
+            caller().create({
+               ...created,
+               protocol,
+            })
+         ).resolves.toMatchObject({ id: 'p1' })
+      })
+
+      it.each(['HTTP', 'SOCKS4'])('should refuse a new %s proxy', async protocol => {
+         await expect(
+            caller().create({
+               ...created,
+               protocol: protocol as never,
+            })
+         ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+         expect(mocks.create).not.toHaveBeenCalled()
+      })
+
+      it.each(['HTTP', 'SOCKS4'])('should refuse to change a proxy to %s', async protocol => {
+         await expect(
+            caller().update({
+               id: 'p1',
+               protocol: protocol as never,
+            })
+         ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+         expect(mocks.update).not.toHaveBeenCalled()
       })
    })
 

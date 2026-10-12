@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 import { type ProxyProtocol } from './types'
 
-const protocols: ProxyProtocol[] = ['HTTP', 'HTTPS', 'SOCKS4', 'SOCKS5']
+import { SUPPORTED_PROTOCOLS, protocolOptions } from './protocols'
 
 export type ProxyFieldValues = {
    protocol: ProxyProtocol
@@ -32,9 +32,10 @@ export const ProxyFields = ({ idPrefix, values, onChange, passwordPlaceholder }:
                   <SelectValue />
                </SelectTrigger>
                <SelectContent>
-                  {protocols.map(protocol => (
+                  {protocolOptions(values.protocol).map(protocol => (
                      <SelectItem key={protocol} value={protocol}>
                         {protocol.toLowerCase()}://
+                        {SUPPORTED_PROTOCOLS.includes(protocol) ? '' : ' (no longer offered)'}
                      </SelectItem>
                   ))}
                </SelectContent>
