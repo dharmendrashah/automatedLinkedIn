@@ -28,7 +28,7 @@ const mocks = vi.hoisted(() => {
       page,
       browser,
       context,
-      camoufox: vi.fn(async () => browser),
+      camoufox: vi.fn(async (_options?: unknown) => browser),
    }
 })
 
@@ -85,18 +85,22 @@ describe('CamoufoxDriver', () => {
       expect(mocks.camoufox).toHaveBeenCalledWith(expect.objectContaining({ headless: 'virtual' }))
    })
 
-   it('should let Camoufox pick a fingerprint for Windows, macOS or Linux on a screen of at most 1920 by 1080', async () => {
+   it('should give Camoufox a Firefox desktop fingerprint from fingerprint-generator, on a screen of at most 1920 by 1080', async () => {
       await driver.open()
 
-      expect(mocks.camoufox).toHaveBeenCalledWith(
-         expect.objectContaining({
-            os: ['windows', 'macos', 'linux'],
-            screen: {
-               maxWidth: 1920,
-               maxHeight: 1080,
-            },
-         })
-      )
+      const options = mocks.camoufox.mock.calls[0]?.[0] as {
+         fingerprint: { navigator: { userAgent: string }; screen: { width: number; height: number } }
+         os?: unknown
+         screen?: unknown
+      }
+
+      expect(options.fingerprint.navigator.userAgent).toMatch(/Firefox\/.*|rv:\d+/)
+      expect(options.fingerprint.navigator.userAgent).toMatch(/Windows|Macintosh|Linux/)
+      expect(options.fingerprint.screen.width).toBeLessThanOrEqual(1920)
+      expect(options.fingerprint.screen.height).toBeLessThanOrEqual(1080)
+      // The constraints are in the generator call; Camoufox must not generate a second, different identity.
+      expect(options.os).toBeUndefined()
+      expect(options.screen).toBeUndefined()
    })
 
    it('should start the browser through the proxy and never fall back to a direct connection', async () => {
