@@ -115,5 +115,34 @@ model ProxyServer {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
+  tests ProxyTest[]
+
   @@index([linkedInAccountId])
+}
+
+// One run of the proxy test with exactly what was sent and what came back, kept for 7 days. Secrets are masked
+// before they get here (see IpInfoService); the proxy's own credentials are never part of it.
+model ProxyTest {
+  id                String            @id @default(uuid(7))
+  proxyServerId     String
+  proxyServer       ProxyServer       @relation(fields: [proxyServerId], references: [id], onDelete: Cascade)
+  testedAt          DateTime          @default(now())
+  // The status the proxy ended in after this test.
+  status            ProxyServerStatus
+  statusMessage     String?
+  // Elapsed time of the attempt, also for a failed one.
+  latencyMs         Int?
+  requestMethod     String
+  requestUrl        String
+  requestHeaders    Json
+  requestBody       String?
+  // Null when no response arrived (connection refused, timeout).
+  responseStatus    Int?
+  responseHeaders   Json?
+  responseBody      String?
+  responseTruncated Boolean           @default(false)
+  error             String?
+
+  @@index([proxyServerId, testedAt])
+  @@index([testedAt])
 }

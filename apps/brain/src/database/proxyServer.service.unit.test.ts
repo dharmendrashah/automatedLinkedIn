@@ -10,6 +10,10 @@ const mocks = vi.hoisted(() => ({
    createProxy: vi.fn(),
    updateProxy: vi.fn(),
    deleteManyProxy: vi.fn(),
+   createTest: vi.fn(),
+   deleteManyTest: vi.fn(),
+   findManyTest: vi.fn(),
+   findFirstTest: vi.fn(),
    seal: vi.fn(),
    open: vi.fn(),
    lookupThroughProxy: vi.fn(),
@@ -36,6 +40,12 @@ vi.mock('./prisma.service', () => ({
             create: mocks.createProxy,
             update: mocks.updateProxy,
             deleteMany: mocks.deleteManyProxy,
+         },
+         proxyTest: {
+            create: mocks.createTest,
+            deleteMany: mocks.deleteManyTest,
+            findMany: mocks.findManyTest,
+            findFirst: mocks.findFirstTest,
          },
       },
    },
@@ -100,6 +110,9 @@ describe('toProxyConfig', () => {
 describe('ProxyServerService', () => {
    beforeEach(() => {
       vi.resetAllMocks()
+      vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      mocks.createTest.mockResolvedValue({})
+      mocks.deleteManyTest.mockResolvedValue({ count: 0 })
       mocks.seal.mockReturnValue(sealed)
       mocks.open.mockReturnValue(
          JSON.stringify({
@@ -385,6 +398,238 @@ describe('ProxyServerService', () => {
             server: 'socks5://proxy.example.net:1080',
             username: 'alice',
             password: 'hunter2',
+         })
+      })
+   })
+
+   describe('test history', () => {
+      const DAY_MS = 24 * 60 * 60 * 1000
+      const exchange = {
+         request: {
+            method: 'GET' as const,
+            url: 'https://api.ipinfo.io/lite/me',
+            headers: {
+               host: 'api.ipinfo.io',
+               authorization: 'Bearer ***',
+            },
+            body: null,
+         },
+         response: {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+            body: '{"ip":"203.0.113.9","country_code":"CA","country":"Canada"}',
+            truncated: false,
+         },
+         elapsedMs: 342,
+      }
+      const good = {
+         ip: '203.0.113.9',
+         countryCode: 'CA',
+         country: 'Canada',
+         latencyMs: 342,
+         exchange,
+      }
+      const saved = () => mocks.createTest.mock.calls[0][0].data
+
+      const arrangeCreate = () => {
+         mocks.findFirstAccount.mockResolvedValue({ id: 'acc1' })
+         mocks.findManyProxy.mockResolvedValue([])
+         mocks.countProxy.mockResolvedValue(0)
+         mocks.createProxy.mockResolvedValue(storedRow)
+      }
+
+      it('should save what was sent and what came back when a proxy is added', async () => {
+         arrangeCreate()
+         mocks.lookupThroughProxy.mockResolvedValue(good)
+
+         await ProxyServerService.create('u1', input)
+
+         expect(mocks.createTest).toHaveBeenCalledTimes(1)
+         expect(saved()).toEqual({
+            proxyServerId: 'p1',
+            status: 'ACTIVE',
+            statusMessage: 'Reachable, detected in Canada',
+            latencyMs: 342,
+            requestMethod: 'GET',
+            requestUrl: 'https://api.ipinfo.io/lite/me',
+            requestHeaders: {
+               host: 'api.ipinfo.io',
+               authorization: 'Bearer ***',
+            },
+            requestBody: null,
+            responseStatus: 200,
+            responseHeaders: { 'content-type': 'application/json' },
+            responseBody: exchange.response.body,
+            responseTruncated: false,
+            error: null,
+         })
+      })
+
+      it('should save a test that got an answer but no success, with the answer', async () => {
+         arrangeCreate()
+         mocks.lookupThroughProxy.mockRejectedValue(
+            Object.assign(new mocks.IpInfoError('ipinfo.io responded with HTTP 403'), {
+               exchange: {
+                  ...exchange,
+                  response: {
+                     status: 403,
+                     headers: {},
+                     body: '{"error":"bad token"}',
+                     truncated: false,
+                  },
+                  elapsedMs: 120,
+               },
+            })
+         )
+
+         await ProxyServerService.create('u1', input)
+
+         expect(saved()).toMatchObject({
+            status: 'UNREACHABLE',
+            latencyMs: 120,
+            responseStatus: 403,
+            responseBody: '{"error":"bad token"}',
+            error: 'ipinfo.io responded with HTTP 403',
+         })
+      })
+
+      it('should save a test with no response when the proxy could not be reached', async () => {
+         arrangeCreate()
+         mocks.lookupThroughProxy.mockRejectedValue(
+            Object.assign(new mocks.IpInfoError('could not reach ipinfo.io through the proxy: ECONNREFUSED'), {
+               exchange: {
+                  ...exchange,
+                  response: null,
+                  elapsedMs: 15,
+               },
+            })
+         )
+
+         await ProxyServerService.create('u1', input)
+
+         expect(saved()).toMatchObject({
+            responseStatus: null,
+            responseBody: null,
+            error: 'could not reach ipinfo.io through the proxy: ECONNREFUSED',
+         })
+         expect(saved().responseHeaders).toBeUndefined()
+      })
+
+      it('should still save a test when the failure carries no exchange at all', async () => {
+         arrangeCreate()
+         mocks.lookupThroughProxy.mockRejectedValue(new Error('boom'))
+
+         await ProxyServerService.create('u1', input)
+
+         expect(saved()).toMatchObject({
+            status: 'UNREACHABLE',
+            requestMethod: 'GET',
+            responseStatus: null,
+            error: 'could not reach the proxy',
+         })
+      })
+
+      it.each([
+         ['an edit', () => ProxyServerService.update('u1', 'p1', {})],
+         ['Test now', () => ProxyServerService.test('u1', 'p1')],
+      ])('should save a test for %s too', async (_name, run) => {
+         mocks.findFirstProxy.mockResolvedValue(storedRow)
+         mocks.findManyProxy.mockResolvedValue([])
+         mocks.lookupThroughProxy.mockResolvedValue(good)
+         mocks.updateProxy.mockResolvedValue(storedRow)
+
+         await run()
+
+         expect(mocks.createTest).toHaveBeenCalledTimes(1)
+         expect(saved().proxyServerId).toBe('p1')
+      })
+
+      it('should delete tests older than 7 days every time one is saved', async () => {
+         arrangeCreate()
+         mocks.lookupThroughProxy.mockResolvedValue(good)
+
+         await ProxyServerService.create('u1', input)
+
+         const [[{ where }]] = mocks.deleteManyTest.mock.calls
+         const cutoff: Date = where.testedAt.lt
+
+         expect(Math.abs(Date.now() - DAY_MS * 7 - cutoff.getTime())).toBeLessThan(5000)
+      })
+
+      it('should never store the proxy credentials or the token', async () => {
+         arrangeCreate()
+         mocks.lookupThroughProxy.mockResolvedValue(good)
+
+         await ProxyServerService.create('u1', input)
+
+         const text = JSON.stringify(mocks.createTest.mock.calls)
+
+         expect(text).not.toContain('hunter2')
+         expect(text).not.toContain('alice')
+         expect(text).not.toContain('test-ipinfo-token')
+      })
+
+      it('should still return the proxy, and not log secrets, when the history cannot be saved', async () => {
+         arrangeCreate()
+         mocks.lookupThroughProxy.mockResolvedValue(good)
+         mocks.createTest.mockRejectedValue(new Error('connection lost'))
+
+         await expect(ProxyServerService.create('u1', input)).resolves.toMatchObject({ id: 'p1' })
+         expect(console.error).toHaveBeenCalledWith(expect.stringContaining('connection lost'))
+         expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain('hunter2')
+      })
+
+      describe('history', () => {
+         it('should refuse a proxy the user does not own', async () => {
+            mocks.findFirstProxy.mockResolvedValue(null)
+
+            await expect(ProxyServerService.history('u1', 'p1')).rejects.toBeInstanceOf(ProxyServerOwnershipError)
+            expect(mocks.findFirstProxy.mock.calls[0][0].where).toEqual({
+               id: 'p1',
+               linkedInAccount: { userId: 'u1' },
+            })
+         })
+
+         it('should list the last 7 days newest first, without the heavy request and response data', async () => {
+            mocks.findFirstProxy.mockResolvedValue(storedRow)
+            mocks.findManyTest.mockResolvedValue([])
+
+            await ProxyServerService.history('u1', 'p1')
+
+            const [[query]] = mocks.findManyTest.mock.calls
+
+            expect(query.where.proxyServerId).toBe('p1')
+            expect(Math.abs(Date.now() - DAY_MS * 7 - query.where.testedAt.gte.getTime())).toBeLessThan(5000)
+            expect(query.orderBy).toEqual({ testedAt: 'desc' })
+            expect(query.select).toEqual({
+               id: true,
+               testedAt: true,
+               status: true,
+               statusMessage: true,
+               latencyMs: true,
+               responseStatus: true,
+               error: true,
+            })
+         })
+      })
+
+      describe('historyEntry', () => {
+         it('should only return a test of a proxy the user owns, from the last 7 days', async () => {
+            mocks.findFirstTest.mockResolvedValue({ id: 't1' })
+
+            await expect(ProxyServerService.historyEntry('u1', 't1')).resolves.toEqual({ id: 't1' })
+
+            const [[{ where }]] = mocks.findFirstTest.mock.calls
+
+            expect(where.id).toBe('t1')
+            expect(where.proxyServer).toEqual({ linkedInAccount: { userId: 'u1' } })
+            expect(where.testedAt.gte).toBeInstanceOf(Date)
+         })
+
+         it('should answer not found for a test that is not the users or is too old', async () => {
+            mocks.findFirstTest.mockResolvedValue(null)
+
+            await expect(ProxyServerService.historyEntry('u1', 't1')).rejects.toBeInstanceOf(ProxyServerOwnershipError)
          })
       })
    })

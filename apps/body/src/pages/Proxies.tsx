@@ -2,6 +2,7 @@ import { AddProxyDialog } from '@/components/proxies/add-proxy-dialog'
 import { DeleteProxyDialog } from '@/components/proxies/delete-proxy-dialog'
 import { EditProxyDialog } from '@/components/proxies/edit-proxy-dialog'
 import { ProxiesTable } from '@/components/proxies/proxies-table'
+import { TestHistoryDrawer } from '@/components/proxies/test-history-drawer'
 import { useState } from 'react'
 
 import { type Proxy } from '@/components/proxies/types'
@@ -13,9 +14,11 @@ export const Proxies = () => {
    const list = trpc.proxyServer.list.useQuery(undefined, { retry: false })
    const [toDelete, setToDelete] = useState<Proxy | null>(null)
    const [toEdit, setToEdit] = useState<Proxy | null>(null)
+   const [toInspect, setToInspect] = useState<Proxy | null>(null)
 
    const refresh = () => {
       void utils.proxyServer.list.invalidate()
+      void utils.proxyServer.history.invalidate()
       void utils.linkedInAccount.list.invalidate()
    }
 
@@ -52,9 +55,11 @@ export const Proxies = () => {
             busyId={busyId}
             onEdit={setToEdit}
             onTest={proxy => test.mutate({ id: proxy.id })}
+            onHistory={setToInspect}
             onDelete={setToDelete}
          />
 
+         <TestHistoryDrawer proxy={toInspect} onClose={() => setToInspect(null)} />
          <EditProxyDialog proxy={toEdit} onClose={() => setToEdit(null)} />
          <DeleteProxyDialog
             proxy={toDelete}

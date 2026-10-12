@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Loader2, MoreHorizontal, Network, Pencil, RefreshCw, Trash2 } from 'lucide-react'
+import { History, Loader2, MoreHorizontal, Network, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -44,10 +44,11 @@ type Props = {
    busyId: string | undefined
    onEdit: (proxy: Proxy) => void
    onTest: (proxy: Proxy) => void
+   onHistory: (proxy: Proxy) => void
    onDelete: (proxy: Proxy) => void
 }
 
-export const ProxiesTable = ({ proxies, loading, error, busyId, onEdit, onTest, onDelete }: Props) => (
+export const ProxiesTable = ({ proxies, loading, error, busyId, onEdit, onTest, onHistory, onDelete }: Props) => (
    <div className="overflow-hidden rounded-lg border">
       <Table>
          <TableHeader className="bg-muted/50">
@@ -109,6 +110,10 @@ export const ProxiesTable = ({ proxies, loading, error, busyId, onEdit, onTest, 
                            <DropdownMenuItem onSelect={() => onTest(proxy)}>
                               <RefreshCw />
                               Test now
+                           </DropdownMenuItem>
+                           <DropdownMenuItem onSelect={() => onHistory(proxy)}>
+                              <History />
+                              Test history
                            </DropdownMenuItem>
                            <DropdownMenuItem onSelect={() => onEdit(proxy)}>
                               <Pencil />

@@ -120,6 +120,7 @@ describe('IpInfoService', () => {
          countryCode: 'US',
          country: 'United States',
          latencyMs: expect.any(Number),
+         exchange: expect.any(Object),
       })
    })
 
@@ -200,5 +201,128 @@ describe('IpInfoService', () => {
       await expect(
          IpInfoService.lookupThroughProxy('http://127.0.0.1:1', 'http://127.0.0.1:1/lite/me')
       ).rejects.toThrow(IpInfoError)
+   })
+
+   describe('the recorded exchange', () => {
+      const lookup = () =>
+         IpInfoService.lookupThroughProxy(`http://127.0.0.1:${proxy.port}`, `http://127.0.0.1:${target.port}/lite/me`)
+
+      const caught = async () => {
+         try {
+            await lookup()
+         } catch (error) {
+            return error as IpInfoError
+         }
+
+         throw new Error('expected the lookup to fail')
+      }
+
+      it('should record what was sent and what came back, for a good lookup', async () => {
+         target = await startTarget((_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(
+               JSON.stringify({
+                  ip: '34.47.216.69',
+                  country_code: 'US',
+                  country: 'United States',
+               })
+            )
+         })
+         proxy = await startProxy()
+
+         const { exchange, latencyMs } = await lookup()
+
+         expect(exchange.request).toMatchObject({
+            method: 'GET',
+            url: `http://127.0.0.1:${target.port}/lite/me`,
+            body: null,
+         })
+         expect(exchange.request.headers.host).toBe(`127.0.0.1:${target.port}`)
+         expect(exchange.response).toMatchObject({
+            status: 200,
+            truncated: false,
+         })
+         expect(exchange.response?.headers['content-type']).toBe('application/json')
+         expect(JSON.parse(exchange.response?.body ?? '')).toMatchObject({ country_code: 'US' })
+         expect(exchange.elapsedMs).toBe(latencyMs)
+      })
+
+      it('should never record the token, only that one was sent', async () => {
+         target = await startTarget((_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(
+               JSON.stringify({
+                  ip: '1.2.3.4',
+                  country_code: 'US',
+                  country: 'United States',
+               })
+            )
+         })
+         proxy = await startProxy()
+
+         const { exchange } = await lookup()
+
+         expect(exchange.request.headers.authorization).toBe('Bearer ***')
+         expect(JSON.stringify(exchange)).not.toContain('test-ipinfo-token')
+      })
+
+      it('should mask cookies the proxy or ipinfo.io sets, by header name', async () => {
+         target = await startTarget((_req, res) => {
+            res.writeHead(200, {
+               'Content-Type': 'application/json',
+               'Set-Cookie': ['session=TOPSECRETCOOKIE; Path=/', 'other=ALSOSECRET'],
+            })
+            res.end(
+               JSON.stringify({
+                  ip: '1.2.3.4',
+                  country_code: 'US',
+                  country: 'United States',
+               })
+            )
+         })
+         proxy = await startProxy()
+
+         const { exchange } = await lookup()
+
+         expect(exchange.response?.headers['set-cookie']).toBe('***')
+         expect(JSON.stringify(exchange)).not.toContain('TOPSECRETCOOKIE')
+      })
+
+      it('should keep the response of a failed lookup, status and body included', async () => {
+         target = await startTarget((_req, res) => {
+            res.writeHead(403, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: 'bad token' }))
+         })
+         proxy = await startProxy()
+
+         const error = await caught()
+
+         expect(error.exchange?.response).toMatchObject({ status: 403 })
+         expect(error.exchange?.response?.body).toContain('bad token')
+      })
+
+      it('should keep the request, and no response, when the proxy cannot be reached', async () => {
+         const error = await IpInfoService.lookupThroughProxy('http://127.0.0.1:1', 'http://127.0.0.1:1/lite/me').then(
+            () => undefined,
+            (rejected: IpInfoError) => rejected
+         )
+
+         expect(error?.exchange?.request.method).toBe('GET')
+         expect(error?.exchange?.response).toBeNull()
+         expect(error?.exchange?.elapsedMs).toBeGreaterThanOrEqual(0)
+      })
+
+      it('should cut a big response body at 64 KB and say so', async () => {
+         target = await startTarget((_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end('a'.repeat(100_000))
+         })
+         proxy = await startProxy()
+
+         const error = await caught()
+
+         expect(error.exchange?.response?.truncated).toBe(true)
+         expect(error.exchange?.response?.body).toHaveLength(65_536)
+      })
    })
 })

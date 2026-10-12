@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => {
       update: vi.fn(),
       test: vi.fn(),
       remove: vi.fn(),
+      history: vi.fn(),
+      historyEntry: vi.fn(),
       requestIfWaiting: vi.fn(),
    }
 })
@@ -27,6 +29,8 @@ vi.mock('database', () => ({
       update: mocks.update,
       test: mocks.test,
       remove: mocks.remove,
+      history: mocks.history,
+      historyEntry: mocks.historyEntry,
    },
    LinkedInAccountValidationService: { requestIfWaiting: mocks.requestIfWaiting },
 }))
@@ -131,5 +135,43 @@ describe('proxyServer resolvers', () => {
 
       await expect(caller().test({ id: 'p1' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
       expect(mocks.requestIfWaiting).not.toHaveBeenCalled()
+   })
+
+   describe('test history', () => {
+      it('should list the history of a proxy for the current user', async () => {
+         mocks.history.mockResolvedValue([{ id: 't1' }])
+
+         await expect(caller().history({ id: 'p1' })).resolves.toEqual([{ id: 't1' }])
+         expect(mocks.history).toHaveBeenCalledWith('u1', 'p1')
+      })
+
+      it('should return one test with its request and response for the current user', async () => {
+         mocks.historyEntry.mockResolvedValue({
+            id: 't1',
+            responseBody: '{}',
+         })
+
+         await expect(caller().historyEntry({ id: 't1' })).resolves.toMatchObject({ id: 't1' })
+         expect(mocks.historyEntry).toHaveBeenCalledWith('u1', 't1')
+      })
+
+      it.each([
+         ['history', () => caller().history({ id: 'p1' }), mocks.history],
+         ['historyEntry', () => caller().historyEntry({ id: 't1' }), mocks.historyEntry],
+      ])('should answer not found for %s that is not the users', async (_name, run, service) => {
+         service.mockRejectedValue(new mocks.ProxyServerOwnershipError('nope'))
+
+         await expect(run()).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      })
+
+      it('should not let an anonymous caller read history', async () => {
+         const anonymous = router({ proxyServer }).createCaller({
+            auth: null,
+            user: null,
+         } as unknown as Context)
+
+         await expect(anonymous.proxyServer.history({ id: 'p1' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+         expect(mocks.history).not.toHaveBeenCalled()
+      })
    })
 })

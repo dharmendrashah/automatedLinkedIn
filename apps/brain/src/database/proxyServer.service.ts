@@ -1,4 +1,4 @@
-import { CryptoService, IpInfoError, IpInfoService } from 'core'
+import { CryptoService, IpInfoError, IpInfoService, type ProxyExchange } from 'core'
 
 import { type ProxyProtocol } from 'generated/prisma/client'
 
@@ -105,8 +105,53 @@ type TestOutcome =
         country: string
         ip: string
         latencyMs: number
+        exchange: ProxyExchange
      }
-   | { status: 'UNREACHABLE'; statusMessage: string }
+   | { status: 'UNREACHABLE'; statusMessage: string; exchange: ProxyExchange }
+
+// Used when a failure carries no recording of what was sent, so a test is still saved.
+const NOT_RECORDED: ProxyExchange = {
+   request: {
+      method: 'GET',
+      url: '',
+      headers: {},
+      body: null,
+   },
+   response: null,
+   elapsedMs: 0,
+}
+
+const HISTORY_DAYS = 7
+const historyCutoff = () => new Date(Date.now() - HISTORY_DAYS * 24 * 60 * 60 * 1000)
+
+// Keeps what was sent and what came back for HISTORY_DAYS. The ipinfo token is masked before it gets here and the
+// proxy's own credentials are not part of the request. A history that cannot be saved never fails the test itself.
+const saveTest = async (proxyServerId: string, outcome: TestOutcome) => {
+   try {
+      const { request, response, elapsedMs } = outcome.exchange
+
+      await PrismaService.client.proxyTest.create({
+         data: {
+            proxyServerId,
+            status: outcome.status,
+            statusMessage: outcome.statusMessage,
+            latencyMs: elapsedMs,
+            requestMethod: request.method,
+            requestUrl: request.url,
+            requestHeaders: request.headers,
+            requestBody: request.body,
+            responseStatus: response?.status ?? null,
+            responseHeaders: response?.headers,
+            responseBody: response?.body ?? null,
+            responseTruncated: response?.truncated ?? false,
+            error: outcome.status === 'UNREACHABLE' ? outcome.statusMessage : null,
+         },
+      })
+      await PrismaService.client.proxyTest.deleteMany({ where: { testedAt: { lt: historyCutoff() } } })
+   } catch (error) {
+      console.error(`Could not save the test history of proxy ${proxyServerId}: ${(error as Error).message}`)
+   }
+}
 
 // Tests a candidate proxy by routing one request through it to ipinfo.io. `otherCountryCodes` are the
 // account's other proxies' already-detected countries: a mismatch only warns, it never blocks the save.
@@ -124,6 +169,7 @@ const test = async (input: ProxyServerInput, otherCountryCodes: string[]): Promi
          country: result.country,
          ip: result.ip,
          latencyMs: result.latencyMs,
+         exchange: result.exchange,
       }
    } catch (error) {
       const message = error instanceof IpInfoError ? error.message : 'could not reach the proxy'
@@ -131,6 +177,7 @@ const test = async (input: ProxyServerInput, otherCountryCodes: string[]): Promi
       return {
          status: 'UNREACHABLE',
          statusMessage: message,
+         exchange: (error instanceof IpInfoError && error.exchange) || NOT_RECORDED,
       }
    }
 }
@@ -176,7 +223,7 @@ export class ProxyServerService {
          },
       })
 
-      return PrismaService.client.proxyServer.create({
+      const created = await PrismaService.client.proxyServer.create({
          data: {
             linkedInAccountId: input.linkedInAccountId,
             protocol: input.protocol,
@@ -199,6 +246,10 @@ export class ProxyServerService {
          },
          select: metadataSelect,
       })
+
+      await saveTest(created.id, outcome)
+
+      return created
    }
 
    // Re-tests with whatever is stored today (no field changes) or with a patch, re-testing either way: every
@@ -246,7 +297,7 @@ export class ProxyServerService {
          siblings.map(sibling => sibling.detectedCountryCode).filter((code): code is string => Boolean(code))
       )
 
-      return PrismaService.client.proxyServer.update({
+      const updated = await PrismaService.client.proxyServer.update({
          where: { id: row.id },
          data: {
             protocol: input.protocol,
@@ -272,11 +323,71 @@ export class ProxyServerService {
          },
          select: metadataSelect,
       })
+
+      await saveTest(updated.id, outcome)
+
+      return updated
    }
 
    // Manual re-test button: whatever the result is, it updates the stored status.
    public static test(userId: string, id: string) {
       return ProxyServerService.update(userId, id, {})
+   }
+
+   // The last 7 days of tests of a proxy the user owns, newest first, without the request and response data (those
+   // are large; historyEntry returns them for the one test that is opened).
+   public static async history(userId: string, proxyServerId: string) {
+      const proxy = await PrismaService.client.proxyServer.findFirst({
+         where: {
+            id: proxyServerId,
+            linkedInAccount: { userId },
+         },
+         select: { id: true },
+      })
+
+      if (!proxy) {
+         throw new ProxyServerOwnershipError()
+      }
+
+      return PrismaService.client.proxyTest.findMany({
+         where: {
+            proxyServerId,
+            testedAt: { gte: historyCutoff() },
+         },
+         orderBy: { testedAt: 'desc' },
+         select: {
+            id: true,
+            testedAt: true,
+            status: true,
+            statusMessage: true,
+            latencyMs: true,
+            responseStatus: true,
+            error: true,
+         },
+      })
+   }
+
+   // One test with everything that was sent and received, only if it belongs to one of the user's proxies.
+   public static async historyEntry(userId: string, id: string) {
+      const entry = await PrismaService.client.proxyTest.findFirst({
+         where: {
+            id,
+            proxyServer: { linkedInAccount: { userId } },
+            testedAt: { gte: historyCutoff() },
+         },
+      })
+
+      if (!entry) {
+         throw new ProxyServerOwnershipError()
+      }
+
+      // Prisma's Json type is recursive and makes the API's output type too deep for the web app to infer; these
+      // columns only ever hold the plain header maps saved by saveTest.
+      return {
+         ...entry,
+         requestHeaders: entry.requestHeaders as Record<string, string>,
+         responseHeaders: entry.responseHeaders as Record<string, string> | null,
+      }
    }
 
    public static async remove(userId: string, id: string) {

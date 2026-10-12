@@ -111,6 +111,24 @@ export const proxyServer = router({
       }
    }),
 
+   // The last 7 days of tests of one proxy, newest first, without the request and response data.
+   history: ownerProcedure.input(byId).query(async ({ ctx, input }) => {
+      try {
+         return await ProxyServerService.history(ctx.user.id, input.id)
+      } catch (error) {
+         throw asTrpcError(error)
+      }
+   }),
+
+   // One test with everything that was sent and received. The bodies are untrusted: show them as plain text.
+   historyEntry: ownerProcedure.input(byId).query(async ({ ctx, input }) => {
+      try {
+         return await ProxyServerService.historyEntry(ctx.user.id, input.id)
+      } catch (error) {
+         throw asTrpcError(error)
+      }
+   }),
+
    delete: ownerProcedure.input(byId).mutation(async ({ ctx, input }) => {
       const deleted = await ProxyServerService.remove(ctx.user.id, input.id)
 
