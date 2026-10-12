@@ -414,10 +414,10 @@ export class ProxyServerService {
       return count > 0
    }
 
-   // The proxy the automation layer should use for this account right now: the primary if it is healthy,
-   // otherwise the most recently tested healthy one, otherwise none. With `proxyId` only that one, and only when it
-   // is one of this account's usable proxies. `config` carries the credentials for the worker; `summary` is what may
-   // be shown and kept (never the credentials).
+   // The proxy the automation layer should use for this account right now, the most reliable usable one: healthy before a
+   // country mismatch (the enum is declared in that order), then the primary, then the fastest in its last test, then the
+   // most recently tested. With `proxyId` only that one, and only when it is one of this account's usable proxies.
+   // `config` carries the credentials for the worker; `summary` is what may be shown and kept (never the credentials).
    public static async pickForAccount(linkedInAccountId: string, proxyId?: string) {
       const candidate = await PrismaService.client.proxyServer.findFirst({
          where: {
@@ -425,7 +425,17 @@ export class ProxyServerService {
             linkedInAccountId,
             status: { in: ['ACTIVE', 'GEO_MISMATCH'] },
          },
-         orderBy: [{ isPrimary: 'desc' }, { lastTestedAt: 'desc' }],
+         orderBy: [
+            { status: 'asc' },
+            { isPrimary: 'desc' },
+            {
+               latencyMs: {
+                  sort: 'asc',
+                  nulls: 'last',
+               },
+            },
+            { lastTestedAt: 'desc' },
+         ],
       })
 
       if (!candidate) {

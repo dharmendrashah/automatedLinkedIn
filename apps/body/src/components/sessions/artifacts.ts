@@ -36,15 +36,3 @@ export const tabsFor = (session: TabbedSession): SessionTab[] => {
 
    return tabs.filter(([, shown]) => shown).map(([tab]) => tab)
 }
-
-type CatalogEntry = {
-   needs: { proxy: 'required' | 'optional' | 'none'; account: boolean }
-   input_schema: Record<string, unknown>
-}
-
-// A task the owner can start from a proxy's row: it works through a proxy, needs no account and asks for nothing.
-export const runnableOnProxy = ({ needs, input_schema: schema }: CatalogEntry) => {
-   const properties = (schema.properties ?? {}) as Record<string, unknown>
-
-   return needs.proxy !== 'none' && !needs.account && Object.keys(properties).length === 0
-}

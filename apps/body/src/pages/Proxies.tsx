@@ -6,8 +6,8 @@ import { TestHistoryDrawer } from '@/components/proxies/test-history-drawer'
 import { useState } from 'react'
 import { Link } from 'react-router'
 
+import { BROWSER_TEST_TASK } from '@/components/proxies/browser-test'
 import { type Proxy } from '@/components/proxies/types'
-import { runnableOnProxy } from '@/components/sessions/artifacts'
 import { useTaskCatalog } from '@/components/sessions/use-task-catalog'
 
 import { trpc } from '../trpc'
@@ -30,8 +30,8 @@ export const Proxies = () => {
    const runTask = trpc.task.run.useMutation({
       onSuccess: () => void utils.session.list.invalidate(),
    })
-   // Any task that works through a proxy and asks for nothing shows in the row menu, so a new task needs no change here.
-   const tasks = catalog?.tasks.filter(runnableOnProxy) ?? []
+   // The button waits for the worker to announce the task: nothing else knows whether a worker is running.
+   const browserTestAnnounced = Boolean(catalog?.tasks.some(({ task }) => task === BROWSER_TEST_TASK))
    const remove = trpc.proxyServer.delete.useMutation({
       onSuccess: () => {
          setToDelete(null)
@@ -39,13 +39,8 @@ export const Proxies = () => {
       },
    })
 
-   const busyId = test.isPending
-      ? test.variables?.id
-      : runTask.isPending
-        ? runTask.variables?.proxyId
-        : remove.isPending
-          ? remove.variables?.id
-          : undefined
+   const busyId = test.isPending ? test.variables?.id : remove.isPending ? remove.variables?.id : undefined
+   const testingId = runTask.isPending ? runTask.variables?.proxyId : undefined
    const actionError = test.error?.message ?? runTask.error?.message ?? remove.error?.message
 
    return (
@@ -78,10 +73,11 @@ export const Proxies = () => {
             loading={list.isPending}
             error={list.error?.message}
             busyId={busyId}
+            testingId={testingId}
             onEdit={setToEdit}
             onTest={proxy => test.mutate({ id: proxy.id })}
-            tasks={tasks}
-            onRunTask={(proxy, task) => runTask.mutate({ task, proxyId: proxy.id })}
+            browserTestAnnounced={browserTestAnnounced}
+            onBrowserTest={proxy => runTask.mutate({ task: BROWSER_TEST_TASK, proxyId: proxy.id })}
             onHistory={setToInspect}
             onDelete={setToDelete}
          />

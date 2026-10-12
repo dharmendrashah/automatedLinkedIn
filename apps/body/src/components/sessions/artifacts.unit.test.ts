@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { artifactNameOf, findArtifact, runnableOnProxy, tabsFor } from './artifacts'
+import { artifactNameOf, findArtifact, tabsFor } from './artifacts'
 
 const artifact = (kind: string, name: string, extra = {}) => ({
    id: `id-${name}`,
@@ -69,30 +69,5 @@ describe('tabsFor', () => {
 
    it('should put the login tokens file with the other files', () => {
       expect(tabsFor(task([artifact('session', 'session.json', { sensitive: true })]))).toEqual(['summary', 'files'])
-   })
-})
-
-describe('runnableOnProxy', () => {
-   const entry = (overrides = {}) => ({
-      task: 'browser-detection',
-      title: 'Browser test',
-      needs: {
-         proxy: 'required' as const,
-         account: false,
-      },
-      input_schema: { type: 'object', properties: {} } as Record<string, unknown>,
-      ...overrides,
-   })
-
-   it('should offer a task that needs a proxy, no account, and no input from the owner', () => {
-      expect(runnableOnProxy(entry())).toBe(true)
-   })
-
-   it.each([
-      ['a task that needs no proxy', { needs: { proxy: 'none', account: false } }],
-      ['a task that needs an account', { needs: { proxy: 'required', account: true } }],
-      ['a task that asks for input', { input_schema: { type: 'object', properties: { url: { type: 'string' } } } }],
-   ])('should not offer %s from a proxy', (_name, overrides) => {
-      expect(runnableOnProxy(entry(overrides))).toBe(false)
    })
 })
