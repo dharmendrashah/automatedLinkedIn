@@ -24,6 +24,7 @@ model User {
   updatedAt   DateTime @updatedAt
 
   linkedInAccounts LinkedInAccount[]
+  spiderSessions   SpiderSession[]
 }
 
 enum LinkedInAccountStatus {
@@ -63,6 +64,7 @@ model LinkedInAccount {
   updatedAt       DateTime              @updatedAt
 
   proxyServers ProxyServer[]
+  spiderSessions SpiderSession[]
 
   @@unique([userId, email])
   @@index([userId])
@@ -116,6 +118,7 @@ model ProxyServer {
   updatedAt         DateTime          @updatedAt
 
   tests ProxyTest[]
+  spiderSessions SpiderSession[]
 
   @@index([linkedInAccountId])
 }
@@ -145,4 +148,54 @@ model ProxyTest {
 
   @@index([proxyServerId, testedAt])
   @@index([testedAt])
+}
+
+enum SpiderSessionKind {
+  // The spider signs in to check an account's credentials.
+  VALIDATE_ACCOUNT
+  // Reserved: scrape tasks join when brain starts creating them.
+  SCRAPE
+}
+
+enum SpiderSessionStatus {
+  IN_PROGRESS
+  SUCCEEDED
+  FAILED
+}
+
+// One run of the spider for one of the user's LinkedIn accounts, shown on /sessions. Its id is the id of the command
+// the spider received (the validation id), so a session and its validation share one id. Holds no secret: the
+// proxy is kept as a snapshot without credentials, because proxies can be edited or removed later.
+model SpiderSession {
+  id                String              @id
+  userId            String
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  linkedInAccountId String
+  linkedInAccount   LinkedInAccount     @relation(fields: [linkedInAccountId], references: [id], onDelete: Cascade)
+  kind              SpiderSessionKind
+  status            SpiderSessionStatus @default(IN_PROGRESS)
+  // The spider's verdict: VALID, INVALID_CREDENTIALS, NEEDS_REAUTH or ERROR. Null while in progress.
+  outcome           String?
+  // One short, fixed sentence from the spider (or brain when the task could not be queued).
+  message           String?
+  proxyServerId     String?
+  proxyServer       ProxyServer?        @relation(fields: [proxyServerId], references: [id], onDelete: SetNull)
+  proxyProtocol     ProxyProtocol?
+  proxyHost         String?
+  proxyPort         Int?
+  proxyCountry      String?
+  // What the run was given, as a small fixed non-secret object (see SpiderSessionService).
+  requestParams     Json
+  startedAt         DateTime            @default(now())
+  finishedAt        DateTime?
+  durationMs        Int?
+  // Where the recording lives in the bucket; null when nothing was recorded.
+  recordingPrefix   String?
+  // The session this one is a retry of.
+  retryOfId         String?
+  retryOf           SpiderSession?      @relation("SessionRetries", fields: [retryOfId], references: [id], onDelete: SetNull)
+  retries           SpiderSession[]     @relation("SessionRetries")
+
+  @@index([userId, startedAt])
+  @@index([linkedInAccountId, startedAt])
 }

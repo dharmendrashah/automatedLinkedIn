@@ -192,6 +192,19 @@ export class ProxyServerService {
       })
    }
 
+   // The proxies of one of the owner's accounts that a check can use, for choosing another one when trying again.
+   public static listUsableForAccount(userId: string, linkedInAccountId: string) {
+      return PrismaService.client.proxyServer.findMany({
+         where: {
+            linkedInAccountId,
+            linkedInAccount: { userId },
+            status: { in: ['ACTIVE', 'GEO_MISMATCH'] },
+         },
+         orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+         select: metadataSelect,
+      })
+   }
+
    public static async create(userId: string, input: ProxyServerInput) {
       const account = await PrismaService.client.linkedInAccount.findFirst({
          where: {
@@ -402,10 +415,13 @@ export class ProxyServerService {
    }
 
    // The proxy the automation layer should use for this account right now: the primary if it is healthy,
-   // otherwise the most recently tested healthy one, otherwise none.
-   public static async pickForAccount(linkedInAccountId: string) {
+   // otherwise the most recently tested healthy one, otherwise none. With `proxyId` only that one, and only when it
+   // is one of this account's usable proxies. `config` carries the credentials for the worker; `summary` is what may
+   // be shown and kept (never the credentials).
+   public static async pickForAccount(linkedInAccountId: string, proxyId?: string) {
       const candidate = await PrismaService.client.proxyServer.findFirst({
          where: {
+            ...(proxyId && { id: proxyId }),
             linkedInAccountId,
             status: { in: ['ACTIVE', 'GEO_MISMATCH'] },
          },
@@ -416,9 +432,18 @@ export class ProxyServerService {
          return null
       }
 
-      return toProxyConfig({
-         ...candidate,
-         ...open(candidate),
-      })
+      return {
+         config: toProxyConfig({
+            ...candidate,
+            ...open(candidate),
+         }),
+         summary: {
+            id: candidate.id,
+            protocol: candidate.protocol,
+            host: candidate.host,
+            port: candidate.port,
+            country: candidate.detectedCountry,
+         },
+      }
    }
 }

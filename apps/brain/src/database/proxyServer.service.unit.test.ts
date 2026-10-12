@@ -370,6 +370,28 @@ describe('ProxyServerService', () => {
       })
    })
 
+   describe('listUsableForAccount', () => {
+      it("should list the account's working proxies for its owner, without credentials", async () => {
+         mocks.findManyProxy.mockResolvedValue([storedRow])
+
+         await ProxyServerService.listUsableForAccount('u1', 'acc1')
+
+         const [[args]] = mocks.findManyProxy.mock.calls
+
+         expect(args.where).toEqual({
+            linkedInAccountId: 'acc1',
+            linkedInAccount: { userId: 'u1' },
+            status: { in: ['ACTIVE', 'GEO_MISMATCH'] },
+         })
+         expect(args.select).not.toHaveProperty('secret')
+         expect(args.select).toMatchObject({
+            id: true,
+            host: true,
+            latencyMs: true,
+         })
+      })
+   })
+
    describe('pickForAccount', () => {
       it('should return null when the account has no working proxy', async () => {
          mocks.findFirstProxy.mockResolvedValue(null)
@@ -391,14 +413,41 @@ describe('ProxyServerService', () => {
          })
       })
 
-      it('should return the Playwright-shaped proxy with decrypted credentials', async () => {
+      it('should return the Playwright-shaped proxy with decrypted credentials, and a summary without them', async () => {
          mocks.findFirstProxy.mockResolvedValue(storedRow)
 
          await expect(ProxyServerService.pickForAccount('acc1')).resolves.toEqual({
-            server: 'socks5://proxy.example.net:1080',
-            username: 'alice',
-            password: 'hunter2',
+            config: {
+               server: 'socks5://proxy.example.net:1080',
+               username: 'alice',
+               password: 'hunter2',
+            },
+            summary: {
+               id: 'p1',
+               protocol: 'SOCKS5',
+               host: 'proxy.example.net',
+               port: 1080,
+               country: 'Canada',
+            },
          })
+      })
+
+      it('should pick the proxy that was asked for, if it is one of the account usable proxies', async () => {
+         mocks.findFirstProxy.mockResolvedValue(storedRow)
+
+         await ProxyServerService.pickForAccount('acc1', 'p1')
+
+         expect(mocks.findFirstProxy.mock.calls[0][0].where).toEqual({
+            id: 'p1',
+            linkedInAccountId: 'acc1',
+            status: { in: ['ACTIVE', 'GEO_MISMATCH'] },
+         })
+      })
+
+      it('should return null for a proxy that is not the account usable, so another account proxy cannot be used', async () => {
+         mocks.findFirstProxy.mockResolvedValue(null)
+
+         await expect(ProxyServerService.pickForAccount('acc1', 'someone-elses')).resolves.toBeNull()
       })
    })
 

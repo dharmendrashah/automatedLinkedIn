@@ -163,3 +163,78 @@ in every environment that uses this project's GCP account.
 | --- | --- |
 | `permission denied` reaching GCS from the pod | The cluster does not have Workload Identity enabled, the binding is missing, or the `ServiceAccount` has no `iam.gke.io/gcp-service-account` annotation. |
 | `storage.googleapis.com/... 403` for a single object | The bucket binding covers the bucket but not objects created before it (rare; usually not an issue for `objectAdmin`). |
+
+## Session recordings (not done yet)
+
+The Sessions page (`/sessions`, `.plan/spider-session-recording.md`) plays each run's video, steps, requests and logs
+straight from the bucket. The worker writes them under `recordings/` (it already has `objectAdmin`, so it needs
+nothing new). The bucket stays private: **brain** hands the browser a signed link that works for ten minutes. These
+are the commands for that, not run as part of this change.
+
+```sh
+export PROJECT_ID=automate-linkedin-511215
+export BUCKET=automate-linkedin-511215-spider
+export SIGNER_NAME=brain-recording-links
+export SIGNER_EMAIL="$SIGNER_NAME@$PROJECT_ID.iam.gserviceaccount.com"
+export APP_ORIGIN=https://app.staging.elitale.com
+
+gcloud services enable iamcredentials.googleapis.com
+
+gcloud iam service-accounts create "$SIGNER_NAME" \
+  --display-name="brain: links to session recordings"
+
+# Read access to recordings/ only, not to sessions/ (which holds login cookies) or results/.
+gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" \
+  --member="serviceAccount:$SIGNER_EMAIL" \
+  --role="roles/storage.objectViewer" \
+  --condition="title=recordings-only,expression=resource.name.startsWith('projects/_/buckets/$BUCKET/objects/recordings/')"
+
+# A signed link is signed by this account through the IAM Credentials API, so it must be allowed to sign for itself.
+gcloud iam service-accounts add-iam-policy-binding "$SIGNER_EMAIL" \
+  --role="roles/iam.serviceAccountTokenCreator" \
+  --member="serviceAccount:$SIGNER_EMAIL"
+
+# Lets the Kubernetes ServiceAccount automatedlinkedin/brain impersonate it (create that ServiceAccount, annotate it
+# with iam.gke.io/gcp-service-account=$SIGNER_EMAIL, and set serviceAccountName: brain on the brain Deployment).
+gcloud iam service-accounts add-iam-policy-binding "$SIGNER_EMAIL" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="serviceAccount:$PROJECT_ID.svc.id.goog[automatedlinkedin/brain]"
+```
+
+The browser fetches the JSON files (`timeline.json`, `network.json`, `logs.json`) with `fetch`, so the bucket needs CORS
+for the app's address. The video and screenshots load as plain `<video>` and `<img>` and need nothing:
+
+```sh
+cat > /tmp/cors.json <<EOF
+[{"origin": ["$APP_ORIGIN"], "method": ["GET"], "responseHeader": ["Content-Type", "Range"], "maxAgeSeconds": 3600}]
+EOF
+gcloud storage buckets update "gs://$BUCKET" --cors-file=/tmp/cors.json
+```
+
+Recordings show what the browser showed, so they are deleted after seven days. This matches
+`SESSION_RECORDING_RETENTION_DAYS` in brain, and it only touches `recordings/`:
+
+```sh
+cat > /tmp/lifecycle.json <<EOF
+{"rule": [{"action": {"type": "Delete"}, "condition": {"age": 7, "matchesPrefix": ["recordings/"]}}]}
+EOF
+gcloud storage buckets update "gs://$BUCKET" --lifecycle-file=/tmp/lifecycle.json
+```
+
+Check what is already on the bucket first (`gcloud storage buckets describe "gs://$BUCKET" --format='value(lifecycle_config,cors_config)'`):
+`buckets update --lifecycle-file` replaces the whole lifecycle configuration, so merge any rule that exists.
+
+**Local development.** Your own `gcloud auth application-default login` credentials cannot sign a link. Impersonate the
+service account instead (it needs `roles/iam.serviceAccountTokenCreator` on it for your user), then start brain with
+`SPIDER_GCS_BUCKET` set:
+
+```sh
+gcloud auth application-default login --impersonate-service-account="$SIGNER_EMAIL"
+```
+
+| Error | Cause |
+| --- | --- |
+| `Cannot sign data without client_email` | Brain is using user credentials. Use the service account (Workload Identity, or impersonation locally). |
+| `Permission 'iam.serviceAccounts.signBlob' denied` | The service account is missing `roles/iam.serviceAccountTokenCreator` on itself. |
+| The video plays but the steps, network and logs tabs say the file could not be loaded | The bucket has no CORS rule for the app's address. |
+| The Video tab says the recording is not set up | `SPIDER_GCS_BUCKET` is empty in brain. |

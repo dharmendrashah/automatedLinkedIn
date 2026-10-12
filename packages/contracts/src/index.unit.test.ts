@@ -150,6 +150,32 @@ describe('validateAccountResultSchema', () => {
       ).toBe('sessions/acc1/state.json')
    })
 
+   it('should accept a recording prefix', () => {
+      const prefix = 'recordings/validate/0190b7a6-7d7e-7c3a-8f1d-2b6f1a9d4c11/20261012T101500Z'
+
+      expect(
+         validateAccountResultSchema.parse({
+            ...result,
+            recording_prefix: prefix,
+         }).recording_prefix
+      ).toBe(prefix)
+   })
+
+   it.each([
+      ['a parent folder', 'recordings/validate/abc/..'],
+      ['another folder', 'sessions/acc1/20261012T101500Z'],
+      ['a trailing slash', 'recordings/validate/abc/20261012T101500Z/'],
+      ['an unknown kind', 'recordings/other/abc/20261012T101500Z'],
+      ['a bad time', 'recordings/validate/abc/yesterday'],
+   ])('should reject a recording prefix with %s', (_name, recording_prefix) => {
+      expect(
+         validateAccountResultSchema.safeParse({
+            ...result,
+            recording_prefix,
+         }).success
+      ).toBe(false)
+   })
+
    it.each(['VALID', 'INVALID_CREDENTIALS', 'NEEDS_REAUTH', 'ERROR'])('should accept the outcome %s', outcome => {
       expect(
          validateAccountResultSchema.safeParse({

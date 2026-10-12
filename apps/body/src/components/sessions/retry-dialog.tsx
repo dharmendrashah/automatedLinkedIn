@@ -1,0 +1,137 @@
+import { RadioMark } from '@/components/radio-mark'
+import { Button } from '@/components/ui/button'
+import {
+   Dialog,
+   DialogContent,
+   DialogDescription,
+   DialogFooter,
+   DialogHeader,
+   DialogTitle,
+} from '@/components/ui/dialog'
+import { Loader2 } from 'lucide-react'
+import { useState } from 'react'
+
+import { cn } from '@/lib/utils'
+
+import { type SessionDetail } from './types'
+
+import { trpc } from '../../trpc'
+import { describeLatency, speedClass } from '../proxies/latency'
+
+type Props = {
+   session: SessionDetail
+   open: boolean
+   onOpenChange: (open: boolean) => void
+   onStarted: (id: string) => void
+}
+
+// Starts the same check again. The proxy is the only thing that can change, and only to one of this account's own.
+export const RetryDialog = ({ session, open, onOpenChange, onStarted }: Props) => {
+   const utils = trpc.useUtils()
+   const [chosen, setChosen] = useState<string | null>(null)
+   const proxies = session.retryProxies
+
+   // The proxy it ran through is chosen to begin with, so "Try again" alone repeats it.
+   const selected = chosen ?? (proxies.some(proxy => proxy.id === session.proxyServerId) ? session.proxyServerId : proxies[0]?.id)
+
+   const retry = trpc.session.retry.useMutation({
+      onSuccess: ({ id }) => {
+         void utils.session.list.invalidate()
+         void utils.session.get.invalidate({ id: session.id })
+         onOpenChange(false)
+         onStarted(id)
+      },
+   })
+
+   const close = (next: boolean) => {
+      if (!next) {
+         setChosen(null)
+         retry.reset()
+      }
+
+      onOpenChange(next)
+   }
+
+   return (
+      <Dialog open={open} onOpenChange={close}>
+         <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+               <DialogTitle>Try again with another proxy</DialogTitle>
+               <DialogDescription>
+                  Same account, same action. Only the proxy changes, and the account's current saved credentials are
+                  used.
+               </DialogDescription>
+            </DialogHeader>
+
+            {proxies.length === 0 ? (
+               <p className="text-muted-foreground rounded-xl border border-dashed p-4 text-sm">
+                  This account has no working proxy. Add one on the Proxies page first.
+               </p>
+            ) : (
+               <ul className="grid max-h-72 gap-2 overflow-y-auto py-1" aria-label="Proxies">
+                  {proxies.map(proxy => {
+                     const latency = describeLatency(proxy.latencyMs)
+                     const isChosen = proxy.id === selected
+
+                     return (
+                        <li key={proxy.id}>
+                           <button
+                              type="button"
+                              onClick={() => setChosen(proxy.id)}
+                              aria-pressed={isChosen}
+                              className={cn(
+                                 'bg-card hover:bg-muted/60 focus-visible:ring-ring/50 flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors outline-none focus-visible:ring-[3px]',
+                                 isChosen && 'border-primary/60 bg-muted/60 ring-primary/20 ring-1'
+                              )}
+                           >
+                              <div className="grid min-w-0 flex-1 gap-0.5">
+                                 <span className="truncate font-mono text-xs">
+                                    {`${proxy.protocol.toLowerCase()}://${proxy.host}:${proxy.port}`}
+                                 </span>
+                                 <span className="text-muted-foreground text-xs">
+                                    {[
+                                       proxy.detectedCountry,
+                                       proxy.id === session.proxyServerId ? 'Used by this session' : undefined,
+                                       proxy.isPrimary ? 'Primary' : undefined,
+                                    ]
+                                       .filter(Boolean)
+                                       .join(' · ')}
+                                 </span>
+                              </div>
+                              {latency ? (
+                                 <span className={cn('text-xs font-medium tabular-nums', speedClass[latency.speed])}>
+                                    {latency.text}
+                                 </span>
+                              ) : null}
+                              <RadioMark checked={isChosen} />
+                           </button>
+                        </li>
+                     )
+                  })}
+               </ul>
+            )}
+
+            {retry.error ? <p className="text-destructive text-sm">{retry.error.message}</p> : null}
+
+            <DialogFooter>
+               <Button variant="outline" onClick={() => close(false)}>
+                  Cancel
+               </Button>
+               <Button
+                  disabled={!selected || retry.isPending}
+                  onClick={() =>
+                     selected &&
+                     retry.mutate({
+                        id: session.id,
+                        proxyId: selected,
+                     })
+                  }
+               >
+                  {retry.isPending ? <Loader2 className="animate-spin" /> : null}
+                  Start
+               </Button>
+            </DialogFooter>
+         </DialogContent>
+      </Dialog>
+   )
+}

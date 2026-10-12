@@ -10,6 +10,8 @@ export class ObjectNotFoundError extends Error {
 // Where spider keeps sessions (read and write), raw results (write) and per-account locks.
 export interface ObjectStore {
    put: (key: string, body: string, contentType: string) => Promise<void>
+   // Streams a local file to the key, so a video never has to fit in memory.
+   upload: (key: string, localPath: string, contentType: string) => Promise<void>
    get: (key: string) => Promise<string>
    // Creates the object only if it does not exist. Resolves to its version, or undefined when it already exists.
    create: (key: string, body: string, contentType: string) => Promise<string | undefined>

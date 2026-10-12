@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { type ValidateAccountCommand, type ValidateAccountResult } from '@automatedLinkedIn/contracts'
 
+import { RecordedSession } from '../recording/recordedSession'
 import { AccountBusyError } from '../scraping/errors'
 import { processValidation } from './processValidation'
 
@@ -43,7 +44,7 @@ const setup = () => {
       }),
    }
    const validator = {
-      validate: vi.fn(async () => ({
+      validate: vi.fn(async (_session: unknown, _input: unknown) => ({
          outcome: 'VALID' as const,
          cookies: [cookie],
       })),
@@ -280,5 +281,175 @@ describe('processValidation', () => {
 
       expect(written).not.toContain('hunter2')
       expect(written).not.toContain('JBSWY3DPEHPK3PXP')
+   })
+
+   describe('with a recording', () => {
+      const PREFIX = 'recordings/validate/0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11/20261012T100005Z'
+
+      const withRecording = (prefix: string | null = PREFIX) => {
+         const recorder = {
+            addSecret: vi.fn((_value: string) => undefined),
+            log: vi.fn(),
+            addStep: vi.fn(() => ({ n: 1 })),
+            saveScreenshot: vi.fn(),
+            saveFailureHtml: vi.fn(),
+            finish: vi.fn(async (_outcome: { failed: boolean; verdict?: string }) => {
+               ctx.events.push('recorded')
+
+               return prefix ?? undefined
+            }),
+         }
+         const startRecording = vi.fn(async () => recorder)
+
+         return {
+            recorder,
+            startRecording,
+            deps: {
+               ...ctx.deps,
+               startRecording,
+            },
+         }
+      }
+
+      it('should open the browser with the recorder and let the check work through a recorded session', async () => {
+         const { recorder, startRecording, deps } = withRecording()
+
+         await processValidation(command, deps as never)
+
+         expect(startRecording).toHaveBeenCalledWith('validate', command.validation_id)
+         expect(ctx.driver.open).toHaveBeenCalledWith({ recorder })
+         expect(ctx.validator.validate.mock.calls[0][0]).toBeInstanceOf(RecordedSession)
+      })
+
+      it('should save the recording after the browser is closed and before the result is announced', async () => {
+         const { deps } = withRecording()
+
+         await processValidation(command, deps as never)
+
+         expect(ctx.events).toEqual([
+            'acquired',
+            'opened',
+            'closed',
+            'recorded',
+            'session',
+            'record',
+            'published',
+            'released',
+         ])
+      })
+
+      it('should say where the recording is in the result and in the bucket record', async () => {
+         const { deps } = withRecording()
+
+         await processValidation(command, deps as never)
+
+         expect(ctx.publishResult.mock.calls[0][0]).toMatchObject({ recording_prefix: PREFIX })
+
+         const record = ctx.store.put.mock.calls.find(([key]) => key.startsWith('results/'))
+
+         expect(JSON.parse(String(record?.[1]))).toMatchObject({ recording_prefix: PREFIX })
+      })
+
+      it('should leave the prefix out when nothing was kept', async () => {
+         const { deps } = withRecording(null)
+
+         await processValidation(command, deps as never)
+
+         expect(ctx.publishResult.mock.calls[0][0]).not.toHaveProperty('recording_prefix')
+      })
+
+      it('should tell the recorder every secret of the account, so none can show up in the record', async () => {
+         ctx.openCredentials.mockReturnValue({
+            password: 'hunter2',
+            totpSecret: 'JBSWY3DPEHPK3PXP',
+            session: 'AQEDAR-token',
+         } as never)
+
+         const { recorder, deps } = withRecording()
+
+         await processValidation(command, deps as never)
+
+         expect(recorder.addSecret.mock.calls.map(([value]) => value).sort()).toEqual(
+            ['AQEDAR-token', 'JBSWY3DPEHPK3PXP', 'hunter2'].sort()
+         )
+      })
+
+      it.each([
+         ['VALID', false],
+         ['INVALID_CREDENTIALS', false],
+         ['NEEDS_REAUTH', true],
+         ['ERROR', true],
+      ] as const)('should report %s to the recorder with failed %s', async (outcome, failed) => {
+         ctx.validator.validate.mockResolvedValue(
+            (outcome === 'VALID'
+               ? {
+                    outcome,
+                    cookies: [cookie],
+                 }
+               : {
+                    outcome,
+                    message: 'Something short',
+                 }) as never
+         )
+
+         const { recorder, deps } = withRecording()
+
+         await processValidation(command, deps as never)
+
+         expect(recorder.finish).toHaveBeenCalledWith({
+            failed,
+            verdict: outcome,
+         })
+      })
+
+      it('should keep the recording of a check that crashed, and still let the error through to retry', async () => {
+         ctx.validator.validate.mockRejectedValue(new Error('browser crashed'))
+
+         const { recorder, deps } = withRecording()
+
+         await expect(processValidation(command, deps as never)).rejects.toThrow('browser crashed')
+
+         expect(ctx.session.close).toHaveBeenCalledTimes(1)
+         expect(recorder.finish).toHaveBeenCalledWith({
+            failed: true,
+            verdict: 'CRASHED',
+         })
+      })
+
+      it('should keep the recording of a browser that could not start, and let the error through', async () => {
+         ctx.driver.open.mockRejectedValue(new Error('no display'))
+
+         const { recorder, deps } = withRecording()
+
+         await expect(processValidation(command, deps as never)).rejects.toThrow('no display')
+         expect(recorder.finish).toHaveBeenCalledWith({
+            failed: true,
+            verdict: 'CRASHED',
+         })
+      })
+
+      it('should carry on without a recording when one cannot be started', async () => {
+         const deps = {
+            ...ctx.deps,
+            startRecording: vi.fn(async () => Promise.reject(new Error('disk full'))),
+         }
+
+         await processValidation(command, deps as never)
+
+         expect(ctx.driver.open).toHaveBeenCalledWith({})
+         expect(ctx.publishResult.mock.calls[0][0]).toMatchObject({ outcome: 'VALID' })
+      })
+
+      it('should not start a recording when the credentials cannot be read, as no browser opens', async () => {
+         ctx.openCredentials.mockImplementation(() => {
+            throw new Error('Unsupported state or unable to authenticate data')
+         })
+
+         const { startRecording, deps } = withRecording()
+
+         await processValidation(command, deps as never)
+
+         expect(startRecording).not.toHaveBeenCalled()
+      })
    })
 })

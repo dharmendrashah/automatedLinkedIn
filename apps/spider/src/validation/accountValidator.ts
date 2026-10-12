@@ -1,4 +1,4 @@
-import { extractLiAt } from '@automatedLinkedIn/contracts'
+import { SECURITY_CHECK_MESSAGE, extractLiAt } from '@automatedLinkedIn/contracts'
 
 import { type SessionCookie } from '../types'
 
@@ -23,7 +23,7 @@ const MESSAGES = {
    badPassword: 'LinkedIn did not accept the email or password.',
    needsCode: 'LinkedIn asked for a two-step code and no two-step key is stored.',
    badCode: 'LinkedIn did not accept the two-step code.',
-   securityCheck: 'LinkedIn asked for a security check that you have to complete yourself.',
+   securityCheck: SECURITY_CHECK_MESSAGE,
    passwordOff: 'Password sign-in is switched off on this worker, and no browser token is stored.',
    nothingStored: 'No password or browser token is stored.',
    unexpected: 'LinkedIn showed a page the check does not understand.',
