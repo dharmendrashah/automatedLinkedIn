@@ -3,6 +3,12 @@ export type Latency = {
    speed: 'fast' | 'ok' | 'slow'
 }
 
+export const speedClass: Record<Latency['speed'], string> = {
+   fast: 'text-emerald-700 dark:text-emerald-400',
+   ok: 'text-amber-700 dark:text-amber-400',
+   slow: 'text-destructive',
+}
+
 const FAST_UNDER_MS = 500
 const OK_UNDER_MS = 1500
 
