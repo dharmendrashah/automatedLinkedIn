@@ -10,6 +10,7 @@ import {
    SPIDER_ACTION_TIMEOUT_MS,
    SPIDER_ALLOWED_HOSTS,
    SPIDER_GCS_BUCKET,
+   SPIDER_HEADLESS,
    SPIDER_LINKEDIN_BASE_URL,
    SPIDER_MAX_RECORDS,
    SPIDER_MIN_DELAY_MS,
@@ -74,6 +75,7 @@ const main = async () => {
    const driver = new CamoufoxDriver({
       actionTimeoutMs: SPIDER_ACTION_TIMEOUT_MS,
       isAllowedNavigation: url => policy.allowsUrl(url),
+      headless: SPIDER_HEADLESS === 'virtual' ? 'virtual' : true,
    })
 
    const engine = new ScrapeEngine({

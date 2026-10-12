@@ -89,6 +89,11 @@ export class Environment {
             desc: 'Include a video of the browser in a recording. Needs the ffmpeg build of Playwright in the image',
             default: true,
          }),
+         SPIDER_HEADLESS: string({
+            desc: 'How the browser runs: true is headless Firefox, virtual is a real browser on an Xvfb display (Linux with Xvfb installed, which the worker image has). Worker only',
+            choices: ['true', 'virtual'] as const,
+            default: 'true',
+         }),
          SPIDER_WORKER_HEALTH_PORT: port({
             desc: 'Port of the worker health endpoint that the Service status page reads. Worker only',
             default: 3003,

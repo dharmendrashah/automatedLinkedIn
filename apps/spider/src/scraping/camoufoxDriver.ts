@@ -1,4 +1,5 @@
 import { Camoufox } from 'camoufox'
+import { FingerprintGenerator } from 'fingerprint-generator'
 
 import { type Browser, type BrowserContext, type Page } from 'playwright-core'
 
@@ -14,10 +15,27 @@ export type CamoufoxOptions = {
    actionTimeoutMs: number
    // Page loads to anything else are blocked in the browser, not only checked afterwards.
    isAllowedNavigation: (url: string) => boolean
+   // `virtual` runs a real browser on an Xvfb display, which Camoufox advises over plain headless. Linux with Xvfb only.
+   headless?: true | 'virtual'
 }
 
 // A page that is stuck should not hold up the screenshot of the step that failed.
 const SNAPSHOT_TIMEOUT_MS = 5000
+
+// The fingerprint comes from Apify's fingerprint-generator: a Firefox desktop on Windows, macOS or Linux, on a screen
+// of at most 1920 by 1080. Camoufox sets the version of its own build in it, so the user agent matches the browser.
+const fingerprints = new FingerprintGenerator()
+
+const newFingerprint = () =>
+   fingerprints.getFingerprint({
+      browsers: [{ name: 'firefox' }],
+      operatingSystems: ['windows', 'macos', 'linux'],
+      devices: ['desktop'],
+      screen: {
+         maxWidth: 1920,
+         maxHeight: 1080,
+      },
+   }).fingerprint
 
 class CamoufoxSession implements LoginSession {
    public constructor(
@@ -181,8 +199,9 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver {
    private async launch(proxy: OpenOptions['proxy'], recorder: OpenOptions['recorder']) {
       try {
          return await Camoufox({
-            headless: true,
+            headless: this.options.headless ?? true,
             humanize: true,
+            fingerprint: newFingerprint(),
             ...(proxy && {
                proxy,
                geoip: true,
