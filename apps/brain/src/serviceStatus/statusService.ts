@@ -15,9 +15,7 @@ import { PrismaService } from 'database'
 
 import { createDiscovery, discoveredModules } from './discovery'
 import { buildModules, coveredWorkloads } from './modules'
-import { StatusBoard, type StatusSnapshot } from './statusBoard'
-
-export type { StatusSnapshot }
+import { StatusBoard } from './statusBoard'
 
 // What the Service status page shows. One board for the process, built from brain's settings the first time it is asked.
 // The explicit modules need a check of their own; every other workload in the cluster is added by discovery.

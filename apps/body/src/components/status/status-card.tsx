@@ -23,7 +23,7 @@ const states: Record<ModuleState, { icon: typeof CheckCircle2; className: string
    },
 }
 
-export const StateBadge = ({ state }: { state: ModuleState }) => {
+const StateBadge = ({ state }: { state: ModuleState }) => {
    const { icon: Icon, className } = states[state]
 
    return (

@@ -3,6 +3,11 @@ x-database-url: &database-url postgresql://${POSTGRES_USER:-postgres}:${POSTGRES
 # The password sits inside a URL, so keep it URL-safe (letters and digits, for example `openssl rand -hex 16`).
 x-rabbitmq-url: &rabbitmq-url amqp://${RABBITMQ_DEFAULT_USER:-automatedlinkedin}:${RABBITMQ_DEFAULT_PASS:-automatedlinkedin}@rabbitmq:5672/${RABBITMQ_DEFAULT_VHOST:-automatedlinkedin}
 
+x-mail-server: &mail-server
+  AUTHENTIK_EMAIL__HOST: ${AUTHENTIK_EMAIL__HOST:-mailpit}
+  AUTHENTIK_EMAIL__PORT: ${AUTHENTIK_EMAIL__PORT:-1025}
+  AUTHENTIK_EMAIL__USE_SSL: ${AUTHENTIK_EMAIL__USE_SSL:-false}
+
 x-authentik: &authentik
   image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2026.8.3}
   env_file:
@@ -16,12 +21,10 @@ x-authentik: &authentik
     AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-dev-only-change-me-dev-only-change-me-dev-only-change-me}
     # Outbound mail for sign-up verification and password reset. Defaults send to the local
     # Mailpit catcher (http://localhost:8025). To use Resend, set the AUTHENTIK_EMAIL__* values in .env.
-    AUTHENTIK_EMAIL__HOST: ${AUTHENTIK_EMAIL__HOST:-mailpit}
-    AUTHENTIK_EMAIL__PORT: ${AUTHENTIK_EMAIL__PORT:-1025}
+    <<: *mail-server
     AUTHENTIK_EMAIL__USERNAME: ${AUTHENTIK_EMAIL__USERNAME:-}
     AUTHENTIK_EMAIL__PASSWORD: ${AUTHENTIK_EMAIL__PASSWORD:-}
     AUTHENTIK_EMAIL__USE_TLS: ${AUTHENTIK_EMAIL__USE_TLS:-false}
-    AUTHENTIK_EMAIL__USE_SSL: ${AUTHENTIK_EMAIL__USE_SSL:-false}
     AUTHENTIK_EMAIL__TIMEOUT: ${AUTHENTIK_EMAIL__TIMEOUT:-10}
     AUTHENTIK_EMAIL__FROM: ${AUTHENTIK_EMAIL__FROM:-no-reply@automatedlinkedin.local}
   depends_on:
@@ -117,9 +120,7 @@ services:
       SESSION_RECORDING_RETENTION_DAYS: ${SESSION_RECORDING_RETENTION_DAYS:-7}
       # The Service status page connects to the mail server authentik uses and reads its greeting (nothing is sent).
       # The other modules are found by their service names, which are the defaults.
-      AUTHENTIK_EMAIL__HOST: ${AUTHENTIK_EMAIL__HOST:-mailpit}
-      AUTHENTIK_EMAIL__PORT: ${AUTHENTIK_EMAIL__PORT:-1025}
-      AUTHENTIK_EMAIL__USE_SSL: ${AUTHENTIK_EMAIL__USE_SSL:-false}
+      <<: *mail-server
     ports:
       - "3001:3001"
     depends_on:

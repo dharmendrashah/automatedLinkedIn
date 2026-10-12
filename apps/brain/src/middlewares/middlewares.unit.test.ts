@@ -7,10 +7,7 @@ const mocks = vi.hoisted(() => ({
    cookieParser: vi.fn(() => 'cookie-middleware'),
    initializeTrpc: vi.fn(),
    configHealth: vi.fn(),
-   env: {
-      CORS_ORIGINS: ' http://localhost:3000 ,http://localhost:5173,, ',
-      isProd: false,
-   },
+   env: { CORS_ORIGINS: ' http://localhost:3000 ,http://localhost:5173,, ' },
 }))
 
 vi.mock('cors', () => ({ default: mocks.cors }))

@@ -58,8 +58,6 @@ vi.mock('env', () => ({
    GIT_SHA: 'test',
    BUILD_TIME: 'test',
    PORT: 3001,
-   isProd: false,
-   isDev: true,
 }))
 
 const liAt = 'AQEDARz1x2aBcD3eFgHiJkLmNoPqRsTuVwXyZ0123456789-_abcdefghijklmnopqrstuvwxyz'

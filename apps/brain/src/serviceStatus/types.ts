@@ -10,7 +10,6 @@ export const REASONS = {
    notAnswering: 'Not answering',
    timedOut: 'Timed out',
    error: 'Reports an error',
-   notOnKubernetes: 'Not running on Kubernetes',
    cannotAskKubernetes: 'Could not ask Kubernetes',
    noPodReady: 'No pod is ready',
    switchedOff: 'Switched off',

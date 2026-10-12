@@ -5,7 +5,7 @@ const DEFAULT_TTL_MS = 10_000
 // A little longer than a check's own limit, so a check that is merely slow still gets to say so itself.
 const HARD_LIMIT_MS = CHECK_TIMEOUT_MS + 500
 
-export type ModuleStatus = {
+type ModuleStatus = {
    key: string
    group: string
    name: string

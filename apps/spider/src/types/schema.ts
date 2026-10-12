@@ -48,7 +48,7 @@ export const scrapeRequestSchema = z.strictObject({
 
 const SESSION_KEY = /^sessions\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/
 
-export const isSafeSessionKey = (key: string) => SESSION_KEY.test(key) && !key.split('/').includes('..')
+const isSafeSessionKey = (key: string) => SESSION_KEY.test(key) && !key.split('/').includes('..')
 
 export const scrapeTaskCommandSchema = scrapeRequestSchema
    .extend({

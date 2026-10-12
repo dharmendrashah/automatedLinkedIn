@@ -21,6 +21,4 @@ export const {
    AUTHENTIK_EMAIL__USE_SSL,
    GIT_SHA,
    BUILD_TIME,
-   isProd,
-   isDev,
 } = Environment.config()

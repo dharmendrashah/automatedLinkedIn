@@ -20,7 +20,6 @@ export {
 } from './proxyServer.service'
 export { retryRefusal } from './sessionRetry'
 export {
-   SESSION_FILE_PATTERN,
    SpiderRecordingUnavailableError,
    SpiderSessionNotFoundError,
    SpiderSessionService,

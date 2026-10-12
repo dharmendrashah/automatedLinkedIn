@@ -33,7 +33,7 @@ export class SpiderRecordingUnavailableError extends Error {
    }
 }
 
-export type SessionProxy = {
+type SessionProxy = {
    id: string
    protocol: ProxyProtocol
    host: string
@@ -50,7 +50,7 @@ type StartInput = {
    retryOfId?: string
 }
 
-export type SessionRequestParams = {
+type SessionRequestParams = {
    action: 'VALIDATE_ACCOUNT'
    email: string
    proxy: string

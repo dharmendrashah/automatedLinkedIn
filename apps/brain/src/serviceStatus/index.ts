@@ -1,1 +1,1 @@
-export { StatusService, type StatusSnapshot } from './statusService'
+export { StatusService } from './statusService'
