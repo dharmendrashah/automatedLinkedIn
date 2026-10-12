@@ -167,7 +167,7 @@ in every environment that uses this project's GCP account.
 ## Session recordings (not done yet)
 
 The Sessions page (`/sessions`, `.plan/spider-session-recording.md`) plays each run's video, steps, requests and logs
-straight from the bucket. The worker writes them under `recordings/` (it already has `objectAdmin`, so it needs
+straight from the bucket. The worker writes them under `runs/<task>/<user>/<yyyy>/<mm>/<dd>/<task_id>/` (older sessions used `recordings/`; it already has `objectAdmin`, so it needs
 nothing new). The bucket stays private: **brain** hands the browser a signed link that works for ten minutes. These
 are the commands for that, not run as part of this change.
 
@@ -183,11 +183,11 @@ gcloud services enable iamcredentials.googleapis.com
 gcloud iam service-accounts create "$SIGNER_NAME" \
   --display-name="brain: links to session recordings"
 
-# Read access to recordings/ only, not to sessions/ (which holds login cookies) or results/.
+# Read access to runs/ and recordings/ only, not to sessions/ (which holds login cookies) or results/.
 gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" \
   --member="serviceAccount:$SIGNER_EMAIL" \
   --role="roles/storage.objectViewer" \
-  --condition="title=recordings-only,expression=resource.name.startsWith('projects/_/buckets/$BUCKET/objects/recordings/')"
+  --condition="title=runs-and-recordings-only,expression=resource.name.startsWith('projects/_/buckets/$BUCKET/objects/runs/') || resource.name.startsWith('projects/_/buckets/$BUCKET/objects/recordings/')"
 
 # A signed link is signed by this account through the IAM Credentials API, so it must be allowed to sign for itself.
 gcloud iam service-accounts add-iam-policy-binding "$SIGNER_EMAIL" \
@@ -213,11 +213,11 @@ gcloud storage buckets update "gs://$BUCKET" --cors-file=/tmp/cors.json
 ```
 
 Recordings show what the browser showed, so they are deleted after seven days. This matches
-`SESSION_RECORDING_RETENTION_DAYS` in brain, and it only touches `recordings/`:
+`SESSION_RECORDING_RETENTION_DAYS` in brain, and it only touches `runs/` and the older `recordings/`:
 
 ```sh
 cat > /tmp/lifecycle.json <<EOF
-{"rule": [{"action": {"type": "Delete"}, "condition": {"age": 7, "matchesPrefix": ["recordings/"]}}]}
+{"rule": [{"action": {"type": "Delete"}, "condition": {"age": 7, "matchesPrefix": ["runs/", "recordings/"]}}]}
 EOF
 gcloud storage buckets update "gs://$BUCKET" --lifecycle-file=/tmp/lifecycle.json
 ```

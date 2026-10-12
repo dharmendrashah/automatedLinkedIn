@@ -277,7 +277,7 @@ Old rows (`VALIDATE_ACCOUNT`) are not touched and keep their own display until a
 - [ ] T6 Account validation: move `validation/` to `tasks/linkedinLogin` (verdict codes `VALID`, `INVALID_CREDENTIALS`,
   `SECURITY_CHECK`, `NEEDS_REAUTH`, `ERROR`), the `linkedin-login` hooks in brain, replace the `/accounts` verify, add-account
   and retry flows' calls, remove `AccountValidationQueue`, the old contract, and the legacy-only code paths.
-- [ ] T7 Env and docs (`deploy/gcp-setup.md` lifecycle prefix `runs/`), definition of done, real runs in the worker image
+- [ ] T7 (partly done: docs, definition of done, a real browser-detection run; the linkedin-login run and the final Outcome wait for T6) Env and docs (`deploy/gcp-setup.md` lifecycle prefix `runs/`), definition of done, real runs in the worker image
   (browser detection against the real pages; linkedin-login against the local stand-in site, as the existing e2e does),
   `MEMORY.md`, outcome.
 
