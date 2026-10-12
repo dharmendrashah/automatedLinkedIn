@@ -201,7 +201,8 @@ gcloud iam service-accounts add-iam-policy-binding "$SIGNER_EMAIL" \
   --member="serviceAccount:$PROJECT_ID.svc.id.goog[automatedlinkedin/brain]"
 ```
 
-The browser fetches the JSON files (`timeline.json`, `network.json`, `logs.json`) with `fetch`, so the bucket needs CORS
+The browser fetches the JSON files (`timeline.json`, `network.json`, `logs.json`, and `detection.json` of a browser test) with
+`fetch`, so the bucket needs CORS
 for the app's address. The video and screenshots load as plain `<video>` and `<img>` and need nothing:
 
 ```sh
@@ -238,3 +239,19 @@ gcloud auth application-default login --impersonate-service-account="$SIGNER_EMA
 | `Permission 'iam.serviceAccounts.signBlob' denied` | The service account is missing `roles/iam.serviceAccountTokenCreator` on itself. |
 | The video plays but the steps, network and logs tabs say the file could not be loaded | The bucket has no CORS rule for the app's address. |
 | The Video tab says the recording is not set up | `SPIDER_GCS_BUCKET` is empty in brain. |
+
+## Browser tests (staging prerequisites, not applied)
+
+A proxy's browser test (`.plan/spider-browser-test.md`) opens two public bot detection pages through the proxy and records
+it. Two things only an operator can do before staging shows its results:
+
+1. Everything in [Session recordings](#session-recordings-not-done-yet) above: the signing service account, the bucket
+   CORS rule (it covers `detection.json`) and the seven day lifecycle rule. Without them the Sessions page cannot open
+   the recording.
+2. Allow the two hosts in the worker's `SPIDER_ALLOWED_HOSTS`: add `deviceandbrowserinfo.com` and `pixelscan.net` to the
+   value in the `STAGING_CONFIG_ENV` secret (see `deploy/overlays/staging/config.example.env`), then let the next staging
+   deploy roll the worker. Until then a browser test ends with "Could not tell" and the note "The address is not on the
+   spider allowlist.".
+
+The test runs headless on staging (`SPIDER_HEADLESS=true`), which some detectors treat differently from a real display. The
+report does not record the display mode, so compare with a local run before drawing conclusions from one result.
