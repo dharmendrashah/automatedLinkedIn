@@ -14,16 +14,10 @@ import { cn } from '@/lib/utils'
 
 import { type Proxy } from './types'
 
-import { describeLatency } from './latency'
+import { describeLatency, speedClass } from './latency'
 import { ProxyStatusBadge } from './proxy-status-badge'
 
 const formatDate = (value: string | Date | null) => (value ? new Date(value).toLocaleString() : 'Never')
-
-const speedClass = {
-   fast: 'text-emerald-700 dark:text-emerald-400',
-   ok: 'text-amber-700 dark:text-amber-400',
-   slow: 'text-destructive',
-}
 
 const LatencyCell = ({ latencyMs }: { latencyMs: number | null }) => {
    const latency = describeLatency(latencyMs)

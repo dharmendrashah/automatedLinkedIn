@@ -59,7 +59,12 @@ export const Proxies = () => {
             onDelete={setToDelete}
          />
 
-         <TestHistoryDrawer proxy={toInspect} onClose={() => setToInspect(null)} />
+         <TestHistoryDrawer
+            proxy={toInspect}
+            testing={test.isPending && test.variables?.id === toInspect?.id}
+            onTest={proxy => test.mutate({ id: proxy.id })}
+            onClose={() => setToInspect(null)}
+         />
          <EditProxyDialog proxy={toEdit} onClose={() => setToEdit(null)} />
          <DeleteProxyDialog
             proxy={toDelete}
