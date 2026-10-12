@@ -1,8 +1,11 @@
 FROM node:25-alpine AS build
 RUN npm install -g pnpm@12.10.1
 WORKDIR /repo
+# Packages download in their own layer, which only changes with the lockfile; a source change reuses it.
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm fetch
 COPY . .
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --offline
 ARG VITE_API_URL
 ARG VITE_AUTHENTIK_URL
 ARG VITE_AUTHENTIK_CLIENT_ID
