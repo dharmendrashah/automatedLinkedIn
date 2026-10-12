@@ -179,7 +179,9 @@ gh secret set STAGING_SECRETS_ENV < deploy/overlays/staging/secrets.env
 ```
 
 The job pins the **immutable `sha-<commit>` tag** rather than the mutable `staging` tag, so each
-deploy actually changes the Deployment and a rollback points at a known build.
+deploy actually changes the Deployment and a rollback points at a known build. This covers all five
+images. With the mutable tag and `imagePullPolicy: IfNotPresent`, a pod keeps whatever `staging` build
+the node cached first, so it would never pick up a newer image.
 
 `config.env` is not secret in itself, but it is stored as a secret so one upload keeps the whole
 environment definition together. Re-run `gh secret set` whenever you change a host.
