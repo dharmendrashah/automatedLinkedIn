@@ -25,7 +25,7 @@ images:
   - name: automatedlinkedin-body
     newName: ghcr.io/dharmendrashah/automatedlinkedin-body
     newTag: staging
-  # Unused until the spider component above is included; harmless to leave declared.
+  # Pinned to the commit tag by the deploy job like the others; `staging` is only the fallback for a local render.
   - name: automatedlinkedin-spider
     newName: ghcr.io/dharmendrashah/automatedlinkedin-spider
     newTag: staging
