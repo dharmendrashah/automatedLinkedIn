@@ -14,6 +14,8 @@ import { cn } from '@/lib/utils'
 
 import { type Proxy } from './types'
 
+import { TestButton } from '../test-button'
+import { browserTestBlocker } from './browser-test'
 import { describeLatency, speedClass } from './latency'
 import { ProxyStatusBadge } from './proxy-status-badge'
 
@@ -36,11 +38,13 @@ type Props = {
    loading: boolean
    error: string | undefined
    busyId: string | undefined
+   // The id of the proxy a browser test was just asked for.
+   testingId: string | undefined
    onEdit: (proxy: Proxy) => void
    onTest: (proxy: Proxy) => void
-   // The tasks the worker announced that work through a proxy and need nothing else.
-   tasks: Array<{ task: string; title: string }>
-   onRunTask: (proxy: Proxy, task: string) => void
+   // Whether the worker announced the browser test.
+   browserTestAnnounced: boolean
+   onBrowserTest: (proxy: Proxy) => void
    onHistory: (proxy: Proxy) => void
    onDelete: (proxy: Proxy) => void
 }
@@ -50,10 +54,11 @@ export const ProxiesTable = ({
    loading,
    error,
    busyId,
+   testingId,
    onEdit,
    onTest,
-   tasks,
-   onRunTask,
+   browserTestAnnounced,
+   onBrowserTest,
    onHistory,
    onDelete,
 }: Props) => (
@@ -67,7 +72,7 @@ export const ProxiesTable = ({
                <TableHead>Detected country</TableHead>
                <TableHead>Latency</TableHead>
                <TableHead>Last tested</TableHead>
-               <TableHead className="w-12" />
+               <TableHead className="w-48" />
             </TableRow>
          </TableHeader>
          <TableBody>
@@ -108,43 +113,45 @@ export const ProxiesTable = ({
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(proxy.lastTestedAt)}</TableCell>
                   <TableCell>
-                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                           <Button variant="ghost" size="icon" aria-label={`Actions for ${proxy.host}:${proxy.port}`}>
-                              {busyId === proxy.id ? <Loader2 className="animate-spin" /> : <MoreHorizontal />}
-                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                           <DropdownMenuItem onSelect={() => onTest(proxy)}>
-                              <RefreshCw />
-                              Test now
-                           </DropdownMenuItem>
-                           {/* A task needs a proxy that works: the spider never goes out from this server. */}
-                           {tasks.map(task => (
-                              <DropdownMenuItem
-                                 key={task.task}
-                                 disabled={proxy.status !== 'ACTIVE' && proxy.status !== 'GEO_MISMATCH'}
-                                 onSelect={() => onRunTask(proxy, task.task)}
+                     <div className="flex items-center justify-end gap-1">
+                        <TestButton
+                           label="Browser test"
+                           icon={<ScanSearch />}
+                           blocker={browserTestBlocker(proxy.status, browserTestAnnounced)}
+                           busy={testingId === proxy.id}
+                           onClick={() => onBrowserTest(proxy)}
+                        />
+                        <DropdownMenu>
+                           <DropdownMenuTrigger asChild>
+                              <Button
+                                 variant="ghost"
+                                 size="icon"
+                                 aria-label={`Actions for ${proxy.host}:${proxy.port}`}
                               >
-                                 <ScanSearch />
-                                 {task.title}
+                                 {busyId === proxy.id ? <Loader2 className="animate-spin" /> : <MoreHorizontal />}
+                              </Button>
+                           </DropdownMenuTrigger>
+                           <DropdownMenuContent align="end">
+                              <DropdownMenuItem onSelect={() => onTest(proxy)}>
+                                 <RefreshCw />
+                                 Test now
                               </DropdownMenuItem>
-                           ))}
-                           <DropdownMenuItem onSelect={() => onHistory(proxy)}>
-                              <History />
-                              Test history
-                           </DropdownMenuItem>
-                           <DropdownMenuItem onSelect={() => onEdit(proxy)}>
-                              <Pencil />
-                              Edit
-                           </DropdownMenuItem>
-                           <DropdownMenuSeparator />
-                           <DropdownMenuItem variant="destructive" onSelect={() => onDelete(proxy)}>
-                              <Trash2 />
-                              Remove
-                           </DropdownMenuItem>
-                        </DropdownMenuContent>
-                     </DropdownMenu>
+                              <DropdownMenuItem onSelect={() => onHistory(proxy)}>
+                                 <History />
+                                 Test history
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => onEdit(proxy)}>
+                                 <Pencil />
+                                 Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem variant="destructive" onSelect={() => onDelete(proxy)}>
+                                 <Trash2 />
+                                 Remove
+                              </DropdownMenuItem>
+                           </DropdownMenuContent>
+                        </DropdownMenu>
+                     </div>
                   </TableCell>
                </TableRow>
             ))}

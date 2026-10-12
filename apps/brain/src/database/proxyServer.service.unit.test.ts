@@ -399,7 +399,7 @@ describe('ProxyServerService', () => {
          await expect(ProxyServerService.pickForAccount('acc1')).resolves.toBeNull()
       })
 
-      it('should prefer the primary proxy, then the most recently tested one', async () => {
+      it('should prefer the most reliable proxy: healthy before a country mismatch, the primary, the fastest, the latest tested', async () => {
          mocks.findFirstProxy.mockResolvedValue(storedRow)
 
          await ProxyServerService.pickForAccount('acc1')
@@ -409,7 +409,17 @@ describe('ProxyServerService', () => {
                linkedInAccountId: 'acc1',
                status: { in: ['ACTIVE', 'GEO_MISMATCH'] },
             },
-            orderBy: [{ isPrimary: 'desc' }, { lastTestedAt: 'desc' }],
+            orderBy: [
+               { status: 'asc' },
+               { isPrimary: 'desc' },
+               {
+                  latencyMs: {
+                     sort: 'asc',
+                     nulls: 'last',
+                  },
+               },
+               { lastTestedAt: 'desc' },
+            ],
          })
       })
 

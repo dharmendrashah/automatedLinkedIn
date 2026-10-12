@@ -9,10 +9,12 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Eye, KeyRound, Loader2, MoreHorizontal, Pause, Pencil, Play, Trash2 } from 'lucide-react'
+import { Eye, KeyRound, Loader2, MoreHorizontal, Pause, Pencil, Play, ScanSearch, Trash2 } from 'lucide-react'
 
 import { type Account } from './types'
 
+import { TestButton } from '../test-button'
+import { loginTestBlocker } from './login-test'
 import { StatusBadge } from './status-badge'
 
 const formatDate = (value: string | Date | null) => (value ? new Date(value).toLocaleDateString() : '—')
@@ -22,7 +24,12 @@ type Props = {
    loading: boolean
    error: string | undefined
    busyId: string | undefined
+   // The id of the account a login test was just asked for.
+   testingId: string | undefined
+   // The accounts that have a proxy that works; undefined while the proxies are loading.
+   accountsWithProxy: Set<string> | undefined
    onEdit: (account: Account) => void
+   onTestLogin: (account: Account) => void
    onReveal: (account: Account) => void
    onTogglePause: (account: Account) => void
    onDelete: (account: Account) => void
@@ -33,7 +40,10 @@ export const AccountsTable = ({
    loading,
    error,
    busyId,
+   testingId,
+   accountsWithProxy,
    onEdit,
+   onTestLogin,
    onReveal,
    onTogglePause,
    onDelete,
@@ -47,7 +57,7 @@ export const AccountsTable = ({
                <TableHead>Credentials</TableHead>
                <TableHead>Last verified</TableHead>
                <TableHead>Added</TableHead>
-               <TableHead className="w-12" />
+               <TableHead className="w-44" />
             </TableRow>
          </TableHeader>
          <TableBody>
@@ -89,32 +99,41 @@ export const AccountsTable = ({
                   <TableCell className="text-muted-foreground">{formatDate(account.lastVerifiedAt)}</TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(account.createdAt)}</TableCell>
                   <TableCell>
-                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                           <Button variant="ghost" size="icon" aria-label={`Actions for ${account.email}`}>
-                              {busyId === account.id ? <Loader2 className="animate-spin" /> : <MoreHorizontal />}
-                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                           <DropdownMenuItem onSelect={() => onEdit(account)}>
-                              <Pencil />
-                              Edit credentials
-                           </DropdownMenuItem>
-                           <DropdownMenuItem onSelect={() => onReveal(account)}>
-                              <Eye />
-                              Reveal credentials
-                           </DropdownMenuItem>
-                           <DropdownMenuItem onSelect={() => onTogglePause(account)}>
-                              {account.status === 'DISABLED' ? <Play /> : <Pause />}
-                              {account.status === 'DISABLED' ? 'Resume' : 'Pause'}
-                           </DropdownMenuItem>
-                           <DropdownMenuSeparator />
-                           <DropdownMenuItem variant="destructive" onSelect={() => onDelete(account)}>
-                              <Trash2 />
-                              Remove
-                           </DropdownMenuItem>
-                        </DropdownMenuContent>
-                     </DropdownMenu>
+                     <div className="flex items-center justify-end gap-1">
+                        <TestButton
+                           label="Test login"
+                           icon={<ScanSearch />}
+                           blocker={loginTestBlocker(account.status, accountsWithProxy?.has(account.id))}
+                           busy={testingId === account.id}
+                           onClick={() => onTestLogin(account)}
+                        />
+                        <DropdownMenu>
+                           <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" aria-label={`Actions for ${account.email}`}>
+                                 {busyId === account.id ? <Loader2 className="animate-spin" /> : <MoreHorizontal />}
+                              </Button>
+                           </DropdownMenuTrigger>
+                           <DropdownMenuContent align="end">
+                              <DropdownMenuItem onSelect={() => onEdit(account)}>
+                                 <Pencil />
+                                 Edit credentials
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => onReveal(account)}>
+                                 <Eye />
+                                 Reveal credentials
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => onTogglePause(account)}>
+                                 {account.status === 'DISABLED' ? <Play /> : <Pause />}
+                                 {account.status === 'DISABLED' ? 'Resume' : 'Pause'}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem variant="destructive" onSelect={() => onDelete(account)}>
+                                 <Trash2 />
+                                 Remove
+                              </DropdownMenuItem>
+                           </DropdownMenuContent>
+                        </DropdownMenu>
+                     </div>
                   </TableCell>
                </TableRow>
             ))}
