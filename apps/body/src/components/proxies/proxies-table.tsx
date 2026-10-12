@@ -10,11 +10,32 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Loader2, MoreHorizontal, Network, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 
+import { cn } from '@/lib/utils'
+
 import { type Proxy } from './types'
 
+import { describeLatency } from './latency'
 import { ProxyStatusBadge } from './proxy-status-badge'
 
 const formatDate = (value: string | Date | null) => (value ? new Date(value).toLocaleString() : 'Never')
+
+const speedClass = {
+   fast: 'text-emerald-700 dark:text-emerald-400',
+   ok: 'text-amber-700 dark:text-amber-400',
+   slow: 'text-destructive',
+}
+
+const LatencyCell = ({ latencyMs }: { latencyMs: number | null }) => {
+   const latency = describeLatency(latencyMs)
+
+   if (!latency) return <span className="text-muted-foreground">—</span>
+
+   return (
+      <span className={cn('font-medium', speedClass[latency.speed])} title={`${latency.speed} (last test)`}>
+         {latency.text}
+      </span>
+   )
+}
 
 type Props = {
    proxies: Proxy[] | undefined
@@ -35,6 +56,7 @@ export const ProxiesTable = ({ proxies, loading, error, busyId, onEdit, onTest, 
                <TableHead>LinkedIn account</TableHead>
                <TableHead>Status</TableHead>
                <TableHead>Detected country</TableHead>
+               <TableHead>Latency</TableHead>
                <TableHead>Last tested</TableHead>
                <TableHead className="w-12" />
             </TableRow>
@@ -42,21 +64,21 @@ export const ProxiesTable = ({ proxies, loading, error, busyId, onEdit, onTest, 
          <TableBody>
             {loading ? (
                <TableRow>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={7}>
                      <Skeleton className="h-8 w-full" />
                   </TableCell>
                </TableRow>
             ) : null}
             {error ? (
                <TableRow>
-                  <TableCell colSpan={6} className="text-destructive h-24 text-center text-sm">
+                  <TableCell colSpan={7} className="text-destructive h-24 text-center text-sm">
                      {error}
                   </TableCell>
                </TableRow>
             ) : null}
             {proxies?.length === 0 ? (
                <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground h-24 text-center text-sm">
+                  <TableCell colSpan={7} className="text-muted-foreground h-24 text-center text-sm">
                      <Network className="mx-auto mb-2 size-5" />
                      No proxies yet. Use Add a proxy to attach one to a LinkedIn account.
                   </TableCell>
@@ -72,6 +94,9 @@ export const ProxiesTable = ({ proxies, loading, error, busyId, onEdit, onTest, 
                      <ProxyStatusBadge status={proxy.status} message={proxy.statusMessage} />
                   </TableCell>
                   <TableCell className="text-muted-foreground">{proxy.detectedCountry ?? '—'}</TableCell>
+                  <TableCell>
+                     <LatencyCell latencyMs={proxy.latencyMs} />
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(proxy.lastTestedAt)}</TableCell>
                   <TableCell>
                      <DropdownMenu>

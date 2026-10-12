@@ -32,6 +32,7 @@ const metadataSelect = {
    status: true,
    statusMessage: true,
    lastTestedAt: true,
+   latencyMs: true,
    detectedCountryCode: true,
    detectedCountry: true,
    detectedIp: true,
@@ -97,7 +98,14 @@ export const toProxyConfig = (input: ProxyServerInput) => ({
 })
 
 type TestOutcome =
-   | { status: 'ACTIVE' | 'GEO_MISMATCH'; statusMessage: string; countryCode: string; country: string; ip: string }
+   | {
+        status: 'ACTIVE' | 'GEO_MISMATCH'
+        statusMessage: string
+        countryCode: string
+        country: string
+        ip: string
+        latencyMs: number
+     }
    | { status: 'UNREACHABLE'; statusMessage: string }
 
 // Tests a candidate proxy by routing one request through it to ipinfo.io. `otherCountryCodes` are the
@@ -115,6 +123,7 @@ const test = async (input: ProxyServerInput, otherCountryCodes: string[]): Promi
          countryCode: result.countryCode,
          country: result.country,
          ip: result.ip,
+         latencyMs: result.latencyMs,
       }
    } catch (error) {
       const message = error instanceof IpInfoError ? error.message : 'could not reach the proxy'
@@ -182,6 +191,7 @@ export class ProxyServerService {
                     detectedCountryCode: outcome.countryCode,
                     detectedCountry: outcome.country,
                     detectedIp: outcome.ip,
+                    latencyMs: outcome.latencyMs,
                  }
                : {}),
             // The account's first healthy proxy becomes primary automatically; later ones are added as backups.
@@ -251,11 +261,13 @@ export class ProxyServerService {
                     detectedCountryCode: outcome.countryCode,
                     detectedCountry: outcome.country,
                     detectedIp: outcome.ip,
+                    latencyMs: outcome.latencyMs,
                  }
                : {
                     detectedCountryCode: null,
                     detectedCountry: null,
                     detectedIp: null,
+                    latencyMs: null,
                  }),
          },
          select: metadataSelect,

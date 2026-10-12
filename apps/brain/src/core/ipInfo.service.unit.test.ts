@@ -119,7 +119,33 @@ describe('IpInfoService', () => {
          ip: '34.47.216.69',
          countryCode: 'US',
          country: 'United States',
+         latencyMs: expect.any(Number),
       })
+   })
+
+   it('should report how long the answer took, in whole milliseconds', async () => {
+      target = await startTarget((_req, res) => {
+         setTimeout(() => {
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(
+               JSON.stringify({
+                  ip: '34.47.216.69',
+                  country_code: 'US',
+                  country: 'United States',
+               })
+            )
+         }, 150)
+      })
+      proxy = await startProxy()
+
+      const { latencyMs } = await IpInfoService.lookupThroughProxy(
+         `http://127.0.0.1:${proxy.port}`,
+         `http://127.0.0.1:${target.port}/lite/me`
+      )
+
+      expect(Number.isInteger(latencyMs)).toBe(true)
+      expect(latencyMs).toBeGreaterThanOrEqual(140)
+      expect(latencyMs).toBeLessThan(5000)
    })
 
    it('should send the token as a bearer header', async () => {

@@ -195,6 +195,35 @@ describe('ProxyServerService', () => {
          expect(data.detectedCountryCode).toBeUndefined()
       })
 
+      it('should store how long the test took, when the proxy works', async () => {
+         mocks.findFirstAccount.mockResolvedValue({ id: 'acc1' })
+         mocks.findManyProxy.mockResolvedValue([])
+         mocks.countProxy.mockResolvedValue(0)
+         mocks.lookupThroughProxy.mockResolvedValue({
+            ip: '203.0.113.9',
+            countryCode: 'CA',
+            country: 'Canada',
+            latencyMs: 342,
+         })
+         mocks.createProxy.mockResolvedValue(storedRow)
+
+         await ProxyServerService.create('u1', input)
+
+         expect(mocks.createProxy.mock.calls[0][0].data.latencyMs).toBe(342)
+      })
+
+      it('should store no latency for a proxy that cannot be reached', async () => {
+         mocks.findFirstAccount.mockResolvedValue({ id: 'acc1' })
+         mocks.findManyProxy.mockResolvedValue([])
+         mocks.countProxy.mockResolvedValue(0)
+         mocks.lookupThroughProxy.mockRejectedValue(new mocks.IpInfoError('timed out'))
+         mocks.createProxy.mockResolvedValue(storedRow)
+
+         await ProxyServerService.create('u1', input)
+
+         expect(mocks.createProxy.mock.calls[0][0].data.latencyMs).toBeUndefined()
+      })
+
       it('should never store the proxy password in plaintext', async () => {
          mocks.findFirstAccount.mockResolvedValue({ id: 'acc1' })
          mocks.findManyProxy.mockResolvedValue([])
@@ -238,6 +267,39 @@ describe('ProxyServerService', () => {
          await ProxyServerService.update('u1', 'p1', { password: null })
 
          expect(mocks.seal).toHaveBeenCalledWith(JSON.stringify({ username: 'alice' }))
+      })
+
+      it('should replace the stored latency with the new measurement on a re-test', async () => {
+         mocks.findFirstProxy.mockResolvedValue({
+            ...storedRow,
+            latencyMs: 900,
+         })
+         mocks.findManyProxy.mockResolvedValue([])
+         mocks.lookupThroughProxy.mockResolvedValue({
+            ip: '203.0.113.9',
+            countryCode: 'CA',
+            country: 'Canada',
+            latencyMs: 210,
+         })
+         mocks.updateProxy.mockResolvedValue(storedRow)
+
+         await ProxyServerService.update('u1', 'p1', {})
+
+         expect(mocks.updateProxy.mock.calls[0][0].data.latencyMs).toBe(210)
+      })
+
+      it('should clear the stored latency when the proxy can no longer be reached', async () => {
+         mocks.findFirstProxy.mockResolvedValue({
+            ...storedRow,
+            latencyMs: 900,
+         })
+         mocks.findManyProxy.mockResolvedValue([])
+         mocks.lookupThroughProxy.mockRejectedValue(new mocks.IpInfoError('timed out'))
+         mocks.updateProxy.mockResolvedValue(storedRow)
+
+         await ProxyServerService.update('u1', 'p1', {})
+
+         expect(mocks.updateProxy.mock.calls[0][0].data.latencyMs).toBeNull()
       })
 
       it("should compare against the account's other proxies, not itself", async () => {

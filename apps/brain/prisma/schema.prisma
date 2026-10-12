@@ -105,6 +105,8 @@ model ProxyServer {
   // Short, non-secret reason for the current status.
   statusMessage     String?
   lastTestedAt      DateTime?
+  // How long the last successful test took, in milliseconds; null when the proxy could not be reached.
+  latencyMs         Int?
   detectedCountryCode String?
   detectedCountry     String?
   detectedIp          String?

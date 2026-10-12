@@ -13,6 +13,8 @@ export interface ProxyLookupResult {
    ip: string
    countryCode: string
    country: string
+   // From sending the request to the full answer, through the proxy: its connection, the secure handshake and ipinfo.io.
+   latencyMs: number
 }
 
 // Looks up the apparent public IP and country by routing the request through the given proxy, so the
@@ -27,6 +29,7 @@ export class IpInfoService {
       const client = selfLookupUrl.startsWith('https:') ? https : http
 
       return new Promise((resolve, reject) => {
+         const startedAt = performance.now()
          const options: https.RequestOptions = {
             agent,
             timeout: TIMEOUT_MS,
@@ -57,6 +60,7 @@ export class IpInfoService {
                      ip: body.ip,
                      countryCode: body.country_code,
                      country: body.country,
+                     latencyMs: Math.round(performance.now() - startedAt),
                   })
                } catch {
                   reject(new IpInfoError('ipinfo.io returned an unexpected response'))
