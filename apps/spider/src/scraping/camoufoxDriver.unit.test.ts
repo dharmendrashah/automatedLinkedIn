@@ -85,6 +85,20 @@ describe('CamoufoxDriver', () => {
       expect(mocks.camoufox).toHaveBeenCalledWith(expect.objectContaining({ headless: 'virtual' }))
    })
 
+   it('should let Camoufox pick a fingerprint for Windows, macOS or Linux on a screen of at most 1920 by 1080', async () => {
+      await driver.open()
+
+      expect(mocks.camoufox).toHaveBeenCalledWith(
+         expect.objectContaining({
+            os: ['windows', 'macos', 'linux'],
+            screen: {
+               maxWidth: 1920,
+               maxHeight: 1080,
+            },
+         })
+      )
+   })
+
    it('should start the browser through the proxy and never fall back to a direct connection', async () => {
       mocks.camoufox.mockRejectedValueOnce(new Error('boom'))
 

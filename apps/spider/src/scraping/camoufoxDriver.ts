@@ -21,6 +21,13 @@ export type CamoufoxOptions = {
 // A page that is stuck should not hold up the screenshot of the step that failed.
 const SNAPSHOT_TIMEOUT_MS = 5000
 
+// Camoufox generates a BrowserForge fingerprint inside these limits, always for the Firefox version it ships.
+const FINGERPRINT_OS = ['windows', 'macos', 'linux']
+const FINGERPRINT_SCREEN = {
+   maxWidth: 1920,
+   maxHeight: 1080,
+}
+
 class CamoufoxSession implements LoginSession {
    public constructor(
       private readonly browser: Browser,
@@ -185,6 +192,8 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver {
          return await Camoufox({
             headless: this.options.headless ?? true,
             humanize: true,
+            os: FINGERPRINT_OS,
+            screen: FINGERPRINT_SCREEN,
             ...(proxy && {
                proxy,
                geoip: true,
