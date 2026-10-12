@@ -29,7 +29,7 @@ Plans are committed with the work; they are the record of locked product decisio
 - `apps/body`: React + Vite 8 frontend. Linted with `oxlint` (not ESLint).
 - `packages/config`: shared `HttpService` URLs, built with `tsup` to `dist/` (CJS).
 - `packages/ui`: shared React components.
-- `packages/eslint-config`: shared flat ESLint config (`eslint.js`, `react.js`).
+- `packages/eslint-config`: shared flat ESLint config (`eslint.js`).
 - `packages/tsconfig`: `base.json`, `node.json`, `react.json`.
 
 ## Commands (run from the repo root)

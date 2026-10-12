@@ -69,8 +69,6 @@ vi.mock('env', () => ({
    GIT_SHA: 'test',
    BUILD_TIME: 'test',
    PORT: 3001,
-   isProd: false,
-   isDev: true,
 }))
 
 const user = {

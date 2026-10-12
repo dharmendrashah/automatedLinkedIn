@@ -18,6 +18,7 @@ export const {
    SPIDER_VALIDATION_MODE,
    SPIDER_RECORDING,
    SPIDER_RECORD_VIDEO,
+   SPIDER_WORKER_HEALTH_PORT,
    GIT_SHA,
    BUILD_TIME,
 } = Environment.config()

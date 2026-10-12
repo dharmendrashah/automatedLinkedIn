@@ -4,6 +4,12 @@ metadata:
   name: authentik-worker
   labels:
     app.kubernetes.io/name: authentik-worker
+  # How this workload appears on the Service status page. It has no web address, so the page reads Kubernetes' own
+  # verdict (a ready pod, which the probe below decides). A new service needs nothing but annotations like these.
+  annotations:
+    status.automatedlinkedin/title: Sign-in worker
+    status.automatedlinkedin/group: Sign-in
+    status.automatedlinkedin/description: Background work for sign-in
 spec:
   replicas: 1
   selector:

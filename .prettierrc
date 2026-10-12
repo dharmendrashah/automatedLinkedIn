@@ -23,6 +23,8 @@
 
       "^database(.*)",
 
+      "^serviceStatus(.*)",
+
       "^generated(.*)",
 
       "^@automatedLinkedIn(.*)",

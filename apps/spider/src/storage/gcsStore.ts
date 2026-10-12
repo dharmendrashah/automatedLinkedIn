@@ -31,6 +31,15 @@ export class GcsStore implements ObjectStore {
       })
    }
 
+   // A read that needs nothing but the permission the worker already has, for the health check.
+   public async ping() {
+      await this.bucket.getFiles({
+         prefix: 'sessions/',
+         maxResults: 1,
+         autoPaginate: false,
+      })
+   }
+
    public async get(key: string) {
       try {
          const [data] = await this.bucket.file(key).download()

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { type ObjectStore } from '../storage/store'
 import { maskHeaders, maskText, maskUrl } from './masking'
 
-export type RecordingMode = 'off' | 'failures' | 'always'
+type RecordingMode = 'off' | 'failures' | 'always'
 
 export type LogSource = 'browser' | 'spider' | 'engine'
 

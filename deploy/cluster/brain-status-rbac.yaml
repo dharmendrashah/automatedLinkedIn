@@ -1,0 +1,33 @@
+# Applied once per cluster by someone with cluster admin: the CI deploy account (roles/container.developer) cannot
+# create Roles or RoleBindings, so this is not part of the kustomize build.
+#
+# Read-only, one namespace, two resource types: the Service status page lists the workloads so a new service shows up
+# there without any code. Its title, group and description come from `status.automatedlinkedin/*` annotations on the
+# workload's own manifest (see authentik-worker.deployment.yaml); `status.automatedlinkedin/hide: "true"` leaves one out.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: brain-service-status
+  namespace: automatedlinkedin
+  labels:
+    app.kubernetes.io/name: brain
+rules:
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: brain-service-status
+  namespace: automatedlinkedin
+  labels:
+    app.kubernetes.io/name: brain
+subjects:
+  - kind: ServiceAccount
+    name: brain
+    namespace: automatedlinkedin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: brain-service-status

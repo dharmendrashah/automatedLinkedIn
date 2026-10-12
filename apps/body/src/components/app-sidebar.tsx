@@ -10,7 +10,7 @@ import {
    SidebarMenuButton,
    SidebarMenuItem,
 } from '@/components/ui/sidebar'
-import { Briefcase, ExternalLink, LayoutDashboard, Network, Send, UserCircle, Video } from 'lucide-react'
+import { Activity, Briefcase, ExternalLink, LayoutDashboard, Network, Send, UserCircle, Video } from 'lucide-react'
 import { type ComponentProps } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { Link } from 'react-router'
@@ -23,6 +23,7 @@ const navMain: NavItem[] = [
    { title: 'LinkedIn accounts', to: '/accounts', icon: Briefcase },
    { title: 'Proxies', to: '/proxies', icon: Network },
    { title: 'Sessions', to: '/sessions', icon: Video },
+   { title: 'Service status', to: '/healthstatus', icon: Activity },
    { title: 'Profile', to: '/profile', icon: UserCircle },
 ]
 

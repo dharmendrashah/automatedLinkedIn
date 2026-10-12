@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
    remove: vi.fn(),
    file: vi.fn(),
    upload: vi.fn(),
+   getFiles: vi.fn(),
    bucket: vi.fn(),
 }))
 
@@ -21,6 +22,7 @@ vi.mock('@google-cloud/storage', () => ({
          return {
             file: mocks.file,
             upload: mocks.upload,
+            getFiles: mocks.getFiles,
          }
       }
    },
@@ -66,6 +68,24 @@ describe('GcsStore', () => {
          contentType: 'video/webm',
          resumable: false,
       })
+   })
+
+   it('should check the bucket can be read by listing at most one object', async () => {
+      mocks.getFiles.mockResolvedValue([[]])
+
+      await expect(new GcsStore('my-bucket').ping()).resolves.toBeUndefined()
+
+      expect(mocks.getFiles).toHaveBeenCalledWith({
+         prefix: 'sessions/',
+         maxResults: 1,
+         autoPaginate: false,
+      })
+   })
+
+   it('should let a bucket that cannot be read fail the ping', async () => {
+      mocks.getFiles.mockRejectedValue(new Error('403'))
+
+      await expect(new GcsStore('my-bucket').ping()).rejects.toThrow('403')
    })
 
    it('should read an object as text', async () => {

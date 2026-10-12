@@ -9,7 +9,7 @@ deploy/
   components/spider/    optional: apps/spider's API and Camoufox worker, not included by any overlay yet
   overlays/local/       minikube: plain HTTP, local images, compose database
   overlays/staging/     staging: hosts, image tags, Spot tolerations, TLS
-  cluster/              cluster-scoped prerequisites (cert-manager issuers)
+  cluster/              cluster-scoped prerequisites (cert-manager issuers, brain's read-only status Role)
   local.md              run the whole stack on minikube
   gcp-setup.md          one-time keyless GCP auth setup for CI, and the GCS Workload Identity binding
 ```
@@ -75,6 +75,12 @@ items.
 5. Apply the issuers once per cluster:
    ```sh
    kubectl apply -f deploy/cluster/cluster-issuer.yaml
+   ```
+6. Apply brain's read-only status Role once per cluster, as a cluster admin. The CI deploy account
+   (`roles/container.developer`) cannot create Roles or RoleBindings, so it is not part of the
+   kustomize build; without it the Service status page only shows the explicitly checked modules.
+   ```sh
+   kubectl apply -f deploy/cluster/brain-status-rbac.yaml
    ```
 
 ## Deploy staging

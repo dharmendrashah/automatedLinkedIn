@@ -1,5 +1,5 @@
-export { getRole } from './getRole/getRole'
 export { linkedInAccount } from './linkedInAccount/linkedInAccount'
 export { me } from './me/me'
 export { proxyServer } from './proxyServer/proxyServer'
 export { session } from './session/session'
+export { status } from './status/status'
