@@ -5,27 +5,31 @@ import { describe, expect, it } from 'vitest'
 import { RUNNER_VERDICTS, taskCatalogEntrySchema, taskCatalogSchema } from '@automatedLinkedIn/contracts'
 
 import { catalogEntryOf, catalogOf } from './catalog'
-import { TASKS } from './registry'
+import { buildTasks } from './registry'
+
+const TASKS = buildTasks({
+   linkedin: {
+      validator: {
+         validate: async () => ({
+            outcome: 'ERROR' as const,
+            message: 'x',
+         }),
+      },
+      baseUrl: 'https://www.linkedin.com',
+   },
+})
 
 const folders = readdirSync(__dirname).filter(name => statSync(join(__dirname, name)).isDirectory())
 
 // What every task must satisfy, so a new task cannot drift from the standard.
 describe('the registered tasks', () => {
    it('should register every task folder, and only those', async () => {
-      const exported = await Promise.all(
-         folders.map(async folder => (await import(`./${folder}`)) as Record<string, unknown>)
+      const names = await Promise.all(
+         folders.map(async folder => ((await import(`./${folder}`)) as { TASK_NAME?: string }).TASK_NAME)
       )
 
-      for (const module of exported) {
-         const tasks = Object.values(module).filter(
-            (value): value is (typeof TASKS)[number] =>
-               typeof value === 'object' && value !== null && 'run' in value && 'verdicts' in value
-         )
-
-         expect(tasks.some(task => TASKS.includes(task))).toBe(true)
-      }
-
-      expect(TASKS).toHaveLength(folders.length)
+      expect(names.every(name => typeof name === 'string')).toBe(true)
+      expect([...names].sort()).toEqual(TASKS.map(task => task.name).sort())
    })
 
    it('should have a different name for every task', () => {

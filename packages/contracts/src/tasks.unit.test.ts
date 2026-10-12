@@ -120,6 +120,7 @@ describe('taskCommandSchema', () => {
          ...command,
          task: 'linkedin-login',
          account_id: 'acc-1',
+         account_email: 'ada@work.com',
          credentials: {
             ciphertext: 'Y2lwaGVy',
             iv: 'aXY=',

@@ -6,23 +6,11 @@ import {
    TASK_DONE_KEY,
    type TaskCatalog,
    type TaskResult,
-   VALIDATED_KEY,
-   VALIDATE_KEY,
-   type ValidateAccountResult,
 } from '@automatedLinkedIn/contracts'
 
 import { type ScrapeTaskCommand, type ScrapeTaskResult } from '../types'
 
-import {
-   publishCatalog,
-   publishResult,
-   publishRunResult,
-   publishTask,
-   publishValidationResult,
-   republishRun,
-   republishTask,
-   republishValidation,
-} from './publisher'
+import { publishCatalog, publishResult, publishRunResult, publishTask, republishRun, republishTask } from './publisher'
 import { EXCHANGE, RESULT_KEY, TASK_KEY } from './topology'
 
 const channel = () => ({
@@ -92,51 +80,6 @@ describe('publisher', () => {
          headers: { 'x-retries': 2 },
       })
       expect(fake.waitForConfirms).toHaveBeenCalled()
-   })
-
-   it('should publish a validation result to brain with its own routing key, persistent, keyed by validation id', async () => {
-      const fake = channel()
-      const validation = {
-         validation_id: '0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11',
-         account_id: 'acc1',
-         outcome: 'VALID',
-         message: 'Signed in',
-         checked_at: '2026-10-12T10:00:05.000Z',
-      } as ValidateAccountResult
-
-      await publishValidationResult(fake as never, validation)
-
-      const [[exchange, key, body, options]] = fake.publish.mock.calls
-
-      expect(exchange).toBe(EXCHANGE)
-      expect(key).toBe(VALIDATED_KEY)
-      expect(JSON.parse(body.toString())).toEqual(validation)
-      expect(options).toMatchObject({
-         persistent: true,
-         contentType: 'application/json',
-         messageId: validation.validation_id,
-      })
-      expect(fake.waitForConfirms).toHaveBeenCalled()
-   })
-
-   it('should publish a validation again with the retry counter, on the validation routing key', async () => {
-      const fake = channel()
-      const original = {
-         content: Buffer.from('{"validation_id":"v1"}'),
-         properties: { messageId: 'v1' },
-      }
-
-      await republishValidation(fake as never, original as never, 1)
-
-      const [[exchange, key, body, options]] = fake.publish.mock.calls
-
-      expect(exchange).toBe(EXCHANGE)
-      expect(key).toBe(VALIDATE_KEY)
-      expect(body.toString()).toBe('{"validation_id":"v1"}')
-      expect(options).toMatchObject({
-         messageId: 'v1',
-         headers: { 'x-retries': 1 },
-      })
    })
 
    it('should wait for the broker to confirm before returning', async () => {

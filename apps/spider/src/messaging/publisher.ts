@@ -6,9 +6,6 @@ import {
    TASK_DONE_KEY,
    type TaskCatalog,
    type TaskResult,
-   VALIDATED_KEY,
-   VALIDATE_KEY,
-   type ValidateAccountResult,
 } from '@automatedLinkedIn/contracts'
 
 import { type ScrapeTaskCommand, type ScrapeTaskResult } from '../types'
@@ -45,13 +42,6 @@ export const publishResult = (channel: Publisher, result: ScrapeTaskResult) =>
 // A retry is the same task body published again with a counter, so the original can be acknowledged.
 export const republishTask = (channel: Publisher, message: ConsumeMessage, retries: number) =>
    publish(channel, TASK_KEY, message.content, String(message.properties.messageId), { [RETRIES_HEADER]: retries })
-
-// The answer to brain's "is this LinkedIn login valid".
-export const publishValidationResult = (channel: Publisher, result: ValidateAccountResult) =>
-   publish(channel, VALIDATED_KEY, Buffer.from(JSON.stringify(result)), result.validation_id)
-
-export const republishValidation = (channel: Publisher, message: ConsumeMessage, retries: number) =>
-   publish(channel, VALIDATE_KEY, message.content, String(message.properties.messageId), { [RETRIES_HEADER]: retries })
 
 // The answer to a task of the standard contract (.plan/spider-task-framework.md).
 export const publishRunResult = (channel: Publisher, result: TaskResult) =>

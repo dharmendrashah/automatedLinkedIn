@@ -2,9 +2,9 @@ import { type Server, createServer } from 'node:http'
 import { type AddressInfo } from 'node:net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { CamoufoxDriver } from '../scraping/camoufoxDriver'
-import { HostPolicy } from '../scraping/policy'
-import { HostRateLimiter } from '../scraping/rateLimiter'
+import { CamoufoxDriver } from '../../scraping/camoufoxDriver'
+import { HostPolicy } from '../../scraping/policy'
+import { HostRateLimiter } from '../../scraping/rateLimiter'
 import { AccountValidator } from './accountValidator'
 import { totpCode } from './totp'
 

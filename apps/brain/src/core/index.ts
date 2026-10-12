@@ -1,4 +1,3 @@
-export { AccountValidationQueue } from './accountValidationQueue'
 export { CryptoService } from './crypto.service'
 export { HttpServer } from './httpServer'
 export { extractLiAt } from '@automatedLinkedIn/contracts'

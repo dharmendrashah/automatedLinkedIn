@@ -1,6 +1,6 @@
 # Spider task framework: one fixed contract, tasks defined in the spider folder
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: done <!-- draft | locked | in progress | done -->
 - Created: 2026-10-13
 - Locked by user: yes, 2026-10-13 <!-- change to "yes, <date>" only after the user confirms -->
 
@@ -274,10 +274,10 @@ Old rows (`VALIDATE_ACCOUNT`) are not touched and keep their own display until a
 - [x] T4 Brain: migration, `TaskQueue`, `TaskService`, catalog consumer, result consumer, artifacts, triggers, hooks, `task`
   router, generic `fileUrl`; remove `BrowserTestService`.
 - [x] T5 Body: catalog-driven labels, artifact tabs, generic retry, proxies action; remove the browser-test specific code.
-- [ ] T6 Account validation: move `validation/` to `tasks/linkedinLogin` (verdict codes `VALID`, `INVALID_CREDENTIALS`,
+- [x] T6 Account validation: move `validation/` to `tasks/linkedinLogin` (verdict codes `VALID`, `INVALID_CREDENTIALS`,
   `SECURITY_CHECK`, `NEEDS_REAUTH`, `ERROR`), the `linkedin-login` hooks in brain, replace the `/accounts` verify, add-account
   and retry flows' calls, remove `AccountValidationQueue`, the old contract, and the legacy-only code paths.
-- [ ] T7 (partly done: docs, definition of done, a real browser-detection run; the linkedin-login run and the final Outcome wait for T6) Env and docs (`deploy/gcp-setup.md` lifecycle prefix `runs/`), definition of done, real runs in the worker image
+- [x] T7 Env and docs (`deploy/gcp-setup.md` lifecycle prefix `runs/`), definition of done, real runs in the worker image
   (browser detection against the real pages; linkedin-login against the local stand-in site, as the existing e2e does),
   `MEMORY.md`, outcome.
 
@@ -344,4 +344,20 @@ as a task.
 
 ## Outcome
 
-Filled in when done.
+Shipped on branch `feat/spider-browser-test` (nothing pushed).
+
+- One contract and queue set (`tasks.run`, `tasks.done`, `tasks.catalog`), tasks as folders in `apps/spider/src/tasks`, one
+  runner, files under `runs/<task>/<brain_user_id>/<yyyy>/<mm>/<dd>/<task_id>/`, brain `TaskService` plus `task` router, body
+  catalog-driven tabs. Two tasks: `browser-detection` and `linkedin-login`.
+- Account validation now runs as `linkedin-login`. Brain side effects are in `TASK_HOOKS` (`linkedInLogin.hooks.ts`);
+  `LinkedInAccountValidationService` stays as a thin facade over `TaskService`. The old `accounts.validate` / `accounts.validated`
+  queues, `AccountValidationQueue` and the `validate*` contract schemas are removed.
+- Deviations: artifact kinds also include `timeline`; network is one file; `account_email` was added to the command; a task
+  needs an account for the session row (`linkedInAccountId` is required).
+- Verified: lint, type check, unit tests (body 132, contracts 79, brain 498, spider 402), build, brain integration tests, a real
+  browser-detection run and a real `linkedin-login` run (good and bad password) in the worker image against a stand-in site:
+  VALID with `session.json` (sensitive) and `sessions/<account>/state.json` including local storage; INVALID_CREDENTIALS keeps
+  the old state; no password in any output file.
+- Not verified: live LinkedIn, signed links on the real bucket, a run through a real proxy, the new body views in a browser.
+- Follow-ups: operator-only staging setup (signing service account, CORS, lifecycle on `runs/`, hosts in `SPIDER_ALLOWED_HOSTS`);
+  the two spider pipeline integration tests need the dev brain stopped (it consumes `tasks.done`); new tasks get their own plans.

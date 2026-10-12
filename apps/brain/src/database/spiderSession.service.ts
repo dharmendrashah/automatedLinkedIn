@@ -6,7 +6,6 @@ import {
    type TaskReport,
    type TaskResult,
    type TaskTrigger,
-   type ValidateAccountResult,
    artifactPathUnder,
    runPrefix,
 } from '@automatedLinkedIn/contracts'
@@ -53,15 +52,6 @@ type SessionProxy = {
    host: string
    port: number
    country: string | null
-}
-
-type StartInput = {
-   id: string
-   userId: string
-   linkedInAccountId: string
-   email: string
-   proxy: SessionProxy
-   retryOfId?: string
 }
 
 type StartTaskInput = {
@@ -136,38 +126,6 @@ const present = <T extends { recordingPrefix: string | null; startedAt: Date; st
 
 // One session is one run of the spider for one of the user's accounts. See .plan/spider-session-recording.md.
 export class SpiderSessionService {
-   // Notes that a check was queued. The check is already on its way, so a failure here is logged, never thrown.
-   public static async start({ id, userId, linkedInAccountId, email, proxy, retryOfId }: StartInput) {
-      try {
-         const params: SessionRequestParams = {
-            action: 'VALIDATE_ACCOUNT',
-            email,
-            proxy: `${proxy.protocol.toLowerCase()}://${proxy.host}:${proxy.port}`,
-         }
-
-         await PrismaService.client.spiderSession.create({
-            data: {
-               id,
-               userId,
-               linkedInAccountId,
-               kind: 'VALIDATE_ACCOUNT',
-               proxyServerId: proxy.id,
-               proxyProtocol: proxy.protocol,
-               proxyHost: proxy.host,
-               proxyPort: proxy.port,
-               proxyCountry: proxy.country,
-               requestParams: params,
-               ...(retryOfId && { retryOfId }),
-            },
-         })
-         const cutoff = new Date(Date.now() - ROW_RETENTION_DAYS * DAY_MS)
-
-         await PrismaService.client.spiderSession.deleteMany({ where: { startedAt: { lt: cutoff } } })
-      } catch (error) {
-         console.error(`Could not save the session ${id}: ${(error as Error).message}`)
-      }
-   }
-
    // Notes a task that is about to be queued. Unlike `start` it throws when the row cannot be saved: a run nobody can see
    // the result of must not happen.
    public static async startTask({
@@ -237,36 +195,6 @@ export class SpiderSessionService {
             finishedAt: new Date(),
          },
       })
-   }
-
-   // Records the worker's answer, once. Resolves to whether this answer was the one that ended the session.
-   public static async finish(result: ValidateAccountResult) {
-      const session = await PrismaService.client.spiderSession.findUnique({
-         where: { id: result.validation_id },
-         select: { startedAt: true },
-      })
-
-      if (!session) {
-         return false
-      }
-
-      const finishedAt = new Date(result.checked_at)
-      const { count } = await PrismaService.client.spiderSession.updateMany({
-         where: {
-            id: result.validation_id,
-            status: 'IN_PROGRESS',
-         },
-         data: {
-            status: result.outcome === 'VALID' ? 'SUCCEEDED' : 'FAILED',
-            outcome: result.outcome,
-            message: result.message,
-            finishedAt,
-            durationMs: Math.max(0, finishedAt.getTime() - session.startedAt.getTime()),
-            ...(result.recording_prefix && { recordingPrefix: result.recording_prefix }),
-         },
-      })
-
-      return count > 0
    }
 
    // Records a task's answer once, with the files it names. Only a file under the folder brain computes for this run is kept,

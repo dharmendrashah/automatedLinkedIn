@@ -152,7 +152,7 @@ services:
   # and writes the raw results and each account's session to a Google Cloud Storage bucket. Only the hosts in
   # SPIDER_ALLOWED_HOSTS can be visited, robots.txt is honoured except for SPIDER_ROBOTS_EXEMPT_HOSTS, actions on
   # one host keep a fixed gap (SPIDER_MIN_DELAY_MS) and only one task runs per account at a time. The worker also
-  # checks the LinkedIn logins brain asks it to (accounts.validate) and answers on accounts.validated.
+  # runs the named tasks brain asks it to (tasks.run: browser-detection, linkedin-login) and answers on tasks.done.
   spider-api:
     profiles: ["spider"]
     build:

@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { type TaskCatalogEntry } from '@automatedLinkedIn/contracts'
 
 import { ProxyServerOwnershipError } from './proxyServer.service'
-import { TaskOwnershipError, TaskRefusedError, TaskService, TaskUnavailableError } from './task.service'
+import { TaskService } from './task.service'
+import { TaskNeedsProxyError, TaskOwnershipError, TaskRefusedError, TaskUnavailableError } from './taskErrors'
 import { TASK_HOOKS } from './taskHooks'
 
 const mocks = vi.hoisted(() => ({
@@ -125,6 +126,7 @@ describe('TaskService', () => {
       })
       mocks.findAccount.mockResolvedValue({
          id: 'acc1',
+         email: 'ada@work.com',
          secret: 'Y2lwaGVy',
          secretIv: 'aXY=',
          secretTag: 'dGFn',
@@ -269,7 +271,7 @@ describe('TaskService', () => {
       it('should refuse a proxy that does not work, for a task that needs one', async () => {
          mocks.pickForAccount.mockResolvedValue(null)
 
-         await expect(ask()).rejects.toBeInstanceOf(TaskRefusedError)
+         await expect(ask()).rejects.toBeInstanceOf(TaskNeedsProxyError)
          expect(mocks.publish).not.toHaveBeenCalled()
       })
 
@@ -310,6 +312,7 @@ describe('TaskService', () => {
          expect(mocks.publish).toHaveBeenCalledWith(
             expect.objectContaining({
                account_id: 'acc1',
+               account_email: 'ada@work.com',
                credentials: {
                   ciphertext: 'Y2lwaGVy',
                   iv: 'aXY=',

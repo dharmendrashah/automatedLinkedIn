@@ -1,6 +1,6 @@
 import { type Mock, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { type LoginSession } from '../scraping/driver'
+import { type LoginSession } from '../../scraping/driver'
 import { AccountValidator } from './accountValidator'
 import { totpCode } from './totp'
 

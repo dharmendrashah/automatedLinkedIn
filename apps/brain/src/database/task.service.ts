@@ -17,6 +17,13 @@ import {
 import { PrismaService } from './prisma.service'
 import { ProxyServerOwnershipError, ProxyServerService } from './proxyServer.service'
 import { SpiderSessionService } from './spiderSession.service'
+import {
+   TaskNeedsProxyError,
+   TaskOwnershipError,
+   TaskRefusedError,
+   TaskSkippedError,
+   TaskUnavailableError,
+} from './taskErrors'
 import { TASK_HOOKS } from './taskHooks'
 
 const MINUTE_MS = 60 * 1000
@@ -24,29 +31,9 @@ const MINUTE_MS = 60 * 1000
 // A run that has not been answered after this long is not running any more, so it cannot block the next one.
 const STALE_AFTER_MS = 30 * MINUTE_MS
 
-const NEEDS_WORKING_PROXY = 'Test the proxy first: this task needs a working proxy.'
-
 const NOT_QUEUED_MESSAGE = 'The task could not be queued. Try again in a moment.'
 
 const inputSchema = z.record(z.string(), z.unknown())
-
-// A request that is refused, with the reason in words the owner can read.
-export class TaskRefusedError extends Error {}
-
-export class TaskUnavailableError extends TaskRefusedError {
-   public constructor() {
-      super('This task is not available.')
-   }
-}
-
-export class TaskOwnershipError extends Error {
-   public constructor() {
-      super('That LinkedIn account was not found.')
-   }
-}
-
-// An automatic request that does not apply right now. Not a failure, so it is never logged.
-class SkippedError extends TaskRefusedError {}
 
 type RequestOptions = {
    userId: string
@@ -152,6 +139,7 @@ export class TaskService {
          },
          select: {
             id: true,
+            email: true,
             secret: true,
             secretIv: true,
             secretTag: true,
@@ -167,7 +155,7 @@ export class TaskService {
       const picked = needs.proxy === 'none' ? null : await ProxyServerService.pickForAccount(accountId, proxy?.id)
 
       if (needs.proxy === 'required' && !picked) {
-         throw new TaskRefusedError(NEEDS_WORKING_PROXY)
+         throw new TaskNeedsProxyError()
       }
 
       await this.checkPolicy(definition, {
@@ -217,6 +205,7 @@ export class TaskService {
             ...(picked && { proxy: picked.config }),
             ...(needs.account && {
                account_id: accountId,
+               account_email: account.email,
                credentials: {
                   ciphertext: account.secret,
                   iv: account.secretIv,
@@ -289,7 +278,7 @@ export class TaskService {
       }
 
       if (scope.everyMs && !scope.changed && age < scope.everyMs) {
-         throw new SkippedError('This task ran recently.')
+         throw new TaskSkippedError('This task ran recently.')
       }
    }
 

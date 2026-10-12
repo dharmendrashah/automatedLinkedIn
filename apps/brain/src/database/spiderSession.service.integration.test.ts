@@ -3,6 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { CryptoService } from 'core'
 
+import { runPrefix } from '@automatedLinkedIn/contracts'
+
 import { PrismaService } from './prisma.service'
 import {
    SpiderRecordingUnavailableError,
@@ -36,12 +38,16 @@ const newAccount = async (ownerId: string, accountEmail: string) => {
    })
 }
 
-const start = (id: string, overrides: Partial<Parameters<typeof SpiderSessionService.start>[0]> = {}) =>
-   SpiderSessionService.start({
+const start = (id: string, overrides: Partial<Parameters<typeof SpiderSessionService.startTask>[0]> = {}) =>
+   SpiderSessionService.startTask({
       id,
       userId,
       linkedInAccountId: accountId,
-      email: 'ada@work.com',
+      task: 'demo',
+      taskVersion: 1,
+      trigger: 'manual',
+      input: {},
+      startedAt: new Date(),
       proxy: {
          id: proxyId,
          protocol: 'HTTP',
@@ -88,41 +94,62 @@ describe('SpiderSessionService (database)', () => {
       await start(id)
 
       const before = await PrismaService.client.spiderSession.findUniqueOrThrow({ where: { id } })
+      const folder = runPrefix({
+         task: 'demo',
+         user_id: userId,
+         requested_at: before.startedAt.toISOString(),
+         task_id: id,
+      })
 
       expect(before).toMatchObject({
          status: 'IN_PROGRESS',
-         kind: 'VALIDATE_ACCOUNT',
+         kind: 'TASK',
+         task: 'demo',
          proxyHost: '203.0.113.5',
          proxyCountry: 'Canada',
          requestParams: {
-            action: 'VALIDATE_ACCOUNT',
-            email: 'ada@work.com',
+            action: 'TASK',
+            task: 'demo',
             proxy: 'http://203.0.113.5:8080',
          },
       })
 
       const result = {
-         validation_id: id,
-         account_id: accountId,
-         outcome: 'VALID' as const,
-         message: 'Signed in to LinkedIn.',
-         checked_at: new Date(before.startedAt.getTime() + 12_000).toISOString(),
-         recording_prefix: PREFIX,
+         contract: 1 as const,
+         task_id: id,
+         task: 'demo',
+         task_version: 1,
+         status: 'SUCCEEDED' as const,
+         verdict: 'FINE',
+         message: 'All good.',
+         artifacts: [
+            {
+               kind: 'log' as const,
+               name: 'logs.json',
+               path: `${folder}/logs.json`,
+               content_type: 'application/json',
+               bytes: 2,
+            },
+         ],
+         artifacts_truncated: false,
+         worker: { build: 'abc1234' },
+         started_at: before.startedAt.toISOString(),
+         finished_at: new Date(before.startedAt.getTime() + 12_000).toISOString(),
       }
 
-      await expect(SpiderSessionService.finish(result)).resolves.toBe(true)
+      await expect(SpiderSessionService.finishTask(result)).resolves.toMatchObject({ id })
       await expect(
-         SpiderSessionService.finish({
+         SpiderSessionService.finishTask({
             ...result,
-            outcome: 'ERROR',
+            verdict: 'OTHER',
          })
-      ).resolves.toBe(false)
+      ).resolves.toBeNull()
 
       await expect(PrismaService.client.spiderSession.findUniqueOrThrow({ where: { id } })).resolves.toMatchObject({
          status: 'SUCCEEDED',
-         outcome: 'VALID',
+         outcome: 'FINE',
          durationMs: 12_000,
-         recordingPrefix: PREFIX,
+         recordingPrefix: folder,
       })
    })
 

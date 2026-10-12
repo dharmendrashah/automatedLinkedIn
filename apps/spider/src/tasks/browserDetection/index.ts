@@ -7,6 +7,8 @@ import { type TaskContext, VisitError, defineTask } from '../defineTask'
 import { DETECTION_PAGES, type DetectionPage } from './pages'
 import { type DetectionOutcome, type DetectionSignal, type PageVerdict, combine } from './readers'
 
+export const TASK_NAME = 'browser-detection'
+
 type PageReport = {
    page: DetectionPage['page']
    url: string
@@ -186,7 +188,7 @@ const reportOf = (
 // The pages are a parameter so a test can use stand-ins; the real task uses the public ones.
 export const createBrowserDetection = (pages: DetectionPage[] = DETECTION_PAGES) =>
    defineTask({
-      name: 'browser-detection',
+      name: TASK_NAME,
       version: 1,
       title: 'Browser test',
       description:

@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { type TaskCommand, type TaskResult, runPrefix } from '@automatedLinkedIn/contracts'
 
 import { Recorder } from '../recording/recorder'
-import { TaskError } from '../scraping/errors'
+import { AccountBusyError, TaskError } from '../scraping/errors'
 import { type TaskDefinition, VisitError, defineTask } from './defineTask'
 import { type RunnerDeps, exhaustedResult, runTask } from './runner'
 
@@ -41,6 +41,42 @@ const makeSession = () => ({
    pageHtml: vi.fn(async () => '<html></html>'),
    fullPageScreenshot: vi.fn(async () => Buffer.from('png')),
    identity: vi.fn(),
+   storageState: vi.fn(async () => ({
+      cookies: [
+         {
+            name: 'li_at',
+            value: 'LIAT-TOKEN-VALUE',
+            domain: '.linkedin.com',
+            path: '/',
+         },
+         {
+            name: 'tracker',
+            value: 't',
+            domain: '.elsewhere.example',
+            path: '/',
+         },
+      ],
+      origins: [
+         {
+            origin: 'https://www.linkedin.com',
+            localStorage: [
+               {
+                  name: 'k',
+                  value: 'v',
+               },
+            ],
+         },
+         {
+            origin: 'https://elsewhere.example',
+            localStorage: [
+               {
+                  name: 'k',
+                  value: 'v',
+               },
+            ],
+         },
+      ],
+   })),
    close: vi.fn(async () => undefined),
 })
 
@@ -99,6 +135,37 @@ const demo = (overrides: Partial<TaskDefinition<{ word: string }>> = {}) =>
       ...overrides,
    })
 
+const credentials = {
+   password: 'account-password-1',
+   totpSecret: 'JBSWY3DPEHPK3PXP',
+}
+
+const lease = { release: vi.fn(async () => undefined) }
+
+const accountTask = (overrides: Partial<TaskDefinition<{ word: string }>> = {}) =>
+   demo({
+      needs: {
+         proxy: 'required',
+         account: true,
+      },
+      policy: {
+         cooldownMs: 0,
+         oneAtATime: 'account',
+      },
+      ...overrides,
+   })
+
+const accountCommand: Partial<TaskCommand> = {
+   account_id: 'acc1',
+   account_email: 'ada@work.com',
+   credentials: {
+      ciphertext: 'Y2lwaGVy',
+      iv: 'aXY=',
+      tag: 'dGFn',
+      key_version: 1,
+   },
+}
+
 const setup = (
    options: {
       task?: ReturnType<typeof demo>
@@ -113,7 +180,12 @@ const setup = (
    const deps: RunnerDeps = {
       tasks: [task],
       driver: { open: vi.fn(async () => session) },
-      policy: { allowsUrl: vi.fn(() => true) },
+      policy: {
+         allowsUrl: vi.fn((url: string) => !url.includes('elsewhere')),
+         allowsCookieDomain: vi.fn((domain: string) => domain.endsWith('linkedin.com')),
+      },
+      accountLock: { acquire: vi.fn(async () => lease) },
+      openCredentials: vi.fn(() => credentials),
       robots: { check: vi.fn(async () => ({ allowed: true })) },
       limiter: { wait: vi.fn(async () => undefined) },
       store,
@@ -280,7 +352,14 @@ describe('runTask', () => {
    })
 
    it('should answer NOT_ALLOWED when a site the task declares is not on the allowlist', async () => {
-      const { run, published, deps } = setup({ overrides: { policy: { allowsUrl: vi.fn(() => false) } } })
+      const { run, published, deps } = setup({
+         overrides: {
+            policy: {
+               allowsUrl: vi.fn(() => false),
+               allowsCookieDomain: vi.fn(() => false),
+            },
+         },
+      })
 
       await run()
 
@@ -508,6 +587,184 @@ describe('runTask', () => {
             ])
          )
       })
+   })
+})
+
+describe('a task that needs an account', () => {
+   beforeEach(() => {
+      vi.restoreAllMocks()
+      vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      lease.release.mockClear()
+   })
+
+   it('should take the account lease, open the credentials for the task, and let go of the lease when the result is out', async () => {
+      let seen: unknown
+      const task = accountTask({
+         run: async context => {
+            seen = context.account
+
+            return {
+               status: 'SUCCEEDED',
+               verdict: 'GOOD',
+               message: 'ok',
+            }
+         },
+      })
+      const { run, deps, published } = setup({ task })
+
+      await run(accountCommand)
+
+      expect(deps.accountLock?.acquire).toHaveBeenCalledWith('acc1', TASK_ID)
+      expect(deps.openCredentials).toHaveBeenCalledWith(accountCommand.credentials)
+      expect(seen).toEqual({
+         id: 'acc1',
+         email: 'ada@work.com',
+         credentials,
+      })
+      expect(published).toHaveLength(1)
+      expect(lease.release).toHaveBeenCalledTimes(1)
+   })
+
+   it('should not run, and not fail the task, when another task holds the account', async () => {
+      const { run, deps, published } = setup({ task: accountTask() })
+
+      vi.mocked(deps.accountLock!.acquire).mockResolvedValueOnce(undefined)
+
+      await expect(run(accountCommand)).rejects.toBeInstanceOf(AccountBusyError)
+      expect(deps.driver.open).not.toHaveBeenCalled()
+      expect(published).toEqual([])
+   })
+
+   it('should answer NEEDS_ACCOUNT, without opening a browser, when the credentials cannot be read', async () => {
+      const { run, deps, published } = setup({ task: accountTask() })
+
+      vi.mocked(deps.openCredentials!).mockImplementationOnce(() => {
+         throw new Error('bad tag')
+      })
+
+      await run(accountCommand)
+
+      expect(published[0]).toMatchObject({
+         verdict: 'NEEDS_ACCOUNT',
+         message: 'The stored credentials could not be read. Save them again.',
+      })
+      expect(deps.driver.open).not.toHaveBeenCalled()
+      expect(lease.release).toHaveBeenCalledTimes(1)
+   })
+
+   it('should let go of the lease when the task throws', async () => {
+      const { run } = setup({
+         task: accountTask({
+            run: async () => {
+               throw new Error('selector exploded')
+            },
+         }),
+      })
+
+      await expect(run(accountCommand)).rejects.toThrow('selector exploded')
+      expect(lease.release).toHaveBeenCalledTimes(1)
+   })
+
+   it('should answer NEEDS_ACCOUNT when the email is missing', async () => {
+      const { run, published } = setup({ task: accountTask() })
+
+      await run({
+         ...accountCommand,
+         account_email: undefined,
+      })
+
+      expect(published[0].verdict).toBe('NEEDS_ACCOUNT')
+   })
+
+   it('should mask the account secrets in every file', async () => {
+      const task = accountTask({
+         run: async context => {
+            context.log('typed account-password-1 and JBSWY3DPEHPK3PXP')
+
+            return {
+               status: 'SUCCEEDED',
+               verdict: 'GOOD',
+               message: 'ok',
+            }
+         },
+      })
+      const { run, store } = setup({ task })
+
+      await run(accountCommand)
+
+      const everything = JSON.stringify([...store.objects.entries()].filter(([key]) => !key.endsWith('session.json')))
+
+      expect(everything).not.toContain('account-password-1')
+      expect(everything).not.toContain('JBSWY3DPEHPK3PXP')
+   })
+
+   it('should keep the browser session of the run as a sensitive file, only for allowed sites', async () => {
+      const { run, published, store } = setup({ task: accountTask() })
+
+      await run(accountCommand)
+
+      const file = published[0].artifacts.find(artifact => artifact.kind === 'session')
+
+      expect(file).toMatchObject({
+         name: 'session.json',
+         sensitive: true,
+         path: `${PREFIX}/session.json`,
+      })
+
+      const saved = JSON.parse(String(store.objects.get(`${PREFIX}/session.json`)))
+
+      expect(saved.cookies.map((cookie: { name: string }) => cookie.name)).toEqual(['li_at'])
+      expect(saved.origins.map((origin: { origin: string }) => origin.origin)).toEqual(['https://www.linkedin.com'])
+      expect(saved.cookies[0].value).toBe('LIAT-TOKEN-VALUE')
+   })
+
+   it('should not keep a browser session for a task that has no account', async () => {
+      const { run, published } = setup()
+
+      await run()
+
+      expect(published[0].artifacts.some(artifact => artifact.kind === 'session')).toBe(false)
+   })
+
+   it("should replace the account's saved session only when the task says its own check passed", async () => {
+      const task = accountTask({
+         run: async () => ({
+            status: 'SUCCEEDED',
+            verdict: 'GOOD',
+            message: 'ok',
+            commitSession: true,
+         }),
+      })
+      const { run, store } = setup({ task })
+
+      await run(accountCommand)
+
+      expect(store.put).toHaveBeenCalledWith('sessions/acc1/state.json', expect.any(String), 'application/json')
+
+      const state = JSON.parse(String(store.objects.get('sessions/acc1/state.json')))
+
+      expect(state.cookies).toHaveLength(1)
+   })
+
+   it.each([
+      ['a task that did not ask for it', accountTask()],
+      [
+         'a failed run',
+         accountTask({
+            run: async () => ({
+               status: 'FAILED',
+               verdict: 'BAD',
+               message: 'no',
+               commitSession: true,
+            }),
+         }),
+      ],
+   ])('should keep the saved session as it was for %s', async (_name, task) => {
+      const { run, store } = setup({ task })
+
+      await run(accountCommand)
+
+      expect(store.objects.has('sessions/acc1/state.json')).toBe(false)
    })
 })
 

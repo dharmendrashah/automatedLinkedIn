@@ -1,5 +1,7 @@
 import { type TaskResult, type TaskTrigger } from '@automatedLinkedIn/contracts'
 
+import { linkedInLoginHooks } from './linkedInLogin.hooks'
+
 // Where a task needs brain to do something of its own: refuse a request for a reason only brain knows, or change brain's own
 // data when the result arrives. Most tasks have no hook. One file lists them all, by task name.
 export type TaskRequestContext = {
@@ -25,4 +27,4 @@ export type TaskHooks = {
    onResult?: (session: FinishedSession, result: TaskResult) => Promise<void>
 }
 
-export const TASK_HOOKS: Record<string, TaskHooks> = {}
+export const TASK_HOOKS: Record<string, TaskHooks> = { 'linkedin-login': linkedInLoginHooks }

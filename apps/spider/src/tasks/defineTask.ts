@@ -3,6 +3,7 @@ import { type z } from 'zod'
 import { type TaskReport } from '@automatedLinkedIn/contracts'
 
 import { type DetectionSession } from '../scraping/driver'
+import { type Credentials } from './credentials'
 
 // How a task shows in the web app, for one of its own verdict codes.
 export type VerdictLabel = {
@@ -17,6 +18,8 @@ export type TaskOutcome = {
    // One fixed sentence, never page content or a secret.
    message: string
    report?: TaskReport
+   // The run's own check passed, so its cookies and local storage replace what is saved for the account.
+   commitSession?: boolean
 }
 
 // A page that could not be opened for a reason the task can describe in its own words.
@@ -34,6 +37,8 @@ export class VisitError extends Error {
 export interface TaskContext {
    // Already recorded, and already behind the proxy.
    readonly browser: DetectionSession
+   // For a task that needs an account: who it is and what to sign in with. Masked in every file of the run.
+   readonly account?: { id: string; email: string; credentials: Credentials }
    // Opens a page. The allowlist, robots.txt and the rate limit are applied here, so a task cannot skip them.
    // Throws VisitError with a sentence when the page may not or could not be opened.
    visit: (url: string) => Promise<string>

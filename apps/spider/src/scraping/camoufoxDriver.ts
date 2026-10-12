@@ -15,6 +15,7 @@ import {
    type DetectionSession,
    type LoginDriver,
    type OpenOptions,
+   type StorageState,
 } from './driver'
 import { TaskError } from './errors'
 
@@ -65,6 +66,10 @@ class CamoufoxSession implements DetectionSession {
       await this.page.mouse.wheel(0, pixels)
 
       return this.page.evaluate(() => window.scrollY + window.innerHeight < document.documentElement.scrollHeight - 2)
+   }
+
+   public storageState() {
+      return this.context.storageState() as Promise<StorageState>
    }
 
    public pageText() {

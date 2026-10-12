@@ -42,6 +42,8 @@ export const taskCommandSchema = z.strictObject({
    // The user's own proxy, resolved by brain; a task that needs one never falls back to a direct connection.
    proxy: proxySchema.optional(),
    account_id: accountIdSchema.optional(),
+   // The login of the account, which the worker types into the sign-in form. Present with `credentials`.
+   account_email: z.string().min(1).max(320).optional(),
    // Sealed exactly as stored: only the worker holds the key. Present only for a task that needs an account.
    credentials: sealedSchema.optional(),
    // Validated by the task's own schema in the spider; brain only checks that it is a small JSON object.

@@ -16,6 +16,13 @@ const mocks = vi.hoisted(() => {
       setDefaultNavigationTimeout: vi.fn(),
       route: vi.fn(),
       newPage: vi.fn(async () => page),
+      storageState: vi.fn(
+         async () =>
+            ({
+               cookies: [],
+               origins: [],
+            }) as unknown
+      ),
       close: vi.fn(async () => {
          events.push('context closed')
       }),
@@ -154,6 +161,35 @@ describe('CamoufoxDriver', () => {
       mocks.page.evaluate.mockResolvedValueOnce(false)
 
       await expect(session.scrollBy(600)).resolves.toBe(false)
+   })
+
+   it('should hand out the cookies and the local storage the browser holds', async () => {
+      const session = await driver.open()
+      const state = {
+         cookies: [
+            {
+               name: 'li_at',
+               value: 'x',
+               domain: '.linkedin.com',
+               path: '/',
+            },
+         ],
+         origins: [
+            {
+               origin: 'https://www.linkedin.com',
+               localStorage: [
+                  {
+                     name: 'k',
+                     value: 'v',
+                  },
+               ],
+            },
+         ],
+      }
+
+      mocks.context.storageState.mockResolvedValueOnce(state)
+
+      await expect(session.storageState()).resolves.toEqual(state)
    })
 
    it('should hand out the visible text of the page, a picture of all of it, and what the browser reports', async () => {

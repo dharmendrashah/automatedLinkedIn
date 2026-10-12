@@ -31,4 +31,8 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
    public identity(): Promise<BrowserIdentity> {
       return this.detector.identity()
    }
+
+   public storageState() {
+      return this.detector.storageState()
+   }
 }
