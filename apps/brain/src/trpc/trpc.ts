@@ -28,3 +28,20 @@ export const userProcedure = t.procedure.use(
       })
    })
 )
+
+// Narrows ctx.user to non-null: userProcedure may leave it null for an identity without a local row.
+export const ownerProcedure = userProcedure.use(({ ctx, next }) => {
+   if (!ctx.user) {
+      throw new TRPCError({
+         code: 'FORBIDDEN',
+         message: 'No account is linked to this login yet',
+      })
+   }
+
+   return next({
+      ctx: {
+         ...ctx,
+         user: ctx.user,
+      },
+   })
+})

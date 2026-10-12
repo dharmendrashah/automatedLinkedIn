@@ -115,6 +115,26 @@ describe('processValidation', () => {
       expect(ctx.events).toEqual(['acquired', 'opened', 'closed', 'session', 'record', 'published', 'released'])
    })
 
+   it("should open the browser through the account's proxy when the command carries one", async () => {
+      const proxy = { server: 'socks5://proxy.example.net:1080' }
+
+      await processValidation(
+         {
+            ...command,
+            proxy,
+         },
+         ctx.deps as never
+      )
+
+      expect(ctx.driver.open).toHaveBeenCalledWith({ proxy })
+   })
+
+   it('should open the browser directly when the command has no proxy', async () => {
+      await processValidation(command, ctx.deps as never)
+
+      expect(ctx.driver.open).toHaveBeenCalledWith({})
+   })
+
    it('should save the session of a valid account, then report where, without the cookie values', async () => {
       await processValidation(command, ctx.deps as never)
 

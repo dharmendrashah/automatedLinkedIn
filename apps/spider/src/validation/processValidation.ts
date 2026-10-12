@@ -71,7 +71,7 @@ const run = async (command: ValidateAccountCommand, deps: ValidationDeps) => {
       return
    }
 
-   const session = await deps.driver.open()
+   const session = await deps.driver.open(command.proxy ? { proxy: command.proxy } : {})
    let verdict: Awaited<ReturnType<ValidationDeps['validator']['validate']>>
 
    try {

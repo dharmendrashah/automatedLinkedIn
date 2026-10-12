@@ -64,6 +64,12 @@ export class Environment {
             // Insecure throwaway key for local and test only; production has no default and must set a real one.
             devDefault: 'pqaZGClH/kqxNTLoLT4c0lMTloNIi2At3Jzz9a2rkIQ=',
          }),
+         IPINFO_TOKEN: string({
+            desc: "ipinfo.io Lite API token used to look up a proxy's country by routing a request through it",
+            example: 'xxxxxxxxxxxxxx',
+            // Local/test never reach the real API; a non-empty placeholder just satisfies validation.
+            devDefault: 'dev-ipinfo-token',
+         }),
          GIT_SHA: string({
             desc: 'Git commit the image was built from, reported by GET /health',
             example: 'a1b2c3d',

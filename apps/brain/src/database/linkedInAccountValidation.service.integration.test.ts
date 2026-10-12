@@ -2,7 +2,7 @@ import { type Channel } from 'amqplib'
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { AccountValidationQueue, MessageBroker } from 'core'
+import { AccountValidationQueue, CryptoService, MessageBroker } from 'core'
 
 import {
    EXCHANGE,
@@ -27,8 +27,32 @@ let userId: string
 
 const accountRow = (id: string) => PrismaService.client.linkedInAccount.findUniqueOrThrow({ where: { id } })
 
+const testProxy = { server: 'http://203.0.113.5:8080' }
+
+// Inserted directly, bypassing ProxyServerService's real network test: this file exercises the validation
+// queue, not proxy testing, and there is no real proxy to test against in CI.
+const newProxy = (linkedInAccountId: string) => {
+   const sealed = CryptoService.seal('{}')
+
+   return PrismaService.client.proxyServer.create({
+      data: {
+         linkedInAccountId,
+         protocol: 'HTTP',
+         host: '203.0.113.5',
+         port: 8080,
+         secret: sealed.ciphertext,
+         secretIv: sealed.iv,
+         secretTag: sealed.tag,
+         status: 'ACTIVE',
+         isPrimary: true,
+      },
+   })
+}
+
 const newAccount = async (linkedInEmail: string) => {
    const { id } = await LinkedInAccountService.create(userId, linkedInEmail, { password: 'hunter2' })
+
+   await newProxy(id)
 
    return id
 }
@@ -91,6 +115,7 @@ describe('LinkedInAccountValidationService (database and broker)', () => {
             tag: row.secretTag,
             key_version: row.keyVersion,
          },
+         proxy: testProxy,
          requested_at: row.validationRequestedAt?.toISOString(),
       })
       expect(JSON.stringify(command)).not.toContain('hunter2')

@@ -6,6 +6,7 @@ import { type ValidateAccountResult } from '@automatedLinkedIn/contracts'
 
 import { LinkedInAccountService } from './linkedInAccount.service'
 import { PrismaService } from './prisma.service'
+import { ProxyServerService } from './proxyServer.service'
 
 // Asking again right away would only repeat a login that LinkedIn may already be suspicious of.
 const VERIFY_COOLDOWN_MS = 5 * 60 * 1000
@@ -47,6 +48,14 @@ export class LinkedInAccountValidationService {
          return false
       }
 
+      const proxy = await ProxyServerService.pickForAccount(row.id)
+
+      if (!proxy) {
+         console.error(`Could not queue the validation of account ${row.id}: it has no working proxy`)
+
+         return false
+      }
+
       const requestedAt = new Date()
       const validationId = randomUUID()
 
@@ -70,6 +79,7 @@ export class LinkedInAccountValidationService {
                tag: row.secretTag,
                key_version: row.keyVersion,
             },
+            proxy,
             requested_at: requestedAt.toISOString(),
          })
 

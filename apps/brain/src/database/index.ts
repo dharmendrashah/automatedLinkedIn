@@ -11,4 +11,10 @@ export {
    LinkedInAccountValidationService,
    LinkedInVerifyCooldownError,
 } from './linkedInAccountValidation.service'
+export {
+   type ProxyCredentials,
+   type ProxyServerInput,
+   ProxyServerOwnershipError,
+   ProxyServerService,
+} from './proxyServer.service'
 export { AccountConflictError, UserService } from './user.service'

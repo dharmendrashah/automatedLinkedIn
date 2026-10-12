@@ -52,6 +52,16 @@ describe('validateAccountCommandSchema', () => {
       expect(validateAccountCommandSchema.parse(command)).toEqual(command)
    })
 
+   it('should accept an optional proxy, and reject a proxy with an unsupported scheme', () => {
+      const proxy = { server: 'socks5://proxy.example.net:1080', username: 'alice', password: 'hunter2' }
+
+      expect(validateAccountCommandSchema.parse({ ...command, proxy }).proxy).toEqual(proxy)
+      expect(validateAccountCommandSchema.parse(command).proxy).toBeUndefined()
+      expect(
+         validateAccountCommandSchema.safeParse({ ...command, proxy: { server: 'ftp://proxy.example.net' } }).success
+      ).toBe(false)
+   })
+
    it.each([
       [
          'a validation id that is not a uuid',

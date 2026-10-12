@@ -109,6 +109,7 @@ services:
       # NODE_ENV is production in the image, so the key has no built-in default there.
       # This is the public development key: never reuse it outside local development.
       LINKEDIN_CRED_ENC_KEY: ${LINKEDIN_CRED_ENC_KEY:-pqaZGClH/kqxNTLoLT4c0lMTloNIi2At3Jzz9a2rkIQ=}
+      IPINFO_TOKEN: ${IPINFO_TOKEN:-dev-ipinfo-token}
     ports:
       - "3001:3001"
     depends_on:

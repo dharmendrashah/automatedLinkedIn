@@ -62,6 +62,56 @@ model LinkedInAccount {
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
 
+  proxyServers ProxyServer[]
+
   @@unique([userId, email])
   @@index([userId])
+}
+
+enum ProxyProtocol {
+  HTTP
+  HTTPS
+  SOCKS4
+  SOCKS5
+}
+
+enum ProxyServerStatus {
+  // Added but not tested yet (should not normally be visible; a create always tests first).
+  PENDING
+  ACTIVE
+  // Reachable, but its country does not match the account's other proxies.
+  GEO_MISMATCH
+  UNREACHABLE
+  // Paused by the owner; automation must skip it.
+  DISABLED
+}
+
+// A proxy a LinkedIn account's sessions always go through. Belongs to exactly one account: reusing an IP
+// across accounts is itself a correlation risk. Credentials live in one AES-256-GCM bundle, same shape as
+// LinkedInAccount's, so CryptoService.seal/open is reused as is.
+model ProxyServer {
+  id                String            @id @default(uuid(7))
+  linkedInAccountId String
+  linkedInAccount   LinkedInAccount   @relation(fields: [linkedInAccountId], references: [id], onDelete: Cascade)
+  protocol          ProxyProtocol
+  host              String
+  port              Int
+  // Sealed { username?, password? }; both optional, some proxies need neither.
+  secret            String
+  secretIv          String
+  secretTag         String
+  keyVersion        Int               @default(1)
+  status            ProxyServerStatus @default(PENDING)
+  // Short, non-secret reason for the current status.
+  statusMessage     String?
+  lastTestedAt      DateTime?
+  detectedCountryCode String?
+  detectedCountry     String?
+  detectedIp          String?
+  // Preferred proxy for the account when more than one is ACTIVE; app-enforced, not a DB constraint.
+  isPrimary         Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([linkedInAccountId])
 }
