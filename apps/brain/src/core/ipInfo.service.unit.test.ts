@@ -2,9 +2,32 @@ import { type IncomingMessage, type Server, type ServerResponse, createServer } 
 import { request as httpRequest } from 'node:http'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { IpInfoError, IpInfoService } from './ipInfo.service'
+import { IpInfoError, IpInfoService, describeConnectionError } from './ipInfo.service'
 
 vi.mock('env', () => ({ IPINFO_TOKEN: 'test-ipinfo-token' }))
+
+describe('describeConnectionError', () => {
+   it.each([
+      ['CERT_HAS_EXPIRED', 'certificate has expired'],
+      ['DEPTH_ZERO_SELF_SIGNED_CERT', 'self-signed certificate'],
+      ['SELF_SIGNED_CERT_IN_CHAIN', 'self signed certificate in certificate chain'],
+      ['UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'unable to verify the first certificate'],
+      ['CERT_NOT_YET_VALID', 'certificate is not yet valid'],
+      ['ERR_TLS_CERT_ALTNAME_INVALID', 'Hostname/IP does not match certificate'],
+   ])('should explain %s as a proxy that re-signs secure traffic, in plain words', (code, message) => {
+      const text = describeConnectionError(Object.assign(new Error(message), { code }))
+
+      expect(text).toContain('replaces the security certificate')
+      expect(text).toContain('Use a different proxy')
+      expect(text).not.toContain(code)
+   })
+
+   it('should keep the original reason for any other failure', () => {
+      expect(describeConnectionError(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }))).toBe(
+         'could not reach ipinfo.io through the proxy: connect ECONNREFUSED'
+      )
+   })
+})
 
 // A minimal plain-HTTP forward proxy: an http-proxy-agent request line carries the absolute target URL in
 // `req.url`, which a real forward proxy relays as is. Good enough to exercise ProxyAgent end to end.

@@ -9,6 +9,23 @@ const SELF_LOOKUP_URL = 'https://api.ipinfo.io/lite/me'
 
 export class IpInfoError extends Error {}
 
+// Node reports a failed certificate check with one of these codes. A proxy that answers for ipinfo.io with its own
+// certificate is re-signing secure traffic, so it could read everything, including a LinkedIn password.
+const CERTIFICATE_ERRORS = new Set([
+   'CERT_HAS_EXPIRED',
+   'CERT_NOT_YET_VALID',
+   'DEPTH_ZERO_SELF_SIGNED_CERT',
+   'SELF_SIGNED_CERT_IN_CHAIN',
+   'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+   'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+   'ERR_TLS_CERT_ALTNAME_INVALID',
+])
+
+export const describeConnectionError = (error: Error & { code?: string }) =>
+   error.code && CERTIFICATE_ERRORS.has(error.code)
+      ? 'this proxy replaces the security certificate of secure websites with its own, which we do not trust. Use a different proxy.'
+      : `could not reach ipinfo.io through the proxy: ${error.message}`
+
 export interface ProxyLookupResult {
    ip: string
    countryCode: string
@@ -71,7 +88,7 @@ export class IpInfoService {
                return
             }
 
-            reject(new IpInfoError(`could not reach ipinfo.io through the proxy: ${error.message}`))
+            reject(new IpInfoError(describeConnectionError(error)))
          })
       })
    }
