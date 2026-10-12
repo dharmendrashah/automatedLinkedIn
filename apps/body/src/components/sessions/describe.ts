@@ -1,17 +1,46 @@
 import { type TimelineStep } from './recording'
 
-type Kind = 'VALIDATE_ACCOUNT' | 'SCRAPE'
+type Kind = 'VALIDATE_ACCOUNT' | 'BROWSER_TEST' | 'SCRAPE'
 
-export const actionLabel = (kind: Kind) => (kind === 'VALIDATE_ACCOUNT' ? 'Check account sign-in' : 'Collect data')
+const ACTIONS: Record<Kind, string> = {
+   VALIDATE_ACCOUNT: 'Check account sign-in',
+   BROWSER_TEST: 'Browser test',
+   SCRAPE: 'Collect data',
+}
+
+export const actionLabel = (kind: Kind) => ACTIONS[kind]
 
 type ResultInput = {
    status: 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED'
    noAnswer: boolean
+   kind?: Kind
+   outcome?: string | null
 }
 
-export type ResultTone = 'success' | 'failure' | 'running' | 'unknown'
+// `neutral` is an answer that is neither good nor bad: the check ran but could not decide.
+export type ResultTone = 'success' | 'failure' | 'running' | 'unknown' | 'neutral'
 
-export const resultOf = ({ status, noAnswer }: ResultInput): { label: string; tone: ResultTone } => {
+// What a browser test says about itself, in the words of the plan: the verdict, not just "Success" or "Failed".
+const BROWSER_TEST_RESULTS: Record<string, { label: string; tone: ResultTone }> = {
+   NOT_DETECTED: {
+      label: 'Not detected',
+      tone: 'success',
+   },
+   DETECTED: {
+      label: 'Detected as a bot',
+      tone: 'failure',
+   },
+   COULD_NOT_TELL: {
+      label: 'Could not tell',
+      tone: 'neutral',
+   },
+}
+
+export const resultOf = ({ status, noAnswer, kind, outcome }: ResultInput): { label: string; tone: ResultTone } => {
+   if (kind === 'BROWSER_TEST' && status !== 'IN_PROGRESS' && outcome && outcome in BROWSER_TEST_RESULTS) {
+      return BROWSER_TEST_RESULTS[outcome]
+   }
+
    if (status === 'SUCCEEDED') {
       return {
          label: 'Success',
@@ -80,6 +109,9 @@ export const describeStep = ({ call, ok, target, urlAfter, length, found, count 
 
       case 'extract':
          return ok ? `Read ${plural(count ?? 0, 'item', 'items')} from the page` : 'Could not read the page'
+
+      case 'scroll':
+         return 'Scrolled down the page'
 
       case 'cookies':
          return "Collected the browser's session"

@@ -17,6 +17,7 @@ import { useState } from 'react'
 
 import { trpc } from '../../trpc'
 import { actionLabel, formatDuration, timeAgo } from './describe'
+import { DetectionTab } from './detection-tab'
 import { LogsTab } from './logs-tab'
 import { NetworkTab } from './network-tab'
 import { RecordingGate } from './recording-gate'
@@ -63,7 +64,12 @@ export const SessionDrawer = ({ sessionId, onOpen, onClose }: Props) => {
                      {session ? (
                         <>
                            <span>{session.linkedInAccount.email}</span>
-                           <SessionStatusBadge status={session.status} noAnswer={session.noAnswer} />
+                           <SessionStatusBadge
+                              status={session.status}
+                              noAnswer={session.noAnswer}
+                              kind={session.kind}
+                              outcome={session.outcome}
+                           />
                            <span title={new Date(session.startedAt).toLocaleString()}>
                               {timeAgo(new Date(session.startedAt))}
                            </span>
@@ -74,7 +80,7 @@ export const SessionDrawer = ({ sessionId, onOpen, onClose }: Props) => {
                      )}
                   </DrawerDescription>
                </div>
-               {session ? (
+               {session && session.kind !== 'BROWSER_TEST' ? (
                   <Tooltip>
                      <TooltipTrigger asChild>
                         <span tabIndex={session.retry.allowed ? undefined : 0}>
@@ -101,6 +107,9 @@ export const SessionDrawer = ({ sessionId, onOpen, onClose }: Props) => {
                   <Tabs defaultValue="summary" className="gap-5">
                      <TabsList className="w-full">
                         <TabsTrigger value="summary">Summary</TabsTrigger>
+                        {session.kind === 'BROWSER_TEST' ? (
+                           <TabsTrigger value="detection">Detection</TabsTrigger>
+                        ) : null}
                         <TabsTrigger value="video">Video</TabsTrigger>
                         <TabsTrigger value="steps">Steps</TabsTrigger>
                         <TabsTrigger value="network">Network</TabsTrigger>
@@ -109,6 +118,11 @@ export const SessionDrawer = ({ sessionId, onOpen, onClose }: Props) => {
 
                      <TabsContent value="summary">
                         <SummaryTab session={session} onOpen={onOpen} />
+                     </TabsContent>
+                     <TabsContent value="detection">
+                        <RecordingGate session={session}>
+                           <DetectionTab session={session} />
+                        </RecordingGate>
                      </TabsContent>
                      <TabsContent value="video">
                         <RecordingGate session={session}>

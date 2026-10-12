@@ -84,7 +84,12 @@ export const SessionsTable = ({
                      }}
                   >
                      <TableCell>
-                        <SessionStatusBadge status={session.status} noAnswer={session.noAnswer} />
+                        <SessionStatusBadge
+                           status={session.status}
+                           noAnswer={session.noAnswer}
+                           kind={session.kind}
+                           outcome={session.outcome}
+                        />
                      </TableCell>
                      <TableCell className="font-medium">{actionLabel(session.kind)}</TableCell>
                      <TableCell>{session.linkedInAccount.email}</TableCell>

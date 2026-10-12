@@ -25,6 +25,7 @@ describe('actionLabel', () => {
    it('should name what the run was for in plain words', () => {
       expect(actionLabel('VALIDATE_ACCOUNT')).toBe('Check account sign-in')
       expect(actionLabel('SCRAPE')).toBe('Collect data')
+      expect(actionLabel('BROWSER_TEST')).toBe('Browser test')
    })
 })
 
@@ -34,6 +35,11 @@ describe('resultOf', () => {
       [{ status: 'FAILED', noAnswer: false }, 'Failed', 'failure'],
       [{ status: 'IN_PROGRESS', noAnswer: false }, 'In progress', 'running'],
       [{ status: 'IN_PROGRESS', noAnswer: true }, 'No answer', 'unknown'],
+      [{ status: 'SUCCEEDED', noAnswer: false, kind: 'BROWSER_TEST', outcome: 'NOT_DETECTED' }, 'Not detected', 'success'],
+      [{ status: 'FAILED', noAnswer: false, kind: 'BROWSER_TEST', outcome: 'DETECTED' }, 'Detected as a bot', 'failure'],
+      [{ status: 'FAILED', noAnswer: false, kind: 'BROWSER_TEST', outcome: 'COULD_NOT_TELL' }, 'Could not tell', 'neutral'],
+      [{ status: 'FAILED', noAnswer: false, kind: 'BROWSER_TEST', outcome: 'ERROR' }, 'Failed', 'failure'],
+      [{ status: 'IN_PROGRESS', noAnswer: false, kind: 'BROWSER_TEST', outcome: null }, 'In progress', 'running'],
    ] as const)('should show %j as %s', (input, label, tone) => {
       expect(resultOf(input)).toEqual({
          label,
@@ -56,6 +62,10 @@ describe('shortAddress', () => {
 })
 
 describe('describeStep', () => {
+   it('should say the page was scrolled down', () => {
+      expect(describeStep(step({ call: 'scroll' }))).toBe('Scrolled down the page')
+   })
+
    it('should say a page was opened, and where the browser ended up if it moved', () => {
       expect(
          describeStep(

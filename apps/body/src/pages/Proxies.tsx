@@ -4,6 +4,7 @@ import { EditProxyDialog } from '@/components/proxies/edit-proxy-dialog'
 import { ProxiesTable } from '@/components/proxies/proxies-table'
 import { TestHistoryDrawer } from '@/components/proxies/test-history-drawer'
 import { useState } from 'react'
+import { Link } from 'react-router'
 
 import { type Proxy } from '@/components/proxies/types'
 
@@ -23,6 +24,9 @@ export const Proxies = () => {
    }
 
    const test = trpc.proxyServer.test.useMutation({ onSuccess: refresh })
+   const browserTest = trpc.proxyServer.browserTest.useMutation({
+      onSuccess: () => void utils.session.list.invalidate(),
+   })
    const remove = trpc.proxyServer.delete.useMutation({
       onSuccess: () => {
          setToDelete(null)
@@ -30,8 +34,14 @@ export const Proxies = () => {
       },
    })
 
-   const busyId = test.isPending ? test.variables?.id : remove.isPending ? remove.variables?.id : undefined
-   const actionError = test.error?.message ?? remove.error?.message
+   const busyId = test.isPending
+      ? test.variables?.id
+      : browserTest.isPending
+        ? browserTest.variables?.id
+        : remove.isPending
+          ? remove.variables?.id
+          : undefined
+   const actionError = test.error?.message ?? browserTest.error?.message ?? remove.error?.message
 
    return (
       <div className="mx-auto grid w-full max-w-5xl gap-4 px-4 lg:px-6">
@@ -48,6 +58,16 @@ export const Proxies = () => {
 
          {actionError ? <p className="text-destructive text-sm">{actionError}</p> : null}
 
+         {browserTest.data ? (
+            <p className="text-sm" role="status">
+               Browser test started.{' '}
+               <Link className="underline underline-offset-4" to={`/sessions?session=${browserTest.data.id}`}>
+                  Follow it in Sessions
+               </Link>
+               .
+            </p>
+         ) : null}
+
          <ProxiesTable
             proxies={list.data}
             loading={list.isPending}
@@ -55,6 +75,7 @@ export const Proxies = () => {
             busyId={busyId}
             onEdit={setToEdit}
             onTest={proxy => test.mutate({ id: proxy.id })}
+            onBrowserTest={proxy => browserTest.mutate({ id: proxy.id })}
             onHistory={setToInspect}
             onDelete={setToDelete}
          />

@@ -11,7 +11,15 @@ import { Notice } from './recording-gate'
 import { type TimelineStep, parseTimeline } from './recording'
 import { useSessionLink, useSessionText } from './use-session-file'
 
-export const Screenshot = ({ sessionId, name }: { sessionId: string; name: string }) => {
+export const Screenshot = ({
+   sessionId,
+   name,
+   alt = 'The page after this step',
+}: {
+   sessionId: string
+   name: string
+   alt?: string
+}) => {
    const link = useSessionLink(sessionId, `screenshots/${name}`)
 
    if (link.isPending) {
@@ -25,7 +33,7 @@ export const Screenshot = ({ sessionId, name }: { sessionId: string; name: strin
    return (
       <img
          src={link.data.url}
-         alt="The page after this step"
+         alt={alt}
          loading="lazy"
          className="w-full rounded-lg border"
       />

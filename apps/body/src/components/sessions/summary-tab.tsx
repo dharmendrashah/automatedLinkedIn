@@ -1,6 +1,6 @@
 import { SectionLabel } from '@/components/text-block'
 import { Button } from '@/components/ui/button'
-import { CheckCircle2, Loader2, TriangleAlert, XCircle } from 'lucide-react'
+import { CheckCircle2, CircleHelp, Loader2, TriangleAlert, XCircle } from 'lucide-react'
 import { type ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -19,6 +19,11 @@ const Fact = ({ label, children }: { label: string; children: ReactNode }) => (
    </div>
 )
 
+const startedBy = {
+   automatic: 'Automatically, after the proxy tested ok',
+   manual: 'You, with Browser test on the Proxies page',
+} as const
+
 const bannerText = (session: SessionDetail) => {
    if (session.status === 'IN_PROGRESS') {
       return session.noAnswer
@@ -31,7 +36,9 @@ const bannerText = (session: SessionDetail) => {
 
 const Banner = ({ session }: { session: SessionDetail }) => {
    const { tone } = resultOf(session)
-   const Icon = { success: CheckCircle2, failure: XCircle, running: Loader2, unknown: TriangleAlert }[tone]
+   const Icon = { success: CheckCircle2, failure: XCircle, running: Loader2, unknown: TriangleAlert, neutral: CircleHelp }[
+      tone
+   ]
    const hint = hintFor(session.message)
 
    return (
@@ -40,7 +47,8 @@ const Banner = ({ session }: { session: SessionDetail }) => {
             'flex gap-3 rounded-xl border p-4',
             tone === 'success' && 'border-emerald-500/30 bg-emerald-500/5',
             tone === 'failure' && 'border-destructive/30 bg-destructive/5',
-            tone === 'unknown' && 'border-amber-500/30 bg-amber-500/5'
+            tone === 'unknown' && 'border-amber-500/30 bg-amber-500/5',
+            tone === 'neutral' && 'bg-muted/40'
          )}
       >
          <Icon className={cn('mt-0.5 size-5 shrink-0', tone === 'running' && 'text-muted-foreground animate-spin')} />
@@ -95,13 +103,17 @@ export const SummaryTab = ({ session, onOpen }: Props) => {
             <SectionLabel>What it was given</SectionLabel>
             <dl className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2">
                <Fact label="Action">{actionLabel(session.kind)}</Fact>
-               <Fact label="LinkedIn account">{session.requestParams.email}</Fact>
+               <Fact label="LinkedIn account">{session.linkedInAccount.email}</Fact>
                <Fact label="Proxy">
                   <span className="font-mono text-xs">{proxyLabel(session)}</span>
                   {session.proxyCountry ? <span className="text-muted-foreground"> · {session.proxyCountry}</span> : null}
                </Fact>
                <Fact label="Started">{new Date(session.startedAt).toLocaleString()}</Fact>
-               <Fact label="Credentials">Sent sealed to the spider. They are never shown or recorded.</Fact>
+               {session.requestParams.action === 'BROWSER_TEST' ? (
+                  <Fact label="Started by">{startedBy[session.requestParams.trigger]}</Fact>
+               ) : (
+                  <Fact label="Credentials">Sent sealed to the spider. They are never shown or recorded.</Fact>
+               )}
             </dl>
          </section>
 

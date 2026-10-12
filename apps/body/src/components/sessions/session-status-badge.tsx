@@ -22,17 +22,25 @@ const tones: Record<ResultTone, { icon: typeof CheckCircle2; className: string }
       icon: CircleHelp,
       className: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
    },
+   neutral: {
+      icon: CircleHelp,
+      className: 'bg-muted text-muted-foreground',
+   },
 }
 
 type Props = {
    status: Parameters<typeof resultOf>[0]['status']
    noAnswer: boolean
+   kind?: Parameters<typeof resultOf>[0]['kind']
+   outcome?: string | null
 }
 
-export const SessionStatusBadge = ({ status, noAnswer }: Props) => {
+export const SessionStatusBadge = ({ status, noAnswer, kind, outcome }: Props) => {
    const { label, tone } = resultOf({
       status,
       noAnswer,
+      kind,
+      outcome,
    })
    const { icon: Icon, className } = tones[tone]
 

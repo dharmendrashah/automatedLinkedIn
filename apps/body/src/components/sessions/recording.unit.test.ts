@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseLogs, parseNetwork, parseTimeline } from './recording'
+import { parseDetection, parseLogs, parseNetwork, parseTimeline } from './recording'
 
 const step = {
    n: 1,
@@ -133,5 +133,55 @@ describe('parseLogs', () => {
 
    it('should read nothing from text that is not a list', () => {
       expect(parseLogs('oops')).toEqual([])
+   })
+})
+
+describe('parseDetection', () => {
+   const page = {
+      page: 'pixelscan',
+      url: 'https://pixelscan.net/bot-check',
+      verdict: 'BOT',
+      headline: 'Bot Behavior Detected',
+      signals: [{ name: 'Automation framework', flagged: true }],
+   }
+   const report = {
+      task_id: 'abc',
+      outcome: 'DETECTED',
+      through_proxy: true,
+      note: 'These pages check the browser fingerprint.',
+      browser: {
+         userAgent: 'Mozilla/5.0',
+         platform: 'Win32',
+         screen: '1600x900',
+      },
+      pages: [page],
+   }
+
+   it('should read a report written by the spider', () => {
+      expect(parseDetection(JSON.stringify(report))).toMatchObject({
+         outcome: 'DETECTED',
+         through_proxy: true,
+         browser: { platform: 'Win32' },
+         pages: [page],
+      })
+   })
+
+   it('should drop a page that is not in the expected shape, and keep the rest', () => {
+      const parsed = parseDetection(
+         JSON.stringify({
+            ...report,
+            pages: [page, { page: 7 }, { ...page, page: 'deviceandbrowserinfo', note: 'The page did not load.' }],
+         })
+      )
+
+      expect(parsed?.pages.map(item => item.page)).toEqual(['pixelscan', 'deviceandbrowserinfo'])
+   })
+
+   it('should work without the browser identity', () => {
+      expect(parseDetection(JSON.stringify({ ...report, browser: undefined }))?.browser).toBeUndefined()
+   })
+
+   it.each(['', 'not json', '[]', 'null', '{"pages":"no"}'])('should say there is no report for %j', text => {
+      expect(parseDetection(text)).toBeNull()
    })
 })
