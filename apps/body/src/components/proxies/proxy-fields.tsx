@@ -93,5 +93,9 @@ export const ProxyFields = ({ idPrefix, values, onChange, passwordPlaceholder }:
          Prefer a residential proxy with a sticky (not rotating) session: LinkedIn is more likely to flag an account
          whose address changes between visits, or that connects from a datacenter.
       </p>
+      <p className="text-muted-foreground text-xs">
+         Only use a proxy you trust. Everything an account sends through it, including its password, passes through the
+         proxy, and we do not check the security certificate it presents.
+      </p>
    </div>
 )

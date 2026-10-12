@@ -131,7 +131,9 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver {
       const browser = await this.launch(proxy)
 
       try {
-         const context = await browser.newContext()
+         // A proxy may re-sign secure websites with its own certificate, even an expired one. The owner accepts that
+         // (.plan/proxy-accept-resigned-https.md), so the browser trusts whatever the proxy presents.
+         const context = await browser.newContext(proxy ? { ignoreHTTPSErrors: true } : {})
 
          context.setDefaultTimeout(this.options.actionTimeoutMs)
          context.setDefaultNavigationTimeout(this.options.actionTimeoutMs)
