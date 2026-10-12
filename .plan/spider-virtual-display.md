@@ -22,7 +22,8 @@ detectable. The worker passes `headless: true` today; run it with `headless: "vi
 
 - R1 The worker image installs `xvfb` and starts Camoufox with `headless: "virtual"`.
 - R2 A new setting `SPIDER_HEADLESS` (`true` or `virtual`, default `true`) chooses the mode, so a Mac or a machine
-  without Xvfb keeps working locally. The worker image sets it to `virtual`.
+  without Xvfb keeps working locally. The worker image sets it to `virtual`. Staging sets it to `true` in the k8s
+  overlay (requested by the user, 2026-10-12), so the image default only applies elsewhere.
 - R3 Recordings (screenshots, text, video) still work in the virtual mode.
 
 ## Design
