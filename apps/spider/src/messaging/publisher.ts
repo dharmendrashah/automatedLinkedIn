@@ -1,6 +1,13 @@
 import { type ConfirmChannel, type ConsumeMessage } from 'amqplib'
 
-import { VALIDATED_KEY, VALIDATE_KEY, type ValidateAccountResult } from '@automatedLinkedIn/contracts'
+import {
+   STANDARD_DONE_KEY,
+   STANDARD_KEY,
+   type StandardTaskResult,
+   VALIDATED_KEY,
+   VALIDATE_KEY,
+   type ValidateAccountResult,
+} from '@automatedLinkedIn/contracts'
 
 import { type ScrapeTaskCommand, type ScrapeTaskResult } from '../types'
 
@@ -43,3 +50,10 @@ export const publishValidationResult = (channel: Publisher, result: ValidateAcco
 
 export const republishValidation = (channel: Publisher, message: ConsumeMessage, retries: number) =>
    publish(channel, VALIDATE_KEY, message.content, String(message.properties.messageId), { [RETRIES_HEADER]: retries })
+
+// The answer to a standard task such as the browser test.
+export const publishStandardResult = (channel: Publisher, result: StandardTaskResult) =>
+   publish(channel, STANDARD_DONE_KEY, Buffer.from(JSON.stringify(result)), result.task_id)
+
+export const republishStandard = (channel: Publisher, message: ConsumeMessage, retries: number) =>
+   publish(channel, STANDARD_KEY, message.content, String(message.properties.messageId), { [RETRIES_HEADER]: retries })

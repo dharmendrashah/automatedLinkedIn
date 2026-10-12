@@ -109,6 +109,40 @@ describe('Recorder', () => {
       ])
    })
 
+   it('should save a browser test under its own folder, with extra files of the run and the size of its video', async () => {
+      const { recorder, store } = start({
+         kind: 'browser-test',
+         videoSize: {
+            width: 1280,
+            height: 720,
+         },
+      })
+      const run = await recorder
+
+      run.addSecret('hunter2-proxy-password')
+
+      const prefix = await run.finish({
+         failed: false,
+         verdict: 'NOT_DETECTED',
+         files: {
+            'detection.json': {
+               pages: [],
+               note: 'via hunter2-proxy-password',
+            },
+         },
+      })
+
+      expect(run.videoSize).toEqual({
+         width: 1280,
+         height: 720,
+      })
+      expect(prefix).toBe('recordings/browser-test/abc-123/20261012T101500Z')
+      expect(JSON.parse(String(store.objects.get(`${prefix}/detection.json`)))).toEqual({
+         pages: [],
+         note: 'via [redacted]',
+      })
+   })
+
    it('should mask cookies, tokens and credentials before anything is written', async () => {
       const { recorder, store } = start()
       const run = await recorder

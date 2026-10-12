@@ -6,7 +6,9 @@ import { type Recorder, type StepCall, type StepEntry } from './recorder'
 
 type StepRecorder = Pick<Recorder, 'addStep' | 'log' | 'addSecret' | 'saveScreenshot' | 'saveFailureHtml'>
 
-type Details = Partial<Pick<StepEntry, 'selector' | 'target' | 'urlBefore' | 'urlAfter' | 'length' | 'found' | 'count'>>
+type Details = Partial<
+   Pick<StepEntry, 'selector' | 'target' | 'urlBefore' | 'urlAfter' | 'length' | 'found' | 'count' | 'pixels'>
+>
 
 // Wraps a browser session and notes every call it gets: what it was, how long it took, how it ended, and a
 // screenshot of the page after it. It changes nothing about the call. What was typed is never noted, only how much.
@@ -14,8 +16,8 @@ export class RecordedSession implements LoginSession {
    private lastUrl: string | undefined
 
    public constructor(
-      private readonly inner: LoginSession,
-      private readonly recorder: StepRecorder
+      protected readonly inner: LoginSession,
+      protected readonly recorder: StepRecorder
    ) {}
 
    public async goto(url: string, waitForSelector?: string) {
@@ -92,7 +94,7 @@ export class RecordedSession implements LoginSession {
       await this.inner.close()
    }
 
-   private async step<T>(
+   protected async step<T>(
       call: StepCall,
       base: Details,
       run: () => Promise<T>,

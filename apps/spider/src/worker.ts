@@ -1,7 +1,13 @@
 import 'dotenv/config'
 
-import { VALIDATE_QUEUE, validateAccountCommandSchema } from '@automatedLinkedIn/contracts'
+import {
+   STANDARD_QUEUE,
+   VALIDATE_QUEUE,
+   standardTaskCommandSchema,
+   validateAccountCommandSchema,
+} from '@automatedLinkedIn/contracts'
 
+import { runStandardTask } from './detection/standardTasks'
 import {
    LINKEDIN_CRED_ENC_KEY,
    RABBITMQ_URL,
@@ -24,7 +30,14 @@ import {
 import { createWorkerHealth, startHealthServer } from './health/workerHealth'
 import { Broker } from './messaging/broker'
 import { consumeQueue, consumeTasks } from './messaging/consumer'
-import { publishResult, publishValidationResult, republishTask, republishValidation } from './messaging/publisher'
+import {
+   publishResult,
+   publishStandardResult,
+   publishValidationResult,
+   republishStandard,
+   republishTask,
+   republishValidation,
+} from './messaging/publisher'
 import { assertTopology } from './messaging/topology'
 import { Recorder } from './recording/recorder'
 import { AccountLock } from './scraping/accountLock'
@@ -96,6 +109,7 @@ const main = async () => {
 
    const channel = await broker.consumeChannel()
    const validationChannel = await broker.consumeChannel()
+   const standardChannel = await broker.consumeChannel()
 
    await assertTopology(channel)
 
@@ -150,6 +164,51 @@ const main = async () => {
       }
    )
 
+   // A browser test is always recorded: the recording is what the operator asked for. Only video can be switched off.
+   const standardConsumer = await consumeQueue(
+      standardChannel,
+      {
+         queue: STANDARD_QUEUE,
+         parse: content => standardTaskCommandSchema.parse(JSON.parse(content.toString())),
+         label: command => `Standard task ${command.task} ${command.task_id}`,
+         handler: command =>
+            oneBrowser.runExclusive(() =>
+               runStandardTask(command, {
+                  driver,
+                  robots: new RobotsGuard(SPIDER_ROBOTS_USER_AGENT),
+                  limiter,
+                  policy,
+                  startRecording: id =>
+                     Recorder.start({
+                        kind: 'browser-test',
+                        id,
+                        mode: 'always',
+                        video: SPIDER_RECORD_VIDEO,
+                        videoSize: {
+                           width: 1280,
+                           height: 720,
+                        },
+                        store,
+                     }),
+                  publishResult: async result => publishStandardResult(await broker.publishChannel(), result),
+               })
+            ),
+         // The proxy must never stay "testing" because the worker kept failing: brain gets an answer instead.
+         onExhausted: async command =>
+            publishStandardResult(await broker.publishChannel(), {
+               task: command.task,
+               task_id: command.task_id,
+               outcome: 'COULD_NOT_TELL',
+               message: 'The browser test could not run. Try again later.',
+               finished_at: new Date().toISOString(),
+            }),
+      },
+      {
+         republish: async (message, retries) => republishStandard(await broker.publishChannel(), message, retries),
+         busyDelayMs: SPIDER_ACCOUNT_BUSY_DELAY_MS,
+      }
+   )
+
    let stopping = false
 
    // What the Service status page reads: connected to the queue and consuming both queues, and able to read the bucket.
@@ -169,7 +228,7 @@ const main = async () => {
    )
 
    // A lost connection ends the process, so the container's restart policy brings a clean worker back.
-   for (const open of [channel, validationChannel]) {
+   for (const open of [channel, validationChannel, standardChannel]) {
       open.on('close', () => {
          if (!stopping) {
             console.error('The broker channel closed; exiting so the worker restarts')
@@ -183,13 +242,13 @@ const main = async () => {
          stopping = true
 
          // Finish the task in progress, take no new one, then leave.
-         Promise.all([consumer.stop(), validationConsumer.stop()])
+         Promise.all([consumer.stop(), validationConsumer.stop(), standardConsumer.stop()])
             .then(() => broker.close())
             .finally(() => process.exit(0))
       })
    }
 
-   console.log('spider worker is waiting for tasks and account validations')
+   console.log('spider worker is waiting for tasks, account validations and browser tests')
 }
 
 main().catch((error: unknown) => {

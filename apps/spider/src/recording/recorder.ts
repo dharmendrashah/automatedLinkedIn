@@ -11,7 +11,7 @@ export type LogSource = 'browser' | 'spider' | 'engine'
 
 export type LogLevel = 'info' | 'warn' | 'error'
 
-export type StepCall = 'goto' | 'click' | 'fill' | 'exists' | 'extract' | 'cookies' | 'addCookies'
+export type StepCall = 'goto' | 'click' | 'fill' | 'exists' | 'extract' | 'cookies' | 'addCookies' | 'scroll'
 
 // One thing the spider did in the browser. `t` is the time in milliseconds since the run started, when it finished.
 export type StepEntry = {
@@ -29,6 +29,8 @@ export type StepEntry = {
    length?: number
    found?: boolean
    count?: number
+   // scroll: how far the page was scrolled down.
+   pixels?: number
    error?: string
    screenshot?: string
 }
@@ -64,6 +66,8 @@ type LogEntry = {
 export interface RunRecorder {
    // Where Playwright writes the video; undefined when video is off.
    readonly videoDir: string | undefined
+   // The size of the video; undefined leaves it to Playwright's default.
+   readonly videoSize: { width: number; height: number } | undefined
    log: (source: LogSource, level: LogLevel, message: string) => void
    network: (entry: NetworkInput) => void
    // A response capture still running; finish waits for it.
@@ -72,10 +76,11 @@ export interface RunRecorder {
 }
 
 export type RecorderOptions = {
-   kind: 'validate' | 'task'
+   kind: 'validate' | 'task' | 'browser-test'
    id: string
    mode: Exclude<RecordingMode, 'off'>
    video: boolean
+   videoSize?: { width: number; height: number }
    store: Pick<ObjectStore, 'put' | 'upload'>
    now?: () => number
    tmpRoot?: string
@@ -96,6 +101,8 @@ const stamp = (time: number) => `${new Date(time).toISOString().slice(0, 19).rep
 // `finish` catches every error, and the temporary folder always goes.
 export class Recorder implements RunRecorder {
    public readonly videoDir: string | undefined
+
+   public readonly videoSize: { width: number; height: number } | undefined
 
    private readonly steps: StepEntry[] = []
 
@@ -123,6 +130,7 @@ export class Recorder implements RunRecorder {
    ) {
       this.startedAt = this.clock()
       this.videoDir = options.video ? dir : undefined
+      this.videoSize = options.video ? options.videoSize : undefined
    }
 
    public static async start(options: RecorderOptions) {
@@ -255,7 +263,16 @@ export class Recorder implements RunRecorder {
 
    // Saves the recording and resolves to its prefix in the bucket, or undefined when nothing was kept (mode
    // `failures` and the run went well) or saving failed. Always removes the temporary folder.
-   public async finish({ failed, verdict }: { failed: boolean; verdict?: string }) {
+   public async finish({
+      failed,
+      verdict,
+      files,
+   }: {
+      failed: boolean
+      verdict?: string
+      // More JSON files for the run, saved next to the timeline and masked like it (a browser test's detection.json).
+      files?: Record<string, unknown>
+   }) {
       try {
          await this.settle()
 
@@ -283,6 +300,10 @@ export class Recorder implements RunRecorder {
          })
          await save('network.json', this.requests)
          await save('logs.json', this.logs)
+
+         for (const [name, value] of Object.entries(files ?? {})) {
+            await save(name, value)
+         }
 
          if (this.failureHtml !== undefined) {
             await store.put(`${prefix}/failure.html`, this.redact(this.failureHtml), 'text/plain')

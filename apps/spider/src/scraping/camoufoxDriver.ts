@@ -8,7 +8,14 @@ import { type ExtractedRecord, type SessionCookie } from '../types'
 import { attachRecorder } from '../recording/attachRecorder'
 import { maskText } from '../recording/masking'
 import { type RunRecorder } from '../recording/recorder'
-import { type BrowserDriver, type LoginDriver, type LoginSession, type OpenOptions } from './driver'
+import {
+   type BrowserDriver,
+   type BrowserIdentity,
+   type DetectionDriver,
+   type DetectionSession,
+   type LoginDriver,
+   type OpenOptions,
+} from './driver'
 import { TaskError } from './errors'
 
 export type CamoufoxOptions = {
@@ -37,7 +44,7 @@ const newFingerprint = () =>
       },
    }).fingerprint
 
-class CamoufoxSession implements LoginSession {
+class CamoufoxSession implements DetectionSession {
    public constructor(
       private readonly browser: Browser,
       private readonly context: BrowserContext,
@@ -51,6 +58,32 @@ class CamoufoxSession implements LoginSession {
 
    public pageHtml() {
       return this.page.content()
+   }
+
+   // The wheel, as a person scrolls, so the page sees real scroll events. True while there is more page below.
+   public async scrollBy(pixels: number) {
+      await this.page.mouse.wheel(0, pixels)
+
+      return this.page.evaluate(() => window.scrollY + window.innerHeight < document.documentElement.scrollHeight - 2)
+   }
+
+   public pageText() {
+      return this.page.evaluate(() => document.body.innerText)
+   }
+
+   public fullPageScreenshot() {
+      return this.page.screenshot({
+         fullPage: true,
+         timeout: SNAPSHOT_TIMEOUT_MS,
+      })
+   }
+
+   public identity(): Promise<BrowserIdentity> {
+      return this.page.evaluate(() => ({
+         userAgent: navigator.userAgent,
+         platform: navigator.platform,
+         screen: `${screen.width}x${screen.height}`,
+      }))
    }
 
    public async cookies(): Promise<SessionCookie[]> {
@@ -159,10 +192,10 @@ class CamoufoxSession implements LoginSession {
 // Starts Camoufox, a Firefox that reports a device identity of its own (LinkedIn authorized this for the project,
 // see .plan/linkedin-account-linking.md). Human-like cursor movement is on. With a proxy, timezone, locale,
 // geolocation and the WebRTC address follow the proxy's exit address.
-export class CamoufoxDriver implements BrowserDriver, LoginDriver {
+export class CamoufoxDriver implements BrowserDriver, LoginDriver, DetectionDriver {
    public constructor(private readonly options: CamoufoxOptions) {}
 
-   public async open({ proxy, recorder }: OpenOptions = {}): Promise<LoginSession> {
+   public async open({ proxy, recorder }: OpenOptions = {}): Promise<DetectionSession> {
       const browser = await this.launch(proxy, recorder)
 
       try {
@@ -170,7 +203,12 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver {
          // (.plan/proxy-accept-resigned-https.md), so the browser trusts whatever the proxy presents.
          const context = await browser.newContext({
             ...(proxy && { ignoreHTTPSErrors: true }),
-            ...(recorder?.videoDir && { recordVideo: { dir: recorder.videoDir } }),
+            ...(recorder?.videoDir && {
+               recordVideo: {
+                  dir: recorder.videoDir,
+                  ...(recorder.videoSize && { size: recorder.videoSize }),
+               },
+            }),
          })
 
          context.setDefaultTimeout(this.options.actionTimeoutMs)
