@@ -15,6 +15,19 @@ export const STANDARD_DONE_QUEUE = 'tasks.standard.done'
 export const STANDARD_KEY = 'task.standard'
 export const STANDARD_DONE_KEY = 'task.standard.done'
 
+// The one task contract (.plan/spider-task-framework.md): every task goes through these queues.
+export const TASK_QUEUE = 'tasks.run'
+export const TASK_DEAD_QUEUE = 'tasks.run.dead'
+export const TASK_DONE_QUEUE = 'tasks.done'
+// Holds the latest catalog the worker announced; brain stores it, so a missed one only waits.
+export const TASK_CATALOG_QUEUE = 'tasks.catalog'
+export const TASK_KEY = 'task.run'
+export const TASK_DONE_KEY = 'task.done'
+export const TASK_CATALOG_KEY = 'task.catalog'
+
+// A task that keeps failing is delivered this many times, then dead-lettered.
+export const TASK_DELIVERY_LIMIT = 3
+
 // A standard task that keeps failing is delivered this many times, then dead-lettered.
 export const STANDARD_DELIVERY_LIMIT = 3
 
@@ -79,4 +92,35 @@ export const assertAccountTopology = async (channel: TopologyChannel) => {
       },
    })
    await channel.bindQueue(STANDARD_DONE_QUEUE, EXCHANGE, STANDARD_DONE_KEY)
+
+   await channel.assertQueue(TASK_DEAD_QUEUE, { durable: true })
+   await channel.bindQueue(TASK_DEAD_QUEUE, DEAD_EXCHANGE, TASK_KEY)
+
+   await channel.assertQueue(TASK_QUEUE, {
+      durable: true,
+      arguments: {
+         'x-queue-type': 'quorum',
+         'x-delivery-limit': TASK_DELIVERY_LIMIT,
+         'x-dead-letter-exchange': DEAD_EXCHANGE,
+      },
+   })
+   await channel.bindQueue(TASK_QUEUE, EXCHANGE, TASK_KEY)
+
+   await channel.assertQueue(TASK_DONE_QUEUE, {
+      durable: true,
+      arguments: {
+         'x-message-ttl': VALIDATED_TTL_MS,
+         'x-max-length': VALIDATED_MAX_LENGTH,
+      },
+   })
+   await channel.bindQueue(TASK_DONE_QUEUE, EXCHANGE, TASK_DONE_KEY)
+
+   await channel.assertQueue(TASK_CATALOG_QUEUE, {
+      durable: true,
+      arguments: {
+         'x-max-length': 1,
+         'x-overflow': 'drop-head',
+      },
+   })
+   await channel.bindQueue(TASK_CATALOG_QUEUE, EXCHANGE, TASK_CATALOG_KEY)
 }
