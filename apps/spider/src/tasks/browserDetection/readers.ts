@@ -1,6 +1,6 @@
-import { type BrowserTestOutcome } from '@automatedLinkedIn/contracts'
-
 export type PageVerdict = 'HUMAN' | 'BOT' | 'UNKNOWN'
+
+export type DetectionOutcome = 'NOT_DETECTED' | 'DETECTED' | 'COULD_NOT_TELL'
 
 // One thing a page checked. `flagged` is true when the page counted it against the browser.
 export type DetectionSignal = {
@@ -104,7 +104,7 @@ export const readPixelscan = (html: string): PageReading => {
 }
 
 // Detected as soon as one page says bot. Not detected only when every page said human.
-export const combine = (verdicts: PageVerdict[]): BrowserTestOutcome => {
+export const combine = (verdicts: PageVerdict[]): DetectionOutcome => {
    if (verdicts.includes('BOT')) {
       return 'DETECTED'
    }

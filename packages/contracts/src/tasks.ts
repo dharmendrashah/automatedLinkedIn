@@ -48,7 +48,16 @@ export const taskCommandSchema = z.strictObject({
    input: z.record(z.string(), z.unknown()).refine(withinBytes(MAX_INPUT_BYTES), { message: 'input is too large' }),
 })
 
-export const ARTIFACT_KINDS = ['log', 'network', 'video', 'screenshot', 'report', 'session', 'file'] as const
+export const ARTIFACT_KINDS = [
+   'log',
+   'network',
+   'timeline',
+   'video',
+   'screenshot',
+   'report',
+   'session',
+   'file',
+] as const
 
 export const artifactSchema = z.strictObject({
    kind: z.enum(ARTIFACT_KINDS),
@@ -143,6 +152,50 @@ export const taskCatalogEntrySchema = z.strictObject({
    hosts: z.array(z.string().max(255)).max(20),
 })
 
+// One message with every task of a worker: the catalog queue keeps only the latest message.
+export const taskCatalogSchema = z.strictObject({
+   contract: z.literal(TASK_CONTRACT_VERSION),
+   announced_at: z.iso.datetime(),
+   worker: z.strictObject({ build: z.string().min(1).max(64) }),
+   tasks: z.array(taskCatalogEntrySchema).max(100),
+})
+
+// The answers the runner gives when a task could not even start, so no task has to declare them.
+export const RUNNER_VERDICTS = {
+   UNKNOWN_TASK: {
+      label: 'Task not available',
+      tone: 'failure',
+   },
+   INVALID_INPUT: {
+      label: 'Invalid input',
+      tone: 'failure',
+   },
+   NEEDS_PROXY: {
+      label: 'Needs a working proxy',
+      tone: 'failure',
+   },
+   NEEDS_ACCOUNT: {
+      label: 'Needs a LinkedIn account',
+      tone: 'failure',
+   },
+   NOT_ALLOWED: {
+      label: 'Site not allowed',
+      tone: 'failure',
+   },
+   PROXY_FAILED: {
+      label: 'The proxy did not work',
+      tone: 'failure',
+   },
+   TIMED_OUT: {
+      label: 'Took too long',
+      tone: 'failure',
+   },
+   CRASHED: {
+      label: 'The browser failed',
+      tone: 'failure',
+   },
+} as const
+
 type RunRequest = { task: string; user_id: string; requested_at: string; task_id: string }
 
 // Where the files of one run live. A pure function of the request, so the spider writes under it and brain computes the
@@ -176,6 +229,7 @@ export const artifactPathUnder = (prefix: string, path: string) =>
 
 export type TaskCommand = z.infer<typeof taskCommandSchema>
 export type TaskResult = z.infer<typeof taskResultSchema>
+export type TaskCatalog = z.infer<typeof taskCatalogSchema>
 export type TaskCatalogEntry = z.infer<typeof taskCatalogEntrySchema>
 export type Artifact = z.infer<typeof artifactSchema>
 export type ArtifactKind = (typeof ARTIFACT_KINDS)[number]

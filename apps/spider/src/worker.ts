@@ -1,14 +1,14 @@
 import 'dotenv/config'
 
 import {
-   STANDARD_QUEUE,
+   TASK_QUEUE,
    VALIDATE_QUEUE,
-   standardTaskCommandSchema,
+   taskCommandSchema,
    validateAccountCommandSchema,
 } from '@automatedLinkedIn/contracts'
 
-import { runStandardTask } from './detection/standardTasks'
 import {
+   GIT_SHA,
    LINKEDIN_CRED_ENC_KEY,
    RABBITMQ_URL,
    SPIDER_ACCOUNT_BUSY_DELAY_MS,
@@ -31,10 +31,11 @@ import { createWorkerHealth, startHealthServer } from './health/workerHealth'
 import { Broker } from './messaging/broker'
 import { consumeQueue, consumeTasks } from './messaging/consumer'
 import {
+   publishCatalog,
    publishResult,
-   publishStandardResult,
+   publishRunResult,
    publishValidationResult,
-   republishStandard,
+   republishRun,
    republishTask,
    republishValidation,
 } from './messaging/publisher'
@@ -48,6 +49,9 @@ import { processTask } from './scraping/processTask'
 import { HostRateLimiter } from './scraping/rateLimiter'
 import { RobotsGuard } from './scraping/robots'
 import { GcsStore } from './storage/gcsStore'
+import { catalogOf } from './tasks/catalog'
+import { TASKS } from './tasks/registry'
+import { exhaustedResult, runTask } from './tasks/runner'
 import { AccountValidator } from './validation/accountValidator'
 import { openCredentials } from './validation/credentials'
 import { Mutex } from './validation/mutex'
@@ -109,7 +113,7 @@ const main = async () => {
 
    const channel = await broker.consumeChannel()
    const validationChannel = await broker.consumeChannel()
-   const standardChannel = await broker.consumeChannel()
+   const taskChannel = await broker.consumeChannel()
 
    await assertTopology(channel)
 
@@ -164,50 +168,50 @@ const main = async () => {
       }
    )
 
-   // A browser test is always recorded: the recording is what the operator asked for. Only video can be switched off.
-   const standardConsumer = await consumeQueue(
-      standardChannel,
+   // Every task of the standard contract runs here: the runner records it, applies the limits and answers.
+   const taskConsumer = await consumeQueue(
+      taskChannel,
       {
-         queue: STANDARD_QUEUE,
-         parse: content => standardTaskCommandSchema.parse(JSON.parse(content.toString())),
-         label: command => `Standard task ${command.task} ${command.task_id}`,
+         queue: TASK_QUEUE,
+         parse: content => taskCommandSchema.parse(JSON.parse(content.toString())),
+         label: command => `Task ${command.task} ${command.task_id}`,
          handler: command =>
             oneBrowser.runExclusive(() =>
-               runStandardTask(command, {
+               runTask(command, {
+                  tasks: TASKS,
                   driver,
+                  policy,
                   robots: new RobotsGuard(SPIDER_ROBOTS_USER_AGENT),
                   limiter,
-                  policy,
-                  startRecording: id =>
-                     Recorder.start({
-                        kind: 'browser-test',
-                        id,
-                        mode: 'always',
-                        video: SPIDER_RECORD_VIDEO,
-                        videoSize: {
-                           width: 1280,
-                           height: 720,
-                        },
-                        store,
-                     }),
-                  publishResult: async result => publishStandardResult(await broker.publishChannel(), result),
+                  store,
+                  startRecording: ({ task, id, prefix, always, videoSize }) =>
+                     always || recordingMode !== 'off'
+                        ? Recorder.start({
+                             kind: task,
+                             id,
+                             prefix,
+                             mode: always ? 'always' : (recordingMode as 'failures' | 'always'),
+                             video: SPIDER_RECORD_VIDEO,
+                             ...(videoSize && { videoSize }),
+                             store,
+                          })
+                        : Promise.resolve(undefined),
+                  publishResult: async result => publishRunResult(await broker.publishChannel(), result),
+                  workerBuild: GIT_SHA,
                })
             ),
-         // The proxy must never stay "testing" because the worker kept failing: brain gets an answer instead.
+         // A session must never stay in progress because the worker kept failing: brain gets an answer instead.
          onExhausted: async command =>
-            publishStandardResult(await broker.publishChannel(), {
-               task: command.task,
-               task_id: command.task_id,
-               outcome: 'COULD_NOT_TELL',
-               message: 'The browser test could not run. Try again later.',
-               finished_at: new Date().toISOString(),
-            }),
+            publishRunResult(await broker.publishChannel(), exhaustedResult(command, GIT_SHA)),
       },
       {
-         republish: async (message, retries) => republishStandard(await broker.publishChannel(), message, retries),
+         republish: async (message, retries) => republishRun(await broker.publishChannel(), message, retries),
          busyDelayMs: SPIDER_ACCOUNT_BUSY_DELAY_MS,
       }
    )
+
+   // Brain keeps the latest, so a worker that starts later or newer simply replaces what brain knew.
+   await publishCatalog(await broker.publishChannel(), catalogOf(TASKS, GIT_SHA))
 
    let stopping = false
 
@@ -228,7 +232,7 @@ const main = async () => {
    )
 
    // A lost connection ends the process, so the container's restart policy brings a clean worker back.
-   for (const open of [channel, validationChannel, standardChannel]) {
+   for (const open of [channel, validationChannel, taskChannel]) {
       open.on('close', () => {
          if (!stopping) {
             console.error('The broker channel closed; exiting so the worker restarts')
@@ -242,7 +246,7 @@ const main = async () => {
          stopping = true
 
          // Finish the task in progress, take no new one, then leave.
-         Promise.all([consumer.stop(), validationConsumer.stop(), standardConsumer.stop()])
+         Promise.all([consumer.stop(), validationConsumer.stop(), taskConsumer.stop()])
             .then(() => broker.close())
             .finally(() => process.exit(0))
       })

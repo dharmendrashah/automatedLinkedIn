@@ -1,10 +1,28 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { VALIDATED_KEY, VALIDATE_KEY, type ValidateAccountResult } from '@automatedLinkedIn/contracts'
+import {
+   TASK_KEY as RUN_KEY,
+   TASK_CATALOG_KEY,
+   TASK_DONE_KEY,
+   type TaskCatalog,
+   type TaskResult,
+   VALIDATED_KEY,
+   VALIDATE_KEY,
+   type ValidateAccountResult,
+} from '@automatedLinkedIn/contracts'
 
 import { type ScrapeTaskCommand, type ScrapeTaskResult } from '../types'
 
-import { publishResult, publishTask, publishValidationResult, republishTask, republishValidation } from './publisher'
+import {
+   publishCatalog,
+   publishResult,
+   publishRunResult,
+   publishTask,
+   publishValidationResult,
+   republishRun,
+   republishTask,
+   republishValidation,
+} from './publisher'
 import { EXCHANGE, RESULT_KEY, TASK_KEY } from './topology'
 
 const channel = () => ({
@@ -141,5 +159,57 @@ describe('publisher', () => {
       fake.waitForConfirms.mockRejectedValue(new Error('nacked'))
 
       await expect(publishTask(fake as never, command)).rejects.toThrow('nacked')
+   })
+
+   describe('task framework', () => {
+      it('should publish the result of a task on the done key, persistent, with the task id as message id', async () => {
+         const fake = channel()
+         const done = { task_id: 'abc' } as TaskResult
+
+         await publishRunResult(fake as never, done)
+
+         const [[exchange, key, body, options]] = fake.publish.mock.calls
+
+         expect(exchange).toBe(EXCHANGE)
+         expect(key).toBe(TASK_DONE_KEY)
+         expect(JSON.parse(body.toString())).toEqual(done)
+         expect(options).toMatchObject({
+            persistent: true,
+            messageId: 'abc',
+         })
+         expect(fake.waitForConfirms).toHaveBeenCalled()
+      })
+
+      it('should publish the catalog on its own key', async () => {
+         const fake = channel()
+         const catalog = {
+            worker: { build: 'abc1234' },
+            tasks: [],
+         } as unknown as TaskCatalog
+
+         await publishCatalog(fake as never, catalog)
+
+         expect(fake.publish.mock.calls[0][1]).toBe(TASK_CATALOG_KEY)
+         expect(fake.waitForConfirms).toHaveBeenCalled()
+      })
+
+      it('should send a run again with a retry count, keeping its body and id', async () => {
+         const fake = channel()
+         const message = {
+            content: Buffer.from('{"task":"x"}'),
+            properties: { messageId: 'abc' },
+         }
+
+         await republishRun(fake as never, message as never, 2)
+
+         const [[, key, body, options]] = fake.publish.mock.calls
+
+         expect(key).toBe(RUN_KEY)
+         expect(body.toString()).toBe('{"task":"x"}')
+         expect(options).toMatchObject({
+            messageId: 'abc',
+            headers: { 'x-retries': 2 },
+         })
+      })
    })
 })

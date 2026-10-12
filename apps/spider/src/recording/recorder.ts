@@ -2,6 +2,8 @@ import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { ARTIFACT_NAME_PATTERN, type Artifact } from '@automatedLinkedIn/contracts'
+
 import { type ObjectStore } from '../storage/store'
 import { maskHeaders, maskText, maskUrl } from './masking'
 
@@ -76,8 +78,11 @@ export interface RunRecorder {
 }
 
 export type RecorderOptions = {
-   kind: 'validate' | 'task' | 'browser-test'
+   // Names the run in logs and in the timeline. Account validation and scrape tasks still use their own kinds.
+   kind: string
    id: string
+   // Where the files go (`runPrefix` in contracts). Without it the older recordings/<kind>/<id>/<time> folder is used.
+   prefix?: string
    mode: Exclude<RecordingMode, 'off'>
    video: boolean
    videoSize?: { width: number; height: number }
@@ -92,6 +97,8 @@ const MAX_BODY_BYTES = 64 * 1024
 const MAX_TOTAL_BODY_BYTES = 2 * 1024 * 1024
 const MAX_SCREENSHOTS = 40
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024
+const MAX_ATTACHMENTS = 20
+const MAX_ATTACHMENT_BYTES = 1024 * 1024
 // A secret shorter than this would blank out ordinary words.
 const MIN_SECRET_LENGTH = 4
 
@@ -119,6 +126,12 @@ export class Recorder implements RunRecorder {
    private readonly pending = new Set<Promise<unknown>>()
 
    private failureHtml: string | undefined
+
+   private readonly attachments: Array<{ name: string; content: string; contentType: string }> = []
+
+   private sessionJson: string | undefined
+
+   private saved: Artifact[] = []
 
    private bodyBytes = 0
 
@@ -228,7 +241,39 @@ export class Recorder implements RunRecorder {
       await Promise.allSettled([...this.pending])
    }
 
-   private redact(text: string) {
+   // A file for the run that is not one of the standard ones. Stored under files/ with the run's secrets masked.
+   public attach(name: string, content: string, contentType: string) {
+      if (
+         !ARTIFACT_NAME_PATTERN.test(name) ||
+         this.attachments.length >= MAX_ATTACHMENTS ||
+         content.length > MAX_ATTACHMENT_BYTES
+      ) {
+         this.notes.push(`The file ${name.slice(0, 40)} was left out.`)
+
+         return false
+      }
+
+      this.attachments.push({
+         name,
+         content,
+         contentType,
+      })
+
+      return true
+   }
+
+   // The browser's cookies and local storage. It holds login tokens, so it is the one file saved without masking and the
+   // list marks it sensitive.
+   public attachSession(json: string) {
+      this.sessionJson = json
+   }
+
+   // What the last `finish` saved, in the shape of the task result.
+   public artifacts(): Artifact[] {
+      return this.saved
+   }
+
+   public redact(text: string) {
       let result = text
 
       for (const secret of this.secrets) {
@@ -263,16 +308,7 @@ export class Recorder implements RunRecorder {
 
    // Saves the recording and resolves to its prefix in the bucket, or undefined when nothing was kept (mode
    // `failures` and the run went well) or saving failed. Always removes the temporary folder.
-   public async finish({
-      failed,
-      verdict,
-      files,
-   }: {
-      failed: boolean
-      verdict?: string
-      // More JSON files for the run, saved next to the timeline and masked like it (a browser test's detection.json).
-      files?: Record<string, unknown>
-   }) {
+   public async finish({ failed, verdict }: { failed: boolean; verdict?: string }) {
       try {
          await this.settle()
 
@@ -281,41 +317,118 @@ export class Recorder implements RunRecorder {
          }
 
          const { store, kind, id } = this.options
-         const prefix = `recordings/${kind}/${id}/${stamp(this.startedAt)}`
+         const prefix = this.options.prefix ?? `recordings/${kind}/${id}/${stamp(this.startedAt)}`
          const video = await this.videoFile()
-         const save = (file: string, value: unknown) =>
-            store.put(`${prefix}/${file}`, this.redact(JSON.stringify(value)), 'application/json')
+         const saved: Artifact[] = []
+         const putText = async (
+            artifact: Pick<Artifact, 'kind' | 'name' | 'content_type' | 'sensitive'>,
+            folder: string,
+            text: string
+         ) => {
+            const path = `${prefix}/${folder}${artifact.name}`
 
-         await save('timeline.json', {
-            kind,
-            id,
-            startedAt: new Date(this.startedAt).toISOString(),
-            durationMs: this.elapsed(),
-            outcome: failed ? 'failed' : 'ok',
-            ...(verdict && { verdict }),
-            video: Boolean(video),
-            screenshots: this.screenshots,
-            notes: this.notes,
-            steps: this.steps,
-         })
-         await save('network.json', this.requests)
-         await save('logs.json', this.logs)
-
-         for (const [name, value] of Object.entries(files ?? {})) {
-            await save(name, value)
+            await store.put(path, text, artifact.content_type)
+            saved.push({
+               ...artifact,
+               path,
+               bytes: Buffer.byteLength(text),
+            })
          }
+         const save = (file: string, value: unknown, artifactKind: Artifact['kind'] = 'file') =>
+            putText(
+               {
+                  kind: artifactKind,
+                  name: file,
+                  content_type: 'application/json',
+               },
+               '',
+               this.redact(JSON.stringify(value))
+            )
+
+         await save(
+            'timeline.json',
+            {
+               kind,
+               id,
+               startedAt: new Date(this.startedAt).toISOString(),
+               durationMs: this.elapsed(),
+               outcome: failed ? 'failed' : 'ok',
+               ...(verdict && { verdict }),
+               video: Boolean(video),
+               screenshots: this.screenshots,
+               notes: this.notes,
+               steps: this.steps,
+            },
+            'timeline'
+         )
+         await save('network.json', this.requests, 'network')
+         await save('logs.json', this.logs, 'log')
 
          if (this.failureHtml !== undefined) {
-            await store.put(`${prefix}/failure.html`, this.redact(this.failureHtml), 'text/plain')
+            await putText(
+               {
+                  kind: 'file',
+                  name: 'failure.html',
+                  content_type: 'text/plain',
+               },
+               '',
+               this.redact(this.failureHtml)
+            )
+         }
+
+         for (const { name, content, contentType } of this.attachments) {
+            await putText(
+               {
+                  kind: 'file',
+                  name,
+                  content_type: contentType,
+               },
+               'files/',
+               this.redact(content)
+            )
+         }
+
+         if (this.sessionJson !== undefined) {
+            await putText(
+               {
+                  kind: 'session',
+                  name: 'session.json',
+                  content_type: 'application/json',
+                  sensitive: true,
+               },
+               '',
+               this.sessionJson
+            )
          }
 
          for (const name of this.screenshots) {
-            await store.upload(`${prefix}/screenshots/${name}`, join(this.dir, 'screenshots', name), 'image/png')
+            const file = join(this.dir, 'screenshots', name)
+            const number = Number(/^(\d{2,3})-/.exec(name)?.[1])
+            const path = `${prefix}/screenshots/${name}`
+
+            await store.upload(path, file, 'image/png')
+            saved.push({
+               kind: 'screenshot',
+               name,
+               path,
+               content_type: 'image/png',
+               bytes: (await stat(file)).size,
+               ...(number >= 1 && number <= this.steps.length && { step: number }),
+            })
          }
 
          if (video) {
             await store.upload(`${prefix}/video.webm`, video, 'video/webm')
+            saved.push({
+               kind: 'video',
+               name: 'video.webm',
+               path: `${prefix}/video.webm`,
+               content_type: 'video/webm',
+               bytes: (await stat(video)).size,
+            })
          }
+
+         this.saved = saved
 
          return prefix
       } catch (error) {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
    ARTIFACT_KINDS,
+   RUNNER_VERDICTS,
    RUN_PREFIX_PATTERN,
    TASK_CATALOG_QUEUE,
    TASK_DEAD_QUEUE,
@@ -13,6 +14,7 @@ import {
    assertAccountTopology,
    runPrefix,
    taskCatalogEntrySchema,
+   taskCatalogSchema,
    taskCommandSchema,
    taskResultSchema,
 } from './index'
@@ -155,7 +157,7 @@ describe('taskResultSchema', () => {
    })
 
    it('should know the kinds of file a run can have', () => {
-      expect(ARTIFACT_KINDS).toEqual(['log', 'network', 'video', 'screenshot', 'report', 'session', 'file'])
+      expect(ARTIFACT_KINDS).toEqual(['log', 'network', 'timeline', 'video', 'screenshot', 'report', 'session', 'file'])
    })
 
    it.each([
@@ -256,6 +258,51 @@ describe('taskCatalogEntrySchema', () => {
             ...patch,
          }).success
       ).toBe(false)
+   })
+})
+
+describe('taskCatalogSchema', () => {
+   it('should carry every task of a worker in one message, because the queue keeps only the latest', () => {
+      const catalog = {
+         contract: 1,
+         announced_at: '2026-10-13T10:00:00.000Z',
+         worker: { build: 'abc1234' },
+         tasks: [catalogEntry],
+      }
+
+      expect(taskCatalogSchema.parse(catalog)).toEqual(catalog)
+      expect(
+         taskCatalogSchema.safeParse({
+            ...catalog,
+            tasks: [
+               {
+                  ...catalogEntry,
+                  task: '../x',
+               },
+            ],
+         }).success
+      ).toBe(false)
+   })
+})
+
+describe('RUNNER_VERDICTS', () => {
+   it('should label the answers the runner gives itself, so a task never has to', () => {
+      expect(Object.keys(RUNNER_VERDICTS).sort()).toEqual(
+         [
+            'CRASHED',
+            'INVALID_INPUT',
+            'NEEDS_ACCOUNT',
+            'NEEDS_PROXY',
+            'NOT_ALLOWED',
+            'PROXY_FAILED',
+            'TIMED_OUT',
+            'UNKNOWN_TASK',
+         ].sort()
+      )
+      expect(RUNNER_VERDICTS.UNKNOWN_TASK).toEqual({
+         label: expect.any(String),
+         tone: 'failure',
+      })
    })
 })
 

@@ -109,9 +109,8 @@ describe('Recorder', () => {
       ])
    })
 
-   it('should save a browser test under its own folder, with extra files of the run and the size of its video', async () => {
-      const { recorder, store } = start({
-         kind: 'browser-test',
+   it('should record the video at the size it was asked for', async () => {
+      const { recorder } = start({
          videoSize: {
             width: 1280,
             height: 720,
@@ -119,28 +118,12 @@ describe('Recorder', () => {
       })
       const run = await recorder
 
-      run.addSecret('hunter2-proxy-password')
-
-      const prefix = await run.finish({
-         failed: false,
-         verdict: 'NOT_DETECTED',
-         files: {
-            'detection.json': {
-               pages: [],
-               note: 'via hunter2-proxy-password',
-            },
-         },
-      })
-
       expect(run.videoSize).toEqual({
          width: 1280,
          height: 720,
       })
-      expect(prefix).toBe('recordings/browser-test/abc-123/20261012T101500Z')
-      expect(JSON.parse(String(store.objects.get(`${prefix}/detection.json`)))).toEqual({
-         pages: [],
-         note: 'via [redacted]',
-      })
+
+      await run.finish({ failed: false })
    })
 
    it('should mask cookies, tokens and credentials before anything is written', async () => {
@@ -392,5 +375,142 @@ describe('Recorder', () => {
       const prefix = (await run.finish({ failed: false })) as string
 
       expect(JSON.parse(String(store.objects.get(`${prefix}/network.json`)))).toHaveLength(1)
+   })
+})
+
+describe('Recorder in the task layout', () => {
+   const PREFIX = 'runs/browser-detection/user-1/2026/10/12/0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11'
+
+   beforeEach(() => {
+      vi.restoreAllMocks()
+   })
+
+   it('should write under the prefix it was given and list every file it saved, with its kind and size', async () => {
+      const { recorder, store } = start({
+         kind: 'browser-detection',
+         prefix: PREFIX,
+      })
+      const run = await recorder
+
+      run.addStep({
+         call: 'goto',
+         durationMs: 5,
+         ok: true,
+      })
+      await run.saveScreenshot('01-goto.png', Buffer.from('png'))
+      await run.saveScreenshot('90-fullpage-pixelscan.png', Buffer.from('big'))
+      await writeFile(join(run.dir, 'abc.webm'), 'video-bytes')
+
+      await expect(run.finish({ failed: false })).resolves.toBe(PREFIX)
+
+      expect(run.artifacts()).toEqual(
+         expect.arrayContaining([
+            {
+               kind: 'timeline',
+               name: 'timeline.json',
+               path: `${PREFIX}/timeline.json`,
+               content_type: 'application/json',
+               bytes: expect.any(Number),
+            },
+            {
+               kind: 'network',
+               name: 'network.json',
+               path: `${PREFIX}/network.json`,
+               content_type: 'application/json',
+               bytes: 2,
+            },
+            {
+               kind: 'log',
+               name: 'logs.json',
+               path: `${PREFIX}/logs.json`,
+               content_type: 'application/json',
+               bytes: 2,
+            },
+            {
+               kind: 'screenshot',
+               name: '01-goto.png',
+               path: `${PREFIX}/screenshots/01-goto.png`,
+               content_type: 'image/png',
+               bytes: 3,
+               step: 1,
+            },
+            {
+               kind: 'screenshot',
+               name: '90-fullpage-pixelscan.png',
+               path: `${PREFIX}/screenshots/90-fullpage-pixelscan.png`,
+               content_type: 'image/png',
+               bytes: 3,
+            },
+            {
+               kind: 'video',
+               name: 'video.webm',
+               path: `${PREFIX}/video.webm`,
+               content_type: 'video/webm',
+               bytes: 11,
+            },
+         ])
+      )
+      expect(store.objects.has(`${PREFIX}/timeline.json`)).toBe(true)
+   })
+
+   it('should keep files a task attached under files/ and mask the secrets of the run in their text', async () => {
+      const { recorder, store } = start({ prefix: PREFIX })
+      const run = await recorder
+
+      run.addSecret('hunter2-password')
+      run.attach('page.html', '<p>hunter2-password</p>', 'text/html')
+
+      await run.finish({ failed: false })
+
+      expect(store.objects.get(`${PREFIX}/files/page.html`)).toBe('<p>[redacted]</p>')
+      expect(run.artifacts()).toContainEqual({
+         kind: 'file',
+         name: 'page.html',
+         path: `${PREFIX}/files/page.html`,
+         content_type: 'text/html',
+         bytes: expect.any(Number),
+      })
+   })
+
+   it('should save the browser session as a sensitive file, untouched by masking, only when asked', async () => {
+      const { recorder, store } = start({ prefix: PREFIX })
+      const run = await recorder
+
+      run.addSecret('LIAT-TOKEN-VALUE')
+      run.attachSession('{"cookies":[{"name":"li_at","value":"LIAT-TOKEN-VALUE"}]}')
+
+      await run.finish({ failed: false })
+
+      expect(store.objects.get(`${PREFIX}/session.json`)).toContain('LIAT-TOKEN-VALUE')
+      expect(run.artifacts()).toContainEqual(
+         expect.objectContaining({
+            kind: 'session',
+            name: 'session.json',
+            sensitive: true,
+         })
+      )
+   })
+
+   it('should offer its masking to the code that writes the result and the manifest', async () => {
+      const { recorder } = start({ prefix: PREFIX })
+      const run = await recorder
+
+      run.addSecret('hunter2-password')
+
+      expect(run.redact('typed hunter2-password')).toBe('typed [redacted]')
+
+      await run.finish({ failed: false })
+   })
+
+   it('should list nothing when nothing was kept', async () => {
+      const { recorder } = start({
+         prefix: PREFIX,
+         mode: 'failures',
+      })
+      const run = await recorder
+
+      await run.finish({ failed: false })
+
+      expect(run.artifacts()).toEqual([])
    })
 })

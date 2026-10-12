@@ -1,9 +1,11 @@
 import { type ConfirmChannel, type ConsumeMessage } from 'amqplib'
 
 import {
-   STANDARD_DONE_KEY,
-   STANDARD_KEY,
-   type StandardTaskResult,
+   TASK_KEY as RUN_KEY,
+   TASK_CATALOG_KEY,
+   TASK_DONE_KEY,
+   type TaskCatalog,
+   type TaskResult,
    VALIDATED_KEY,
    VALIDATE_KEY,
    type ValidateAccountResult,
@@ -51,9 +53,13 @@ export const publishValidationResult = (channel: Publisher, result: ValidateAcco
 export const republishValidation = (channel: Publisher, message: ConsumeMessage, retries: number) =>
    publish(channel, VALIDATE_KEY, message.content, String(message.properties.messageId), { [RETRIES_HEADER]: retries })
 
-// The answer to a standard task such as the browser test.
-export const publishStandardResult = (channel: Publisher, result: StandardTaskResult) =>
-   publish(channel, STANDARD_DONE_KEY, Buffer.from(JSON.stringify(result)), result.task_id)
+// The answer to a task of the standard contract (.plan/spider-task-framework.md).
+export const publishRunResult = (channel: Publisher, result: TaskResult) =>
+   publish(channel, TASK_DONE_KEY, Buffer.from(JSON.stringify(result)), result.task_id)
 
-export const republishStandard = (channel: Publisher, message: ConsumeMessage, retries: number) =>
-   publish(channel, STANDARD_KEY, message.content, String(message.properties.messageId), { [RETRIES_HEADER]: retries })
+export const republishRun = (channel: Publisher, message: ConsumeMessage, retries: number) =>
+   publish(channel, RUN_KEY, message.content, String(message.properties.messageId), { [RETRIES_HEADER]: retries })
+
+// Every task this worker can run, in one message: brain keeps the latest.
+export const publishCatalog = (channel: Publisher, catalog: TaskCatalog) =>
+   publish(channel, TASK_CATALOG_KEY, Buffer.from(JSON.stringify(catalog)), `catalog-${catalog.worker.build}`)

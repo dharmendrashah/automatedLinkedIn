@@ -266,10 +266,10 @@ Old rows (`VALIDATE_ACCOUNT`) are not touched and keep their own display until a
 
 - [x] T1 Contracts: `TaskCommand`, `TaskResult`, `Artifact`, `TaskCatalogEntry`, topology, schema tests; remove `standardTask*`
   and, with T6, the `validateAccount*` schemas and queues.
-- [ ] T2 Spider framework: `defineTask`, `registry`, `context`, `runner` (proxy, recording, secrets, account lease, session
+- [x] T2 Spider framework: `defineTask`, `registry`, `context`, `runner` (proxy, recording, secrets, account lease, session
   state), generalized `Recorder` (the `runPrefix` layout, manifest, artifact list, all files through one writer), contract test for registered
   tasks.
-- [ ] T3 Move browser detection to `tasks/browserDetection` on the framework; delete `src/detection` wiring and the
+- [x] T3 Move browser detection to `tasks/browserDetection` on the framework; delete `src/detection` wiring and the
   `standardTasks` registry; worker consumes `tasks.run` and publishes the catalog at start.
 - [ ] T4 Brain: migration, `TaskQueue`, `TaskService`, catalog consumer, result consumer, artifacts, triggers, hooks, `task`
   router, generic `fileUrl`; remove `BrowserTestService`.
