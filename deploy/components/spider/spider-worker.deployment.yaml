@@ -44,7 +44,11 @@ spec:
           # clean worker back, the same behaviour worker.ts already relies on for a lost broker connection.
           resources:
             requests:
-              cpu: 500m
+              # Measured against the real staging node (2026-10-12): GKE_METADATA mode's own
+              # gke-metadata-server daemonset eats ~100m CPU that wasn't accounted for in the
+              # original estimate, so 500m no longer fit. 400m schedules; the 1-CPU limit still
+              # lets it burst since Camoufox/Firefox usage is bursty, not sustained.
+              cpu: 400m
               memory: 1Gi
             limits:
               cpu: '1'
