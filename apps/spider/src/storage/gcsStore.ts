@@ -23,6 +23,14 @@ export class GcsStore implements ObjectStore {
       })
    }
 
+   public async upload(key: string, localPath: string, contentType: string) {
+      await this.bucket.upload(localPath, {
+         destination: key,
+         contentType,
+         resumable: false,
+      })
+   }
+
    public async get(key: string) {
       try {
          const [data] = await this.bucket.file(key).download()

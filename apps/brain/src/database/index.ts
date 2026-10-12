@@ -10,6 +10,7 @@ export {
    LinkedInAccountPausedError,
    LinkedInAccountValidationService,
    LinkedInVerifyCooldownError,
+   SessionRetryError,
 } from './linkedInAccountValidation.service'
 export {
    type ProxyCredentials,
@@ -17,4 +18,11 @@ export {
    ProxyServerOwnershipError,
    ProxyServerService,
 } from './proxyServer.service'
+export { retryRefusal } from './sessionRetry'
+export {
+   SESSION_FILE_PATTERN,
+   SpiderRecordingUnavailableError,
+   SpiderSessionNotFoundError,
+   SpiderSessionService,
+} from './spiderSession.service'
 export { AccountConflictError, UserService } from './user.service'

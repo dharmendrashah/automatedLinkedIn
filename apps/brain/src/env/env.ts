@@ -1,4 +1,4 @@
-import { cleanEnv, makeValidator, port, str as string, url } from 'envalid'
+import { cleanEnv, makeValidator, num, port, str as string, url } from 'envalid'
 
 // Base64-encoded 32-byte key for AES-256-GCM. Validated at boot so a bad key fails fast.
 const encryptionKey = makeValidator<string>(value => {
@@ -69,6 +69,15 @@ export class Environment {
             example: 'xxxxxxxxxxxxxx',
             // Local/test never reach the real API; a non-empty placeholder just satisfies validation.
             devDefault: 'dev-ipinfo-token',
+         }),
+         SPIDER_GCS_BUCKET: string({
+            desc: 'Google Cloud Storage bucket spider records sessions in. Brain only signs links to its recordings/ files. Empty: the Sessions page works without recordings',
+            example: 'my-spider-bucket',
+            default: '',
+         }),
+         SESSION_RECORDING_RETENTION_DAYS: num({
+            desc: 'How many days a session recording stays available. Match the bucket lifecycle rule for recordings/',
+            default: 7,
          }),
          GIT_SHA: string({
             desc: 'Git commit the image was built from, reported by GET /health',

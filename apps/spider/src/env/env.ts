@@ -1,4 +1,4 @@
-import { cleanEnv, num, port, str as string, url } from 'envalid'
+import { bool, cleanEnv, num, port, str as string, url } from 'envalid'
 
 export class Environment {
    public static config() {
@@ -78,6 +78,16 @@ export class Environment {
             desc: 'full: try the saved browser token, then sign in with the password (and two-step code). session: only the token',
             choices: ['full', 'session'] as const,
             default: 'full',
+         }),
+         SPIDER_RECORDING: string({
+            desc: 'Record each account check for the Sessions page: off, failures (keep a recording only when the run went wrong) or always',
+            choices: ['off', 'failures', 'always'] as const,
+            default: 'off',
+            devDefault: 'always',
+         }),
+         SPIDER_RECORD_VIDEO: bool({
+            desc: 'Include a video of the browser in a recording. Needs the ffmpeg build of Playwright in the image',
+            default: true,
          }),
          GIT_SHA: string({
             desc: 'Git commit the image was built from, reported by GET /health',

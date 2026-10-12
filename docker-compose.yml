@@ -110,6 +110,11 @@ services:
       # This is the public development key: never reuse it outside local development.
       LINKEDIN_CRED_ENC_KEY: ${LINKEDIN_CRED_ENC_KEY:-pqaZGClH/kqxNTLoLT4c0lMTloNIi2At3Jzz9a2rkIQ=}
       IPINFO_TOKEN: ${IPINFO_TOKEN:-dev-ipinfo-token}
+      # Where the Sessions page finds recordings. Empty: no recordings. Signing links needs service account
+      # credentials, which this container does not have: run brain with `pnpm dev` to see recordings locally
+      # (see apps/brain/.env.example).
+      SPIDER_GCS_BUCKET: ${SPIDER_GCS_BUCKET:-}
+      SESSION_RECORDING_RETENTION_DAYS: ${SESSION_RECORDING_RETENTION_DAYS:-7}
     ports:
       - "3001:3001"
     depends_on:
@@ -177,6 +182,9 @@ services:
       SPIDER_VALIDATION_MODE: ${SPIDER_VALIDATION_MODE:-full}
       SPIDER_GCS_BUCKET: ${SPIDER_GCS_BUCKET:-}
       SPIDER_MIN_DELAY_MS: ${SPIDER_MIN_DELAY_MS:-2000}
+      # Local runs record by default (steps, requests, console and a video, kept in the bucket under recordings/).
+      SPIDER_RECORDING: ${SPIDER_RECORDING:-always}
+      SPIDER_RECORD_VIDEO: ${SPIDER_RECORD_VIDEO:-true}
       GOOGLE_APPLICATION_CREDENTIALS: /gcp/credentials.json
     volumes:
       # Application Default Credentials from `gcloud auth application-default login`, read-only.

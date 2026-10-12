@@ -4,6 +4,9 @@ import { type Browser, type BrowserContext, type Page } from 'playwright-core'
 
 import { type ExtractedRecord, type SessionCookie } from '../types'
 
+import { attachRecorder } from '../recording/attachRecorder'
+import { maskText } from '../recording/masking'
+import { type RunRecorder } from '../recording/recorder'
 import { type BrowserDriver, type LoginDriver, type LoginSession, type OpenOptions } from './driver'
 import { TaskError } from './errors'
 
@@ -13,12 +16,24 @@ export type CamoufoxOptions = {
    isAllowedNavigation: (url: string) => boolean
 }
 
+// A page that is stuck should not hold up the screenshot of the step that failed.
+const SNAPSHOT_TIMEOUT_MS = 5000
+
 class CamoufoxSession implements LoginSession {
    public constructor(
       private readonly browser: Browser,
       private readonly context: BrowserContext,
-      private readonly page: Page
+      private readonly page: Page,
+      private readonly recorder?: RunRecorder
    ) {}
+
+   public screenshot() {
+      return this.page.screenshot({ timeout: SNAPSHOT_TIMEOUT_MS })
+   }
+
+   public pageHtml() {
+      return this.page.content()
+   }
 
    public async cookies(): Promise<SessionCookie[]> {
       const cookies = await this.context.cookies()
@@ -111,9 +126,11 @@ class CamoufoxSession implements LoginSession {
       }
    }
 
-   // Closing releases the browser's memory; the worker takes its next task only after this.
+   // Closing releases the browser's memory; the worker takes its next task only after this. The video file is
+   // complete only once the context is closed, and the recorder's pending captures need the page to be there.
    public async close() {
       try {
+         await this.recorder?.settle()
          await this.context.close()
       } finally {
          await this.browser.close()
@@ -127,13 +144,16 @@ class CamoufoxSession implements LoginSession {
 export class CamoufoxDriver implements BrowserDriver, LoginDriver {
    public constructor(private readonly options: CamoufoxOptions) {}
 
-   public async open({ proxy }: OpenOptions = {}): Promise<LoginSession> {
-      const browser = await this.launch(proxy)
+   public async open({ proxy, recorder }: OpenOptions = {}): Promise<LoginSession> {
+      const browser = await this.launch(proxy, recorder)
 
       try {
          // A proxy may re-sign secure websites with its own certificate, even an expired one. The owner accepts that
          // (.plan/proxy-accept-resigned-https.md), so the browser trusts whatever the proxy presents.
-         const context = await browser.newContext(proxy ? { ignoreHTTPSErrors: true } : {})
+         const context = await browser.newContext({
+            ...(proxy && { ignoreHTTPSErrors: true }),
+            ...(recorder?.videoDir && { recordVideo: { dir: recorder.videoDir } }),
+         })
 
          context.setDefaultTimeout(this.options.actionTimeoutMs)
          context.setDefaultNavigationTimeout(this.options.actionTimeoutMs)
@@ -144,7 +164,13 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver {
                : route.continue()
          )
 
-         return new CamoufoxSession(browser, context, await context.newPage())
+         const page = await context.newPage()
+
+         if (recorder) {
+            attachRecorder(page, recorder)
+         }
+
+         return new CamoufoxSession(browser, context, page, recorder)
       } catch (error) {
          await browser.close()
 
@@ -152,7 +178,7 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver {
       }
    }
 
-   private async launch(proxy: OpenOptions['proxy']) {
+   private async launch(proxy: OpenOptions['proxy'], recorder: OpenOptions['recorder']) {
       try {
          return await Camoufox({
             headless: true,
@@ -163,6 +189,12 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver {
             }),
          })
       } catch (error) {
+         recorder?.log(
+            'engine',
+            'error',
+            `Start failed: ${maskText(error instanceof Error ? error.message : 'unknown')}`
+         )
+
          // The proxy never falls back to a direct connection. Its address and credentials stay out of the message.
          if (proxy) {
             throw new TaskError('The browser could not start through the proxy')

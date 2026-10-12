@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
    getMetadata: vi.fn(),
    remove: vi.fn(),
    file: vi.fn(),
+   upload: vi.fn(),
    bucket: vi.fn(),
 }))
 
@@ -17,7 +18,10 @@ vi.mock('@google-cloud/storage', () => ({
       public bucket(name: string) {
          mocks.bucket(name)
 
-         return { file: mocks.file }
+         return {
+            file: mocks.file,
+            upload: mocks.upload,
+         }
       }
    },
 }))
@@ -48,6 +52,18 @@ describe('GcsStore', () => {
       expect(mocks.file).toHaveBeenCalledWith('results/demo/1.json')
       expect(mocks.save).toHaveBeenCalledWith('{"a":1}', {
          contentType: 'application/json',
+         resumable: false,
+      })
+   })
+
+   it('should stream a local file to the bucket with its content type', async () => {
+      mocks.upload.mockResolvedValue(undefined)
+
+      await new GcsStore('my-bucket').upload('recordings/validate/a/video.webm', '/tmp/x/video.webm', 'video/webm')
+
+      expect(mocks.upload).toHaveBeenCalledWith('/tmp/x/video.webm', {
+         destination: 'recordings/validate/a/video.webm',
+         contentType: 'video/webm',
          resumable: false,
       })
    })

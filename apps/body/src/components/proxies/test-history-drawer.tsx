@@ -1,3 +1,6 @@
+import { floatingDrawer } from '@/components/floating-drawer'
+import { RadioMark } from '@/components/radio-mark'
+import { SectionLabel, TextBlock } from '@/components/text-block'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -29,20 +32,6 @@ const formatTime = (value: string | Date) =>
       timeStyle: 'medium',
    })
 
-const SectionLabel = ({ children }: { children: string }) => (
-   <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">{children}</h3>
-)
-
-// Bodies come from the proxy, so they are text in a <pre>, never HTML.
-const Block = ({ title, children }: { title: string; children: string }) => (
-   <section className="grid gap-1.5">
-      <SectionLabel>{title}</SectionLabel>
-      <pre className="bg-muted/40 max-h-64 overflow-auto rounded-lg border p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
-         {children}
-      </pre>
-   </section>
-)
-
 const Detail = ({ entry }: { entry: ProxyTestEntry }) => (
    <Tabs defaultValue="response" className="gap-4">
       <TabsList className="w-full">
@@ -51,35 +40,23 @@ const Detail = ({ entry }: { entry: ProxyTestEntry }) => (
       </TabsList>
 
       <TabsContent value="request" className="grid gap-4">
-         <Block title="Request">{`${entry.requestMethod} ${entry.requestUrl}`}</Block>
-         <Block title="Headers">{formatHeaders(entry.requestHeaders)}</Block>
-         <Block title="Body">{formatBody(entry.requestBody, false)}</Block>
+         <TextBlock title="Request">{`${entry.requestMethod} ${entry.requestUrl}`}</TextBlock>
+         <TextBlock title="Headers">{formatHeaders(entry.requestHeaders)}</TextBlock>
+         <TextBlock title="Body">{formatBody(entry.requestBody, false)}</TextBlock>
       </TabsContent>
 
       <TabsContent value="response" className="grid gap-4">
          {entry.responseStatus === null ? (
-            <Block title="Result">{entry.error ?? 'No response arrived.'}</Block>
+            <TextBlock title="Result">{entry.error ?? 'No response arrived.'}</TextBlock>
          ) : (
             <>
-               <Block title="Status">{String(entry.responseStatus)}</Block>
-               <Block title="Headers">{formatHeaders(entry.responseHeaders)}</Block>
-               <Block title="Body">{formatBody(entry.responseBody, entry.responseTruncated)}</Block>
+               <TextBlock title="Status">{String(entry.responseStatus)}</TextBlock>
+               <TextBlock title="Headers">{formatHeaders(entry.responseHeaders)}</TextBlock>
+               <TextBlock title="Body">{formatBody(entry.responseBody, entry.responseTruncated)}</TextBlock>
             </>
          )}
       </TabsContent>
    </Tabs>
-)
-
-const Radio = ({ checked }: { checked: boolean }) => (
-   <span
-      aria-hidden
-      className={cn(
-         'grid size-4 shrink-0 place-items-center rounded-full border transition-colors',
-         checked ? 'border-primary' : 'border-muted-foreground/30'
-      )}
-   >
-      {checked ? <span className="bg-primary size-2 rounded-full" /> : null}
-   </span>
 )
 
 type Props = {
@@ -115,13 +92,7 @@ export const TestHistoryDrawer = ({ proxy, testing, onTest, onClose }: Props) =>
 
    return (
       <Drawer open={Boolean(proxy)} onOpenChange={open => (open ? undefined : close())} direction="right">
-         <DrawerContent
-            className={cn(
-               'data-[vaul-drawer-direction=right]:inset-y-3 data-[vaul-drawer-direction=right]:right-3',
-               'data-[vaul-drawer-direction=right]:w-[calc(100%-1.5rem)] data-[vaul-drawer-direction=right]:sm:max-w-xl',
-               'data-[vaul-drawer-direction=right]:rounded-2xl data-[vaul-drawer-direction=right]:border shadow-2xl'
-            )}
-         >
+         <DrawerContent className={floatingDrawer('data-[vaul-drawer-direction=right]:sm:max-w-xl')}>
             <DrawerHeader className="flex-row items-start justify-between gap-3 border-b px-5 py-4">
                <div className="grid gap-1.5">
                   <DrawerTitle className="text-base">Test history</DrawerTitle>
@@ -197,7 +168,7 @@ export const TestHistoryDrawer = ({ proxy, testing, onTest, onClose }: Props) =>
                                     >
                                        {latency?.text ?? '—'}
                                     </span>
-                                    <Radio checked={selected} />
+                                    <RadioMark checked={selected} />
                                  </button>
                               </li>
                            )

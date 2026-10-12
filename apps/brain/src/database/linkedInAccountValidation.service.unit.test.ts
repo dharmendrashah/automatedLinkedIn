@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { type ValidationOutcome } from '@automatedLinkedIn/contracts'
+import { SECURITY_CHECK_MESSAGE, type ValidationOutcome } from '@automatedLinkedIn/contracts'
 
 import {
    LinkedInAccountPausedError,
    LinkedInAccountValidationService,
    LinkedInVerifyCooldownError,
+   SessionRetryError,
 } from './linkedInAccountValidation.service'
 
 const mocks = vi.hoisted(() => ({
@@ -16,6 +17,11 @@ const mocks = vi.hoisted(() => ({
    publish: vi.fn(),
    getForUser: vi.fn(),
    pickForAccount: vi.fn(),
+   findFirstSession: vi.fn(),
+   findFirstProxy: vi.fn(),
+   startSession: vi.fn(),
+   failSession: vi.fn(),
+   finishSession: vi.fn(),
 }))
 
 vi.mock('core', () => ({ AccountValidationQueue: { publish: mocks.publish } }))
@@ -29,15 +35,25 @@ vi.mock('./prisma.service', () => ({
             update: mocks.update,
             updateMany: mocks.updateMany,
          },
+         spiderSession: { findFirst: mocks.findFirstSession },
+         proxyServer: { findFirst: mocks.findFirstProxy },
       },
    },
 }))
 
 vi.mock('./linkedInAccount.service', () => ({ LinkedInAccountService: { getForUser: mocks.getForUser } }))
 vi.mock('./proxyServer.service', () => ({ ProxyServerService: { pickForAccount: mocks.pickForAccount } }))
+vi.mock('./spiderSession.service', () => ({
+   SpiderSessionService: {
+      start: mocks.startSession,
+      fail: mocks.failSession,
+      finish: mocks.finishSession,
+   },
+}))
 
 const row = {
    id: '0192a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b',
+   userId: 'u1',
    email: 'ada@work.com',
    secret: 'ct',
    secretIv: 'iv',
@@ -47,7 +63,18 @@ const row = {
 }
 
 const validationId = '0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11'
-const proxy = { server: 'http://10.0.0.1:8080' }
+
+// What ProxyServerService.pickForAccount returns: the worker's config, and a summary without credentials.
+const proxy = {
+   config: { server: 'http://10.0.0.1:8080' },
+   summary: {
+      id: 'p1',
+      protocol: 'HTTP',
+      host: '10.0.0.1',
+      port: 8080,
+      country: 'Canada',
+   },
+}
 
 describe('LinkedInAccountValidationService', () => {
    beforeEach(() => {
@@ -82,10 +109,74 @@ describe('LinkedInAccountValidationService', () => {
                tag: 'tag',
                key_version: 1,
             },
-            proxy,
+            proxy: proxy.config,
             requested_at: expect.any(String),
          })
          expect(mocks.update.mock.invocationCallOrder[0]).toBeLessThan(mocks.publish.mock.invocationCallOrder[0])
+      })
+
+      it('should note the session before it queues the check, with the proxy summary and the owner', async () => {
+         mocks.findUnique.mockResolvedValue(row)
+         mocks.pickForAccount.mockResolvedValue(proxy)
+         mocks.update.mockResolvedValue({})
+         mocks.publish.mockResolvedValue(undefined)
+
+         await LinkedInAccountValidationService.request(row.id)
+
+         expect(mocks.startSession).toHaveBeenCalledWith({
+            id: mocks.publish.mock.calls[0][0].validation_id,
+            userId: 'u1',
+            linkedInAccountId: row.id,
+            email: 'ada@work.com',
+            proxy: proxy.summary,
+         })
+         expect(mocks.startSession.mock.invocationCallOrder[0]).toBeLessThan(mocks.publish.mock.invocationCallOrder[0])
+      })
+
+      it('should ask for the proxy it was told to use, and remember which session it retries', async () => {
+         mocks.findUnique.mockResolvedValue(row)
+         mocks.pickForAccount.mockResolvedValue(proxy)
+         mocks.update.mockResolvedValue({})
+         mocks.publish.mockResolvedValue(undefined)
+
+         await LinkedInAccountValidationService.request(row.id, {
+            proxyId: 'p9',
+            retryOfId: 'old-session',
+            validationId,
+         })
+
+         expect(mocks.pickForAccount).toHaveBeenCalledWith(row.id, 'p9')
+         expect(mocks.publish.mock.calls[0][0].validation_id).toBe(validationId)
+         expect(mocks.startSession).toHaveBeenCalledWith(
+            expect.objectContaining({
+               id: validationId,
+               retryOfId: 'old-session',
+            })
+         )
+      })
+
+      it('should end the session as failed, not leave it in progress, when the check cannot be queued', async () => {
+         mocks.findUnique.mockResolvedValue(row)
+         mocks.pickForAccount.mockResolvedValue(proxy)
+         mocks.update.mockResolvedValue({})
+         mocks.publish.mockRejectedValue(new Error('ECONNREFUSED'))
+
+         await LinkedInAccountValidationService.request(row.id)
+
+         expect(mocks.failSession).toHaveBeenCalledWith(
+            mocks.startSession.mock.calls[0][0].id,
+            'The check could not be queued. Try again in a moment.'
+         )
+      })
+
+      it('should not note a session when no proxy is available, as nothing runs', async () => {
+         mocks.findUnique.mockResolvedValue(row)
+         mocks.pickForAccount.mockResolvedValue(null)
+         mocks.update.mockResolvedValue({})
+
+         await LinkedInAccountValidationService.request(row.id)
+
+         expect(mocks.startSession).not.toHaveBeenCalled()
       })
 
       it('should use a new validation id each time', async () => {
@@ -367,6 +458,209 @@ describe('LinkedInAccountValidationService', () => {
          mocks.updateMany.mockRejectedValue(new Error('database down'))
 
          await expect(LinkedInAccountValidationService.applyResult(result)).rejects.toThrow('database down')
+      })
+
+      it('should give the session its own verdict, even when the account no longer waits for this check', async () => {
+         mocks.updateMany.mockResolvedValue({ count: 0 })
+
+         await expect(LinkedInAccountValidationService.applyResult(result)).resolves.toBe(false)
+         expect(mocks.finishSession).toHaveBeenCalledWith(result)
+      })
+   })
+
+   describe('retryForUser', () => {
+      const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000)
+
+      const failed = (overrides: Record<string, unknown> = {}) => ({
+         id: 'old-session',
+         kind: 'VALIDATE_ACCOUNT',
+         status: 'FAILED',
+         outcome: 'ERROR',
+         message: 'LinkedIn showed a page the check does not understand.',
+         linkedInAccountId: row.id,
+         linkedInAccount: {
+            status: 'ERROR',
+            validationId: null,
+            validationRequestedAt: minutesAgo(10),
+         },
+         ...overrides,
+      })
+
+      const allow = () => {
+         mocks.findFirstSession.mockResolvedValue(failed())
+         mocks.findFirstProxy.mockResolvedValue({ id: 'p2' })
+         mocks.findUnique.mockResolvedValue(row)
+         mocks.pickForAccount.mockResolvedValue(proxy)
+         mocks.update.mockResolvedValue({})
+         mocks.publish.mockResolvedValue(undefined)
+      }
+
+      it('should only find a session that is the users own', async () => {
+         mocks.findFirstSession.mockResolvedValue(null)
+
+         const attempt = LinkedInAccountValidationService.retryForUser('u1', 'old-session', 'p2')
+
+         await expect(attempt).rejects.toMatchObject({ code: 'NOT_FOUND' })
+         expect(mocks.findFirstSession.mock.calls[0][0].where).toEqual({
+            id: 'old-session',
+            userId: 'u1',
+         })
+         expect(mocks.publish).not.toHaveBeenCalled()
+      })
+
+      it('should start the same check again through the chosen proxy and say which session it retries', async () => {
+         allow()
+
+         const started = await LinkedInAccountValidationService.retryForUser('u1', 'old-session', 'p2')
+
+         expect(started).toEqual({ id: mocks.publish.mock.calls[0][0].validation_id })
+         expect(mocks.pickForAccount).toHaveBeenCalledWith(row.id, 'p2')
+         expect(mocks.startSession).toHaveBeenCalledWith(
+            expect.objectContaining({
+               id: started.id,
+               retryOfId: 'old-session',
+            })
+         )
+         expect(mocks.update.mock.calls[0][0].data).toMatchObject({
+            status: 'PENDING',
+            statusMessage: null,
+         })
+      })
+
+      it('should retry a security check, where another address may help', async () => {
+         allow()
+         mocks.findFirstSession.mockResolvedValue(
+            failed({
+               outcome: 'NEEDS_REAUTH',
+               message: SECURITY_CHECK_MESSAGE,
+            })
+         )
+
+         await expect(LinkedInAccountValidationService.retryForUser('u1', 'old-session', 'p2')).resolves.toBeDefined()
+      })
+
+      it.each([
+         [
+            'a check that succeeded',
+            {
+               status: 'SUCCEEDED',
+               outcome: 'VALID',
+            },
+         ],
+         [
+            'a check still in progress',
+            {
+               status: 'IN_PROGRESS',
+               outcome: null,
+            },
+         ],
+         [
+            'a rejected password',
+            {
+               outcome: 'INVALID_CREDENTIALS',
+               message: 'LinkedIn did not accept the email or password.',
+            },
+         ],
+         [
+            'a rejected two-step code',
+            {
+               outcome: 'NEEDS_REAUTH',
+               message: 'LinkedIn did not accept the two-step code.',
+            },
+         ],
+         [
+            'a missing credential',
+            {
+               outcome: 'NEEDS_REAUTH',
+               message: 'No password or browser token is stored.',
+            },
+         ],
+         ['a kind of run that cannot be retried', { kind: 'SCRAPE' }],
+      ])('should refuse to retry %s', async (_name, overrides) => {
+         allow()
+         mocks.findFirstSession.mockResolvedValue(failed(overrides))
+
+         await expect(LinkedInAccountValidationService.retryForUser('u1', 'old-session', 'p2')).rejects.toBeInstanceOf(
+            SessionRetryError
+         )
+         expect(mocks.publish).not.toHaveBeenCalled()
+      })
+
+      it('should refuse a paused account', async () => {
+         allow()
+         mocks.findFirstSession.mockResolvedValue(
+            failed({
+               linkedInAccount: {
+                  status: 'DISABLED',
+                  validationId: null,
+                  validationRequestedAt: null,
+               },
+            })
+         )
+
+         await expect(LinkedInAccountValidationService.retryForUser('u1', 'old-session', 'p2')).rejects.toBeInstanceOf(
+            LinkedInAccountPausedError
+         )
+      })
+
+      it('should refuse while another check of the account is in progress', async () => {
+         allow()
+         mocks.findFirstSession.mockResolvedValue(
+            failed({
+               linkedInAccount: {
+                  status: 'PENDING',
+                  validationId: 'another',
+                  validationRequestedAt: minutesAgo(10),
+               },
+            })
+         )
+
+         await expect(LinkedInAccountValidationService.retryForUser('u1', 'old-session', 'p2')).rejects.toMatchObject({
+            code: 'REFUSED',
+            message: expect.stringContaining('in progress'),
+         })
+      })
+
+      it('should keep the wait between two checks of the same account', async () => {
+         allow()
+         mocks.findFirstSession.mockResolvedValue(
+            failed({
+               linkedInAccount: {
+                  status: 'ERROR',
+                  validationId: null,
+                  validationRequestedAt: minutesAgo(2),
+               },
+            })
+         )
+
+         await expect(LinkedInAccountValidationService.retryForUser('u1', 'old-session', 'p2')).rejects.toBeInstanceOf(
+            LinkedInVerifyCooldownError
+         )
+         expect(mocks.publish).not.toHaveBeenCalled()
+      })
+
+      it('should refuse a proxy that is not one of this account usable proxies', async () => {
+         allow()
+         mocks.findFirstProxy.mockResolvedValue(null)
+
+         await expect(
+            LinkedInAccountValidationService.retryForUser('u1', 'old-session', 'someone-elses')
+         ).rejects.toMatchObject({ code: 'REFUSED' })
+         expect(mocks.findFirstProxy.mock.calls[0][0].where).toEqual({
+            id: 'someone-elses',
+            linkedInAccountId: row.id,
+            status: { in: ['ACTIVE', 'GEO_MISMATCH'] },
+         })
+         expect(mocks.publish).not.toHaveBeenCalled()
+      })
+
+      it('should say so when the check could not be started', async () => {
+         allow()
+         mocks.publish.mockRejectedValue(new Error('ECONNREFUSED'))
+
+         const attempt = LinkedInAccountValidationService.retryForUser('u1', 'old-session', 'p2')
+
+         await expect(attempt).rejects.toMatchObject({ code: 'REFUSED' })
       })
    })
 })

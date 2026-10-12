@@ -52,4 +52,7 @@ COPY --from=worker-build /out/node_modules ./node_modules
 COPY --from=worker-build /repo/apps/spider/dist ./dist
 USER node
 RUN node node_modules/camoufox/dist/__main__.js fetch
+# Playwright's own build of ffmpeg, which encodes the video of a recording (a few MB). It lands in the node user's
+# ~/.cache/ms-playwright, where playwright-core looks for it at run time.
+RUN node node_modules/playwright-core/cli.js install ffmpeg
 CMD ["node", "dist/src/worker.js"]

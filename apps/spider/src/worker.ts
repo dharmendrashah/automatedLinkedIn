@@ -13,6 +13,8 @@ import {
    SPIDER_LINKEDIN_BASE_URL,
    SPIDER_MAX_RECORDS,
    SPIDER_MIN_DELAY_MS,
+   SPIDER_RECORDING,
+   SPIDER_RECORD_VIDEO,
    SPIDER_ROBOTS_EXEMPT_HOSTS,
    SPIDER_ROBOTS_USER_AGENT,
    SPIDER_VALIDATION_MODE,
@@ -21,6 +23,7 @@ import { Broker } from './messaging/broker'
 import { consumeQueue, consumeTasks } from './messaging/consumer'
 import { publishResult, publishValidationResult, republishTask, republishValidation } from './messaging/publisher'
 import { assertTopology } from './messaging/topology'
+import { Recorder } from './recording/recorder'
 import { AccountLock } from './scraping/accountLock'
 import { CamoufoxDriver } from './scraping/camoufoxDriver'
 import { ScrapeEngine } from './scraping/engine'
@@ -46,6 +49,19 @@ const main = async () => {
    const limiter = new HostRateLimiter(SPIDER_MIN_DELAY_MS)
    // Scrape tasks and validations each open a Firefox, so this worker does one of them at a time.
    const oneBrowser = new Mutex()
+   const recordingMode = SPIDER_RECORDING
+   // Off by default: a recording holds what the browser showed, so it is only made when it is switched on.
+   const startRecording =
+      recordingMode === 'off'
+         ? undefined
+         : (kind: 'validate' | 'task', id: string) =>
+              Recorder.start({
+                 kind,
+                 id,
+                 mode: recordingMode,
+                 video: SPIDER_RECORD_VIDEO,
+                 store,
+              })
 
    if (!policy.allowsUrl(SPIDER_LINKEDIN_BASE_URL)) {
       console.error(
@@ -110,6 +126,7 @@ const main = async () => {
                   store,
                   accountLock,
                   openCredentials: sealed => openCredentials(sealed, LINKEDIN_CRED_ENC_KEY),
+                  startRecording,
                   publishResult: async result => publishValidationResult(await broker.publishChannel(), result),
                })
             ),
