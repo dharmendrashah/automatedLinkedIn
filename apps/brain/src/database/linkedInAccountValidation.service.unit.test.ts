@@ -120,14 +120,21 @@ describe('LinkedInAccountValidationService', () => {
          expect(mocks.update).not.toHaveBeenCalled()
       })
 
-      it('should not publish anything, and not update the account, when it has no working proxy', async () => {
+      it('should keep the account pending and tell the owner to add a proxy, without publishing, when it has none', async () => {
          mocks.findUnique.mockResolvedValue(row)
          mocks.pickForAccount.mockResolvedValue(null)
+         mocks.update.mockResolvedValue({})
 
          await expect(LinkedInAccountValidationService.request(row.id)).resolves.toBe(false)
          expect(mocks.publish).not.toHaveBeenCalled()
-         expect(mocks.update).not.toHaveBeenCalled()
-         expect(console.error).toHaveBeenCalledWith(expect.stringContaining('no working proxy'))
+         expect(mocks.update).toHaveBeenCalledTimes(1)
+         expect(mocks.update.mock.calls[0][0]).toEqual({
+            where: { id: row.id },
+            data: {
+               statusMessage: 'Add a proxy to verify this account.',
+               statusUpdatedAt: expect.any(Date),
+            },
+         })
       })
 
       it('should keep the account pending, and say so, when the broker is down', async () => {
@@ -152,6 +159,55 @@ describe('LinkedInAccountValidationService', () => {
          await LinkedInAccountValidationService.request(row.id)
 
          expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain('TOPSECRETCIPHERTEXT')
+      })
+   })
+
+   describe('requestIfWaiting', () => {
+      it('should validate an account that is pending and has no validation in flight', async () => {
+         mocks.findUnique.mockResolvedValue({
+            ...row,
+            validationId: null,
+         })
+         mocks.pickForAccount.mockResolvedValue(proxy)
+         mocks.update.mockResolvedValue({})
+         mocks.publish.mockResolvedValue(undefined)
+
+         await expect(LinkedInAccountValidationService.requestIfWaiting(row.id)).resolves.toBe(true)
+         expect(mocks.publish).toHaveBeenCalledTimes(1)
+      })
+
+      it.each([
+         ['an account that does not exist', null],
+         [
+            'an active account',
+            {
+               ...row,
+               status: 'ACTIVE',
+               validationId: null,
+            },
+         ],
+         [
+            'a paused account',
+            {
+               ...row,
+               status: 'DISABLED',
+               validationId: null,
+            },
+         ],
+         [
+            'an account already waiting for a result',
+            {
+               ...row,
+               validationId,
+            },
+         ],
+      ])('should do nothing for %s', async (_name, found) => {
+         mocks.findUnique.mockResolvedValue(found)
+         mocks.pickForAccount.mockResolvedValue(proxy)
+
+         await expect(LinkedInAccountValidationService.requestIfWaiting(row.id)).resolves.toBe(false)
+         expect(mocks.publish).not.toHaveBeenCalled()
+         expect(mocks.update).not.toHaveBeenCalled()
       })
    })
 

@@ -38,6 +38,7 @@ export const AddProxyDialog = () => {
       onSuccess: () => {
          setOpen(false)
          void utils.proxyServer.list.invalidate()
+         void utils.linkedInAccount.list.invalidate()
       },
    })
 

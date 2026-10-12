@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
-import { ProxyServerOwnershipError, ProxyServerService } from 'database'
+import { LinkedInAccountValidationService, ProxyServerOwnershipError, ProxyServerService } from 'database'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -47,6 +47,22 @@ const notFound = () =>
       message: 'Proxy not found',
    })
 
+// An account added before its first proxy is waiting for one. The proxy is already saved, so a validation that cannot
+// be queued must not fail the request: the owner can still verify the account by hand.
+const validateWaitingAccount = async (proxy: { linkedInAccountId: string; status: string }) => {
+   if (proxy.status !== 'ACTIVE' && proxy.status !== 'GEO_MISMATCH') {
+      return
+   }
+
+   try {
+      await LinkedInAccountValidationService.requestIfWaiting(proxy.linkedInAccountId)
+   } catch (error) {
+      console.error(
+         `Could not request the validation of account ${proxy.linkedInAccountId}: ${(error as Error).message}`
+      )
+   }
+}
+
 // Every procedure scopes to ctx.user.id through the proxy's LinkedIn account, so one user can never reach
 // another's proxies by id.
 export const proxyServer = router({
@@ -54,7 +70,11 @@ export const proxyServer = router({
 
    create: ownerProcedure.input(createInput).mutation(async ({ ctx, input }) => {
       try {
-         return await ProxyServerService.create(ctx.user.id, input)
+         const proxy = await ProxyServerService.create(ctx.user.id, input)
+
+         await validateWaitingAccount(proxy)
+
+         return proxy
       } catch (error) {
          throw asTrpcError(error)
       }
@@ -62,13 +82,17 @@ export const proxyServer = router({
 
    update: ownerProcedure.input(updateInput).mutation(async ({ ctx, input }) => {
       try {
-         return await ProxyServerService.update(ctx.user.id, input.id, {
+         const proxy = await ProxyServerService.update(ctx.user.id, input.id, {
             protocol: input.protocol,
             host: input.host,
             port: input.port,
             username: input.username,
             password: input.password,
          })
+
+         await validateWaitingAccount(proxy)
+
+         return proxy
       } catch (error) {
          throw asTrpcError(error)
       }
@@ -77,7 +101,11 @@ export const proxyServer = router({
    // Manual re-test: whatever the result is, it updates the stored status.
    test: ownerProcedure.input(byId).mutation(async ({ ctx, input }) => {
       try {
-         return await ProxyServerService.test(ctx.user.id, input.id)
+         const proxy = await ProxyServerService.test(ctx.user.id, input.id)
+
+         await validateWaitingAccount(proxy)
+
+         return proxy
       } catch (error) {
          throw asTrpcError(error)
       }

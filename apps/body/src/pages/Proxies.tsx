@@ -14,7 +14,10 @@ export const Proxies = () => {
    const [toDelete, setToDelete] = useState<Proxy | null>(null)
    const [toEdit, setToEdit] = useState<Proxy | null>(null)
 
-   const refresh = () => void utils.proxyServer.list.invalidate()
+   const refresh = () => {
+      void utils.proxyServer.list.invalidate()
+      void utils.linkedInAccount.list.invalidate()
+   }
 
    const test = trpc.proxyServer.test.useMutation({ onSuccess: refresh })
    const remove = trpc.proxyServer.delete.useMutation({

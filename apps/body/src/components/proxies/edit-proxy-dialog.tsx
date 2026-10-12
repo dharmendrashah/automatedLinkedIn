@@ -36,6 +36,7 @@ const EditForm = ({ proxy, onClose }: FormProps) => {
       onSuccess: () => {
          onClose()
          void utils.proxyServer.list.invalidate()
+         void utils.linkedInAccount.list.invalidate()
       },
    })
 
