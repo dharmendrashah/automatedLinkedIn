@@ -18,9 +18,10 @@ import { type FormEvent, useState } from 'react'
 
 import { trpc } from '../../trpc'
 import { type ProxyFieldValues, ProxyFields } from './proxy-fields'
+import { type SupportedProtocol } from './protocols'
 
 const emptyValues: ProxyFieldValues = {
-   protocol: 'HTTP',
+   protocol: 'HTTPS',
    host: '',
    port: '',
    username: '',
@@ -67,7 +68,7 @@ export const AddProxyDialog = () => {
       event.preventDefault()
       create.mutate({
          linkedInAccountId,
-         protocol: values.protocol,
+         protocol: values.protocol as SupportedProtocol,
          host: values.host.trim(),
          port,
          username: values.username.trim() || undefined,

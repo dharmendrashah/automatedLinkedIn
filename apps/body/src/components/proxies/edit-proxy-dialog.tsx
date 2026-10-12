@@ -16,6 +16,7 @@ import { type Proxy } from './types'
 
 import { trpc } from '../../trpc'
 import { type ProxyFieldValues, ProxyFields } from './proxy-fields'
+import { type SupportedProtocol } from './protocols'
 
 type FormProps = {
    proxy: Proxy
@@ -53,7 +54,8 @@ const EditForm = ({ proxy, onClose }: FormProps) => {
       event.preventDefault()
       update.mutate({
          id: proxy.id,
-         protocol: values.protocol,
+         // A stored HTTP or SOCKS4 proxy keeps its protocol unless the owner picks another one.
+         ...(values.protocol !== proxy.protocol && { protocol: values.protocol as SupportedProtocol }),
          host: values.host.trim(),
          port,
          username: values.username.trim() || undefined,
