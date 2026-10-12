@@ -56,15 +56,15 @@ RUN node node_modules/camoufox/dist/__main__.js fetch
 # ~/.cache/ms-playwright, where playwright-core looks for it at run time.
 RUN node node_modules/playwright-core/cli.js install ffmpeg
 
-# The libraries are Firefox's runtime needs.
+# The libraries are Firefox's runtime needs; xvfb is the virtual display Camoufox runs on instead of plain headless.
 FROM node:25-bookworm-slim AS worker
-ENV NODE_ENV=production
+ENV NODE_ENV=production SPIDER_HEADLESS=virtual
 RUN apt-get update \
    && apt-get install -y --no-install-recommends \
       ca-certificates fonts-liberation libasound2 libatk1.0-0 libcairo-gobject2 libcairo2 libdbus-1-3 \
       libdbus-glib-1-2 libfontconfig1 libfreetype6 libgdk-pixbuf-2.0-0 libglib2.0-0 libgtk-3-0 libharfbuzz0b \
       libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 libx11-6 libx11-xcb1 libxcb-shm0 libxcb1 \
-      libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxt6 libxtst6 \
+      libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxt6 libxtst6 xvfb \
    && rm -rf /var/lib/apt/lists/*
 COPY --from=browsers --chown=node:node /home/node/.cache /home/node/.cache
 WORKDIR /app

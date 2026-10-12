@@ -14,6 +14,8 @@ export type CamoufoxOptions = {
    actionTimeoutMs: number
    // Page loads to anything else are blocked in the browser, not only checked afterwards.
    isAllowedNavigation: (url: string) => boolean
+   // `virtual` runs a real browser on an Xvfb display, which Camoufox advises over plain headless. Linux with Xvfb only.
+   headless?: true | 'virtual'
 }
 
 // A page that is stuck should not hold up the screenshot of the step that failed.
@@ -181,7 +183,7 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver {
    private async launch(proxy: OpenOptions['proxy'], recorder: OpenOptions['recorder']) {
       try {
          return await Camoufox({
-            headless: true,
+            headless: this.options.headless ?? true,
             humanize: true,
             ...(proxy && {
                proxy,

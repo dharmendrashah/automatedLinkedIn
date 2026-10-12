@@ -69,6 +69,22 @@ describe('CamoufoxDriver', () => {
       expect(mocks.browser.newContext).toHaveBeenCalledWith({})
    })
 
+   it('should start the browser headless by default', async () => {
+      await driver.open()
+
+      expect(mocks.camoufox).toHaveBeenCalledWith(expect.objectContaining({ headless: true }))
+   })
+
+   it('should start the browser on a virtual display when that is set', async () => {
+      await new CamoufoxDriver({
+         actionTimeoutMs: 1000,
+         isAllowedNavigation: () => true,
+         headless: 'virtual',
+      }).open()
+
+      expect(mocks.camoufox).toHaveBeenCalledWith(expect.objectContaining({ headless: 'virtual' }))
+   })
+
    it('should start the browser through the proxy and never fall back to a direct connection', async () => {
       mocks.camoufox.mockRejectedValueOnce(new Error('boom'))
 
