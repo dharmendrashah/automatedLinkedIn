@@ -8,6 +8,14 @@ export const sealedSchema = z.strictObject({
    key_version: z.number().int().min(1),
 })
 
+// A proxy a browser session connects through. Carries credentials, so it is never logged or echoed.
+export const proxySchema = z.strictObject({
+   server: z.url({ protocol: /^(https?|socks4|socks5)$/ }).max(2048),
+   username: z.string().max(256).optional(),
+   password: z.string().max(256).optional(),
+   bypass: z.string().max(1000).optional(),
+})
+
 // Names objects in the bucket, so the first character rules out `.` and `..`.
 export const ACCOUNT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/
 
@@ -19,6 +27,8 @@ export const validateAccountCommandSchema = z.strictObject({
    account_id: accountIdSchema,
    email: z.string().min(1).max(320),
    sealed: sealedSchema,
+   // The account's own proxy (see proxy-server-manager.md); absent only for accounts with no working proxy yet.
+   proxy: proxySchema.optional(),
    requested_at: z.iso.datetime(),
 })
 
@@ -36,6 +46,7 @@ export const validateAccountResultSchema = z.strictObject({
 })
 
 export type Sealed = z.infer<typeof sealedSchema>
+export type ProxyConfig = z.infer<typeof proxySchema>
 export type ValidateAccountCommand = z.infer<typeof validateAccountCommandSchema>
 export type ValidateAccountResult = z.infer<typeof validateAccountResultSchema>
 export type ValidationOutcome = (typeof VALIDATION_OUTCOMES)[number]

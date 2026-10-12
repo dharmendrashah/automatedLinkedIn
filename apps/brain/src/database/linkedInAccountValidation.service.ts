@@ -6,9 +6,12 @@ import { type ValidateAccountResult } from '@automatedLinkedIn/contracts'
 
 import { LinkedInAccountService } from './linkedInAccount.service'
 import { PrismaService } from './prisma.service'
+import { ProxyServerService } from './proxyServer.service'
 
 // Asking again right away would only repeat a login that LinkedIn may already be suspicious of.
 const VERIFY_COOLDOWN_MS = 5 * 60 * 1000
+
+const NEEDS_PROXY_MESSAGE = 'Add a proxy to verify this account.'
 
 export class LinkedInAccountPausedError extends Error {
    public constructor() {
@@ -47,6 +50,21 @@ export class LinkedInAccountValidationService {
          return false
       }
 
+      const proxy = await ProxyServerService.pickForAccount(row.id)
+
+      if (!proxy) {
+         // Never log in from this server's own network: wait until the owner adds a proxy that works.
+         await PrismaService.client.linkedInAccount.update({
+            where: { id: row.id },
+            data: {
+               statusMessage: NEEDS_PROXY_MESSAGE,
+               statusUpdatedAt: new Date(),
+            },
+         })
+
+         return false
+      }
+
       const requestedAt = new Date()
       const validationId = randomUUID()
 
@@ -70,6 +88,7 @@ export class LinkedInAccountValidationService {
                tag: row.secretTag,
                key_version: row.keyVersion,
             },
+            proxy,
             requested_at: requestedAt.toISOString(),
          })
 
@@ -79,6 +98,24 @@ export class LinkedInAccountValidationService {
 
          return false
       }
+   }
+
+   // A proxy just became healthy: validate the account if it was only waiting for one. An account that is active,
+   // paused or already waiting for a result is left alone, so editing a proxy never re-logs-in a working account.
+   public static async requestIfWaiting(accountId: string) {
+      const row = await PrismaService.client.linkedInAccount.findUnique({
+         where: { id: accountId },
+         select: {
+            status: true,
+            validationId: true,
+         },
+      })
+
+      if (!row || row.status !== 'PENDING' || row.validationId) {
+         return false
+      }
+
+      return this.request(accountId)
    }
 
    // The owner asks for another check. Null when the account is not theirs.

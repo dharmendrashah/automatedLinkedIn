@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { proxySchema } from '@automatedLinkedIn/contracts'
+
 import { type ScrapeTaskCommand } from './index'
 
 const selector = z.string().min(1).max(500)
@@ -25,12 +27,7 @@ const action = z.strictObject({
    params: actionParam,
 })
 
-const proxy = z.strictObject({
-   server: z.url({ protocol: /^(https?|socks5)$/ }).max(2048),
-   username: z.string().max(256).optional(),
-   password: z.string().max(256).optional(),
-   bypass: z.string().max(1000).optional(),
-})
+const proxy = proxySchema
 
 // Names the session and lock objects in the store, so the first character rules out `.` and `..`.
 const ACCOUNT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/

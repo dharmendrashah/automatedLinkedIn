@@ -12,7 +12,7 @@ import {
    LinkedInVerifyCooldownError,
 } from 'database'
 
-import { router, userProcedure } from 'trpc'
+import { ownerProcedure, router } from 'trpc'
 
 const secret = z.string().min(1).max(8192)
 const email = z.string().min(1).max(320)
@@ -109,23 +109,6 @@ const notFound = () =>
       code: 'NOT_FOUND',
       message: 'LinkedIn account not found',
    })
-
-// Narrows ctx.user to non-null: userProcedure may leave it null for an identity without a local row.
-const ownerProcedure = userProcedure.use(({ ctx, next }) => {
-   if (!ctx.user) {
-      throw new TRPCError({
-         code: 'FORBIDDEN',
-         message: 'No account is linked to this login yet',
-      })
-   }
-
-   return next({
-      ctx: {
-         ...ctx,
-         user: ctx.user,
-      },
-   })
-})
 
 // Every procedure scopes to ctx.user.id, so one user can never reach another's accounts by id.
 // Only `reveal` returns decrypted secrets; it is a mutation so the secret is never cached by react-query.

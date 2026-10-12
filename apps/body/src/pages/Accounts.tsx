@@ -2,8 +2,9 @@ import { AccountsTable } from '@/components/accounts/accounts-table'
 import { AddAccountDialog } from '@/components/accounts/add-account-dialog'
 import { DeleteAccountDialog } from '@/components/accounts/delete-account-dialog'
 import { EditAccountDialog } from '@/components/accounts/edit-account-dialog'
+import { NeedsProxyNotice } from '@/components/accounts/needs-proxy-notice'
 import { RevealDialog } from '@/components/accounts/reveal-dialog'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { type Account } from '@/components/accounts/types'
 
@@ -12,8 +13,21 @@ import { trpc } from '../trpc'
 export const Accounts = () => {
    const utils = trpc.useUtils()
    const list = trpc.linkedInAccount.list.useQuery(undefined, { retry: false })
+   const proxies = trpc.proxyServer.list.useQuery(undefined, { retry: false })
    const [toDelete, setToDelete] = useState<Account | null>(null)
    const [toEdit, setToEdit] = useState<Account | null>(null)
+
+   const accountsWithProxy = useMemo(
+      () =>
+         proxies.data
+            ? new Set(
+                 proxies.data
+                    .filter(proxy => proxy.status === 'ACTIVE' || proxy.status === 'GEO_MISMATCH')
+                    .map(proxy => proxy.linkedInAccountId)
+              )
+            : undefined,
+      [proxies.data]
+   )
 
    const refresh = () => void utils.linkedInAccount.list.invalidate()
 
@@ -40,6 +54,8 @@ export const Accounts = () => {
          </div>
 
          {actionError ? <p className="text-destructive text-sm">{actionError}</p> : null}
+
+         <NeedsProxyNotice accounts={list.data} accountsWithProxy={accountsWithProxy} />
 
          <AccountsTable
             accounts={list.data}

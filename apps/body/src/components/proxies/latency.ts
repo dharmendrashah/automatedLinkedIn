@@ -1,0 +1,23 @@
+export type Latency = {
+   text: string
+   speed: 'fast' | 'ok' | 'slow'
+}
+
+export const speedClass: Record<Latency['speed'], string> = {
+   fast: 'text-emerald-700 dark:text-emerald-400',
+   ok: 'text-amber-700 dark:text-amber-400',
+   slow: 'text-destructive',
+}
+
+const FAST_UNDER_MS = 500
+const OK_UNDER_MS = 1500
+
+// One sample from the last test, so the label is a hint, not a measurement of a whole session.
+export const describeLatency = (latencyMs: number | null): Latency | null => {
+   if (latencyMs === null) return null
+
+   return {
+      text: `${latencyMs} ms`,
+      speed: latencyMs < FAST_UNDER_MS ? 'fast' : latencyMs < OK_UNDER_MS ? 'ok' : 'slow',
+   }
+}

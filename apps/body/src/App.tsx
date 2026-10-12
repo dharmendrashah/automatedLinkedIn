@@ -9,6 +9,7 @@ import { Dashboard } from './pages/Dashboard'
 import { Home } from './pages/Home'
 import { Login } from './pages/Login'
 import { Profile } from './pages/Profile'
+import { Proxies } from './pages/Proxies'
 import { Signup } from './pages/Signup'
 
 const App = () => (
@@ -28,6 +29,7 @@ const App = () => (
       <Route element={<DashboardLayout />}>
          <Route path="/dashboard" element={<Dashboard />} />
          <Route path="/accounts" element={<Accounts />} />
+         <Route path="/proxies" element={<Proxies />} />
          <Route path="/profile" element={<Profile />} />
       </Route>
    </Routes>

@@ -9,6 +9,7 @@ export const {
    CORS_ORIGINS,
    RABBITMQ_URL,
    LINKEDIN_CRED_ENC_KEY,
+   IPINFO_TOKEN,
    GIT_SHA,
    BUILD_TIME,
    isProd,

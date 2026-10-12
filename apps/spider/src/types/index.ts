@@ -1,3 +1,5 @@
+import { type ProxyConfig } from '@automatedLinkedIn/contracts'
+
 // Message contracts shared by the API and the worker.
 
 export type ScraperActionType = 'login' | 'navigate' | 'interaction' | 'extract'
@@ -22,12 +24,7 @@ export interface ScraperAction {
 }
 
 // A proxy the browser connects through for one task. It carries credentials, so it is never logged or echoed.
-export interface ProxyConfig {
-   server: string
-   username?: string
-   password?: string
-   bypass?: string
-}
+export type { ProxyConfig }
 
 export interface ScrapeTaskCommand {
    task_id: string

@@ -40,6 +40,7 @@
       "fs-extra": "^11.4.1",
       "jose": "^6.2.12",
       "module-alias": "^2.3.4",
+      "proxy-agent": "^8.0.2",
       "zod": "^4.6.5"
    },
    "devDependencies": {

@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
    updateMany: vi.fn(),
    publish: vi.fn(),
    getForUser: vi.fn(),
+   pickForAccount: vi.fn(),
 }))
 
 vi.mock('core', () => ({ AccountValidationQueue: { publish: mocks.publish } }))
@@ -33,6 +34,7 @@ vi.mock('./prisma.service', () => ({
 }))
 
 vi.mock('./linkedInAccount.service', () => ({ LinkedInAccountService: { getForUser: mocks.getForUser } }))
+vi.mock('./proxyServer.service', () => ({ ProxyServerService: { pickForAccount: mocks.pickForAccount } }))
 
 const row = {
    id: '0192a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b',
@@ -45,6 +47,7 @@ const row = {
 }
 
 const validationId = '0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11'
+const proxy = { server: 'http://10.0.0.1:8080' }
 
 describe('LinkedInAccountValidationService', () => {
    beforeEach(() => {
@@ -55,6 +58,7 @@ describe('LinkedInAccountValidationService', () => {
    describe('request', () => {
       it('should remember a new validation on the account, then publish the sealed secrets as stored', async () => {
          mocks.findUnique.mockResolvedValue(row)
+         mocks.pickForAccount.mockResolvedValue(proxy)
          mocks.update.mockResolvedValue({})
          mocks.publish.mockResolvedValue(undefined)
 
@@ -78,6 +82,7 @@ describe('LinkedInAccountValidationService', () => {
                tag: 'tag',
                key_version: 1,
             },
+            proxy,
             requested_at: expect.any(String),
          })
          expect(mocks.update.mock.invocationCallOrder[0]).toBeLessThan(mocks.publish.mock.invocationCallOrder[0])
@@ -85,6 +90,7 @@ describe('LinkedInAccountValidationService', () => {
 
       it('should use a new validation id each time', async () => {
          mocks.findUnique.mockResolvedValue(row)
+         mocks.pickForAccount.mockResolvedValue(proxy)
          mocks.update.mockResolvedValue({})
          mocks.publish.mockResolvedValue(undefined)
 
@@ -107,14 +113,33 @@ describe('LinkedInAccountValidationService', () => {
          ],
       ])('should not publish anything for %s', async (_name, found) => {
          mocks.findUnique.mockResolvedValue(found)
+         mocks.pickForAccount.mockResolvedValue(proxy)
 
          await expect(LinkedInAccountValidationService.request(row.id)).resolves.toBe(false)
          expect(mocks.publish).not.toHaveBeenCalled()
          expect(mocks.update).not.toHaveBeenCalled()
       })
 
+      it('should keep the account pending and tell the owner to add a proxy, without publishing, when it has none', async () => {
+         mocks.findUnique.mockResolvedValue(row)
+         mocks.pickForAccount.mockResolvedValue(null)
+         mocks.update.mockResolvedValue({})
+
+         await expect(LinkedInAccountValidationService.request(row.id)).resolves.toBe(false)
+         expect(mocks.publish).not.toHaveBeenCalled()
+         expect(mocks.update).toHaveBeenCalledTimes(1)
+         expect(mocks.update.mock.calls[0][0]).toEqual({
+            where: { id: row.id },
+            data: {
+               statusMessage: 'Add a proxy to verify this account.',
+               statusUpdatedAt: expect.any(Date),
+            },
+         })
+      })
+
       it('should keep the account pending, and say so, when the broker is down', async () => {
          mocks.findUnique.mockResolvedValue(row)
+         mocks.pickForAccount.mockResolvedValue(proxy)
          mocks.update.mockResolvedValue({})
          mocks.publish.mockRejectedValue(new Error('ECONNREFUSED'))
 
@@ -127,12 +152,62 @@ describe('LinkedInAccountValidationService', () => {
             ...row,
             secret: 'TOPSECRETCIPHERTEXT',
          })
+         mocks.pickForAccount.mockResolvedValue(proxy)
          mocks.update.mockResolvedValue({})
          mocks.publish.mockRejectedValue(new Error('ECONNREFUSED'))
 
          await LinkedInAccountValidationService.request(row.id)
 
          expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain('TOPSECRETCIPHERTEXT')
+      })
+   })
+
+   describe('requestIfWaiting', () => {
+      it('should validate an account that is pending and has no validation in flight', async () => {
+         mocks.findUnique.mockResolvedValue({
+            ...row,
+            validationId: null,
+         })
+         mocks.pickForAccount.mockResolvedValue(proxy)
+         mocks.update.mockResolvedValue({})
+         mocks.publish.mockResolvedValue(undefined)
+
+         await expect(LinkedInAccountValidationService.requestIfWaiting(row.id)).resolves.toBe(true)
+         expect(mocks.publish).toHaveBeenCalledTimes(1)
+      })
+
+      it.each([
+         ['an account that does not exist', null],
+         [
+            'an active account',
+            {
+               ...row,
+               status: 'ACTIVE',
+               validationId: null,
+            },
+         ],
+         [
+            'a paused account',
+            {
+               ...row,
+               status: 'DISABLED',
+               validationId: null,
+            },
+         ],
+         [
+            'an account already waiting for a result',
+            {
+               ...row,
+               validationId,
+            },
+         ],
+      ])('should do nothing for %s', async (_name, found) => {
+         mocks.findUnique.mockResolvedValue(found)
+         mocks.pickForAccount.mockResolvedValue(proxy)
+
+         await expect(LinkedInAccountValidationService.requestIfWaiting(row.id)).resolves.toBe(false)
+         expect(mocks.publish).not.toHaveBeenCalled()
+         expect(mocks.update).not.toHaveBeenCalled()
       })
    })
 
@@ -183,6 +258,7 @@ describe('LinkedInAccountValidationService', () => {
             validationRequestedAt: asked(6),
          })
          mocks.findUnique.mockResolvedValue(row)
+         mocks.pickForAccount.mockResolvedValue(proxy)
          mocks.update.mockResolvedValue({})
          mocks.publish.mockResolvedValue(undefined)
          mocks.getForUser.mockResolvedValue({
@@ -209,6 +285,7 @@ describe('LinkedInAccountValidationService', () => {
             validationRequestedAt: null,
          })
          mocks.findUnique.mockResolvedValue(row)
+         mocks.pickForAccount.mockResolvedValue(proxy)
          mocks.update.mockResolvedValue({})
          mocks.publish.mockResolvedValue(undefined)
          mocks.getForUser.mockResolvedValue({ id: row.id })
