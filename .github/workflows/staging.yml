@@ -29,6 +29,12 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    # Everything deploys except docs and example files. workflow_dispatch ignores this filter.
+    paths-ignore:
+      - '**/*.md'
+      - '.plan/**'
+      - 'LICENSE'
+      - '**/*.example.env'
 
 concurrency:
   group: staging-images
