@@ -91,6 +91,15 @@ Open, left as placeholders for whoever applies this (documented inline, not bloc
   ~410m CPU / ~2.05Gi on one `e2-standard-2` (allocatable roughly 0.7 CPU / 2.3Gi reported in `MEMORY.md`) does
   not fit. This is exactly the blocked-on-node-resize item already in `MEMORY.md`; the manifests are written so
   they are ready once that happens, not to be applied before it.
+
+  **Addendum 2026-10-12, checked against the real cluster:** `kubectl describe node` on `staging-asia`'s one
+  `e2-standard-2` Spot node shows 1930m CPU / ~6.03Gi allocatable, with 1238m CPU / ~3.56Gi already requested
+  by brain/body/rabbitmq/authentik, leaving **~692m CPU / ~2.47Gi free**. With a single `spider-worker` replica
+  (the default `replicas: 1`, confirmed with the user — not 2), `spider-api` (100m/128Mi) + `spider-worker`
+  (500m/1Gi) need 600m CPU / ~1.13Gi, which **fits without a node resize**, leaving ~92m CPU / ~1.34Gi free.
+  That CPU margin is thin (under 5% of the node's allocatable), so watch for throttling or a Spot eviction
+  racing with another workload's restart; resizing to a bigger machine type is still the safer long-term move
+  if a second worker or heavier scrape load is ever added, but is not required to turn this component on now.
 - **Workload Identity may not be enabled on the cluster yet.** It is a one-time `gcloud container clusters
   update --workload-identity-pool=...` plus enabling it on the node pool; undocumented here beyond the
   `gcp-setup.md` note, and must happen before the `ServiceAccount` annotation does anything.
@@ -151,3 +160,47 @@ anything that needs a real cluster or `gcloud` (explicitly out of scope).
 Follow-ups (also in `MEMORY.md`): scale the staging node pool; bind GKE Workload Identity (`gcp-setup.md`); add
 `components: [../../components/spider]` to the staging overlay and rollout-status checks to `staging.yml`'s
 `deploy` job; then the two node-pool/Workload-Identity open items in `MEMORY.md` can close.
+
+## Addendum 2026-10-12: actually deployed
+
+Per explicit user confirmation ("yes deploy it now"), all three follow-ups above were done for real against
+the live `staging-asia` GKE cluster, and spider is now running in staging:
+
+- Enabled `GKE_METADATA` workload-metadata mode on the node pool (`gcloud container node-pools update
+  default-pool --workload-metadata=GKE_METADATA`). This is a one-time, disruptive change: it recreates the
+  node, so every pod on it restarts. Cluster-level Workload Identity (`--workload-pool`) was already on.
+- Created the `spider-worker-gcs` GSA, bound it to `roles/storage.objectAdmin` on the spider bucket only, and
+  bound `roles/iam.workloadIdentityUser` for `automate-linkedin-511215.svc.id.goog[automatedlinkedin/spider-worker]`.
+  Annotated `deploy/components/spider/spider-worker.serviceaccount.yaml` with the GSA email.
+- Added `components: [../../components/spider]` to `deploy/overlays/staging/kustomization.yaml` and
+  `spider-api`/`spider-worker` rollout-status checks to `staging.yml`'s `deploy` job.
+- Rendered and server-side dry-ran the full overlay against the live cluster, then applied it for real.
+- Triggered `staging.yml` via `workflow_dispatch` on this branch (its `push: [main]` trigger does not cover
+  feature branches) to build and push the `spider`/`spider-worker` images; all five images built, the `deploy`
+  job applied cleanly, and `spider-api`/`spider-worker` are now `Running 1/1` with a confirmed GCS
+  read/write/delete round trip through Workload Identity (no mounted key).
+
+Two real incidents surfaced by the node recreation, both pre-existing and unrelated to spider, fixed in the
+same change:
+
+- **rabbitmq crash loop.** The default `fsGroupChangePolicy` re-chowns the volume on every mount; that widened
+  `.erlang.cookie` to group-readable, which RabbitMQ refuses to start with ("must be accessible by owner
+  only"). Fixed with `fsGroupChangePolicy: OnRootMismatch` on the StatefulSet (`deploy/base/rabbitmq.statefulset.yaml`),
+  which skips the recursive chown once the volume's root group already matches, so a restart no longer
+  re-widens it.
+- **dns-updater broken by GKE_METADATA mode.** The per-node metadata proxy that mode turns on no longer serves
+  `instance/network-interfaces/.../external-ip`, so the old GCE-metadata-based lookup 404'd on every run.
+  Rewritten to read the node's `ExternalIP` from the Kubernetes API instead (`NODE_NAME` via the downward API,
+  a dedicated `dns-updater` ServiceAccount with a `ClusterRole` scoped to `get` on `nodes` only) —
+  `deploy/overlays/staging/dns/`.
+
+Also found at deploy time: the original 500m CPU request for `spider-worker` no longer fit once
+`GKE_METADATA` mode's own `gke-metadata-server` daemonset (~100m CPU) was counted, which the original estimate
+did not include. Lowered to 400m request (limit unchanged at 1 CPU) in
+`deploy/components/spider/spider-worker.deployment.yaml`; it schedules with the free capacity actually found on
+the node.
+
+Everything is committed and pushed to `feat/spider` (PR #17): `d8ee311` (component wiring + rabbitmq/dns-updater
+fixes) and `e982ea6` (the CPU request fix, applied live first then committed). Not yet done: merging `feat/spider`
+to `main` (CI's `staging.yml` only triggers on `main` push or manual dispatch; this deploy used manual dispatch).
+
