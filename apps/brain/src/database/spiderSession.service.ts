@@ -2,7 +2,7 @@ import { SESSION_RECORDING_RETENTION_DAYS } from 'env'
 
 import { type ProxyProtocol, type SpiderSessionStatus } from 'generated/prisma/client'
 
-import { type ValidateAccountResult } from '@automatedLinkedIn/contracts'
+import { type StandardTaskResult, type ValidateAccountResult } from '@automatedLinkedIn/contracts'
 
 import { PrismaService } from './prisma.service'
 
@@ -19,7 +19,7 @@ const NO_ANSWER_AFTER_MS = 30 * 60 * 1000
 
 // The only files of a recording the browser may ask for. The path itself always comes from the database.
 export const SESSION_FILE_PATTERN =
-   /^(?:video\.webm|timeline\.json|network\.json|logs\.json|failure\.html|screenshots\/\d{2,3}-[A-Za-z-]+\.png)$/
+   /^(?:video\.webm|timeline\.json|network\.json|logs\.json|detection\.json|failure\.html|screenshots\/\d{2,3}-[A-Za-z-]+\.png)$/
 
 export class SpiderSessionNotFoundError extends Error {
    public constructor() {
@@ -41,6 +41,8 @@ type SessionProxy = {
    country: string | null
 }
 
+export type BrowserTestTrigger = 'automatic' | 'manual'
+
 type StartInput = {
    id: string
    userId: string
@@ -50,11 +52,19 @@ type StartInput = {
    retryOfId?: string
 }
 
-type SessionRequestParams = {
-   action: 'VALIDATE_ACCOUNT'
-   email: string
-   proxy: string
-}
+type StartBrowserTestInput = Omit<StartInput, 'email' | 'retryOfId'> & { trigger: BrowserTestTrigger }
+
+type SessionRequestParams =
+   | {
+        action: 'VALIDATE_ACCOUNT'
+        email: string
+        proxy: string
+     }
+   | {
+        action: 'BROWSER_TEST'
+        trigger: BrowserTestTrigger
+        proxy: string
+     }
 
 const listSelect = {
    id: true,
@@ -129,6 +139,39 @@ export class SpiderSessionService {
       }
    }
 
+   // Notes a browser test that is about to be queued. Unlike `start` it throws when the row cannot be saved: a test
+   // nobody can see the result of must not run.
+   public static async startBrowserTest({ id, userId, linkedInAccountId, proxy, trigger }: StartBrowserTestInput) {
+      const params: SessionRequestParams = {
+         action: 'BROWSER_TEST',
+         trigger,
+         proxy: `${proxy.protocol.toLowerCase()}://${proxy.host}:${proxy.port}`,
+      }
+
+      await PrismaService.client.spiderSession.create({
+         data: {
+            id,
+            userId,
+            linkedInAccountId,
+            kind: 'BROWSER_TEST',
+            proxyServerId: proxy.id,
+            proxyProtocol: proxy.protocol,
+            proxyHost: proxy.host,
+            proxyPort: proxy.port,
+            proxyCountry: proxy.country,
+            requestParams: params,
+         },
+      })
+
+      try {
+         await PrismaService.client.spiderSession.deleteMany({
+            where: { startedAt: { lt: new Date(Date.now() - ROW_RETENTION_DAYS * DAY_MS) } },
+         })
+      } catch (error) {
+         console.error(`Could not delete old sessions: ${(error as Error).message}`)
+      }
+   }
+
    // The check could not even be queued.
    public static async fail(id: string, message: string) {
       await PrismaService.client.spiderSession.updateMany({
@@ -164,6 +207,38 @@ export class SpiderSessionService {
          },
          data: {
             status: result.outcome === 'VALID' ? 'SUCCEEDED' : 'FAILED',
+            outcome: result.outcome,
+            message: result.message,
+            finishedAt,
+            durationMs: Math.max(0, finishedAt.getTime() - session.startedAt.getTime()),
+            ...(result.recording_prefix && { recordingPrefix: result.recording_prefix }),
+         },
+      })
+
+      return count > 0
+   }
+
+   // Records a standard task's answer (a browser test's verdict), once. A browser test that was not detected succeeded;
+   // detected or undecided is failed. Resolves to whether this answer was the one that ended the session.
+   public static async finishStandard(result: StandardTaskResult) {
+      const session = await PrismaService.client.spiderSession.findUnique({
+         where: { id: result.task_id },
+         select: { startedAt: true },
+      })
+
+      if (!session) {
+         return false
+      }
+
+      const finishedAt = new Date(result.finished_at)
+      const { count } = await PrismaService.client.spiderSession.updateMany({
+         where: {
+            id: result.task_id,
+            kind: 'BROWSER_TEST',
+            status: 'IN_PROGRESS',
+         },
+         data: {
+            status: result.outcome === 'NOT_DETECTED' ? 'SUCCEEDED' : 'FAILED',
             outcome: result.outcome,
             message: result.message,
             finishedAt,

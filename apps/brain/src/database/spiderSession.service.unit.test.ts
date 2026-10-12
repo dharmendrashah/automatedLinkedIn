@@ -404,12 +404,122 @@ describe('SpiderSessionService', () => {
       })
    })
 
+   describe('startBrowserTest', () => {
+      const input = {
+         id: '0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11',
+         userId: 'u1',
+         linkedInAccountId: 'acc1',
+         trigger: 'automatic' as const,
+         proxy: {
+            id: 'p1',
+            protocol: 'HTTP' as const,
+            host: 'proxy.example.net',
+            port: 8080,
+            country: 'Canada',
+         },
+      }
+
+      it('should note a browser test in progress with the proxy as a snapshot and what started it, without secrets', async () => {
+         mocks.create.mockResolvedValue({})
+         mocks.deleteMany.mockResolvedValue({ count: 0 })
+
+         await SpiderSessionService.startBrowserTest(input)
+
+         expect(mocks.create).toHaveBeenCalledWith({
+            data: {
+               id: input.id,
+               userId: 'u1',
+               linkedInAccountId: 'acc1',
+               kind: 'BROWSER_TEST',
+               proxyServerId: 'p1',
+               proxyProtocol: 'HTTP',
+               proxyHost: 'proxy.example.net',
+               proxyPort: 8080,
+               proxyCountry: 'Canada',
+               requestParams: {
+                  action: 'BROWSER_TEST',
+                  trigger: 'automatic',
+                  proxy: 'http://proxy.example.net:8080',
+               },
+            },
+         })
+      })
+
+      it('should throw when the session cannot be saved, so the test is never queued without one', async () => {
+         mocks.create.mockRejectedValue(new Error('database down'))
+
+         await expect(SpiderSessionService.startBrowserTest(input)).rejects.toThrow('database down')
+      })
+   })
+
+   describe('finishStandard', () => {
+      const result = {
+         task: 'browser_detection' as const,
+         task_id: 's1',
+         outcome: 'NOT_DETECTED' as const,
+         message: 'Every detection page took this browser for a person.',
+         finished_at: '2026-10-12T10:01:00.000Z',
+         recording_prefix: 'recordings/browser-test/0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11/20261012T100005Z',
+      }
+
+      it('should end a session as succeeded when the browser was not detected, once, with its recording', async () => {
+         mocks.findUnique.mockResolvedValue({ startedAt: new Date('2026-10-12T10:00:00.000Z') })
+         mocks.updateMany.mockResolvedValue({ count: 1 })
+
+         await expect(SpiderSessionService.finishStandard(result)).resolves.toBe(true)
+
+         expect(mocks.updateMany).toHaveBeenCalledWith({
+            where: {
+               id: 's1',
+               kind: 'BROWSER_TEST',
+               status: 'IN_PROGRESS',
+            },
+            data: {
+               status: 'SUCCEEDED',
+               outcome: 'NOT_DETECTED',
+               message: result.message,
+               finishedAt: new Date('2026-10-12T10:01:00.000Z'),
+               durationMs: 60_000,
+               recordingPrefix: result.recording_prefix,
+            },
+         })
+      })
+
+      it.each(['DETECTED', 'COULD_NOT_TELL'] as const)('should end a %s verdict as failed', async outcome => {
+         mocks.findUnique.mockResolvedValue({ startedAt: new Date('2026-10-12T10:00:00.000Z') })
+         mocks.updateMany.mockResolvedValue({ count: 1 })
+
+         await SpiderSessionService.finishStandard({
+            ...result,
+            outcome,
+         })
+
+         expect(mocks.updateMany.mock.calls[0][0].data).toMatchObject({
+            status: 'FAILED',
+            outcome,
+         })
+      })
+
+      it('should ignore an answer for a session it does not know', async () => {
+         mocks.findUnique.mockResolvedValue(null)
+
+         await expect(SpiderSessionService.finishStandard(result)).resolves.toBe(false)
+         expect(mocks.updateMany).not.toHaveBeenCalled()
+      })
+   })
+
    describe('SESSION_FILE_PATTERN', () => {
-      it.each(['video.webm', 'timeline.json', 'network.json', 'logs.json', 'failure.html', 'screenshots/01-goto.png'])(
-         'should accept %s',
-         file => {
-            expect(SESSION_FILE_PATTERN.test(file)).toBe(true)
-         }
-      )
+      it.each([
+         'video.webm',
+         'timeline.json',
+         'network.json',
+         'logs.json',
+         'detection.json',
+         'failure.html',
+         'screenshots/01-goto.png',
+         'screenshots/04-fullpage-pixelscan.png',
+      ])('should accept %s', file => {
+         expect(SESSION_FILE_PATTERN.test(file)).toBe(true)
+      })
    })
 })

@@ -2,9 +2,9 @@ import 'dotenv/config'
 
 import './aliases'
 
-import { AccountValidationQueue, HttpServer, MessageBroker } from 'core'
+import { AccountValidationQueue, HttpServer, MessageBroker, StandardTaskQueue } from 'core'
 
-import { LinkedInAccountValidationService, PrismaService } from 'database'
+import { LinkedInAccountValidationService, PrismaService, SpiderSessionService } from 'database'
 
 import { Middlewares } from 'middlewares'
 
@@ -17,10 +17,15 @@ const validationResults = AccountValidationQueue.consume(async result => {
    await LinkedInAccountValidationService.applyResult(result)
 })
 
+// The worker's answers to standard tasks, such as a proxy's browser test: they finish the session that shows them.
+const standardResults = StandardTaskQueue.consume(async result => {
+   await SpiderSessionService.finishStandard(result)
+})
+
 for (const signal of ['SIGINT', 'SIGTERM']) {
    process.once(signal, () =>
-      validationResults
-         .then(consumer => consumer.stop())
+      Promise.all([validationResults, standardResults])
+         .then(consumers => Promise.all(consumers.map(consumer => consumer.stop())))
          .then(() => Promise.all([PrismaService.disconnect(), MessageBroker.disconnect()]))
          .then(() => {
             console.log(`database and broker connections closed`)

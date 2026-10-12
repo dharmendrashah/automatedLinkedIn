@@ -153,6 +153,8 @@ model ProxyTest {
 enum SpiderSessionKind {
   // The spider signs in to check an account's credentials.
   VALIDATE_ACCOUNT
+  // The spider opens its browser through a proxy and checks whether bot detection pages take it for a person.
+  BROWSER_TEST
   // Reserved: scrape tasks join when brain starts creating them.
   SCRAPE
 }
@@ -174,7 +176,8 @@ model SpiderSession {
   linkedInAccount   LinkedInAccount     @relation(fields: [linkedInAccountId], references: [id], onDelete: Cascade)
   kind              SpiderSessionKind
   status            SpiderSessionStatus @default(IN_PROGRESS)
-  // The spider's verdict: VALID, INVALID_CREDENTIALS, NEEDS_REAUTH or ERROR. Null while in progress.
+  // The spider's verdict: VALID, INVALID_CREDENTIALS, NEEDS_REAUTH or ERROR for an account check; NOT_DETECTED,
+  // DETECTED, COULD_NOT_TELL or ERROR for a browser test. Null while in progress.
   outcome           String?
   // One short, fixed sentence from the spider (or brain when the task could not be queued).
   message           String?

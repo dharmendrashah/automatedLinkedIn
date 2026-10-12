@@ -7,9 +7,13 @@ import { proxyServer } from './proxyServer'
 
 const mocks = vi.hoisted(() => {
    class ProxyServerOwnershipError extends Error {}
+   class BrowserTestRefusedError extends Error {}
 
    return {
       ProxyServerOwnershipError,
+      BrowserTestRefusedError,
+      requestAutomatic: vi.fn(),
+      requestForUser: vi.fn(),
       listForUser: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
@@ -23,6 +27,11 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('database', () => ({
    ProxyServerOwnershipError: mocks.ProxyServerOwnershipError,
+   BrowserTestRefusedError: mocks.BrowserTestRefusedError,
+   BrowserTestService: {
+      requestAutomatic: mocks.requestAutomatic,
+      requestForUser: mocks.requestForUser,
+   },
    ProxyServerService: {
       listForUser: mocks.listForUser,
       create: mocks.create,
@@ -133,6 +142,84 @@ describe('proxyServer resolvers', () => {
 
       await expect(caller().test({ id: 'p1' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
       expect(mocks.requestIfWaiting).not.toHaveBeenCalled()
+   })
+
+   describe('automatic browser test', () => {
+      it.each([
+         ['create', () => caller().create(created), mocks.create, false],
+         ['test', () => caller().test({ id: 'p1' }), mocks.test, false],
+         [
+            'update of the address',
+            () =>
+               caller().update({
+                  id: 'p1',
+                  host: 'other.example.net',
+               }),
+            mocks.update,
+            true,
+         ],
+         [
+            'update of the password',
+            () =>
+               caller().update({
+                  id: 'p1',
+                  password: 'new',
+               }),
+            mocks.update,
+            true,
+         ],
+         ['update that changes nothing', () => caller().update({ id: 'p1' }), mocks.update, false],
+      ])('should ask for a browser test when %s ends with a working proxy', async (_name, run, service, changed) => {
+         service.mockResolvedValue(proxy('ACTIVE'))
+
+         await run()
+
+         expect(mocks.requestAutomatic).toHaveBeenCalledWith('p1', { changed })
+      })
+
+      it.each(['GEO_MISMATCH', 'UNREACHABLE', 'PENDING'])(
+         'should not ask for one when the proxy is %s',
+         async status => {
+            mocks.test.mockResolvedValue(proxy(status))
+
+            await caller().test({ id: 'p1' })
+
+            expect(mocks.requestAutomatic).not.toHaveBeenCalled()
+         }
+      )
+
+      it('should not wait for the browser test to finish, so the proxy is returned at once', async () => {
+         mocks.test.mockResolvedValue(proxy('ACTIVE'))
+         mocks.requestAutomatic.mockReturnValue(new Promise(() => undefined))
+
+         await expect(caller().test({ id: 'p1' })).resolves.toMatchObject({ id: 'p1' })
+      })
+   })
+
+   describe('browserTest', () => {
+      it("should start a browser test of one of the current user's proxies and return the session id", async () => {
+         mocks.requestForUser.mockResolvedValue({ id: 's1' })
+
+         await expect(caller().browserTest({ id: 'p1' })).resolves.toEqual({ id: 's1' })
+         expect(mocks.requestForUser).toHaveBeenCalledWith('u1', 'p1')
+      })
+
+      it('should answer not found for a proxy that is not the users', async () => {
+         mocks.requestForUser.mockRejectedValue(new mocks.ProxyServerOwnershipError('nope'))
+
+         await expect(caller().browserTest({ id: 'p1' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      })
+
+      it('should say why when the test cannot run now', async () => {
+         mocks.requestForUser.mockRejectedValue(
+            new mocks.BrowserTestRefusedError('A browser test of this proxy is already running.')
+         )
+
+         await expect(caller().browserTest({ id: 'p1' })).rejects.toMatchObject({
+            code: 'PRECONDITION_FAILED',
+            message: 'A browser test of this proxy is already running.',
+         })
+      })
    })
 
    describe('test history', () => {

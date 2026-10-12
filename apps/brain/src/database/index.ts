@@ -1,4 +1,5 @@
 export { PrismaService } from './prisma.service'
+export { BrowserTestRefusedError, BrowserTestService } from './browserTest.service'
 export {
    LinkedInAccountConflictError,
    LinkedInAccountService,
