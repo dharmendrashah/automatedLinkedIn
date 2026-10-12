@@ -7,6 +7,11 @@ resources:
   - ../../base
   - dns/cronjob.yaml
 
+# Deployed 2026-10-12: node pool has GKE_METADATA mode and spider-worker's GSA binding (deploy/gcp-setup.md);
+# one spider-worker replica fits the node with the current workloads (.plan/spider-staging-deploy.md).
+components:
+  - ../../components/spider
+
 # Replace OWNER with the lowercase GitHub owner/repo that publishes the images.
 # The body image is environment specific: its VITE_* values are baked at build time,
 # so staging must use the image built by .github/workflows/staging.yml.
@@ -19,6 +24,13 @@ images:
     newTag: staging
   - name: automatedlinkedin-body
     newName: ghcr.io/dharmendrashah/automatedlinkedin-body
+    newTag: staging
+  # Unused until the spider component above is included; harmless to leave declared.
+  - name: automatedlinkedin-spider
+    newName: ghcr.io/dharmendrashah/automatedlinkedin-spider
+    newTag: staging
+  - name: automatedlinkedin-spider-worker
+    newName: ghcr.io/dharmendrashah/automatedlinkedin-spider-worker
     newTag: staging
 
 configMapGenerator:
@@ -45,11 +57,13 @@ secretGenerator:
 patches:
   - path: ingress.patch.yaml
 
-  # Only brain and body come from GHCR; the authentik image is public.
+  # brain and body come from GHCR; the authentik image is public. spider-api/spider-worker are listed here too,
+  # ready for when the spider component above is included (a target naming a Deployment that does not exist
+  # yet is not an error, as long as the regex still matches at least one that does).
   - path: imagepullsecret.patch.yaml
     target:
       kind: Deployment
-      name: (brain|body)
+      name: (brain|body|spider-api|spider-worker)
 
   # One Spot node, so every workload must tolerate the Spot taint and stay single-replica.
   - path: spot-toleration.patch.yaml

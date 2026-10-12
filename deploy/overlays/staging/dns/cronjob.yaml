@@ -1,3 +1,31 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dns-updater
+---
+# Scoped to read-only on the single resource it needs: its own node's external IP.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dns-updater-read-nodes
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dns-updater-read-nodes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dns-updater-read-nodes
+subjects:
+  - kind: ServiceAccount
+    name: dns-updater
+    namespace: automatedlinkedin
+---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -15,6 +43,7 @@ spec:
       template:
         spec:
           restartPolicy: Never
+          serviceAccountName: dns-updater
           securityContext:
             runAsNonRoot: true
             runAsUser: 65534
@@ -26,6 +55,10 @@ spec:
               env:
                 - name: PYTHONDONTWRITEBYTECODE
                   value: "1"
+                - name: NODE_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: spec.nodeName
                 - name: CF_API_TOKEN
                   valueFrom:
                     secretKeyRef:

@@ -130,4 +130,93 @@ describe('MessageBroker', () => {
 
       await expect(MessageBroker.disconnect()).resolves.toBeUndefined()
    })
+
+   describe('channels', () => {
+      const channelOf = () => Object.assign(new EventEmitter(), { close: vi.fn() })
+
+      const connectionWith = (channels: ReturnType<typeof channelOf>[]) =>
+         Object.assign(fakeConnection(), {
+            createConfirmChannel: vi.fn(async () => channels.shift()),
+            createChannel: vi.fn(async () => channels.shift()),
+         })
+
+      it('should open one confirm channel for publishing and share it', async () => {
+         const connection = connectionWith([channelOf()])
+
+         mocks.connect.mockResolvedValue(connection)
+
+         const [first, second] = await Promise.all([MessageBroker.confirmChannel(), MessageBroker.confirmChannel()])
+
+         expect(first).toBe(second)
+         expect(connection.createConfirmChannel).toHaveBeenCalledTimes(1)
+      })
+
+      it('should open a new confirm channel after the channel closes', async () => {
+         const first = channelOf()
+         const connection = connectionWith([first, channelOf()])
+
+         mocks.connect.mockResolvedValue(connection)
+
+         await MessageBroker.confirmChannel()
+         first.emit('close')
+         await MessageBroker.confirmChannel()
+
+         expect(connection.createConfirmChannel).toHaveBeenCalledTimes(2)
+      })
+
+      it('should open a new confirm channel after the connection closes', async () => {
+         const firstConnection = connectionWith([channelOf()])
+         const secondConnection = connectionWith([channelOf()])
+
+         mocks.connect.mockResolvedValueOnce(firstConnection).mockResolvedValueOnce(secondConnection)
+
+         await MessageBroker.confirmChannel()
+         firstConnection.emit('close')
+         await MessageBroker.confirmChannel()
+
+         expect(secondConnection.createConfirmChannel).toHaveBeenCalledTimes(1)
+      })
+
+      it('should not crash the process on a channel error', async () => {
+         const channel = channelOf()
+
+         mocks.connect.mockResolvedValue(connectionWith([channel]))
+         await MessageBroker.confirmChannel()
+
+         expect(() => channel.emit('error', new Error('channel closed'))).not.toThrow()
+      })
+
+      it('should try again after a channel could not be opened', async () => {
+         const connection = connectionWith([channelOf()])
+
+         connection.createConfirmChannel.mockRejectedValueOnce(new Error('channel limit'))
+         mocks.connect.mockResolvedValue(connection)
+
+         await expect(MessageBroker.confirmChannel()).rejects.toThrow('channel limit')
+         await expect(MessageBroker.confirmChannel()).resolves.toBeDefined()
+      })
+
+      it('should hand out a fresh channel for each consumer', async () => {
+         const connection = connectionWith([channelOf(), channelOf()])
+
+         mocks.connect.mockResolvedValue(connection)
+
+         const [first, second] = [await MessageBroker.channel(), await MessageBroker.channel()]
+
+         expect(first).not.toBe(second)
+         expect(connection.createChannel).toHaveBeenCalledTimes(2)
+      })
+
+      it('should forget the confirm channel on disconnect', async () => {
+         const connection = connectionWith([channelOf(), channelOf()])
+
+         mocks.connect.mockResolvedValue(connection)
+
+         await MessageBroker.confirmChannel()
+         await MessageBroker.disconnect()
+         await MessageBroker.confirmChannel()
+
+         expect(connection.createConfirmChannel).toHaveBeenCalledTimes(2)
+      })
+   })
 })

@@ -1,10 +1,15 @@
 name: Staging images
 
-# Builds the three images the staging overlay deploys:
+# Builds the images the staging overlay deploys:
 #   -brain          the API
 #   -brain-migrate  the `migrate` Dockerfile stage, run as brain's init container
 #   -body           the SPA, which bakes its VITE_* values at build time and is
 #                   therefore environment specific
+#   -spider         the spider API (apps/spider Dockerfile's `api` target)
+#   -spider-worker  the Camoufox worker (apps/spider Dockerfile's `worker` target)
+#
+# -spider and -spider-worker are built and pushed here so the images exist in GHCR, but the staging overlay
+# does not deploy them yet (deploy/overlays/staging/kustomization.yaml explains why and how to turn it on).
 #
 # Configure these repository variables before the first run:
 #   STAGING_API_URL   https://api.staging.<domain>
@@ -61,6 +66,12 @@ jobs:
           - app: body
             suffix: body
             target: ''
+          - app: spider
+            suffix: spider
+            target: api
+          - app: spider
+            suffix: spider-worker
+            target: worker
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -205,3 +216,5 @@ jobs:
           kubectl -n automatedlinkedin rollout status deploy/body --timeout=5m
           kubectl -n automatedlinkedin rollout status deploy/authentik-server --timeout=5m
           kubectl -n automatedlinkedin rollout status deploy/authentik-worker --timeout=5m
+          kubectl -n automatedlinkedin rollout status deploy/spider-api --timeout=5m
+          kubectl -n automatedlinkedin rollout status deploy/spider-worker --timeout=5m

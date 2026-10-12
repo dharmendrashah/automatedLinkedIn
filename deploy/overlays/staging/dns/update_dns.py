@@ -3,12 +3,20 @@
 Runs as a CronJob in the staging cluster. The node's external IP changes when a Spot node
 is replaced, so the record is checked on every run and updated only when it differs.
 
+The node's external IP is read from the Kubernetes API (the Node object's status.addresses),
+not the GCE metadata server: once the node pool runs in GKE_METADATA mode (required for
+Workload Identity), the per-node metadata proxy no longer serves instance network-interface
+details and returns 404 for them.
+
 Environment:
-  CF_API_TOKEN   Cloudflare API token with Zone -> DNS -> Edit on the zone (required)
-  CF_ZONE_ID     Cloudflare zone ID (required)
-  RECORD_NAME    fully qualified A record name, for example app.staging.example.com (required)
-  METADATA_URL   GCE metadata URL for the external IP (defaults to the node's IP)
-  CF_API_BASE    Cloudflare API base URL (defaults to the public API; tests override it)
+  CF_API_TOKEN     Cloudflare API token with Zone -> DNS -> Edit on the zone (required)
+  CF_ZONE_ID       Cloudflare zone ID (required)
+  RECORD_NAME      fully qualified A record name, for example app.staging.example.com (required)
+  NODE_NAME        the Node object to read the external IP from (required; set via the downward API)
+  K8S_API_URL      Kubernetes API base URL (defaults to https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT)
+  K8S_API_TOKEN    bearer token for the API server (defaults to the mounted service account token)
+  K8S_API_CA_PATH  CA bundle for the API server (defaults to the mounted service account CA; skipped if absent)
+  CF_API_BASE      Cloudflare API base URL (defaults to the public API; tests override it)
 
 Exit status is 0 when the record is correct afterwards, 1 on any error. The token is never printed.
 """
@@ -16,14 +24,13 @@ Exit status is 0 when the record is correct afterwards, 1 on any error. The toke
 import ipaddress
 import json
 import os
+import ssl
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 
-DEFAULT_METADATA_URL = (
-    "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip"
-)
+SERVICE_ACCOUNT_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
 DEFAULT_API_BASE = "https://api.cloudflare.com/client/v4"
 TTL_SECONDS = 60
 
@@ -39,20 +46,56 @@ def require(name: str) -> str:
     return value
 
 
-def node_external_ip(metadata_url: str) -> str:
-    request = urllib.request.Request(metadata_url, headers={"Metadata-Flavor": "Google"})
+def _default_api_url() -> str:
+    host = os.environ.get("KUBERNETES_SERVICE_HOST", "").strip()
+    port = os.environ.get("KUBERNETES_SERVICE_PORT", "443").strip()
+    if not host:
+        raise UpdateError("KUBERNETES_SERVICE_HOST is not set (expected when running as a pod)")
+    return f"https://{host}:{port}"
+
+
+def _service_account_token() -> str:
+    override = os.environ.get("K8S_API_TOKEN")
+    if override:
+        return override
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
-            raw = response.read().decode().strip()
-    except (urllib.error.URLError, TimeoutError) as error:
-        raise UpdateError(f"could not read the node IP from the metadata server: {error}") from error
+        with open(f"{SERVICE_ACCOUNT_DIR}/token", encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError as error:
+        raise UpdateError(f"could not read the service account token: {error}") from error
+
+
+def _ca_path() -> str | None:
+    path = os.environ.get("K8S_API_CA_PATH", f"{SERVICE_ACCOUNT_DIR}/ca.crt")
+    return path if path and os.path.exists(path) else None
+
+
+def node_external_ip(api_url: str, node_name: str, token: str, ca_path: str | None) -> str:
+    request = urllib.request.Request(
+        f"{api_url}/api/v1/nodes/{urllib.parse.quote(node_name)}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    context = ssl.create_default_context(cafile=ca_path) if ca_path else None
+    try:
+        with urllib.request.urlopen(request, timeout=10, context=context) as response:
+            payload = json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        raise UpdateError(f"could not read node {node_name} from the Kubernetes API: HTTP {error.code}") from error
+    except (urllib.error.URLError, TimeoutError, ValueError) as error:
+        raise UpdateError(f"could not read node {node_name} from the Kubernetes API: {error}") from error
+
+    addresses = payload.get("status", {}).get("addresses", [])
+    raw = next((entry.get("address") for entry in addresses if entry.get("type") == "ExternalIP"), None)
+    if raw is None:
+        raise UpdateError(f"node {node_name} has no ExternalIP address")
     try:
         address = ipaddress.IPv4Address(raw)
     except ValueError as error:
-        raise UpdateError(f"metadata returned an invalid IPv4 address: {raw!r}") from error
+        raise UpdateError(f"Kubernetes API returned an invalid IPv4 address: {raw!r}") from error
     if address.is_private or address.is_unspecified or address.is_loopback:
         raise UpdateError(f"refusing to publish a non-public address: {address}")
     return str(address)
+
 
 
 class Cloudflare:
@@ -122,10 +165,11 @@ def main() -> int:
         token = require("CF_API_TOKEN")
         zone_id = require("CF_ZONE_ID")
         name = require("RECORD_NAME")
-        metadata_url = os.environ.get("METADATA_URL", DEFAULT_METADATA_URL)
+        node_name = require("NODE_NAME")
+        api_url = os.environ.get("K8S_API_URL") or _default_api_url()
         api_base = os.environ.get("CF_API_BASE", DEFAULT_API_BASE)
 
-        ip = node_external_ip(metadata_url)
+        ip = node_external_ip(api_url, node_name, _service_account_token(), _ca_path())
         result = sync(Cloudflare(api_base, token, zone_id), name, ip)
         print(result, flush=True)
         return 0

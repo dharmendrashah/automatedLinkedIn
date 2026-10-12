@@ -1,0 +1,29 @@
+{
+   "name": "@automatedLinkedIn/contracts",
+   "version": "1.0.0",
+   "private": true,
+   "sideEffects": false,
+   "main": "dist/index.js",
+   "types": "src/index.ts",
+   "files": ["dist"],
+   "scripts": {
+      "dev": "pnpm build:lib --watch",
+      "lint": "eslint .",
+      "lint:fix": "eslint . --fix",
+      "ts:check": "tsc -b",
+      "check": "pnpm lint && pnpm ts:check",
+      "build:lib": "tsup src/index.ts --format cjs",
+      "test:unit": "vitest .unit.test.ts",
+      "test:unit:run": "pnpm test:unit --run"
+   },
+   "dependencies": {
+      "zod": "^4.6.5"
+   },
+   "devDependencies": {
+      "@automatedLinkedIn/eslint-config": "workspace:*",
+      "@automatedLinkedIn/tsconfig": "workspace:*",
+      "@types/node": "^26.6.4",
+      "tsup": "^8.5.1",
+      "typescript": "^7.0.2"
+   }
+}

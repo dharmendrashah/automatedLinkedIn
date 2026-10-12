@@ -6,11 +6,12 @@ lives in an overlay. Plan and decisions: [`.plan/kubernetes-deploy.md`](../.plan
 ```
 deploy/
   base/                 platform-agnostic manifests
+  components/spider/    optional: apps/spider's API and Camoufox worker, not included by any overlay yet
   overlays/local/       minikube: plain HTTP, local images, compose database
   overlays/staging/     staging: hosts, image tags, Spot tolerations, TLS
   cluster/              cluster-scoped prerequisites (cert-manager issuers)
   local.md              run the whole stack on minikube
-  gcp-setup.md          one-time keyless GCP auth setup for CI
+  gcp-setup.md          one-time keyless GCP auth setup for CI, and the GCS Workload Identity binding
 ```
 
 Start with [`local.md`](local.md): it uses the same manifests as staging, so most mistakes
@@ -27,6 +28,17 @@ surface on your laptop instead of in the cloud.
 | `rabbitmq` | `rabbitmq:4.3-management-alpine` | Message broker. Single-replica StatefulSet with a 2Gi volume, ClusterIP only (AMQP 5672, management 15672). |
 
 **PostgreSQL is not deployed.** It is an existing external server on another cloud.
+
+### Spider (not deployed yet)
+
+`deploy/components/spider` is a Kustomize [Component](https://kubectl.docs.kubernetes.io/guides/config_management/components/)
+with `spider-api` (the Fastify API, internal only, `ClusterIP`) and `spider-worker` (the Camoufox
+worker, no `Service`: it only consumes RabbitMQ). It renders cleanly
+(`kubectl kustomize --load-restrictor LoadRestrictionsNone deploy/overlays/staging` after adding it
+to that overlay's `components:` list) but **no overlay includes it yet** — see the comment at the
+top of `deploy/overlays/staging/kustomization.yaml` for the two things that must happen first
+(the node pool, and the GCS Workload Identity binding in `gcp-setup.md`), and `MEMORY.md`'s open
+items.
 
 ## Prerequisites
 

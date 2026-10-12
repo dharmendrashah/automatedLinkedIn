@@ -21,6 +21,10 @@ spec:
         runAsUser: 100
         runAsGroup: 101
         fsGroup: 101
+        # OnRootMismatch skips the recursive chown/chmod once the volume's root already has the right
+        # group: re-running it on every restart widened .erlang.cookie to group-readable, which RabbitMQ
+        # refuses to start with ("must be accessible by owner only").
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: rabbitmq
           # Pinned to a minor version; bump it on purpose, never follow `latest`.

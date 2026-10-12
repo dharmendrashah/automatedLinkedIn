@@ -1,4 +1,4 @@
-import { type ChannelModel, connect } from 'amqplib'
+import { type ChannelModel, type ConfirmChannel, connect } from 'amqplib'
 
 import { RABBITMQ_URL } from 'env'
 
@@ -9,6 +9,8 @@ export class MessageBroker {
    private static pending?: Promise<ChannelModel>
 
    private static open?: ChannelModel
+
+   private static publisher?: Promise<ConfirmChannel>
 
    // One shared connection, opened on first use and opened again after it drops.
    public static connection() {
@@ -21,6 +23,7 @@ export class MessageBroker {
             connection.on('close', () => {
                this.pending = undefined
                this.open = undefined
+               this.publisher = undefined
             })
 
             return connection
@@ -32,6 +35,32 @@ export class MessageBroker {
          })
 
       return this.pending
+   }
+
+   // One shared channel for publishing. `waitForConfirms()` resolves once the broker has the message.
+   public static confirmChannel() {
+      this.publisher ??= this.connection()
+         .then(connection => connection.createConfirmChannel())
+         .then(channel => {
+            channel.on('error', (error: Error) => console.error(`RabbitMQ channel error: ${error.message}`))
+            channel.on('close', () => {
+               this.publisher = undefined
+            })
+
+            return channel
+         })
+         .catch((error: unknown) => {
+            this.publisher = undefined
+
+            throw error
+         })
+
+      return this.publisher
+   }
+
+   // A channel of its own, for a consumer that must not share a prefetch with anything else.
+   public static async channel() {
+      return (await this.connection()).createChannel()
    }
 
    public static async isHealthy() {
@@ -59,6 +88,7 @@ export class MessageBroker {
 
       this.pending = undefined
       this.open = undefined
+      this.publisher = undefined
 
       try {
          await open?.close()

@@ -56,6 +56,9 @@ model LinkedInAccount {
   statusMessage   String?
   statusUpdatedAt DateTime              @default(now())
   lastVerifiedAt  DateTime?
+  // Id of the validation the account is waiting for. A result from the worker applies only if it carries this id.
+  validationId          String?
+  validationRequestedAt DateTime?
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
 
