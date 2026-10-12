@@ -13,6 +13,7 @@ type PageReport = {
    page: DetectionPage['page']
    url: string
    verdict: PageVerdict
+   advisory: boolean
    headline: string
    signals: DetectionSignal[]
    // One sentence when the page could not be used.
@@ -34,6 +35,8 @@ const MESSAGES: Record<DetectionOutcome, string> = {
 const PAGE_TITLES: Record<DetectionPage['page'], string> = {
    deviceandbrowserinfo: 'Device and Browser Info',
    pixelscan: 'Pixelscan',
+   'pixelscan-ip': 'Pixelscan IP check',
+   'pixelscan-blacklist': 'Pixelscan IP blacklist',
 }
 
 const VERDICT_TEXT: Record<PageVerdict, { value: string; status: 'ok' | 'warn' | 'fail' }> = {
@@ -51,6 +54,19 @@ const VERDICT_TEXT: Record<PageVerdict, { value: string; status: 'ok' | 'warn' |
    },
 }
 
+// An advisory page never fails the test, so what it finds is a warning.
+const ADVISORY_VERDICT_TEXT: typeof VERDICT_TEXT = {
+   ...VERDICT_TEXT,
+   HUMAN: {
+      value: 'Nothing found',
+      status: 'ok',
+   },
+   BOT: {
+      value: 'Has findings',
+      status: 'warn',
+   },
+}
+
 // Opens one detection page, waits for its own check to finish, reads the answer, then scrolls down it while the recording
 // runs and takes a picture of the whole page. A page that cannot be used is UNKNOWN with a sentence, never "human".
 const visit = async (context: TaskContext, target: DetectionPage, index: number): Promise<PageReport> => {
@@ -58,6 +74,7 @@ const visit = async (context: TaskContext, target: DetectionPage, index: number)
       page: target.page,
       url: target.url,
       verdict,
+      advisory: Boolean(target.advisory),
       headline,
       signals,
       ...(note && { note }),
@@ -80,6 +97,14 @@ const visit = async (context: TaskContext, target: DetectionPage, index: number)
    }
 
    let result: PageReport
+
+   if (target.start) {
+      try {
+         await browser.click(target.start)
+      } catch {
+         return unusable('The check could not be started.')
+      }
+   }
 
    if (await browser.exists(target.readySelector, READY_TIMEOUT_MS)) {
       try {
@@ -119,14 +144,16 @@ const reportOf = (
    pages: PageReport[],
    browser: Awaited<ReturnType<DetectionSession['identity']>> | undefined
 ): TaskReport => ({
-   headline: MESSAGES[outcome],
+   headline: pages.some(({ advisory, verdict }) => advisory && verdict === 'BOT')
+      ? `${MESSAGES[outcome]} The IP pages found something worth a look.`
+      : MESSAGES[outcome],
    sections: [
       ...pages.map(page => ({
          title: PAGE_TITLES[page.page],
          items: [
             {
                label: 'Verdict',
-               ...VERDICT_TEXT[page.verdict],
+               ...(page.advisory ? ADVISORY_VERDICT_TEXT : VERDICT_TEXT)[page.verdict],
             },
             ...(page.headline
                ? [
@@ -148,7 +175,7 @@ const reportOf = (
             ...page.signals.slice(0, 90).map(signal => ({
                label: signal.name,
                value: signal.flagged ? 'Flagged' : 'Clear',
-               status: signal.flagged ? ('fail' as const) : ('ok' as const),
+               status: signal.flagged ? (page.advisory ? ('warn' as const) : ('fail' as const)) : ('ok' as const),
             })),
          ],
       })),
@@ -239,7 +266,7 @@ export const createBrowserDetection = (pages: DetectionPage[] = DETECTION_PAGES)
          }
 
          const browser = await context.browser.identity().catch(() => undefined)
-         const outcome = combine(reports.map(({ verdict }) => verdict))
+         const outcome = combine(reports.filter(({ advisory }) => !advisory).map(({ verdict }) => verdict))
 
          return {
             status: outcome === 'NOT_DETECTED' ? 'SUCCEEDED' : 'FAILED',

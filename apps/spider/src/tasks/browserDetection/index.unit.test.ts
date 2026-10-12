@@ -39,6 +39,7 @@ const page = (name: DetectionPage['page'], reading: PageReading): DetectionPage 
 
 const makeContext = (overrides: Record<string, unknown> = {}) => {
    const browser = {
+      click: vi.fn(async () => 'https://page.example.net/'),
       exists: vi.fn(async () => true),
       scrollBy: vi.fn(async () => false),
       pageText: vi.fn(async () => 'text'),
@@ -221,6 +222,90 @@ describe('browser detection task', () => {
       made.context.visit.mockRejectedValue(new Error('browser crashed'))
 
       await expect(run([page('pixelscan', human)], made)).rejects.toThrow('browser crashed')
+   })
+
+   it('should press the start button of a page that does not run by itself, before waiting for its check', async () => {
+      const made = makeContext()
+      const started = {
+         ...page('pixelscan', human),
+         start: '#go',
+      }
+
+      await run([started], made)
+
+      expect(made.browser.click).toHaveBeenCalledWith('#go')
+      expect(made.browser.click.mock.invocationCallOrder[0]).toBeLessThan(
+         made.browser.exists.mock.invocationCallOrder[0]
+      )
+   })
+
+   it('should not guess when the start button cannot be pressed', async () => {
+      const made = makeContext({
+         click: vi.fn(async () => {
+            throw new Error('no such element')
+         }),
+      })
+      const outcome = await run(
+         [
+            {
+               ...page('pixelscan', human),
+               start: '#go',
+            },
+         ],
+         made
+      )
+
+      expect(outcome.verdict).toBe('COULD_NOT_TELL')
+      expect(JSON.stringify(outcome.report)).toContain('could not be started')
+      expect(made.browser.exists).not.toHaveBeenCalled()
+   })
+
+   it('should show an advisory page with findings as a warning and leave the verdict alone', async () => {
+      const advisory = {
+         ...page('pixelscan-blacklist', bot),
+         advisory: true,
+      }
+      const outcome = await run([page('deviceandbrowserinfo', human), advisory])
+
+      expect(outcome).toMatchObject({
+         status: 'SUCCEEDED',
+         verdict: 'NOT_DETECTED',
+         message: 'Every detection page took this browser for a person.',
+      })
+      expect(outcome.report?.headline).toContain('worth a look')
+
+      const section = outcome.report?.sections.find(({ title }) => title === 'Pixelscan IP blacklist')
+
+      expect(section?.items).toEqual(
+         expect.arrayContaining([
+            {
+               label: 'Verdict',
+               value: 'Has findings',
+               status: 'warn',
+            },
+            {
+               label: 'Webdriver',
+               value: 'Flagged',
+               status: 'warn',
+            },
+         ])
+      )
+   })
+
+   it('should not let an advisory page that cannot be read change the verdict', async () => {
+      const advisory = {
+         ...page('pixelscan-ip', human),
+         advisory: true,
+      }
+
+      vi.mocked(advisory.read).mockImplementation(() => {
+         throw new Error('unexpected markup')
+      })
+
+      const outcome = await run([page('deviceandbrowserinfo', human), advisory])
+
+      expect(outcome.verdict).toBe('NOT_DETECTED')
+      expect(JSON.stringify(outcome.report)).toContain('Could not read')
    })
 
    it('should only ever answer with a verdict it declared', async () => {
