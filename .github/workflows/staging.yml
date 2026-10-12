@@ -123,8 +123,9 @@ jobs:
             VITE_AUTHENTIK_CLIENT_ID=automatedlinkedin
             VITE_AUTHENTIK_APP_SLUG=automatedlinkedin
             VITE_AUTHENTIK_ENROLLMENT_SLUG=automatedlinkedin-enrollment
-          cache-from: type=gha,scope=${{ matrix.suffix }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.suffix }}
+          # In GHCR rather than the Actions cache: that one holds 10 GB for the whole repository and evicts the browser layers.
+          cache-from: type=registry,ref=${{ steps.image.outputs.name }}:buildcache
+          cache-to: type=registry,ref=${{ steps.image.outputs.name }}:buildcache,mode=max,oci-mediatypes=true,image-manifest=true
 
   deploy:
     needs: publish

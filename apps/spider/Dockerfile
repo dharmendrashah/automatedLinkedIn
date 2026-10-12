@@ -1,8 +1,11 @@
 FROM node:25-alpine AS build
 RUN npm install -g pnpm@12.10.1
 WORKDIR /repo
+# Packages download in their own layer, which only changes with the lockfile; a source change reuses it.
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm fetch
 COPY . .
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --offline
 RUN pnpm --filter @automatedLinkedIn/spider... build
 
 FROM build AS prune
@@ -29,14 +32,31 @@ CMD ["node", "dist/src/server.js"]
 FROM node:25-bookworm-slim AS worker-build
 RUN npm install -g pnpm@12.10.1
 WORKDIR /repo
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm fetch
 COPY . .
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --offline
 RUN pnpm --filter @automatedLinkedIn/spider... build
 RUN pnpm --filter @automatedLinkedIn/spider deploy --prod --ignore-scripts /out
 RUN find apps/spider/dist \( -name '*.test.*' -o -name '*.d.ts' -o -name '*.tsbuildinfo' -o -name 'vitest.setup.*' \) -delete
 
 # The worker drives Camoufox, a Firefox build. The exact `camoufox` version in apps/spider/package.json pairs with one
-# browser build, which is downloaded here so a task never waits for it. The libraries are Firefox's runtime needs.
+# browser build, which is downloaded here so a task never waits for it. This stage only sees that package.json, so a
+# source change reuses the download (about eight minutes) instead of repeating it.
+FROM node:25-bookworm-slim AS browsers
+WORKDIR /browsers
+COPY apps/spider/package.json /tmp/spider-package.json
+RUN npm init -y > /dev/null \
+   && npm install --no-audit --no-fund --ignore-scripts \
+      camoufox@"$(node -p "require('/tmp/spider-package.json').dependencies.camoufox")" \
+      playwright-core@"$(node -p "require('/tmp/spider-package.json').dependencies['playwright-core']")"
+USER node
+RUN node node_modules/camoufox/dist/__main__.js fetch
+# Playwright's own build of ffmpeg, which encodes the video of a recording (a few MB). It lands in the node user's
+# ~/.cache/ms-playwright, where playwright-core looks for it at run time.
+RUN node node_modules/playwright-core/cli.js install ffmpeg
+
+# The libraries are Firefox's runtime needs.
 FROM node:25-bookworm-slim AS worker
 ENV NODE_ENV=production
 RUN apt-get update \
@@ -46,13 +66,10 @@ RUN apt-get update \
       libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 libx11-6 libx11-xcb1 libxcb-shm0 libxcb1 \
       libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxt6 libxtst6 \
    && rm -rf /var/lib/apt/lists/*
+COPY --from=browsers --chown=node:node /home/node/.cache /home/node/.cache
 WORKDIR /app
 COPY --from=worker-build /out/package.json ./
 COPY --from=worker-build /out/node_modules ./node_modules
 COPY --from=worker-build /repo/apps/spider/dist ./dist
 USER node
-RUN node node_modules/camoufox/dist/__main__.js fetch
-# Playwright's own build of ffmpeg, which encodes the video of a recording (a few MB). It lands in the node user's
-# ~/.cache/ms-playwright, where playwright-core looks for it at run time.
-RUN node node_modules/playwright-core/cli.js install ffmpeg
 CMD ["node", "dist/src/worker.js"]
