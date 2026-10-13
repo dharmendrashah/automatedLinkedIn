@@ -130,7 +130,10 @@ export const consumeQueue = async <T>(
 
          return { ok: true }
       } catch (error) {
-         return { ok: false, error }
+         return {
+            ok: false,
+            error,
+         }
       } finally {
          clearInterval(heartbeat)
       }

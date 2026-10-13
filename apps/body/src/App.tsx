@@ -1,18 +1,22 @@
 import { FailureCard } from '@/components/failure-card'
+import { Suspense, lazy } from 'react'
 import { Route, Routes } from 'react-router'
 
 import { DashboardLayout } from './layouts/DashboardLayout'
 import { PublicLayout } from './layouts/PublicLayout'
 import { Accounts } from './pages/Accounts'
 import { Callback } from './pages/Callback'
-import { Dashboard } from './pages/Dashboard'
 import { HealthStatus } from './pages/HealthStatus'
 import { Home } from './pages/Home'
 import { Login } from './pages/Login'
 import { Profile } from './pages/Profile'
+import { Profiles } from './pages/Profiles'
 import { Proxies } from './pages/Proxies'
 import { Sessions } from './pages/Sessions'
 import { Signup } from './pages/Signup'
+
+// The dashboard carries the charts and the data table, the heaviest code in the app.
+const Dashboard = lazy(() => import('./pages/Dashboard').then(({ Dashboard: page }) => ({ default: page })))
 
 const App = () => (
    <Routes>
@@ -29,8 +33,16 @@ const App = () => (
          />
       </Route>
       <Route element={<DashboardLayout />}>
-         <Route path="/dashboard" element={<Dashboard />} />
+         <Route
+            path="/dashboard"
+            element={
+               <Suspense fallback={null}>
+                  <Dashboard />
+               </Suspense>
+            }
+         />
          <Route path="/accounts" element={<Accounts />} />
+         <Route path="/profiles" element={<Profiles />} />
          <Route path="/proxies" element={<Proxies />} />
          <Route path="/sessions" element={<Sessions />} />
          <Route path="/healthstatus" element={<HealthStatus />} />

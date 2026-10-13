@@ -24,7 +24,38 @@ model User {
   updatedAt   DateTime @updatedAt
 
   linkedInAccounts LinkedInAccount[]
+  linkedInProfiles LinkedInProfile[]
   spiderSessions   SpiderSession[]
+}
+
+enum LinkedInProfileStatus {
+  NEW
+  CONTACTED
+  REPLIED
+}
+
+// A person the user wants to reach, saved from a pasted profile link. Nothing here is scraped.
+model LinkedInProfile {
+  id         String                @id @default(uuid(7))
+  userId     String
+  user       User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Lowercase public identifier from linkedin.com/in/<slug>; unique per owner.
+  slug       String
+  url        String
+  fullName   String?
+  headline   String?
+  company    String?
+  location   String?
+  notes      String?
+  tags       String[]
+  status     LinkedInProfileStatus @default(NEW)
+  // Set when the owner removes the profile; it can be restored.
+  archivedAt DateTime?
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  @@unique([userId, slug])
+  @@index([userId, archivedAt, createdAt])
 }
 
 enum LinkedInAccountStatus {

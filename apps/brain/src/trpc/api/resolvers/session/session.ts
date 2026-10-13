@@ -34,9 +34,10 @@ const fileInput = byId
       // Needed for a file that holds login tokens.
       reveal: z.boolean().optional(),
    })
-   .refine(({ file, artifactId }) => (file === undefined) !== (artifactId === undefined), {
-      message: 'Name either a file or an artifact id',
-   })
+   .refine(
+      ({ file, artifactId }) => (file === undefined) !== (artifactId === undefined),
+      'Name either a file or an artifact id'
+   )
 
 const retryInput = byId.extend({ proxyId: z.string().min(1).max(100) })
 

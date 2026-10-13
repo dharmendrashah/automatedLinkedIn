@@ -172,9 +172,9 @@ export class SpiderSessionService {
       })
 
       try {
-         await PrismaService.client.spiderSession.deleteMany({
-            where: { startedAt: { lt: new Date(Date.now() - ROW_RETENTION_DAYS * DAY_MS) } },
-         })
+         const cutoff = new Date(Date.now() - ROW_RETENTION_DAYS * DAY_MS)
+
+         await PrismaService.client.spiderSession.deleteMany({ where: { startedAt: { lt: cutoff } } })
       } catch (error) {
          console.error(`Could not delete old sessions: ${(error as Error).message}`)
       }

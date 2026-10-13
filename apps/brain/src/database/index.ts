@@ -13,6 +13,11 @@ export {
    SessionRetryError,
 } from './linkedInAccountValidation.service'
 export {
+   type LinkedInProfileChanges,
+   type LinkedInProfileListQuery,
+   LinkedInProfileService,
+} from './linkedInProfile.service'
+export {
    type ProxyCredentials,
    type ProxyServerInput,
    ProxyServerNotUsableError,

@@ -148,9 +148,9 @@ describe('AccountValidator in a real browser, against a stand-in for LinkedIn', 
    })
 
    it('should report a wrong password, which LinkedIn shows on a /checkpoint/ page', async () => {
-      await expect(run('ada@work.com', { password: 'not-it' })).resolves.toMatchObject({
-         outcome: 'INVALID_CREDENTIALS',
-      })
+      const result = await run('ada@work.com', { password: 'not-it' })
+
+      expect(result).toMatchObject({ outcome: 'INVALID_CREDENTIALS' })
    })
 
    it('should answer the two-step page with a code from the stored key', async () => {

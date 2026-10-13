@@ -58,7 +58,10 @@ describe('consumeTasks', () => {
    }
 
    beforeEach(() => {
-      log = { info: vi.fn<(message: string) => void>(), error: vi.fn<(message: string) => void>() }
+      log = {
+         info: vi.fn<(message: string) => void>(),
+         error: vi.fn<(message: string) => void>(),
+      }
       republish = vi.fn<(message: unknown, retries: number) => Promise<void>>().mockResolvedValue(undefined)
       sleep = vi.fn<(ms: number) => Promise<void>>().mockResolvedValue(undefined)
       options = {
@@ -261,7 +264,10 @@ describe('consumeTasks', () => {
       it('should log a heartbeat while a long job is still running', async () => {
          const { channel, send } = setup()
          const handler = vi.fn(() => new Promise<void>(resolve => setTimeout(resolve, 60)))
-         const consumer = await consumeTasks(channel as never, handler, { ...options, heartbeatMs: 5 })
+         const consumer = await consumeTasks(channel as never, handler, {
+            ...options,
+            heartbeatMs: 5,
+         })
 
          send(message(command))
          await consumer.stop()
@@ -273,7 +279,10 @@ describe('consumeTasks', () => {
       it('should stop the heartbeat once the job has finished', async () => {
          const { channel, send } = setup()
          const handler = vi.fn(() => new Promise<void>(resolve => setTimeout(resolve, 20)))
-         const consumer = await consumeTasks(channel as never, handler, { ...options, heartbeatMs: 5 })
+         const consumer = await consumeTasks(channel as never, handler, {
+            ...options,
+            heartbeatMs: 5,
+         })
 
          send(message(command))
          await consumer.stop()
