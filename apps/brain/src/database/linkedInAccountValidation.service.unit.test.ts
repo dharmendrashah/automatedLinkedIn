@@ -107,9 +107,9 @@ describe('LinkedInAccountValidationService', () => {
 
          await expect(LinkedInAccountValidationService.request(row.id)).resolves.toBe(false)
 
-         expect(mocks.update.mock.calls[0][0].data).toMatchObject({
-            statusMessage: 'Add a proxy to verify this account.',
-         })
+         const [[{ data }]] = mocks.update.mock.calls
+
+         expect(data).toMatchObject({ statusMessage: 'Add a proxy to verify this account.' })
       })
 
       it('should not fail the caller when the check is refused or cannot be queued', async () => {

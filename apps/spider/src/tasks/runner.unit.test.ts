@@ -261,9 +261,9 @@ describe('runTask', () => {
       expect([...store.objects.keys()]).toEqual(
          expect.arrayContaining([`${PREFIX}/result.json`, `${PREFIX}/manifest.json`])
       )
-      expect(JSON.parse(String(store.objects.get(`${PREFIX}/manifest.json`)))).toEqual({
-         artifacts: published[0].artifacts,
-      })
+      const manifest = JSON.parse(String(store.objects.get(`${PREFIX}/manifest.json`)))
+
+      expect(manifest).toEqual({ artifacts: published[0].artifacts })
    })
 
    it('should close the browser before it saves the files, so the video is complete', async () => {

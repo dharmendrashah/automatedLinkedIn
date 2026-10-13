@@ -15,5 +15,20 @@ export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0'
+  },
+  build: {
+    rolldownOptions: {
+      output: {
+        // Keeps every chunk under the size warning and lets the browser cache the libraries apart from the app.
+        codeSplitting: {
+          groups: [
+            { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler|react-router)[\\/]/ },
+            { name: 'radix', test: /node_modules[\\/](radix-ui|@radix-ui|@floating-ui|vaul)[\\/]/ },
+            { name: 'icons', test: /node_modules[\\/](lucide-react|@tabler)[\\/]/ },
+            { name: 'data', test: /node_modules[\\/](@tanstack|@trpc|oidc-client-ts|react-oidc-context|zod)[\\/]/ }
+          ]
+        }
+      }
+    }
   }
 })

@@ -31,9 +31,9 @@ describe('openCredentials', () => {
    })
 
    it('should accept a bundle with only some of the secrets', () => {
-      expect(openCredentials(seal(JSON.stringify({ session: 'li_at=AQEDARz1' })), KEY)).toEqual({
-         session: 'li_at=AQEDARz1',
-      })
+      const bundle = seal(JSON.stringify({ session: 'li_at=AQEDARz1' }))
+
+      expect(openCredentials(bundle, KEY)).toEqual({ session: 'li_at=AQEDARz1' })
    })
 
    it('should refuse a bundle sealed with another key', () => {

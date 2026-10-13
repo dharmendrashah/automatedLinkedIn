@@ -257,9 +257,9 @@ describe('AccountValidator', () => {
             load: () => feed,
          })
 
-         await expect(validator.validate(session, input({ password: 'hunter2' }))).resolves.toMatchObject({
-            outcome: 'VALID',
-         })
+         const result = await validator.validate(session, input({ password: 'hunter2' }))
+
+         expect(result).toMatchObject({ outcome: 'VALID' })
          expect(session.fill).not.toHaveBeenCalled()
       })
 
@@ -363,9 +363,9 @@ describe('AccountValidator', () => {
             })
          )
 
-         await expect(validator.validate(session, input({ password: 'hunter2' }))).resolves.toMatchObject({
-            outcome: 'ERROR',
-         })
+         const result = await validator.validate(session, input({ password: 'hunter2' }))
+
+         expect(result).toMatchObject({ outcome: 'ERROR' })
       })
 
       it('should report ERROR, without the raw error, when LinkedIn will not load a page', async () => {
