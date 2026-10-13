@@ -4,8 +4,8 @@ export type Latency = {
 }
 
 export const speedClass: Record<Latency['speed'], string> = {
-   fast: 'text-emerald-700 dark:text-emerald-400',
-   ok: 'text-amber-700 dark:text-amber-400',
+   fast: 'text-success',
+   ok: 'text-warning',
    slow: 'text-destructive',
 }
 

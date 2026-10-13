@@ -58,7 +58,7 @@ export const Sessions = () => {
       )
 
    return (
-      <div className="mx-auto grid w-full max-w-5xl gap-4 px-4 lg:px-6">
+      <div className="grid w-full gap-4 px-4 lg:px-6">
          <div className="grid gap-1">
             <h2 className="text-lg font-semibold">Sessions</h2>
             <p className="text-muted-foreground text-sm">

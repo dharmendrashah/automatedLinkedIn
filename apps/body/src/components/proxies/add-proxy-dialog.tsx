@@ -8,17 +8,19 @@ import {
    DialogFooter,
    DialogHeader,
    DialogTitle,
-   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { readableError } from '@/lib/trpc-error'
-import { Loader2, Plus } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 
+import { type Proxy } from './types'
+
 import { trpc } from '../../trpc'
-import { type ProxyFieldValues, ProxyFields } from './proxy-fields'
 import { type SupportedProtocol } from './protocols'
+import { type ProxyFieldValues, ProxyFields } from './proxy-fields'
+import { ProxyResult } from './proxy-result'
 
 const emptyValues: ProxyFieldValues = {
    protocol: 'HTTPS',
@@ -28,29 +30,35 @@ const emptyValues: ProxyFieldValues = {
    password: '',
 }
 
-export const AddProxyDialog = () => {
+export type AddRequest = {
+   // The account to add it to, when known (an account's own Add button, or a replacement).
+   accountId?: string
+   // The proxy being replaced.
+   replacing?: Proxy
+}
+
+type BodyProps = {
+   request: AddRequest
+   onClose: () => void
+}
+
+const AddBody = ({ request, onClose }: BodyProps) => {
    const utils = trpc.useUtils()
    const accounts = trpc.linkedInAccount.list.useQuery(undefined, { retry: false })
-   const [open, setOpen] = useState(false)
-   const [linkedInAccountId, setLinkedInAccountId] = useState('')
+   const [linkedInAccountId, setLinkedInAccountId] = useState(request.accountId ?? '')
    const [values, setValues] = useState(emptyValues)
+   const [createdId, setCreatedId] = useState<string | null>(null)
 
    const create = trpc.proxyServer.create.useMutation({
-      onSuccess: () => {
-         setOpen(false)
+      onSuccess: created => {
+         setCreatedId(created.id)
          void utils.proxyServer.list.invalidate()
          void utils.linkedInAccount.list.invalidate()
       },
    })
 
-   const onOpenChange = (next: boolean) => {
-      setOpen(next)
-
-      if (!next) {
-         setLinkedInAccountId('')
-         setValues(emptyValues)
-         create.reset()
-      }
+   if (createdId) {
+      return <ProxyResult proxyId={createdId} replacing={request.replacing ?? null} onDone={onClose} />
    }
 
    const change = (patch: Partial<ProxyFieldValues>) => setValues(current => ({ ...current, ...patch }))
@@ -77,63 +85,82 @@ export const AddProxyDialog = () => {
    }
 
    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-         <DialogTrigger asChild>
-            <Button>
-               <Plus />
-               Add a proxy
-            </Button>
-         </DialogTrigger>
-         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-            <form onSubmit={submit} className="grid gap-6">
-               <DialogHeader>
-                  <DialogTitle>Add a proxy</DialogTitle>
-                  <DialogDescription>
-                     We test it before saving, so you will see right away whether it works.
-                  </DialogDescription>
-               </DialogHeader>
+      <form onSubmit={submit} className="grid gap-6">
+         <DialogHeader>
+            <DialogTitle>{request.replacing ? 'Add a replacement' : 'Add a proxy'}</DialogTitle>
+            <DialogDescription>
+               {request.replacing
+                  ? `This will replace ${request.replacing.host}:${request.replacing.port}. We test the new one first, and you decide afterwards whether to remove the old one.`
+                  : 'We test it before saving, so you will see right away whether it works.'}
+            </DialogDescription>
+         </DialogHeader>
 
-               <div className="grid gap-2">
-                  <Label htmlFor="add-proxy-account">LinkedIn account</Label>
-                  <Select value={linkedInAccountId} onValueChange={setLinkedInAccountId}>
-                     <SelectTrigger id="add-proxy-account" className="w-full">
-                        <SelectValue placeholder="Choose an account" />
-                     </SelectTrigger>
-                     <SelectContent>
-                        {accounts.data?.map(account => (
-                           <SelectItem key={account.id} value={account.id}>
-                              {account.email}
-                           </SelectItem>
-                        ))}
-                     </SelectContent>
-                  </Select>
-               </div>
+         <details className="bg-muted/40 rounded-lg border p-3 text-sm">
+            <summary className="cursor-pointer font-medium">Where do I get these details?</summary>
+            <p className="text-muted-foreground mt-2 leading-relaxed">
+               You get a proxy from a provider you buy it from. They give you an address (the host, like 203.0.113.9), a
+               number (the port), usually a username and password, and tell you whether it is HTTPS or SOCKS5. Copy them
+               into the boxes below. Choose a proxy in the country your LinkedIn account normally signs in from.
+            </p>
+         </details>
 
-               <ProxyFields idPrefix="add-proxy" values={values} onChange={change} />
+         <div className="grid gap-2">
+            <Label htmlFor="add-proxy-account">LinkedIn account</Label>
+            <Select
+               value={linkedInAccountId}
+               onValueChange={setLinkedInAccountId}
+               disabled={Boolean(request.replacing)}
+            >
+               <SelectTrigger id="add-proxy-account" className="w-full">
+                  <SelectValue placeholder="Choose an account" />
+               </SelectTrigger>
+               <SelectContent>
+                  {accounts.data?.map(account => (
+                     <SelectItem key={account.id} value={account.id}>
+                        {account.email}
+                     </SelectItem>
+                  ))}
+               </SelectContent>
+            </Select>
+         </div>
 
-               {create.error ? (
-                  <Alert variant="destructive">
-                     <AlertTitle>We could not save this proxy</AlertTitle>
-                     <AlertDescription>{readableError(create.error)}</AlertDescription>
-                  </Alert>
-               ) : null}
+         <ProxyFields idPrefix="add-proxy" values={values} onChange={change} />
 
-               <DialogFooter className="items-center sm:justify-between">
-                  <p className="text-muted-foreground text-sm">{missing}</p>
-                  <div className="flex gap-2">
-                     <DialogClose asChild>
-                        <Button type="button" variant="outline">
-                           Cancel
-                        </Button>
-                     </DialogClose>
-                     <Button type="submit" disabled={Boolean(missing) || create.isPending}>
-                        {create.isPending ? <Loader2 className="animate-spin" /> : null}
-                        Test and save
-                     </Button>
-                  </div>
-               </DialogFooter>
-            </form>
-         </DialogContent>
-      </Dialog>
+         {create.error ? (
+            <Alert variant="destructive">
+               <AlertTitle>We could not save this proxy</AlertTitle>
+               <AlertDescription>{readableError(create.error)}</AlertDescription>
+            </Alert>
+         ) : null}
+
+         <DialogFooter className="items-center sm:justify-between">
+            <p className="text-muted-foreground text-sm">{missing}</p>
+            <div className="flex gap-2">
+               <DialogClose asChild>
+                  <Button type="button" variant="outline">
+                     Cancel
+                  </Button>
+               </DialogClose>
+               <Button type="submit" disabled={Boolean(missing) || create.isPending}>
+                  {create.isPending ? <Loader2 className="animate-spin" /> : null}
+                  Test and save
+               </Button>
+            </div>
+         </DialogFooter>
+      </form>
    )
 }
+
+type Props = {
+   // What is being added; null while the dialog is closed.
+   request: AddRequest | null
+   onClose: () => void
+}
+
+export const AddProxyDialog = ({ request, onClose }: Props) => (
+   <Dialog open={request !== null} onOpenChange={open => (open ? undefined : onClose())}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+         {request ? <AddBody request={request} onClose={onClose} /> : null}
+      </DialogContent>
+   </Dialog>
+)

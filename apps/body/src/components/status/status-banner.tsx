@@ -7,7 +7,7 @@ import { type ModuleState } from './types'
 const looks: Record<ModuleState, { icon: typeof CheckCircle2; className: string }> = {
    live: {
       icon: CheckCircle2,
-      className: 'border-emerald-500/30 bg-emerald-500/5',
+      className: 'border-success/30 bg-success/5',
    },
    dead: {
       icon: XCircle,
@@ -15,7 +15,7 @@ const looks: Record<ModuleState, { icon: typeof CheckCircle2; className: string 
    },
    unknown: {
       icon: CircleHelp,
-      className: 'border-amber-500/30 bg-amber-500/5',
+      className: 'border-warning/30 bg-warning/5',
    },
 }
 

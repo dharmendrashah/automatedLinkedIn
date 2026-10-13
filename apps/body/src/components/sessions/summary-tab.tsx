@@ -47,9 +47,9 @@ const Banner = ({ session }: { session: SessionDetail }) => {
       <div
          className={cn(
             'flex gap-3 rounded-xl border p-4',
-            tone === 'success' && 'border-emerald-500/30 bg-emerald-500/5',
+            tone === 'success' && 'border-success/30 bg-success/5',
             tone === 'failure' && 'border-destructive/30 bg-destructive/5',
-            tone === 'unknown' && 'border-amber-500/30 bg-amber-500/5',
+            tone === 'unknown' && 'border-warning/30 bg-warning/5',
             tone === 'neutral' && 'bg-muted/40'
          )}
       >

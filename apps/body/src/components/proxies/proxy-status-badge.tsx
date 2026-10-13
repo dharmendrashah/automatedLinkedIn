@@ -15,12 +15,12 @@ const statuses: Record<ProxyStatus, { label: string; icon: LucideIcon; className
    ACTIVE: {
       label: 'Active',
       icon: CheckCircle2,
-      className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+      className: 'bg-success/10 text-success',
    },
    GEO_MISMATCH: {
       label: 'Different country',
       icon: AlertTriangle,
-      className: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+      className: 'bg-warning/10 text-warning',
    },
    UNREACHABLE: {
       label: 'Unreachable',

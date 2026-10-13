@@ -60,7 +60,7 @@ const StepCard = ({ session, step }: { session: SessionDetail; step: TimelineSte
             className="flex w-full items-center gap-3 px-4 py-3 text-left"
          >
             {step.ok ? (
-               <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+               <CheckCircle2 className="size-4 shrink-0 text-success" />
             ) : (
                <XCircle className="text-destructive size-4 shrink-0" />
             )}

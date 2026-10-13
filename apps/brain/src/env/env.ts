@@ -70,6 +70,12 @@ export class Environment {
             // Local/test never reach the real API; a non-empty placeholder just satisfies validation.
             devDefault: 'dev-ipinfo-token',
          }),
+         ABUSEIPDB_API_KEY: string({
+            desc: "AbuseIPDB API key used to check a proxy's exit IP for abuse reports. Empty: proxies are scored on latency alone",
+            example: 'xxxxxxxxxxxxxx',
+            default: '',
+            docs: 'https://docs.abuseipdb.com/#check-endpoint',
+         }),
          SPIDER_GCS_BUCKET: string({
             desc: 'Google Cloud Storage bucket spider records sessions in. Brain only signs links to its recordings/ files. Empty: the Sessions page works without recordings',
             example: 'my-spider-bucket',

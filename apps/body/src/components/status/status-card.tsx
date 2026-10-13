@@ -11,7 +11,7 @@ import { stateLabel } from './describe'
 const states: Record<ModuleState, { icon: typeof CheckCircle2; className: string }> = {
    live: {
       icon: CheckCircle2,
-      className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+      className: 'bg-success/10 text-success',
    },
    dead: {
       icon: XCircle,

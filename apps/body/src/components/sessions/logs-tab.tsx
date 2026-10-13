@@ -19,7 +19,7 @@ const sources = {
 
 const levelClass = {
    info: 'text-muted-foreground',
-   warn: 'text-amber-700 dark:text-amber-400',
+   warn: 'text-warning',
    error: 'text-destructive',
 }
 

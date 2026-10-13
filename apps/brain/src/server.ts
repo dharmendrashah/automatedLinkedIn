@@ -4,7 +4,7 @@ import './aliases'
 
 import { HttpServer, MessageBroker, TaskQueue } from 'core'
 
-import { PrismaService, TaskService } from 'database'
+import { PrismaService, ProxyScoringJob, TaskService } from 'database'
 
 import { Middlewares } from 'middlewares'
 
@@ -20,9 +20,14 @@ const taskCatalog = TaskQueue.consumeCatalog(async catalog => {
    await TaskService.applyCatalog(catalog)
 })
 
+// Scores every proxy once a day (reputation and latency).
+ProxyScoringJob.start()
+
 for (const signal of ['SIGINT', 'SIGTERM']) {
-   process.once(signal, () =>
-      Promise.all([taskResults, taskCatalog])
+   process.once(signal, () => {
+      ProxyScoringJob.stop()
+
+      return Promise.all([taskResults, taskCatalog])
          .then(consumers => Promise.all(consumers.map(consumer => consumer.stop())))
          .then(() => Promise.all([PrismaService.disconnect(), MessageBroker.disconnect()]))
          .then(() => {
@@ -31,5 +36,5 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
          .finally(() => {
             process.exit(0)
          })
-   )
+   })
 }

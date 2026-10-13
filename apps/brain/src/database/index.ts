@@ -15,9 +15,11 @@ export {
 export {
    type ProxyCredentials,
    type ProxyServerInput,
+   ProxyServerNotUsableError,
    ProxyServerOwnershipError,
    ProxyServerService,
 } from './proxyServer.service'
+export { ProxyScoringJob } from './proxyScoringJob'
 export { retryRefusal } from './sessionRetry'
 export {
    SpiderRecordingUnavailableError,

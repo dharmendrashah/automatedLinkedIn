@@ -27,7 +27,7 @@ export const Profile = () => {
    const profile = toProfile(user.profile)
 
    return (
-      <div className="mx-auto grid w-full max-w-3xl gap-6 px-4 lg:px-6">
+      <div className="grid w-full gap-6 px-4 lg:px-6">
          <Card>
             <CardHeader className="flex-row items-center gap-4">
                <UserAvatar name={profile.displayName} className="size-16 rounded-full text-lg" />

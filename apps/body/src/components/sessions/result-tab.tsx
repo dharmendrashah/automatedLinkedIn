@@ -6,8 +6,8 @@ import { type SessionDetail } from './types'
 import { Notice } from './recording-gate'
 
 const statusIcon = {
-   ok: <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />,
-   warn: <CircleHelp className="size-4 shrink-0 text-amber-600" />,
+   ok: <CheckCircle2 className="size-4 shrink-0 text-success" />,
+   warn: <CircleHelp className="size-4 shrink-0 text-warning" />,
    fail: <XCircle className="text-destructive size-4 shrink-0" />,
 } as const
 

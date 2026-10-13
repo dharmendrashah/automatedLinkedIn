@@ -54,7 +54,7 @@ export const Accounts = () => {
    const actionError = setPaused.error?.message ?? remove.error?.message ?? testLogin.error?.message
 
    return (
-      <div className="mx-auto grid w-full max-w-5xl gap-4 px-4 lg:px-6">
+      <div className="grid w-full gap-4 px-4 lg:px-6">
          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="grid gap-1">
                <h2 className="text-lg font-semibold">LinkedIn accounts</h2>

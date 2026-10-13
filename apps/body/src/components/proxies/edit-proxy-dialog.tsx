@@ -15,8 +15,8 @@ import { type FormEvent, useState } from 'react'
 import { type Proxy } from './types'
 
 import { trpc } from '../../trpc'
-import { type ProxyFieldValues, ProxyFields } from './proxy-fields'
 import { type SupportedProtocol } from './protocols'
+import { type ProxyFieldValues, ProxyFields } from './proxy-fields'
 
 type FormProps = {
    proxy: Proxy
