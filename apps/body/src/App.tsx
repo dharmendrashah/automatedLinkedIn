@@ -6,6 +6,7 @@ import { DashboardLayout } from './layouts/DashboardLayout'
 import { PublicLayout } from './layouts/PublicLayout'
 import { Accounts } from './pages/Accounts'
 import { Callback } from './pages/Callback'
+import { Companies } from './pages/Companies'
 import { HealthStatus } from './pages/HealthStatus'
 import { Home } from './pages/Home'
 import { Login } from './pages/Login'
@@ -43,6 +44,7 @@ const App = () => (
          />
          <Route path="/accounts" element={<Accounts />} />
          <Route path="/profiles" element={<Profiles />} />
+         <Route path="/companies" element={<Companies />} />
          <Route path="/proxies" element={<Proxies />} />
          <Route path="/sessions" element={<Sessions />} />
          <Route path="/healthstatus" element={<HealthStatus />} />

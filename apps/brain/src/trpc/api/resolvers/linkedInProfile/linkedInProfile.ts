@@ -1,39 +1,10 @@
-import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
-
-import { TooManyProfileUrlsError, parseProfileUrls } from 'core'
 
 import { LinkedInProfileService } from 'database'
 
 import { ownerProcedure, router } from 'trpc'
 
-const byId = z.object({ id: z.string().min(1) })
-const status = z.enum(['NEW', 'CONTACTED', 'REPLIED'])
-
-// Optional text; an empty value clears the field.
-const text = (max: number) =>
-   z
-      .string()
-      .trim()
-      .max(max)
-      .transform(value => value || null)
-
-const tag = z.string().trim().toLowerCase().min(1).max(30)
-const tags = z
-   .array(tag)
-   .max(10)
-   .transform(values => [...new Set(values)])
-
-const createInput = z.object({ urls: z.string().trim().min(1).max(50_000) })
-
-const listInput = z.object({
-   search: z.string().trim().max(100).optional(),
-   status: status.optional(),
-   tag: tag.optional(),
-   includeArchived: z.boolean().optional(),
-   page: z.number().int().min(1).default(1),
-   pageSize: z.number().int().min(1).max(100).default(25),
-})
+import { byId, createInput, found, listInput, readLinks, status, tags, text } from '../linkedInRecord'
 
 const updateInput = z.object({
    id: z.string().min(1),
@@ -46,38 +17,17 @@ const updateInput = z.object({
    status: status.optional(),
 })
 
-// A foreign profile id is answered exactly like a missing one.
-const found = <T>(profile: T | null) => {
-   if (!profile) {
-      throw new TRPCError({
-         code: 'NOT_FOUND',
-         message: 'LinkedIn profile not found',
-      })
-   }
-
-   return profile
-}
+const NOUN = 'profile'
 
 // Every procedure scopes to ctx.user.id, so one user can never reach another's profiles by id.
 export const linkedInProfile = router({
    create: ownerProcedure.input(createInput).mutation(async ({ ctx, input }) => {
-      try {
-         const { profiles, invalid } = parseProfileUrls(input.urls)
-         const saved = await LinkedInProfileService.addMany(ctx.user.id, profiles)
+      const { links, invalid } = readLinks(input.urls, 'profile')
+      const saved = await LinkedInProfileService.addMany(ctx.user.id, links)
 
-         return {
-            ...saved,
-            invalid,
-         }
-      } catch (error) {
-         if (error instanceof TooManyProfileUrlsError) {
-            throw new TRPCError({
-               code: 'BAD_REQUEST',
-               message: error.message,
-            })
-         }
-
-         throw error
+      return {
+         ...saved,
+         invalid,
       }
    }),
 
@@ -85,19 +35,23 @@ export const linkedInProfile = router({
 
    get: ownerProcedure
       .input(byId)
-      .query(async ({ ctx, input }) => found(await LinkedInProfileService.getForUser(ctx.user.id, input.id))),
+      .query(async ({ ctx, input }) => found(await LinkedInProfileService.getForUser(ctx.user.id, input.id), NOUN)),
 
    update: ownerProcedure.input(updateInput).mutation(async ({ ctx, input }) => {
       const { id, ...changes } = input
 
-      return found(await LinkedInProfileService.updateForUser(ctx.user.id, id, changes))
+      return found(await LinkedInProfileService.updateForUser(ctx.user.id, id, changes), NOUN)
    }),
 
    archive: ownerProcedure
       .input(byId)
-      .mutation(async ({ ctx, input }) => found(await LinkedInProfileService.archiveForUser(ctx.user.id, input.id))),
+      .mutation(async ({ ctx, input }) =>
+         found(await LinkedInProfileService.archiveForUser(ctx.user.id, input.id), NOUN)
+      ),
 
    restore: ownerProcedure
       .input(byId)
-      .mutation(async ({ ctx, input }) => found(await LinkedInProfileService.restoreForUser(ctx.user.id, input.id))),
+      .mutation(async ({ ctx, input }) =>
+         found(await LinkedInProfileService.restoreForUser(ctx.user.id, input.id), NOUN)
+      ),
 })

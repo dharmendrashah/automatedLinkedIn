@@ -1,8 +1,8 @@
 import { CircleDot, type LucideIcon, MessageSquareReply, Send } from 'lucide-react'
 
-import { type ProfileStatus } from './types'
+import { type LinkStatus } from './types'
 
-export const profileStatuses: Record<ProfileStatus, { label: string; icon: LucideIcon; className: string }> = {
+export const linkStatuses: Record<LinkStatus, { label: string; icon: LucideIcon; className: string }> = {
    NEW: {
       label: 'New',
       icon: CircleDot,
@@ -19,3 +19,5 @@ export const profileStatuses: Record<ProfileStatus, { label: string; icon: Lucid
       className: 'bg-success/10 text-success',
    },
 }
+
+export const isLinkStatus = (value: string): value is LinkStatus => value in linkStatuses

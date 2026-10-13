@@ -6,6 +6,7 @@ const titles: Record<string, string> = {
    '/dashboard': 'Dashboard',
    '/accounts': 'LinkedIn accounts',
    '/profiles': 'LinkedIn profiles',
+   '/companies': 'LinkedIn companies',
    '/profile': 'Profile',
 }
 

@@ -23,9 +23,41 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  linkedInAccounts LinkedInAccount[]
-  linkedInProfiles LinkedInProfile[]
-  spiderSessions   SpiderSession[]
+  linkedInAccounts  LinkedInAccount[]
+  linkedInCompanies LinkedInCompany[]
+  linkedInProfiles  LinkedInProfile[]
+  spiderSessions    SpiderSession[]
+}
+
+enum LinkedInCompanyStatus {
+  NEW
+  CONTACTED
+  REPLIED
+}
+
+// A company the user wants to reach, saved from a pasted company link. Nothing here is scraped.
+model LinkedInCompany {
+  id         String                @id @default(uuid(7))
+  userId     String
+  user       User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Lowercase public identifier from linkedin.com/company/<slug>; unique per owner.
+  slug       String
+  url        String
+  name       String?
+  industry   String?
+  website    String?
+  size       String?
+  location   String?
+  notes      String?
+  tags       String[]
+  status     LinkedInCompanyStatus @default(NEW)
+  // Set when the owner removes the company; it can be restored.
+  archivedAt DateTime?
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  @@unique([userId, slug])
+  @@index([userId, archivedAt, createdAt])
 }
 
 enum LinkedInProfileStatus {

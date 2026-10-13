@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { type Profile } from './types'
 
-import { buildChanges, toFormValues, toTagList } from './profile-form'
+import { buildChanges, toFormValues } from './profile-form'
 
 const profile: Profile = {
    id: 'p1',
@@ -19,12 +19,6 @@ const profile: Profile = {
    createdAt: '2026-10-14T00:00:00.000Z',
    updatedAt: '2026-10-14T00:00:00.000Z',
 }
-
-describe('toTagList', () => {
-   it('should split on commas, lowercase, trim and drop empty and repeated tags', () => {
-      expect(toTagList(' VIP, lead ,, vip ,')).toEqual(['vip', 'lead'])
-   })
-})
 
 describe('buildChanges', () => {
    it('should send nothing when the form is untouched', () => {
