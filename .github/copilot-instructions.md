@@ -86,6 +86,7 @@ Turborepo behaviour differs between versions: read the docs bundled in the insta
 - Prettier: 3-space indent, no semicolons, single quotes, `printWidth` 120, `arrowParens: avoid`, `trailingComma: es5`. Run `pnpm lint:fix` rather than formatting by hand.
 - ESLint rules to expect: `consistent-type-imports` (inline `type`), `prefer-destructuring`, `prefer-template`, and `object-curly-newline` (objects with two or more keys must be multi-line; single-key objects must stay on one line).
 - Prefer small, focused changes. Share behaviour, not shape; do not add abstractions for one caller. Comments only when the code cannot say it, one short line.
+- `apps/body` pages and tables are full width: the page root is `grid w-full gap-4 px-4 lg:px-6`, with no `max-w-*` and no `mx-auto`. Keep this for every new page and table.
 
 ## TypeScript 7 gotchas
 

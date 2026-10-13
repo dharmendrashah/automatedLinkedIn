@@ -7,9 +7,14 @@ import { proxyServer } from './proxyServer'
 
 const mocks = vi.hoisted(() => {
    class ProxyServerOwnershipError extends Error {}
+   class ProxyServerNotUsableError extends Error {}
 
    return {
       ProxyServerOwnershipError,
+      ProxyServerNotUsableError,
+      acceptRisk: vi.fn(),
+      clearRisk: vi.fn(),
+      setPreferred: vi.fn(),
       emit: vi.fn(),
       listForUser: vi.fn(),
       create: vi.fn(),
@@ -18,14 +23,19 @@ const mocks = vi.hoisted(() => {
       remove: vi.fn(),
       history: vi.fn(),
       historyEntry: vi.fn(),
+      scoreHistory: vi.fn(),
       requestIfWaiting: vi.fn(),
    }
 })
 
 vi.mock('database', () => ({
    ProxyServerOwnershipError: mocks.ProxyServerOwnershipError,
+   ProxyServerNotUsableError: mocks.ProxyServerNotUsableError,
    TaskService: { emit: mocks.emit },
    ProxyServerService: {
+      acceptRisk: mocks.acceptRisk,
+      clearRisk: mocks.clearRisk,
+      setPreferred: mocks.setPreferred,
       listForUser: mocks.listForUser,
       create: mocks.create,
       update: mocks.update,
@@ -33,6 +43,7 @@ vi.mock('database', () => ({
       remove: mocks.remove,
       history: mocks.history,
       historyEntry: mocks.historyEntry,
+      scoreHistory: mocks.scoreHistory,
    },
    LinkedInAccountValidationService: { requestIfWaiting: mocks.requestIfWaiting },
 }))
@@ -225,12 +236,48 @@ describe('proxyServer resolvers', () => {
       })
    })
 
+   describe('risk and preferred proxy', () => {
+      it.each([
+         ['acceptRisk', () => caller().acceptRisk({ id: 'p1' }), mocks.acceptRisk],
+         ['clearRisk', () => caller().clearRisk({ id: 'p1' }), mocks.clearRisk],
+         ['setPreferred', () => caller().setPreferred({ id: 'p1' }), mocks.setPreferred],
+      ])('should call %s for the current user', async (_name, run, service) => {
+         service.mockResolvedValue({ id: 'p1' })
+
+         await expect(run()).resolves.toEqual({ id: 'p1' })
+         expect(service).toHaveBeenCalledWith('u1', 'p1')
+      })
+
+      it.each([
+         ['acceptRisk', () => caller().acceptRisk({ id: 'p1' }), mocks.acceptRisk],
+         ['clearRisk', () => caller().clearRisk({ id: 'p1' }), mocks.clearRisk],
+         ['setPreferred', () => caller().setPreferred({ id: 'p1' }), mocks.setPreferred],
+      ])('should answer not found for %s on a proxy that is not the users', async (_name, run, service) => {
+         service.mockRejectedValue(new mocks.ProxyServerOwnershipError('nope'))
+
+         await expect(run()).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      })
+
+      it('should answer bad request when the proxy to prefer does not work', async () => {
+         mocks.setPreferred.mockRejectedValue(new mocks.ProxyServerNotUsableError('test it first'))
+
+         await expect(caller().setPreferred({ id: 'p1' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+      })
+   })
+
    describe('test history', () => {
       it('should list the history of a proxy for the current user', async () => {
          mocks.history.mockResolvedValue([{ id: 't1' }])
 
          await expect(caller().history({ id: 'p1' })).resolves.toEqual([{ id: 't1' }])
          expect(mocks.history).toHaveBeenCalledWith('u1', 'p1')
+      })
+
+      it('should list the score history of a proxy for the current user', async () => {
+         mocks.scoreHistory.mockResolvedValue([{ id: 's1' }])
+
+         await expect(caller().scoreHistory({ id: 'p1' })).resolves.toEqual([{ id: 's1' }])
+         expect(mocks.scoreHistory).toHaveBeenCalledWith('u1', 'p1')
       })
 
       it('should return one test with its request and response for the current user', async () => {
@@ -246,6 +293,7 @@ describe('proxyServer resolvers', () => {
       it.each([
          ['history', () => caller().history({ id: 'p1' }), mocks.history],
          ['historyEntry', () => caller().historyEntry({ id: 't1' }), mocks.historyEntry],
+         ['scoreHistory', () => caller().scoreHistory({ id: 'p1' }), mocks.scoreHistory],
       ])('should answer not found for %s that is not the users', async (_name, run, service) => {
          service.mockRejectedValue(new mocks.ProxyServerOwnershipError('nope'))
 

@@ -1,3 +1,4 @@
+export { AbuseIpDbError, AbuseIpDbService, type AbuseDetail, type AbuseIpDbResult } from './abuseIpDb.service'
 export { CryptoService } from './crypto.service'
 export { HttpServer } from './httpServer'
 export { extractLiAt } from '@automatedLinkedIn/contracts'

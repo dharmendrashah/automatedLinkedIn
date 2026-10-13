@@ -1,7 +1,13 @@
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
-import { LinkedInAccountValidationService, ProxyServerOwnershipError, ProxyServerService, TaskService } from 'database'
+import {
+   LinkedInAccountValidationService,
+   ProxyServerNotUsableError,
+   ProxyServerOwnershipError,
+   ProxyServerService,
+   TaskService,
+} from 'database'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -33,6 +39,13 @@ const updateInput = z.object({
 })
 
 const asTrpcError = (error: unknown) => {
+   if (error instanceof ProxyServerNotUsableError) {
+      return new TRPCError({
+         code: 'BAD_REQUEST',
+         message: error.message,
+      })
+   }
+
    if (error instanceof ProxyServerOwnershipError) {
       return new TRPCError({
          code: 'NOT_FOUND',
@@ -131,10 +144,45 @@ export const proxyServer = router({
       }
    }),
 
+   // The owner chooses to live with the problems this proxy has now. Nothing changes for the automation.
+   acceptRisk: ownerProcedure.input(byId).mutation(async ({ ctx, input }) => {
+      try {
+         return await ProxyServerService.acceptRisk(ctx.user.id, input.id)
+      } catch (error) {
+         throw asTrpcError(error)
+      }
+   }),
+
+   clearRisk: ownerProcedure.input(byId).mutation(async ({ ctx, input }) => {
+      try {
+         return await ProxyServerService.clearRisk(ctx.user.id, input.id)
+      } catch (error) {
+         throw asTrpcError(error)
+      }
+   }),
+
+   // Prefers this proxy for its account (the primary one).
+   setPreferred: ownerProcedure.input(byId).mutation(async ({ ctx, input }) => {
+      try {
+         return await ProxyServerService.setPreferred(ctx.user.id, input.id)
+      } catch (error) {
+         throw asTrpcError(error)
+      }
+   }),
+
    // The last 7 days of tests of one proxy, newest first, without the request and response data.
    history: ownerProcedure.input(byId).query(async ({ ctx, input }) => {
       try {
          return await ProxyServerService.history(ctx.user.id, input.id)
+      } catch (error) {
+         throw asTrpcError(error)
+      }
+   }),
+
+   // The last 30 days of scores of one proxy, newest first.
+   scoreHistory: ownerProcedure.input(byId).query(async ({ ctx, input }) => {
+      try {
+         return await ProxyServerService.scoreHistory(ctx.user.id, input.id)
       } catch (error) {
          throw asTrpcError(error)
       }

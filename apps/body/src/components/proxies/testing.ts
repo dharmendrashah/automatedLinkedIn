@@ -1,0 +1,48 @@
+import { type Proxy } from './types'
+
+// A listed proxy with everything the page reads, healthy by default; tests change only what they care about.
+export const makeProxy = (extra: Record<string, unknown> = {}): Proxy =>
+   ({
+      id: 'p1',
+      linkedInAccountId: 'acc1',
+      protocol: 'HTTPS',
+      host: '203.0.113.9',
+      port: 8080,
+      status: 'ACTIVE',
+      statusMessage: 'Reachable, detected in India',
+      lastTestedAt: new Date('2026-10-14T10:00:00Z'),
+      latencyMs: 400,
+      detectedCountryCode: 'IN',
+      detectedCountry: 'India',
+      detectedIp: '203.0.113.9',
+      isPrimary: true,
+      score: 95,
+      scoredAt: new Date('2026-10-14T10:00:05Z'),
+      scoreHasReputation: true,
+      abuseScore: 0,
+      abuseReports: 0,
+      abuseLastReportedAt: null,
+      abuseUsageType: null,
+      abuseIsp: null,
+      abuseIsTor: null,
+      abuseError: null,
+      abuseReasons: [],
+      riskAcceptedIssues: [],
+      riskAcceptedAt: null,
+      scoreLabel: 'GOOD',
+      reputationState: 'CLEAN',
+      browserCheck: null,
+      health: {
+         level: 'HEALTHY',
+         issues: [],
+         open: [],
+      },
+      isBest: true,
+      createdAt: new Date('2026-10-01T10:00:00Z'),
+      updatedAt: new Date('2026-10-14T10:00:00Z'),
+      linkedInAccount: {
+         id: 'acc1',
+         email: 'ada@example.com',
+      },
+      ...extra,
+   }) as unknown as Proxy

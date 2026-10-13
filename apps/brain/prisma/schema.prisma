@@ -114,13 +114,57 @@ model ProxyServer {
   detectedIp          String?
   // Preferred proxy for the account when more than one is ACTIVE; app-enforced, not a DB constraint.
   isPrimary         Boolean           @default(false)
+  // 0 to 100, higher is better (.plan/proxy-ip-reputation.md): 70% IP reputation, 30% speed. Null when the proxy cannot be
+  // scored (unreachable, no test yet). Without a reputation answer it is the speed alone and never above 89.
+  score             Int?
+  scoredAt          DateTime?
+  // False when the score has no reputation behind it (no AbuseIPDB key, or the lookup failed).
+  scoreHasReputation Boolean?
+  // AbuseIPDB's answer for abuseIp, the address that was checked. Kept for a day and reused while the IP stays the same.
+  abuseIp           String?
+  abuseScore        Int?
+  abuseReports      Int?
+  abuseLastReportedAt DateTime?
+  abuseUsageType    String?
+  abuseIsp          String?
+  abuseIsTor        Boolean?
+  abuseCheckedAt    DateTime?
+  // What explains abuseScore (reasons, recent reports, reporters); see AbuseDetail in core. No report comments.
+  abuseDetail       Json?
+  // Short fixed reason the last lookup failed; null after a good one.
+  abuseError        String?
+  // Problems the owner chose to live with (HealthIssue codes), and when. A different problem asks again.
+  riskAcceptedIssues String[]         @default([])
+  riskAcceptedAt    DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
   tests ProxyTest[]
+  scores ProxyScore[]
   spiderSessions SpiderSession[]
 
   @@index([linkedInAccountId])
+  @@index([scoredAt])
+}
+
+// One scoring of a proxy, kept for 30 days. No secrets: only the address that was checked and the numbers.
+model ProxyScore {
+  id                 String            @id @default(uuid(7))
+  proxyServerId      String
+  proxyServer        ProxyServer       @relation(fields: [proxyServerId], references: [id], onDelete: Cascade)
+  scoredAt           DateTime          @default(now())
+  ip                 String
+  score              Int
+  // Null when reputation was not checked.
+  abuseScore         Int?
+  latencyMs          Int?
+  reputationChecked  Boolean
+  // The AbuseDetail known when this score was made; null for entries saved before details were kept.
+  detail             Json?
+  status             ProxyServerStatus
+
+  @@index([proxyServerId, scoredAt])
+  @@index([scoredAt])
 }
 
 // One run of the proxy test with exactly what was sent and what came back, kept for 7 days. Secrets are masked

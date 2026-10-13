@@ -18,7 +18,7 @@ const statusTone = (entry: NetworkEntry) => {
       return 'bg-destructive/10 text-destructive'
    }
 
-   return entry.status >= 300 ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400' : ''
+   return entry.status >= 300 ? 'bg-warning/10 text-warning' : ''
 }
 
 const Row = ({ entry }: { entry: NetworkEntry }) => {

@@ -113,6 +113,7 @@ services:
       # This is the public development key: never reuse it outside local development.
       LINKEDIN_CRED_ENC_KEY: ${LINKEDIN_CRED_ENC_KEY:-pqaZGClH/kqxNTLoLT4c0lMTloNIi2At3Jzz9a2rkIQ=}
       IPINFO_TOKEN: ${IPINFO_TOKEN:-dev-ipinfo-token}
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
       # Where the Sessions page finds recordings. Empty: no recordings. Signing links needs service account
       # credentials, which this container does not have: run brain with `pnpm dev` to see recordings locally
       # (see apps/brain/.env.example).

@@ -1,8 +1,11 @@
-import { CryptoService, IpInfoError, IpInfoService, type ProxyExchange } from 'core'
+import { pickBest, reputationState, scoreLabel, scoreParts } from './proxyScore'
+import { type AbuseDetail, AbuseIpDbService, CryptoService, IpInfoError, IpInfoService, type ProxyExchange } from 'core'
 
-import { type ProxyProtocol } from 'generated/prisma/client'
+import { type ProxyProtocol, type ProxyServer } from 'generated/prisma/client'
 
 import { PrismaService } from './prisma.service'
+import { type BrowserVerdict, assessHealth } from './proxyHealth'
+import { ProxyScoringService } from './proxyScoring.service'
 
 export type ProxyCredentials = {
    username?: string
@@ -22,6 +25,12 @@ export class ProxyServerOwnershipError extends Error {
    }
 }
 
+export class ProxyServerNotUsableError extends Error {
+   public constructor() {
+      super('Only a proxy that works can be preferred. Test it first.')
+   }
+}
+
 // Fields safe to return over the API: the row without the sealed secret.
 const metadataSelect = {
    id: true,
@@ -37,6 +46,20 @@ const metadataSelect = {
    detectedCountry: true,
    detectedIp: true,
    isPrimary: true,
+   score: true,
+   scoredAt: true,
+   scoreHasReputation: true,
+   abuseIp: true,
+   abuseScore: true,
+   abuseReports: true,
+   abuseLastReportedAt: true,
+   abuseUsageType: true,
+   abuseIsp: true,
+   abuseIsTor: true,
+   abuseCheckedAt: true,
+   abuseError: true,
+   riskAcceptedIssues: true,
+   riskAcceptedAt: true,
    createdAt: true,
    updatedAt: true,
    linkedInAccount: {
@@ -182,25 +205,186 @@ const test = async (input: ProxyServerInput, otherCountryCodes: string[]): Promi
    }
 }
 
-export class ProxyServerService {
-   // Every proxy the owner has, across every LinkedIn account, for the /proxies table.
-   public static listForUser(userId: string) {
-      return PrismaService.client.proxyServer.findMany({
-         where: { linkedInAccount: { userId } },
-         orderBy: { createdAt: 'asc' },
-         select: metadataSelect,
-      })
+const USABLE = ['ACTIVE', 'GEO_MISMATCH'] as const
+const SCORE_HISTORY_DAYS = 30
+
+export const BROWSER_TEST_TASK = 'browser-detection'
+
+// The latest finished browser check of each proxy: the verdict and when it was made. Anything but a clear answer is "could
+// not tell", so a failed run never counts against a proxy.
+const latestBrowserChecks = async (proxyIds: string[]) => {
+   const checks = new Map<string, { verdict: BrowserVerdict; checkedAt: Date; sessionId: string }>()
+
+   if (proxyIds.length === 0) {
+      return checks
    }
 
-   // The proxies of one of the owner's accounts that a check can use, for choosing another one when trying again.
+   const sessions = await PrismaService.client.spiderSession.findMany({
+      where: {
+         proxyServerId: { in: proxyIds },
+         status: { not: 'IN_PROGRESS' },
+         OR: [{ task: BROWSER_TEST_TASK }, { kind: 'BROWSER_TEST' }],
+      },
+      orderBy: { startedAt: 'desc' },
+      select: {
+         id: true,
+         proxyServerId: true,
+         outcome: true,
+         startedAt: true,
+      },
+   })
+
+   for (const session of sessions) {
+      if (session.proxyServerId && !checks.has(session.proxyServerId)) {
+         checks.set(session.proxyServerId, {
+            verdict:
+               session.outcome === 'NOT_DETECTED' || session.outcome === 'DETECTED'
+                  ? session.outcome
+                  : 'COULD_NOT_TELL',
+            checkedAt: session.startedAt,
+            sessionId: session.id,
+         })
+      }
+   }
+
+   return checks
+}
+
+type MetadataRow = Awaited<
+   ReturnType<typeof PrismaService.client.proxyServer.findMany<{ select: typeof metadataSelect }>>
+>[number]
+
+const healthOf = (row: MetadataRow, browser: { verdict: BrowserVerdict } | undefined) =>
+   assessHealth({
+      status: row.status,
+      latencyMs: row.latencyMs,
+      lastTestedAt: row.lastTestedAt,
+      scoredAt: row.scoredAt,
+      abuseScore: row.abuseScore,
+      browserVerdict: browser?.verdict ?? null,
+      reputationEnabled: AbuseIpDbService.isConfigured(),
+      acceptedIssues: row.riskAcceptedIssues,
+      now: new Date(),
+   })
+
+// Re-tests a stored proxy, with a patch of its connection or none, and saves the result. Every field that can change
+// here affects the connection, so it always tests. undefined leaves username/password unchanged; null clears them; a
+// string sets them.
+const retestRow = async (
+   row: ProxyServer,
+   patch: Partial<{ protocol: ProxyProtocol; host: string; port: number }> & {
+      username?: string | null
+      password?: string | null
+   }
+) => {
+   const current = open(row)
+   const input: ProxyServerInput = {
+      linkedInAccountId: row.linkedInAccountId,
+      protocol: patch.protocol ?? row.protocol,
+      host: patch.host ?? row.host,
+      port: patch.port ?? row.port,
+      username: patch.username === undefined ? current.username : (patch.username ?? undefined),
+      password: patch.password === undefined ? current.password : (patch.password ?? undefined),
+   }
+
+   const siblings = await PrismaService.client.proxyServer.findMany({
+      where: {
+         linkedInAccountId: row.linkedInAccountId,
+         id: { not: row.id },
+         detectedCountryCode: { not: null },
+      },
+      select: { detectedCountryCode: true },
+   })
+   const outcome = await test(
+      input,
+      siblings.map(sibling => sibling.detectedCountryCode).filter((code): code is string => Boolean(code))
+   )
+
+   const updated = await PrismaService.client.proxyServer.update({
+      where: { id: row.id },
+      data: {
+         protocol: input.protocol,
+         host: input.host,
+         port: input.port,
+         ...seal(input),
+         status: outcome.status,
+         statusMessage: outcome.statusMessage,
+         lastTestedAt: new Date(),
+         ...('countryCode' in outcome
+            ? {
+                 detectedCountryCode: outcome.countryCode,
+                 detectedCountry: outcome.country,
+                 detectedIp: outcome.ip,
+                 latencyMs: outcome.latencyMs,
+              }
+            : {
+                 detectedCountryCode: null,
+                 detectedCountry: null,
+                 detectedIp: null,
+                 latencyMs: null,
+              }),
+      },
+      select: metadataSelect,
+   })
+
+   await saveTest(updated.id, outcome)
+
+   return updated
+}
+
+export class ProxyServerService {
+   // Every proxy the owner has, across every LinkedIn account, for the /proxies table. `isBest` marks the proxy each
+   // account would use right now.
+   public static async listForUser(userId: string) {
+      const rows = await PrismaService.client.proxyServer.findMany({
+         where: { linkedInAccount: { userId } },
+         orderBy: { createdAt: 'asc' },
+         select: {
+            ...metadataSelect,
+            abuseDetail: true,
+         },
+      })
+      const accountIds = [...new Set(rows.map(row => row.linkedInAccountId))]
+      const browserChecks = await latestBrowserChecks(rows.map(row => row.id))
+      const best = new Set(
+         accountIds.map(
+            id => pickBest(rows.filter(row => row.linkedInAccountId === id && USABLE.some(s => s === row.status)))?.id
+         )
+      )
+
+      return rows.map(({ abuseDetail, ...row }) => ({
+         ...row,
+         // What the address was reported for, most reported first. The rest of the detail stays out of the list.
+         abuseReasons: ((abuseDetail as AbuseDetail | null | undefined)?.categories ?? [])
+            .slice(0, 3)
+            .map(item => item.name),
+         scoreLabel: scoreLabel(row.score),
+         reputationState: reputationState(row.abuseScore),
+         browserCheck: browserChecks.get(row.id) ?? null,
+         health: healthOf(row, browserChecks.get(row.id)),
+         isBest: best.has(row.id),
+      }))
+   }
+
+   // The proxies of one of the owner's accounts that a check can use, for choosing another one when trying again, the
+   // best scored first.
    public static listUsableForAccount(userId: string, linkedInAccountId: string) {
       return PrismaService.client.proxyServer.findMany({
          where: {
             linkedInAccountId,
             linkedInAccount: { userId },
-            status: { in: ['ACTIVE', 'GEO_MISMATCH'] },
+            status: { in: [...USABLE] },
          },
-         orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+         orderBy: [
+            {
+               score: {
+                  sort: 'desc',
+                  nulls: 'last',
+               },
+            },
+            { isPrimary: 'desc' },
+            { createdAt: 'asc' },
+         ],
          select: metadataSelect,
       })
    }
@@ -261,13 +445,12 @@ export class ProxyServerService {
       })
 
       await saveTest(created.id, outcome)
+      ProxyScoringService.scoreSoon(created.id)
 
       return created
    }
 
-   // Re-tests with whatever is stored today (no field changes) or with a patch, re-testing either way: every
-   // field that can change here affects the connection. undefined leaves username/password unchanged; null clears
-   // them; a string sets them.
+   // Re-tests with whatever is stored today (no field changes) or with a patch. See retestRow.
    public static async update(
       userId: string,
       id: string,
@@ -287,59 +470,19 @@ export class ProxyServerService {
          throw new ProxyServerOwnershipError()
       }
 
-      const current = open(row)
-      const input: ProxyServerInput = {
-         linkedInAccountId: row.linkedInAccountId,
-         protocol: patch.protocol ?? row.protocol,
-         host: patch.host ?? row.host,
-         port: patch.port ?? row.port,
-         username: patch.username === undefined ? current.username : (patch.username ?? undefined),
-         password: patch.password === undefined ? current.password : (patch.password ?? undefined),
-      }
+      const updated = await retestRow(row, patch)
 
-      const siblings = await PrismaService.client.proxyServer.findMany({
-         where: {
-            linkedInAccountId: row.linkedInAccountId,
-            id: { not: id },
-            detectedCountryCode: { not: null },
-         },
-         select: { detectedCountryCode: true },
-      })
-      const outcome = await test(
-         input,
-         siblings.map(sibling => sibling.detectedCountryCode).filter((code): code is string => Boolean(code))
-      )
-
-      const updated = await PrismaService.client.proxyServer.update({
-         where: { id: row.id },
-         data: {
-            protocol: input.protocol,
-            host: input.host,
-            port: input.port,
-            ...seal(input),
-            status: outcome.status,
-            statusMessage: outcome.statusMessage,
-            lastTestedAt: new Date(),
-            ...('countryCode' in outcome
-               ? {
-                    detectedCountryCode: outcome.countryCode,
-                    detectedCountry: outcome.country,
-                    detectedIp: outcome.ip,
-                    latencyMs: outcome.latencyMs,
-                 }
-               : {
-                    detectedCountryCode: null,
-                    detectedCountry: null,
-                    detectedIp: null,
-                    latencyMs: null,
-                 }),
-         },
-         select: metadataSelect,
-      })
-
-      await saveTest(updated.id, outcome)
+      ProxyScoringService.scoreSoon(updated.id)
 
       return updated
+   }
+
+   // The daily scoring job's re-test: no owner (the job acts for everyone) and no scoring (the job scores right after).
+   // Null when the proxy was removed meanwhile.
+   public static async retest(id: string) {
+      const row = await PrismaService.client.proxyServer.findUnique({ where: { id } })
+
+      return row ? retestRow(row, {}) : null
    }
 
    // Manual re-test button: whatever the result is, it updates the stored status.
@@ -380,6 +523,52 @@ export class ProxyServerService {
       })
    }
 
+   // The last 30 days of scores of a proxy the user owns, newest first.
+   public static async scoreHistory(userId: string, proxyServerId: string) {
+      const proxy = await PrismaService.client.proxyServer.findFirst({
+         where: {
+            id: proxyServerId,
+            linkedInAccount: { userId },
+         },
+         select: { id: true },
+      })
+
+      if (!proxy) {
+         throw new ProxyServerOwnershipError()
+      }
+
+      const rows = await PrismaService.client.proxyScore.findMany({
+         where: {
+            proxyServerId,
+            scoredAt: { gte: new Date(Date.now() - SCORE_HISTORY_DAYS * 24 * 60 * 60 * 1000) },
+         },
+         orderBy: { scoredAt: 'desc' },
+         select: {
+            id: true,
+            scoredAt: true,
+            ip: true,
+            score: true,
+            abuseScore: true,
+            latencyMs: true,
+            reputationChecked: true,
+            detail: true,
+            status: true,
+         },
+      })
+
+      // How each score was reached. Prisma's recursive Json type would make the API's output too deep for the web app to
+      // infer, so the detail is cast to the plain shape saveHistory wrote.
+      return rows.map(row => ({
+         ...row,
+         detail: row.detail as AbuseDetail | null,
+         reputationState: reputationState(row.abuseScore),
+         parts: scoreParts({
+            abuseScore: row.abuseScore,
+            latencyMs: row.latencyMs,
+         }),
+      }))
+   }
+
    // One test with everything that was sent and received, only if it belongs to one of the user's proxies.
    public static async historyEntry(userId: string, id: string) {
       const entry = await PrismaService.client.proxyTest.findFirst({
@@ -403,6 +592,92 @@ export class ProxyServerService {
       }
    }
 
+   // The owner chooses to live with the problems this proxy has now. A problem that is not among them asks again.
+   public static async acceptRisk(userId: string, id: string) {
+      const row = await PrismaService.client.proxyServer.findFirst({
+         where: {
+            id,
+            linkedInAccount: { userId },
+         },
+         select: metadataSelect,
+      })
+
+      if (!row) {
+         throw new ProxyServerOwnershipError()
+      }
+
+      const browserChecks = await latestBrowserChecks([id])
+      const { issues } = healthOf(row, browserChecks.get(id))
+
+      return PrismaService.client.proxyServer.update({
+         where: { id },
+         data: {
+            riskAcceptedIssues: issues,
+            riskAcceptedAt: new Date(),
+         },
+         select: metadataSelect,
+      })
+   }
+
+   public static async clearRisk(userId: string, id: string) {
+      const { count } = await PrismaService.client.proxyServer.updateMany({
+         where: {
+            id,
+            linkedInAccount: { userId },
+         },
+         data: {
+            riskAcceptedIssues: [],
+            riskAcceptedAt: null,
+         },
+      })
+
+      if (count === 0) {
+         throw new ProxyServerOwnershipError()
+      }
+
+      return { cleared: true }
+   }
+
+   // Prefers this proxy for its account: it becomes the primary one, and the others stop being. The automation still
+   // follows the scores; the primary only wins while it is within a few points of the best.
+   public static async setPreferred(userId: string, id: string) {
+      const row = await PrismaService.client.proxyServer.findFirst({
+         where: {
+            id,
+            linkedInAccount: { userId },
+         },
+         select: {
+            linkedInAccountId: true,
+            status: true,
+         },
+      })
+
+      if (!row) {
+         throw new ProxyServerOwnershipError()
+      }
+
+      if (!USABLE.some(status => status === row.status)) {
+         throw new ProxyServerNotUsableError()
+      }
+
+      const [, preferred] = await PrismaService.client.$transaction([
+         PrismaService.client.proxyServer.updateMany({
+            where: {
+               linkedInAccountId: row.linkedInAccountId,
+               id: { not: id },
+            },
+            data: { isPrimary: false },
+         }),
+         PrismaService.client.proxyServer.update({
+            where: { id },
+            data: { isPrimary: true },
+            select: metadataSelect,
+         }),
+      ])
+
+      return preferred
+   }
+
    public static async remove(userId: string, id: string) {
       const { count } = await PrismaService.client.proxyServer.deleteMany({
          where: {
@@ -414,29 +689,20 @@ export class ProxyServerService {
       return count > 0
    }
 
-   // The proxy the automation layer should use for this account right now, the most reliable usable one: healthy before a
-   // country mismatch (the enum is declared in that order), then the primary, then the fastest in its last test, then the
-   // most recently tested. With `proxyId` only that one, and only when it is one of this account's usable proxies.
+   // The proxy the automation layer should use for this account right now: a healthy one before a country mismatch, then
+   // the highest score (the primary keeps its place within 5 points of it), then the fastest in its last test, then the
+   // most recently tested; see pickBest. With `proxyId` only that one, and only when it is one of this account's usable
+   // proxies. A proxy scoring under 90 is still used when it is the best there is.
    // `config` carries the credentials for the worker; `summary` is what may be shown and kept (never the credentials).
    public static async pickForAccount(linkedInAccountId: string, proxyId?: string) {
-      const candidate = await PrismaService.client.proxyServer.findFirst({
+      const candidates = await PrismaService.client.proxyServer.findMany({
          where: {
             ...(proxyId && { id: proxyId }),
             linkedInAccountId,
-            status: { in: ['ACTIVE', 'GEO_MISMATCH'] },
+            status: { in: [...USABLE] },
          },
-         orderBy: [
-            { status: 'asc' },
-            { isPrimary: 'desc' },
-            {
-               latencyMs: {
-                  sort: 'asc',
-                  nulls: 'last',
-               },
-            },
-            { lastTestedAt: 'desc' },
-         ],
       })
+      const candidate = pickBest(candidates)
 
       if (!candidate) {
          return null

@@ -15,12 +15,12 @@ const statuses: Record<AccountStatus, { label: string; icon: LucideIcon; classNa
    ACTIVE: {
       label: 'Active',
       icon: CheckCircle2,
-      className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+      className: 'bg-success/10 text-success',
    },
    NEEDS_REAUTH: {
       label: 'Needs re-auth',
       icon: ShieldAlert,
-      className: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+      className: 'bg-warning/10 text-warning',
    },
    ERROR: {
       label: 'Error',

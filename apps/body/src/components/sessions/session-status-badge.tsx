@@ -9,7 +9,7 @@ import { useTaskCatalog } from './use-task-catalog'
 const tones: Record<ResultTone, { icon: typeof CheckCircle2; className: string }> = {
    success: {
       icon: CheckCircle2,
-      className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+      className: 'bg-success/10 text-success',
    },
    failure: {
       icon: XCircle,
@@ -21,7 +21,7 @@ const tones: Record<ResultTone, { icon: typeof CheckCircle2; className: string }
    },
    unknown: {
       icon: CircleHelp,
-      className: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+      className: 'bg-warning/10 text-warning',
    },
    neutral: {
       icon: CircleHelp,
