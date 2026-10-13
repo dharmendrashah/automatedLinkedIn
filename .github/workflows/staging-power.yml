@@ -59,7 +59,6 @@ jobs:
         if: inputs.action == 'wake'
         env:
           API_URL: ${{ vars.STAGING_API_URL }}
-          AUTH_URL: ${{ vars.STAGING_AUTH_URL }}
         run: |
           APP_URL="${API_URL/api./app.}"
           check() {
@@ -73,4 +72,3 @@ jobs:
           }
           check "$APP_URL/"
           check "$API_URL/health"
-          check "$AUTH_URL/application/o/automatedlinkedin/.well-known/openid-configuration"

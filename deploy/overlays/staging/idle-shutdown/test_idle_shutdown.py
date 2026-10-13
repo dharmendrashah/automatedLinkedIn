@@ -88,6 +88,12 @@ class FakeOpener:
         return Response()
 
 
+class ScopeTests(unittest.TestCase):
+    def test_the_checker_never_reads_authentik_pods(self):
+        self.assertEqual(ids.ACTIVITY_APPS, ("brain", "spider-api", "spider-worker"))
+        self.assertFalse(any("authentik" in app for app in ids.ACTIVITY_APPS))
+
+
 class ConfigTests(unittest.TestCase):
     def test_defaults_to_disabled_dry_run_with_45_minutes(self):
         config = ids.Config.from_env(dict(BASE_ENV, SMART_SHUTDOWN_ENABLED="false", SMART_SHUTDOWN_MODE=""))

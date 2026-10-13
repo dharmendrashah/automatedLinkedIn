@@ -70,7 +70,7 @@ refresh_dns() {
 }
 
 wait_for_apps() {
-  for target in deploy/brain deploy/body deploy/authentik-server deploy/authentik-worker deploy/spider-api deploy/spider-worker statefulset/rabbitmq; do
+  for target in deploy/brain deploy/body deploy/spider-api deploy/spider-worker statefulset/rabbitmq; do
     kubectl -n "$NAMESPACE" rollout status "$target" --timeout=10m
   done
 }

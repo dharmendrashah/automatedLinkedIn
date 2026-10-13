@@ -124,6 +124,15 @@ Open: whether logs alone are enough. The alternative is to also count RabbitMQ q
 - The deploy job wakes the pool before applying manifests, if the pool is at zero.
 - Remaining decisions for later: none that block the design.
 
+## Change request (2026-10-13): remove authentik from detection and wake
+
+The user asked to remove authentik detection from smart shutdown, for both authentik-server and authentik-worker.
+
+- The checker already ignored authentik. A test now guards that it reads only brain, spider-api and spider-worker.
+- The wake step no longer waits for the authentik-server and authentik-worker rollouts.
+- The wake workflow no longer checks the auth OIDC endpoint. It checks the app and the API only.
+- Sign-in still needs authentik. This change only affects the idle checker and the wake checks.
+
 ## Outcome
 
 Implemented on `feat/smart-shutdown` (PR #32). Status on 2026-10-13:

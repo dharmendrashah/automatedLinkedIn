@@ -6,7 +6,7 @@ activity for IDLE_MINUTES, the staging node pool is scaled to zero, which stops 
 What counts as activity:
   brain                       any request or job line, except health checks and known retry noise
   spider-api, spider-worker   only the job lines "spider job started / still running / finished"
-Authentik is not read: sign-ins only count once they reach brain.
+Authentik pods are neither read nor waited for: sign-ins only count once they reach brain.
 
 The checker does nothing while a deploy holds the lock (deploy_lock_until in the state ConfigMap), and it only acts
 when the node pool has exactly one node.
