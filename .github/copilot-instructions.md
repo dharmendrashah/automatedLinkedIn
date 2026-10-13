@@ -22,6 +22,14 @@ Applies to any task that changes behaviour, schema, config, infra, or more than 
 
 Plans are committed with the work; they are the record of locked product decisions. Custom agents follow this workflow too.
 
+## Engineering principles (always)
+
+- Follow SOLID, YAGNI and KISS in all code. Build only what the task needs, and pick the simplest design that works.
+- Reuse before writing. Before adding code, search the codebase for an existing helper, type, component, or config that does the job, and extend it instead of duplicating it. Do not bloat the codebase; delete code you replace.
+- Keep code small and readable. Short functions and files with one job, clear names, no clever tricks, so a person can read and understand each piece quickly.
+- Be strict in the language. TypeScript: no `any`, no `@ts-ignore` or `@ts-expect-error` without a one-line reason, no non-null `!` assertions, no unchecked casts; type inputs and outputs explicitly at boundaries, narrow `unknown`, and use `strict` compiler options. YAML (Compose, Kubernetes, CI): quote ambiguous scalars, set explicit types, versions, and image tags (no `latest`), and keep keys minimal and consistent.
+- Verify end to end. A task is not done until the code has run for real: the checks in the definition of done pass, and the feature works through its real path (for example the tRPC call, the page, or the container), not only in unit tests. State what you ran and what you could not run.
+
 ## Stack
 
 - Node `v25.9.0` (`.nvmrc`), pnpm `12.10.1`, Turborepo 2, TypeScript 7, Vitest 5, ESLint 10 (flat config), Prettier 3.
@@ -47,6 +55,8 @@ Plans are committed with the work; they are the record of locked product decisio
 | Database | `pnpm --filter @automatedLinkedIn/brain db:generate` / `db:migrate:dev` / `db:migrate:deploy` |
 
 Definition of done for any change: `pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build` all pass.
+
+After finishing every task, run lint, tests and build locally for all apps and packages in the monorepo (these root commands cover them all through Turborepo), not only the ones you touched. Fix every error and every warning they report, including ones that look unrelated to your change, and re-run until all are clean. If something cannot be fixed or run, say so.
 
 Turborepo behaviour differs between versions: read the docs bundled in the installed `turbo` package before changing `turbo.json` (see `AGENTS.md`).
 
@@ -77,6 +87,7 @@ Turborepo behaviour differs between versions: read the docs bundled in the insta
 ## Testing
 
 - Co-locate tests next to the source and write the test first.
+- Write the fewest tests that prove the behaviour: the happy path, the real edge and failure cases, and the contract. No duplicate cases, no tests of framework or trivial code, no assertions on implementation details.
 - Suffixes decide which runner picks a file up: `*.unit.test.ts` (no I/O, mock `env`, Prisma and adapters), `*.integration.test.ts` (real Postgres), `*.e2e.test.ts` (running server).
 - `apps/brain/vitest.config.mts` is `.mts` on purpose: `vite-tsconfig-paths` is ESM-only and brain is CJS. It extends the root `vitest.config.ts`.
 - Mock `module-alias` with `vi.mock('module-alias', ...)` and a named `addAliases` import; spying on a namespace import fails under ESM.
