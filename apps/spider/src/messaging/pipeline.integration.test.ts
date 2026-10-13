@@ -54,7 +54,7 @@ const consume = async (handler: TaskHandler) =>
       republish: async (message, retries) => republishTask(await broker.publishChannel(), message, retries),
       backoffMs: [20, 20, 20],
       busyDelayMs: 20,
-      log: { error: () => undefined },
+      log: { info: () => undefined, error: () => undefined },
    })
 
 const freeAccount = { acquire: async () => ({ release: async () => undefined }) }
@@ -149,7 +149,7 @@ const consumeRuns = async (handler: (item: TaskCommand) => Promise<void>) =>
          republish: async (message, retries) => republishRun(await broker.publishChannel(), message, retries),
          backoffMs: [20, 20, 20],
          busyDelayMs: 20,
-         log: { error: () => undefined },
+         log: { info: () => undefined, error: () => undefined },
       }
    )
 

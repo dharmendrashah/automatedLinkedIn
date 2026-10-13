@@ -8,7 +8,7 @@ import { TASK_QUEUE } from './topology'
 
 export type TaskHandler = (command: ScrapeTaskCommand) => Promise<void>
 
-type Log = { error: (message: string) => void }
+type Log = { info: (message: string) => void; error: (message: string) => void }
 
 export type ConsumerOptions = {
    // Publishes a copy of the message with its retry counter set to `retries`.
@@ -18,6 +18,8 @@ export type ConsumerOptions = {
    backoffMs?: number[]
    // How long a task waits before it is tried again because another task holds its account.
    busyDelayMs?: number
+   // How often a job that is still running writes a heartbeat line to the log.
+   heartbeatMs?: number
 }
 
 export const RETRIES_HEADER = 'x-retries'
@@ -28,6 +30,10 @@ export const MAX_RETRIES = 3
 const BACKOFF_MS = [5_000, 30_000, 120_000]
 
 const BUSY_DELAY_MS = 10_000
+
+// Job lines tell the idle checker that a job is running. A long job writes a heartbeat so it is not
+// mistaken for idle work. Only real jobs write these lines, not the polling of an empty queue.
+const HEARTBEAT_MS = 60_000
 
 const readRetries = (message: ConsumeMessage) => {
    const value: unknown = message.properties.headers?.[RETRIES_HEADER]
@@ -65,6 +71,7 @@ export const consumeQueue = async <T>(
       sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
       backoffMs = BACKOFF_MS,
       busyDelayMs = BUSY_DELAY_MS,
+      heartbeatMs = HEARTBEAT_MS,
    }: ConsumerOptions
 ) => {
    let inFlight: Promise<void> = Promise.resolve()
@@ -111,6 +118,24 @@ export const consumeQueue = async <T>(
       await requeue(message, backoffMs[retries] ?? backoffMs[backoffMs.length - 1], retries + 1)
    }
 
+   // Runs the handler and writes the job lines around it. The heartbeat stops as soon as the handler returns,
+   // so a retry or a wait does not look like a running job.
+   const runJob = async (item: T): Promise<{ ok: true } | { ok: false; error: unknown }> => {
+      const name = label(item)
+      log.info(`spider job started: ${name}`)
+      const heartbeat = setInterval(() => log.info(`spider job still running: ${name}`), heartbeatMs)
+
+      try {
+         await handler(item)
+
+         return { ok: true }
+      } catch (error) {
+         return { ok: false, error }
+      } finally {
+         clearInterval(heartbeat)
+      }
+   }
+
    const handle = async (message: ConsumeMessage) => {
       let item: T
 
@@ -124,19 +149,24 @@ export const consumeQueue = async <T>(
          return
       }
 
-      try {
-         await handler(item)
+      const result = await runJob(item)
+
+      if (result.ok) {
+         log.info(`spider job finished: ${label(item)}`)
          channel.ack(message)
-      } catch (error) {
-         // The task did nothing wrong: it waits for the other task and keeps the retries it has left.
-         if (error instanceof AccountBusyError) {
-            await requeue(message, busyDelayMs, readRetries(message))
 
-            return
-         }
-
-         await retry(message, item, error instanceof Error ? error.message : 'unknown error')
+         return
       }
+
+      const { error } = result
+      // The task did nothing wrong: it waits for the other task and keeps the retries it has left.
+      if (error instanceof AccountBusyError) {
+         await requeue(message, busyDelayMs, readRetries(message))
+
+         return
+      }
+
+      await retry(message, item, error instanceof Error ? error.message : 'unknown error')
    }
 
    await channel.prefetch(1)

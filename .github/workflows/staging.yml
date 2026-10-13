@@ -179,6 +179,24 @@ jobs:
             kustomize edit set image "automatedlinkedin-$image=$repo-$image:$tag"
           done
 
+      # Smart shutdown must not switch staging off while a deploy runs. The lock lasts 30 minutes,
+      # and the release step below clears it when the deploy ends.
+      - name: Hold the smart-shutdown lock for this deploy
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          GKE_LOCATION: ${{ vars.GKE_LOCATION }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: ./deploy/scripts/staging-power.sh lock 30
+
+      - name: Wake staging if it is asleep
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          GKE_LOCATION: ${{ vars.GKE_LOCATION }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: ./deploy/scripts/staging-power.sh ensure-awake
+
       - name: Apply
         env:
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
@@ -225,3 +243,12 @@ jobs:
           kubectl -n automatedlinkedin rollout status deploy/authentik-worker --timeout=5m
           kubectl -n automatedlinkedin rollout status deploy/spider-api --timeout=5m
           kubectl -n automatedlinkedin rollout status deploy/spider-worker --timeout=5m
+
+      - name: Release the smart-shutdown lock
+        if: always()
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          GKE_LOCATION: ${{ vars.GKE_LOCATION }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: ./deploy/scripts/staging-power.sh unlock
