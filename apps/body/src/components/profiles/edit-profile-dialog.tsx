@@ -1,43 +1,33 @@
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import {
-   Dialog,
-   DialogContent,
-   DialogDescription,
-   DialogFooter,
-   DialogHeader,
-   DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { readableError } from '@/lib/trpc-error'
-import { Loader2 } from 'lucide-react'
-import { type FormEvent, useState } from 'react'
+import { useState } from 'react'
 
-import { type Profile, type ProfileStatus } from './types'
+import { type Profile } from './types'
 
 import { trpc } from '../../trpc'
+import { EditDialog, EditFrame } from '../links/edit-frame'
+import { hasChanges } from '../links/form-rules'
+import { NotesField, StatusField, TagsField, TextField } from '../links/record-fields'
 import { type FormValues, buildChanges, toFormValues } from './profile-form'
-import { profileStatuses } from './profile-statuses'
 
 const textFields = [
    {
       key: 'fullName',
       label: 'Name',
+      maxLength: 200,
    },
    {
       key: 'headline',
       label: 'Headline',
+      maxLength: 300,
    },
    {
       key: 'company',
       label: 'Company',
+      maxLength: 200,
    },
    {
       key: 'location',
       label: 'Location',
+      maxLength: 200,
    },
 ] as const
 
@@ -58,102 +48,44 @@ const EditForm = ({ profile, onClose }: FormProps) => {
    })
 
    const changes = buildChanges(profile, values)
-   const changed = Object.keys(changes).length > 0
 
    const change = (key: keyof FormValues, value: string) => setValues(current => ({ ...current, [key]: value }))
 
-   const submit = (event: FormEvent) => {
-      event.preventDefault()
-      update.mutate({
-         id: profile.id,
-         ...changes,
-      })
-   }
-
    return (
-      <form onSubmit={submit} className="grid gap-6">
-         <DialogHeader>
-            <DialogTitle>Edit {profile.fullName ?? profile.slug}</DialogTitle>
-            <DialogDescription>
-               The link cannot be changed. Add what you know about this person and where you are with them.
-            </DialogDescription>
-         </DialogHeader>
-
+      <EditFrame
+         title={`Edit ${profile.fullName ?? profile.slug}`}
+         description="The link cannot be changed. Add what you know about this person and where you are with them."
+         changed={hasChanges(changes)}
+         pending={update.isPending}
+         error={update.error}
+         onSubmit={() =>
+            update.mutate({
+               id: profile.id,
+               ...changes,
+            })
+         }
+         onClose={onClose}
+      >
          <div className="grid gap-4 sm:grid-cols-2">
-            {textFields.map(({ key, label }) => (
-               <div key={key} className="grid gap-2">
-                  <Label htmlFor={`profile-${key}`}>{label}</Label>
-                  <Input
-                     id={`profile-${key}`}
-                     value={values[key]}
-                     onChange={event => change(key, event.target.value)}
-                     maxLength={key === 'headline' ? 300 : 200}
-                  />
-               </div>
-            ))}
-
-            <div className="grid gap-2">
-               <Label htmlFor="profile-status">Status</Label>
-               <Select value={values.status} onValueChange={value => change('status', value as ProfileStatus)}>
-                  <SelectTrigger id="profile-status">
-                     <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                     {Object.entries(profileStatuses).map(([value, { label }]) => (
-                        <SelectItem key={value} value={value}>
-                           {label}
-                        </SelectItem>
-                     ))}
-                  </SelectContent>
-               </Select>
-            </div>
-
-            <div className="grid gap-2">
-               <Label htmlFor="profile-tags">Tags</Label>
-               <Input
-                  id="profile-tags"
-                  placeholder="vip, conference"
-                  value={values.tags}
-                  onChange={event => change('tags', event.target.value)}
-                  aria-describedby="profile-tags-hint"
+            {textFields.map(({ key, label, maxLength }) => (
+               <TextField
+                  key={key}
+                  id={`profile-${key}`}
+                  label={label}
+                  maxLength={maxLength}
+                  value={values[key]}
+                  onChange={value => change(key, value)}
                />
-               <p id="profile-tags-hint" className="text-muted-foreground text-xs">
-                  Separate with commas. Up to 10, 30 characters each.
-               </p>
-            </div>
-         </div>
-
-         <div className="grid gap-2">
-            <Label htmlFor="profile-notes">Notes</Label>
-            <Textarea
-               id="profile-notes"
-               rows={4}
-               maxLength={5000}
-               value={values.notes}
-               onChange={event => change('notes', event.target.value)}
+            ))}
+            <StatusField
+               id="profile-status"
+               value={values.status}
+               onChange={status => setValues(current => ({ ...current, status }))}
             />
+            <TagsField id="profile-tags" value={values.tags} onChange={value => change('tags', value)} />
          </div>
-
-         {update.error ? (
-            <Alert variant="destructive">
-               <AlertTitle>We could not save your changes</AlertTitle>
-               <AlertDescription>{readableError(update.error)}</AlertDescription>
-            </Alert>
-         ) : null}
-
-         <DialogFooter className="items-center sm:justify-between">
-            <p className="text-muted-foreground text-sm">{changed ? '' : 'No changes yet.'}</p>
-            <div className="flex gap-2">
-               <Button type="button" variant="outline" onClick={onClose}>
-                  Cancel
-               </Button>
-               <Button type="submit" disabled={!changed || update.isPending}>
-                  {update.isPending ? <Loader2 className="animate-spin" /> : null}
-                  Save changes
-               </Button>
-            </div>
-         </DialogFooter>
-      </form>
+         <NotesField id="profile-notes" value={values.notes} onChange={value => change('notes', value)} />
+      </EditFrame>
    )
 }
 
@@ -164,9 +96,7 @@ type Props = {
 
 // The form mounts only while open, so each edit starts from the saved values.
 export const EditProfileDialog = ({ profile, onClose }: Props) => (
-   <Dialog open={Boolean(profile)} onOpenChange={open => (open ? undefined : onClose())}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-         {profile ? <EditForm key={profile.id} profile={profile} onClose={onClose} /> : null}
-      </DialogContent>
-   </Dialog>
+   <EditDialog open={Boolean(profile)} onClose={onClose}>
+      {profile ? <EditForm key={profile.id} profile={profile} onClose={onClose} /> : null}
+   </EditDialog>
 )

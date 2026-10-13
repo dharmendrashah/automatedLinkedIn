@@ -1,14 +1,15 @@
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Archive, ArchiveRestore, Loader2, Pencil, Users } from 'lucide-react'
+import { Users } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
 import { type Profile } from './types'
 
-import { ProfileStatusBadge } from './profile-status'
+import { LinkStatusBadge } from '../links/link-status-badge'
+import { RowActions } from '../links/row-actions'
+import { StateRows } from '../links/state-rows'
+import { TagBadges } from '../links/tag-badges'
 
 const COLUMNS = 5
 
@@ -40,28 +41,14 @@ export const ProfilesTable = ({ profiles, loading, error, busyId, onEdit, onArch
             </TableRow>
          </TableHeader>
          <TableBody>
-            {loading ? (
-               <TableRow>
-                  <TableCell colSpan={COLUMNS}>
-                     <Skeleton className="h-8 w-full" />
-                  </TableCell>
-               </TableRow>
-            ) : null}
-            {error ? (
-               <TableRow>
-                  <TableCell colSpan={COLUMNS} className="text-destructive h-24 text-center text-sm">
-                     {error}
-                  </TableCell>
-               </TableRow>
-            ) : null}
-            {profiles?.length === 0 ? (
-               <TableRow>
-                  <TableCell colSpan={COLUMNS} className="text-muted-foreground h-24 text-center text-sm">
-                     <Users className="mx-auto mb-2 size-5" />
-                     No profiles found. Use Add profiles to paste some LinkedIn links.
-                  </TableCell>
-               </TableRow>
-            ) : null}
+            <StateRows
+               loading={loading}
+               error={error}
+               empty={profiles?.length === 0}
+               columns={COLUMNS}
+               emptyIcon={Users}
+               emptyText="No profiles found. Use Add profiles to paste some LinkedIn links."
+            />
             {profiles?.map(profile => (
                <TableRow key={profile.id} className={cn(profile.archivedAt && 'opacity-60')}>
                   <TableCell>
@@ -77,46 +64,23 @@ export const ProfilesTable = ({ profiles, loading, error, busyId, onEdit, onArch
                   </TableCell>
                   <TableCell>
                      <span className="flex flex-wrap items-center gap-1">
-                        <ProfileStatusBadge status={profile.status} />
+                        <LinkStatusBadge status={profile.status} />
                         {profile.archivedAt ? <Badge variant="secondary">Archived</Badge> : null}
                      </span>
                   </TableCell>
                   <TableCell>
-                     <span className="flex flex-wrap gap-1">
-                        {profile.tags.map(tag => (
-                           <button key={tag} type="button" aria-label={`Show only ${tag}`} onClick={() => onTag(tag)}>
-                              <Badge variant="secondary">{tag}</Badge>
-                           </button>
-                        ))}
-                     </span>
+                     <TagBadges tags={profile.tags} onTag={onTag} />
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(profile.createdAt)}</TableCell>
                   <TableCell>
-                     <div className="flex items-center justify-end gap-1">
-                        <Button
-                           variant="ghost"
-                           size="icon"
-                           aria-label={`Edit ${profile.fullName ?? profile.slug}`}
-                           onClick={() => onEdit(profile)}
-                        >
-                           <Pencil />
-                        </Button>
-                        <Button
-                           variant="ghost"
-                           size="icon"
-                           disabled={busyId === profile.id}
-                           aria-label={`${profile.archivedAt ? 'Restore' : 'Archive'} ${profile.fullName ?? profile.slug}`}
-                           onClick={() => (profile.archivedAt ? onRestore(profile) : onArchive(profile))}
-                        >
-                           {busyId === profile.id ? (
-                              <Loader2 className="animate-spin" />
-                           ) : profile.archivedAt ? (
-                              <ArchiveRestore />
-                           ) : (
-                              <Archive />
-                           )}
-                        </Button>
-                     </div>
+                     <RowActions
+                        name={profile.fullName ?? profile.slug}
+                        archived={Boolean(profile.archivedAt)}
+                        busy={busyId === profile.id}
+                        onEdit={() => onEdit(profile)}
+                        onArchive={() => onArchive(profile)}
+                        onRestore={() => onRestore(profile)}
+                     />
                   </TableCell>
                </TableRow>
             ))}

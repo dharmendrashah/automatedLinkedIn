@@ -1,28 +1,13 @@
-import { type Profile, type ProfileStatus } from './types'
+import { type LinkStatus } from '../links/types'
+import { type Profile } from './types'
 
-const TEXT_FIELDS = ['fullName', 'headline', 'company', 'location', 'notes'] as const
+import { statusChange, tagsChange, textChange } from '../links/form-rules'
 
-type TextField = (typeof TEXT_FIELDS)[number]
-
-export type FormValues = Record<TextField, string> & {
+export type FormValues = Record<'fullName' | 'headline' | 'company' | 'location' | 'notes', string> & {
    // Comma separated, as typed.
    tags: string
-   status: ProfileStatus
+   status: LinkStatus
 }
-
-export type Changes = Partial<Record<TextField, string | null>> & {
-   tags?: string[]
-   status?: ProfileStatus
-}
-
-export const toTagList = (text: string) => [
-   ...new Set(
-      text
-         .split(',')
-         .map(tag => tag.trim().toLowerCase())
-         .filter(Boolean)
-   ),
-]
 
 export const toFormValues = (profile: Profile): FormValues => ({
    fullName: profile.fullName ?? '',
@@ -34,27 +19,12 @@ export const toFormValues = (profile: Profile): FormValues => ({
    status: profile.status,
 })
 
-// Only what the user changed; a text field that was emptied is sent as null to clear it.
-export const buildChanges = (profile: Profile, values: FormValues): Changes => {
-   const changes: Changes = {}
-
-   for (const field of TEXT_FIELDS) {
-      const next = values[field].trim()
-
-      if (next !== (profile[field] ?? '')) {
-         changes[field] = next || null
-      }
-   }
-
-   const tags = toTagList(values.tags)
-
-   if (tags.join(',') !== profile.tags.join(',')) {
-      changes.tags = tags
-   }
-
-   if (values.status !== profile.status) {
-      changes.status = values.status
-   }
-
-   return changes
-}
+export const buildChanges = (profile: Profile, values: FormValues) => ({
+   fullName: textChange(profile.fullName, values.fullName),
+   headline: textChange(profile.headline, values.headline),
+   company: textChange(profile.company, values.company),
+   location: textChange(profile.location, values.location),
+   notes: textChange(profile.notes, values.notes),
+   tags: tagsChange(profile.tags, values.tags),
+   status: statusChange(profile.status, values.status),
+})

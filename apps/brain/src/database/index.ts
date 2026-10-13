@@ -13,6 +13,11 @@ export {
    SessionRetryError,
 } from './linkedInAccountValidation.service'
 export {
+   type LinkedInCompanyChanges,
+   type LinkedInCompanyListQuery,
+   LinkedInCompanyService,
+} from './linkedInCompany.service'
+export {
    type LinkedInProfileChanges,
    type LinkedInProfileListQuery,
    LinkedInProfileService,
