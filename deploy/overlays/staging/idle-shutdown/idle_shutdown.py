@@ -67,6 +67,10 @@ class ConfigError(Exception):
     pass
 
 
+class PodNotReady(Exception):
+    """A container has not started yet (the logs API answers 400 for it). Nothing is decided in that case."""
+
+
 def parse_int(raw: str, name: str, low: int, high: int) -> int:
     try:
         value = int(raw.strip())
@@ -205,6 +209,8 @@ class Kubernetes:
         status, raw = self.http.request(
             "GET", f"{self.base}/api/v1/namespaces/{namespace}/pods/{pod}/log?{query}", self._headers()
         )
+        if status == 400:
+            raise PodNotReady(pod)
         if status != 200:
             raise RuntimeError(f"reading logs of {pod} failed with HTTP {status}")
         return raw.decode(errors="replace").splitlines()
@@ -284,9 +290,13 @@ def run(config: Config, kube, pools, now: dt.datetime) -> str:
         return f"skipped-nodes-{nodes}"
 
     activity = 0
-    for app in ACTIVITY_APPS:
-        for pod in kube.pod_names(config.namespace, app):
-            activity += count_activity(app, kube.recent_lines(config.namespace, pod, config.window_seconds))
+    try:
+        for app in ACTIVITY_APPS:
+            for pod in kube.pod_names(config.namespace, app):
+                activity += count_activity(app, kube.recent_lines(config.namespace, pod, config.window_seconds))
+    except PodNotReady:
+        # A service is still starting (for example brain running its migrations). Its quiet logs are not idleness.
+        return "pods-starting"
 
     last_active = parse_time(kube.read_state(config.namespace, LAST_ACTIVE_KEY))
     decision = decide(now, last_active, activity, config.idle_minutes)

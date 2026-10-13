@@ -37,7 +37,10 @@ class FakeKube:
         return [f"{app}-pod"] if app in self.lines_by_app else []
 
     def recent_lines(self, namespace, pod, since_seconds):
-        return self.lines_by_app[pod.removesuffix("-pod")]
+        lines = self.lines_by_app[pod.removesuffix("-pod")]
+        if lines is None:
+            raise ids.PodNotReady(pod)
+        return lines
 
     def read_state(self, namespace, key):
         return self.state.get(key)
@@ -287,6 +290,19 @@ class NodePoolRequestTests(unittest.TestCase):
     def test_set_size_fails_loudly_on_an_api_error(self):
         with self.assertRaises(RuntimeError):
             ids.NodePools(ids.HttpClient(FakeOpener([(403, b"permission denied")])), token="tok").set_size("p", "l", "c", "np", 0)
+
+
+class PodsStartingTests(unittest.TestCase):
+    def test_a_pod_whose_logs_are_not_available_yet_pauses_the_checker(self):
+        kube = FakeKube({"brain": []}, state={"last_active": (NOW - dt.timedelta(minutes=50)).isoformat()})
+        kube.lines_by_app["brain"] = None  # simulates a container still starting (HTTP 400 from the logs API)
+        pools = FakePools()
+
+        result = ids.run(ids.Config.from_env({**BASE_ENV, "SMART_SHUTDOWN_MODE": "enforce"}), kube, pools, NOW)
+
+        self.assertEqual(result, "pods-starting")
+        self.assertEqual(pools.calls, [])
+        self.assertEqual(kube.writes, [])
 
 
 class KubernetesStateTests(unittest.TestCase):

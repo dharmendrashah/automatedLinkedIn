@@ -49,12 +49,24 @@ wait_for_node() {
   return 1
 }
 
+# The DNS job has a 2-minute deadline, so a node that is still starting can make one attempt fail.
+# Each attempt is a fresh job; three attempts are enough for a node that became Ready.
 refresh_dns() {
-  local job="dns-wake-${GITHUB_RUN_ID:-manual}-$(date +%s)"
-  kubectl -n "$NAMESPACE" create job --from=cronjob/staging-dns-updater "$job" > /dev/null
-  kubectl -n "$NAMESPACE" wait --for=condition=complete "job/$job" --timeout=5m > /dev/null
-  kubectl -n "$NAMESPACE" logs "job/$job"
-  kubectl -n "$NAMESPACE" delete "job/$job" > /dev/null
+  local attempt job
+  for attempt in 1 2 3; do
+    job="dns-wake-${GITHUB_RUN_ID:-manual}-$(date +%s)"
+    kubectl -n "$NAMESPACE" create job --from=cronjob/staging-dns-updater "$job" > /dev/null
+    if kubectl -n "$NAMESPACE" wait --for=condition=complete "job/$job" --timeout=5m > /dev/null 2>&1; then
+      kubectl -n "$NAMESPACE" logs "job/$job"
+      kubectl -n "$NAMESPACE" delete "job/$job" > /dev/null
+      return 0
+    fi
+    echo "DNS update attempt $attempt did not finish; the node may still be starting" >&2
+    kubectl -n "$NAMESPACE" delete "job/$job" > /dev/null 2>&1 || true
+    sleep 30
+  done
+  echo "DNS update failed after 3 attempts" >&2
+  return 1
 }
 
 wait_for_apps() {
