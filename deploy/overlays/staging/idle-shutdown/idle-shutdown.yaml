@@ -1,5 +1,7 @@
 # Smart shutdown: stops the staging node pool after IDLE_MINUTES without activity in the brain,
 # spider-api and spider-worker logs. Runs in dry-run mode until SMART_SHUTDOWN_MODE is set to enforce.
+# Smart shutdown: stops the staging node pool after IDLE_MINUTES without activity in the brain,
+# spider-api and spider-worker logs. Runs in dry-run mode until SMART_SHUTDOWN_MODE is set to enforce.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -7,56 +9,6 @@ metadata:
   annotations:
     # Workload Identity: the checker acts as this Google service account (narrow custom role only).
     iam.gke.io/gcp-service-account: staging-power@automate-linkedin-511215.iam.gserviceaccount.com
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: idle-shutdown
-rules:
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list"]
-  - apiGroups: [""]
-    resources: ["pods/log"]
-    verbs: ["get"]
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    verbs: ["get", "create", "patch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: idle-shutdown
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: idle-shutdown
-subjects:
-  - kind: ServiceAccount
-    name: idle-shutdown
----
-# Reads the nodes of the staging pool, to check that exactly one is running before it acts.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: idle-shutdown-read-nodes
-rules:
-  - apiGroups: [""]
-    resources: ["nodes"]
-    verbs: ["get", "list"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: idle-shutdown-read-nodes
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: idle-shutdown-read-nodes
-subjects:
-  - kind: ServiceAccount
-    name: idle-shutdown
-    namespace: automatedlinkedin
 ---
 apiVersion: batch/v1
 kind: CronJob
