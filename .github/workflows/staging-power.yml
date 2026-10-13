@@ -1,0 +1,74 @@
+name: Staging power
+
+# Turn the staging VM off to stop the bill, or on again. Run it from Actions → Staging power → Run workflow,
+# or with: gh workflow run "Staging power" -f action=wake
+#
+#   sleep  scales the staging node pool to zero. Smart shutdown does the same after 45 idle minutes.
+#   wake   starts the node, refreshes the DNS record to the new IP, resets the idle timer and waits for the apps.
+#
+# The deploy job wakes staging by itself when it finds it asleep, so a deploy never needs this button.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "wake or sleep"
+        required: true
+        type: choice
+        options:
+          - wake
+          - sleep
+        default: wake
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: staging-power
+  cancel-in-progress: false
+
+jobs:
+  power:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: staging
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: google-github-actions/auth@v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/get-gke-credentials@v3.0.0
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ vars.GKE_LOCATION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: ${{ inputs.action }} staging
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          GKE_LOCATION: ${{ vars.GKE_LOCATION }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: ./deploy/scripts/staging-power.sh "${{ inputs.action }}"
+
+      - name: Check the public endpoints
+        if: inputs.action == 'wake'
+        env:
+          API_URL: ${{ vars.STAGING_API_URL }}
+        run: |
+          APP_URL="${API_URL/api./app.}"
+          check() {
+            for _ in $(seq 1 30); do
+              code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$1" || true)
+              if [ "$code" = "200" ]; then echo "$1 -> 200"; return 0; fi
+              sleep 10
+            done
+            echo "$1 did not return 200 (last: $code)" >&2
+            return 1
+          }
+          check "$APP_URL/"
+          check "$API_URL/health"

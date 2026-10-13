@@ -46,7 +46,7 @@ const setup = () => {
 }
 
 describe('consumeTasks', () => {
-   let log: { error: Mock<(message: string) => void> }
+   let log: { info: Mock<(message: string) => void>; error: Mock<(message: string) => void> }
    let republish: Mock<(message: unknown, retries: number) => Promise<void>>
    let sleep: Mock<(ms: number) => Promise<void>>
    let options: {
@@ -58,7 +58,7 @@ describe('consumeTasks', () => {
    }
 
    beforeEach(() => {
-      log = { error: vi.fn<(message: string) => void>() }
+      log = { info: vi.fn<(message: string) => void>(), error: vi.fn<(message: string) => void>() }
       republish = vi.fn<(message: unknown, retries: number) => Promise<void>>().mockResolvedValue(undefined)
       sleep = vi.fn<(ms: number) => Promise<void>>().mockResolvedValue(undefined)
       options = {
@@ -240,6 +240,59 @@ describe('consumeTasks', () => {
       expect(handler).not.toHaveBeenCalled()
       expect(channel.nack).toHaveBeenCalledWith(bad, false, false)
       expect(channel.nack).toHaveBeenCalledWith(notJson, false, false)
+   })
+
+   describe('job log lines', () => {
+      it('should log when a job starts and when it finishes', async () => {
+         const { channel, send } = setup()
+         const handler = vi.fn().mockResolvedValue(undefined)
+         const consumer = await consumeTasks(channel as never, handler, options)
+
+         send(message(command))
+         await consumer.stop()
+
+         const lines = log.info.mock.calls.map(call => call[0])
+         expect(lines).toEqual([
+            `spider job started: Task ${command.task_id}`,
+            `spider job finished: Task ${command.task_id}`,
+         ])
+      })
+
+      it('should log a heartbeat while a long job is still running', async () => {
+         const { channel, send } = setup()
+         const handler = vi.fn(() => new Promise<void>(resolve => setTimeout(resolve, 60)))
+         const consumer = await consumeTasks(channel as never, handler, { ...options, heartbeatMs: 5 })
+
+         send(message(command))
+         await consumer.stop()
+
+         const heartbeats = log.info.mock.calls.filter(call => call[0].startsWith('spider job still running'))
+         expect(heartbeats.length).toBeGreaterThan(0)
+      })
+
+      it('should stop the heartbeat once the job has finished', async () => {
+         const { channel, send } = setup()
+         const handler = vi.fn(() => new Promise<void>(resolve => setTimeout(resolve, 20)))
+         const consumer = await consumeTasks(channel as never, handler, { ...options, heartbeatMs: 5 })
+
+         send(message(command))
+         await consumer.stop()
+         const countAtFinish = log.info.mock.calls.length
+         await new Promise(resolve => setTimeout(resolve, 30))
+
+         expect(log.info.mock.calls.length).toBe(countAtFinish)
+      })
+
+      it('should not log a finish for a job that failed and is retried', async () => {
+         const { channel, send } = setup()
+         const handler = vi.fn().mockRejectedValue(new Error('boom'))
+         const consumer = await consumeTasks(channel as never, handler, options)
+
+         send(message(command))
+         await consumer.stop()
+
+         expect(log.info.mock.calls.map(call => call[0])).not.toContain(`spider job finished: Task ${command.task_id}`)
+      })
    })
 
    it('should not log the content of a rejected message', async () => {

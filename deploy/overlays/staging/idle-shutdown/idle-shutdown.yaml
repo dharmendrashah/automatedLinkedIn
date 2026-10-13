@@ -1,0 +1,62 @@
+# Smart shutdown: stops the staging node pool after IDLE_MINUTES without activity in the brain,
+# spider-api and spider-worker logs. Runs in dry-run mode until SMART_SHUTDOWN_MODE is set to enforce.
+# Smart shutdown: stops the staging node pool after IDLE_MINUTES without activity in the brain,
+# spider-api and spider-worker logs. Runs in dry-run mode until SMART_SHUTDOWN_MODE is set to enforce.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: idle-shutdown
+  annotations:
+    # Workload Identity: the checker acts as this Google service account (narrow custom role only).
+    iam.gke.io/gcp-service-account: staging-power@automate-linkedin-511215.iam.gserviceaccount.com
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: staging-idle-shutdown
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 180
+      template:
+        spec:
+          serviceAccountName: idle-shutdown
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+          containers:
+            - name: idle-shutdown
+              image: python:3.14-alpine
+              command: ["python3", "/app/idle_shutdown.py"]
+              env:
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+              envFrom:
+                - configMapRef:
+                    name: idle-shutdown-config
+              volumeMounts:
+                - name: script
+                  mountPath: /app
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 64Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+          volumes:
+            - name: script
+              configMap:
+                name: idle-shutdown-script
