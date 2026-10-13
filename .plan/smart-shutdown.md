@@ -1,6 +1,6 @@
 # Smart shutdown for the staging environment
 
-- Status: locked <!-- draft | locked | in progress | done -->
+- Status: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-10-13
 - Locked by user: yes, 2026-10-13 (decisions below). Code can start after the spider log check.
 
@@ -126,4 +126,27 @@ Open: whether logs alone are enough. The alternative is to also count RabbitMQ q
 
 ## Outcome
 
-Filled in when done.
+Implemented on `feat/smart-shutdown` (PR #32). Status on 2026-10-13:
+
+- **Checker:** running on staging as a CronJob every 5 minutes, in dry-run mode. Its last runs report `idle`, with the state
+  saved in the `idle-shutdown-state` ConfigMap. Enforce mode is off, pending a week of dry-run results.
+- **Tests:** 32 checker tests and the spider unit suite pass.
+- **Permissions:** custom role `stagingNodePoolPower` with three permissions: `container.clusters.get`,
+  `container.clusters.update` and `container.operations.get`. Bound to the `staging-power` service account (used by the
+  checker through Workload Identity) and to the CI account (used by the wake and deploy steps).
+- **Sleep and wake tested on staging** with the same script the workflow runs. Sleep took about 3 minutes and the app was
+  unreachable while the node was off. Wake took about 6.5 minutes. It refreshed DNS, reset the idle timer, waited for the
+  apps, and the public endpoints returned 200.
+- **Problems found and fixed during testing:**
+  - RBAC was applied outside the app namespace (fixed; RBAC now lives in `deploy/cluster/idle-shutdown-rbac.yaml` and is
+    applied by an admin, since the CI account cannot create RBAC objects).
+  - The checker failed while brain was still running its migrations. It now pauses instead of counting starting services as idle.
+  - The wake's DNS job missed its 2-minute deadline on a node that was still starting. It now retries up to three times.
+- **Not yet done:** the Staging power button has not been run from the GitHub Actions UI, because the workflow file must be on
+  `main` first (merge PR #32). Enforce mode is not enabled.
+
+Follow-ups:
+
+- Review dry-run results for one week, then decide whether to set `SMART_SHUTDOWN_MODE=enforce`.
+- Spider job lines are written by the shared consumer. Check the wording is what the team wants.
+
