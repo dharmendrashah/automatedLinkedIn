@@ -51,10 +51,15 @@ const SNAPSHOT_TIMEOUT_MS = 5000
 // of at most 1920 by 1080. Camoufox sets the version of its own build in it, so the user agent matches the browser.
 const fingerprints = new FingerprintGenerator()
 
-const newFingerprint = () =>
+export type FingerprintOs = 'windows' | 'macos' | 'linux'
+
+// On a macOS or Windows machine Camoufox draws on the real system fonts, so a fingerprint for another OS lists fonts
+// the machine lacks and text renders as broken glyphs. A desktop run passes its own OS here; the Linux worker image
+// bundles the fonts of every OS and keeps the default.
+export const newFingerprint = (operatingSystems: FingerprintOs[] = ['windows', 'macos', 'linux']) =>
    fingerprints.getFingerprint({
       browsers: [{ name: 'firefox' }],
-      operatingSystems: ['windows', 'macos', 'linux'],
+      operatingSystems,
       devices: ['desktop'],
       screen: {
          maxWidth: 1920,

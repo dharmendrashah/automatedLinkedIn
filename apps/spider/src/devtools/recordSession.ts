@@ -10,7 +10,7 @@ import { type Browser, type BrowserContext, type Page } from 'playwright-core'
 
 import { type ProxyConfig } from '@automatedLinkedIn/contracts'
 
-import { buildCamoufoxOptions } from '../scraping/camoufoxDriver'
+import { type FingerprintOs, buildCamoufoxOptions, newFingerprint } from '../scraping/camoufoxDriver'
 import { openProxyCredentials } from '../tasks/credentials'
 import { type SavedProxy, listSavedProxies, loadLocalDbConfig } from './localDb'
 import { type DevStepEntry, attachPageRecorder } from './pageRecorder'
@@ -18,6 +18,11 @@ import { renderSkeleton } from './skeleton'
 
 // Assumes the working directory is apps/spider, true for the documented `pnpm --filter ... dev:record` script.
 const OUTPUT_ROOT = join(process.cwd(), '.devtools-recordings')
+
+const HOST_OS: Record<string, FingerprintOs> = {
+   darwin: 'macos',
+   win32: 'windows',
+}
 
 const rl = createInterface({
    input: process.stdin,
@@ -129,7 +134,9 @@ const main = async () => {
    const picked = await pickProxy(proxies)
    const proxy = picked ? toProxyConfig(picked, encryptionKey) : undefined
 
-   const browser = await Camoufox(buildCamoufoxOptions(false, proxy))
+   const browser = await Camoufox(
+      buildCamoufoxOptions(false, proxy, newFingerprint([HOST_OS[process.platform] ?? 'linux']))
+   )
    const steps: DevStepEntry[] = []
 
    try {
