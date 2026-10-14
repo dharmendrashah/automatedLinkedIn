@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 import { type ProxyProtocol } from './types'
 
-import { SUPPORTED_PROTOCOLS, protocolOptions } from './protocols'
+import { protocolHint, protocolLabel, protocolOptions } from './protocols'
 
 export type ProxyFieldValues = {
    protocol: ProxyProtocol
@@ -25,7 +25,7 @@ type Props = {
 export const ProxyFields = ({ idPrefix, values, onChange, passwordPlaceholder }: Props) => (
    <div className="grid gap-4">
       <div className="grid grid-cols-2 gap-4">
-         <div className="grid gap-2">
+         <div className="grid min-w-0 gap-2">
             <Label htmlFor={`${idPrefix}-protocol`}>Protocol</Label>
             <Select value={values.protocol} onValueChange={value => onChange({ protocol: value as ProxyProtocol })}>
                <SelectTrigger id={`${idPrefix}-protocol`} className="w-full">
@@ -34,14 +34,13 @@ export const ProxyFields = ({ idPrefix, values, onChange, passwordPlaceholder }:
                <SelectContent>
                   {protocolOptions(values.protocol).map(protocol => (
                      <SelectItem key={protocol} value={protocol}>
-                        {protocol.toLowerCase()}://
-                        {SUPPORTED_PROTOCOLS.includes(protocol) ? '' : ' (no longer offered)'}
+                        {protocolLabel(protocol)}
                      </SelectItem>
                   ))}
                </SelectContent>
             </Select>
          </div>
-         <div className="grid gap-2">
+         <div className="grid min-w-0 gap-2">
             <Label htmlFor={`${idPrefix}-port`}>Port</Label>
             <Input
                id={`${idPrefix}-port`}
@@ -54,6 +53,7 @@ export const ProxyFields = ({ idPrefix, values, onChange, passwordPlaceholder }:
             />
          </div>
       </div>
+      <p className="text-muted-foreground -mt-2 text-xs">{protocolHint(values.protocol)}</p>
 
       <div className="grid gap-2">
          <Label htmlFor={`${idPrefix}-host`}>Host</Label>

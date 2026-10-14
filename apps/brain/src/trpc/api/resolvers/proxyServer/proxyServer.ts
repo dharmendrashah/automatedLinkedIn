@@ -13,9 +13,10 @@ import { ownerProcedure, router } from 'trpc'
 
 const byId = z.object({ id: z.string().min(1) })
 
-// Every page the spider visits is HTTPS, so a proxy has to carry it; plain HTTP and SOCKS4 proxies are no longer added
-// (stored ones keep working).
-const protocol = z.enum(['HTTPS', 'SOCKS5'])
+// Every page the spider visits is HTTPS, so a proxy has to carry it. An HTTP proxy does (it tunnels secure sites), and
+// so does SOCKS5; HTTPS means a secure connection to the proxy itself. SOCKS4 is no longer added (stored ones keep
+// working).
+const protocol = z.enum(['HTTP', 'HTTPS', 'SOCKS5'])
 const host = z.string().min(1).max(255)
 const port = z.number().int().min(1).max(65535)
 const secret = z.string().min(1).max(256)

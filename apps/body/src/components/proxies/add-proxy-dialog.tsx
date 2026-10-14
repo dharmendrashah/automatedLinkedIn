@@ -18,12 +18,12 @@ import { type FormEvent, useState } from 'react'
 import { type Proxy } from './types'
 
 import { trpc } from '../../trpc'
-import { type SupportedProtocol } from './protocols'
+import { DEFAULT_PROTOCOL, type SupportedProtocol } from './protocols'
 import { type ProxyFieldValues, ProxyFields } from './proxy-fields'
 import { ProxyResult } from './proxy-result'
 
 const emptyValues: ProxyFieldValues = {
-   protocol: 'HTTPS',
+   protocol: DEFAULT_PROTOCOL,
    host: '',
    port: '',
    username: '',
@@ -99,8 +99,9 @@ const AddBody = ({ request, onClose }: BodyProps) => {
             <summary className="cursor-pointer font-medium">Where do I get these details?</summary>
             <p className="text-muted-foreground mt-2 leading-relaxed">
                You get a proxy from a provider you buy it from. They give you an address (the host, like 203.0.113.9), a
-               number (the port), usually a username and password, and tell you whether it is HTTPS or SOCKS5. Copy them
-               into the boxes below. Choose a proxy in the country your LinkedIn account normally signs in from.
+               number (the port), usually a username and password, and tell you whether it is HTTP, HTTPS or SOCKS5. If
+               their example starts with http://, choose http://. Copy them into the boxes below. Choose a proxy in the
+               country your LinkedIn account normally signs in from.
             </p>
          </details>
 
