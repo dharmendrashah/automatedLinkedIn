@@ -6,6 +6,8 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 
+import { type Browser, type BrowserContext, type Page } from 'playwright-core'
+
 import { type ProxyConfig } from '@automatedLinkedIn/contracts'
 
 import { buildCamoufoxOptions } from '../scraping/camoufoxDriver'
@@ -52,16 +54,36 @@ const pickProxy = async (proxies: SavedProxy[]): Promise<SavedProxy | undefined>
    return choice === 0 ? undefined : proxies[choice - 1]
 }
 
-// `rl.once('line', ...)` rather than `rl.question()`: a `question()` left pending (closing the browser window
-// instead of pressing Enter) would still be "active" on the interface, and a second question() afterwards (the name
-// prompt) would break.
-const waitForStop = (browser: { on: (event: 'disconnected', listener: () => void) => void }) =>
+// Stops on Enter, Ctrl+C, the last browser window closing, or the browser quitting. Firefox keeps running after its
+// window closes on some platforms, so `disconnected` alone is not enough. A second Ctrl+C forces the exit.
+const waitForStop = (browser: Browser, context: BrowserContext) =>
    new Promise<void>(resolve => {
-      const finish = () => resolve()
+      let stopped = false
 
-      browser.on('disconnected', finish)
-      console.log('\nRecording. Press Enter here, or close the browser window, to stop and save.')
-      rl.once('line', finish)
+      const stop = () => {
+         stopped = true
+         resolve()
+      }
+      const watchClose = (page: Page) =>
+         page.on('close', () => {
+            if (context.pages().length === 0) {
+               stop()
+            }
+         })
+
+      context.pages().forEach(watchClose)
+      context.on('page', watchClose)
+      browser.on('disconnected', stop)
+      rl.once('line', stop)
+      rl.on('SIGINT', () => {
+         if (stopped) {
+            process.exit(1)
+         }
+
+         stop()
+      })
+      process.once('SIGTERM', stop)
+      console.log('\nRecording. Press Enter here, press Ctrl+C, or close the browser window to stop and save.')
    })
 
 const slugify = (name: string) =>
@@ -71,30 +93,8 @@ const slugify = (name: string) =>
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '') || 'session'
 
-const main = async () => {
-   const { databaseUrl, encryptionKey } = loadLocalDbConfig()
-   const proxies = await listSavedProxies(databaseUrl)
-   const picked = await pickProxy(proxies)
-   const proxy = picked ? toProxyConfig(picked, encryptionKey) : undefined
-
-   const browser = await Camoufox(buildCamoufoxOptions(false, proxy))
-   const steps: DevStepEntry[] = []
-
-   try {
-      const context = await browser.newContext(proxy ? { ignoreHTTPSErrors: true } : {})
-      const page = await context.newPage()
-
-      await attachPageRecorder(page, step => steps.push(step))
-      await page.goto('about:blank')
-
-      await waitForStop(browser)
-   } finally {
-      await browser.close().catch(() => undefined)
-   }
-
-   const name = await rl.question('\nName this recording (used in the folder name): ')
-   const slug = `${slugify(name)}-${new Date().toISOString().replace(/[:.]/g, '-')}`
-   const dir = join(OUTPUT_ROOT, slug)
+const saveRecording = async (steps: DevStepEntry[], picked: SavedProxy | undefined, name: string) => {
+   const dir = join(OUTPUT_ROOT, `${slugify(name)}-${new Date().toISOString().replace(/[:.]/g, '-')}`)
 
    await mkdir(dir, { recursive: true })
    await writeFile(
@@ -116,9 +116,37 @@ const main = async () => {
    )
    await writeFile(join(dir, 'skeleton.md'), renderSkeleton(steps))
 
-   console.log(`\nSaved ${steps.length} step(s) to ${dir}`)
+   return dir
+}
 
-   rl.close()
+// A browser that is already gone can leave close() pending forever, so it never holds up the exit.
+const closeBrowser = (browser: Browser) =>
+   Promise.race([browser.close().catch(() => undefined), new Promise(resolve => setTimeout(resolve, 5000))])
+
+const main = async () => {
+   const { databaseUrl, encryptionKey } = loadLocalDbConfig()
+   const proxies = await listSavedProxies(databaseUrl)
+   const picked = await pickProxy(proxies)
+   const proxy = picked ? toProxyConfig(picked, encryptionKey) : undefined
+
+   const browser = await Camoufox(buildCamoufoxOptions(false, proxy))
+   const steps: DevStepEntry[] = []
+
+   try {
+      const context = await browser.newContext(proxy ? { ignoreHTTPSErrors: true } : {})
+      const page = await context.newPage()
+
+      await attachPageRecorder(page, step => steps.push(step))
+      await page.goto('about:blank')
+      await waitForStop(browser, context)
+
+      // Saved before the browser is closed, so a slow or stuck close can never lose the recording.
+      const dir = await saveRecording(steps, picked, process.argv[2] ?? '')
+
+      console.log(`\nSaved ${steps.length} step(s) to ${dir}`)
+   } finally {
+      await closeBrowser(browser)
+   }
 }
 
 main()
@@ -126,4 +154,7 @@ main()
       console.error(error instanceof Error ? error.message : error)
       process.exitCode = 1
    })
-   .finally(() => rl.close())
+   .finally(() => {
+      rl.close()
+      process.exit(process.exitCode ?? 0)
+   })
