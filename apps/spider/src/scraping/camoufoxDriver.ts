@@ -23,9 +23,26 @@ export type CamoufoxOptions = {
    actionTimeoutMs: number
    // Page loads to anything else are blocked in the browser, not only checked afterwards.
    isAllowedNavigation: (url: string) => boolean
-   // `virtual` runs a real browser on an Xvfb display, which Camoufox advises over plain headless. Linux with Xvfb only.
-   headless?: true | 'virtual'
+   // `virtual` runs a real browser on an Xvfb display, which Camoufox advises over plain headless; `false` is a real
+   // window, for the local devtools recorder only (apps/spider/src/devtools) — production never sets it.
+   headless?: true | 'virtual' | false
 }
+
+// What CamoufoxDriver passes to Camoufox(), shared with the local devtools recorder so both start the exact same
+// browser identity instead of keeping two copies of these options.
+export const buildCamoufoxOptions = (
+   headless: Exclude<CamoufoxOptions['headless'], undefined>,
+   proxy: OpenOptions['proxy'],
+   fingerprint = newFingerprint()
+) => ({
+   headless,
+   humanize: true,
+   fingerprint,
+   ...(proxy && {
+      proxy,
+      geoip: true,
+   }),
+})
 
 // A page that is stuck should not hold up the screenshot of the step that failed.
 const SNAPSHOT_TIMEOUT_MS = 5000
@@ -241,15 +258,7 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver, DetectionDriv
 
    private async launch(proxy: OpenOptions['proxy'], recorder: OpenOptions['recorder']) {
       try {
-         return await Camoufox({
-            headless: this.options.headless ?? true,
-            humanize: true,
-            fingerprint: newFingerprint(),
-            ...(proxy && {
-               proxy,
-               geoip: true,
-            }),
-         })
+         return await Camoufox(buildCamoufoxOptions(this.options.headless ?? true, proxy))
       } catch (error) {
          recorder?.log(
             'engine',

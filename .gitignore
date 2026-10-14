@@ -22,3 +22,6 @@ __pycache__/
 *.pyc
 .DS_Store
 **/.DS_Store
+
+# Local-only devtools recordings (apps/spider/src/devtools), never shared or committed.
+apps/spider/.devtools-recordings/

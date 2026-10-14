@@ -1,7 +1,7 @@
 import { createCipheriv, randomBytes } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 
-import { openCredentials } from './credentials'
+import { openCredentials, openProxyCredentials } from './credentials'
 
 const KEY = Buffer.alloc(32, 7).toString('base64')
 
@@ -82,6 +82,43 @@ describe('openCredentials', () => {
             seal(
                JSON.stringify({
                   password: 123,
+                  extra: 'TOPSECRET',
+               })
+            ),
+            KEY
+         )
+
+      expect(attempt).toThrow()
+      expect(attempt).not.toThrow(/TOPSECRET/)
+   })
+})
+
+describe('openProxyCredentials', () => {
+   it("should open a saved proxy's username and password", () => {
+      const bundle = {
+         username: 'proxyuser',
+         password: 'hunter2',
+      }
+
+      expect(openProxyCredentials(seal(JSON.stringify(bundle)), KEY)).toEqual(bundle)
+   })
+
+   it('should accept a bundle with only one of the secrets', () => {
+      expect(openProxyCredentials(seal(JSON.stringify({ password: 'x' })), KEY)).toEqual({ password: 'x' })
+   })
+
+   it('should refuse a bundle sealed with another key', () => {
+      const other = Buffer.alloc(32, 9).toString('base64')
+
+      expect(() => openProxyCredentials(seal('{"username":"x"}', other), KEY)).toThrow()
+   })
+
+   it('should refuse a bundle that is not the expected shape, without echoing it', () => {
+      const attempt = () =>
+         openProxyCredentials(
+            seal(
+               JSON.stringify({
+                  username: 123,
                   extra: 'TOPSECRET',
                })
             ),
