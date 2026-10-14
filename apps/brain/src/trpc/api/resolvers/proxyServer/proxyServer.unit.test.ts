@@ -142,7 +142,7 @@ describe('proxyServer resolvers', () => {
    })
 
    describe('protocols', () => {
-      it.each(['HTTPS', 'SOCKS5'] as const)('should accept a %s proxy', async protocol => {
+      it.each(['HTTP', 'HTTPS', 'SOCKS5'] as const)('should accept a %s proxy', async protocol => {
          mocks.create.mockResolvedValue(proxy('UNREACHABLE'))
 
          await expect(
@@ -153,21 +153,21 @@ describe('proxyServer resolvers', () => {
          ).resolves.toMatchObject({ id: 'p1' })
       })
 
-      it.each(['HTTP', 'SOCKS4'])('should refuse a new %s proxy', async protocol => {
+      it('should refuse a new SOCKS4 proxy', async () => {
          await expect(
             caller().create({
                ...created,
-               protocol: protocol as never,
+               protocol: 'SOCKS4' as never,
             })
          ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
          expect(mocks.create).not.toHaveBeenCalled()
       })
 
-      it.each(['HTTP', 'SOCKS4'])('should refuse to change a proxy to %s', async protocol => {
+      it('should refuse to change a proxy to SOCKS4', async () => {
          await expect(
             caller().update({
                id: 'p1',
-               protocol: protocol as never,
+               protocol: 'SOCKS4' as never,
             })
          ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
          expect(mocks.update).not.toHaveBeenCalled()

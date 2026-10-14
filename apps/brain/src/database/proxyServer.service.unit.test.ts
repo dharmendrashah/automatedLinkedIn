@@ -1007,6 +1007,51 @@ describe('ProxyServerService', () => {
          expect(saved().responseHeaders).toBeUndefined()
       })
 
+      it.each([
+         'write EPROTO 8030:error:0A0000C6:SSL routines:tls_get_more_records:packet length too long',
+         'write EPROTO 8030:error:0A00010B:SSL routines:ssl3_get_record:wrong version number',
+      ])('should tell an https:// proxy that answered without TLS to try http://', async reason => {
+         arrangeCreate()
+         mocks.lookupThroughProxy.mockRejectedValue(
+            new mocks.IpInfoError(`could not reach ipinfo.io through the proxy: ${reason}`)
+         )
+
+         await ProxyServerService.create('u1', {
+            ...input,
+            protocol: 'HTTPS',
+         })
+
+         expect(saved().error).toContain('choose http://')
+         expect(saved().error).toContain(reason)
+      })
+
+      it('should not add that hint for other failures or other protocols', async () => {
+         arrangeCreate()
+         mocks.lookupThroughProxy.mockRejectedValue(
+            new mocks.IpInfoError('could not reach ipinfo.io through the proxy: write EPROTO packet length too long')
+         )
+
+         await ProxyServerService.create('u1', {
+            ...input,
+            protocol: 'HTTP',
+         })
+
+         expect(saved().error).not.toContain('choose http://')
+
+         mocks.createTest.mockClear()
+         arrangeCreate()
+         mocks.lookupThroughProxy.mockRejectedValue(
+            new mocks.IpInfoError('could not reach ipinfo.io through the proxy: ECONNREFUSED')
+         )
+
+         await ProxyServerService.create('u1', {
+            ...input,
+            protocol: 'HTTPS',
+         })
+
+         expect(saved().error).not.toContain('choose http://')
+      })
+
       it('should still save a test when the failure carries no exchange at all', async () => {
          arrangeCreate()
          mocks.lookupThroughProxy.mockRejectedValue(new Error('boom'))

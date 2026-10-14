@@ -176,6 +176,20 @@ const saveTest = async (proxyServerId: string, outcome: TestOutcome) => {
    }
 }
 
+// A proxy saved as https:// is reached over TLS. Most providers' proxies are plain http:// ones that tunnel secure sites,
+// and they answer a TLS hello with plain text, which OpenSSL reports as one of these.
+const NOT_TLS = /EPROTO|wrong version number|packet length too long/i
+const TRY_HTTP =
+   ' The proxy did not answer with a secure connection: if your provider gave an http:// address, choose http://.'
+
+const reasonFor = (error: unknown, protocol: ProxyProtocol) => {
+   if (!(error instanceof IpInfoError)) {
+      return 'could not reach the proxy'
+   }
+
+   return protocol === 'HTTPS' && NOT_TLS.test(error.message) ? `${error.message}.${TRY_HTTP}` : error.message
+}
+
 // Tests a candidate proxy by routing one request through it to ipinfo.io. `otherCountryCodes` are the
 // account's other proxies' already-detected countries: a mismatch only warns, it never blocks the save.
 const test = async (input: ProxyServerInput, otherCountryCodes: string[]): Promise<TestOutcome> => {
@@ -195,11 +209,9 @@ const test = async (input: ProxyServerInput, otherCountryCodes: string[]): Promi
          exchange: result.exchange,
       }
    } catch (error) {
-      const message = error instanceof IpInfoError ? error.message : 'could not reach the proxy'
-
       return {
          status: 'UNREACHABLE',
-         statusMessage: message,
+         statusMessage: reasonFor(error, input.protocol),
          exchange: (error instanceof IpInfoError && error.exchange) || NOT_RECORDED,
       }
    }
