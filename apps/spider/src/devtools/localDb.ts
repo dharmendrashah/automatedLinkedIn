@@ -66,14 +66,22 @@ export const loadLocalDbConfig = (repoRoot = join(process.cwd(), '../..')): Loca
    }
 }
 
-// Every saved proxy across every account, newest account first. Credentials stay sealed; only devtools/recordSession.ts
-// decrypts the one the developer picks.
-export const listSavedProxies = async (databaseUrl: string): Promise<SavedProxy[]> => {
+const withClient = async <T>(databaseUrl: string, run: (client: Client) => Promise<T>) => {
    const client = new Client({ connectionString: databaseUrl })
 
    await client.connect()
 
    try {
+      return await run(client)
+   } finally {
+      await client.end()
+   }
+}
+
+// Every saved proxy across every account, newest account first. Credentials stay sealed; only the devtools decrypt the
+// one the developer picks.
+export const listSavedProxies = (databaseUrl: string): Promise<SavedProxy[]> =>
+   withClient(databaseUrl, async client => {
       const result = await client.query<{
          id: string
          protocol: string
@@ -107,7 +115,41 @@ export const listSavedProxies = async (databaseUrl: string): Promise<SavedProxy[
             key_version: row.keyVersion,
          },
       }))
-   } finally {
-      await client.end()
-   }
+   })
+
+export type SavedAccount = {
+   id: string
+   email: string
+   status: string
+   secret: Sealed
 }
+
+// Every LinkedIn account, with its credentials still sealed: they are opened by the same code the worker uses.
+export const listSavedAccounts = (databaseUrl: string): Promise<SavedAccount[]> =>
+   withClient(databaseUrl, async client => {
+      const result = await client.query<{
+         id: string
+         email: string
+         status: string
+         secret: string
+         secretIv: string
+         secretTag: string
+         keyVersion: number
+      }>(
+         `select id, email, status, secret, "secretIv", "secretTag", "keyVersion"
+            from "LinkedInAccount"
+           order by email`
+      )
+
+      return result.rows.map(row => ({
+         id: row.id,
+         email: row.email,
+         status: row.status,
+         secret: {
+            ciphertext: row.secret,
+            iv: row.secretIv,
+            tag: row.secretTag,
+            key_version: row.keyVersion,
+         },
+      }))
+   })

@@ -26,6 +26,8 @@ export type CamoufoxOptions = {
    // `virtual` runs a real browser on an Xvfb display, which Camoufox advises over plain headless; `false` is a real
    // window, for the local devtools recorder only (apps/spider/src/devtools) — production never sets it.
    headless?: true | 'virtual' | false
+   // Limits the fingerprint to these systems. Only a run on a desktop passes it (see `newFingerprint`).
+   operatingSystems?: FingerprintOs[]
 }
 
 // What CamoufoxDriver passes to Camoufox(), shared with the local devtools recorder so both start the exact same
@@ -263,7 +265,9 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver, DetectionDriv
 
    private async launch(proxy: OpenOptions['proxy'], recorder: OpenOptions['recorder']) {
       try {
-         return await Camoufox(buildCamoufoxOptions(this.options.headless ?? true, proxy))
+         return await Camoufox(
+            buildCamoufoxOptions(this.options.headless ?? true, proxy, newFingerprint(this.options.operatingSystems))
+         )
       } catch (error) {
          recorder?.log(
             'engine',
