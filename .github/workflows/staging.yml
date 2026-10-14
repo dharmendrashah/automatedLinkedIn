@@ -20,7 +20,7 @@ name: Staging images
 # And these repository secrets:
 #   STAGING_CONFIG_ENV   full contents of deploy/overlays/staging/config.env
 #   STAGING_SECRETS_ENV  full contents of deploy/overlays/staging/secrets.env
-#   CLOUDFLARE_API_TOKEN Cloudflare token with Zone -> DNS -> Edit on elitale.com (keeps staging DNS current)
+#   CF_API_TOKEN         Cloudflare token with Zone -> DNS -> Edit on elitale.com (keeps staging DNS current)
 #
 # GCP authentication is keyless (Workload Identity Federation), so there is no
 # service account key to store or rotate. See deploy/README.md.
@@ -200,7 +200,7 @@ jobs:
       - name: Apply
         env:
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         run: |
           # GHCR packages are private, so the cluster needs pull credentials.
           # GHCR_PULL_TOKEN is a classic PAT with read:packages. GITHUB_TOKEN would

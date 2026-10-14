@@ -51,7 +51,7 @@ configMapGenerator:
       - update_dns.py=dns/update_dns.py
   - name: dns-config
     literals:
-      - CF_ZONE_ID=e03351a934383e813f5becffec34b440
+      - CF_ZONE_ID=b7c2c36fd58578c9dc212fc57d87b33b
       - RECORD_NAME=app.staging.elitale.com
   # Smart shutdown (see idle-shutdown/). Stays in dry-run until SMART_SHUTDOWN_MODE is changed to enforce.
   - name: idle-shutdown-script
@@ -60,7 +60,7 @@ configMapGenerator:
   - name: idle-shutdown-config
     literals:
       - SMART_SHUTDOWN_ENABLED=true
-      - SMART_SHUTDOWN_MODE=dry-run
+      - SMART_SHUTDOWN_MODE=enforce
       - IDLE_MINUTES=45
       - ACTIVITY_WINDOW_SECONDS=600
       - GCP_PROJECT=automate-linkedin-511215
