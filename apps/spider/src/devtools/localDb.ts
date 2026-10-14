@@ -48,8 +48,9 @@ export type LocalDbConfig = {
    encryptionKey: string
 }
 
-// repoRoot defaults to the usual apps/spider -> repo root relationship; a test can pass its own fixture folder.
-export const loadLocalDbConfig = (repoRoot = join(__dirname, '../../../..')): LocalDbConfig => {
+// repoRoot defaults to the package script's own working directory (apps/spider, set by the dev:record script) two
+// levels up; a test can pass its own fixture folder.
+export const loadLocalDbConfig = (repoRoot = join(process.cwd(), '../..')): LocalDbConfig => {
    const env = readBrainEnv(repoRoot)
    const databaseUrl = env.DATABASE_URL
 

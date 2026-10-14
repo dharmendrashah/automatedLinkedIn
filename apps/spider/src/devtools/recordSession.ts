@@ -1,4 +1,6 @@
-#!/usr/bin/env tsx
+// Run through `pnpm --filter @automatedLinkedIn/spider dev:record` (builds, then plain `node`): tsx's dynamic-import
+// loader mishandles Camoufox's optional `maxmind` dependency (its geoip lookup), turning `maxmind.Reader` into
+// undefined; plain Node resolves the same module correctly.
 import { Camoufox } from 'camoufox'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -12,7 +14,8 @@ import { type SavedProxy, listSavedProxies, loadLocalDbConfig } from './localDb'
 import { type DevStepEntry, attachPageRecorder } from './pageRecorder'
 import { renderSkeleton } from './skeleton'
 
-const OUTPUT_ROOT = join(__dirname, '../../.devtools-recordings')
+// Assumes the working directory is apps/spider, true for the documented `pnpm --filter ... dev:record` script.
+const OUTPUT_ROOT = join(process.cwd(), '.devtools-recordings')
 
 const rl = createInterface({
    input: process.stdin,
@@ -49,11 +52,16 @@ const pickProxy = async (proxies: SavedProxy[]): Promise<SavedProxy | undefined>
    return choice === 0 ? undefined : proxies[choice - 1]
 }
 
+// `rl.once('line', ...)` rather than `rl.question()`: a `question()` left pending (closing the browser window
+// instead of pressing Enter) would still be "active" on the interface, and a second question() afterwards (the name
+// prompt) would break.
 const waitForStop = (browser: { on: (event: 'disconnected', listener: () => void) => void }) =>
    new Promise<void>(resolve => {
-      browser.on('disconnected', resolve)
+      const finish = () => resolve()
+
+      browser.on('disconnected', finish)
       console.log('\nRecording. Press Enter here, or close the browser window, to stop and save.')
-      void rl.question('').then(() => resolve())
+      rl.once('line', finish)
    })
 
 const slugify = (name: string) =>

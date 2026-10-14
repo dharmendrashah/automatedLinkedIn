@@ -144,7 +144,7 @@ Open questions (must be empty before locking):
 
 ## Outcome
 
-Shipped as locked, no deviations from the approach.
+Shipped as locked, with one deviation found during the user's own manual run (see below).
 
 - `apps/spider/src/tasks/credentials.ts`: extracted `decryptSealed` (the AES-256-GCM decrypt, key-length and
   `key_version` checks), reused by both `openCredentials` (account bundle) and the new `openProxyCredentials`
@@ -162,9 +162,23 @@ Shipped as locked, no deviations from the approach.
   worker/api Docker images only install production dependencies).
 - `.gitignore`: `apps/spider/.devtools-recordings/`.
 
-Verified: `pnpm lint`, `ts:check`, `test:unit:run` (whole monorepo green, spider 436 tests including 25 new ones)
-and `build`, all from the repo root.
+**Deviation found in the user's first real run**: picking a real proxy crashed with `maxmind.Reader is not a
+constructor` right at the Camoufox launch step. Root cause: `tsx`'s dynamic-`import()` loader mishandles
+Camoufox's optional `maxmind` dependency (its geoip lookup) — `(await import('maxmind')).default.Reader` resolves
+to a function under plain Node but to `undefined` under `tsx` for this specific TypeScript-compiled, getter-based
+CJS export shape (confirmed by a side-by-side repro: identical `createRequire`-based resolution, only the loader
+differed). This affects any geoip-using Camoufox launch run through `tsx` (so `pnpm dev:worker` with a proxy
+locally has the same latent bug — noted in `MEMORY.md` as a gotcha, out of scope to fix here). Fixed for this tool
+by changing `dev:record` to `tsc -b && node dist/src/devtools/recordSession.js` (build once, run compiled with
+plain `node`, matching how `start`/`start:worker` already run). Also fixed two `__dirname`-relative path defaults
+(`localDb.ts`'s `repoRoot`, `recordSession.ts`'s `OUTPUT_ROOT`) that assumed the source layout depth and broke
+once running from `dist/`; both now derive from `process.cwd()` (the package directory `dev:record` runs in),
+and hardened the stop-recording wait to use `rl.once('line', ...)` instead of a second `rl.question()` (closing
+the browser window before pressing Enter left the first question pending and broke the later "name" prompt).
 
-Not verified: an actual manual run of `pnpm --filter @automatedLinkedIn/spider dev:record` against the local
-stack with a real saved proxy (needs the user's own local Postgres and a saved proxy to pick).
+Verified: `pnpm lint`, `ts:check`, `test:unit:run` (whole monorepo green, spider 436 tests including 25 new ones)
+and `build`, all from the repo root; a full manual run against the user's real local Postgres and a real saved
+proxy (`fabianpacheco@onet.pl`), confirming the browser launched through the proxy, recording stopped on Enter,
+and `steps.json`/`skeleton.md` were written correctly (proxy metadata without credentials, no crash).
+
 
