@@ -14,13 +14,15 @@ Cloudflare zone and the new API token, after elitale.com moved to another Cloudf
 - Nameservers for elitale.com: `hope.ns.cloudflare.com`, `leland.ns.cloudflare.com`.
 - Cluster: the DNS CronJob still uses the old zone ID `e03351a934383e813f5becffec34b440`, and the token from 2026-10-11.
 - Repo (this branch): new zone ID `b7c2c36fd58578c9dc212fc57d87b33b`.
-- GitHub secret `CLOUDFLARE_API_TOKEN`: last updated 2026-10-11 08:00 UTC. This needs to be confirmed as the new token.
+- The new token is stored as the GitHub secret `CF_API_TOKEN` (updated 2026-10-14 16:17 UTC). The workflow read the old
+  `CLOUDFLARE_API_TOKEN` (2026-10-11), so the deploy saw an empty token and the cluster kept the old one: Cloudflare returned 403 for the new zone.
+  The workflow now reads `CF_API_TOKEN`.
 - Node external IP 34.180.56.254 and the record match.
 
 ## Steps
 
 1. Commit the new zone ID (this branch). Run the staging deploy from this branch.
-2. The deploy job writes `cloudflare-dns` from `CLOUDFLARE_API_TOKEN`. The CronJob picks up the new zone ID.
+2. The deploy job writes `cloudflare-dns` from `CF_API_TOKEN`. The CronJob picks up the new zone ID.
 3. Run the DNS job by hand. Expected: `unchanged: A app.staging.elitale.com already points at 34.180.56.254`, with no 403 or 404.
 4. Self-heal test in the new zone: point the record at a documentation address (203.0.113.10) through the new zone, run the job,
    and confirm it corrects the record to the node IP. The record change is made with the token from the cluster secret, and the
