@@ -1,6 +1,6 @@
 # Staging DNS after moving elitale.com to a new Cloudflare account
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: done <!-- draft | locked | in progress | done -->
 - Created: 2026-10-14
 - Locked by user: yes (the user asked to test and plan the change, 2026-10-14)
 
@@ -50,4 +50,19 @@ account still serves the zone.
 
 ## Outcome
 
-Filled in when done.
+Done on 2026-10-14 (branch `fix/cloudflare-new-zone`).
+
+- The new zone ID `b7c2c36fd58578c9dc212fc57d87b33b` is in the overlay, and the token is read from the GitHub secret `CF_API_TOKEN`.
+- Deploy run 38601865497 succeeded. The cluster secret `cloudflare-dns` was refreshed at 16:56 UTC.
+- DNS job against the new zone: `unchanged: A app.staging.elitale.com already points at 34.180.56.254`, with no HTTP error.
+- Self-heal in the new zone: the record was moved to 203.0.113.10 at 17:09:12 UTC. The job corrected it at 17:09:20 UTC.
+- Public resolvers 1.1.1.1 and 8.8.8.8 return 34.180.56.254. `app` returns 200. `api/health` returns ok.
+
+Found and fixed during the test:
+
+- The deploy read `CLOUDFLARE_API_TOKEN` (old, 2026-10-11) instead of the new `CF_API_TOKEN`. The deploy saw an empty token,
+  kept the old one, and Cloudflare returned 403 for the new zone. The workflow now reads `CF_API_TOKEN`.
+
+Follow-up:
+
+- The repository secret `CLOUDFLARE_API_TOKEN` is no longer used. It can be deleted.
