@@ -2,12 +2,12 @@ import { AccountsTable } from '@/components/accounts/accounts-table'
 import { AddAccountDialog } from '@/components/accounts/add-account-dialog'
 import { DeleteAccountDialog } from '@/components/accounts/delete-account-dialog'
 import { EditAccountDialog } from '@/components/accounts/edit-account-dialog'
+import { LOGIN_TASK } from '@/components/accounts/login-test'
 import { NeedsProxyNotice } from '@/components/accounts/needs-proxy-notice'
 import { RevealDialog } from '@/components/accounts/reveal-dialog'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 
-import { LOGIN_TASK } from '@/components/accounts/login-test'
 import { type Account } from '@/components/accounts/types'
 
 import { trpc } from '../trpc'
@@ -18,6 +18,8 @@ export const Accounts = () => {
    const proxies = trpc.proxyServer.list.useQuery(undefined, { retry: false })
    const [toDelete, setToDelete] = useState<Account | null>(null)
    const [toEdit, setToEdit] = useState<Account | null>(null)
+   // The owner's own two-step keys, revealed one account at a time, kept only in this page's memory.
+   const [totpCodes, setTotpCodes] = useState<Record<string, string>>({})
 
    const accountsWithProxy = useMemo(
       () =>
@@ -34,6 +36,13 @@ export const Accounts = () => {
    const refresh = () => void utils.linkedInAccount.list.invalidate()
 
    const reveal = trpc.linkedInAccount.reveal.useMutation()
+   const revealTotp = trpc.linkedInAccount.reveal.useMutation({
+      onSuccess: (data, variables) => {
+         if (data.secrets.totpSecret) {
+            setTotpCodes(current => ({ ...current, [variables.id]: data.secrets.totpSecret as string }))
+         }
+      },
+   })
    const setPaused = trpc.linkedInAccount.setPaused.useMutation({ onSuccess: refresh })
    // The worker signs in through the account's most reliable proxy; the server picks it and says why when it cannot.
    const testLogin = trpc.task.run.useMutation({
@@ -84,9 +93,21 @@ export const Accounts = () => {
             busyId={busyId}
             testingId={testingId}
             accountsWithProxy={accountsWithProxy}
+            totpCodes={totpCodes}
+            revealingTotpId={revealTotp.isPending ? revealTotp.variables?.id : undefined}
             onEdit={setToEdit}
             onTestLogin={account => testLogin.mutate({ task: LOGIN_TASK, accountId: account.id })}
             onReveal={account => reveal.mutate({ id: account.id })}
+            onShowTotpCode={account => revealTotp.mutate({ id: account.id })}
+            onHideTotpCode={account =>
+               setTotpCodes(current => {
+                  const next = { ...current }
+
+                  delete next[account.id]
+
+                  return next
+               })
+            }
             onTogglePause={account => setPaused.mutate({ id: account.id, paused: account.status !== 'DISABLED' })}
             onDelete={setToDelete}
          />
