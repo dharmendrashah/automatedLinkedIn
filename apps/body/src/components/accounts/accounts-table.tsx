@@ -16,6 +16,7 @@ import { type Account } from './types'
 import { TestButton } from '../test-button'
 import { loginTestBlocker } from './login-test'
 import { StatusBadge } from './status-badge'
+import { TotpCode } from './totp-cell'
 
 const formatDate = (value: string | Date | null) => (value ? new Date(value).toLocaleDateString() : '—')
 
@@ -28,9 +29,14 @@ type Props = {
    testingId: string | undefined
    // The accounts that have a proxy that works; undefined while the proxies are loading.
    accountsWithProxy: Set<string> | undefined
+   // The totp secret of each account whose code is currently shown; absent until the owner asks to see it.
+   totpCodes: Record<string, string>
+   revealingTotpId: string | undefined
    onEdit: (account: Account) => void
    onTestLogin: (account: Account) => void
    onReveal: (account: Account) => void
+   onShowTotpCode: (account: Account) => void
+   onHideTotpCode: (account: Account) => void
    onTogglePause: (account: Account) => void
    onDelete: (account: Account) => void
 }
@@ -42,9 +48,13 @@ export const AccountsTable = ({
    busyId,
    testingId,
    accountsWithProxy,
+   totpCodes,
+   revealingTotpId,
    onEdit,
    onTestLogin,
    onReveal,
+   onShowTotpCode,
+   onHideTotpCode,
    onTogglePause,
    onDelete,
 }: Props) => (
@@ -55,6 +65,7 @@ export const AccountsTable = ({
                <TableHead>Account</TableHead>
                <TableHead>Status</TableHead>
                <TableHead>Credentials</TableHead>
+               <TableHead>Two-step code</TableHead>
                <TableHead>Last verified</TableHead>
                <TableHead>Added</TableHead>
                <TableHead className="w-44" />
@@ -63,21 +74,21 @@ export const AccountsTable = ({
          <TableBody>
             {loading ? (
                <TableRow>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={7}>
                      <Skeleton className="h-8 w-full" />
                   </TableCell>
                </TableRow>
             ) : null}
             {error ? (
                <TableRow>
-                  <TableCell colSpan={6} className="text-destructive h-24 text-center text-sm">
+                  <TableCell colSpan={7} className="text-destructive h-24 text-center text-sm">
                      {error}
                   </TableCell>
                </TableRow>
             ) : null}
             {accounts?.length === 0 ? (
                <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground h-24 text-center text-sm">
+                  <TableCell colSpan={7} className="text-muted-foreground h-24 text-center text-sm">
                      <KeyRound className="mx-auto mb-2 size-5" />
                      No LinkedIn accounts yet. Use Add account to store one.
                   </TableCell>
@@ -95,6 +106,18 @@ export const AccountsTable = ({
                         {account.hasTotp ? <Badge variant="secondary">Two-step key</Badge> : null}
                         {account.hasSession ? <Badge variant="secondary">Browser token</Badge> : null}
                      </span>
+                  </TableCell>
+                  <TableCell>
+                     {account.hasTotp ? (
+                        <TotpCode
+                           secret={totpCodes[account.id]}
+                           revealing={revealingTotpId === account.id}
+                           onShow={() => onShowTotpCode(account)}
+                           onHide={() => onHideTotpCode(account)}
+                        />
+                     ) : (
+                        <span className="text-muted-foreground">—</span>
+                     )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(account.lastVerifiedAt)}</TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(account.createdAt)}</TableCell>
