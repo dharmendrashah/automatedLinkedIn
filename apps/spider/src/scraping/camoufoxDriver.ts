@@ -23,9 +23,28 @@ export type CamoufoxOptions = {
    actionTimeoutMs: number
    // Page loads to anything else are blocked in the browser, not only checked afterwards.
    isAllowedNavigation: (url: string) => boolean
-   // `virtual` runs a real browser on an Xvfb display, which Camoufox advises over plain headless. Linux with Xvfb only.
-   headless?: true | 'virtual'
+   // `virtual` runs a real browser on an Xvfb display, which Camoufox advises over plain headless; `false` is a real
+   // window, for the local devtools recorder only (apps/spider/src/devtools) — production never sets it.
+   headless?: true | 'virtual' | false
+   // Limits the fingerprint to these systems. Only a run on a desktop passes it (see `newFingerprint`).
+   operatingSystems?: FingerprintOs[]
 }
+
+// What CamoufoxDriver passes to Camoufox(), shared with the local devtools recorder so both start the exact same
+// browser identity instead of keeping two copies of these options.
+export const buildCamoufoxOptions = (
+   headless: Exclude<CamoufoxOptions['headless'], undefined>,
+   proxy: OpenOptions['proxy'],
+   fingerprint = newFingerprint()
+) => ({
+   headless,
+   humanize: true,
+   fingerprint,
+   ...(proxy && {
+      proxy,
+      geoip: true,
+   }),
+})
 
 // A page that is stuck should not hold up the screenshot of the step that failed.
 const SNAPSHOT_TIMEOUT_MS = 5000
@@ -34,10 +53,15 @@ const SNAPSHOT_TIMEOUT_MS = 5000
 // of at most 1920 by 1080. Camoufox sets the version of its own build in it, so the user agent matches the browser.
 const fingerprints = new FingerprintGenerator()
 
-const newFingerprint = () =>
+export type FingerprintOs = 'windows' | 'macos' | 'linux'
+
+// On a macOS or Windows machine Camoufox draws on the real system fonts, so a fingerprint for another OS lists fonts
+// the machine lacks and text renders as broken glyphs. A desktop run passes its own OS here; the Linux worker image
+// bundles the fonts of every OS and keeps the default.
+export const newFingerprint = (operatingSystems: FingerprintOs[] = ['windows', 'macos', 'linux']) =>
    fingerprints.getFingerprint({
       browsers: [{ name: 'firefox' }],
-      operatingSystems: ['windows', 'macos', 'linux'],
+      operatingSystems,
       devices: ['desktop'],
       screen: {
          maxWidth: 1920,
@@ -241,15 +265,9 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver, DetectionDriv
 
    private async launch(proxy: OpenOptions['proxy'], recorder: OpenOptions['recorder']) {
       try {
-         return await Camoufox({
-            headless: this.options.headless ?? true,
-            humanize: true,
-            fingerprint: newFingerprint(),
-            ...(proxy && {
-               proxy,
-               geoip: true,
-            }),
-         })
+         return await Camoufox(
+            buildCamoufoxOptions(this.options.headless ?? true, proxy, newFingerprint(this.options.operatingSystems))
+         )
       } catch (error) {
          recorder?.log(
             'engine',

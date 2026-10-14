@@ -5,6 +5,7 @@
    "scripts": {
       "dev": "tsx watch src/server.ts",
       "dev:worker": "tsx watch src/worker.ts",
+      "dev:record": "tsc -b && node dist/src/devtools/index.js",
       "build": "tsc -b",
       "start": "node dist/src/server.js",
       "start:worker": "node dist/src/worker.js",
@@ -23,6 +24,8 @@
       "@automatedLinkedIn/eslint-config": "workspace:*",
       "@automatedLinkedIn/tsconfig": "workspace:*",
       "@types/node": "^26.6.4",
+      "@types/pg": "^8.11.10",
+      "pg": "^8.23.1",
       "tsx": "^4.23.15",
       "typescript": "^7.0.2"
    },

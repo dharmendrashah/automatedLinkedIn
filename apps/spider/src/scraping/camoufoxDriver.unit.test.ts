@@ -113,6 +113,18 @@ describe('CamoufoxDriver', () => {
       expect(options.screen).toBeUndefined()
    })
 
+   it('should only claim the operating systems it is limited to', async () => {
+      await new CamoufoxDriver({
+         actionTimeoutMs: 1000,
+         isAllowedNavigation: () => true,
+         operatingSystems: ['macos'],
+      }).open()
+
+      const options = mocks.camoufox.mock.calls[0]?.[0] as { fingerprint: { navigator: { userAgent: string } } }
+
+      expect(options.fingerprint.navigator.userAgent).toMatch(/Macintosh/)
+   })
+
    it('should start the browser through the proxy and never fall back to a direct connection', async () => {
       mocks.camoufox.mockRejectedValueOnce(new Error('boom'))
 
