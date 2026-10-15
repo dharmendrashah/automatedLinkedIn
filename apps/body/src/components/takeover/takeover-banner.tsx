@@ -6,35 +6,19 @@ import { useState } from 'react'
 
 import { trpc } from '../../trpc'
 import { TakeoverPanel } from './takeover-panel'
-import { useTakeoverAlert } from './use-takeover-alert'
 
 const CHECK_MS = 3000
 
 // Shown on every page while a worker is holding a run for its owner: a sign-in that LinkedIn stopped at a security check
-// waits for up to ten minutes for the owner to finish it. Asking costs brain nothing while nothing is held. A run the owner
-// has not opened yet also sets off the alert (icon, title, sound, notification), even with the tab in the background.
+// waits for up to ten minutes for the owner to finish it. Asking costs brain nothing while nothing is held.
 export const TakeoverBanner = () => {
    const waiting = trpc.takeover.list.useQuery(undefined, {
       retry: false,
       refetchInterval: CHECK_MS,
-      refetchIntervalInBackground: true,
    })
    const [openId, setOpenId] = useState<string>()
-   const [seen, setSeen] = useState<string[]>([])
    const first = waiting.data?.[0]
    const open = waiting.data?.find(item => item.id === openId)
-   const unseen = (waiting.data ?? []).map(({ id }) => id).filter(id => !seen.includes(id))
-
-   const show = (id: string) => {
-      setOpenId(id)
-      setSeen(ids => (ids.includes(id) ? ids : [...ids, id]))
-   }
-
-   useTakeoverAlert(unseen, () => {
-      if (unseen[0]) {
-         show(unseen[0])
-      }
-   })
 
    if (!first) {
       return null
@@ -50,7 +34,7 @@ export const TakeoverBanner = () => {
                   The sign-in for {first.accountEmail} stopped at a security check. The browser is waiting for you to
                   complete it.
                </p>
-               <Button size="sm" onClick={() => show(first.id)}>
+               <Button size="sm" onClick={() => setOpenId(first.id)}>
                   Take over
                </Button>
             </AlertDescription>

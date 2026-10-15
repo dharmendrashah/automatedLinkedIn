@@ -44,7 +44,6 @@ const frame = {
 describe('TakeoverService', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      TakeoverService.resetCache()
    })
 
    describe('listForUser', () => {
@@ -115,42 +114,6 @@ describe('TakeoverService', () => {
          mocks.latest.mockReturnValue(undefined)
 
          await expect(TakeoverService.frameForUser('user-1', ID)).rejects.toBeInstanceOf(TakeoverNotFoundError)
-      })
-
-      it('should ask the database once for a run the user owns, then remember it for a few seconds', async () => {
-         mocks.findFirst.mockResolvedValue({ id: ID })
-         mocks.latest.mockReturnValue(frame)
-
-         await TakeoverService.frameForUser('user-1', ID)
-         await TakeoverService.frameForUser('user-1', ID)
-
-         expect(mocks.findFirst).toHaveBeenCalledTimes(1)
-      })
-
-      it('should stop offering a run the moment the worker lets go of it, even while the owner is remembered', async () => {
-         mocks.findFirst.mockResolvedValue({ id: ID })
-         mocks.latest.mockReturnValueOnce(frame).mockReturnValueOnce(undefined)
-
-         await TakeoverService.frameForUser('user-1', ID)
-
-         await expect(TakeoverService.frameForUser('user-1', ID)).rejects.toBeInstanceOf(TakeoverNotFoundError)
-      })
-
-      it('should never remember a no, so a run that starts later is found', async () => {
-         mocks.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: ID })
-         mocks.latest.mockReturnValue(frame)
-
-         await expect(TakeoverService.frameForUser('user-1', ID)).rejects.toBeInstanceOf(TakeoverNotFoundError)
-         await expect(TakeoverService.frameForUser('user-1', ID)).resolves.toEqual(frame)
-      })
-
-      it('should not let one user ride on the memory of another', async () => {
-         mocks.findFirst.mockResolvedValueOnce({ id: ID }).mockResolvedValueOnce(null)
-         mocks.latest.mockReturnValue(frame)
-
-         await TakeoverService.frameForUser('user-1', ID)
-
-         await expect(TakeoverService.frameForUser('user-2', ID)).rejects.toBeInstanceOf(TakeoverNotFoundError)
       })
    })
 

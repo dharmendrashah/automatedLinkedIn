@@ -37,8 +37,6 @@ export const takeoverFrameSchema = z.strictObject({
    width: z.number().int().min(1).max(4000),
    height: z.number().int().min(1).max(4000),
    jpeg: z.string().max(600_000).regex(BASE64_PATTERN),
-   // When the picture was taken, so the owner's dialog can show how old it is. Older workers leave it out.
-   taken_at: z.iso.datetime().optional(),
    // When the worker stops waiting for the owner.
    expires_at: z.iso.datetime(),
 })

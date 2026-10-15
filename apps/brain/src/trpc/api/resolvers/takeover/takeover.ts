@@ -11,11 +11,6 @@ import { ownerProcedure, router } from 'trpc'
 
 const byId = z.object({ id: z.uuid() })
 
-const frameInput = byId.extend({
-   // The picture the owner already has: when it is still the newest, the answer leaves the picture out.
-   since: z.number().int().min(0).optional(),
-})
-
 const sendInput = byId.extend({ input: takeoverInputSchema })
 
 // What is safe to say to the browser. Anything unexpected is logged without what was typed, and reported without details.
@@ -54,18 +49,10 @@ export const takeover = router({
       }
    }),
 
-   // The newest picture of the page, as base64, or only its number when the owner already has it. The dialog asks several
-   // times a second, and a picture is hundreds of KB.
-   frame: ownerProcedure.input(frameInput).query(async ({ ctx, input }) => {
+   // The newest picture of the page, as base64. The page asks about once a second.
+   frame: ownerProcedure.input(byId).query(async ({ ctx, input }) => {
       try {
-         const found = await TakeoverService.frameForUser(ctx.user.id, input.id)
-
-         return {
-            seq: found.seq,
-            expires_at: found.expires_at,
-            ...(found.taken_at && { age_ms: Math.max(0, Date.now() - Date.parse(found.taken_at)) }),
-            ...(input.since !== found.seq && { jpeg: found.jpeg }),
-         }
+         return await TakeoverService.frameForUser(ctx.user.id, input.id)
       } catch (error) {
          throw asTrpcError(error)
       }

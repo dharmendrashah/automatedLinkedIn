@@ -2,8 +2,6 @@ import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { useLocation } from 'react-router'
 
-import { TakeoverBell } from './takeover/takeover-bell'
-
 const titles: Record<string, string> = {
    '/dashboard': 'Dashboard',
    '/accounts': 'LinkedIn accounts',
@@ -21,7 +19,6 @@ export const SiteHeader = () => {
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
             <h1 className="text-base font-medium">{titles[pathname] ?? ''}</h1>
-            <TakeoverBell />
          </div>
       </header>
    )
