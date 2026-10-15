@@ -260,6 +260,19 @@ describe('AccountValidator', () => {
          expect(session.addCookies.mock.invocationCallOrder[0]).toBeLessThan(session.goto.mock.invocationCallOrder[0])
       })
 
+      it('should send nothing, and say so, when the form does not keep what was typed', async () => {
+         const { session } = fakeSession(withButton)
+
+         session.fill.mockRejectedValueOnce(new Error('The field did not keep what was typed'))
+
+         await expect(validator.validate(session, input({ password: 'hunter2' }))).resolves.toMatchObject({
+            outcome: 'ERROR',
+            message: expect.stringMatching(/did not keep what was typed/i),
+         })
+         expect(session.click).not.toHaveBeenCalled()
+         expect(session.press).not.toHaveBeenCalled()
+      })
+
       it('should send no language cookie when the account has none', async () => {
          const { session } = fakeSession(withButton)
 

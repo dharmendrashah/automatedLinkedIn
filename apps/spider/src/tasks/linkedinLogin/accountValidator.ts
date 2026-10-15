@@ -30,6 +30,7 @@ const MESSAGES = {
    passwordOff: 'Password sign-in is switched off on this worker, and no browser token is stored.',
    nothingStored: 'No password or browser token is stored.',
    unexpected: 'LinkedIn showed a page the check does not understand.',
+   typing: 'The sign-in form did not keep what was typed, so nothing was sent. Try again.',
    blocked: 'LinkedIn did not let the check load a page.',
 } as const
 
@@ -255,8 +256,14 @@ export class AccountValidator {
          return this.valid(session)
       }
 
-      await session.fill(SELECTORS.username, email)
-      await session.fill(SELECTORS.password, password ?? '')
+      try {
+         await session.fill(SELECTORS.username, email)
+         await session.fill(SELECTORS.password, password ?? '')
+      } catch {
+         // The form did not keep what was typed; nothing was sent, which a wrong password or e-mail would count against the account.
+         return this.fail('ERROR', MESSAGES.typing)
+      }
+
       await this.options.pause(this.host)
 
       landed = await this.afterSubmit(session, await this.submit(session))

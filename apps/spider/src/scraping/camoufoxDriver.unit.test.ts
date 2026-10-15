@@ -7,12 +7,19 @@ import { CamoufoxDriver, allowedRoute } from './camoufoxDriver'
 
 const mocks = vi.hoisted(() => {
    const events: string[] = []
+   // What the field holds, as a page would keep it.
+   const typed = { value: '' }
    const field = {
       click: vi.fn(async () => {
          events.push('field clicked')
       }),
-      pressSequentially: vi.fn(async (_text: string, _options?: unknown) => {
+      pressSequentially: vi.fn(async (text: string, _options?: unknown) => {
+         typed.value += text
          events.push('field typed')
+      }),
+      inputValue: vi.fn(async () => typed.value),
+      fill: vi.fn(async (text: string) => {
+         typed.value = text
       }),
    }
    const page = {
@@ -55,6 +62,7 @@ const mocks = vi.hoisted(() => {
 
    return {
       events,
+      typed,
       field,
       page,
       browser,
@@ -87,6 +95,9 @@ describe('CamoufoxDriver', () => {
       mocks.camoufox.mockClear()
       mocks.page.on.mockClear()
       mocks.events.length = 0
+      mocks.typed.value = ''
+      mocks.field.pressSequentially.mockClear()
+      mocks.field.fill.mockClear()
    })
 
    it('should accept the certificate of a proxy that re-signs secure websites, as the owner decided', async () => {
@@ -291,6 +302,41 @@ describe('CamoufoxDriver', () => {
       expect(mocks.page.locator).toHaveBeenCalledWith('#password')
       expect(mocks.field.pressSequentially).toHaveBeenCalledWith('hunter2', expect.anything())
       expect(mocks.events).toEqual(['field clicked', 'field typed'])
+   })
+
+   it('should type again when the page kept only the start of what was typed, and send nothing cut', async () => {
+      const session = await driver.open()
+
+      mocks.field.pressSequentially.mockImplementationOnce(async text => {
+         mocks.typed.value = text.slice(0, 9)
+      })
+
+      await session.fill('#username', 'amani_farley@onet.pl')
+
+      expect(mocks.field.pressSequentially).toHaveBeenCalledTimes(2)
+      expect(mocks.field.fill).toHaveBeenCalledWith('')
+      expect(mocks.typed.value).toBe('amani_farley@onet.pl')
+   })
+
+   it('should give up, without quoting the text, when the field never keeps it', async () => {
+      const session = await driver.open()
+
+      mocks.field.pressSequentially.mockImplementation(async text => {
+         mocks.typed.value = text.slice(0, 3)
+      })
+
+      try {
+         const failure = await session.fill('#password', 'hunter2-secret').catch((error: Error) => error)
+
+         expect(failure).toBeInstanceOf(Error)
+         expect((failure as Error).message).not.toContain('hunter2')
+         expect(mocks.field.pressSequentially).toHaveBeenCalledTimes(3)
+      } finally {
+         mocks.field.pressSequentially.mockImplementation(async (text: string) => {
+            mocks.typed.value += text
+            mocks.events.push('field typed')
+         })
+      }
    })
 
    it('should press a key as a person would and say where the browser is afterwards', async () => {

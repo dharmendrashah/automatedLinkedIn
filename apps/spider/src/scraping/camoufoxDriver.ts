@@ -75,6 +75,9 @@ export const allowedRoute = (isAllowed: (url: string) => boolean) => (route: Rou
 // How long to wait for the redirects after a submit.
 const SETTLE_TIMEOUT_MS = 4000
 
+// How many times a field is typed into before the run gives up on it.
+const FILL_ATTEMPTS = 3
+
 // The fingerprint comes from Apify's fingerprint-generator: a Firefox desktop on Windows, macOS or Linux, on a screen
 // of at most 1920 by 1080. Camoufox sets the version of its own build in it, so the user agent matches the browser.
 const fingerprints = new FingerprintGenerator()
@@ -315,11 +318,23 @@ class CamoufoxSession implements DetectionSession {
 
    // Clicked first and then typed key by key, as a person would: the click puts the focus in the field even where the
    // page ignores a script's focus (the typing then went to the field before it), and the page sees the usual key events.
+   // What the field holds is read back: a page still loading can rebuild the field while it is typed into and keep only the
+   // start (an e-mail cut after 9 letters was sent on staging). Then it is emptied and typed again, and never sent as it is.
    public async fill(selector: string, value: string) {
       const field = this.page.locator(selector)
 
-      await field.click()
-      await field.pressSequentially(value, { delay: 50 })
+      for (let attempt = 1; attempt <= FILL_ATTEMPTS; attempt += 1) {
+         await field.click()
+         await field.pressSequentially(value, { delay: 50 })
+
+         if ((await field.inputValue()) === value) {
+            return
+         }
+
+         await field.fill('')
+      }
+
+      throw new Error('The field did not keep what was typed')
    }
 
    // The key goes to whatever has the focus, as when a person presses Enter after typing a password.
