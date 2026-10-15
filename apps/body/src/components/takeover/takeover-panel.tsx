@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { keepPreviousData } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 
 import { trpc } from '../../trpc'
@@ -21,12 +22,34 @@ const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds
 // The page a worker holds for the owner's run, shown as pictures that refresh while the dialog is open. Clicks, typing and the
 // wheel go straight to that page; nothing typed is kept here. "I'm done" tells the run to look again whether the check passed.
 export const TakeoverPanel = ({ id, accountEmail, onClose }: Props) => {
-   const frame = trpc.takeover.frame.useQuery({ id }, { retry: false, refetchInterval: FRAME_MS })
+   // The picture on screen. Brain is asked for a newer one than this, and answers with a few bytes while there is none.
+   const [picture, setPicture] = useState<{ seq: number; jpeg: string }>()
+   const frame = trpc.takeover.frame.useQuery(
+      {
+         id,
+         since: picture?.seq,
+      },
+      {
+         retry: false,
+         refetchInterval: FRAME_MS,
+         gcTime: 0,
+         placeholderData: keepPreviousData,
+      }
+   )
    const send = trpc.takeover.send.useMutation()
    const typing = useRef(new TypingBuffer())
    const [now, setNow] = useState(() => Date.now())
 
    const { mutate } = send
+   const { data } = frame
+
+   // A newer picture replaces the one on screen; set while rendering, since it only follows what the query just returned.
+   if (data?.jpeg && data.seq !== picture?.seq) {
+      setPicture({
+         seq: data.seq,
+         jpeg: data.jpeg,
+      })
+   }
 
    useEffect(() => {
       const timer = setInterval(() => {
@@ -65,8 +88,6 @@ export const TakeoverPanel = ({ id, accountEmail, onClose }: Props) => {
          </div>
       )
    }
-
-   const picture = frame.data
 
    return (
       <div className="grid gap-3">
@@ -145,7 +166,8 @@ export const TakeoverPanel = ({ id, accountEmail, onClose }: Props) => {
 
          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-muted-foreground text-sm">
-               {picture ? `The run waits ${clock(secondsLeft(picture.expires_at, now))} more.` : ''}
+               {data ? `The run waits ${clock(secondsLeft(data.expires_at, now))} more.` : ''}
+               {data?.age_ms === undefined ? '' : ` Page updated ${(data.age_ms / 1000).toFixed(1)} s ago.`}
                {send.error ? ` ${send.error.message}` : ''}
             </span>
             <div className="flex gap-2">

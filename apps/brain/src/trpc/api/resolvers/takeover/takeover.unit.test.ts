@@ -84,11 +84,54 @@ describe('takeover router', () => {
       expect(mocks.listForUser).toHaveBeenCalledWith('user-1')
    })
 
-   it('should give the newest picture of a run', async () => {
-      mocks.frameForUser.mockResolvedValue({ seq: 4 })
+   it('should give the newest picture of a run, and how old it is', async () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2026-10-15T10:00:01.500Z'))
 
-      await expect(caller().frame({ id: ID })).resolves.toEqual({ seq: 4 })
-      expect(mocks.frameForUser).toHaveBeenCalledWith('user-1', ID)
+      try {
+         mocks.frameForUser.mockResolvedValue({
+            seq: 4,
+            jpeg: '/9j/4AAQ',
+            width: 1280,
+            height: 720,
+            taken_at: '2026-10-15T10:00:01.000Z',
+            expires_at: '2026-10-15T10:10:00.000Z',
+         })
+
+         await expect(caller().frame({ id: ID })).resolves.toEqual({
+            seq: 4,
+            jpeg: '/9j/4AAQ',
+            age_ms: 500,
+            expires_at: '2026-10-15T10:10:00.000Z',
+         })
+         expect(mocks.frameForUser).toHaveBeenCalledWith('user-1', ID)
+      } finally {
+         vi.useRealTimers()
+      }
+   })
+
+   it('should leave the picture out when the owner already has the newest one', async () => {
+      mocks.frameForUser.mockResolvedValue({
+         seq: 4,
+         jpeg: '/9j/4AAQ',
+         expires_at: '2026-10-15T10:10:00.000Z',
+      })
+
+      const answer = await caller().frame({
+         id: ID,
+         since: 4,
+      })
+
+      expect(answer).toEqual({
+         seq: 4,
+         expires_at: '2026-10-15T10:10:00.000Z',
+      })
+      await expect(
+         caller().frame({
+            id: ID,
+            since: 3,
+         })
+      ).resolves.toMatchObject({ jpeg: '/9j/4AAQ' })
    })
 
    it('should answer NOT_FOUND for a run that is not waiting for the user', async () => {
