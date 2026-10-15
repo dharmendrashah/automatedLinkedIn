@@ -8,15 +8,22 @@ import {
    taskResultSchema,
 } from '@automatedLinkedIn/contracts'
 
+import { type ProxyConfig } from '../types'
+
+import { type DeviceIdentity } from '../identity/deviceIdentity'
+import { type IdentityStore } from '../identity/identityStore'
+import { type ExitRegion, regionToKeep } from '../identity/region'
 import { RecordedDetectionSession } from '../recording/recordedDetectionSession'
 import { type Recorder } from '../recording/recorder'
 import { type AccountLock } from '../scraping/accountLock'
-import { type DetectionDriver, type DetectionSession, type StorageState } from '../scraping/driver'
+import { type DetectionDriver, type DetectionSession, type SessionControl, type StorageState } from '../scraping/driver'
 import { AccountBusyError, TaskError } from '../scraping/errors'
 import { type HostPolicy } from '../scraping/policy'
 import { type HostRateLimiter } from '../scraping/rateLimiter'
 import { type RobotsGuard } from '../scraping/robots'
-import { type ObjectStore, sessionKey } from '../storage/store'
+import { type SessionVault } from '../sessions/sessionVault'
+import { type ObjectStore } from '../storage/store'
+import { type Handover } from '../takeover/waitForOwner'
 import { type Credentials } from './credentials'
 import { type TaskContext, type TaskDefinition, type TaskOutcome, VisitError } from './defineTask'
 
@@ -41,6 +48,14 @@ export type RunnerDeps = {
    // Only needed by tasks that need an account.
    accountLock?: Pick<AccountLock, 'acquire'>
    openCredentials?: (sealed: NonNullable<TaskCommand['credentials']>) => Credentials
+   // The device an account signs in from. Without it every run is a new device (the local devtools).
+   identities?: Pick<IdentityStore, 'forAccount' | 'pin'>
+   // Where a proxy's traffic leaves. With `identities` it keeps the account's timezone and language true to the proxy.
+   exitGeo?: (proxy: ProxyConfig) => Promise<ExitRegion>
+   // The cookies an account keeps between runs. Without it nothing is restored or kept (the local devtools).
+   sessions?: Pick<SessionVault, 'load' | 'save'>
+   // Keeps the run's browser for its owner while they finish a check; resolves when they are done, leave, or time is up.
+   handover?: (taskId: string, control: SessionControl) => Promise<Handover>
    // Resolves to nothing when the run is not to be kept; the task still runs.
    startRecording: (request: RecordingRequest) => Promise<Recorder | undefined>
    publishResult: (result: TaskResult) => Promise<void>
@@ -51,6 +66,12 @@ export type RunnerDeps = {
 }
 
 class TimedOut extends Error {}
+
+const HANDOVER_LOG: Record<Handover, string> = {
+   done: 'The owner says the check is done; looking again',
+   gave_up: 'The owner left it',
+   timed_out: 'The owner did not come in time',
+}
 
 // The answer for a command the broker delivered for the last time without the task ever finishing.
 export const exhaustedResult = (command: TaskCommand, workerBuild: string, now = Date.now): TaskResult => {
@@ -202,7 +223,11 @@ type Shared = {
    pause: (ms: number) => Promise<void>
 }
 
-const allowedState = (state: StorageState, policy: RunnerDeps['policy']): StorageState => ({
+const allowedState = <T extends Pick<StorageState, 'origins'> & { cookies: Array<{ domain: string }> }>(
+   state: T,
+   policy: RunnerDeps['policy']
+): T => ({
+   ...state,
    cookies: state.cookies.filter(({ domain }) => policy.allowsCookieDomain(domain)),
    origins: state.origins.filter(({ origin }) => policy.allowsUrl(origin)),
 })
@@ -289,18 +314,53 @@ const execute = async (
 
       // Only a run that passed its own check replaces the saved session, so a failed or logged-out one never overwrites a good one.
       if (state && account && outcome.commitSession && outcome.status === 'SUCCEEDED') {
-         await deps.store.put(sessionKey(account.id), JSON.stringify(state), 'application/json')
+         await deps.sessions?.save(account.id, state).catch(error => {
+            console.error(`Could not keep the session of ${account.id}: ${(error as Error).message}`)
+         })
       }
 
       await publish(outcome, artifacts)
    }
 
    let session: DetectionSession
+   let device: DeviceIdentity | undefined
+   let exitIp: string | undefined
 
    try {
+      device = account && deps.identities ? await deps.identities.forAccount(account.id) : undefined
+
+      // The proxy's exit decides the account's timezone, and its language while the country stays the same. A lookup that
+      // fails is a proxy that does not work, never a reason to start with whatever the host would show.
+      if (account && device && command.proxy && deps.identities && deps.exitGeo) {
+         const exit = await deps.exitGeo(command.proxy).catch(() => {
+            throw new TaskError('The exit address of the proxy could not be looked up')
+         })
+         const kept = regionToKeep(device, exit)
+
+         recorder?.log('spider', 'info', `The proxy exits at ${exit.ip}, which looks up as ${exit.country}`)
+         if (kept) {
+            recorder?.log(
+               'spider',
+               'info',
+               device.country && device.country !== kept.country
+                  ? `The proxy now exits in ${kept.country}, not ${device.country}: language and timezone follow`
+                  : `Language and timezone set to ${kept.locale} and ${kept.timezone} for this account`
+            )
+            device = await deps.identities.pin(account.id, device, kept)
+         }
+
+         exitIp = exit.ip
+      }
+
+      // Only sites the operator allowed are put back, the same rule as when it was kept.
+      const saved = account && deps.sessions ? await deps.sessions.load(account.id) : undefined
+
       session = await deps.driver.open({
          ...(command.proxy && { proxy: command.proxy }),
          ...(recorder && { recorder }),
+         ...(device && { identity: device }),
+         ...(exitIp && { exitIp }),
+         ...(saved && { storageState: allowedState(saved, deps.policy) }),
       })
    } catch (error) {
       // A proxy that does not work is an answer to this task, not a reason to retry it.
@@ -360,6 +420,7 @@ const execute = async (
    const context: TaskContext = {
       browser,
       ...(account && { account }),
+      ...(device?.locale && { language: device.locale }),
       visit,
       log: message => recorder?.log('spider', 'info', message),
       warn: message => recorder?.log('spider', 'warn', message),
@@ -373,6 +434,41 @@ const execute = async (
    }
 
    let outcome: TaskOutcome
+
+   // The way to look again is not part of the answer: it must never reach the result or the files.
+   const withoutPerson = (answer: TaskOutcome) => {
+      const bare = { ...answer }
+
+      delete bare.needsPerson
+
+      return bare
+   }
+
+   // The run stopped at something only its owner can finish. The browser stays open for them; after they say they are done
+   // the task looks again. Where nobody can take over (no way to reach the owner, a browser without hands), or the owner
+   // does not come, the answer is the one the task gave.
+   const handOver = async (stopped: TaskOutcome): Promise<TaskOutcome> => {
+      const answer = withoutPerson(stopped)
+      const { control } = session
+
+      if (!stopped.needsPerson || !deps.handover || !control) {
+         return answer
+      }
+
+      recorder?.log('spider', 'warn', 'The run needs its owner and keeps the browser open for them')
+
+      try {
+         const handed = await deps.handover(command.task_id, control)
+
+         recorder?.log('spider', 'info', HANDOVER_LOG[handed])
+
+         return handed === 'done'
+            ? withoutPerson(await withLimit(stopped.needsPerson.resume(), task.limits.timeoutMs))
+            : answer
+      } catch {
+         return answer
+      }
+   }
 
    try {
       outcome = await withLimit(task.run(context, input), task.limits.timeoutMs)
@@ -395,6 +491,10 @@ const execute = async (
       })
 
       throw error
+   }
+
+   if (outcome.needsPerson) {
+      outcome = await handOver(outcome)
    }
 
    // A verdict the task never declared would show in the web app without a label: that is a fault of the task.

@@ -98,6 +98,8 @@ enum LinkedInAccountStatus {
   ERROR
   // Paused by the owner; automation must skip it.
   DISABLED
+  // LinkedIn restricted the account; only the owner can lift that on LinkedIn.
+  BLOCKED
 }
 
 // A LinkedIn login the user asks the tool to act as. Secrets live in one AES-256-GCM

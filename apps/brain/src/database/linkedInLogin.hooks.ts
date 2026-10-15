@@ -5,6 +5,17 @@ import { type TaskHooks } from './taskHooks'
 // Asking again right away would only repeat a login that LinkedIn may already be suspicious of.
 const VERIFY_COOLDOWN_MS = 5 * 60 * 1000
 
+// A failed check is an error of the system, a restriction by LinkedIn, or something the owner has to fix.
+const statusOf = (verdict: string) => {
+   if (verdict === 'BLOCKED') {
+      return 'BLOCKED' as const
+   }
+
+   return ['ERROR', 'PROXY_FAILED', 'CRASHED', 'TIMED_OUT'].includes(verdict)
+      ? ('ERROR' as const)
+      : ('NEEDS_REAUTH' as const)
+}
+
 // What the LinkedIn sign-in check changes in brain's own data: the account's status. The task itself is generic.
 export const linkedInLoginHooks: TaskHooks = {
    async onRequest({ id, accountId, trigger }) {
@@ -60,9 +71,7 @@ export const linkedInLoginHooks: TaskHooks = {
                  lastVerifiedAt: now,
               }
             : {
-                 status: ['ERROR', 'PROXY_FAILED', 'CRASHED', 'TIMED_OUT'].includes(result.verdict)
-                    ? ('ERROR' as const)
-                    : ('NEEDS_REAUTH' as const),
+                 status: statusOf(result.verdict),
                  statusMessage: result.message,
               }
 

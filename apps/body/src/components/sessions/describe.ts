@@ -124,6 +124,9 @@ export const describeStep = ({ call, ok, target, urlAfter, length, found, count 
             ? `Typed ${plural(length ?? 0, 'character', 'characters')} into a field`
             : 'Could not type into the field'
 
+      case 'press':
+         return ok ? `Pressed a key${urlAfter ? ` and moved to ${shortAddress(urlAfter)}` : ''}` : 'Could not press the key'
+
       case 'exists':
          return `Looked for an element and ${found ? 'found it' : 'it was not there'}`
 

@@ -23,9 +23,13 @@ import {
    SPIDER_WORKER_HEALTH_PORT,
 } from './env'
 import { createWorkerHealth, startHealthServer } from './health/workerHealth'
+import { createDeviceIdentity } from './identity/createDeviceIdentity'
+import { IdentityStore } from './identity/identityStore'
+import { lookupExit } from './identity/lookupExit'
 import { Broker } from './messaging/broker'
 import { consumeQueue, consumeTasks } from './messaging/consumer'
 import { publishCatalog, publishResult, publishRunResult, republishRun, republishTask } from './messaging/publisher'
+import { listenForInput, publishFrame } from './messaging/takeover'
 import { assertTopology } from './messaging/topology'
 import { Recorder } from './recording/recorder'
 import { AccountLock } from './scraping/accountLock'
@@ -36,7 +40,9 @@ import { HostPolicy } from './scraping/policy'
 import { processTask } from './scraping/processTask'
 import { HostRateLimiter } from './scraping/rateLimiter'
 import { RobotsGuard } from './scraping/robots'
+import { SessionVault } from './sessions/sessionVault'
 import { GcsStore } from './storage/gcsStore'
+import { waitForOwner } from './takeover/waitForOwner'
 import { catalogOf } from './tasks/catalog'
 import { openCredentials } from './tasks/credentials'
 import { AccountValidator } from './tasks/linkedinLogin/accountValidator'
@@ -92,6 +98,8 @@ const main = async () => {
 
    const channel = await broker.consumeChannel()
    const taskChannel = await broker.consumeChannel()
+   // The owner's inputs while a run waits for them; each run listens on a queue of its own.
+   const takeoverChannel = await broker.consumeChannel()
 
    await assertTopology(channel)
 
@@ -129,6 +137,14 @@ const main = async () => {
                   limiter,
                   store,
                   accountLock,
+                  identities: new IdentityStore(store, createDeviceIdentity),
+                  exitGeo: lookupExit,
+                  sessions: new SessionVault(store, LINKEDIN_CRED_ENC_KEY),
+                  handover: (taskId, control) =>
+                     waitForOwner(taskId, control, {
+                        publishFrame: async frame => publishFrame(await broker.publishChannel(), frame),
+                        listen: (id, onInput) => listenForInput(takeoverChannel, id, onInput),
+                     }),
                   openCredentials: sealed => openCredentials(sealed, LINKEDIN_CRED_ENC_KEY),
                   startRecording: ({ task, id, prefix, always, videoSize }) =>
                      always || recordingMode !== 'off'
@@ -178,7 +194,7 @@ const main = async () => {
    )
 
    // A lost connection ends the process, so the container's restart policy brings a clean worker back.
-   for (const open of [channel, taskChannel]) {
+   for (const open of [channel, taskChannel, takeoverChannel]) {
       open.on('close', () => {
          if (!stopping) {
             console.error('The broker channel closed; exiting so the worker restarts')

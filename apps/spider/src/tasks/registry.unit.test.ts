@@ -14,6 +14,10 @@ const TASKS = buildTasks({
             outcome: 'ERROR' as const,
             message: 'x',
          }),
+         recheck: async () => ({
+            outcome: 'ERROR' as const,
+            message: 'x',
+         }),
       },
       baseUrl: 'https://www.linkedin.com',
    },
@@ -25,7 +29,9 @@ const folders = readdirSync(__dirname).filter(name => statSync(join(__dirname, n
 describe('the registered tasks', () => {
    it('should register every task folder, and only those', async () => {
       const names = await Promise.all(
-         folders.map(async folder => ((await import(`./${folder}`)) as { TASK_NAME?: string }).TASK_NAME)
+         folders.map(
+            async folder => ((await import(/* @vite-ignore */ `./${folder}`)) as { TASK_NAME?: string }).TASK_NAME
+         )
       )
 
       expect(names.every(name => typeof name === 'string')).toBe(true)

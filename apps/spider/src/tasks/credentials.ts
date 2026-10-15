@@ -1,4 +1,4 @@
-import { createDecipheriv } from 'node:crypto'
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 import { z } from 'zod'
 
 import { type Sealed } from '@automatedLinkedIn/contracts'
@@ -21,14 +21,20 @@ export type ProxyCredentials = z.infer<typeof proxyBundleSchema>
 
 const SUPPORTED_KEY_VERSION = 1
 
-// The AES-256-GCM decrypt brain's sealing produces, shared by every bundle shape sealed with it. Throws without ever
-// including the plaintext in the message: a wrong key and a changed ciphertext both end up here.
-export const decryptSealed = (sealed: Sealed, keyBase64: string): string => {
+const keyOf = (keyBase64: string) => {
    const key = Buffer.from(keyBase64, 'base64')
 
    if (key.length !== 32) {
       throw new Error('LINKEDIN_CRED_ENC_KEY must be a base64-encoded 32-byte key')
    }
+
+   return key
+}
+
+// The AES-256-GCM decrypt brain's sealing produces, shared by every bundle shape sealed with it. Throws without ever
+// including the plaintext in the message: a wrong key and a changed ciphertext both end up here.
+export const decryptSealed = (sealed: Sealed, keyBase64: string): string => {
+   const key = keyOf(keyBase64)
 
    if (sealed.key_version !== SUPPORTED_KEY_VERSION) {
       throw new Error(`The credentials use key version ${sealed.key_version}, which this worker cannot read`)
@@ -41,6 +47,20 @@ export const decryptSealed = (sealed: Sealed, keyBase64: string): string => {
    const plaintext = Buffer.concat([decipher.update(Buffer.from(sealed.ciphertext, 'base64')), decipher.final()])
 
    return plaintext.toString('utf8')
+}
+
+// The same sealing brain does, for what the worker keeps itself (a saved browser session).
+export const sealText = (plaintext: string, keyBase64: string): Sealed => {
+   const iv = randomBytes(12)
+   const cipher = createCipheriv('aes-256-gcm', keyOf(keyBase64), iv)
+   const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
+
+   return {
+      ciphertext: ciphertext.toString('base64'),
+      iv: iv.toString('base64'),
+      tag: cipher.getAuthTag().toString('base64'),
+      key_version: SUPPORTED_KEY_VERSION,
+   }
 }
 
 // Opens the bundle brain sealed for a LinkedIn account's credentials.

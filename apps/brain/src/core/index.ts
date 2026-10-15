@@ -6,5 +6,6 @@ export { IpInfoError, IpInfoService, type ProxyExchange } from './ipInfo.service
 export { type LinkKind, type LinkedInLink, TooManyLinksError, parseLinkedInUrls } from './linkedInUrl'
 export { MessageBroker } from './messageBroker'
 export { RecordingLinks } from './recordingLinks'
+export { TakeoverRateError, TakeoverRelay } from './takeoverRelay'
 export { TaskQueue } from './taskQueue'
 export { parseTotpSecret } from './totp'

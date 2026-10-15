@@ -118,6 +118,74 @@ describe('browser detection task', () => {
       ])
    })
 
+   describe('the check the browser makes on itself', () => {
+      const facts = {
+         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:156.0)',
+         platform: 'Win32',
+         language: 'en-US',
+         languages: 'en-US,en',
+         timezone: 'Europe/Berlin',
+         hardwareConcurrency: 8,
+         webdriver: false,
+      }
+
+      const titleOf = (outcome: Awaited<ReturnType<typeof run>>) => outcome.report?.sections.map(({ title }) => title)
+
+      it('should run before the outside pages, with no outside site to wait for, and show in the report', async () => {
+         const probe = vi.fn(async () => ({
+            window: facts,
+            iframe: facts,
+            worker: facts,
+         }))
+         const made = makeContext({ probe })
+
+         const outcome = await run([page('pixelscan', human)], made)
+
+         expect(probe).toHaveBeenCalledTimes(1)
+         expect(titleOf(outcome)?.[0]).toBe('The browser compared with itself')
+         expect(outcome).toMatchObject({ verdict: 'NOT_DETECTED' })
+      })
+
+      it('should say detected, even when every outside page is fine, when the browser disagrees with itself', async () => {
+         const made = makeContext({
+            probe: vi.fn(async () => ({
+               window: facts,
+               iframe: facts,
+               worker: {
+                  ...facts,
+                  timezone: 'Asia/Kolkata',
+               },
+            })),
+         })
+
+         const outcome = await run([page('pixelscan', human)], made)
+
+         expect(outcome).toMatchObject({
+            status: 'FAILED',
+            verdict: 'DETECTED',
+         })
+      })
+
+      it('should not let a probe that fails make the browser a bot, and carry on with the pages', async () => {
+         const made = makeContext({
+            probe: vi.fn(async () => {
+               throw new Error('evaluation failed')
+            }),
+         })
+
+         const outcome = await run([page('pixelscan', human)], made)
+
+         expect(outcome).toMatchObject({ verdict: 'COULD_NOT_TELL' })
+         expect(made.context.visit).toHaveBeenCalledTimes(1)
+      })
+
+      it('should leave the check out for a browser that cannot be probed', async () => {
+         const outcome = await run([page('pixelscan', human)])
+
+         expect(titleOf(outcome)).not.toContain('The browser compared with itself')
+      })
+   })
+
    it('should stop scrolling when the end of the page is reached', async () => {
       const made = makeContext()
 

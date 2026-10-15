@@ -3,13 +3,31 @@ import { z } from 'zod'
 import { SECURITY_CHECK_MESSAGE } from '@automatedLinkedIn/contracts'
 
 import { type TaskOutcome, defineTask } from '../defineTask'
-import { type AccountValidator } from './accountValidator'
+import { type AccountValidator, type Verdict } from './accountValidator'
+import { browseAfterLogin } from './browseAfterLogin'
 
 export const TASK_NAME = 'linkedin-login'
 
 type Options = {
-   validator: Pick<AccountValidator, 'validate'>
+   validator: Pick<AccountValidator, 'validate' | 'recheck'>
    baseUrl: string
+}
+
+const answerOf = (verdict: Verdict): TaskOutcome => {
+   if (verdict.outcome === 'VALID') {
+      return {
+         status: 'SUCCEEDED',
+         verdict: 'VALID',
+         message: 'Signed in to LinkedIn.',
+         commitSession: true,
+      }
+   }
+
+   return {
+      status: 'FAILED',
+      verdict: verdict.message === SECURITY_CHECK_MESSAGE ? 'SECURITY_CHECK' : verdict.outcome,
+      message: verdict.message,
+   }
 }
 
 // Signs in to LinkedIn once with what is stored for the account. A wrong password or a wrong code is an answer, because
@@ -43,6 +61,10 @@ export const createLinkedinLogin = ({ validator, baseUrl }: Options) =>
             label: 'Needs your attention',
             tone: 'failure',
          },
+         BLOCKED: {
+            label: 'Account blocked',
+            tone: 'failure',
+         },
          ERROR: {
             label: 'Could not check',
             tone: 'neutral',
@@ -56,29 +78,49 @@ export const createLinkedinLogin = ({ validator, baseUrl }: Options) =>
          oneAtATime: 'account',
       },
       limits: { timeoutMs: 3 * 60 * 1000 },
-      run: async ({ browser, account }): Promise<TaskOutcome> => {
+      run: async (context): Promise<TaskOutcome> => {
+         const { browser, account } = context
+
          if (!account) {
             throw new Error('The runner gave linkedin-login no account')
          }
 
-         const verdict = await validator.validate(browser, {
-            email: account.email,
-            credentials: account.credentials,
-         })
+         // Signed in: look around like the owner would, then the session is kept only if the browser is still signed in.
+         // Anything else keeps the page it ended on, so a page this task does not understand can be read afterwards.
+         const afterwards = async (found: Verdict): Promise<TaskOutcome> => {
+            const answer = answerOf(found)
 
-         if (verdict.outcome === 'VALID') {
-            return {
-               status: 'SUCCEEDED',
-               verdict: 'VALID',
-               message: 'Signed in to LinkedIn.',
-               commitSession: true,
+            if (answer.verdict === 'VALID') {
+               return {
+                  ...answer,
+                  commitSession: await browseAfterLogin(context, baseUrl),
+               }
             }
+
+            try {
+               context.attach('page.html', await browser.pageHtml(), 'text/html')
+            } catch {
+               // The page is only for reading; a browser that is gone changes nothing about the answer.
+            }
+
+            return answer
          }
 
-         return {
-            status: 'FAILED',
-            verdict: verdict.message === SECURITY_CHECK_MESSAGE ? 'SECURITY_CHECK' : verdict.outcome,
-            message: verdict.message,
-         }
+         const answer = await afterwards(
+            await validator.validate(browser, {
+               email: account.email,
+               credentials: account.credentials,
+               ...(context.language && { language: context.language }),
+            })
+         )
+         const resume = async () => afterwards(await validator.recheck(browser, account.credentials))
+
+         // A security check is the owner's to complete. If they do, the same page is looked at again, never retyped.
+         return answer.verdict === 'SECURITY_CHECK'
+            ? {
+                 ...answer,
+                 needsPerson: { resume },
+              }
+            : answer
       },
    })

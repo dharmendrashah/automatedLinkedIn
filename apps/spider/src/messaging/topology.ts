@@ -1,6 +1,6 @@
 import { type Channel } from 'amqplib'
 
-import { DEAD_EXCHANGE, EXCHANGE, assertAccountTopology } from '@automatedLinkedIn/contracts'
+import { DEAD_EXCHANGE, EXCHANGE, assertAccountTopology, assertTakeoverTopology } from '@automatedLinkedIn/contracts'
 
 // The exchanges are shared with brain's validation queues, so both apps declare them from the same constants.
 export { DEAD_EXCHANGE, EXCHANGE }
@@ -46,4 +46,5 @@ export const assertTopology = async (channel: Pick<Channel, 'assertExchange' | '
 
    // Brain asks for account validations and reads the answers on these.
    await assertAccountTopology(channel)
+   await assertTakeoverTopology(channel)
 }

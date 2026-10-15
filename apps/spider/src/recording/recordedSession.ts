@@ -15,10 +15,23 @@ type Details = Partial<
 export class RecordedSession implements LoginSession {
    private lastUrl: string | undefined
 
+   // Present only when the browser can tell where the redirects after a submit end.
+   public readonly settled?: () => Promise<string>
+
    public constructor(
       protected readonly inner: LoginSession,
       protected readonly recorder: StepRecorder
-   ) {}
+   ) {
+      const { settled } = inner
+
+      if (settled) {
+         this.settled = async () => {
+            this.lastUrl = await settled.call(inner)
+
+            return this.lastUrl
+         }
+      }
+   }
 
    public async goto(url: string, waitForSelector?: string) {
       return this.step(
@@ -61,6 +74,21 @@ export class RecordedSession implements LoginSession {
             length: value.length,
          },
          () => this.inner.fill(selector, value)
+      )
+   }
+
+   public async press(key: string) {
+      return this.step(
+         'press',
+         { selector: key },
+         async () => {
+            const landed = await this.inner.press(key)
+
+            this.lastUrl = landed
+
+            return landed
+         },
+         landed => ({ urlAfter: maskUrl(landed) })
       )
    }
 

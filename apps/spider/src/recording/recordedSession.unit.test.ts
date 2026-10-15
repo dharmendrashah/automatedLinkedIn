@@ -18,6 +18,7 @@ const makeInner = (overrides: Partial<LoginSession> = {}) =>
       click: vi.fn(async () => 'https://www.linkedin.com/feed/'),
       extract: vi.fn(async () => [{ a: '1' }, { a: '2' }]),
       fill: vi.fn(async () => undefined),
+      press: vi.fn(async () => 'https://www.linkedin.com/feed/'),
       exists: vi.fn(async () => true),
       close: vi.fn(async () => undefined),
       screenshot: vi.fn(async () => Buffer.from('png')),
@@ -64,6 +65,21 @@ describe('RecordedSession', () => {
       expect(inner.goto).toHaveBeenCalledWith('https://www.linkedin.com/login', '#username')
       expect(inner.fill).toHaveBeenCalledWith('#username', 'someone@example.com')
       expect(inner.close).toHaveBeenCalled()
+   })
+
+   it('should record a key press as a step with where it led, and pass it on', async () => {
+      const recorder = makeRecorder()
+      const inner = makeInner()
+      const session = new RecordedSession(inner, recorder as never)
+
+      await expect(session.press('Enter')).resolves.toBe('https://www.linkedin.com/feed/')
+
+      expect(inner.press).toHaveBeenCalledWith('Enter')
+      expect(recorder.steps[0]).toMatchObject({
+         call: 'press',
+         ok: true,
+         urlAfter: 'https://www.linkedin.com/feed/',
+      })
    })
 
    it('should record a step with its address, take a screenshot and number it after the step', async () => {

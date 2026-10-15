@@ -11,6 +11,8 @@ type ResultQueueOptions<T> = {
    // Names what the queue carries in log lines, for example "validation".
    noun: string
    parse: (content: string) => T
+   // What to declare before consuming; the account and task queues unless a queue of another kind says otherwise.
+   topology?: (channel: Channel) => Promise<unknown>
 }
 
 const RECONNECT_MS = 5000
@@ -18,7 +20,7 @@ const RECONNECT_MS = 5000
 // Takes the worker's answers from `queue` one after another and acknowledges each after `handler` finished. It never
 // throws: if the broker is down, it keeps trying, so brain can start before RabbitMQ does.
 export const consumeResults = async <T>(
-   { queue, noun, parse }: ResultQueueOptions<T>,
+   { queue, noun, parse, topology = assertAccountTopology }: ResultQueueOptions<T>,
    handler: (result: T) => Promise<void>,
    log: Log
 ) => {
@@ -71,7 +73,7 @@ export const consumeResults = async <T>(
             schedule()
          })
 
-         await assertAccountTopology(channel)
+         await topology(channel)
          await channel.prefetch(10)
          await channel.consume(
             queue,

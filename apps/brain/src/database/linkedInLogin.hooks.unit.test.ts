@@ -162,6 +162,7 @@ describe('linkedin-login hooks', () => {
          ['INVALID_CREDENTIALS', 'NEEDS_REAUTH'],
          ['NEEDS_REAUTH', 'NEEDS_REAUTH'],
          ['SECURITY_CHECK', 'NEEDS_REAUTH'],
+         ['BLOCKED', 'BLOCKED'],
          ['PROXY_FAILED', 'ERROR'],
          ['CRASHED', 'ERROR'],
       ])(
