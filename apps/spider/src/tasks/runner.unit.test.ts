@@ -3,9 +3,15 @@ import { z } from 'zod'
 
 import { type TaskCommand, type TaskResult, runPrefix } from '@automatedLinkedIn/contracts'
 
+import { type ProxyConfig } from '../types'
+
+import { type DeviceIdentity } from '../identity/deviceIdentity'
+import { type ExitRegion, type KeptRegion } from '../identity/region'
 import { Recorder } from '../recording/recorder'
+import { type SessionControl } from '../scraping/driver'
 import { AccountBusyError, TaskError } from '../scraping/errors'
-import { type TaskDefinition, VisitError, defineTask } from './defineTask'
+import { type SavedState } from '../sessions/sessionVault'
+import { type TaskDefinition, type TaskOutcome, VisitError, defineTask } from './defineTask'
 import { type RunnerDeps, exhaustedResult, runTask } from './runner'
 
 const TASK_ID = '0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11'
@@ -35,6 +41,7 @@ const makeSession = () => ({
    click: vi.fn(),
    extract: vi.fn(),
    fill: vi.fn(),
+   press: vi.fn(async (_key: string) => 'https://example.com/'),
    exists: vi.fn(async () => true),
    scrollBy: vi.fn(async () => false),
    pageText: vi.fn(async () => 'text'),
@@ -169,7 +176,7 @@ const accountCommand: Partial<TaskCommand> = {
 const setup = (
    options: {
       task?: ReturnType<typeof demo>
-      session?: ReturnType<typeof makeSession>
+      session?: ReturnType<typeof makeSession> & { control?: SessionControl }
       overrides?: Partial<RunnerDeps>
    } = {}
 ) => {
@@ -625,6 +632,191 @@ describe('a task that needs an account', () => {
       expect(lease.release).toHaveBeenCalledTimes(1)
    })
 
+   describe('the device of the account', () => {
+      const device: DeviceIdentity = {
+         version: 1,
+         os: 'windows',
+         fingerprint: {
+            screen: { width: 1366 },
+            navigator: { userAgent: 'Mozilla/5.0' },
+         } as DeviceIdentity['fingerprint'],
+         createdAt: '2026-10-15T10:00:00.000Z',
+      }
+
+      const exit: ExitRegion = {
+         ip: '203.0.113.7',
+         country: 'DE',
+         locale: 'de-DE',
+         timezone: 'Europe/Berlin',
+      }
+
+      const withIdentities = (stored: DeviceIdentity = device, task = accountTask()) => {
+         const identities = {
+            forAccount: vi.fn(async () => stored),
+            pin: vi.fn(async (_id: string, found: DeviceIdentity, region: KeptRegion) => ({
+               ...found,
+               ...region,
+            })),
+         }
+         const exitGeo = vi.fn(async (_proxy: ProxyConfig) => exit)
+
+         return {
+            ...setup({
+               task,
+               overrides: {
+                  identities,
+                  exitGeo,
+               },
+            }),
+            identities,
+            exitGeo,
+         }
+      }
+
+      it('should give the task the language of the account, so a site cannot pick another from the address', async () => {
+         let seen: { language?: string } | undefined
+         const { run } = withIdentities(
+            device,
+            accountTask({
+               run: async context => {
+                  seen = context
+
+                  return {
+                     status: 'SUCCEEDED',
+                     verdict: 'GOOD',
+                     message: 'ok',
+                  }
+               },
+            })
+         )
+
+         await run(accountCommand)
+
+         expect(seen?.language).toBe('de-DE')
+      })
+
+      it('should open the browser with the same device of the account, not a new one', async () => {
+         const { run, deps, identities } = withIdentities()
+
+         await run(accountCommand)
+
+         expect(identities.forAccount).toHaveBeenCalledWith('acc1')
+         expect(deps.driver.open).toHaveBeenCalledWith(
+            expect.objectContaining({ identity: expect.objectContaining(device) })
+         )
+      })
+
+      it('should set the language and timezone from where the proxy exits, and give the browser the address it found', async () => {
+         const { run, deps, identities, exitGeo } = withIdentities()
+
+         await run(accountCommand)
+
+         expect(exitGeo).toHaveBeenCalledWith(command.proxy)
+         expect(identities.pin).toHaveBeenCalledWith('acc1', device, {
+            locale: 'de-DE',
+            timezone: 'Europe/Berlin',
+            country: 'DE',
+         })
+         expect(deps.driver.open).toHaveBeenCalledWith(
+            expect.objectContaining({
+               exitIp: '203.0.113.7',
+               identity: expect.objectContaining({
+                  locale: 'de-DE',
+                  timezone: 'Europe/Berlin',
+               }),
+            })
+         )
+      })
+
+      it('should change nothing, and not write, while the proxy exits where it did', async () => {
+         const { run, identities } = withIdentities({
+            ...device,
+            locale: 'de-DE',
+            timezone: 'Europe/Berlin',
+            country: 'DE',
+         })
+
+         await run(accountCommand)
+
+         expect(identities.pin).not.toHaveBeenCalled()
+      })
+
+      it('should move the language and timezone, not the device, when the proxy now exits in another country', async () => {
+         const { run, identities, deps } = withIdentities({
+            ...device,
+            locale: 'en-US',
+            timezone: 'America/New_York',
+            country: 'US',
+         })
+
+         await run(accountCommand)
+
+         expect(identities.pin).toHaveBeenCalledWith('acc1', expect.objectContaining(device), {
+            locale: 'de-DE',
+            timezone: 'Europe/Berlin',
+            country: 'DE',
+         })
+         expect(deps.driver.open).toHaveBeenCalledWith(
+            expect.objectContaining({ identity: expect.objectContaining({ fingerprint: device.fingerprint }) })
+         )
+      })
+
+      it('should not look anything up without a proxy, since the host decides the language then', async () => {
+         const { run, identities, exitGeo } = withIdentities()
+
+         await run({
+            ...accountCommand,
+            proxy: undefined,
+         })
+
+         expect(exitGeo).not.toHaveBeenCalled()
+         expect(identities.pin).not.toHaveBeenCalled()
+      })
+
+      it('should answer PROXY_FAILED, never starting with the host language, when the exit cannot be looked up', async () => {
+         const { run, exitGeo, deps, published } = withIdentities()
+
+         exitGeo.mockRejectedValueOnce(new Error('ip-api unreachable'))
+
+         await run(accountCommand)
+
+         expect(deps.driver.open).not.toHaveBeenCalled()
+         expect(published[0]).toMatchObject({
+            status: 'FAILED',
+            verdict: 'PROXY_FAILED',
+         })
+      })
+
+      it('should let the broker retry when the new language cannot be written', async () => {
+         const { run, identities, deps } = withIdentities()
+
+         identities.pin.mockRejectedValueOnce(new Error('bucket unavailable'))
+
+         await expect(run(accountCommand)).rejects.toThrow('bucket unavailable')
+         expect(deps.driver.open).not.toHaveBeenCalled()
+      })
+
+      it('should let the broker retry, with no new device, when the identity cannot be read', async () => {
+         const { run, identities, deps } = withIdentities()
+
+         identities.forAccount.mockRejectedValueOnce(new Error('bucket unavailable'))
+
+         await expect(run(accountCommand)).rejects.toThrow('bucket unavailable')
+         expect(deps.driver.open).not.toHaveBeenCalled()
+         expect(lease.release).toHaveBeenCalledTimes(1)
+      })
+
+      it('should give a task without an account a new device, as before', async () => {
+         const { identities } = withIdentities()
+         const { run, deps } = setup({ overrides: { identities } })
+
+         await run()
+
+         expect(identities.forAccount).not.toHaveBeenCalled()
+         expect(deps.driver.open).toHaveBeenCalledWith(expect.not.objectContaining({ identity: expect.anything() }))
+      })
+   })
+
    it('should not run, and not fail the task, when another task holds the account', async () => {
       const { run, deps, published } = setup({ task: accountTask() })
 
@@ -726,45 +918,268 @@ describe('a task that needs an account', () => {
       expect(published[0].artifacts.some(artifact => artifact.kind === 'session')).toBe(false)
    })
 
-   it("should replace the account's saved session only when the task says its own check passed", async () => {
-      const task = accountTask({
+   const committing = (verdictStatus: 'SUCCEEDED' | 'FAILED' = 'SUCCEEDED', commitSession = true) =>
+      accountTask({
          run: async () => ({
-            status: 'SUCCEEDED',
-            verdict: 'GOOD',
+            status: verdictStatus,
+            verdict: verdictStatus === 'SUCCEEDED' ? 'GOOD' : 'BAD',
             message: 'ok',
-            commitSession: true,
+            commitSession,
          }),
       })
-      const { run, store } = setup({ task })
+
+   const withVault = (task: ReturnType<typeof demo>, saved?: SavedState) => {
+      const sessions = {
+         load: vi.fn(async (_id: string) => saved),
+         save: vi.fn(async (_id: string, _state: unknown) => undefined),
+      }
+
+      return {
+         sessions,
+         ...setup({
+            task,
+            overrides: { sessions },
+         }),
+      }
+   }
+
+   it("should replace the account's saved session only when the task says its own check passed", async () => {
+      const { run, sessions } = withVault(committing())
 
       await run(accountCommand)
 
-      expect(store.put).toHaveBeenCalledWith('sessions/acc1/state.json', expect.any(String), 'application/json')
+      expect(sessions.save).toHaveBeenCalledTimes(1)
 
-      const state = JSON.parse(String(store.objects.get('sessions/acc1/state.json')))
+      const [id, state] = sessions.save.mock.calls[0] as [string, { cookies: unknown[] }]
 
+      expect(id).toBe('acc1')
       expect(state.cookies).toHaveLength(1)
    })
 
    it.each([
       ['a task that did not ask for it', accountTask()],
-      [
-         'a failed run',
-         accountTask({
-            run: async () => ({
-               status: 'FAILED',
-               verdict: 'BAD',
-               message: 'no',
-               commitSession: true,
-            }),
-         }),
-      ],
+      ['a failed run', committing('FAILED')],
    ])('should keep the saved session as it was for %s', async (_name, task) => {
-      const { run, store } = setup({ task })
+      const { run, sessions } = withVault(task)
 
       await run(accountCommand)
 
-      expect(store.objects.has('sessions/acc1/state.json')).toBe(false)
+      expect(sessions.save).not.toHaveBeenCalled()
+   })
+
+   it('should still answer when the session cannot be kept', async () => {
+      const { run, sessions, published } = withVault(committing())
+
+      sessions.save.mockRejectedValueOnce(new Error('bucket unavailable'))
+
+      await run(accountCommand)
+
+      expect(published[0]).toMatchObject({ status: 'SUCCEEDED' })
+   })
+
+   it('should start the browser from the session the account kept, for allowed sites only', async () => {
+      const cookie = {
+         expires: -1,
+         httpOnly: true,
+         secure: true,
+         sameSite: 'None' as const,
+         path: '/',
+      }
+      const { run, deps } = withVault(accountTask(), {
+         cookies: [
+            {
+               ...cookie,
+               name: 'bcookie',
+               value: 'b',
+               domain: '.linkedin.com',
+            },
+            {
+               ...cookie,
+               name: 'tracker',
+               value: 't',
+               domain: '.elsewhere.example',
+            },
+         ],
+         origins: [
+            {
+               origin: 'https://elsewhere.example',
+               localStorage: [],
+            },
+         ],
+      })
+
+      await run(accountCommand)
+
+      const [[options]] = vi.mocked(deps.driver.open).mock.calls
+
+      expect(options?.storageState?.cookies.map(({ name }) => name)).toEqual(['bcookie'])
+      expect(options?.storageState?.origins).toEqual([])
+   })
+
+   it('should start cold when the account kept no session, and let the broker retry when it cannot be read', async () => {
+      const { run, deps, sessions } = withVault(accountTask())
+
+      await run(accountCommand)
+
+      expect(vi.mocked(deps.driver.open).mock.calls[0]?.[0]).not.toHaveProperty('storageState')
+
+      sessions.load.mockRejectedValueOnce(new Error('bucket unavailable'))
+
+      await expect(run(accountCommand)).rejects.toThrow('bucket unavailable')
+   })
+})
+
+describe('a task that stops for its owner', () => {
+   beforeEach(() => {
+      vi.restoreAllMocks()
+      vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      lease.release.mockClear()
+   })
+
+   const stopped = {
+      status: 'FAILED',
+      verdict: 'BAD',
+      message: 'A security check.',
+   } as const
+
+   const control = {
+      frame: vi.fn(),
+      click: vi.fn(),
+      type: vi.fn(),
+      press: vi.fn(),
+      scroll: vi.fn(),
+   }
+
+   const stoppingTask = (resume: () => Promise<TaskOutcome>) =>
+      accountTask({
+         run: async () => ({
+            ...stopped,
+            needsPerson: { resume },
+         }),
+      })
+
+   const withOwner = (resume: () => Promise<TaskOutcome>, handover: RunnerDeps['handover'], hasControl = true) =>
+      setup({
+         task: stoppingTask(resume),
+         session: hasControl
+            ? {
+                 ...makeSession(),
+                 control,
+              }
+            : makeSession(),
+         overrides: { handover },
+      })
+
+   const passed: TaskOutcome = {
+      status: 'SUCCEEDED',
+      verdict: 'GOOD',
+      message: 'ok',
+      commitSession: true,
+   }
+
+   it('should hold the browser for the owner, and answer with what the task finds once they say they are done', async () => {
+      const resume = vi.fn(async () => passed)
+      const handover = vi.fn(async (_id: string, _control: unknown) => 'done' as const)
+      const { run, published, session } = withOwner(resume, handover)
+
+      await run(accountCommand)
+
+      expect(handover).toHaveBeenCalledWith(TASK_ID, control)
+      expect(resume).toHaveBeenCalledTimes(1)
+      expect(published).toHaveLength(1)
+      expect(published[0]).toMatchObject({
+         status: 'SUCCEEDED',
+         verdict: 'GOOD',
+      })
+      expect(session.close).toHaveBeenCalledTimes(1)
+   })
+
+   it.each(['gave_up', 'timed_out'] as const)(
+      'should answer as the task did, and not look again, when the owner %s',
+      async answer => {
+         const resume = vi.fn(async () => passed)
+         const { run, published } = withOwner(resume, async () => answer)
+
+         await run(accountCommand)
+
+         expect(resume).not.toHaveBeenCalled()
+         expect(published[0]).toMatchObject({
+            status: 'FAILED',
+            verdict: 'BAD',
+            message: 'A security check.',
+         })
+      }
+   )
+
+   it('should answer as the task did when looking again fails, rather than lose the run', async () => {
+      const { run, published } = withOwner(
+         async () => {
+            throw new Error('page closed')
+         },
+         async () => 'done'
+      )
+
+      await run(accountCommand)
+
+      expect(published[0]).toMatchObject({
+         status: 'FAILED',
+         verdict: 'BAD',
+      })
+   })
+
+   it('should not wait when this worker cannot hand a browser over, such as the local devtools', async () => {
+      const resume = vi.fn(async () => passed)
+      const handover = vi.fn(async () => 'done' as const)
+      const noControl = withOwner(resume, handover, false)
+
+      await noControl.run(accountCommand)
+
+      const noHandover = withOwner(resume, undefined)
+
+      await noHandover.run(accountCommand)
+
+      expect(handover).not.toHaveBeenCalled()
+      expect(resume).not.toHaveBeenCalled()
+      expect(noControl.published[0]).toMatchObject({ verdict: 'BAD' })
+      expect(noHandover.published[0]).toMatchObject({ verdict: 'BAD' })
+   })
+
+   it('should keep the session of the run only when the owner got it through', async () => {
+      const sessions = {
+         load: vi.fn(async () => undefined),
+         save: vi.fn(async (_id: string, _state: unknown) => undefined),
+      }
+      const withSession = (answer: 'done' | 'gave_up') =>
+         setup({
+            task: stoppingTask(async () => passed),
+            session: {
+               ...makeSession(),
+               control,
+            },
+            overrides: {
+               handover: async () => answer,
+               sessions,
+            },
+         })
+
+      await withSession('gave_up').run(accountCommand)
+
+      expect(sessions.save).not.toHaveBeenCalled()
+
+      await withSession('done').run(accountCommand)
+
+      expect(sessions.save).toHaveBeenCalledTimes(1)
+   })
+
+   it('should not put the way to look again into the files of the run', async () => {
+      const { run, store } = withOwner(
+         async () => passed,
+         async () => 'done'
+      )
+
+      await run(accountCommand)
+
+      expect(String(store.objects.get(`${PREFIX}/result.json`))).not.toContain('resume')
    })
 })
 

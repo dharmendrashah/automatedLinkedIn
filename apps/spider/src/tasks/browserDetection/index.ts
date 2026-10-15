@@ -5,12 +5,15 @@ import { type TaskReport } from '@automatedLinkedIn/contracts'
 import { type DetectionSession } from '../../scraping/driver'
 import { type TaskContext, VisitError, defineTask } from '../defineTask'
 import { DETECTION_PAGES, type DetectionPage } from './pages'
+import { readProbe } from './probe'
 import { type DetectionOutcome, type DetectionSignal, type PageVerdict, combine } from './readers'
 
 export const TASK_NAME = 'browser-detection'
 
+type PageName = DetectionPage['page'] | 'local-probe'
+
 type PageReport = {
-   page: DetectionPage['page']
+   page: PageName
    url: string
    verdict: PageVerdict
    advisory: boolean
@@ -32,7 +35,8 @@ const MESSAGES: Record<DetectionOutcome, string> = {
    COULD_NOT_TELL: 'A detection page did not answer or could not be read.',
 }
 
-const PAGE_TITLES: Record<DetectionPage['page'], string> = {
+const PAGE_TITLES: Record<PageName, string> = {
+   'local-probe': 'The browser compared with itself',
    deviceandbrowserinfo: 'Device and Browser Info',
    pixelscan: 'Pixelscan',
    'pixelscan-ip': 'Pixelscan IP check',
@@ -137,6 +141,39 @@ const visit = async (context: TaskContext, target: DetectionPage, index: number)
       .catch(() => undefined)
 
    return result
+}
+
+// The browser reads the same values in the page, an iframe and a worker. It needs no outside site, so unlike the pages
+// it cannot fail because of someone else's server. A probe that cannot run is UNKNOWN, never a pass.
+const probeReport = async (context: TaskContext): Promise<PageReport | undefined> => {
+   const { browser } = context
+
+   if (!browser.probe) {
+      return undefined
+   }
+
+   const base = {
+      page: 'local-probe' as const,
+      url: '',
+      advisory: false,
+   }
+
+   try {
+      return {
+         ...base,
+         ...readProbe(await browser.probe()),
+      }
+   } catch {
+      context.warn('local-probe: the browser could not be read from inside')
+
+      return {
+         ...base,
+         verdict: 'UNKNOWN',
+         headline: '',
+         signals: [],
+         note: 'The browser could not be read from inside.',
+      }
+   }
 }
 
 const reportOf = (
@@ -259,7 +296,8 @@ export const createBrowserDetection = (pages: DetectionPage[] = DETECTION_PAGES)
          },
       },
       run: async context => {
-         const reports: PageReport[] = []
+         const local = await probeReport(context)
+         const reports: PageReport[] = local ? [local] : []
 
          for (const [index, target] of pages.entries()) {
             reports.push(await visit(context, target, index))

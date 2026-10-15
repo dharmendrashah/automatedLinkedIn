@@ -1,10 +1,11 @@
 import { Camoufox } from 'camoufox'
 import { FingerprintGenerator } from 'fingerprint-generator'
 
-import { type Browser, type BrowserContext, type Page } from 'playwright-core'
+import { type Browser, type BrowserContext, type Page, type Route } from 'playwright-core'
 
 import { type ExtractedRecord, type SessionCookie } from '../types'
 
+import { type DeviceIdentity } from '../identity/deviceIdentity'
 import { attachRecorder } from '../recording/attachRecorder'
 import { maskText } from '../recording/masking'
 import { type RunRecorder } from '../recording/recorder'
@@ -15,13 +16,16 @@ import {
    type DetectionSession,
    type LoginDriver,
    type OpenOptions,
+   type ProbeReading,
+   type SessionControl,
    type StorageState,
 } from './driver'
 import { TaskError } from './errors'
 
 export type CamoufoxOptions = {
    actionTimeoutMs: number
-   // Page loads to anything else are blocked in the browser, not only checked afterwards.
+   // Page loads to anything else are blocked in the browser, not only checked afterwards. Frames inside an allowed page
+   // (a captcha, a sign-in button) are parts of that page and are not held to it.
    isAllowedNavigation: (url: string) => boolean
    // `virtual` runs a real browser on an Xvfb display, which Camoufox advises over plain headless; `false` is a real
    // window, for the local devtools recorder only (apps/spider/src/devtools) — production never sets it.
@@ -30,24 +34,46 @@ export type CamoufoxOptions = {
    operatingSystems?: FingerprintOs[]
 }
 
+// The longest the cursor takes to glide to a point, in seconds. Camoufox's own 1.5 s made every click of a person taking over
+// a run arrive more than a second late.
+const HUMANIZE_MAX_S = 0.7
+
 // What CamoufoxDriver passes to Camoufox(), shared with the local devtools recorder so both start the exact same
-// browser identity instead of keeping two copies of these options.
+// browser identity instead of keeping two copies of these options. A stored `pin` (language, timezone) wins over what
+// the proxy's address would draw, so one account does not change language between runs.
 export const buildCamoufoxOptions = (
    headless: Exclude<CamoufoxOptions['headless'], undefined>,
    proxy: OpenOptions['proxy'],
-   fingerprint = newFingerprint()
+   fingerprint = newFingerprint(),
+   pin: Pick<DeviceIdentity, 'locale' | 'timezone'> = {},
+   exitIp?: string
 ) => ({
    headless,
-   humanize: true,
+   humanize: HUMANIZE_MAX_S,
    fingerprint,
+   ...(pin.locale && { locale: pin.locale }),
+   ...(pin.timezone && { config: { timezone: pin.timezone } }),
    ...(proxy && {
       proxy,
-      geoip: true,
+      geoip: exitIp ?? true,
    }),
 })
 
 // A page that is stuck should not hold up the screenshot of the step that failed.
 const SNAPSHOT_TIMEOUT_MS = 5000
+
+// Blocks a load of the page itself (and its redirects) to an address the operator did not allow. The frames an allowed page
+// embeds are not checked: LinkedIn's captcha lives in a frame of google.com, and without it the check can never be passed.
+export const allowedRoute = (isAllowed: (url: string) => boolean) => (route: Route) => {
+   const request = route.request()
+
+   return request.isNavigationRequest() && request.frame().parentFrame() === null && !isAllowed(request.url())
+      ? route.abort('blockedbyclient')
+      : route.continue()
+}
+
+// How long to wait for the redirects after a submit.
+const SETTLE_TIMEOUT_MS = 4000
 
 // The fingerprint comes from Apify's fingerprint-generator: a Firefox desktop on Windows, macOS or Linux, on a screen
 // of at most 1920 by 1080. Camoufox sets the version of its own build in it, so the user agent matches the browser.
@@ -76,6 +102,38 @@ class CamoufoxSession implements DetectionSession {
       private readonly page: Page,
       private readonly recorder?: RunRecorder
    ) {}
+
+   // The owner's hands on the page. Nothing here is recorded as a step: what they type could be a code or a password.
+   public readonly control: SessionControl = {
+      frame: async () => {
+         const jpeg = await this.page.screenshot({
+            type: 'jpeg',
+            quality: 55,
+            scale: 'css',
+            timeout: SNAPSHOT_TIMEOUT_MS,
+         })
+
+         return {
+            jpeg,
+            ...(await this.viewport()),
+         }
+      },
+      click: async (x, y) => {
+         const { width, height } = await this.viewport()
+
+         await this.page.mouse.click(x * width, y * height)
+      },
+      type: text => this.page.keyboard.type(text, { delay: 60 }),
+      press: key => this.page.keyboard.press(key),
+      scroll: dy => this.page.mouse.wheel(0, dy),
+   }
+
+   private viewport() {
+      return this.page.evaluate(() => ({
+         width: window.innerWidth,
+         height: window.innerHeight,
+      }))
+   }
 
    public screenshot() {
       return this.page.screenshot({ timeout: SNAPSHOT_TIMEOUT_MS })
@@ -113,6 +171,65 @@ class CamoufoxSession implements DetectionSession {
          platform: navigator.platform,
          screen: `${screen.width}x${screen.height}`,
       }))
+   }
+
+   // Reads the same values in the page, in an iframe and in a worker, which is where a spoof that only patched the page's
+   // own copy shows. A world that does not answer in time is left out.
+   public probe(): Promise<ProbeReading> {
+      return this.page.evaluate(async () => {
+         const collect = (scope: { navigator: Navigator; Intl: typeof Intl }) => ({
+            userAgent: scope.navigator.userAgent,
+            platform: scope.navigator.platform,
+            language: scope.navigator.language,
+            languages: scope.navigator.languages.join(','),
+            timezone: new scope.Intl.DateTimeFormat().resolvedOptions().timeZone,
+            hardwareConcurrency: scope.navigator.hardwareConcurrency,
+            webdriver: scope.navigator.webdriver,
+         })
+         // The same code, run as a script of the iframe and of the worker, so each reads its own globals.
+         const source = `(${collect.toString()})({ navigator, Intl })`
+         type Facts = ReturnType<typeof collect>
+         const timeout = <T>(work: Promise<T | undefined>) =>
+            Promise.race([work, new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), 3000))])
+
+         const frame = document.createElement('iframe')
+         const inFrame = timeout(
+            new Promise<Facts | undefined>(resolve => {
+               window.addEventListener('message', event => {
+                  if (event.source === frame.contentWindow) {
+                     resolve(event.data)
+                  }
+               })
+            })
+         )
+
+         frame.srcdoc = `<script>parent.postMessage(${source}, '*')</script>`
+         document.body.appendChild(frame)
+
+         const url = URL.createObjectURL(new Blob([`self.postMessage(${source})`], { type: 'text/javascript' }))
+         const worker = new Worker(url)
+         const inWorker = timeout(
+            new Promise<Facts | undefined>(resolve => {
+               worker.onmessage = event => resolve(event.data)
+               worker.onerror = () => resolve(undefined)
+            })
+         )
+
+         const [iframe, workerFacts] = await Promise.all([inFrame, inWorker])
+
+         worker.terminate()
+         URL.revokeObjectURL(url)
+         frame.remove()
+
+         return {
+            window: collect({
+               navigator,
+               Intl,
+            }),
+            ...(iframe && { iframe }),
+            ...(workerFacts && { worker: workerFacts }),
+         }
+      })
    }
 
    public async cookies(): Promise<SessionCookie[]> {
@@ -165,6 +282,14 @@ class CamoufoxSession implements DetectionSession {
       return this.page.url()
    }
 
+   // A submit is answered on the same page and LinkedIn moves on a moment later; this waits for the network to go quiet
+   // (not for ever: the page may keep polling) and says where the browser ended up.
+   public async settled() {
+      await this.page.waitForLoadState('networkidle', { timeout: SETTLE_TIMEOUT_MS }).catch(() => undefined)
+
+      return this.page.url()
+   }
+
    public async extract(selectors: Record<string, string>, limit: number): Promise<ExtractedRecord[]> {
       const { wrapper, ...fields } = selectors
 
@@ -188,9 +313,21 @@ class CamoufoxSession implements DetectionSession {
       )
    }
 
-   // Typed key by key, as a person would, so the page sees the usual key events.
+   // Clicked first and then typed key by key, as a person would: the click puts the focus in the field even where the
+   // page ignores a script's focus (the typing then went to the field before it), and the page sees the usual key events.
    public async fill(selector: string, value: string) {
-      await this.page.locator(selector).pressSequentially(value, { delay: 50 })
+      const field = this.page.locator(selector)
+
+      await field.click()
+      await field.pressSequentially(value, { delay: 50 })
+   }
+
+   // The key goes to whatever has the focus, as when a person presses Enter after typing a password.
+   public async press(key: string) {
+      await this.page.keyboard.press(key)
+      await this.page.waitForLoadState('domcontentloaded').catch(() => undefined)
+
+      return this.page.url()
    }
 
    public async exists(selector: string, timeoutMs: number) {
@@ -224,14 +361,15 @@ class CamoufoxSession implements DetectionSession {
 export class CamoufoxDriver implements BrowserDriver, LoginDriver, DetectionDriver {
    public constructor(private readonly options: CamoufoxOptions) {}
 
-   public async open({ proxy, recorder }: OpenOptions = {}): Promise<DetectionSession> {
-      const browser = await this.launch(proxy, recorder)
+   public async open({ proxy, recorder, identity, storageState, exitIp }: OpenOptions = {}): Promise<DetectionSession> {
+      const browser = await this.launch(proxy, recorder, identity, exitIp)
 
       try {
          // A proxy may re-sign secure websites with its own certificate, even an expired one. The owner accepts that
          // (.plan/proxy-accept-resigned-https.md), so the browser trusts whatever the proxy presents.
          const context = await browser.newContext({
             ...(proxy && { ignoreHTTPSErrors: true }),
+            ...(storageState && { storageState }),
             ...(recorder?.videoDir && {
                recordVideo: {
                   dir: recorder.videoDir,
@@ -243,11 +381,7 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver, DetectionDriv
          context.setDefaultTimeout(this.options.actionTimeoutMs)
          context.setDefaultNavigationTimeout(this.options.actionTimeoutMs)
 
-         await context.route('**/*', route =>
-            route.request().isNavigationRequest() && !this.options.isAllowedNavigation(route.request().url())
-               ? route.abort('blockedbyclient')
-               : route.continue()
-         )
+         await context.route('**/*', allowedRoute(this.options.isAllowedNavigation))
 
          const page = await context.newPage()
 
@@ -263,10 +397,21 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver, DetectionDriv
       }
    }
 
-   private async launch(proxy: OpenOptions['proxy'], recorder: OpenOptions['recorder']) {
+   private async launch(
+      proxy: OpenOptions['proxy'],
+      recorder: OpenOptions['recorder'],
+      identity: OpenOptions['identity'],
+      exitIp: OpenOptions['exitIp']
+   ) {
       try {
          return await Camoufox(
-            buildCamoufoxOptions(this.options.headless ?? true, proxy, newFingerprint(this.options.operatingSystems))
+            buildCamoufoxOptions(
+               this.options.headless ?? true,
+               proxy,
+               identity?.fingerprint ?? newFingerprint(this.options.operatingSystems),
+               identity,
+               exitIp
+            )
          )
       } catch (error) {
          recorder?.log(

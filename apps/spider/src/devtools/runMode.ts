@@ -2,8 +2,12 @@ import { join } from 'node:path'
 
 import { type ProxyConfig, RUNNER_VERDICTS, type TaskResult, runPrefix } from '@automatedLinkedIn/contracts'
 
+import { createDeviceIdentity } from '../identity/createDeviceIdentity'
+import { IdentityStore } from '../identity/identityStore'
+import { lookupExit } from '../identity/lookupExit'
 import { Recorder } from '../recording/recorder'
 import { CamoufoxDriver } from '../scraping/camoufoxDriver'
+import { SessionVault } from '../sessions/sessionVault'
 import { openCredentials } from '../tasks/credentials'
 import { type TaskDefinition } from '../tasks/defineTask'
 import { AccountValidator } from '../tasks/linkedinLogin/accountValidator'
@@ -14,6 +18,7 @@ import { hostOs } from './hostOs'
 import { askInput } from './inputPrompt'
 import { type SavedAccount, listSavedAccounts } from './localDb'
 import { LocalStore } from './localStore'
+import { MemoryStore } from './memoryStore'
 import { ask, choose, confirm, handleInterrupt } from './prompt'
 import { type RunRecord, formatRun, summarise } from './summary'
 
@@ -128,6 +133,11 @@ export const runTasks = async ({ proxy, databaseUrl, encryptionKey, outputRoot }
 
    const records: RunRecord[] = []
    let stopping = false
+   // The same device, language and signed-in session for every run of an account in this session, as on the worker;
+   // nothing is kept after it.
+   const memory = new MemoryStore()
+   const identities = new IdentityStore(memory, () => createDeviceIdentity(hostOs()))
+   const sessions = new SessionVault(memory, encryptionKey)
 
    const release = handleInterrupt(() => {
       if (stopping) {
@@ -152,6 +162,14 @@ export const runTasks = async ({ proxy, databaseUrl, encryptionKey, outputRoot }
             tasks,
             driver,
             store,
+            identities,
+            sessions,
+            exitGeo: lookupExit,
+            // The browser window is open in front of the person running this, so they finish a check right there.
+            handover: async () =>
+               (await confirm('\nA security check needs you. Finish it in the browser window, then answer y here'))
+                  ? 'done'
+                  : 'gave_up',
             openCredentials: sealed => openCredentials(sealed, encryptionKey),
             startRecording: ({ task: kind, id, prefix, videoSize }) =>
                Recorder.start({

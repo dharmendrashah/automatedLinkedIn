@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { AlertCircle, CheckCircle2, Clock, type LucideIcon, PauseCircle, ShieldAlert } from 'lucide-react'
+import { AlertCircle, Ban, CheckCircle2, Clock, type LucideIcon, PauseCircle, ShieldAlert } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -31,6 +31,11 @@ const statuses: Record<AccountStatus, { label: string; icon: LucideIcon; classNa
       label: 'Paused',
       icon: PauseCircle,
       className: 'bg-muted text-muted-foreground',
+   },
+   BLOCKED: {
+      label: 'Blocked',
+      icon: Ban,
+      className: 'bg-destructive/10 text-destructive',
    },
 }
 

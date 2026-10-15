@@ -1,6 +1,8 @@
 import { type ExtractedRecord, type ProxyConfig, type SessionCookie } from '../types'
 
+import { type DeviceIdentity } from '../identity/deviceIdentity'
 import { type RunRecorder } from '../recording/recorder'
+import { type SavedState } from '../sessions/sessionVault'
 
 // What the engine needs from a browser. Camoufox implements it; tests use a fake.
 export interface BrowserSession {
@@ -20,6 +22,12 @@ export type OpenOptions = {
    proxy?: ProxyConfig
    // When set, the browser records a video and reports what the page does to it (.plan/spider-session-recording.md).
    recorder?: RunRecorder
+   // The device of an account: the browser looks the same on every run. Without it each run is a new device.
+   identity?: DeviceIdentity
+   // The proxy's exit address, when the caller already looked it up, so the browser does not ask again.
+   exitIp?: string
+   // The cookies and local storage the account had at the end of its last good sign-in.
+   storageState?: SavedState
 }
 
 export interface BrowserDriver {
@@ -30,11 +38,15 @@ export interface BrowserDriver {
 // get it, so they cannot type credentials.
 export interface LoginSession extends BrowserSession {
    fill: (selector: string, value: string) => Promise<void>
+   // Presses a key in the element that has the focus (Enter sends a form) and returns the url afterwards.
+   press: (key: string) => Promise<string>
    // Whether the element shows up within `timeoutMs`.
    exists: (selector: string, timeoutMs: number) => Promise<boolean>
    // Only what a recording needs; a fake browser may leave them out.
    screenshot?: () => Promise<Buffer>
    pageHtml?: () => Promise<string>
+   // Waits for the redirects after a submit to end, and says where the browser is. A fake browser may leave it out.
+   settled?: () => Promise<string>
 }
 
 export interface LoginDriver {
@@ -46,6 +58,35 @@ export type BrowserIdentity = {
    userAgent: string
    platform: string
    screen: string
+}
+
+// The values a script can read about the browser, as one place (the page, an iframe, a worker) sees them. A worker has
+// no `webdriver` flag in some browsers.
+export type ProbeFacts = {
+   userAgent: string
+   platform: string
+   language: string
+   languages: string
+   timezone: string
+   hardwareConcurrency: number
+   webdriver?: boolean
+}
+
+// A world that could not be read is left out.
+export type ProbeReading = {
+   window: ProbeFacts
+   iframe?: ProbeFacts
+   worker?: ProbeFacts
+}
+
+// What a person at the keyboard can do to a page, for human takeover. Positions are fractions of the page, so the owner's
+// screen size does not matter. There is no way to run code in the page.
+export interface SessionControl {
+   frame: () => Promise<{ jpeg: Buffer; width: number; height: number }>
+   click: (x: number, y: number) => Promise<void>
+   type: (text: string) => Promise<void>
+   press: (key: string) => Promise<void>
+   scroll: (dy: number) => Promise<void>
 }
 
 // What a browser holds between runs: the cookies and the local storage of each site. It carries login tokens.
@@ -62,6 +103,10 @@ export interface DetectionSession extends LoginSession {
    pageHtml: () => Promise<string>
    fullPageScreenshot: () => Promise<Buffer>
    identity: () => Promise<BrowserIdentity>
+   // What the page, an iframe and a worker each report about the browser. A fake browser may leave it out.
+   probe?: () => Promise<ProbeReading>
+   // Present when a person can take over the page.
+   control?: SessionControl
    storageState: () => Promise<StorageState>
 }
 

@@ -30,6 +30,16 @@ const signedIn = (cookie = '') => cookie.includes('signed=yes') || cookie.includ
 
 let server: Server
 let origin: string
+// The new LinkedIn page has no form: Enter does nothing and a button sends what was typed.
+let noForm = false
+
+// A checkbox made of a button, the sign-in button, then a button of the footer.
+const noFormPage =
+   '<div><input id="u1" autocomplete="username"></div><div><input id="p1" type="password" autocomplete="current-password"></div><div><a href="#">Forgot</a></div><div><button type="button" role="checkbox" aria-checked="true">Keep</button></div><div><button type="button" id="go">Go</button></div><div><button type="button">Language</button></div><script>document.getElementById("go").onclick=()=>{location.href="/spa-signin?p="+encodeURIComponent(document.getElementById("p1").value)}</script>'
+
+// LinkedIn's two-step page also holds a hidden recovery code form with the same ids and names.
+const twoStepPage =
+   '<form method="post" action="/checkpoint/challenge/abc"><input name="pin" id="input__phone_verification_pin" maxlength="6"><button type="submit" id="two-step-submit-button">Verify</button></form><div style="display:none"><form method="post" action="/checkpoint/challenge/abc"><input name="pin" id="input__phone_verification_pin" maxlength="8"><button type="submit" id="two-step-submit-button">Recover</button></form></div>'
 
 beforeAll(async () => {
    server = createServer(async (request, response) => {
@@ -54,7 +64,17 @@ beforeAll(async () => {
          return signedIn(cookie) ? html('<h1>feed</h1>') : redirect('/login')
       }
 
+      if (pathname === '/spa-signin') {
+         return new URL(request.url ?? '/', 'http://localhost').searchParams.get('p') === PASSWORD
+            ? redirect('/feed/', { 'set-cookie': 'signed=yes; Path=/' })
+            : html('<p>no</p>')
+      }
+
       if (pathname === '/login' && request.method === 'GET') {
+         if (noForm && !signedIn(cookie)) {
+            return html(noFormPage)
+         }
+
          return signedIn(cookie)
             ? redirect('/feed/')
             : html(
@@ -80,9 +100,7 @@ beforeAll(async () => {
       }
 
       if (pathname === '/checkpoint/challenge/abc' && request.method === 'GET') {
-         return html(
-            '<form method="post" action="/checkpoint/challenge/abc"><input name="pin"><button type="submit">Verify</button></form>'
-         )
+         return html(twoStepPage)
       }
 
       if (pathname === '/checkpoint/challenge/abc' && request.method === 'POST') {
@@ -130,6 +148,16 @@ const run = async (email: string, credentials: Record<string, string>) => {
 }
 
 describe('AccountValidator in a real browser, against a stand-in for LinkedIn', () => {
+   it('should send the password with the button when the page has no form and ignores Enter', async () => {
+      noForm = true
+
+      try {
+         await expect(run('ada@work.com', { password: PASSWORD })).resolves.toMatchObject({ outcome: 'VALID' })
+      } finally {
+         noForm = false
+      }
+   })
+
    it('should accept a good browser token and hand back the session cookies', async () => {
       const verdict = await run('ada@work.com', { session: `li_at=${TOKEN}` })
 

@@ -20,6 +20,9 @@ export type TaskOutcome = {
    report?: TaskReport
    // The run's own check passed, so its cookies and local storage replace what is saved for the account.
    commitSession?: boolean
+   // The run stopped at something only its owner can finish (a security check, a code sent to them). The runner keeps the
+   // browser open for them, and once they say they are done it calls `resume`, which looks again and answers for real.
+   needsPerson?: { resume: () => Promise<TaskOutcome> }
 }
 
 // A page that could not be opened for a reason the task can describe in its own words.
@@ -39,6 +42,9 @@ export interface TaskContext {
    readonly browser: DetectionSession
    // For a task that needs an account: who it is and what to sign in with. Masked in every file of the run.
    readonly account?: { id: string; email: string; credentials: Credentials }
+   // The language of the account's device (a locale such as en-US), when the run has one. A site that picks a language by
+   // itself (from the address it sees) is told this one instead.
+   readonly language?: string
    // Opens a page. The allowlist, robots.txt and the rate limit are applied here, so a task cannot skip them.
    // Throws VisitError with a sentence when the page may not or could not be opened.
    visit: (url: string) => Promise<string>

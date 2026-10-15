@@ -1,15 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { CamoufoxDriver } from './camoufoxDriver'
+import { type Route } from 'playwright-core'
+
+import { type DeviceIdentity } from '../identity/deviceIdentity'
+import { CamoufoxDriver, allowedRoute } from './camoufoxDriver'
 
 const mocks = vi.hoisted(() => {
    const events: string[] = []
+   const field = {
+      click: vi.fn(async () => {
+         events.push('field clicked')
+      }),
+      pressSequentially: vi.fn(async (_text: string, _options?: unknown) => {
+         events.push('field typed')
+      }),
+   }
    const page = {
       on: vi.fn(),
       screenshot: vi.fn(async (_options?: unknown) => Buffer.from('png')),
       content: vi.fn(async () => '<html>page</html>'),
-      mouse: { wheel: vi.fn(async () => undefined) },
+      mouse: {
+         wheel: vi.fn(async () => undefined),
+         click: vi.fn(async (_x: number, _y: number) => undefined),
+      },
+      keyboard: {
+         type: vi.fn(async (_text: string, _options?: unknown) => undefined),
+         press: vi.fn(async (_key: string) => undefined),
+      },
       evaluate: vi.fn(async (_script?: unknown): Promise<unknown> => undefined),
+      waitForLoadState: vi.fn(async (_state?: string, _options?: unknown) => undefined),
+      locator: vi.fn((_selector: string) => field),
+      url: vi.fn(() => 'https://www.linkedin.com/feed/'),
    }
    const context = {
       setDefaultTimeout: vi.fn(),
@@ -34,6 +55,7 @@ const mocks = vi.hoisted(() => {
 
    return {
       events,
+      field,
       page,
       browser,
       context,
@@ -79,6 +101,31 @@ describe('CamoufoxDriver', () => {
       expect(mocks.browser.newContext).toHaveBeenCalledWith({})
    })
 
+   it('should start from the cookies and local storage an account kept', async () => {
+      const storageState = {
+         cookies: [],
+         origins: [
+            {
+               origin: 'https://www.linkedin.com',
+               localStorage: [],
+            },
+         ],
+      }
+
+      await driver.open({ storageState })
+
+      expect(mocks.browser.newContext).toHaveBeenCalledWith({ storageState })
+   })
+
+   it('should hand the proxy exit address it was given to Camoufox, so the address is not looked up twice', async () => {
+      await driver.open({
+         proxy: { server: 'http://proxy.example.net:80' },
+         exitIp: '203.0.113.7',
+      })
+
+      expect(mocks.camoufox).toHaveBeenCalledWith(expect.objectContaining({ geoip: '203.0.113.7' }))
+   })
+
    it('should start the browser headless by default', async () => {
       await driver.open()
 
@@ -111,6 +158,146 @@ describe('CamoufoxDriver', () => {
       // The constraints are in the generator call; Camoufox must not generate a second, different identity.
       expect(options.os).toBeUndefined()
       expect(options.screen).toBeUndefined()
+   })
+
+   it('should launch an account with the fingerprint, language and timezone its device was given, on every run', async () => {
+      const identity = {
+         version: 1 as const,
+         os: 'windows' as const,
+         fingerprint: {
+            screen: { width: 1366 },
+            navigator: { userAgent: 'Mozilla/5.0 (Windows NT 10.0; rv:150.0) Gecko/20100101 Firefox/150.0' },
+         } as DeviceIdentity['fingerprint'],
+         locale: 'de-DE',
+         timezone: 'Europe/Berlin',
+         createdAt: '2026-10-15T10:00:00.000Z',
+      }
+
+      await driver.open({
+         proxy: { server: 'http://proxy.example.net:80' },
+         identity,
+      })
+      await driver.open({
+         proxy: { server: 'http://proxy.example.net:80' },
+         identity,
+      })
+
+      const [first, second] = mocks.camoufox.mock.calls.map(([options]) => options)
+
+      expect(first).toEqual(second)
+      expect(first).toMatchObject({
+         fingerprint: identity.fingerprint,
+         locale: 'de-DE',
+         config: { timezone: 'Europe/Berlin' },
+         geoip: true,
+      })
+   })
+
+   it('should leave the language and timezone to the proxy until the device has them', async () => {
+      await driver.open({
+         proxy: { server: 'http://proxy.example.net:80' },
+         identity: {
+            version: 1,
+            os: 'windows',
+            fingerprint: {
+               screen: { width: 1366 },
+               navigator: { userAgent: 'Mozilla/5.0' },
+            } as DeviceIdentity['fingerprint'],
+            createdAt: '2026-10-15T10:00:00.000Z',
+         },
+      })
+
+      const options = mocks.camoufox.mock.calls[0]?.[0] as Record<string, unknown>
+
+      expect(options.locale).toBeUndefined()
+      expect(options.config).toBeUndefined()
+      expect(options.geoip).toBe(true)
+   })
+
+   it('should hand out what the page, an iframe and a worker each report about the browser', async () => {
+      const session = await driver.open()
+      const facts = {
+         userAgent: 'Mozilla/5.0',
+         platform: 'Win32',
+         language: 'de-DE',
+         languages: 'de-DE,de',
+         timezone: 'Europe/Berlin',
+         hardwareConcurrency: 8,
+      }
+
+      mocks.page.evaluate.mockResolvedValueOnce({
+         window: facts,
+         iframe: facts,
+         worker: facts,
+      })
+
+      await expect(session.probe?.()).resolves.toEqual({
+         window: facts,
+         iframe: facts,
+         worker: facts,
+      })
+   })
+
+   it('should give the owner a picture of the page, a click placed by fraction, text, keys and a scroll', async () => {
+      const session = await driver.open()
+
+      mocks.page.evaluate.mockResolvedValue({
+         width: 1280,
+         height: 720,
+      })
+
+      const frame = await session.control?.frame()
+
+      expect(frame).toMatchObject({
+         width: 1280,
+         height: 720,
+      })
+      expect(mocks.page.screenshot).toHaveBeenCalledWith(expect.objectContaining({ type: 'jpeg' }))
+
+      await session.control?.click(0.5, 0.25)
+      await session.control?.type('123456')
+      await session.control?.press('Enter')
+      await session.control?.scroll(300)
+
+      expect(mocks.page.mouse.click).toHaveBeenCalledWith(640, 180)
+      expect(mocks.page.keyboard.type).toHaveBeenCalledWith('123456', expect.anything())
+      expect(mocks.page.keyboard.press).toHaveBeenCalledWith('Enter')
+      expect(mocks.page.mouse.wheel).toHaveBeenCalledWith(0, 300)
+
+      mocks.page.evaluate.mockReset()
+   })
+
+   it('should wait for the redirects after a submit and say where the browser is, even when the page never goes quiet', async () => {
+      const session = await driver.open()
+
+      await expect(session.settled?.()).resolves.toBe('https://www.linkedin.com/feed/')
+      expect(mocks.page.waitForLoadState).toHaveBeenCalledWith(
+         'networkidle',
+         expect.objectContaining({ timeout: 4000 })
+      )
+
+      mocks.page.waitForLoadState.mockRejectedValueOnce(new Error('Timeout 4000ms exceeded'))
+
+      await expect(session.settled?.()).resolves.toBe('https://www.linkedin.com/feed/')
+   })
+
+   it('should click a field before it types into it, so the keys go to that field and not to the one before', async () => {
+      const session = await driver.open()
+
+      mocks.events.length = 0
+
+      await session.fill('#password', 'hunter2')
+
+      expect(mocks.page.locator).toHaveBeenCalledWith('#password')
+      expect(mocks.field.pressSequentially).toHaveBeenCalledWith('hunter2', expect.anything())
+      expect(mocks.events).toEqual(['field clicked', 'field typed'])
+   })
+
+   it('should press a key as a person would and say where the browser is afterwards', async () => {
+      const session = await driver.open()
+
+      await expect(session.press('Enter')).resolves.toBe('https://www.linkedin.com/feed/')
+      expect(mocks.page.keyboard.press).toHaveBeenCalledWith('Enter')
    })
 
    it('should only claim the operating systems it is limited to', async () => {
@@ -285,5 +472,42 @@ describe('CamoufoxDriver', () => {
       await session.close()
 
       expect(mocks.events).toEqual(['settled', 'context closed'])
+   })
+})
+
+describe('allowedRoute', () => {
+   const request = (url: string, { navigation = true, main = true } = {}) => {
+      const route = {
+         request: () => ({
+            url: () => url,
+            isNavigationRequest: () => navigation,
+            frame: () => ({ parentFrame: () => (main ? null : {}) }),
+         }),
+         abort: vi.fn(),
+         continue: vi.fn(),
+      }
+
+      allowedRoute(host => host.startsWith('https://www.linkedin.com/'))(route as unknown as Route)
+
+      return route
+   }
+
+   it('should block the page itself from loading an address that is not allowed', () => {
+      const route = request('https://elsewhere.example/')
+
+      expect(route.abort).toHaveBeenCalledWith('blockedbyclient')
+      expect(route.continue).not.toHaveBeenCalled()
+   })
+
+   it('should let a frame of an allowed page load, as the captcha of the sign-in is one', () => {
+      const route = request('https://www.google.com/recaptcha/enterprise/anchor', { main: false })
+
+      expect(route.continue).toHaveBeenCalled()
+      expect(route.abort).not.toHaveBeenCalled()
+   })
+
+   it('should let an allowed page and anything that is not a page load through', () => {
+      expect(request('https://www.linkedin.com/login').continue).toHaveBeenCalled()
+      expect(request('https://cdn.example/app.js', { navigation: false }).continue).toHaveBeenCalled()
    })
 })

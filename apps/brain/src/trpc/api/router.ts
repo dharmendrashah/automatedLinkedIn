@@ -4,7 +4,17 @@ import type { Application } from 'express'
 import { router } from 'trpc'
 
 import { createContext } from './context'
-import { linkedInAccount, linkedInCompany, linkedInProfile, me, proxyServer, session, status, task } from './resolvers'
+import {
+   linkedInAccount,
+   linkedInCompany,
+   linkedInProfile,
+   me,
+   proxyServer,
+   session,
+   status,
+   takeover,
+   task,
+} from './resolvers'
 
 export type AppRouter = typeof appRouter
 
@@ -16,6 +26,7 @@ export const appRouter = router({
    proxyServer,
    session,
    status,
+   takeover,
    task,
 })
 

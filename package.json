@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "pnpm -F @automatedLinkedIn/server start",
+    "record": "pnpm -F @automatedLinkedIn/spider dev:record",
     "dev": "turbo run dev",
       "lint": "turbo run lint",
       "lint:fix": "turbo run lint:fix",

@@ -28,4 +28,9 @@ export const resultKey = ({ task_type: type, task_id: id }: ScrapeTaskCommand) =
 // The account id is validated as path safe by the command schema.
 export const sessionKey = (accountId: string) => `sessions/${accountId}/state.json`
 
+// The sealed copy a task run keeps; `sessionKey` above is the plain one only the older scrape engine reads.
+export const sessionVaultKey = (accountId: string) => `sessions/${accountId}/state.enc.json`
+
 export const lockKey = (accountId: string) => `locks/${accountId}.json`
+
+export const identityKey = (accountId: string) => `identities/${accountId}/identity.json`
