@@ -40,9 +40,13 @@ configMapGenerator:
     envs:
       - config.env
     literals:
-      # Set here, not in the git-ignored config.env, so every staging deploy has it. The worker image defaults to
-      # `virtual` (Xvfb); staging runs plain headless Firefox.
-      - SPIDER_HEADLESS=true
+      # Set here, not in the git-ignored config.env, so every staging deploy has it. A real Firefox on an Xvfb display, which
+      # Camoufox advises over plain headless; it costs the worker a little more CPU and memory.
+      - SPIDER_HEADLESS=virtual
+      # Every run keeps its video, steps, requests, logs and pages for the Sessions page, seven days, including runs that
+      # went well. Off (the default) kept nothing for sign-in checks, `failures` keeps only runs that went wrong. A
+      # recording shows what the browser showed.
+      - SPIDER_RECORDING=always
   # Keeps app.staging.elitale.com pointed at the node's external IP (see dns/cronjob.yaml).
   # CF_ZONE_ID is the zone ID of elitale.com in Cloudflare (Overview page, right-hand side).
   # The API token is not here: the deploy job creates the cloudflare-dns secret from CLOUDFLARE_API_TOKEN.

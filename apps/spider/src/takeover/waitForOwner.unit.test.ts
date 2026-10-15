@@ -11,12 +11,18 @@ const setup = (script: Array<TakeoverInput[]> = []) => {
    let clock = Date.parse('2026-10-15T10:00:00.000Z')
    let handler: ((input: TakeoverInput) => void) | undefined
    const frames: TakeoverFrame[] = []
+   let taken = 0
    const control = {
-      frame: vi.fn(async () => ({
-         jpeg: Buffer.from('jpeg'),
-         width: 1280,
-         height: 720,
-      })),
+      // Each picture differs from the last, as a page that is changing would.
+      frame: vi.fn(async () => {
+         taken += 1
+
+         return {
+            jpeg: Buffer.from(`jpeg${taken}`),
+            width: 1280,
+            height: 720,
+         }
+      }),
       click: vi.fn(async (_x: number, _y: number) => undefined),
       type: vi.fn(async (_text: string) => undefined),
       press: vi.fn(async (_key: string) => undefined),
@@ -72,7 +78,8 @@ describe('waitForOwner', () => {
          seq: 0,
          width: 1280,
          height: 720,
-         jpeg: Buffer.from('jpeg').toString('base64'),
+         jpeg: Buffer.from('jpeg1').toString('base64'),
+         taken_at: '2026-10-15T10:00:00.000Z',
          expires_at: '2026-10-15T10:00:03.000Z',
       })
       expect(frames[1]?.seq).toBe(1)
@@ -219,5 +226,46 @@ describe('waitForOwner', () => {
       // 100 ms ticks: the picture after the click, then one every 250 ms for 4 s, then one every 700 ms.
       expect(frames.length).toBeGreaterThan(14)
       expect(frames.length).toBeLessThan(26)
+   })
+
+   it('should not send the same picture again, except now and then so brain keeps listing the run', async () => {
+      const { run, frames, control } = setup()
+
+      control.frame.mockResolvedValue({
+         jpeg: Buffer.from('still'),
+         width: 1280,
+         height: 720,
+      })
+
+      await run(12_000)
+
+      // One at the start, then one every 5 s while the page does not change.
+      expect(frames.length).toBe(3)
+      expect(frames.map(({ seq }) => seq)).toEqual([0, 1, 2])
+   })
+
+   it('should send a picture again as soon as the page changes', async () => {
+      const { run, frames, control } = setup()
+
+      control.frame
+         .mockResolvedValueOnce({
+            jpeg: Buffer.from('a'),
+            width: 1280,
+            height: 720,
+         })
+         .mockResolvedValueOnce({
+            jpeg: Buffer.from('a'),
+            width: 1280,
+            height: 720,
+         })
+         .mockResolvedValue({
+            jpeg: Buffer.from('b'),
+            width: 1280,
+            height: 720,
+         })
+
+      await run(3000)
+
+      expect(frames.map(({ jpeg }) => Buffer.from(jpeg, 'base64').toString())).toEqual(['a', 'b'])
    })
 })

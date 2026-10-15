@@ -17,6 +17,8 @@ type Options = {
    // ...and this often for a few seconds after they did something, which is when they wait for the page to answer.
    activeEveryMs?: number
    activeForMs?: number
+   // A picture identical to the last one is not sent again, except this often, so brain keeps listing the run.
+   keepAliveMs?: number
    tickMs?: number
    now?: () => number
    pause?: (ms: number) => Promise<void>
@@ -51,6 +53,7 @@ export const waitForOwner = async (
       frameEveryMs = 700,
       activeEveryMs = 250,
       activeForMs = 4000,
+      keepAliveMs = 5000,
       tickMs = 100,
       now = Date.now,
       pause = wait,
@@ -62,12 +65,18 @@ export const waitForOwner = async (
    let seq = 0
    let lastFrame = Number.NEGATIVE_INFINITY
    let lastInput = Number.NEGATIVE_INFINITY
+   let lastSent = Number.NEGATIVE_INFINITY
+   let lastJpeg: Buffer | undefined
 
    const sendFrame = async () => {
       lastFrame = now()
 
       try {
          const { jpeg, width, height } = await control.frame()
+
+         if (lastJpeg?.equals(jpeg) && now() - lastSent < keepAliveMs) {
+            return
+         }
 
          await channel.publishFrame({
             contract: 1,
@@ -76,8 +85,11 @@ export const waitForOwner = async (
             width,
             height,
             jpeg: jpeg.toString('base64'),
+            taken_at: new Date(now()).toISOString(),
             expires_at: new Date(deadline).toISOString(),
          })
+         lastJpeg = jpeg
+         lastSent = now()
          seq += 1
       } catch {
          // The next picture replaces it.
