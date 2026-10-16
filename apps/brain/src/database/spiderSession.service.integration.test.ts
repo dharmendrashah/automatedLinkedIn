@@ -223,17 +223,20 @@ describe('SpiderSessionService (database)', () => {
       })
    })
 
-   it('should delete sessions older than 30 days when a new one is saved', async () => {
+   it('should delete sessions older than 30 days, and leave the recent ones', async () => {
       const old = randomUUID()
+      const recent = randomUUID()
 
       await start(old)
+      await start(recent)
       await PrismaService.client.spiderSession.update({
          where: { id: old },
          data: { startedAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000) },
       })
-      await start(randomUUID())
+      await SpiderSessionService.deleteExpired()
 
       await expect(PrismaService.client.spiderSession.findUnique({ where: { id: old } })).resolves.toBeNull()
+      await expect(PrismaService.client.spiderSession.findUnique({ where: { id: recent } })).resolves.not.toBeNull()
    })
 
    it('should only hand out the files of a recording that exists and has not expired', async () => {

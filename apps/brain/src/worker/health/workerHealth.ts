@@ -10,6 +10,8 @@ export type HealthSources = {
    isBrokerHealthy: () => Promise<boolean>
    // How many messages wait in each dead queue.
    deadLetters: () => Promise<Array<{ queue: string; messages: number }>>
+   // How many accepted tasks wait to be published, and for how long the oldest has waited.
+   taskDispatch: () => Promise<{ waiting: number; oldestSeconds: number }>
    build: { commit: string; builtAt: string }
 }
 
@@ -30,10 +32,14 @@ export const createHealthReader = (sources: HealthSources) => {
    let cached: { at: number; result: HealthResult } | undefined
 
    const read = async (): Promise<HealthResult> => {
-      const [database, broker, dead] = await Promise.all([
+      const [database, broker, dead, dispatch] = await Promise.all([
          sources.isDatabaseHealthy().catch(() => false),
          sources.isBrokerHealthy().catch(() => false),
          sources.deadLetters().catch(() => []),
+         sources.taskDispatch().catch(() => ({
+            waiting: 0,
+            oldestSeconds: 0,
+         })),
       ])
       const consumers = sources.consumers()
       const ok = database && consumers.every(({ connected }) => connected)
@@ -51,6 +57,7 @@ export const createHealthReader = (sources: HealthSources) => {
             consumers,
             jobs: sources.jobs(),
             deadLetters: dead,
+            taskDispatch: dispatch,
          },
       }
    }

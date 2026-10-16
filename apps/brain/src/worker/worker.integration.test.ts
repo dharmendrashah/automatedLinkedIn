@@ -167,11 +167,9 @@ describe('the brain worker (PostgreSQL and RabbitMQ)', () => {
 
    it('should keep a message that does not match the contract in the dead queue, and move it back on replay', async () => {
       await publish({ nope: 1 })
-      await expect
-         .poll(async () => (await deadDepths([QUEUE], () => MessageBroker.confirmedChannel()))[0].messages, {
-            timeout: 10_000,
-         })
-         .toBe(1)
+      const waiting = async () => (await deadDepths([QUEUE], () => MessageBroker.confirmedChannel()))[0].messages
+
+      await expect.poll(waiting, { timeout: 10_000 }).toBe(1)
 
       await runner.stop(1000)
 

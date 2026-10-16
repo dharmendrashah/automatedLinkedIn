@@ -22,7 +22,7 @@ import { type HostPolicy } from '../scraping/policy'
 import { type HostRateLimiter } from '../scraping/rateLimiter'
 import { type RobotsGuard } from '../scraping/robots'
 import { type SessionVault } from '../sessions/sessionVault'
-import { type ObjectStore } from '../storage/store'
+import { ObjectNotFoundError, type ObjectStore } from '../storage/store'
 import { type Handover } from '../takeover/waitForOwner'
 import { type Credentials } from './credentials'
 import { type TaskContext, type TaskDefinition, type TaskOutcome, VisitError } from './defineTask'
@@ -44,7 +44,9 @@ export type RunnerDeps = {
    policy: Pick<HostPolicy, 'allowsUrl' | 'allowsCookieDomain'>
    robots: Pick<RobotsGuard, 'check'>
    limiter: Pick<HostRateLimiter, 'wait'>
-   store: Pick<ObjectStore, 'put'>
+   // `get` and `create` keep a marker of every answered command (a second delivery is then skipped); without them (the
+   // local devtools) nothing is skipped.
+   store: Pick<ObjectStore, 'put'> & Partial<Pick<ObjectStore, 'get' | 'create'>>
    // Only needed by tasks that need an account.
    accountLock?: Pick<AccountLock, 'acquire'>
    openCredentials?: (sealed: NonNullable<TaskCommand['credentials']>) => Credentials
@@ -116,12 +118,51 @@ const withLimit = <T>(work: Promise<T>, ms: number) => {
 export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
    const { publishResult, now = Date.now, pause = wait } = deps
    const startedAt = now()
+   const doneKey = `${runPrefix(command)}/done.json`
 
-   const publish = (
+   // A result for this very command was already published, so a second delivery of it (the broker delivers at least once)
+   // must not run the task again. Not being able to tell counts as not done: the task runs, as it always did.
+   const alreadyDone = async () => {
+      if (!deps.store.get) {
+         return false
+      }
+
+      try {
+         await deps.store.get(doneKey)
+
+         return true
+      } catch (error) {
+         if (!(error instanceof ObjectNotFoundError)) {
+            console.error(`Could not look for the done marker of ${command.task_id}: ${(error as Error).message}`)
+         }
+
+         return false
+      }
+   }
+
+   // Written after the result was published, never before: a crash in between repeats the run, where the other order
+   // would lose the answer.
+   const markDone = async () => {
+      try {
+         await deps.store.create?.(
+            doneKey,
+            JSON.stringify({ done_at: new Date(now()).toISOString() }),
+            'application/json'
+         )
+      } catch (error) {
+         console.error(`Could not write the done marker of ${command.task_id}: ${(error as Error).message}`)
+      }
+   }
+
+   const skipDuplicate = () => {
+      console.log(`spider job skipped, its result was already published: Task ${command.task} ${command.task_id}`)
+   }
+
+   const publish = async (
       outcome: Pick<TaskOutcome, 'status' | 'verdict' | 'message' | 'report'>,
       artifacts: Artifact[] = []
-   ) =>
-      publishResult(
+   ) => {
+      await publishResult(
          taskResultSchema.parse({
             contract: TASK_CONTRACT_VERSION,
             task_id: command.task_id,
@@ -138,6 +179,8 @@ export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
             finished_at: new Date(now()).toISOString(),
          })
       )
+      await markDone()
+   }
 
    const refuse = (verdict: keyof typeof RUNNER_VERDICTS, message: string) =>
       publish({
@@ -186,6 +229,13 @@ export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
          throw new AccountBusyError()
       }
 
+      // Checked while holding the lease, so a duplicate that waited for the first run finds its marker.
+      if (await alreadyDone()) {
+         await lease.release().catch(() => undefined)
+
+         return skipDuplicate()
+      }
+
       try {
          account = {
             id: command.account_id as string,
@@ -198,6 +248,8 @@ export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
 
          return refuse('NEEDS_ACCOUNT', 'The stored credentials could not be read. Save them again.')
       }
+   } else if (await alreadyDone()) {
+      return skipDuplicate()
    }
 
    try {

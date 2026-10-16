@@ -11,6 +11,7 @@ import { Recorder } from '../recording/recorder'
 import { type SessionControl } from '../scraping/driver'
 import { AccountBusyError, TaskError } from '../scraping/errors'
 import { type SavedState } from '../sessions/sessionVault'
+import { ObjectNotFoundError } from '../storage/store'
 import { type TaskDefinition, type TaskOutcome, VisitError, defineTask } from './defineTask'
 import { type RunnerDeps, exhaustedResult, runTask } from './runner'
 
@@ -96,6 +97,24 @@ const makeStore = () => {
          objects.set(key, body)
       }),
       upload: vi.fn(async (_key: string, _path: string, _type: string) => undefined),
+      get: vi.fn(async (key: string) => {
+         const body = objects.get(key)
+
+         if (body === undefined) {
+            throw new ObjectNotFoundError(key)
+         }
+
+         return body
+      }),
+      create: vi.fn(async (key: string, body: string, _type: string) => {
+         if (objects.has(key)) {
+            return undefined
+         }
+
+         objects.set(key, body)
+
+         return '1'
+      }),
    }
 }
 
@@ -827,6 +846,97 @@ describe('a task that needs an account', () => {
       expect(published).toEqual([])
    })
 
+   describe('a command delivered twice', () => {
+      const doneKey = `${runPrefix(command)}/done.json`
+
+      it('should write a marker after the result was published, so a second delivery is recognised', async () => {
+         const { run, deps, store } = setup()
+
+         await run()
+
+         expect(store.objects.has(doneKey)).toBe(true)
+         expect(vi.mocked(deps.publishResult).mock.invocationCallOrder[0]).toBeLessThan(
+            store.create.mock.invocationCallOrder[0]
+         )
+      })
+
+      it('should skip a command whose result was already published: no browser, no second result', async () => {
+         const { run, deps, store, published } = setup()
+
+         store.objects.set(doneKey, '{}')
+         vi.spyOn(console, 'log').mockImplementation(() => undefined)
+
+         await expect(run()).resolves.toBeUndefined()
+
+         expect(deps.driver.open).not.toHaveBeenCalled()
+         expect(published).toEqual([])
+         expect(console.log).toHaveBeenCalledWith(expect.stringContaining('skipped'))
+      })
+
+      it('should skip it while holding the account, release the account, and never open the credentials', async () => {
+         const { run, deps, store, published } = setup({ task: accountTask() })
+
+         store.objects.set(
+            `${runPrefix({
+               ...command,
+               ...accountCommand,
+            })}/done.json`,
+            '{}'
+         )
+         vi.spyOn(console, 'log').mockImplementation(() => undefined)
+
+         await run(accountCommand)
+
+         expect(deps.accountLock?.acquire).toHaveBeenCalledTimes(1)
+         expect(lease.release).toHaveBeenCalledTimes(1)
+         expect(deps.openCredentials).not.toHaveBeenCalled()
+         expect(deps.driver.open).not.toHaveBeenCalled()
+         expect(published).toEqual([])
+      })
+
+      it('should run when the marker cannot be read for another reason than not being there, and say so', async () => {
+         const { run, store, published } = setup()
+
+         store.get.mockRejectedValueOnce(new Error('bucket unavailable'))
+
+         await run()
+
+         expect(published).toHaveLength(1)
+         expect(console.error).toHaveBeenCalledWith(expect.stringContaining('bucket unavailable'))
+      })
+
+      it('should still answer when the marker cannot be written', async () => {
+         const { run, store, published } = setup()
+
+         store.create.mockRejectedValueOnce(new Error('bucket unavailable'))
+
+         await expect(run()).resolves.toBeUndefined()
+
+         expect(published).toHaveLength(1)
+         expect(console.error).toHaveBeenCalledWith(expect.stringContaining('bucket unavailable'))
+      })
+
+      it('should write no marker for a run that failed for the broker to retry, so its retry is not skipped', async () => {
+         const { run, deps, store } = setup()
+
+         vi.mocked(deps.driver.open).mockRejectedValueOnce(new Error('browser crashed'))
+
+         await expect(run()).rejects.toThrow('browser crashed')
+
+         expect(store.objects.has(doneKey)).toBe(false)
+      })
+
+      it('should run as before with a store that keeps no markers, such as the local devtools', async () => {
+         const { run, deps, published } = setup()
+
+         deps.store = { put: deps.store.put }
+
+         await run()
+
+         expect(published).toHaveLength(1)
+      })
+   })
+
    it('should answer NEEDS_ACCOUNT, without opening a browser, when the credentials cannot be read', async () => {
       const { run, deps, published } = setup({ task: accountTask() })
 
@@ -1025,7 +1135,13 @@ describe('a task that needs an account', () => {
 
       sessions.load.mockRejectedValueOnce(new Error('bucket unavailable'))
 
-      await expect(run(accountCommand)).rejects.toThrow('bucket unavailable')
+      // Another command: the first one is answered, so its twin would be skipped.
+      const another = {
+         ...accountCommand,
+         task_id: '1e0a6c7f-1d69-4c5e-8e5c-0c9a6c1a7b22',
+      }
+
+      await expect(run(another)).rejects.toThrow('bucket unavailable')
    })
 })
 

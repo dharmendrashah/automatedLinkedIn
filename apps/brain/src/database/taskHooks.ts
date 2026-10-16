@@ -23,8 +23,9 @@ export type FinishedSession = {
 }
 
 export type TaskHooks = {
-   // Throws TaskRefusedError to refuse, before anything is saved or queued.
-   onRequest?: (context: TaskRequestContext) => Promise<void>
+   // Throws TaskRefusedError to refuse. Runs inside the transaction that saves the session and its "to publish" row, so a
+   // throw leaves nothing behind. Change brain's own data through `tx`, be quick (Prisma's transaction limits apply).
+   onRequest?: (context: TaskRequestContext, tx: Prisma.TransactionClient) => Promise<void>
    // Runs inside the transaction that finishes the session, so a hook that throws leaves the session in progress and the
    // result is applied again when it is redelivered. Change brain's own data through `tx`, be quick, and make no network call.
    onResult?: (session: FinishedSession, result: TaskResult, tx: Prisma.TransactionClient) => Promise<void>

@@ -17,14 +17,20 @@ const mocks = vi.hoisted(() => ({
    startTask: vi.fn(),
    fail: vi.fn(),
    finishTask: vi.fn(),
-   publish: vi.fn(),
+   deleteExpired: vi.fn(),
+   dispatch: vi.fn(),
+   transaction: vi.fn(),
+   createDispatch: vi.fn(),
 }))
 
-vi.mock('core', () => ({ TaskQueue: { publish: mocks.publish } }))
+vi.mock('./taskDispatch.service', () => ({ TaskDispatchService: { dispatch: mocks.dispatch } }))
+
+const tx = { taskDispatch: { create: mocks.createDispatch } }
 
 vi.mock('./prisma.service', () => ({
    PrismaService: {
       client: {
+         $transaction: mocks.transaction,
          taskDefinition: {
             findMany: mocks.findDefinitions,
             upsert: mocks.upsertDefinition,
@@ -46,6 +52,7 @@ vi.mock('./spiderSession.service', () => ({
       startTask: mocks.startTask,
       fail: mocks.fail,
       finishTask: mocks.finishTask,
+      deleteExpired: mocks.deleteExpired,
    },
 }))
 
@@ -136,7 +143,10 @@ describe('TaskService', () => {
       mocks.pickForAccount.mockResolvedValue(picked)
       mocks.startTask.mockResolvedValue(undefined)
       mocks.fail.mockResolvedValue(undefined)
-      mocks.publish.mockResolvedValue(undefined)
+      mocks.dispatch.mockResolvedValue({ outcome: 'published' })
+      mocks.deleteExpired.mockResolvedValue(undefined)
+      mocks.createDispatch.mockResolvedValue({})
+      mocks.transaction.mockImplementation(async (work: (client: unknown) => Promise<unknown>) => work(tx))
    })
 
    describe('catalog', () => {
@@ -225,54 +235,51 @@ describe('TaskService', () => {
             })
          )
          expect(mocks.pickForAccount).toHaveBeenCalledWith('acc1', 'p1')
-         expect(mocks.startTask).toHaveBeenCalledWith({
-            id,
-            userId: 'u1',
-            linkedInAccountId: 'acc1',
-            proxy: picked.summary,
-            task: 'browser-detection',
-            taskVersion: 1,
-            trigger: 'manual',
-            input: {},
-            startedAt: expect.any(Date),
-         })
-         expect(mocks.publish).toHaveBeenCalledWith({
-            contract: 1,
-            task_id: id,
-            user_id: 'u1',
-            task: 'browser-detection',
-            task_version: 1,
-            requested_at: mocks.startTask.mock.calls[0][0].startedAt.toISOString(),
-            trigger: 'manual',
-            proxy: picked.config,
-            input: {},
-         })
-         expect(mocks.startTask.mock.invocationCallOrder[0]).toBeLessThan(mocks.publish.mock.invocationCallOrder[0])
+         expect(mocks.startTask).toHaveBeenCalledWith(
+            {
+               id,
+               userId: 'u1',
+               linkedInAccountId: 'acc1',
+               proxy: picked.summary,
+               task: 'browser-detection',
+               taskVersion: 1,
+               trigger: 'manual',
+               input: {},
+               startedAt: expect.any(Date),
+            },
+            tx
+         )
+         expect(mocks.createDispatch).toHaveBeenCalledWith({ data: { sessionId: id } })
+         expect(mocks.dispatch).toHaveBeenCalledWith(id)
+         expect(mocks.createDispatch.mock.invocationCallOrder[0]).toBeLessThan(
+            mocks.dispatch.mock.invocationCallOrder[0]
+         )
+         expect(mocks.deleteExpired).toHaveBeenCalledTimes(1)
       })
 
       it('should pass the input along without reading it', async () => {
          await ask({ input: { word: 'hello' } })
 
-         expect(mocks.publish).toHaveBeenCalledWith(expect.objectContaining({ input: { word: 'hello' } }))
+         expect(mocks.startTask).toHaveBeenCalledWith(expect.objectContaining({ input: { word: 'hello' } }), tx)
       })
 
       it('should refuse a task the worker never announced', async () => {
          await expect(ask({ task: 'nothing' })).rejects.toBeInstanceOf(TaskUnavailableError)
-         expect(mocks.publish).not.toHaveBeenCalled()
+         expect(mocks.dispatch).not.toHaveBeenCalled()
       })
 
       it("should say not found for someone else's proxy", async () => {
          mocks.findProxy.mockResolvedValue(null)
 
          await expect(ask({ userId: 'u2' })).rejects.toBeInstanceOf(ProxyServerOwnershipError)
-         expect(mocks.publish).not.toHaveBeenCalled()
+         expect(mocks.dispatch).not.toHaveBeenCalled()
       })
 
       it('should refuse a proxy that does not work, for a task that needs one', async () => {
          mocks.pickForAccount.mockResolvedValue(null)
 
          await expect(ask()).rejects.toBeInstanceOf(TaskNeedsProxyError)
-         expect(mocks.publish).not.toHaveBeenCalled()
+         expect(mocks.dispatch).not.toHaveBeenCalled()
       })
 
       it('should refuse a task that has neither a proxy nor an account to belong to', async () => {
@@ -309,25 +316,22 @@ describe('TaskService', () => {
             })
          )
          expect(mocks.pickForAccount).toHaveBeenCalledWith('acc1', undefined)
-         expect(mocks.publish).toHaveBeenCalledWith(
+         // The sealed credentials are added to the command when it is published, not stored with the task.
+         expect(mocks.startTask).toHaveBeenCalledWith(
             expect.objectContaining({
-               account_id: 'acc1',
-               account_email: 'ada@work.com',
-               credentials: {
-                  ciphertext: 'Y2lwaGVy',
-                  iv: 'aXY=',
-                  tag: 'dGFn',
-                  key_version: 1,
-               },
-            })
+               task: 'linkedin-login',
+               linkedInAccountId: 'acc1',
+            }),
+            tx
          )
+         expect(mocks.dispatch).toHaveBeenCalledTimes(1)
       })
 
-      it('should never send credentials to a task that does not need an account', async () => {
-         await ask()
+      it('should refuse an input that can never be published, and save nothing', async () => {
+         await expect(ask({ input: { big: 'x'.repeat(9000) } })).rejects.toBeInstanceOf(TaskRefusedError)
 
-         expect(mocks.publish.mock.calls[0][0]).not.toHaveProperty('credentials')
-         expect(mocks.publish.mock.calls[0][0]).not.toHaveProperty('account_id')
+         expect(mocks.transaction).not.toHaveBeenCalled()
+         expect(mocks.dispatch).not.toHaveBeenCalled()
       })
 
       it("should say not found for someone else's account", async () => {
@@ -430,18 +434,28 @@ describe('TaskService', () => {
          await expect(ask()).resolves.toEqual({ id: expect.any(String) })
       })
 
-      it('should end the session as not queued and refuse when the command cannot be queued', async () => {
-         mocks.publish.mockRejectedValue(new Error('nack from broker'))
+      it('should accept the task when it cannot be published right away: it is saved and the worker publishes it', async () => {
+         mocks.dispatch.mockRejectedValue(new Error('nack from broker'))
 
-         await expect(ask()).rejects.toThrow('could not be queued')
-         expect(mocks.fail).toHaveBeenCalledWith(mocks.startTask.mock.calls[0][0].id, expect.any(String), 'NOT_QUEUED')
+         await expect(ask()).resolves.toEqual({ id: expect.any(String) })
+         expect(mocks.startTask).toHaveBeenCalledTimes(1)
+         expect(mocks.createDispatch).toHaveBeenCalledTimes(1)
+         expect(mocks.fail).not.toHaveBeenCalled()
+      })
+
+      it('should save nothing when any step of the transaction fails', async () => {
+         mocks.createDispatch.mockRejectedValue(new Error('database down'))
+
+         await expect(ask()).rejects.toThrow('database down')
+         expect(mocks.dispatch).not.toHaveBeenCalled()
       })
 
       it('should queue nothing when the session cannot be saved', async () => {
          mocks.startTask.mockRejectedValue(new Error('database down'))
 
          await expect(ask()).rejects.toThrow()
-         expect(mocks.publish).not.toHaveBeenCalled()
+         expect(mocks.createDispatch).not.toHaveBeenCalled()
+         expect(mocks.dispatch).not.toHaveBeenCalled()
       })
 
       it('should let the hook of the task refuse the request before anything is saved', async () => {
@@ -453,23 +467,27 @@ describe('TaskService', () => {
 
          await expect(ask()).rejects.toThrow('Resume the account first.')
          expect(mocks.startTask).not.toHaveBeenCalled()
+         expect(mocks.createDispatch).not.toHaveBeenCalled()
       })
 
-      it('should run the request hook with what it needs to decide', async () => {
+      it('should run the request hook inside the transaction, with what it needs to decide', async () => {
          const onRequest = vi.fn(async () => undefined)
 
          TASK_HOOKS['browser-detection'] = { onRequest }
 
          const { id } = await ask()
 
-         expect(onRequest).toHaveBeenCalledWith({
-            id,
-            userId: 'u1',
-            accountId: 'acc1',
-            proxyId: 'p1',
-            task: 'browser-detection',
-            trigger: 'manual',
-         })
+         expect(onRequest).toHaveBeenCalledWith(
+            {
+               id,
+               userId: 'u1',
+               accountId: 'acc1',
+               proxyId: 'p1',
+               task: 'browser-detection',
+               trigger: 'manual',
+            },
+            tx
+         )
       })
    })
 
@@ -495,7 +513,8 @@ describe('TaskService', () => {
                userId: 'u1',
                trigger: 'automatic',
                task: 'browser-detection',
-            })
+            }),
+            tx
          )
       })
 
@@ -530,7 +549,7 @@ describe('TaskService', () => {
          ])
 
          await expect(TaskService.emit('proxy.active', { proxyId: 'p1' })).resolves.toBe(0)
-         expect(mocks.publish).not.toHaveBeenCalled()
+         expect(mocks.dispatch).not.toHaveBeenCalled()
       })
 
       it('should never throw, so the change that caused the event cannot fail', async () => {

@@ -2,11 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { JOBS } from './registry'
 
-const mocks = vi.hoisted(() => ({ runDue: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+   runDue: vi.fn(),
+   dispatchDue: vi.fn(),
+}))
 
-vi.mock('database', () => ({ ProxyScoringJob: { runDue: mocks.runDue } }))
+vi.mock('database', () => ({
+   ProxyScoringJob: { runDue: mocks.runDue },
+   TaskDispatchService: { dispatchDue: mocks.dispatchDue },
+}))
 
-const [proxyScoring] = JOBS
+const [proxyScoring, taskDispatch] = JOBS
 const context = { signal: new AbortController().signal }
 
 describe('worker jobs', () => {
@@ -38,5 +44,45 @@ describe('worker jobs', () => {
       })
 
       await expect(proxyScoring.run(context)).resolves.toBeUndefined()
+   })
+
+   it('should register task dispatch every 10 seconds, with a limit below the lease of a row', () => {
+      expect(taskDispatch).toMatchObject({
+         name: 'task-dispatch',
+         everyMs: 10_000,
+         startAfterMs: 15_000,
+      })
+   })
+
+   it('should give the job signal to the dispatch, so it stops when the job runs out of time', async () => {
+      mocks.dispatchDue.mockResolvedValue({
+         published: 0,
+         retried: 0,
+         gaveUp: 0,
+      })
+
+      await taskDispatch.run(context)
+
+      expect(mocks.dispatchDue).toHaveBeenCalledWith(context.signal)
+   })
+
+   it('should report what it published or gave up', async () => {
+      mocks.dispatchDue.mockResolvedValue({
+         published: 2,
+         retried: 1,
+         gaveUp: 1,
+      })
+
+      await expect(taskDispatch.run(context)).resolves.toEqual({ summary: '2 published, 1 given up' })
+   })
+
+   it('should report nothing for an empty table or for retries only, so a broker outage is not a log line a run', async () => {
+      mocks.dispatchDue.mockResolvedValue({
+         published: 0,
+         retried: 4,
+         gaveUp: 0,
+      })
+
+      await expect(taskDispatch.run(context)).resolves.toBeUndefined()
    })
 })

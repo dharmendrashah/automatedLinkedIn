@@ -13,17 +13,7 @@ const mocks = vi.hoisted(() => ({
    updateManyAccounts: vi.fn(),
 }))
 
-vi.mock('./prisma.service', () => ({
-   PrismaService: {
-      client: {
-         linkedInAccount: {
-            findUnique: mocks.findAccount,
-            update: mocks.updateAccount,
-            updateMany: mocks.updateManyAccounts,
-         },
-      },
-   },
-}))
+vi.mock('./prisma.service', () => ({ PrismaService: { client: {} } }))
 
 const MINUTE_MS = 60 * 1000
 
@@ -58,7 +48,13 @@ const session = {
    linkedInAccountId: 'acc1',
 }
 
-const tx = { linkedInAccount: { updateMany: mocks.updateManyAccounts } } as unknown as Prisma.TransactionClient
+const tx = {
+   linkedInAccount: {
+      findUnique: mocks.findAccount,
+      update: mocks.updateAccount,
+      updateMany: mocks.updateManyAccounts,
+   },
+} as unknown as Prisma.TransactionClient
 
 describe('linkedin-login hooks', () => {
    beforeEach(() => {
@@ -72,7 +68,7 @@ describe('linkedin-login hooks', () => {
 
    describe('onRequest', () => {
       it('should note the task on the account, so only its own answer can change the account', async () => {
-         await linkedInLoginHooks.onRequest?.(request)
+         await linkedInLoginHooks.onRequest?.(request, tx)
 
          expect(mocks.updateAccount).toHaveBeenCalledWith({
             where: { id: 'acc1' },
@@ -89,7 +85,7 @@ describe('linkedin-login hooks', () => {
             validationRequestedAt: null,
          })
 
-         await expect(linkedInLoginHooks.onRequest?.(request)).rejects.toBeInstanceOf(TaskRefusedError)
+         await expect(linkedInLoginHooks.onRequest?.(request, tx)).rejects.toBeInstanceOf(TaskRefusedError)
          expect(mocks.updateAccount).not.toHaveBeenCalled()
       })
 
@@ -102,10 +98,13 @@ describe('linkedin-login hooks', () => {
             })
 
             await expect(
-               linkedInLoginHooks.onRequest?.({
-                  ...request,
-                  trigger,
-               })
+               linkedInLoginHooks.onRequest?.(
+                  {
+                     ...request,
+                     trigger,
+                  },
+                  tx
+               )
             ).rejects.toThrow('3 minute')
             expect(mocks.updateAccount).not.toHaveBeenCalled()
          }
@@ -117,7 +116,7 @@ describe('linkedin-login hooks', () => {
             validationRequestedAt: new Date(Date.now() - MINUTE_MS),
          })
 
-         await expect(linkedInLoginHooks.onRequest?.(request)).resolves.toBeUndefined()
+         await expect(linkedInLoginHooks.onRequest?.(request, tx)).resolves.toBeUndefined()
       })
 
       it('should put the account back to waiting when the owner asks for another sign-in', async () => {
@@ -126,10 +125,13 @@ describe('linkedin-login hooks', () => {
             validationRequestedAt: new Date(Date.now() - 10 * MINUTE_MS),
          })
 
-         await linkedInLoginHooks.onRequest?.({
-            ...request,
-            trigger: 'manual',
-         })
+         await linkedInLoginHooks.onRequest?.(
+            {
+               ...request,
+               trigger: 'manual',
+            },
+            tx
+         )
 
          expect(mocks.updateAccount.mock.calls[0][0].data).toMatchObject({
             status: 'PENDING',
@@ -169,6 +171,9 @@ describe('linkedin-login hooks', () => {
          ['BLOCKED', 'BLOCKED'],
          ['PROXY_FAILED', 'ERROR'],
          ['CRASHED', 'ERROR'],
+         ['NOT_QUEUED', 'ERROR'],
+         ['UNKNOWN_TASK', 'ERROR'],
+         ['NEEDS_PROXY', 'PENDING'],
       ])(
          'should turn the verdict %s into the account status %s, with the sentence as the reason',
          async (verdict, status) => {
@@ -192,6 +197,29 @@ describe('linkedin-login hooks', () => {
             expect(mocks.updateManyAccounts.mock.calls[0][0].data).not.toHaveProperty('lastVerifiedAt')
          }
       )
+
+      it('should only let go of an account when the task was cancelled because the owner paused it', async () => {
+         mocks.updateManyAccounts.mockResolvedValue({ count: 1 })
+
+         await linkedInLoginHooks.onResult?.(
+            session,
+            result({
+               status: 'FAILED',
+               verdict: 'CANCELLED',
+               message: 'The account was paused before this task started.',
+            }),
+            tx
+         )
+
+         // Not limited to accounts that are not paused: a paused account is exactly the case.
+         expect(mocks.updateManyAccounts).toHaveBeenCalledWith({
+            where: {
+               id: 'acc1',
+               validationId: 'task-1',
+            },
+            data: { validationId: null },
+         })
+      })
 
       it('should leave an account alone that is no longer waiting for this very sign-in', async () => {
          mocks.updateManyAccounts.mockResolvedValue({ count: 0 })
