@@ -81,7 +81,7 @@ describe('TakeoverRelay (RabbitMQ)', () => {
          await channel.close()
       } finally {
          await consumer.stop()
-         TakeoverRelay.release(taskId)
+         TakeoverRelay.reset()
       }
    })
 

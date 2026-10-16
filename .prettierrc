@@ -25,6 +25,8 @@
 
       "^serviceStatus(.*)",
 
+      "^worker(.*)",
+
       "^generated(.*)",
 
       "^@automatedLinkedIn(.*)",

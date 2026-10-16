@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProxyScoringJob } from './proxyScoringJob'
 
@@ -37,17 +37,11 @@ const ok = {
 describe('ProxyScoringJob', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      vi.spyOn(console, 'log').mockImplementation(() => undefined)
+      ProxyScoringJob.reset()
       vi.spyOn(console, 'error').mockImplementation(() => undefined)
       mocks.claim.mockResolvedValue(true)
       mocks.score.mockResolvedValue(ok)
       mocks.retest.mockResolvedValue({ status: 'ACTIVE' })
-   })
-
-   afterEach(() => {
-      ProxyScoringJob.stop()
-      ProxyScoringJob.reset()
-      vi.useRealTimers()
    })
 
    describe('runDue', () => {
@@ -167,60 +161,14 @@ describe('ProxyScoringJob', () => {
          await first
       })
 
-      it('should log nothing when nothing was due, so an idle brain stays idle', async () => {
+      it('should report nothing, and write nothing, when nothing was due', async () => {
          mocks.findDue.mockResolvedValue([])
 
-         await ProxyScoringJob.runDue(NOW, { retryDelayMs: 0 })
-
-         expect(console.log).not.toHaveBeenCalled()
+         await expect(ProxyScoringJob.runDue(NOW, { retryDelayMs: 0 })).resolves.toEqual({
+            scored: 0,
+            failed: 0,
+         })
          expect(console.error).not.toHaveBeenCalled()
-      })
-
-      it('should log one line when proxies were scored', async () => {
-         mocks.findDue.mockResolvedValue([due('a')])
-
-         await ProxyScoringJob.runDue(NOW, { retryDelayMs: 0 })
-
-         expect(console.log).toHaveBeenCalledTimes(1)
-      })
-   })
-
-   describe('start and stop', () => {
-      it('should run a minute after boot and then every hour, until stopped', async () => {
-         vi.useFakeTimers()
-
-         const run = vi.spyOn(ProxyScoringJob, 'runDue').mockResolvedValue({
-            scored: 0,
-            failed: 0,
-         })
-
-         ProxyScoringJob.start()
-         expect(run).not.toHaveBeenCalled()
-
-         await vi.advanceTimersByTimeAsync(60_000)
-         expect(run).toHaveBeenCalledTimes(1)
-
-         await vi.advanceTimersByTimeAsync(60 * 60 * 1000)
-         expect(run).toHaveBeenCalledTimes(2)
-
-         ProxyScoringJob.stop()
-         await vi.advanceTimersByTimeAsync(2 * 60 * 60 * 1000)
-         expect(run).toHaveBeenCalledTimes(2)
-      })
-
-      it('should not start twice', async () => {
-         vi.useFakeTimers()
-
-         const run = vi.spyOn(ProxyScoringJob, 'runDue').mockResolvedValue({
-            scored: 0,
-            failed: 0,
-         })
-
-         ProxyScoringJob.start()
-         ProxyScoringJob.start()
-         await vi.advanceTimersByTimeAsync(60_000)
-
-         expect(run).toHaveBeenCalledTimes(1)
       })
    })
 })

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { type Prisma } from 'generated/prisma/client'
+
 import { type TaskResult } from '@automatedLinkedIn/contracts'
 
 import { linkedInLoginHooks } from './linkedInLogin.hooks'
@@ -55,6 +57,8 @@ const session = {
    userId: 'u1',
    linkedInAccountId: 'acc1',
 }
+
+const tx = { linkedInAccount: { updateMany: mocks.updateManyAccounts } } as unknown as Prisma.TransactionClient
 
 describe('linkedin-login hooks', () => {
    beforeEach(() => {
@@ -139,7 +143,7 @@ describe('linkedin-login hooks', () => {
       it('should mark the account active when the sign-in worked, and clear what it was waiting for', async () => {
          mocks.updateManyAccounts.mockResolvedValue({ count: 1 })
 
-         await linkedInLoginHooks.onResult?.(session, result())
+         await linkedInLoginHooks.onResult?.(session, result(), tx)
 
          expect(mocks.updateManyAccounts).toHaveBeenCalledWith({
             where: {
@@ -176,7 +180,8 @@ describe('linkedin-login hooks', () => {
                   status: 'FAILED',
                   verdict,
                   message: 'A sentence for the owner.',
-               })
+               }),
+               tx
             )
 
             expect(mocks.updateManyAccounts.mock.calls[0][0].data).toMatchObject({
@@ -191,7 +196,7 @@ describe('linkedin-login hooks', () => {
       it('should leave an account alone that is no longer waiting for this very sign-in', async () => {
          mocks.updateManyAccounts.mockResolvedValue({ count: 0 })
 
-         await expect(linkedInLoginHooks.onResult?.(session, result())).resolves.toBeUndefined()
+         await expect(linkedInLoginHooks.onResult?.(session, result(), tx)).resolves.toBeUndefined()
       })
    })
 })

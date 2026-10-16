@@ -61,7 +61,7 @@ export const linkedInLoginHooks: TaskHooks = {
 
    // One conditional update does the whole check: the account must still be waiting for this very sign-in (so an old or
    // repeated answer changes nothing) and must not have been paused meanwhile.
-   async onResult(session, result) {
+   async onResult(session, result, tx) {
       const now = new Date()
       const verdict =
          result.verdict === 'VALID'
@@ -75,7 +75,7 @@ export const linkedInLoginHooks: TaskHooks = {
                  statusMessage: result.message,
               }
 
-      await PrismaService.client.linkedInAccount.updateMany({
+      await tx.linkedInAccount.updateMany({
          where: {
             id: session.linkedInAccountId,
             validationId: session.id,

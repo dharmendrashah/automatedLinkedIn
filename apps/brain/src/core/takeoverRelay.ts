@@ -51,6 +51,8 @@ export class TakeoverRelay {
    }
 
    public static hold(frame: TakeoverFrame, now = Date.now()) {
+      this.prune(now)
+
       const current = this.held.get(frame.task_id)
 
       // Pictures can overtake each other on the way; the older one must not replace a newer one.
@@ -79,9 +81,20 @@ export class TakeoverRelay {
       return [...this.held.keys()].filter(id => this.latest(id, now))
    }
 
-   public static release(taskId: string) {
-      this.held.delete(taskId)
-      this.sent.delete(taskId)
+   // Forgets the pictures nobody asks for any more and the input counts that have gone quiet, so a finished run leaves nothing
+   // behind. Run on every picture: there are few runs, and a worker that stopped sending has nothing to wait for.
+   private static prune(now: number) {
+      for (const [taskId, { at }] of this.held) {
+         if (now - at > TAKEOVER_FRAME_TTL_MS) {
+            this.held.delete(taskId)
+         }
+      }
+
+      for (const [taskId, times] of this.sent) {
+         if (times.every(at => now - at >= 1000)) {
+            this.sent.delete(taskId)
+         }
+      }
    }
 
    // The owner's input goes to the one worker waiting on the run; with nobody waiting the exchange drops it. What was

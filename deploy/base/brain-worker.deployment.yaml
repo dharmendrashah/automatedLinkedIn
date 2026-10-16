@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: brain-worker
+  labels:
+    app.kubernetes.io/name: brain-worker
+  # The Service status page has an explicit "Background worker" check; these annotations only matter if that check is
+  # switched off (STATUS_URL_BRAIN_WORKER empty), when discovery shows the pod's readiness instead.
+  annotations:
+    status.automatedlinkedin/title: Background worker
+    status.automatedlinkedin/group: The app
+    status.automatedlinkedin/description: Applies the spider's answers and runs the daily jobs
+spec:
+  # Consumers scale by replicas, but jobs must run in one: add a second Deployment with WORKER_ROLES=consumers instead.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: brain-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: brain-worker
+    spec:
+      # Longer than WORKER_SHUTDOWN_GRACE_MS, so work in progress finishes before the pod is killed.
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: brain-worker
+          # The same image as brain; only the command differs.
+          image: automatedlinkedin-brain
+          imagePullPolicy: IfNotPresent
+          command: [node, dist/src/worker/main.js]
+          ports:
+            - name: health
+              containerPort: 3004
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: app-secrets
+          env:
+            # Built from the same two secret keys the broker starts with, so they cannot drift apart.
+            # $(VAR) only expands variables defined earlier in this list.
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: RABBITMQ_DEFAULT_PASS
+            - name: RABBITMQ_URL
+              value: amqp://$(RABBITMQ_DEFAULT_USER):$(RABBITMQ_DEFAULT_PASS)@rabbitmq:5672/automatedlinkedin
+          # Ready means the database answers and every queue it consumes is connected.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: health
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: health
+            periodSeconds: 10
+            timeoutSeconds: 3
+          # TCP, not HTTP: /health checks the database and the broker, so an outage of either must not restart the pod.
+          livenessProbe:
+            tcpSocket:
+              port: health
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]

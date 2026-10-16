@@ -101,7 +101,7 @@ services:
     build:
       context: .
       dockerfile: apps/brain/Dockerfile
-    environment:
+    environment: &brain-environment
       PORT: 3001
       DATABASE_URL: *database-url
       AUTHENTIK_ISSUER: ${AUTHENTIK_ISSUER:-http://localhost:9000/application/o/automatedlinkedin/}
@@ -128,6 +128,23 @@ services:
       migrate:
         condition: service_completed_successfully
       # Started, not healthy: brain keeps serving while the broker is down.
+      rabbitmq:
+        condition: service_started
+    restart: unless-stopped
+
+  # The same image as brain, started as its own process: it applies the spider's answers and runs the scheduled jobs, so
+  # the API only serves requests. Scale consumers with more replicas of WORKER_ROLES=consumers; keep jobs in one.
+  brain-worker:
+    build:
+      context: .
+      dockerfile: apps/brain/Dockerfile
+    command: ["node", "dist/src/worker/main.js"]
+    environment:
+      <<: *brain-environment
+      WORKER_ROLES: ${WORKER_ROLES:-consumers,jobs}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
       rabbitmq:
         condition: service_started
     restart: unless-stopped

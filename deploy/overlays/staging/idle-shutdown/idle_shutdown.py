@@ -1,10 +1,10 @@
 """Smart shutdown for the staging node pool.
 
-Each run reads the recent logs of the brain API, the spider API and the spider worker. If none of them logged real
-activity for IDLE_MINUTES, the staging node pool is scaled to zero, which stops the VM bill.
+Each run reads the recent logs of the brain API, the brain worker, the spider API and the spider worker. If none of them
+logged real activity for IDLE_MINUTES, the staging node pool is scaled to zero, which stops the VM bill.
 
 What counts as activity:
-  brain                       any request or job line, except health checks and known retry noise
+  brain, brain-worker         any request, result or job line, except health checks and known retry noise
   spider-api, spider-worker   only the job lines "spider job started / still running / finished"
 Authentik pods are neither read nor waited for: sign-ins only count once they reach brain.
 
@@ -37,7 +37,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Optional
 
-ACTIVITY_APPS = ("brain", "spider-api", "spider-worker")
+ACTIVITY_APPS = ("brain", "brain-worker", "spider-api", "spider-worker")
 SPIDER_APPS = ("spider-api", "spider-worker")
 JOB_MARKERS = ("spider job started", "spider job still running", "spider job finished")
 NOISE_MARKERS = (
@@ -45,6 +45,8 @@ NOISE_MARKERS = (
     "/healthz",
     "/readyz",
     "Could not consume validation results",
+    "Could not consume",
+    "The database is not answering yet",
     "ECONNREFUSED",
 )
 DEFAULT_IDLE_MINUTES = 45

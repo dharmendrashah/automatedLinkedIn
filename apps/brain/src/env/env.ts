@@ -109,6 +109,25 @@ export class Environment {
             default: 'http://spider-worker:3003/health',
             devDefault: 'http://localhost:3003/health',
          }),
+         STATUS_URL_BRAIN_WORKER: string({
+            desc: 'Health address of the brain worker. Empty: the module is left out',
+            example: 'http://brain-worker:3004/health',
+            default: 'http://brain-worker:3004/health',
+            devDefault: 'http://localhost:3004/health',
+         }),
+         WORKER_ROLES: string({
+            desc: 'What the brain worker process does, comma separated: consumers (apply results from the queues) and jobs (scheduled work). Run jobs in one replica only',
+            example: 'consumers,jobs',
+            default: 'consumers,jobs',
+         }),
+         WORKER_HEALTH_PORT: port({
+            desc: 'Port the brain worker answers GET /health on',
+            default: 3004,
+         }),
+         WORKER_SHUTDOWN_GRACE_MS: num({
+            desc: 'How long the brain worker waits for work in progress when it is asked to stop',
+            default: 25_000,
+         }),
          AUTHENTIK_EMAIL__HOST: string({
             desc: 'SMTP server authentik sends mail through. The Service status page connects to it and reads its greeting. Empty: left out',
             example: 'smtp.resend.com',

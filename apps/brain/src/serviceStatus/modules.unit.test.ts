@@ -25,6 +25,7 @@ afterEach(() => {
 const config = (overrides: Partial<StatusConfig> = {}): StatusConfig => ({
    websiteUrl: 'http://body:80/health',
    signInUrl: 'http://authentik-server:9000/-/health/ready/',
+   brainWorkerUrl: 'http://brain-worker:3004/health',
    spiderApiUrl: 'http://spider-api:3002/health',
    spiderWorkerUrl: 'http://spider-worker:3003/health',
    smtp: {
@@ -54,6 +55,7 @@ describe('buildModules', () => {
          ['The app', 'website'],
          ['The app', 'api'],
          ['The app', 'database'],
+         ['The app', 'brainWorker'],
          ['Sign-in', 'signIn'],
          ['Sign-in', 'email'],
          ['The spider', 'queue'],
@@ -76,6 +78,7 @@ describe('buildModules', () => {
          config({
             websiteUrl: '',
             signInUrl: '',
+            brainWorkerUrl: '',
             spiderApiUrl: '',
             spiderWorkerUrl: '',
             smtp: null,
@@ -87,7 +90,7 @@ describe('buildModules', () => {
 
    it('should say which Kubernetes workloads the modules cover, so discovery adds no second card for them', () => {
       expect(coveredWorkloads(buildModules(config()))).toEqual(
-         new Set(['body', 'brain', 'authentik-server', 'rabbitmq', 'spider-api', 'spider-worker'])
+         new Set(['body', 'brain', 'brain-worker', 'authentik-server', 'rabbitmq', 'spider-api', 'spider-worker'])
       )
    })
 
@@ -134,18 +137,32 @@ describe('buildModules', () => {
       })
    })
 
-   it('should ask the right address for the website, sign-in and spider API', async () => {
+   it('should ask the right address for the website, sign-in, brain worker and spider API', async () => {
       const modules = buildModules(config())
 
       await find(modules, 'website').check()
       await find(modules, 'signIn').check()
+      await find(modules, 'brainWorker').check()
       await find(modules, 'spiderApi').check()
 
       expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
          'http://body:80/health',
          'http://authentik-server:9000/-/health/ready/',
+         'http://brain-worker:3004/health',
          'http://spider-api:3002/health',
       ])
+   })
+
+   it('should call the brain worker dead when its health answers 503, since it is not applying results', async () => {
+      fetchMock.mockResolvedValue({
+         ok: false,
+         status: 503,
+      })
+
+      await expect(find(buildModules(config()), 'brainWorker').check()).resolves.toEqual({
+         state: 'dead',
+         reason: 'Reports an error',
+      })
    })
 
    it('should ask the spider worker once for both the worker and cloud storage', async () => {

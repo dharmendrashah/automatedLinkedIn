@@ -5,6 +5,7 @@ import {
    AUTHENTIK_EMAIL__PORT,
    AUTHENTIK_EMAIL__USE_SSL,
    IPINFO_TOKEN,
+   STATUS_URL_BRAIN_WORKER,
    STATUS_URL_SIGN_IN,
    STATUS_URL_SPIDER_API,
    STATUS_URL_SPIDER_WORKER,
@@ -27,6 +28,7 @@ export class StatusService {
          const explicit = buildModules({
             websiteUrl: STATUS_URL_WEBSITE,
             signInUrl: STATUS_URL_SIGN_IN,
+            brainWorkerUrl: STATUS_URL_BRAIN_WORKER,
             spiderApiUrl: STATUS_URL_SPIDER_API,
             spiderWorkerUrl: STATUS_URL_SPIDER_WORKER,
             smtp: AUTHENTIK_EMAIL__HOST

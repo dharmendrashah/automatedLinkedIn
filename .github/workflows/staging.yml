@@ -238,6 +238,7 @@ jobs:
           kubectl apply -f /tmp/staging-rendered.yaml
           kubectl -n automatedlinkedin rollout status statefulset/rabbitmq --timeout=5m
           kubectl -n automatedlinkedin rollout status deploy/brain --timeout=5m
+          kubectl -n automatedlinkedin rollout status deploy/brain-worker --timeout=5m
           kubectl -n automatedlinkedin rollout status deploy/body --timeout=5m
           kubectl -n automatedlinkedin rollout status deploy/authentik-server --timeout=5m
           kubectl -n automatedlinkedin rollout status deploy/authentik-worker --timeout=5m
