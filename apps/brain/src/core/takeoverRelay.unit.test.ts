@@ -78,11 +78,13 @@ describe('TakeoverRelay', () => {
          expect(TakeoverRelay.heldIds(NOW + TAKEOVER_FRAME_TTL_MS + 1)).toEqual([])
       })
 
-      it('should forget the run once it ended', () => {
-         TakeoverRelay.hold(frame(), NOW)
-         TakeoverRelay.release(TASK_ID)
+      it('should drop the pictures of ended runs when the next picture arrives, so nothing piles up', () => {
+         TakeoverRelay.hold(frame(TASK_ID), NOW)
+         TakeoverRelay.hold(frame(OTHER_ID), NOW + TAKEOVER_FRAME_TTL_MS + 1)
 
-         expect(TakeoverRelay.latest(TASK_ID, NOW)).toBeUndefined()
+         const { held } = TakeoverRelay as unknown as { held: Map<string, unknown> }
+
+         expect([...held.keys()]).toEqual([OTHER_ID])
       })
    })
 

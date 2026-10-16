@@ -207,6 +207,17 @@ describe('MessageBroker', () => {
          expect(connection.createChannel).toHaveBeenCalledTimes(2)
       })
 
+      it('should hand out a fresh confirm channel to each consumer, apart from the publishing one', async () => {
+         const connection = connectionWith([channelOf(), channelOf(), channelOf()])
+
+         mocks.connect.mockResolvedValue(connection)
+
+         const publisher = await MessageBroker.confirmChannel()
+         const [first, second] = [await MessageBroker.confirmedChannel(), await MessageBroker.confirmedChannel()]
+
+         expect(new Set([publisher, first, second]).size).toBe(3)
+      })
+
       it('should forget the confirm channel on disconnect', async () => {
          const connection = connectionWith([channelOf(), channelOf()])
 

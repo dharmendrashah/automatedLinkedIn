@@ -90,7 +90,7 @@ class FakeOpener:
 
 class ScopeTests(unittest.TestCase):
     def test_the_checker_never_reads_authentik_pods(self):
-        self.assertEqual(ids.ACTIVITY_APPS, ("brain", "spider-api", "spider-worker"))
+        self.assertEqual(ids.ACTIVITY_APPS, ("brain", "brain-worker", "spider-api", "spider-worker"))
         self.assertFalse(any("authentik" in app for app in ids.ACTIVITY_APPS))
 
 
@@ -141,6 +141,22 @@ class ActivityTests(unittest.TestCase):
         lines = ['{"req":{"method":"POST","url":"/trpc/me"},"msg":"request completed"}', ""]
 
         self.assertEqual(ids.count_activity("brain", lines), 1)
+
+    def test_applied_results_and_job_lines_are_activity_for_the_brain_worker(self):
+        lines = [
+            "worker consumer=task-results done in 12 ms: linkedin-login 0d9f5b6e",
+            "worker job=proxy-scoring 3 scored, 0 failed",
+        ]
+
+        self.assertEqual(ids.count_activity("brain-worker", lines), 2)
+
+    def test_the_brain_workers_reconnect_and_start_up_noise_is_not_activity(self):
+        lines = [
+            "Could not consume task-results: connect ECONNREFUSED 10.0.0.1:5672",
+            "The database is not answering yet; the brain worker waits for it",
+        ]
+
+        self.assertEqual(ids.count_activity("brain-worker", lines), 0)
 
     def test_spider_counts_only_job_lines(self):
         lines = [

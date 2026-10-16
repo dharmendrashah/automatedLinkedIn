@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: brain-worker
+  labels:
+    app.kubernetes.io/name: brain-worker
+spec:
+  selector:
+    app.kubernetes.io/name: brain-worker
+  ports:
+    - name: health
+      port: 3004
+      targetPort: health

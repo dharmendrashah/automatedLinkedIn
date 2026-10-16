@@ -63,6 +63,11 @@ export class MessageBroker {
       return (await this.connection()).createChannel()
    }
 
+   // Like `channel()`, but a consumer can also republish and wait until the broker has the copy.
+   public static async confirmedChannel() {
+      return (await this.connection()).createConfirmChannel()
+   }
+
    public static async isHealthy() {
       let timer: NodeJS.Timeout | undefined
 

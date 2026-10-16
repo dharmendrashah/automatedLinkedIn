@@ -6,6 +6,7 @@ export type StatusConfig = {
    // An empty address or null removes that module: the deployment does not have it.
    websiteUrl: string
    signInUrl: string
+   brainWorkerUrl: string
    spiderApiUrl: string
    spiderWorkerUrl: string
    smtp: { host: string; port: number; tls: boolean } | null
@@ -58,6 +59,15 @@ export const buildModules = (config: StatusConfig): StatusModule[] => {
          name: 'Database',
          description: 'Where accounts and sessions are kept',
          check: fromBoolean(config.databaseIsHealthy),
+      },
+      Boolean(config.brainWorkerUrl) && {
+         key: 'brainWorker',
+         group: APP,
+         name: 'Background worker',
+         description: "Applies the spider's answers and runs the daily jobs. Without it a check stays Pending",
+         workload: 'brain-worker',
+         // Healthy means the database answers and every queue it consumes is connected.
+         check: httpCheck(config.brainWorkerUrl),
       },
       Boolean(config.signInUrl) && {
          key: 'signIn',

@@ -86,7 +86,7 @@ patches:
   - path: imagepullsecret.patch.yaml
     target:
       kind: Deployment
-      name: (brain|body|spider-api|spider-worker)
+      name: (brain|brain-worker|body|spider-api|spider-worker)
 
   # One Spot node, so every workload must tolerate the Spot taint and stay single-replica.
   - path: spot-toleration.patch.yaml

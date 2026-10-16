@@ -13,6 +13,8 @@ resources:
   - brain.deployment.yaml
   - brain.service.yaml
   - brain.serviceaccount.yaml
+  - brain-worker.deployment.yaml
+  - brain-worker.service.yaml
   - rabbitmq.statefulset.yaml
   - rabbitmq.service.yaml
   - body.deployment.yaml

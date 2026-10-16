@@ -557,20 +557,40 @@ describe('TaskService', () => {
          finished_at: '2026-10-13T10:01:00.000Z',
       }
 
-      it('should finish the session, then give the hook of the task the session and the result', async () => {
+      it('should finish the session, then give the hook of the task the session, the result and the transaction', async () => {
          const session = {
             id: result.task_id,
             userId: 'u1',
             linkedInAccountId: 'acc1',
          }
+         const tx = {}
          const onResult = vi.fn(async () => undefined)
 
          TASK_HOOKS['browser-detection'] = { onResult }
-         mocks.finishTask.mockResolvedValue(session)
+         mocks.finishTask.mockImplementation(
+            async (_result: unknown, after: (finished: typeof session, tx: unknown) => Promise<void>) => {
+               await after(session, tx)
+
+               return session
+            }
+         )
 
          await expect(TaskService.applyResult(result)).resolves.toBe(true)
 
-         expect(onResult).toHaveBeenCalledWith(session, result)
+         expect(onResult).toHaveBeenCalledWith(session, result, tx)
+      })
+
+      it('should let the failure of a hook through, so the result is applied again', async () => {
+         TASK_HOOKS['browser-detection'] = {
+            onResult: async () => {
+               throw new Error('account update failed')
+            },
+         }
+         mocks.finishTask.mockImplementation(async (_result: unknown, after: (...args: unknown[]) => Promise<void>) => {
+            await after({}, {})
+         })
+
+         await expect(TaskService.applyResult(result)).rejects.toThrow('account update failed')
       })
 
       it('should do nothing for a result that did not finish a session, such as a repeated one', async () => {
@@ -584,7 +604,12 @@ describe('TaskService', () => {
       })
 
       it('should work for a task without a hook', async () => {
-         mocks.finishTask.mockResolvedValue({ id: result.task_id })
+         delete TASK_HOOKS['browser-detection']
+         mocks.finishTask.mockImplementation(async (_result: unknown, after: (...args: unknown[]) => Promise<void>) => {
+            await after({}, {})
+
+            return { id: result.task_id }
+         })
 
          await expect(TaskService.applyResult(result)).resolves.toBe(true)
       })

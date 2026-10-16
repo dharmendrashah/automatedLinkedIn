@@ -11,6 +11,7 @@ import {
 } from '@automatedLinkedIn/contracts'
 
 import { PrismaService } from './prisma.service'
+import { type FinishedSession } from './taskHooks'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -199,8 +200,12 @@ export class SpiderSessionService {
 
    // Records a task's answer once, with the files it names. Only a file under the folder brain computes for this run is kept,
    // so a result can never point at someone else's files. Resolves to the session that this answer finished, or null when it
-   // finished nothing (unknown, already finished, or another task's).
-   public static async finishTask(result: TaskResult) {
+   // finished nothing (unknown, already finished, or another task's). `after` runs inside the same transaction once the
+   // session is finished, so what it changes is saved with it or not at all.
+   public static async finishTask(
+      result: TaskResult,
+      after?: (session: FinishedSession, tx: Prisma.TransactionClient) => Promise<void>
+   ) {
       const session = await PrismaService.client.spiderSession.findFirst({
          where: {
             id: result.task_id,
@@ -273,6 +278,15 @@ export class SpiderSessionService {
                skipDuplicates: true,
             })
          }
+
+         await after?.(
+            {
+               id: session.id,
+               userId: session.userId,
+               linkedInAccountId: session.linkedInAccountId,
+            },
+            tx
+         )
 
          return true
       })

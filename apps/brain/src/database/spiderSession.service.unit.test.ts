@@ -537,6 +537,58 @@ describe('SpiderSessionService', () => {
          expect(mocks.createArtifacts).not.toHaveBeenCalled()
       })
 
+      it('should run the hook inside the transaction, after the session was finished, with the transaction', async () => {
+         const order: string[] = []
+         const tx = {
+            spiderSession: { updateMany: mocks.updateMany },
+            spiderSessionArtifact: { createMany: mocks.createArtifacts },
+         }
+         const after = vi.fn(async () => {
+            order.push('after')
+         })
+
+         mocks.findFirst.mockResolvedValue(stored)
+         mocks.updateMany.mockImplementation(async () => {
+            order.push('finished')
+
+            return { count: 1 }
+         })
+         mocks.transaction.mockImplementation(async (work: (tx: unknown) => unknown) => work(tx))
+
+         await SpiderSessionService.finishTask(result, after)
+
+         expect(after).toHaveBeenCalledWith(
+            {
+               id: TASK_ID,
+               userId: 'u1',
+               linkedInAccountId: 'acc1',
+            },
+            tx
+         )
+         expect(order).toEqual(['finished', 'after'])
+      })
+
+      it('should let a failing hook roll the whole transaction back', async () => {
+         mocks.findFirst.mockResolvedValue(stored)
+         mocks.updateMany.mockResolvedValue({ count: 1 })
+
+         await expect(
+            SpiderSessionService.finishTask(result, async () => {
+               throw new Error('account update failed')
+            })
+         ).rejects.toThrow('account update failed')
+      })
+
+      it('should not run the hook for an answer that finished nothing', async () => {
+         const after = vi.fn()
+
+         mocks.findFirst.mockResolvedValue(stored)
+         mocks.updateMany.mockResolvedValue({ count: 0 })
+
+         await expect(SpiderSessionService.finishTask(result, after)).resolves.toBeNull()
+         expect(after).not.toHaveBeenCalled()
+      })
+
       it('should ignore an answer that names a different task than the session', async () => {
          mocks.findFirst.mockResolvedValue({
             ...stored,

@@ -12,6 +12,7 @@ vi.mock('core', () => ({ MessageBroker: { isHealthy: mocks.brokerHealthy } }))
 vi.mock('env', () => ({
    STATUS_URL_WEBSITE: 'http://body:80/health',
    STATUS_URL_SIGN_IN: '',
+   STATUS_URL_BRAIN_WORKER: '',
    STATUS_URL_SPIDER_API: '',
    STATUS_URL_SPIDER_WORKER: '',
    AUTHENTIK_EMAIL__HOST: '',

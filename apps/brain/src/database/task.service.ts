@@ -331,16 +331,14 @@ export class TaskService {
       return started
    }
 
-   // Applies the worker's answer once. Resolves to whether this answer was the one that ended the session.
+   // Applies the worker's answer once, together with the hook of its task, in one transaction. Resolves to whether this
+   // answer was the one that ended the session.
    public static async applyResult(result: TaskResult) {
-      const session = await SpiderSessionService.finishTask(result)
+      const session = await SpiderSessionService.finishTask(
+         result,
+         (finished, tx) => TASK_HOOKS[result.task]?.onResult?.(finished, result, tx) ?? Promise.resolve()
+      )
 
-      if (!session) {
-         return false
-      }
-
-      await TASK_HOOKS[result.task]?.onResult?.(session, result)
-
-      return true
+      return session !== null
    }
 }

@@ -4,7 +4,10 @@
    "private": true,
    "scripts": {
       "start": "cross-env NODE_ENV=production node dist/src/server.js",
+      "start:worker": "cross-env NODE_ENV=production node dist/src/worker/main.js",
+      "worker:replay": "cross-env NODE_ENV=production node dist/src/worker/replayMain.js",
       "dev": "tsx watch src/server.ts",
+      "dev:worker": "tsx watch src/worker/main.ts",
       "lint": "eslint .",
       "lint:fix": "eslint . --fix",
       "ts:check": "tsc -b",
