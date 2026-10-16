@@ -71,6 +71,12 @@ refresh_dns() {
 
 wait_for_apps() {
   for target in deploy/brain deploy/brain-worker deploy/body deploy/spider-api deploy/spider-worker statefulset/rabbitmq; do
+    # The deploy job wakes the node before it applies the manifests, so a workload that this very deploy creates (a new one)
+    # is not on the cluster yet; the deploy waits for it after applying.
+    if ! kubectl -n "$NAMESPACE" get "$target" > /dev/null 2>&1; then
+      echo "not waiting for $target: it is not on the cluster yet"
+      continue
+    fi
     kubectl -n "$NAMESPACE" rollout status "$target" --timeout=10m
   done
 }
