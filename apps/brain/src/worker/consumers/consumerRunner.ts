@@ -37,7 +37,8 @@ const readRetries = (message: ConsumeMessage) => {
    return typeof value === 'number' ? value : 0
 }
 
-const reasonOf = (error: unknown) => (error instanceof Error ? error.message : 'unknown error')
+// A connection that is refused arrives as an error without a message, so the name says what happened.
+const reasonOf = (error: unknown) => (error instanceof Error ? error.message || error.name : 'unknown error')
 
 // Runs one queue for the worker: takes messages, acknowledges after the handler finished, and on a failure retries by
 // publishing a copy after a back-off (RabbitMQ gives no delay or limit to nack-with-requeue, so a failing message would

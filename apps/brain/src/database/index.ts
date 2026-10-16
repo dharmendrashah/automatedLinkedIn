@@ -40,5 +40,6 @@ export {
 export { AccountConflictError, UserService } from './user.service'
 export { TakeoverNotFoundError, TakeoverService } from './takeover.service'
 export { TASK_HOOKS } from './taskHooks'
+export { TaskDispatchService } from './taskDispatch.service'
 export { TaskService } from './task.service'
 export { TaskNeedsProxyError, TaskOwnershipError, TaskRefusedError, TaskUnavailableError } from './taskErrors'

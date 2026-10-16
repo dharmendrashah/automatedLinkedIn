@@ -322,6 +322,8 @@ model SpiderSession {
   retryOfId         String?
   retryOf           SpiderSession?      @relation("SessionRetries", fields: [retryOfId], references: [id], onDelete: SetNull)
   retries           SpiderSession[]     @relation("SessionRetries")
+  // Present only while the task waits to be published (.plan/task-outbox.md).
+  dispatch          TaskDispatch?
 
   @@index([userId, startedAt])
   @@index([linkedInAccountId, startedAt])
@@ -348,6 +350,24 @@ model SpiderSessionArtifact {
 
   @@unique([sessionId, path])
   @@index([sessionId])
+}
+
+// A task that was accepted and waits to be published to RabbitMQ (.plan/task-outbox.md). It holds no secret: the command is
+// built from the session, the account and the proxy when it is published. The row is deleted once the broker confirmed it.
+model TaskDispatch {
+  sessionId      String        @id
+  session        SpiderSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+  attempts       Int           @default(0)
+  nextAttemptAt  DateTime      @default(now())
+  // A lease, so two publishers never take the same row.
+  claimedUntil   DateTime?
+  // Counts failed attempts to end the session after the age limit; after three the session is ended without its hook.
+  giveUpFailures Int           @default(0)
+  // A fixed sentence or an error class, never message content.
+  lastError      String?
+
+  @@index([nextAttemptAt])
 }
 
 // What the worker announced about a task (title, verdict labels, what it needs, how often it may run), so brain and the web

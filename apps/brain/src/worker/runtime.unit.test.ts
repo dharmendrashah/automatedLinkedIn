@@ -50,6 +50,10 @@ const setup = (roles: string, databaseHealthy: () => Promise<boolean> = async ()
          openChannel: vi.fn().mockResolvedValue(channel),
          isDatabaseHealthy: databaseHealthy,
          isBrokerHealthy: async () => true,
+         taskDispatch: async () => ({
+            waiting: 0,
+            oldestSeconds: 0,
+         }),
          build: {
             commit: 'abc1234',
             builtAt: 'now',

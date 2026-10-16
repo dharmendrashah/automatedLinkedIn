@@ -189,6 +189,11 @@ export const RUNNER_VERDICTS = {
       label: 'Could not be queued',
       tone: 'failure',
    },
+   // Given by brain, when the owner paused the account while the task waited to be queued.
+   CANCELLED: {
+      label: 'Cancelled before it started',
+      tone: 'neutral',
+   },
    PROXY_FAILED: {
       label: 'The proxy did not work',
       tone: 'failure',

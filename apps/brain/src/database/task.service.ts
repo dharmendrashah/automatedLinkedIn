@@ -1,22 +1,21 @@
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 
-import { TaskQueue } from 'core'
-
 import { type Prisma } from 'generated/prisma/client'
 
 import {
-   TASK_CONTRACT_VERSION,
    type TaskCatalog,
    type TaskCatalogEntry,
    type TaskResult,
    type TaskTrigger,
-   taskCatalogEntrySchema,
 } from '@automatedLinkedIn/contracts'
 
 import { PrismaService } from './prisma.service'
 import { ProxyServerOwnershipError, ProxyServerService } from './proxyServer.service'
 import { SpiderSessionService } from './spiderSession.service'
+import { readCatalog } from './taskCatalog'
+import { buildTaskCommand } from './taskCommand'
+import { TaskDispatchService } from './taskDispatch.service'
 import {
    TaskNeedsProxyError,
    TaskOwnershipError,
@@ -25,13 +24,14 @@ import {
    TaskUnavailableError,
 } from './taskErrors'
 import { TASK_HOOKS } from './taskHooks'
+import { applyTaskResult } from './taskResult'
 
 const MINUTE_MS = 60 * 1000
 
 // A run that has not been answered after this long is not running any more, so it cannot block the next one.
 const STALE_AFTER_MS = 30 * MINUTE_MS
 
-const NOT_QUEUED_MESSAGE = 'The task could not be queued. Try again in a moment.'
+const NOT_VALID_MESSAGE = 'This task cannot be started with what was given. Check the input and try again.'
 
 const inputSchema = z.record(z.string(), z.unknown())
 
@@ -52,23 +52,12 @@ type RequestOptions = {
 
 type Scope = 'proxy' | 'account' | 'none'
 
-const asEntry = (row: { manifest: unknown }) => {
-   const parsed = taskCatalogEntrySchema.safeParse(row.manifest)
-
-   return parsed.success ? [parsed.data] : []
-}
-
 // Brain's side of every task of the standard contract (.plan/spider-task-framework.md): it asks, applies the answer and keeps
 // the catalog. It never reads a task's input, verdict or report; those are the task's own.
 export class TaskService {
    // The latest version of every task the worker announced.
    public static async catalog(): Promise<TaskCatalogEntry[]> {
-      const rows = await PrismaService.client.taskDefinition.findMany({
-         distinct: ['task'],
-         orderBy: [{ task: 'asc' }, { version: 'desc' }],
-      })
-
-      return rows.flatMap(asEntry)
+      return readCatalog()
    }
 
    // What the worker announced replaces what brain knew about those tasks. A task that is no longer announced stays known.
@@ -170,61 +159,62 @@ export class TaskService {
       const id = randomUUID()
       const requestedAt = new Date()
 
-      await TASK_HOOKS[task]?.onRequest?.({
-         id,
-         userId,
-         accountId,
-         ...(picked && { proxyId: picked.summary.id }),
-         task,
-         trigger,
+      // A command that can never be published is refused now, not after the task waited for it.
+      try {
+         buildTaskCommand({
+            id,
+            userId,
+            task,
+            taskVersion: definition.version,
+            requestedAt,
+            trigger,
+            input,
+            needs,
+            ...(picked && { proxy: picked.config }),
+            account,
+         })
+      } catch {
+         throw new TaskRefusedError(NOT_VALID_MESSAGE)
+      }
+
+      // The task's own effect, the session and the row that says "to publish" are saved together or not at all.
+      await PrismaService.client.$transaction(async tx => {
+         await TASK_HOOKS[task]?.onRequest?.(
+            {
+               id,
+               userId,
+               accountId,
+               ...(picked && { proxyId: picked.summary.id }),
+               task,
+               trigger,
+            },
+            tx
+         )
+         await SpiderSessionService.startTask(
+            {
+               id,
+               userId,
+               linkedInAccountId: accountId,
+               ...(picked && { proxy: picked.summary }),
+               task,
+               taskVersion: definition.version,
+               trigger,
+               input,
+               startedAt: requestedAt,
+               ...(options.retryOfId && { retryOfId: options.retryOfId }),
+            },
+            tx
+         )
+         await tx.taskDispatch.create({ data: { sessionId: id } })
       })
 
-      await SpiderSessionService.startTask({
-         id,
-         userId,
-         linkedInAccountId: accountId,
-         ...(picked && { proxy: picked.summary }),
-         task,
-         taskVersion: definition.version,
-         trigger,
-         input,
-         startedAt: requestedAt,
-         ...(options.retryOfId && { retryOfId: options.retryOfId }),
-      })
+      await SpiderSessionService.deleteExpired()
 
       try {
-         await TaskQueue.publish({
-            contract: TASK_CONTRACT_VERSION,
-            task_id: id,
-            user_id: userId,
-            task,
-            task_version: definition.version,
-            requested_at: requestedAt.toISOString(),
-            trigger,
-            // Forwarded as stored: the worker masks it in every recording and log.
-            ...(picked && { proxy: picked.config }),
-            ...(needs.account && {
-               account_id: accountId,
-               account_email: account.email,
-               credentials: {
-                  ciphertext: account.secret,
-                  iv: account.secretIv,
-                  tag: account.secretTag,
-                  key_version: account.keyVersion,
-               },
-            }),
-            input,
-         })
+         await TaskDispatchService.dispatch(id)
       } catch (error) {
-         console.error(`Could not queue the task ${task}: ${(error as Error).message}`)
-
-         try {
-            await SpiderSessionService.fail(id, NOT_QUEUED_MESSAGE, 'NOT_QUEUED')
-         } catch {
-            // The session stays in progress and shows as having no answer.
-         }
-
-         throw new TaskRefusedError(NOT_QUEUED_MESSAGE)
+         // The task is saved: the worker publishes it.
+         console.error(`Could not publish the task ${task} right away: ${(error as Error).name}`)
       }
 
       return { id }
@@ -334,11 +324,6 @@ export class TaskService {
    // Applies the worker's answer once, together with the hook of its task, in one transaction. Resolves to whether this
    // answer was the one that ended the session.
    public static async applyResult(result: TaskResult) {
-      const session = await SpiderSessionService.finishTask(
-         result,
-         (finished, tx) => TASK_HOOKS[result.task]?.onResult?.(finished, result, tx) ?? Promise.resolve()
-      )
-
-      return session !== null
+      return applyTaskResult(result)
    }
 }

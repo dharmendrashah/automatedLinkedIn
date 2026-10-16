@@ -6,7 +6,7 @@ import { MessageBroker } from 'core'
 
 import { BUILD_TIME, GIT_SHA, WORKER_HEALTH_PORT, WORKER_ROLES, WORKER_SHUTDOWN_GRACE_MS } from 'env'
 
-import { PrismaService } from 'database'
+import { PrismaService, TaskDispatchService } from 'database'
 
 import { createWorkerConfig } from './config'
 import { CONSUMERS } from './consumers/registry'
@@ -25,6 +25,7 @@ const runtime = new WorkerRuntime(
       openChannel: () => MessageBroker.confirmedChannel(),
       isDatabaseHealthy: () => PrismaService.isHealthy(),
       isBrokerHealthy: () => MessageBroker.isHealthy(),
+      taskDispatch: () => TaskDispatchService.waiting(),
       build: {
          commit: GIT_SHA,
          builtAt: BUILD_TIME,

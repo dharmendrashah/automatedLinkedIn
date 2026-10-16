@@ -290,6 +290,7 @@ describe('RUNNER_VERDICTS', () => {
    it('should label the answers the runner gives itself, so a task never has to', () => {
       expect(Object.keys(RUNNER_VERDICTS).sort()).toEqual(
          [
+            'CANCELLED',
             'CRASHED',
             'INVALID_INPUT',
             'NEEDS_ACCOUNT',

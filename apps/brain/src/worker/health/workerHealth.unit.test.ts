@@ -21,6 +21,10 @@ const sources = (overrides: Partial<HealthSources> = {}): HealthSources => ({
    isDatabaseHealthy: async () => true,
    isBrokerHealthy: async () => true,
    deadLetters: async () => [],
+   taskDispatch: async () => ({
+      waiting: 0,
+      oldestSeconds: 0,
+   }),
    build: {
       commit: 'abc1234',
       builtAt: '2026-10-16T10:00:00Z',
@@ -94,6 +98,38 @@ describe('createHealthReader', () => {
       ])
       expect(withDead.ok).toBe(true)
       expect(failing.body.deadLetters).toEqual([])
+   })
+
+   it('should report the tasks waiting to be published without making the worker unhealthy', async () => {
+      const { ok, body } = await createHealthReader(
+         sources({
+            taskDispatch: async () => ({
+               waiting: 4,
+               oldestSeconds: 95,
+            }),
+         })
+      )()
+
+      expect(body.taskDispatch).toEqual({
+         waiting: 4,
+         oldestSeconds: 95,
+      })
+      expect(ok).toBe(true)
+   })
+
+   it('should report none waiting when the count cannot be read, instead of failing the report', async () => {
+      const { body } = await createHealthReader(
+         sources({
+            taskDispatch: async () => {
+               throw new Error('relation does not exist')
+            },
+         })
+      )()
+
+      expect(body.taskDispatch).toEqual({
+         waiting: 0,
+         oldestSeconds: 0,
+      })
    })
 
    it('should answer from its cache for a few seconds', async () => {

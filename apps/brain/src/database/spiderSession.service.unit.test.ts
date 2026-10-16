@@ -358,6 +358,36 @@ describe('SpiderSessionService', () => {
 
          await expect(SpiderSessionService.startTask(input)).rejects.toThrow('database down')
       })
+
+      it('should save through the transaction it is given, and delete nothing inside it', async () => {
+         const create = vi.fn().mockResolvedValue({})
+         const tx = { spiderSession: { create } } as unknown as Parameters<typeof SpiderSessionService.startTask>[1]
+
+         await SpiderSessionService.startTask(input, tx)
+
+         expect(create).toHaveBeenCalledTimes(1)
+         expect(mocks.create).not.toHaveBeenCalled()
+         expect(mocks.deleteMany).not.toHaveBeenCalled()
+      })
+   })
+
+   describe('deleteExpired', () => {
+      it('should delete sessions older than the 30 day retention', async () => {
+         mocks.deleteMany.mockResolvedValue({ count: 2 })
+
+         await SpiderSessionService.deleteExpired()
+
+         const [[{ where }]] = mocks.deleteMany.mock.calls
+
+         expect(Date.now() - where.startedAt.lt.getTime()).toBeGreaterThanOrEqual(30 * DAY_MS - 1000)
+      })
+
+      it('should never throw: it runs after a task was saved', async () => {
+         mocks.deleteMany.mockRejectedValue(new Error('database down'))
+
+         await expect(SpiderSessionService.deleteExpired()).resolves.toBeUndefined()
+         expect(console.error).toHaveBeenCalledWith(expect.stringContaining('database down'))
+      })
    })
 
    describe('finishTask', () => {

@@ -128,19 +128,11 @@ const present = <T extends { recordingPrefix: string | null; startedAt: Date; st
 // One session is one run of the spider for one of the user's accounts. See .plan/spider-session-recording.md.
 export class SpiderSessionService {
    // Notes a task that is about to be queued. Unlike `start` it throws when the row cannot be saved: a run nobody can see
-   // the result of must not happen.
-   public static async startTask({
-      id,
-      userId,
-      linkedInAccountId,
-      proxy,
-      task,
-      taskVersion,
-      trigger,
-      input,
-      startedAt,
-      retryOfId,
-   }: StartTaskInput) {
+   // the result of must not happen. `client` is the transaction the task is saved in.
+   public static async startTask(
+      { id, userId, linkedInAccountId, proxy, task, taskVersion, trigger, input, startedAt, retryOfId }: StartTaskInput,
+      client: Prisma.TransactionClient = PrismaService.client
+   ) {
       const params: SessionRequestParams = {
          action: 'TASK',
          task,
@@ -150,7 +142,7 @@ export class SpiderSessionService {
          proxy: proxy ? `${proxy.protocol.toLowerCase()}://${proxy.host}:${proxy.port}` : null,
       }
 
-      await PrismaService.client.spiderSession.create({
+      await client.spiderSession.create({
          data: {
             id,
             userId,
@@ -171,7 +163,11 @@ export class SpiderSessionService {
             ...(retryOfId && { retryOfId }),
          },
       })
+   }
 
+   // Deletes sessions past their retention. Best effort: it runs after a task was saved, never inside its transaction,
+   // where a failed statement would fail the whole save.
+   public static async deleteExpired() {
       try {
          const cutoff = new Date(Date.now() - ROW_RETENTION_DAYS * DAY_MS)
 

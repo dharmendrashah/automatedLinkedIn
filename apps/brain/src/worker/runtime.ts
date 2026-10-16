@@ -18,6 +18,7 @@ export type RuntimeDependencies = {
    openChannel: () => Promise<ConfirmChannel>
    isDatabaseHealthy: () => Promise<boolean>
    isBrokerHealthy: () => Promise<boolean>
+   taskDispatch: () => Promise<{ waiting: number; oldestSeconds: number }>
    build: { commit: string; builtAt: string }
    log?: Log
    // How often to ask again while the database is not there yet.
@@ -72,6 +73,7 @@ export class WorkerRuntime {
          isDatabaseHealthy: dependencies.isDatabaseHealthy,
          isBrokerHealthy: dependencies.isBrokerHealthy,
          deadLetters: () => (queues.length > 0 ? deadDepths(queues, dependencies.openChannel) : Promise.resolve([])),
+         taskDispatch: dependencies.taskDispatch,
          build: dependencies.build,
       })
 

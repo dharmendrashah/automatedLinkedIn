@@ -31,7 +31,7 @@ const message = (body: unknown, headers: Record<string, unknown> = {}) => ({
 
 type Item = { id: string }
 
-const setup = async (overrides: Partial<ConsumerDefinition<Item>> = {}, brokerDownAtFirst = false) => {
+const setup = async (overrides: Partial<ConsumerDefinition<Item>> = {}, brokerDownAtFirst: boolean | Error = false) => {
    const channel = fakeChannel()
    const log = {
       info: vi.fn(),
@@ -69,7 +69,9 @@ const setup = async (overrides: Partial<ConsumerDefinition<Item>> = {}, brokerDo
    const openChannel = vi.fn().mockResolvedValue(channel)
 
    if (brokerDownAtFirst) {
-      openChannel.mockRejectedValueOnce(new Error('connect ECONNREFUSED'))
+      openChannel.mockRejectedValueOnce(
+         brokerDownAtFirst instanceof Error ? brokerDownAtFirst : new Error('connect ECONNREFUSED')
+      )
    }
 
    const runner = new ConsumerRunner(definition as unknown as ConsumerDefinition, {
@@ -258,6 +260,16 @@ describe('ConsumerRunner', () => {
 
       expect(openChannel).toHaveBeenCalledTimes(2)
       expect(runner.state().connected).toBe(true)
+   })
+
+   it('should name the error when a refused connection has no message', async () => {
+      const refused = new Error('')
+
+      refused.name = 'AggregateError'
+
+      const { log } = await setup({}, refused)
+
+      expect(log.error).toHaveBeenCalledWith('Could not consume results: AggregateError')
    })
 
    it('should keep trying when the broker is down at the start', async () => {
