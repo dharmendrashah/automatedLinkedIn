@@ -39,6 +39,9 @@ export const READ_LABELS: Record<ReadKind, string> = {
 
 export type ReadRows = [Record<string, unknown>, ...Record<string, unknown>[]]
 
+// Longer than the data client waits for a job.
+const STALE_MS = 11 * 60 * 1000
+
 type PaidRead = {
    userId: string
    kind: ReadKind
@@ -61,6 +64,27 @@ export const paidRead = async ({ userId, kind, slug, variant, operation, params,
 
    const day = new Date().toISOString().slice(0, 10)
    const callId = [`${kind}-read`, userId, slug, day, variant].filter(Boolean).join(':')
+   const booked = await PrismaService.client.spendLedger.findUnique({
+      where: { callId },
+      select: {
+         amountMicros: true,
+         createdAt: true,
+      },
+   })
+
+   // A $0 row is a read in flight; past the data client's own timeout it was cut off (a restart) and may be retried.
+   if (booked && booked.amountMicros === 0) {
+      if (Date.now() - booked.createdAt.getTime() < STALE_MS) {
+         throw new ConflictError(`Reading ${noun} is still running. Please check again in a few minutes.`)
+      }
+
+      await PrismaService.client.spendLedger.deleteMany({
+         where: {
+            callId,
+            amountMicros: 0,
+         },
+      })
+   }
 
    await uniqueOr(
       PrismaService.client.spendLedger.create({

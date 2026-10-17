@@ -158,6 +158,36 @@ describe('post comments and reactions (database)', () => {
       ])
    })
 
+   it('should say a read is still running, and retry one that never finished', async () => {
+      const callId = `reactions-read:${userId}:${POST_SLUG}:${new Date().toISOString().slice(0, 10)}:all`
+      const reader = readerOf([
+         {
+            reactorName: 'Erin',
+            reactorUrl: profile('erin'),
+         },
+      ])
+
+      await PrismaService.client.spendLedger.create({
+         data: {
+            userId,
+            callId,
+            amountMicros: 0,
+            month: new Date().toISOString().slice(0, 7),
+         },
+      })
+      await expect(PostEngagementService.read(userId, POST_SLUG, 'reactions', true, reader)).rejects.toThrow(
+         'still running'
+      )
+      await PrismaService.client.spendLedger.update({
+         where: { callId },
+         data: { createdAt: new Date(Date.now() - 20 * 60 * 1000) },
+      })
+
+      const page = await PostEngagementService.read(userId, POST_SLUG, 'reactions', true, reader)
+
+      expect(page?.reactions?.items.map(({ slug }) => slug)).toEqual(['erin'])
+   })
+
    it('should delete the comments and reactions when the post is archived', async () => {
       const post = await LinkedInPostService.bySlug(userId, POST_SLUG)
 
