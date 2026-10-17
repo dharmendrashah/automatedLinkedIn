@@ -11,11 +11,24 @@ export {
    type Seniority,
    readSeniorities,
    scoreIcp,
+   scorePerson,
 } from './icpScore'
 export { IpInfoError, IpInfoService, type ProxyExchange } from './ipInfo.service'
-export { type LinkKind, type LinkedInLink, TooManyLinksError, parseLinkedInUrls } from './linkedInUrl'
+export { type LinkKind, type LinkedInLink, TooManyLinksError, parseLinkedInUrl, parseLinkedInUrls } from './linkedInUrl'
 export { MessageBroker } from './messageBroker'
 export { RecordingLinks } from './recordingLinks'
 export { TakeoverRateError, TakeoverRelay } from './takeoverRelay'
 export { TaskQueue } from './taskQueue'
 export { parseTotpSecret } from './totp'
+export {
+   type Band,
+   EXCERPT_LENGTH,
+   type PersonItem,
+   type PostItem,
+   type Signal,
+   type WorkflowItemData,
+   mergeBySlug,
+   person,
+   readItem,
+   readSignals,
+} from './workflowItem'

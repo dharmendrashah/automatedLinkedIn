@@ -1,3 +1,5 @@
+import { readSignals } from 'core'
+
 import { type Prisma, type WorkflowListMemberState, type WorkflowListMemberStatus } from 'generated/prisma/client'
 
 import { ConflictError, uniqueOr } from './conflict'
@@ -51,6 +53,7 @@ const memberSelect = {
    state: true,
    status: true,
    postUrl: true,
+   score: true,
    createdAt: true,
    updatedAt: true,
 } satisfies Prisma.WorkflowListMemberSelect
@@ -58,6 +61,18 @@ const memberSelect = {
 const SEARCHED_FIELDS = ['name', 'headline', 'location', 'slug'] as const
 
 const nameTaken = (name: string) => `You already have a list named "${name}".`
+
+export type RunMember = {
+   slug: string
+   url: string
+   name: string | null
+   headline: string | null
+   location: string | null
+   state: WorkflowListMemberState
+   postUrl: string | null
+   score: number | null
+   signals: Prisma.InputJsonValue
+}
 
 const ownedMember = (userId: string, id: string) => ({
    id,
@@ -155,8 +170,20 @@ export class WorkflowListService {
       )
    }
 
-   // Hard delete; the members go with the list.
+   // Hard delete; the members go with the list. A list a workflow writes to is refused.
    public static async deleteList(userId: string, id: string) {
+      const user = await PrismaService.client.workflow.findFirst({
+         where: {
+            userId,
+            outputListId: id,
+         },
+         select: { name: true },
+      })
+
+      if (user) {
+         throw new ConflictError(`The workflow "${user.name}" adds people to this list. Delete the workflow first.`)
+      }
+
       const { count } = await PrismaService.client.workflowList.deleteMany({
          where: {
             id,
@@ -165,6 +192,53 @@ export class WorkflowListService {
       })
 
       return count > 0
+   }
+
+   // The slugs among these the owner already has in a list or in /profiles, or must not contact.
+   public static async seenAmong(userId: string, slugs: string[]) {
+      const db = PrismaService.client
+      const where = {
+         userId,
+         slug: { in: slugs },
+      }
+      const [suppressed, members, profiles] = await Promise.all([
+         db.suppression.findMany({
+            where,
+            select: { slug: true },
+         }),
+         db.workflowListMember.findMany({
+            where: {
+               slug: { in: slugs },
+               list: { userId },
+            },
+            select: { slug: true },
+         }),
+         db.linkedInProfile.findMany({
+            where,
+            select: { slug: true },
+         }),
+      ])
+
+      return new Set([...suppressed, ...members, ...profiles].map(({ slug }) => slug))
+   }
+
+   // Adds the people a run kept, skipping anyone seen meanwhile. Safe to repeat: the unique index skips repeats.
+   public static async addFromRun(userId: string, listId: string, runId: string, people: RunMember[]) {
+      const seen = await WorkflowListService.seenAmong(
+         userId,
+         people.map(({ slug }) => slug)
+      )
+      const fresh = people.filter(({ slug }) => !seen.has(slug))
+      const { count } = await PrismaService.client.workflowListMember.createMany({
+         data: fresh.map(member => ({
+            ...member,
+            listId,
+            addedByRunId: runId,
+         })),
+         skipDuplicates: true,
+      })
+
+      return count
    }
 
    public static async members(userId: string, query: MemberListQuery) {
@@ -190,13 +264,19 @@ export class WorkflowListService {
             where,
             orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             ...pageArgs(query),
-            select: memberSelect,
+            select: {
+               ...memberSelect,
+               signals: true,
+            },
          }),
          PrismaService.client.workflowListMember.count({ where }),
       ])
 
       return {
-         items,
+         items: items.map(item => ({
+            ...item,
+            signals: readSignals(item.signals),
+         })),
          total,
       }
    }

@@ -112,4 +112,40 @@ export class LinkedInPostService {
    public static restoreForUser(userId: string, id: string) {
       return updateOwned(userId, id, { archivedAt: null })
    }
+
+   // The posts a workflow works through next: not done, not archived, oldest first.
+   public static waiting(userId: string, take: number) {
+      return PrismaService.client.linkedInPost.findMany({
+         where: waitingWhere(userId),
+         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+         take,
+         select: {
+            id: true,
+            slug: true,
+            url: true,
+         },
+      })
+   }
+
+   public static countWaiting(userId: string) {
+      return PrismaService.client.linkedInPost.count({ where: waitingWhere(userId) })
+   }
+
+   public static async markProcessed(userId: string, ids: string[]) {
+      const { count } = await PrismaService.client.linkedInPost.updateMany({
+         where: {
+            userId,
+            id: { in: ids },
+         },
+         data: { status: 'PROCESSED' },
+      })
+
+      return count
+   }
 }
+
+const waitingWhere = (userId: string) => ({
+   userId,
+   status: 'UNPROCESSED' as const,
+   archivedAt: null,
+})

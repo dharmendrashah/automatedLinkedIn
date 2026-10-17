@@ -124,6 +124,23 @@ export class Environment {
             desc: 'Port the brain worker answers GET /health on',
             default: 3004,
          }),
+         MINDCASE_API_KEY: string({
+            desc: 'Key of the shared data wallet. Only the brain worker uses it. Empty: workflow collect steps fail with "not configured"',
+            example: 'mk_live_xxxxxxxx',
+            default: '',
+         }),
+         MINDCASE_RPM: num({
+            desc: 'Requests a minute the worker sends to the data service; the service allows 60 per key',
+            default: 45,
+         }),
+         DATA_WALLET_FLOOR_USD: num({
+            desc: 'Below this balance no new workflow run starts and running ones stop collecting',
+            default: 5,
+         }),
+         DATA_WALLET_WARN_USD: num({
+            desc: 'Below this balance the admin sees a top-up warning',
+            default: 25,
+         }),
          WORKER_SHUTDOWN_GRACE_MS: num({
             desc: 'How long the brain worker waits for work in progress when it is asked to stop',
             default: 25_000,

@@ -18,9 +18,14 @@ import { Profiles } from './pages/Profiles'
 import { Proxies } from './pages/Proxies'
 import { Sessions } from './pages/Sessions'
 import { Signup } from './pages/Signup'
+import { Usage } from './pages/Usage'
+import { WorkflowNew } from './pages/WorkflowNew'
+import { Workflows } from './pages/Workflows'
 
 // The dashboard carries the charts and the data table, the heaviest code in the app.
 const Dashboard = lazy(() => import('./pages/Dashboard').then(({ Dashboard: page }) => ({ default: page })))
+// The canvas carries React Flow, the next heaviest.
+const WorkflowPage = lazy(() => import('./pages/Workflow').then(({ WorkflowPage: page }) => ({ default: page })))
 
 const App = () => (
    <Routes>
@@ -51,6 +56,17 @@ const App = () => (
          <Route path="/posts" element={<Posts />} />
          <Route path="/lists" element={<Lists />} />
          <Route path="/icps" element={<Icps />} />
+         <Route path="/workflows" element={<Workflows />} />
+         <Route path="/workflows/new" element={<WorkflowNew />} />
+         <Route
+            path="/workflows/:id"
+            element={
+               <Suspense fallback={null}>
+                  <WorkflowPage />
+               </Suspense>
+            }
+         />
+         <Route path="/usage" element={<Usage />} />
          <Route path="/proxies" element={<Proxies />} />
          <Route path="/sessions" element={<Sessions />} />
          <Route path="/healthstatus" element={<HealthStatus />} />

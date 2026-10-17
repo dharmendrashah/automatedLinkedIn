@@ -98,3 +98,60 @@ export const scoreIcp = (rules: IcpRules, sample: IcpSample): IcpScore => {
       matched: hits.map(hit => hit.label),
    }
 }
+
+export const SIGNAL_WEIGHTS = {
+   problemComment: 20,
+   comment: 10,
+   reaction: 5,
+} as const
+
+type ScoredSignal = { type: 'commented' | 'reacted'; excerpt: string | null }
+
+// Engagement adds to the headline score: a comment that names the problem counts most, a reaction least. Signals add up.
+export const scoreSignals = (problemKeywords: string[], signals: ScoredSignal[]) => {
+   const matched: string[] = []
+   let score = 0
+
+   for (const signal of signals) {
+      const problem =
+         signal.type === 'commented' ? firstIn(signal.excerpt?.toLowerCase() ?? '', problemKeywords) : undefined
+
+      if (problem) {
+         score += SIGNAL_WEIGHTS.problemComment
+         matched.push(`comment mentions "${problem}"`)
+      } else if (signal.type === 'commented') {
+         score += SIGNAL_WEIGHTS.comment
+         matched.push('commented')
+      } else {
+         score += SIGNAL_WEIGHTS.reaction
+         matched.push('reacted')
+      }
+   }
+
+   return {
+      score,
+      matched,
+   }
+}
+
+export const MAX_SCORE = 100
+
+// The whole score of a person a workflow found: the headline rules plus engagement, at most 100.
+export const scorePerson = (
+   rules: IcpRules & { problemKeywords: string[] },
+   sample: IcpSample & { signals: ScoredSignal[] }
+): IcpScore => {
+   const base = scoreIcp(rules, sample)
+
+   if (base.disqualified) {
+      return base
+   }
+
+   const engagement = scoreSignals(rules.problemKeywords, sample.signals)
+
+   return {
+      score: Math.min(MAX_SCORE, base.score + engagement.score),
+      disqualified: false,
+      matched: [...base.matched, ...engagement.matched],
+   }
+}
