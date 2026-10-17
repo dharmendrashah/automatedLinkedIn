@@ -244,4 +244,15 @@ describe('templates', () => {
          }).totalMicros
       ).toBeGreaterThan(0)
    })
+
+   it.each(GOALS)('should lay the %s workflow out top to bottom', goal => {
+      const graph = templateGraph(goal, {
+         icpId: 'icp-1',
+         posts: 5,
+         perPost: 20,
+      })
+      const yOf = (id: string) => graph.nodes.find(node => node.id === id)?.position.y ?? Number.NaN
+
+      expect(graph.edges.every(({ from, to }) => yOf(to) > yOf(from))).toBe(true)
+   })
 })

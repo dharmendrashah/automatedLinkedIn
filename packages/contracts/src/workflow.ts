@@ -1028,19 +1028,23 @@ export type TemplateOptions = {
    titles?: string[]
 }
 
+const STEP_Y = 140
+const BRANCH_X = 280
+
+// Templates read top to bottom: `depth` is the step, `branch` places side-by-side blocks.
 const step = (
    id: string,
    type: BlockType,
-   column: number,
-   row: number,
+   depth: number,
+   branch: number,
    config: GraphNode['config'] = {}
 ): GraphNode => ({
    id,
    type,
    config,
    position: {
-      x: column * 240,
-      y: row * 160 + 40,
+      x: branch * BRANCH_X,
+      y: depth * STEP_Y,
    },
 })
 
@@ -1050,13 +1054,13 @@ const linked = (pairs: string[][]) =>
       to,
    }))
 
-// Score, read full profiles of the qualified, keep them in the list. Starts in `column`, after `from`.
-const tail = (from: string[], column: number, icpId: string, enrich = true) => {
+// Score, read full profiles of the qualified, keep them in the list. Starts at `depth`, after `from`.
+const tail = (from: string[], depth: number, icpId: string, enrich = true) => {
    const nodes = [
-      step('dedupe', 'process.dedupe', column, 0),
-      step('score', 'score.icp', column + 1, 0, { icpId }),
-      ...(enrich ? [step('enrich', 'collect.profile', column + 2, 0)] : []),
-      step('list', 'output.list', column + (enrich ? 3 : 2), 0),
+      step('dedupe', 'process.dedupe', depth, 0),
+      step('score', 'score.icp', depth + 1, 0, { icpId }),
+      ...(enrich ? [step('enrich', 'collect.profile', depth + 2, 0)] : []),
+      step('list', 'output.list', depth + (enrich ? 3 : 2), 0),
    ]
    const edges = [
       ...from.map(source => [source, 'dedupe']),
@@ -1076,13 +1080,13 @@ const tail = (from: string[], column: number, icpId: string, enrich = true) => {
 }
 
 // Commenters and reactors of the posts from `from`, then the tail.
-const engagersOf = (from: string, column: number, options: TemplateOptions) => {
-   const rest = tail(['commenters', 'reactors'], column + 1, options.icpId)
+const engagersOf = (from: string, depth: number, options: TemplateOptions) => {
+   const rest = tail(['commenters', 'reactors'], depth + 1, options.icpId)
 
    return {
       nodes: [
-         step('commenters', 'collect.commenters', column, 0, { howMany: options.perPost }),
-         step('reactors', 'collect.reactors', column, 1, { howMany: options.perPost }),
+         step('commenters', 'collect.commenters', depth, 0, { howMany: options.perPost }),
+         step('reactors', 'collect.reactors', depth, 1, { howMany: options.perPost }),
          ...rest.nodes,
       ],
       edges: [[from, 'commenters'], [from, 'reactors'], ...rest.edges],
@@ -1160,7 +1164,7 @@ export const templateGraph = (goal: Goal, options: TemplateOptions): Graph => {
       },
    }
    const start = starts[goal]
-   const rest = engagersOf(start.last, Math.max(...start.nodes.map(({ position }) => position.x)) / 240 + 1, options)
+   const rest = engagersOf(start.last, Math.max(...start.nodes.map(({ position }) => position.y)) / STEP_Y + 1, options)
 
    return {
       nodes: [...start.nodes, ...rest.nodes],

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { type Block, type Graph } from './types'
 
-import { canConnect, newNodeId, toFlow, toGraph } from './graph-convert'
+import { canConnect, choicesFor, newNodeId, toFlow, toGraph } from './graph-convert'
 
 const block = (type: Block['type'], input: Block['input'], output: Block['output']): Block => ({
    type,
@@ -91,5 +91,13 @@ describe('graph-convert', () => {
 
    it('should name a new block after its type without clashing', () => {
       expect(newNodeId('collect.commenters', [{ id: 'commenters-1' }])).toBe('commenters-2')
+   })
+
+   it('should offer only blocks that take what the chosen block gives, filtered by the search', () => {
+      const types = (blocks: Block[]) => blocks.map(({ type }) => type)
+
+      expect(types(choicesFor(catalog, catalog[0], ''))).toEqual(['collect.commenters'])
+      expect(types(choicesFor(catalog, null, 'SCORE'))).toEqual(['score.icp'])
+      expect(choicesFor(catalog, block('output.list', 'profile', null), '')).toEqual([])
    })
 })

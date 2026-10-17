@@ -5,6 +5,7 @@ import {
    type EdgeChange,
    MiniMap,
    type NodeChange,
+   Panel,
    ReactFlow,
    ReactFlowProvider,
    addEdge,
@@ -13,19 +14,25 @@ import {
    useReactFlow,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Loader2, Save } from 'lucide-react'
-import { type DragEvent, useDeferredValue, useMemo, useState } from 'react'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { CircleAlert, Keyboard, Loader2, Plus, Redo2, Save, Undo2 } from 'lucide-react'
+import { useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 
 import { trpc } from '../../trpc'
 import { BlockNode } from './block-node'
-import { type FlowNode, blockOf, canConnect, newNodeId, toFlow, toGraph } from './graph-convert'
-import { DRAG_TYPE, Palette } from './palette'
-import { SettingsPanel } from './settings-panel'
+import { BlockPicker } from './block-picker'
+import { BlockSettings } from './block-settings'
+import { CanvasActions } from './canvas-actions'
+import { type FlowNode, canConnect, newNodeId, toFlow, toGraph } from './graph-convert'
+import { type History, record, redo, startHistory, undo } from './history'
+import { isLeftToRight, layoutTopToBottom, neighbourOf, placeBelow } from './layout'
+import { SHORTCUT_HELP, shortcutOf } from './shortcuts'
 import { type Block, type ConfigValue, type Graph, type StepRun, formatUsd } from './types'
 
 const NODE_TYPES = { block: BlockNode }
+const EDGE_OPTIONS = { type: 'smoothstep' }
+const DUPLICATE_OFFSET = 40
 
 type Props = {
    workflowId: string
@@ -41,14 +48,23 @@ type Props = {
    onSave: (graph: Graph) => void
 }
 
+type Canvas = { nodes: FlowNode[]; edges: Edge[] }
+
 const Editor = ({ workflowId, graph, catalog, icps, workflows, replay, saving, saveError, onSave }: Props) => {
    const { screenToFlowPosition } = useReactFlow()
+   const wrapper = useRef<HTMLDivElement>(null)
    const icpNames = useMemo(() => new Map(icps.map(icp => [icp.id, icp.name])), [icps])
-   const initial = useMemo(() => toFlow(graph, catalog, { icpNames }), [graph, catalog, icpNames])
-   const [nodes, setNodes] = useState<FlowNode[]>(initial.nodes)
-   const [edges, setEdges] = useState<Edge[]>(initial.edges)
+   // A workflow saved left to right is shown top to bottom; it is stored that way only when saved.
+   const [relaid] = useState(() => isLeftToRight(graph))
+   const [history, setHistory] = useState<History<Canvas>>(() =>
+      startHistory(toFlow(relaid ? layoutTopToBottom(graph) : graph, catalog, { icpNames }))
+   )
+   const [dirty, setDirty] = useState(relaid)
    const [selectedId, setSelectedId] = useState<string | null>(null)
-   const [dirty, setDirty] = useState(false)
+   const [openId, setOpenId] = useState<string | null>(null)
+   const [picker, setPicker] = useState<{ afterId: string | null } | null>(null)
+   const [help, setHelp] = useState(false)
+   const { nodes, edges } = history.present
 
    const draft = useMemo(() => toGraph(nodes, edges), [nodes, edges])
    const deferred = useDeferredValue(draft)
@@ -69,17 +85,46 @@ const Editor = ({ workflowId, graph, catalog, icps, workflows, replay, saving, s
       icpNames,
    })
 
-   const change = (update: () => void) => {
-      update()
+   const commit = (update: (canvas: Canvas) => Canvas) => {
+      setHistory(current => record(current, update(current.present)))
       setDirty(true)
    }
+   const setPresent = (update: (canvas: Canvas) => Canvas) =>
+      setHistory(current => ({
+         ...current,
+         present: update(current.present),
+      }))
 
-   const add = (block: Block, position = { x: 80 + nodes.length * 30, y: 80 + nodes.length * 30 }) =>
-      change(() => {
-         const id = newNodeId(block.type, nodes)
+   const nodeOf = (id: string | null) => nodes.find(node => node.id === id) ?? null
+   const selected = nodeOf(selectedId)
 
-         setNodes(current => [
-            ...current,
+   const viewCentre = () => {
+      const box = wrapper.current?.getBoundingClientRect()
+
+      return box
+         ? screenToFlowPosition({
+              x: box.left + box.width / 2,
+              y: box.top + box.height / 3,
+           })
+         : {
+              x: 0,
+              y: 0,
+           }
+   }
+
+   const pick = (block: Block) => {
+      const after = nodeOf(picker?.afterId ?? null)
+      const id = newNodeId(block.type, nodes)
+      const position = after
+         ? placeBelow(
+              after.position,
+              nodes.map(node => node.position)
+           )
+         : viewCentre()
+
+      commit(canvas => ({
+         nodes: [
+            ...canvas.nodes,
             {
                id,
                type: 'block',
@@ -91,123 +136,301 @@ const Editor = ({ workflowId, graph, catalog, icps, workflows, replay, saving, s
                   invalid: false,
                },
             },
-         ])
-         setSelectedId(id)
-      })
-
-   const onDrop = (event: DragEvent) => {
-      event.preventDefault()
-
-      const block = blockOf(catalog, event.dataTransfer.getData(DRAG_TYPE))
-
-      if (block) {
-         add(
-            block,
-            screenToFlowPosition({
-               x: event.clientX,
-               y: event.clientY,
-            })
-         )
-      }
+         ],
+         edges: after
+            ? [
+                 ...canvas.edges,
+                 {
+                    id: `${after.id}>${id}`,
+                    source: after.id,
+                    target: id,
+                 },
+              ]
+            : canvas.edges,
+      }))
+      setPicker(null)
+      setSelectedId(id)
+      setOpenId(block.fields.length > 0 ? id : null)
    }
 
    const setConfig = (key: string, value: ConfigValue) =>
-      change(() =>
-         setNodes(current =>
-            current.map(node =>
-               node.id === selectedId ? { ...node, data: { ...node.data, config: { ...node.data.config, [key]: value } } } : node
-            )
-         )
-      )
+      commit(canvas => ({
+         ...canvas,
+         nodes: canvas.nodes.map(node =>
+            node.id === openId ? { ...node, data: { ...node.data, config: { ...node.data.config, [key]: value } } } : node
+         ),
+      }))
 
-   const remove = () =>
-      change(() => {
-         setNodes(current => current.filter(({ id }) => id !== selectedId))
-         setEdges(current => current.filter(({ source, target }) => source !== selectedId && target !== selectedId))
+   const removeSelection = () => {
+      if (selectedId) {
+         commit(canvas => ({
+            nodes: canvas.nodes.filter(({ id }) => id !== selectedId),
+            edges: canvas.edges.filter(({ source, target }) => source !== selectedId && target !== selectedId),
+         }))
          setSelectedId(null)
-      })
+         setOpenId(null)
+      } else if (edges.some(edge => edge.selected)) {
+         commit(canvas => ({
+            ...canvas,
+            edges: canvas.edges.filter(edge => !edge.selected),
+         }))
+      }
+   }
 
-   const selected = nodes.find(({ id }) => id === selectedId) ?? null
+   const duplicate = () => {
+      if (!selected) {
+         return
+      }
+
+      const id = newNodeId(selected.data.block.type, nodes)
+
+      commit(canvas => ({
+         ...canvas,
+         nodes: [
+            ...canvas.nodes,
+            {
+               ...selected,
+               id,
+               selected: false,
+               position: {
+                  x: selected.position.x + DUPLICATE_OFFSET,
+                  y: selected.position.y + DUPLICATE_OFFSET,
+               },
+            },
+         ],
+      }))
+      setSelectedId(id)
+   }
+
+   const save = () => {
+      if (dirty && !saving) {
+         onSave(draft)
+      }
+   }
+
+   const addBlock = () =>
+      setPicker({ afterId: selected?.data.block.output ? selected.id : null })
+
+   const step = (change: (current: History<Canvas>) => History<Canvas>) => {
+      setHistory(change)
+      setDirty(true)
+   }
+
+   const onKey = useEffectEvent((event: KeyboardEvent) => {
+      const { target } = event
+      const inCanvas = target === document.body || (target instanceof Node && wrapper.current?.contains(target))
+      const shortcut = inCanvas && !picker && !openId && !help ? shortcutOf(event) : null
+
+      if (!shortcut) {
+         return
+      }
+
+      event.preventDefault()
+
+      if (shortcut.action === 'move') {
+         const next = selectedId
+            ? neighbourOf(nodes, edges, selectedId, shortcut.direction)
+            : (nodes[0]?.id ?? null)
+
+         setSelectedId(next ?? selectedId)
+
+         return
+      }
+
+      const actions: Record<typeof shortcut.action, () => void> = {
+         add: addBlock,
+         open: () => setOpenId(selectedId),
+         remove: removeSelection,
+         close: () => setSelectedId(null),
+         save,
+         undo: () => step(undo),
+         redo: () => step(redo),
+         duplicate,
+      }
+
+      actions[shortcut.action]()
+   })
+
+   useEffect(() => {
+      window.addEventListener('keydown', onKey)
+
+      return () => window.removeEventListener('keydown', onKey)
+   }, [])
+
+   useEffect(() => {
+      if (!dirty) {
+         return undefined
+      }
+
+      const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+
+      window.addEventListener('beforeunload', warn)
+
+      return () => window.removeEventListener('beforeunload', warn)
+   }, [dirty])
+
+   const openNode = nodeOf(openId)
+   const actions = useMemo(() => ({ addAfter: (id: string) => setPicker({ afterId: id }) }), [])
 
    return (
-      <div className="grid gap-3">
-         <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm">
-               Data cost up to <span className="font-medium">{formatUsd(estimate.data?.totalMicros ?? 0)}</span> a run
-               {estimate.data ? ` (${estimate.data.posts} posts waiting)` : ''}
-            </p>
-            <Button disabled={!dirty || saving} onClick={() => onSave(draft)}>
-               {saving ? <Loader2 className="animate-spin" /> : <Save />}
-               Save changes
-            </Button>
-         </div>
-         {problems.length > 0 ? (
-            <Alert>
-               <AlertTitle>Before this workflow can run</AlertTitle>
-               <AlertDescription>
-                  <ul className="list-disc pl-5">
-                     {problems.map(problem => (
-                        <li key={`${problem.nodeId ?? ''}${problem.message}`}>{problem.message}</li>
-                     ))}
-                  </ul>
-               </AlertDescription>
-            </Alert>
-         ) : null}
-         {saveError ? <p className="text-destructive text-sm">{saveError.message}</p> : null}
-         <div className="grid h-[640px] grid-cols-[200px_1fr_280px] overflow-hidden rounded-lg border">
-            <div className="border-r">
-               <Palette catalog={catalog} onAdd={block => add(block)} />
-            </div>
-            <div onDragOver={event => event.preventDefault()} onDrop={onDrop}>
-               <ReactFlow<FlowNode>
-                  nodes={shown.nodes.map(node => ({
-                     ...node,
-                     measured: nodes.find(({ id }) => id === node.id)?.measured,
-                     selected: node.id === selectedId,
-                  }))}
-                  edges={shown.edges.map(edge => ({
-                     ...edge,
-                     selected: edges.find(({ id }) => id === edge.id)?.selected,
-                  }))}
-                  nodeTypes={NODE_TYPES}
-                  onNodesChange={(changes: NodeChange<FlowNode>[]) => {
-                     setNodes(current => applyNodeChanges(changes, current))
+      <CanvasActions value={actions}>
+         <div
+            ref={wrapper}
+            tabIndex={-1}
+            className="relative h-[calc(100svh-15rem)] min-h-[560px] overflow-hidden rounded-xl border outline-none"
+         >
+            <ReactFlow<FlowNode>
+               nodes={shown.nodes.map(node => ({
+                  ...node,
+                  measured: nodeOf(node.id)?.measured,
+                  selected: node.id === selectedId,
+               }))}
+               edges={shown.edges.map(edge => ({
+                  ...edge,
+                  selected: edges.find(({ id }) => id === edge.id)?.selected,
+               }))}
+               nodeTypes={NODE_TYPES}
+               defaultEdgeOptions={EDGE_OPTIONS}
+               deleteKeyCode={null}
+               disableKeyboardA11y
+               onNodesChange={(changes: NodeChange<FlowNode>[]) => {
+                  setPresent(canvas => ({
+                     ...canvas,
+                     nodes: applyNodeChanges(changes, canvas.nodes),
+                  }))
 
-                     if (changes.some(({ type }) => type === 'position' || type === 'remove')) {
-                        setDirty(true)
-                     }
-                  }}
-                  onEdgesChange={(changes: EdgeChange[]) => {
-                     setEdges(current => applyEdgeChanges(changes, current))
-
-                     if (changes.some(({ type }) => type === 'remove')) {
-                        setDirty(true)
-                     }
-                  }}
-                  isValidConnection={({ source, target }) => canConnect(nodes, edges, source, target)}
-                  onConnect={connection =>
-                     change(() => setEdges(current => addEdge({ ...connection, id: `${connection.source}>${connection.target}` }, current)))
+                  if (changes.some(({ type }) => type === 'position')) {
+                     setDirty(true)
                   }
-                  onNodeClick={(_, node) => setSelectedId(node.id)}
-                  onPaneClick={() => setSelectedId(null)}
-                  fitView
-               >
-                  <Background />
-                  <Controls />
-                  <MiniMap pannable zoomable />
-               </ReactFlow>
-            </div>
-            <div className="overflow-y-auto border-l">
-               <SettingsPanel
-                  node={selected}
-                  icps={icps}
-                  workflows={workflows.filter(({ id }) => id !== workflowId)}
-                  onChange={setConfig}
-                  onRemove={remove}
-               />
-            </div>
+               }}
+               onEdgesChange={(changes: EdgeChange[]) =>
+                  setPresent(canvas => ({
+                     ...canvas,
+                     edges: applyEdgeChanges(changes, canvas.edges),
+                  }))
+               }
+               onNodeDragStart={() => setHistory(current => record(current, current.present))}
+               isValidConnection={({ source, target }) => canConnect(nodes, edges, source, target)}
+               onConnect={connection =>
+                  commit(canvas => ({
+                     ...canvas,
+                     edges: addEdge({ ...connection, id: `${connection.source}>${connection.target}` }, canvas.edges),
+                  }))
+               }
+               onNodeClick={(_, node) => {
+                  setSelectedId(node.id)
+                  wrapper.current?.focus()
+               }}
+               onNodeDoubleClick={(_, node) => setOpenId(node.id)}
+               onPaneClick={() => {
+                  setSelectedId(null)
+                  wrapper.current?.focus()
+               }}
+               fitView
+            >
+               <Background gap={20} />
+               <Controls showInteractive={false} />
+               <MiniMap pannable zoomable />
+               <Panel position="top-left" className="bg-background/90 grid max-w-sm gap-2 rounded-lg border p-3 text-sm shadow-sm backdrop-blur">
+                  <p>
+                     <span aria-hidden>💸 </span>
+                     Up to <span className="font-medium">{formatUsd(estimate.data?.totalMicros ?? 0)}</span> a run
+                     {estimate.data ? ` · ${estimate.data.posts} posts waiting` : ''}
+                  </p>
+                  {problems.length > 0 ? (
+                     <ul className="grid gap-1">
+                        {problems.map(problem => (
+                           <li key={`${problem.nodeId ?? ''}${problem.message}`}>
+                              <button
+                                 type="button"
+                                 disabled={!problem.nodeId}
+                                 onClick={() => {
+                                    setSelectedId(problem.nodeId ?? null)
+                                    setOpenId(problem.nodeId ?? null)
+                                 }}
+                                 className="text-destructive flex items-start gap-1.5 text-left text-xs enabled:hover:underline"
+                              >
+                                 <CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                                 {problem.message}
+                              </button>
+                           </li>
+                        ))}
+                     </ul>
+                  ) : (
+                     <p className="text-muted-foreground text-xs">
+                        <span aria-hidden>✅ </span>Ready to run
+                     </p>
+                  )}
+                  {saveError ? <p className="text-destructive text-xs">{saveError.message}</p> : null}
+               </Panel>
+               <Panel position="top-right" className="flex items-center gap-1">
+                  <Button variant="outline" size="icon" aria-label="Undo" disabled={history.past.length === 0} onClick={() => step(undo)}>
+                     <Undo2 />
+                  </Button>
+                  <Button variant="outline" size="icon" aria-label="Redo" disabled={history.future.length === 0} onClick={() => step(redo)}>
+                     <Redo2 />
+                  </Button>
+                  <Button variant="outline" size="icon" aria-label="Keyboard shortcuts" onClick={() => setHelp(true)}>
+                     <Keyboard />
+                  </Button>
+                  <Button variant="outline" onClick={addBlock}>
+                     <Plus />
+                     Add block
+                  </Button>
+                  <Button disabled={!dirty || saving} onClick={save}>
+                     {saving ? <Loader2 className="animate-spin" /> : <Save />}
+                     Save changes
+                  </Button>
+               </Panel>
+               {nodes.length === 0 ? (
+                  <Panel position="top-center" className="mt-40">
+                     <Button size="lg" variant="outline" onClick={addBlock}>
+                        <Plus />
+                        Add the first block (Tab)
+                     </Button>
+                  </Panel>
+               ) : null}
+            </ReactFlow>
          </div>
-      </div>
+
+         <BlockPicker
+            open={picker !== null}
+            catalog={catalog}
+            after={nodeOf(picker?.afterId ?? null)?.data.block ?? null}
+            onPick={pick}
+            onClose={() => setPicker(null)}
+         />
+         <BlockSettings
+            node={openNode}
+            problems={problems.filter(({ nodeId }) => nodeId === openId).map(({ message }) => message)}
+            icps={icps}
+            workflows={workflows.filter(({ id }) => id !== workflowId)}
+            onChange={setConfig}
+            onRemove={removeSelection}
+            onClose={() => {
+               setOpenId(null)
+               wrapper.current?.focus()
+            }}
+         />
+         <Dialog open={help} onOpenChange={setHelp}>
+            <DialogContent>
+               <DialogHeader>
+                  <DialogTitle>Keyboard shortcuts</DialogTitle>
+                  <DialogDescription>They work when the canvas has focus.</DialogDescription>
+               </DialogHeader>
+               <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+                  {SHORTCUT_HELP.map(([keys, what]) => (
+                     <div key={keys} className="contents">
+                        <dt>
+                           <kbd className="bg-muted rounded border px-1.5 py-0.5 font-mono text-xs">{keys}</kbd>
+                        </dt>
+                        <dd className="text-muted-foreground">{what}</dd>
+                     </div>
+                  ))}
+               </dl>
+            </DialogContent>
+         </Dialog>
+      </CanvasActions>
    )
 }
 
