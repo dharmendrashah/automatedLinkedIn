@@ -26,7 +26,12 @@ export class RetentionService {
       ledgerCutoff.setUTCMonth(ledgerCutoff.getUTCMonth() - RETENTION.ledgerMonths)
 
       const itemCutoff = daysBefore(now, RETENTION.itemsDays)
-      const items = await db.workflowItem.deleteMany({ where: { createdAt: { lt: itemCutoff } } })
+      const items = await db.workflowItem.deleteMany({
+         where: {
+            createdAt: { lt: itemCutoff },
+            OR: [{ keepUntil: null }, { keepUntil: { lt: now } }],
+         },
+      })
       // What an API call or another workflow passed in holds personal data too.
       const inputs = await db.workflowRun.updateMany({
          where: {

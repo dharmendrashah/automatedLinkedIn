@@ -16,11 +16,15 @@ const MEMBER_MISSING = 'Person not found in your lists'
 const byId = z.object({ id: z.string().min(1) })
 const listName = z.string().trim().min(1).max(100)
 const state = z.enum(['QUALIFIED', 'MAYBE'])
+const viewState = z.enum(['QUALIFIED', 'MAYBE', 'UNSCORED'])
+const label = z.string().trim().toLowerCase().min(1).max(30)
 const status = z.enum(['NEW', 'IN_REVIEW', 'DONE', 'NOT_A_FIT'])
 
+// No state shows everyone in the list.
 const membersInput = z.object({
    listId: z.string().min(1),
-   state,
+   state: viewState.optional(),
+   label: label.optional(),
    status: status.optional(),
    search: z.string().trim().max(100).optional(),
    needsReview: z.boolean().optional(),
@@ -46,7 +50,7 @@ const updateInput = z.object({
    status: status.optional(),
 })
 
-const CSV_HEADER = ['Name', 'Headline', 'Location', 'Profile', 'State', 'Status', 'Found via', 'Date found']
+const CSV_HEADER = ['Name', 'Headline', 'Location', 'Profile', 'State', 'Status', 'Labels', 'Found via', 'Date found']
 
 const profileLink = (url: string) => {
    const [link] = readLinks(url, 'profile').links
@@ -130,23 +134,32 @@ export const workflowList = router({
       return { removed }
    }),
 
-   // A mutation so the download is only built when asked for and never cached.
-   exportCsv: ownerProcedure.input(byId).mutation(async ({ ctx, input }) => {
-      const list = present(await WorkflowListService.exportList(ctx.user.id, input.id), LIST_MISSING)
-      const rows = list.members.map(member => [
-         member.name,
-         member.headline,
-         member.location,
-         member.url,
-         member.state,
-         member.status,
-         member.postUrl,
-         member.createdAt.toISOString(),
-      ])
+   // A mutation so the download is only built when asked for and never cached. Exports the view on screen.
+   exportCsv: ownerProcedure
+      .input(
+         byId.extend({
+            state: viewState.optional(),
+            label: label.optional(),
+         })
+      )
+      .mutation(async ({ ctx, input }) => {
+         const { id, ...view } = input
+         const list = present(await WorkflowListService.exportList(ctx.user.id, id, view), LIST_MISSING)
+         const rows = list.members.map(member => [
+            member.name,
+            member.headline,
+            member.location,
+            member.url,
+            member.state,
+            member.status,
+            member.tags.join(', '),
+            member.postUrl,
+            member.createdAt.toISOString(),
+         ])
 
-      return {
-         fileName: fileName(list.name),
-         csv: toCsv(CSV_HEADER, rows),
-      }
-   }),
+         return {
+            fileName: fileName(list.name),
+            csv: toCsv(CSV_HEADER, rows),
+         }
+      }),
 })

@@ -4,8 +4,10 @@ import {
    CheckCheck,
    Clock,
    CopyMinus,
+   FileDown,
    FileSearch,
    Funnel,
+   GitBranch,
    Globe,
    Hand,
    Heart,
@@ -15,7 +17,10 @@ import {
    type LucideIcon,
    MessageSquare,
    Newspaper,
+   Repeat,
    Search,
+   Send,
+   Split,
    Tag,
    Target,
    ThumbsUp,
@@ -52,6 +57,11 @@ export const BLOCK_ICONS: Record<Block['type'], LucideIcon> = {
    'collect.profile': IdCard,
    'output.list': ListPlus,
    'output.markPosts': CheckCheck,
+   'logic.if': Split,
+   'logic.else': GitBranch,
+   'logic.forEach': Repeat,
+   'output.csv': FileDown,
+   'output.sendApi': Send,
 }
 
 export const GROUPS: { group: Block['group']; emoji: string; tile: string }[] = [
@@ -74,6 +84,11 @@ export const GROUPS: { group: Block['group']; emoji: string; tile: string }[] = 
       group: 'Process',
       emoji: '⚙️',
       tile: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+   },
+   {
+      group: 'Logic',
+      emoji: '🔀',
+      tile: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
    },
    {
       group: 'Output',

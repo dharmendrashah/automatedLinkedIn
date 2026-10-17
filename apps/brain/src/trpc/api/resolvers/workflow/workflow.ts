@@ -1,10 +1,11 @@
-import { TRPCError } from '@trpc/server'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 
+import { CSV_MAX_ROWS, itemsCsv } from 'core'
+
 import { WorkflowService, WorkflowTriggerService, readGraph } from 'database'
 
-import { GOALS, catalog, graphSchema, templateGraph } from '@automatedLinkedIn/contracts'
+import { GOALS, blankGraph, catalog, graphSchema, templateGraph } from '@automatedLinkedIn/contracts'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -17,21 +18,22 @@ const byId = z.object({ id: z.string().min(1) })
 const name = z.string().trim().min(1).max(100)
 const score = z.number().int().min(1).max(100)
 
-const templateFields = {
-   goal: z.enum(GOALS).default('engagers'),
-   icpId: z.string().min(1),
-   posts: z.number().int().min(1).max(100),
-   perPost: z.number().int().min(1).max(500),
-   keywords: z.string().trim().min(1).max(200).optional(),
-   customer: z.string().trim().min(1).max(500).optional(),
-   titles: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
+// Ready-made templates start with these numbers; everything else is set on the canvas.
+const TEMPLATE_NUMBERS = {
+   posts: 5,
+   perPost: 50,
 }
 
-const template = z.object(templateFields)
-
-const createInput = template.extend({
+const createInput = z.object({
    name,
+   start: z.enum(['blank', ...GOALS]),
    description: z.string().trim().max(200).optional(),
+})
+
+const outputInput = z.object({
+   runId: z.string().min(1),
+   nodeId: z.string().min(1).max(60),
+   round: z.number().int().min(0).optional(),
 })
 
 const updateInput = byId.extend({
@@ -72,26 +74,17 @@ export const workflow = router({
       return withProblems(ctx.user.id, found)
    }),
 
-   // The guided start: the template of the chosen goal with the client's ideal customer and numbers.
+   // A new workflow, blank or from a ready-made template; it is finished on the canvas, so problems do not stop it.
    create: ownerProcedure.input(createInput).mutation(async ({ ctx, input }) => {
-      const { goal, name: workflowName, description, ...options } = input
-      const graph = templateGraph(goal, options)
-      const [problem] = await WorkflowService.problems(ctx.user.id, graph)
-
-      if (problem) {
-         throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: problem.message,
-         })
-      }
-
-      return orConflict(
+      const { id } = await orConflict(
          WorkflowService.create(ctx.user.id, {
-            name: workflowName,
-            goal: description ?? null,
-            graph,
+            name: input.name,
+            goal: input.description ?? null,
+            graph: input.start === 'blank' ? blankGraph() : templateGraph(input.start, TEMPLATE_NUMBERS),
          })
       )
+
+      return { id }
    }),
 
    update: ownerProcedure.input(updateInput).mutation(async ({ ctx, input }) => {
@@ -112,20 +105,18 @@ export const workflow = router({
       return { token }
    }),
 
-   // The most a run can cost, for a saved workflow, a draft graph on the canvas, or the guided start's template.
+   // The most a run can cost, for a saved workflow or a draft graph on the canvas.
    estimate: ownerProcedure
       .input(
          z.object({
             id: z.string().min(1).optional(),
             graph: graphSchema.optional(),
-            template: template.optional(),
             preview: z.boolean().default(false),
          })
       )
       .query(async ({ ctx, input }) => {
          const saved = input.id ? await WorkflowService.get(ctx.user.id, input.id) : null
-         const fromTemplate = input.template ? templateGraph(input.template.goal, input.template) : null
-         const graph = input.graph ?? fromTemplate ?? (saved ? readGraph(saved.graph) : null)
+         const graph = input.graph ?? (saved ? readGraph(saved.graph) : null)
          const draft = present(graph, MISSING)
          const [estimate, problems] = await Promise.all([
             WorkflowService.estimate(ctx.user.id, draft, input.preview),
@@ -161,4 +152,46 @@ export const workflow = router({
          graph: readGraph(run.graph),
       }
    }),
+
+   // One page of what a block passed on in a run (all rounds unless one is chosen).
+   output: ownerProcedure
+      .input(
+         outputInput.extend({
+            page: z.number().int().min(1).default(1),
+            pageSize: z.number().int().min(1).max(100).default(25),
+         })
+      )
+      .query(async ({ ctx, input }) => {
+         const { page, pageSize, ...query } = input
+
+         return present(
+            await WorkflowService.output(ctx.user.id, {
+               ...query,
+               skip: (page - 1) * pageSize,
+               take: pageSize,
+            }),
+            RUN_MISSING
+         )
+      }),
+
+   // A mutation so the file is only built when asked for and never cached.
+   outputCsv: ownerProcedure
+      .input(outputInput.extend({ fileName: z.string().trim().max(80).optional() }))
+      .mutation(async ({ ctx, input }) => {
+         const { fileName, ...query } = input
+         const { items, total } = present(
+            await WorkflowService.output(ctx.user.id, {
+               ...query,
+               skip: 0,
+               take: CSV_MAX_ROWS,
+            }),
+            RUN_MISSING
+         )
+         const base = (fileName || `${input.nodeId}-output`).replace(/[^\p{L}\p{N}_-]+/gu, '-')
+
+         return {
+            fileName: `${base}.csv`,
+            csv: itemsCsv(items, total),
+         }
+      }),
 })

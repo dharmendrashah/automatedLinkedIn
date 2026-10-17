@@ -1,10 +1,11 @@
 import { type CompanyItem, type PersonItem, type PostItem, type WorkflowItemData, readSeniorities } from 'core'
 
-import { IcpService, WalletService, WorkflowRunService, floorMicros } from 'database'
+import { IcpService, type ItemKey, WalletService, WorkflowRunService, floorMicros } from 'database'
 
 import { type Graph, type GraphNode, blockOf } from '@automatedLinkedIn/contracts'
 
 import { type DataClient, DataServiceError } from '../data/dataClient'
+import { type Post } from './sendApi'
 import { type ScoringRules } from './steps'
 
 // What every step executor shares: the run it belongs to, its inputs, and the one way to make a paid request.
@@ -18,7 +19,14 @@ export type EngineDeps = {
    client: Pick<DataClient, 'balanceMicros' | 'collect' | 'findJob'>
    signal: AbortSignal
    log: Log
+   // How "Send via API" posts; tests swap it for a fake.
+   post?: Post
 }
+
+// Where an If keeps the people it did not pass on, for an Else after it.
+export const ELSE_SUFFIX = '~else'
+
+export const DAY_MS = 24 * 60 * 60 * 1000
 
 export type StepResult = {
    status: 'DONE' | 'PARTIAL'
@@ -32,6 +40,8 @@ export type Context = {
    graph: Graph
    node: GraphNode
    step: Step
+   // Where this step's output is kept.
+   at: ItemKey
    inputs: WorkflowItemData[]
    preview: boolean
    deps: EngineDeps
@@ -235,13 +245,13 @@ export const collectEach = async (ctx: Context, requests: Request[]): Promise<St
    return {
       status: stopped || failed > 0 ? 'PARTIAL' : 'DONE',
       itemsIn: ctx.inputs.length,
-      itemsOut: await WorkflowRunService.countItems(ctx.run.id, ctx.node.id),
+      itemsOut: await WorkflowRunService.countItems(ctx.at),
       message: stopped ? WALLET_LOW : failed > 0 ? SERVICE_BUSY : undefined,
    }
 }
 
 export const keepItems = async (ctx: Context, items: WorkflowItemData[], itemsIn: number): Promise<StepResult> => {
-   await WorkflowRunService.replaceItems(ctx.run.id, ctx.node.id, items)
+   await WorkflowRunService.replaceItems(ctx.at, items)
 
    return {
       status: 'DONE',

@@ -129,6 +129,7 @@ export const WorkflowPage = () => {
                   icps={icps.data ?? []}
                   workflows={workflows.data ?? []}
                   replay={replay && detail.data ? detail.data.steps : null}
+                  replayRunId={replay && detail.data ? detail.data.id : null}
                   saving={update.isPending}
                   saveError={update.error}
                   onSave={graph =>

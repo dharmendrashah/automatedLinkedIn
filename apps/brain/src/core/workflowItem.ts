@@ -39,6 +39,8 @@ export type PostItem = {
    url: string
    // The row in the owner's posts list; null for a post a workflow found by itself.
    postId: string | null
+   // The author's profile link when the data service gave it; a block that wants people uses the author.
+   author?: string | null
 }
 
 export type CompanyItem = {
@@ -134,6 +136,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       slug: z.string(),
       url: z.string(),
       postId: z.string().nullable(),
+      author: z.string().nullable().optional(),
    }),
    z.object({
       kind: z.literal('company'),

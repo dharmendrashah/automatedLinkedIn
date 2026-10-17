@@ -37,6 +37,8 @@ model User {
 enum WorkflowListMemberState {
   QUALIFIED
   MAYBE
+  // Added by a workflow without a Score block.
+  UNSCORED
 }
 
 enum WorkflowListMemberStatus {
@@ -194,12 +196,14 @@ model WorkflowStepRun {
   itemsOut   Int                @default(0)
   costMicros Int                @default(0)
   message    String?
+  // Which repeat of a loop or For each batch this is; 0 for blocks that run once.
+  round      Int                @default(0)
   // When a worker took the step; a step held too long is taken again.
   claimedAt  DateTime?
   finishedAt DateTime?
   calls      WorkflowStepCall[]
 
-  @@unique([runId, nodeId])
+  @@unique([runId, nodeId, round])
 }
 
 // One paid request of a collect step. The supplier's job id is saved as soon as it is known, so a restart reads that
@@ -226,11 +230,14 @@ model WorkflowItem {
   runId     String
   run       WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
   nodeId    String
+  round     Int         @default(0)
   slug      String
   data      Json
+  // Set for what reached an "Export to CSV" block: kept until then instead of 14 days.
+  keepUntil DateTime?
   createdAt DateTime    @default(now())
 
-  @@unique([runId, nodeId, slug])
+  @@unique([runId, nodeId, round, slug])
   @@index([createdAt])
 }
 

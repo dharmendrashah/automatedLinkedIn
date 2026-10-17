@@ -135,17 +135,22 @@ describe('workflowList resolvers', () => {
                url: 'https://www.linkedin.com/in/ada',
                state: 'QUALIFIED',
                status: 'NEW',
+               tags: ['hot', 'q4'],
                postUrl: null,
                createdAt: new Date('2026-10-17T00:00:00Z'),
             },
          ],
       })
 
-      const { fileName, csv } = await caller().exportCsv({ id: 'l1' })
+      const { fileName, csv } = await caller().exportCsv({
+         id: 'l1',
+         label: 'Hot',
+      })
 
+      expect(mocks.exportList).toHaveBeenCalledWith(expect.any(String), 'l1', { label: 'hot' })
       expect(fileName).toBe('Q4-founders.csv')
       expect(csv.split('\r\n')[1]).toBe(
-         '"Ada","\'=cmd","","https://www.linkedin.com/in/ada","QUALIFIED","NEW","","2026-10-17T00:00:00.000Z"'
+         '"Ada","\'=cmd","","https://www.linkedin.com/in/ada","QUALIFIED","NEW","hot, q4","","2026-10-17T00:00:00.000Z"'
       )
    })
 })

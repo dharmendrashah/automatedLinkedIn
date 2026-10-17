@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { person } from 'core'
 
-import { applyProfiles, filterPeople, scorePeople } from './steps'
+import { applyProfiles, conditionsOf, filterPeople, matches, scorePeople } from './steps'
 
 // core's index also loads services that read env; these pure steps need none of it.
 vi.mock('env', () => ({}))
@@ -49,6 +49,26 @@ const cy = person({
 })
 
 describe('engine steps', () => {
+   it('should match If conditions with all or any, and let everyone through when none is set', () => {
+      const slugs = (config: Record<string, unknown>) =>
+         [ada, bob, cy].filter(item => matches(item, conditionsOf(config))).map(({ slug }) => slug)
+
+      expect(slugs({})).toEqual(['ada', 'bob', 'cy'])
+      expect(
+         slugs({
+            minFollowers: 100,
+            headlineHas: ['marketer'],
+         })
+      ).toEqual([])
+      expect(
+         slugs({
+            match: 'any',
+            minFollowers: 100,
+            headlineHas: ['marketer'],
+         })
+      ).toEqual(['ada', 'cy'])
+      expect(slugs({ signal: 'reacted' })).toEqual([])
+   })
    it('should filter on followers, comment-only and headline words', () => {
       expect(
          filterPeople([ada, bob, cy], {
@@ -82,7 +102,7 @@ describe('engine steps', () => {
       ).toBe(1)
    })
 
-   it('should rescore qualified people with their full profile and leave maybe people alone', () => {
+   it('should rescore people with their full profile, and only add what it shows when there is no scoring', () => {
       const { kept } = scorePeople([ada, cy], rules, thresholds)
       const cards = new Map([
          [
@@ -98,9 +118,16 @@ describe('engine steps', () => {
          ],
       ])
 
-      const after = applyProfiles(kept, cards, rules, thresholds)
+      const scored = applyProfiles(kept, cards, rules, thresholds)
+      const unscored = applyProfiles([ada], cards, null, thresholds)
 
-      expect(after.discarded).toBe(1)
-      expect(after.kept.map(({ slug }) => slug)).toEqual(['cy'])
+      expect(scored.find(({ slug }) => slug === 'ada')?.band).toBeNull()
+      expect(scored.find(({ slug }) => slug === 'cy')?.band).not.toBeNull()
+      expect(unscored[0]).toMatchObject({
+         name: 'Ada L',
+         company: 'Acme',
+         enriched: true,
+         band: ada.band,
+      })
    })
 })

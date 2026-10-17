@@ -3,6 +3,7 @@ import { type Prisma, type WorkflowTrigger } from 'generated/prisma/client'
 import {
    type Graph,
    type GraphError,
+   errorsOf,
    estimateGraph,
    graphSchema,
    nextScheduledRun,
@@ -17,6 +18,7 @@ import { LinkedInPostService } from './linkedInPost.service'
 import { LinkedInProfileService } from './linkedInProfile.service'
 import { PrismaService } from './prisma.service'
 import { WalletService } from './wallet.service'
+import { WorkflowRunService } from './workflowRun.service'
 
 export type WorkflowChanges = {
    name?: string
@@ -62,6 +64,7 @@ const runSelect = {
 const stepSelect = {
    nodeId: true,
    type: true,
+   round: true,
    status: true,
    itemsIn: true,
    itemsOut: true,
@@ -103,6 +106,7 @@ const chainProblems = async (userId: string, graph: Graph, selfId: string | null
          return [
             {
                nodeId: node.id,
+               level: 'error',
                message: 'This chain of workflows would start itself again. Pick another workflow.',
             },
          ]
@@ -121,6 +125,7 @@ const chainProblems = async (userId: string, graph: Graph, selfId: string | null
             ? [
                  {
                     nodeId: node.id,
+                    level: 'error',
                     message: 'Pick one of your workflows to run after.',
                  },
               ]
@@ -148,9 +153,13 @@ export class WorkflowService {
       })
       const ownedIds = new Set(owned.map(({ id }) => id))
       const missing = graph.nodes
-         .filter(node => node.type === 'score.icp' && !ownedIds.has(String(node.config.icpId ?? '')))
+         .filter(
+            node =>
+               node.type === 'score.icp' && typeof node.config.icpId === 'string' && !ownedIds.has(node.config.icpId)
+         )
          .map(node => ({
             nodeId: node.id,
+            level: 'error' as const,
             message: 'Pick one of your ideal customers to score against.',
          }))
 
@@ -229,7 +238,7 @@ export class WorkflowService {
          )
       }
 
-      if (enabled && (await WorkflowService.problems(userId, graph, id)).length > 0) {
+      if (enabled && errorsOf(await WorkflowService.problems(userId, graph, id)).length > 0) {
          throw new ConflictError('Fix the problems in the workflow before switching it on.')
       }
 
@@ -301,7 +310,7 @@ export class WorkflowService {
       }
 
       const graph = readGraph(workflow.graph)
-      const [problem] = await WorkflowService.problems(userId, graph, workflowId)
+      const [problem] = errorsOf(await WorkflowService.problems(userId, graph, workflowId))
 
       if (problem) {
          throw new ConflictError(`Fix the workflow first: ${problem.message}`)
@@ -380,9 +389,28 @@ export class WorkflowService {
          select: {
             ...runSelect,
             graph: true,
-            steps: { select: stepSelect },
+            steps: {
+               select: stepSelect,
+               orderBy: [{ round: 'asc' }, { id: 'asc' }],
+            },
          },
       })
+   }
+
+   // One page of what a block of the owner's run passed on. null when the run is not the owner's.
+   public static async output(
+      userId: string,
+      query: { runId: string; nodeId: string; round?: number; skip: number; take: number }
+   ) {
+      const run = await PrismaService.client.workflowRun.findFirst({
+         where: {
+            id: query.runId,
+            userId,
+         },
+         select: { id: true },
+      })
+
+      return run ? WorkflowRunService.page(run.id, query.nodeId, query.round, query.skip, query.take) : null
    }
 
    // Scheduled workflows whose time has come.

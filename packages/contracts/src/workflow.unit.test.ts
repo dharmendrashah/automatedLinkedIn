@@ -4,6 +4,7 @@ import {
    GOALS,
    type Graph,
    catalog,
+   errorsOf,
    estimateGraph,
    flagshipGraph,
    nextScheduledRun,
@@ -38,7 +39,7 @@ describe('validateGraph', () => {
       expect(validateGraph(flagship)).toEqual([])
    })
 
-   it('should refuse a connection between ports of different kinds', () => {
+   it('should let posts reach a block that needs people, using their authors, and only note it', () => {
       const graph: Graph = {
          ...flagship,
          edges: [
@@ -50,15 +51,19 @@ describe('validateGraph', () => {
          ],
       }
 
-      expect(validateGraph(graph)).toContainEqual({
-         nodeId: 'score',
-         message: 'Posts gives posts, but Score against an ideal customer needs people.',
-      })
+      expect(validateGraph(graph)).toEqual([
+         {
+            nodeId: 'score',
+            level: 'note',
+            message: 'Score against an ideal customer gets posts: it uses their authors.',
+         },
+      ])
    })
 
-   it('should refuse a loop, a missing trigger, an orphan and a list without scoring', () => {
+   it('should only note a missing trigger, an orphan, a list without scoring and a loop, never block on them', () => {
       const loop: Graph = {
          ...flagship,
+         loopRounds: 4,
          edges: [
             ...flagship.edges,
             {
@@ -67,32 +72,53 @@ describe('validateGraph', () => {
             },
          ],
       }
+      const free: Graph = {
+         nodes: without(without(flagship, 'trigger'), 'score').nodes,
+         edges: without(without(flagship, 'trigger'), 'score').edges,
+      }
 
-      expect(validateGraph(loop).map(({ message }) => message)).toContain(
-         'The blocks form a loop. A workflow must flow one way.'
-      )
-      expect(validateGraph(without(flagship, 'trigger')).map(({ message }) => message)).toEqual(
+      expect(errorsOf(validateGraph(loop))).toEqual([])
+      expect(validateGraph(loop)).toContainEqual({
+         nodeId: 'dedupe',
+         level: 'note',
+         message: 'These blocks form a loop; it runs up to 4 rounds.',
+      })
+      expect(errorsOf(validateGraph(free))).toEqual([])
+      expect(validateGraph(free).map(({ message }) => message)).toEqual(
          expect.arrayContaining([
-            'A workflow needs exactly one trigger.',
-            'Posts is not connected to anything before it.',
+            'No trigger: Run starts from the blocks with nothing before them.',
+            'Get full profile has nothing before it, so it gets nothing.',
          ])
       )
+   })
 
-      const unscored: Graph = {
-         nodes: without(flagship, 'score').nodes,
-         edges: [
-            ...without(flagship, 'score').edges,
+   it('should note an Else without an If before it and a workflow that keeps nothing', () => {
+      const graph: Graph = {
+         nodes: [
+            ...without(flagship, 'list').nodes.filter(({ type }) => type !== 'output.markPosts'),
             {
-               from: 'dedupe',
-               to: 'enrich',
+               id: 'else',
+               type: 'logic.else',
+               config: {},
+               position: {
+                  x: 0,
+                  y: 0,
+               },
+            },
+         ],
+         edges: [
+            ...without(flagship, 'list').edges.filter(({ to }) => to !== 'done'),
+            {
+               from: 'enrich',
+               to: 'else',
             },
          ],
       }
 
-      expect(validateGraph(unscored)).toContainEqual({
-         nodeId: 'list',
-         message: 'Add to list needs a "Score against an ideal customer" block before it.',
-      })
+      expect(validateGraph(graph).map(({ message }) => message)).toEqual([
+         'Else passes on nothing unless an If comes right before it.',
+         'Nothing keeps the results: add "Add to list", "Export to CSV" or "Send via API".',
+      ])
    })
 
    it('should refuse a "how many" of 0, which the data service reads as everything', () => {
@@ -206,6 +232,22 @@ describe('estimateGraph', () => {
       const { totalMicros } = estimateGraph(previewGraph(flagship), available)
 
       expect(totalMicros).toBe(20 * 2_000 * 2 + 40 * 4_000)
+   })
+
+   it('should count every round of a loop', () => {
+      const loop: Graph = {
+         ...flagship,
+         loopRounds: 2,
+         edges: [
+            ...flagship.edges,
+            {
+               from: 'enrich',
+               to: 'dedupe',
+            },
+         ],
+      }
+
+      expect(estimateGraph(loop, available).nodes.enrich.costMicros).toBe(2 * 600 * 4_000)
    })
 
    it('should price people at a company with the page fee and skip enriching them again', () => {

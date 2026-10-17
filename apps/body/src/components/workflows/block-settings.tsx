@@ -3,10 +3,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CircleAlert, Minus, Plus, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 
 import { cn } from '@/lib/utils'
+
+import { BlockOutput } from './block-output'
 
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { type FlowNode } from './graph-convert'
@@ -16,12 +19,14 @@ type Choice = { id: string; name: string }
 
 type Props = {
    node: FlowNode | null
-   problems: string[]
+   problems: { message: string; level: 'error' | 'note' }[]
    icps: Choice[]
    workflows: Choice[]
    onChange: (key: string, value: ConfigValue) => void
    onRemove: () => void
    onClose: () => void
+   // The run shown on the canvas: the dialog then also shows what this block passed on in it.
+   output?: { runId: string; rounds: number } | null
 }
 
 const textOf = (value: ConfigValue | undefined) => (Array.isArray(value) ? value.join(', ') : String(value ?? ''))
@@ -129,7 +134,7 @@ const Chips = ({
 const SHORT_LIST = 4
 
 // A block's settings over the canvas. Every change applies at once; the canvas's Save keeps them.
-export const BlockSettings = ({ node, problems, icps, workflows, onChange, onRemove, onClose }: Props) => {
+export const BlockSettings = ({ node, problems, icps, workflows, onChange, onRemove, onClose, output }: Props) => {
    if (!node) {
       return null
    }
@@ -219,9 +224,24 @@ export const BlockSettings = ({ node, problems, icps, workflows, onChange, onRem
       )
    }
 
+   const settings =
+      block.fields.length === 0 ? (
+         <p className="text-muted-foreground text-sm">This block has nothing to set.</p>
+      ) : (
+         <div className="grid max-h-[60vh] gap-5 overflow-y-auto pr-1">
+            {block.fields.map(item => (
+               <div key={item.key} className="grid gap-2">
+                  <Label htmlFor={`setting-${node.id}-${item.key}`}>{item.label}</Label>
+                  {field(item)}
+                  {'hint' in item && item.hint ? <p className="text-muted-foreground text-xs">{item.hint}</p> : null}
+               </div>
+            ))}
+         </div>
+      )
+
    return (
       <Dialog open onOpenChange={next => (next ? undefined : onClose())}>
-         <DialogContent className="sm:max-w-xl">
+         <DialogContent className={output ? 'sm:max-w-3xl' : 'sm:max-w-xl'}>
             <DialogHeader>
                <div className="flex items-center gap-3">
                   <span className={cn('grid size-10 place-items-center rounded-lg', tileOf(block.group))}>
@@ -234,27 +254,39 @@ export const BlockSettings = ({ node, problems, icps, workflows, onChange, onRem
                </div>
             </DialogHeader>
             {problems.length > 0 ? (
-               <ul className="text-destructive grid gap-1 text-sm">
+               <ul className="grid gap-1 text-sm">
                   {problems.map(problem => (
-                     <li key={problem} className="flex items-start gap-2">
+                     <li
+                        key={problem.message}
+                        className={cn(
+                           'flex items-start gap-2',
+                           problem.level === 'error' ? 'text-destructive' : 'text-warning'
+                        )}
+                     >
                         <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-                        {problem}
+                        {problem.message}
                      </li>
                   ))}
                </ul>
             ) : null}
-            {block.fields.length === 0 ? (
-               <p className="text-muted-foreground text-sm">This block has nothing to set.</p>
+            {output ? (
+               <Tabs defaultValue="output">
+                  <TabsList>
+                     <TabsTrigger value="output">Output of the run</TabsTrigger>
+                     <TabsTrigger value="settings">Settings</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="output">
+                     <BlockOutput
+                        runId={output.runId}
+                        nodeId={node.id}
+                        rounds={output.rounds}
+                        fileName={typeof config.fileName === 'string' ? config.fileName : undefined}
+                     />
+                  </TabsContent>
+                  <TabsContent value="settings">{settings}</TabsContent>
+               </Tabs>
             ) : (
-               <div className="grid max-h-[60vh] gap-5 overflow-y-auto pr-1">
-                  {block.fields.map(item => (
-                     <div key={item.key} className="grid gap-2">
-                        <Label htmlFor={`setting-${node.id}-${item.key}`}>{item.label}</Label>
-                        {field(item)}
-                        {'hint' in item && item.hint ? <p className="text-muted-foreground text-xs">{item.hint}</p> : null}
-                     </div>
-                  ))}
-               </div>
+               settings
             )}
             <DialogFooter className="sm:justify-between">
                <Button type="button" variant="ghost" className="text-destructive" onClick={onRemove}>

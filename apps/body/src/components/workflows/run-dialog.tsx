@@ -38,6 +38,8 @@ export const RunDialog = ({ workflowId, mode, onClose, onStarted }: Props) => {
          onClose()
       },
    })
+   // Notes only explain; an error is the one thing that stops a run.
+   const firstError = estimate.data?.problems.find(({ level }) => level === 'error')
 
    return (
       <Dialog
@@ -66,9 +68,9 @@ export const RunDialog = ({ workflowId, mode, onClose, onStarted }: Props) => {
             ) : (
                <Loader2 className="animate-spin" />
             )}
-            {estimate.data?.problems.length ? (
+            {firstError ? (
                <Alert variant="destructive">
-                  <AlertDescription>{estimate.data.problems[0].message}</AlertDescription>
+                  <AlertDescription>{firstError.message}</AlertDescription>
                </Alert>
             ) : null}
             {start.error ? (
@@ -81,7 +83,7 @@ export const RunDialog = ({ workflowId, mode, onClose, onStarted }: Props) => {
                   Cancel
                </Button>
                <Button
-                  disabled={!estimate.data || estimate.data.problems.length > 0 || start.isPending}
+                  disabled={!estimate.data || Boolean(firstError) || start.isPending}
                   onClick={() =>
                      start.mutate({
                         id: workflowId,

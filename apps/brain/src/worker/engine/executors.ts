@@ -43,6 +43,8 @@ import {
 } from '../data/operations'
 import {
    type Context,
+   DAY_MS,
+   ELSE_SUFFIX,
    type StepResult,
    WALLET_LOW,
    collectEach,
@@ -51,6 +53,7 @@ import {
    keepItems,
    numberIn,
    paidCall,
+   parentsOf,
    peopleOf,
    postsOf,
    rulesOf,
@@ -59,7 +62,8 @@ import {
    thresholdsOf,
    wordsIn,
 } from './context'
-import { applyProfiles, filterPeople, scorePeople } from './steps'
+import { sendPages } from './sendApi'
+import { applyProfiles, conditionsOf, filterPeople, matches, scorePeople } from './steps'
 
 const DONE: StepResult = {
    status: 'DONE',
@@ -207,14 +211,14 @@ const engagement = (ctx: Context, kind: 'commenters' | 'reactors') => {
          use: async rows => {
             const people = kind === 'commenters' ? commentersFrom(rows, post) : reactorsFrom(rows, post)
 
-            await WorkflowRunService.mergePeople(ctx.run.id, ctx.node.id, people)
+            await WorkflowRunService.mergePeople(ctx.at, people)
          },
       }))
    )
 }
 
 const savePosts = (ctx: Context) => async (rows: Record<string, unknown>[]) => {
-   await WorkflowRunService.seedItems(ctx.run.id, ctx.node.id, postsFrom(rows))
+   await WorkflowRunService.seedItems(ctx.at, postsFrom(rows))
 }
 
 const findPosts = (ctx: Context) => {
@@ -279,7 +283,7 @@ const employees = (ctx: Context) => {
          slug: 'company-employees',
          params: employeesParams(company, settings),
          use: async rows => {
-            await WorkflowRunService.mergePeople(ctx.run.id, ctx.node.id, employeesFrom(rows, company))
+            await WorkflowRunService.mergePeople(ctx.at, employeesFrom(rows, company))
          },
       }))
    )
@@ -294,7 +298,7 @@ const jobs = async (ctx: Context): Promise<StepResult> => {
       howMany: numberIn(config, 'howMany'),
    }
 
-   await WorkflowRunService.seedItems(ctx.run.id, ctx.node.id, companies)
+   await WorkflowRunService.seedItems(ctx.at, companies)
 
    const batches = Array.from({ length: Math.ceil(companies.length / JOB_BATCH) }, (_, index) =>
       companies.slice(index * JOB_BATCH, (index + 1) * JOB_BATCH)
@@ -309,8 +313,7 @@ const jobs = async (ctx: Context): Promise<StepResult> => {
             const roles = hiringFrom(rows, batch)
 
             await WorkflowRunService.putItems(
-               ctx.run.id,
-               ctx.node.id,
+               ctx.at,
                batch.map(company => ({
                   ...company,
                   hiring: roles.get(company.slug) ?? [],
@@ -319,7 +322,7 @@ const jobs = async (ctx: Context): Promise<StepResult> => {
          },
       }))
    )
-   const stored = companiesOf(await WorkflowRunService.items(ctx.run.id, [ctx.node.id]))
+   const stored = companiesOf(await WorkflowRunService.items(ctx.run.id, [ctx.at]))
    const kept = config.onlyHiring === false ? stored : stored.filter(({ hiring }) => hiring.length > 0)
    const final = await keepItems(ctx, kept, companies.length)
 
@@ -338,24 +341,24 @@ const domainLookup = (ctx: Context) => {
          slug: 'domain-lookup',
          params: domainParams(wordsIn(config, 'domains'), numberIn(config, 'howMany')),
          use: async rows => {
-            await WorkflowRunService.seedItems(ctx.run.id, ctx.node.id, companiesFromDomains(rows))
+            await WorkflowRunService.seedItems(ctx.at, companiesFromDomains(rows))
          },
       },
    ])
 }
 
-// Reads the full profile of qualified people not read yet and scores them again.
+// Reads the full profile of everyone it gets who was not read yet. After a Score block they are scored again and
+// the ones that no longer fit are dropped; without one they keep no score.
 const enrich = async (ctx: Context): Promise<StepResult> => {
-   const { run, node, graph } = ctx
+   const { run, node, graph, at } = ctx
    const people = mergeBySlug(peopleOf(ctx.inputs))
-   const rules = await rulesOf(run.userId, scoringNodeBefore(graph, node.id))
+   const scoring = scoringNodeBefore(graph, node.id)
+   const rules = scoring ? await rulesOf(run.userId, scoring) : null
    const thresholds = thresholdsOf(run)
-   const toRead = people
-      .filter(({ band, enriched }) => band === 'QUALIFIED' && !enriched)
-      .sort((a, b) => a.slug.localeCompare(b.slug))
+   const toRead = people.filter(({ enriched }) => !enriched).sort((a, b) => a.slug.localeCompare(b.slug))
    let stopped = false
 
-   await WorkflowRunService.seedItems(run.id, node.id, people)
+   await WorkflowRunService.seedItems(at, people)
 
    for (let start = 0; start < toRead.length && !stopped; start += ENRICH_BATCH) {
       const batch = toRead.slice(start, start + ENRICH_BATCH)
@@ -365,23 +368,15 @@ const enrich = async (ctx: Context): Promise<StepResult> => {
          slug: 'profiles',
          params: profilesParams(batch),
          use: async rows => {
-            const rescored = applyProfiles(batch, profilesFrom(rows), rules, thresholds)
-            const keptSlugs = new Set(rescored.kept.map(({ slug }) => slug))
-            const dropped = batch
-               .filter(({ slug }) => !keptSlugs.has(slug))
-               .map(item => ({
-                  ...item,
-                  band: null,
-               }))
-
-            await WorkflowRunService.putItems(run.id, node.id, [...rescored.kept, ...dropped])
+            await WorkflowRunService.putItems(at, applyProfiles(batch, profilesFrom(rows), rules, thresholds))
          },
       })
 
       stopped = outcome === 'stop'
    }
 
-   const kept = peopleOf(await WorkflowRunService.items(run.id, [node.id])).filter(({ band }) => band !== null)
+   const read = peopleOf(await WorkflowRunService.items(run.id, [at]))
+   const kept = rules ? read.filter(({ band }) => band !== null) : read
    const result = await keepItems(ctx, kept, people.length)
 
    return stopped
@@ -415,20 +410,18 @@ const notSeen = async (userId: string, people: PersonItem[]) => {
    return people.filter(({ slug }) => !seen.has(slug))
 }
 
+// Adds everyone it gets to the workflow's list: Qualified or Maybe after scoring, Unscored without it. What it got
+// is also its output, so blocks after it see the same people.
 const addToList = async (ctx: Context): Promise<StepResult> => {
-   const people = mergeBySlug(peopleOf(ctx.inputs)).filter(({ band }) => band !== null)
-   const bands = {
-      qualified: people.filter(({ band }) => band === 'QUALIFIED').length,
-      maybe: people.filter(({ band }) => band === 'MAYBE').length,
-   }
+   const people = mergeBySlug(peopleOf(ctx.inputs))
 
-   await WorkflowRunService.setBands(ctx.run.id, bands)
+   await keepItems(ctx, people, people.length)
 
    if (ctx.preview) {
       return {
          status: 'DONE',
          itemsIn: people.length,
-         itemsOut: 0,
+         itemsOut: people.length,
          message: 'A preview adds nobody to the list.',
       }
    }
@@ -443,7 +436,7 @@ const addToList = async (ctx: Context): Promise<StepResult> => {
          name: item.name,
          headline: item.headline,
          location: item.location,
-         state: item.band === 'MAYBE' ? 'MAYBE' : 'QUALIFIED',
+         state: item.band ?? 'UNSCORED',
          postUrl: item.signals[0]?.via ?? null,
          score: item.score,
          signals: item.signals,
@@ -455,18 +448,22 @@ const addToList = async (ctx: Context): Promise<StepResult> => {
    return {
       status: 'DONE',
       itemsIn: people.length,
-      itemsOut: added,
+      itemsOut: people.length,
+      message: `${added} new in the list.`,
    }
 }
 
 const markPosts = async (ctx: Context): Promise<StepResult> => {
-   const ids = postsOf(ctx.inputs).flatMap(({ postId }) => (postId ? [postId] : []))
+   const posts = postsOf(ctx.inputs)
+   const ids = posts.flatMap(({ postId }) => (postId ? [postId] : []))
+
+   await keepItems(ctx, posts, posts.length)
 
    if (ctx.preview) {
       return {
          status: 'DONE',
          itemsIn: ids.length,
-         itemsOut: 0,
+         itemsOut: posts.length,
          message: 'A preview leaves your posts as they are.',
       }
    }
@@ -475,15 +472,115 @@ const markPosts = async (ctx: Context): Promise<StepResult> => {
       return {
          status: 'DONE',
          itemsIn: ids.length,
-         itemsOut: 0,
+         itemsOut: posts.length,
          message: 'The posts stay not done because the run did not finish fully.',
       }
    }
 
+   const marked = await LinkedInPostService.markProcessed(ctx.run.userId, ids)
+
    return {
       status: 'DONE',
       itemsIn: ids.length,
-      itemsOut: await LinkedInPostService.markProcessed(ctx.run.userId, ids),
+      itemsOut: posts.length,
+      message: `${marked} posts marked done.`,
+   }
+}
+
+const elseKey = (ctx: Context, ifId: string) => ({
+   ...ctx.at,
+   nodeId: `${ifId}${ELSE_SUFFIX}`,
+})
+
+// Passes on the people who match its conditions; the rest are kept aside for an Else block after it.
+const ifBlock = async (ctx: Context): Promise<StepResult> => {
+   const people = mergeBySlug(peopleOf(ctx.inputs))
+   const conditions = conditionsOf(configOf(ctx.node))
+   const passed = people.filter(item => matches(item, conditions))
+   const passedSlugs = new Set(passed.map(({ slug }) => slug))
+
+   await WorkflowRunService.replaceItems(
+      elseKey(ctx, ctx.node.id),
+      people.filter(({ slug }) => !passedSlugs.has(slug))
+   )
+
+   return keepItems(ctx, passed, people.length)
+}
+
+const elseBlock = async (ctx: Context): Promise<StepResult> => {
+   const ifIds = parentsOf(ctx.graph, ctx.node.id).filter(id =>
+      ctx.graph.nodes.some(node => node.id === id && node.type === 'logic.if')
+   )
+   const rest = peopleOf(
+      await WorkflowRunService.items(
+         ctx.run.id,
+         ifIds.map(id => elseKey(ctx, id))
+      )
+   )
+
+   return keepItems(ctx, mergeBySlug(rest), rest.length)
+}
+
+// Passes on one batch per round; the engine starts the next round while batches are left.
+const forEach = async (ctx: Context): Promise<StepResult> => {
+   const size = numberIn(configOf(ctx.node), 'batchSize')
+   const start = ctx.step.round * size
+   const result = await keepItems(ctx, ctx.inputs.slice(start, start + size), ctx.inputs.length)
+
+   return {
+      ...result,
+      message: `Batch ${ctx.step.round + 1} of ${Math.max(1, Math.ceil(ctx.inputs.length / size))}.`,
+   }
+}
+
+const CSV_KEEP_DAYS = 90
+
+const exportCsv = async (ctx: Context): Promise<StepResult> => {
+   await WorkflowRunService.replaceItems(ctx.at, ctx.inputs, new Date(Date.now() + CSV_KEEP_DAYS * DAY_MS))
+
+   return {
+      status: 'DONE',
+      itemsIn: ctx.inputs.length,
+      itemsOut: ctx.inputs.length,
+      message: 'Ready to download from the run for 90 days.',
+   }
+}
+
+const sendApi = async (ctx: Context): Promise<StepResult> => {
+   const config = configOf(ctx.node)
+
+   await keepItems(ctx, ctx.inputs, ctx.inputs.length)
+
+   if (ctx.preview) {
+      return {
+         status: 'DONE',
+         itemsIn: ctx.inputs.length,
+         itemsOut: ctx.inputs.length,
+         message: 'A preview sends nothing.',
+      }
+   }
+
+   const sent = await sendPages(
+      {
+         url: textIn(config, 'url'),
+         secret: textIn(config, 'secret'),
+         post: ctx.deps.post,
+      },
+      {
+         workflowId: ctx.run.workflowId,
+         runId: ctx.run.id,
+      },
+      ctx.inputs
+   )
+
+   return {
+      status: sent.failed > 0 ? 'PARTIAL' : 'DONE',
+      itemsIn: ctx.inputs.length,
+      itemsOut: ctx.inputs.length,
+      message:
+         sent.failed > 0
+            ? `Your address did not accept ${sent.failed} of ${sent.pages} requests: ${sent.error ?? 'no answer'}.`
+            : `Sent in ${sent.pages} requests.`,
    }
 }
 
@@ -546,6 +643,11 @@ export const EXECUTORS: Record<GraphNode['type'], (ctx: Context) => Promise<Step
 
       return keepItems(ctx, kept, people.length)
    },
+   'logic.if': ifBlock,
+   'logic.else': elseBlock,
+   'logic.forEach': forEach,
    'output.list': addToList,
    'output.markPosts': markPosts,
+   'output.csv': exportCsv,
+   'output.sendApi': sendApi,
 }

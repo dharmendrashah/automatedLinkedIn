@@ -26,9 +26,14 @@ export type MemberChanges = {
    status?: WorkflowListMemberStatus
 }
 
-export type MemberListQuery = {
+// Which people of a list a view shows: one state or all of them, and optionally one label.
+export type MemberView = {
+   state?: WorkflowListMemberState
+   label?: string
+}
+
+export type MemberListQuery = MemberView & {
    listId: string
-   state: WorkflowListMemberState
    status?: WorkflowListMemberStatus
    // Only people marked for review after 180 days untouched.
    needsReview?: boolean
@@ -65,6 +70,11 @@ const memberSelect = {
 const SEARCHED_FIELDS = ['name', 'headline', 'location', 'slug'] as const
 
 const nameTaken = (name: string) => `You already have a list named "${name}".`
+
+const viewWhere = ({ state, label }: MemberView): Prisma.WorkflowListMemberWhereInput => ({
+   ...(state ? { state } : {}),
+   ...(label ? { tags: { has: label } } : {}),
+})
 
 export type RunMember = {
    slug: string
@@ -270,7 +280,7 @@ export class WorkflowListService {
       const where: Prisma.WorkflowListMemberWhereInput = {
          listId: query.listId,
          list: { userId },
-         state: query.state,
+         ...viewWhere(query),
          ...(query.status ? { status: query.status } : {}),
          ...(query.needsReview ? { reviewAt: { not: null } } : {}),
          ...(query.search
@@ -406,8 +416,8 @@ export class WorkflowListService {
       })
    }
 
-   // The list name and its members, oldest first; null when the list is not the owner's.
-   public static exportList(userId: string, id: string) {
+   // The list name and the members of a view, oldest first; null when the list is not the owner's.
+   public static exportList(userId: string, id: string, view: MemberView = {}) {
       return PrismaService.client.workflowList.findFirst({
          where: {
             id,
@@ -416,6 +426,7 @@ export class WorkflowListService {
          select: {
             name: true,
             members: {
+               where: viewWhere(view),
                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
                take: EXPORT_LIMIT,
                select: memberSelect,

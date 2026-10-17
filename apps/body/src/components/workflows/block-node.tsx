@@ -1,12 +1,12 @@
 import { Handle, type NodeProps, Position } from '@xyflow/react'
-import { CircleAlert, CircleCheck, CircleDashed, Loader2, Plus } from 'lucide-react'
+import { CircleAlert, CircleCheck, CircleDashed, Info, Loader2, Plus } from 'lucide-react'
 import { useContext } from 'react'
 
 import { cn } from '@/lib/utils'
 
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { CanvasActions } from './canvas-actions'
-import { type FlowNode, summaryOf } from './graph-convert'
+import { type FlowNode, SIDES, summaryOf } from './graph-convert'
 import { NODE_WIDTH } from './layout'
 import { formatUsd } from './types'
 
@@ -26,9 +26,17 @@ const STEP_TONES = {
    FAILED: 'text-destructive',
 } as const
 
-// One block: icon, title and settings in a line, during a run its state, and a "+" to add the next block.
+const POSITIONS = {
+   top: Position.Top,
+   right: Position.Right,
+   bottom: Position.Bottom,
+   left: Position.Left,
+} as const
+
+// One block: icon, title and settings in a line, during a run its state, and a "+" to add the next block. Lines
+// leave and enter on any side.
 export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
-   const { block, config, step, invalid, icpName } = data
+   const { block, config, step, invalid, noted, icpName } = data
    const { addAfter } = useContext(CanvasActions)
    const Icon = BLOCK_ICONS[block.type]
    const StepIcon = step ? STEP_ICONS[step.status] : null
@@ -39,10 +47,19 @@ export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
             className={cn(
                'bg-card flex items-start gap-3 rounded-xl border p-3 text-left shadow-sm transition-shadow hover:shadow-md',
                selected && 'ring-primary ring-2',
+               noted && 'border-warning',
                invalid && 'border-destructive'
             )}
          >
-            {block.input ? <Handle type="target" position={Position.Top} className="size-3!" /> : null}
+            {SIDES.map(side => (
+               <Handle
+                  key={side}
+                  id={side}
+                  type="source"
+                  position={POSITIONS[side]}
+                  className="size-3! opacity-0 transition-opacity group-hover:opacity-100"
+               />
+            ))}
             <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg', tileOf(block.group))}>
                <Icon className="size-5" aria-hidden />
             </span>
@@ -59,14 +76,17 @@ export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
                {invalid ? (
                   <p className="text-destructive mt-1 flex items-center gap-1 text-xs">
                      <CircleAlert className="size-3.5" aria-hidden />
-                     Needs attention
+                     Needs a setting
+                  </p>
+               ) : noted ? (
+                  <p className="text-warning mt-1 flex items-center gap-1 text-xs">
+                     <Info className="size-3.5" aria-hidden />
+                     See the note
                   </p>
                ) : null}
             </div>
-            {block.output ? <Handle type="source" position={Position.Bottom} className="size-3!" /> : null}
          </div>
-         {block.output ? (
-            <button
+         <button
                type="button"
                aria-label={`Add a block after ${block.label}`}
                onClick={event => {
@@ -80,7 +100,6 @@ export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
             >
                <Plus className="size-3.5" />
             </button>
-         ) : null}
       </div>
    )
 }

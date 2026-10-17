@@ -134,6 +134,7 @@ const postLinkOf = (url: unknown) => {
 export const postsFrom = (rows: Row[]): PostItem[] =>
    rows.flatMap(row => {
       const link = postLinkOf(row.postUrl)
+      const author = linkOf(row.postAuthorUrl ?? row.authorUrl ?? row.authorProfileUrl)
 
       return link
          ? [
@@ -141,6 +142,7 @@ export const postsFrom = (rows: Row[]): PostItem[] =>
                  kind: 'post' as const,
                  ...link,
                  postId: null,
+                 author: author?.url ?? null,
               },
            ]
          : []

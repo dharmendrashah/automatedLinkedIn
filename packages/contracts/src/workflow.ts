@@ -87,14 +87,19 @@ export const BLOCK_TYPES = [
    'process.tag',
    'score.icp',
    'collect.profile',
+   'logic.if',
+   'logic.else',
+   'logic.forEach',
    'output.list',
    'output.markPosts',
+   'output.csv',
+   'output.sendApi',
 ] as const
 
 export type BlockType = (typeof BLOCK_TYPES)[number]
 
 type BlockSpec = {
-   group: 'Triggers' | 'Inputs' | 'Collect' | 'Process' | 'Output'
+   group: 'Triggers' | 'Inputs' | 'Collect' | 'Process' | 'Logic' | 'Output'
    label: string
    summary: string
    input: ItemKind | null
@@ -300,9 +305,9 @@ const BLOCKS = {
    'output.list': {
       group: 'Output',
       label: 'Add to list',
-      summary: "Adds people to the workflow's list as qualified or maybe.",
+      summary: "Adds people to the workflow's list.",
       input: 'profile',
-      output: null,
+      output: 'profile',
       config: empty,
       fields: [],
    },
@@ -311,7 +316,7 @@ const BLOCKS = {
       label: 'Mark posts done',
       summary: 'Marks the posts as done when everything else has finished.',
       input: 'post',
-      output: null,
+      output: 'post',
       config: empty,
       fields: [],
    },
@@ -629,17 +634,175 @@ const BLOCKS = {
    },
    'process.tag': {
       group: 'Process',
-      label: 'Tag',
-      summary: 'Adds tags to everyone who passes, shown in the list.',
+      label: 'Add label',
+      summary: 'Adds labels to everyone who passes, shown in the list.',
       input: 'profile',
       output: 'profile',
       config: z.object({ tags: z.array(z.string().trim().toLowerCase().min(1).max(30)).min(1).max(10) }),
       fields: [
          {
             key: 'tags',
-            label: 'Tags',
+            label: 'Labels',
             kind: 'words',
-            hint: 'Separate with commas. Up to 10, 30 characters each.',
+            hint: 'Up to 10, 30 characters each.',
+         },
+      ],
+   },
+   'logic.if': {
+      group: 'Logic',
+      label: 'If',
+      summary: 'Passes on the people who match; connect an Else after it for the rest.',
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         match: z.enum(['all', 'any']).default('all'),
+         minScore: z.number().int().min(0).max(100).default(0),
+         minFollowers: z.number().int().min(0).max(10_000_000).default(0),
+         signal: z.enum(['any', 'commented', 'reacted']).default('any'),
+         headlineHas: words,
+         locationHas: words,
+         companyHas: words,
+         hasLabel: words,
+      }),
+      fields: [
+         {
+            key: 'match',
+            label: 'Match',
+            kind: 'select',
+            options: [
+               {
+                  value: 'all',
+                  label: 'All conditions (and)',
+               },
+               {
+                  value: 'any',
+                  label: 'Any condition (or)',
+               },
+            ],
+         },
+         {
+            key: 'minScore',
+            label: 'Score at least',
+            kind: 'int',
+            min: 0,
+            max: 100,
+            hint: '0 leaves this condition out.',
+         },
+         {
+            key: 'minFollowers',
+            label: 'Followers at least',
+            kind: 'int',
+            min: 0,
+            max: 10_000_000,
+            hint: '0 leaves this condition out.',
+         },
+         {
+            key: 'signal',
+            label: 'Found because they',
+            kind: 'select',
+            options: [
+               {
+                  value: 'any',
+                  label: 'Any reason',
+               },
+               {
+                  value: 'commented',
+                  label: 'Commented',
+               },
+               {
+                  value: 'reacted',
+                  label: 'Reacted',
+               },
+            ],
+         },
+         {
+            key: 'headlineHas',
+            label: 'Headline has one of',
+            kind: 'words',
+         },
+         {
+            key: 'locationHas',
+            label: 'Location has one of',
+            kind: 'words',
+         },
+         {
+            key: 'companyHas',
+            label: 'Company has one of',
+            kind: 'words',
+         },
+         {
+            key: 'hasLabel',
+            label: 'Has one of these labels',
+            kind: 'words',
+         },
+      ],
+   },
+   'logic.else': {
+      group: 'Logic',
+      label: 'Else',
+      summary: 'The people the If before it did not pass on.',
+      input: 'profile',
+      output: 'profile',
+      config: empty,
+      fields: [],
+   },
+   'logic.forEach': {
+      group: 'Logic',
+      label: 'For each',
+      summary: 'Runs the blocks after it once per batch, so a run can stop early when the wallet runs low.',
+      input: 'profile',
+      output: 'profile',
+      config: z.object({ batchSize: z.number().int().min(1).max(500).default(25) }),
+      fields: [
+         {
+            key: 'batchSize',
+            label: 'Items per batch',
+            kind: 'int',
+            min: 1,
+            max: 500,
+         },
+      ],
+   },
+   'output.csv': {
+      group: 'Output',
+      label: 'Export to CSV',
+      summary: 'Keeps what reaches it for 90 days to see and download from the run.',
+      input: 'profile',
+      output: 'profile',
+      config: z.object({ fileName: z.string().trim().max(80).default('') }),
+      fields: [
+         {
+            key: 'fileName',
+            label: 'File name (optional)',
+            kind: 'text',
+         },
+      ],
+   },
+   'output.sendApi': {
+      group: 'Output',
+      label: 'Send via API',
+      summary: 'Sends what reaches it as JSON to your HTTPS address.',
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         url: z
+            .string()
+            .trim()
+            .max(500)
+            .url()
+            .refine(value => value.startsWith('https://'), 'must start with https://'),
+         secret: z.string().trim().max(200).default(''),
+      }),
+      fields: [
+         {
+            key: 'url',
+            label: 'Your HTTPS address',
+            kind: 'text',
+         },
+         {
+            key: 'secret',
+            label: 'Secret sent in the X-Workflow-Secret header (optional)',
+            kind: 'text',
          },
       ],
    },
@@ -666,6 +829,11 @@ export const catalog = (): CatalogBlock[] =>
    })
 
 const nodeId = z.string().regex(/^[\w-]{1,40}$/)
+
+const side = z.enum(['top', 'right', 'bottom', 'left'])
+
+export const DEFAULT_LOOP_ROUNDS = 3
+export const MAX_LOOP_ROUNDS = 10
 
 // Plain values only, so a graph is stored as JSON as it is.
 const configSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]))
@@ -696,28 +864,76 @@ export const graphSchema = z.object({
             }),
          })
       )
-      .max(30),
+      .max(50),
    edges: z
       .array(
          z.object({
             from: nodeId,
             to: nodeId,
+            // Where the line leaves and enters on the canvas; drawing only.
+            fromSide: side.optional(),
+            toSide: side.optional(),
          })
       )
-      .max(60),
+      .max(100),
+   // How many times a loop (a line back to an earlier block) may run.
+   loopRounds: z.number().int().min(1).max(MAX_LOOP_ROUNDS).optional(),
 })
 
 export type Graph = z.infer<typeof graphSchema>
 export type GraphNode = Graph['nodes'][number]
-export type GraphError = { nodeId?: string; message: string }
+export type GraphEdge = Graph['edges'][number]
+// An error stops a run; a note only explains what will happen.
+export type GraphError = { nodeId?: string; message: string; level: 'error' | 'note' }
+
+export const loopRoundsOf = (graph: Graph) => graph.loopRounds ?? DEFAULT_LOOP_ROUNDS
 
 const isTrigger = (type: BlockType) => BLOCKS[type].input === null
 
 const parentsOf = (graph: Graph, id: string) => graph.edges.filter(edge => edge.to === id).map(edge => edge.from)
 
-// Kahn's order; nodes on a loop are left out, which is how a loop is detected.
+export const edgeKey = ({ from, to }: { from: string; to: string }) => `${from}>${to}`
+
+// Lines that go back to a block already on the way (depth-first from the blocks with nothing before them).
+export const backEdges = (graph: Graph) => {
+   const state = new Map<string, 'open' | 'done'>()
+   const back = new Set<string>()
+   const visit = (id: string) => {
+      state.set(id, 'open')
+
+      for (const edge of graph.edges.filter(({ from }) => from === id)) {
+         const seen = state.get(edge.to)
+
+         if (seen === 'open') {
+            back.add(edgeKey(edge))
+         } else if (!seen) {
+            visit(edge.to)
+         }
+      }
+
+      state.set(id, 'done')
+   }
+   const roots = graph.nodes.filter(node => parentsOf(graph, node.id).length === 0)
+
+   for (const node of [...roots, ...graph.nodes]) {
+      if (!state.has(node.id)) {
+         visit(node.id)
+      }
+   }
+
+   return back
+}
+
+export const forwardEdges = (graph: Graph) => {
+   const back = backEdges(graph)
+
+   return graph.edges.filter(edge => !back.has(edgeKey(edge)))
+}
+
+// Kahn's order over the forward lines, so a loop's way back does not hide its blocks.
 export const topoOrder = (graph: Graph) => {
-   const incoming = new Map(graph.nodes.map(node => [node.id, parentsOf(graph, node.id).length]))
+   const edges = forwardEdges(graph)
+   const incoming = new Map(graph.nodes.map(node => [node.id, edges.filter(({ to }) => to === node.id).length]))
    const ready = graph.nodes.filter(node => incoming.get(node.id) === 0).map(node => node.id)
    const order: string[] = []
 
@@ -726,7 +942,7 @@ export const topoOrder = (graph: Graph) => {
 
       order.push(id)
 
-      for (const edge of graph.edges.filter(({ from }) => from === id)) {
+      for (const edge of edges.filter(({ from }) => from === id)) {
          const left = (incoming.get(edge.to) ?? 0) - 1
 
          incoming.set(edge.to, left)
@@ -740,15 +956,49 @@ export const topoOrder = (graph: Graph) => {
    return order
 }
 
-const ancestorsOf = (graph: Graph, id: string, seen = new Set<string>()) => {
-   for (const parent of parentsOf(graph, id)) {
-      if (!seen.has(parent)) {
-         seen.add(parent)
-         ancestorsOf(graph, parent, seen)
+const downstreamOf = (edges: GraphEdge[], start: string) => {
+   const found = new Set([start])
+   const queue = [start]
+
+   while (queue.length > 0) {
+      const id = queue.shift() ?? ''
+
+      for (const { to } of edges.filter(({ from }) => from === id)) {
+         if (!found.has(to)) {
+            found.add(to)
+            queue.push(to)
+         }
       }
    }
 
-   return seen
+   return found
+}
+
+// The parts of a graph that run more than once: a For each and what follows it (once per batch), and a loop from the
+// block a line goes back to (once per round).
+export type RepeatRegion = { kind: 'forEach' | 'loop'; start: string; nodes: Set<string>; backEdge?: GraphEdge }
+
+export const repeatRegions = (graph: Graph): RepeatRegion[] => {
+   const back = backEdges(graph)
+   const edges = graph.edges.filter(edge => !back.has(edgeKey(edge)))
+
+   return [
+      ...graph.nodes
+         .filter(({ type }) => type === 'logic.forEach')
+         .map(node => ({
+            kind: 'forEach' as const,
+            start: node.id,
+            nodes: downstreamOf(edges, node.id),
+         })),
+      ...graph.edges
+         .filter(edge => back.has(edgeKey(edge)))
+         .map(edge => ({
+            kind: 'loop' as const,
+            start: edge.to,
+            nodes: downstreamOf(edges, edge.to),
+            backEdge: edge,
+         })),
+   ]
 }
 
 const configErrors = (node: GraphNode): GraphError[] => {
@@ -758,91 +1008,115 @@ const configErrors = (node: GraphNode): GraphError[] => {
       ? []
       : result.error.issues.map(issue => ({
            nodeId: node.id,
+           level: 'error' as const,
            message: `${BLOCKS[node.type].label}: ${issue.path.join('.') || 'settings'} ${issue.message.toLowerCase()}`,
         }))
 }
 
-const edgeErrors = (graph: Graph, byId: Map<string, GraphNode>): GraphError[] =>
-   graph.edges.flatMap(({ from, to }) => {
+// What happens to items a block does not take: posts become their authors where a block wants people, the rest
+// passes through unchanged.
+export const convertsTo = (gives: ItemKind, needs: ItemKind) => gives === 'post' && needs === 'profile'
+
+const edgeNotes = (graph: Graph, byId: Map<string, GraphNode>): GraphError[] =>
+   graph.edges.flatMap(({ from, to }): GraphError[] => {
       const source = byId.get(from)
       const target = byId.get(to)
 
       if (!source || !target || from === to) {
-         return [{ message: 'A connection points at a block that does not exist.' }]
-      }
-
-      const gives = BLOCKS[source.type].output
-      const needs = BLOCKS[target.type].input
-
-      if (gives === null || needs === null || gives !== needs) {
          return [
             {
-               nodeId: to,
-               message: `${BLOCKS[source.type].label} gives ${gives ? KIND_LABELS[gives] : 'nothing'}, but ${BLOCKS[target.type].label} needs ${needs ? KIND_LABELS[needs] : 'no input'}.`,
+               level: 'error' as const,
+               message: 'A connection points at a block that does not exist.',
             },
          ]
       }
 
-      return []
+      const gives = BLOCKS[source.type].output
+      const needs = BLOCKS[target.type].input
+      const { label } = BLOCKS[target.type]
+
+      if (needs === null) {
+         return [
+            {
+               nodeId: to,
+               level: 'note' as const,
+               message: `${label} starts the workflow and ignores what comes in.`,
+            },
+         ]
+      }
+
+      if (gives === null || gives === needs || needs === 'start') {
+         return []
+      }
+
+      return [
+         {
+            nodeId: to,
+            level: 'note' as const,
+            message: convertsTo(gives, needs)
+               ? `${label} gets posts: it uses their authors.`
+               : `${label} needs ${KIND_LABELS[needs]}; the ${KIND_LABELS[gives]} it gets pass through unchanged.`,
+         },
+      ]
    })
 
-// Everything a workflow needs before it may run. Empty means ready.
+const OUTPUTS = new Set<BlockType>(['output.list', 'output.csv', 'output.sendApi', 'output.markPosts'])
+
+// Only an error stops a run. Notes explain what will happen with a free-form graph.
 export const validateGraph = (graph: Graph): GraphError[] => {
    const byId = new Map(graph.nodes.map(node => [node.id, node]))
-   const errors: GraphError[] = []
+   const problems: GraphError[] = []
+   const note = (message: string, nodeId?: string) =>
+      problems.push({
+         nodeId,
+         level: 'note',
+         message,
+      })
 
    if (byId.size !== graph.nodes.length) {
-      errors.push({ message: 'Two blocks share the same id.' })
+      problems.push({
+         level: 'error',
+         message: 'Two blocks share the same id.',
+      })
    }
 
-   const keys = new Set(graph.edges.map(({ from, to }) => `${from}>${to}`))
-
-   if (keys.size !== graph.edges.length) {
-      errors.push({ message: 'Two blocks are connected twice.' })
+   if (new Set(graph.edges.map(edgeKey)).size !== graph.edges.length) {
+      problems.push({
+         level: 'error',
+         message: 'Two blocks are connected twice.',
+      })
    }
 
-   errors.push(...graph.nodes.flatMap(configErrors), ...edgeErrors(graph, byId))
+   problems.push(...graph.nodes.flatMap(configErrors), ...edgeNotes(graph, byId))
 
-   const triggers = graph.nodes.filter(node => isTrigger(node.type))
-
-   if (triggers.length !== 1) {
-      errors.push({ message: 'A workflow needs exactly one trigger.' })
+   if (!graph.nodes.some(node => isTrigger(node.type))) {
+      note('No trigger: Run starts from the blocks with nothing before them.')
    }
 
    for (const node of graph.nodes) {
-      if (!isTrigger(node.type) && parentsOf(graph, node.id).length === 0) {
-         errors.push({
-            nodeId: node.id,
-            message: `${BLOCKS[node.type].label} is not connected to anything before it.`,
-         })
+      if (!isTrigger(node.type) && BLOCKS[node.type].input !== 'start' && parentsOf(graph, node.id).length === 0) {
+         note(`${BLOCKS[node.type].label} has nothing before it, so it gets nothing.`, node.id)
+      }
+
+      if (node.type === 'logic.else' && !parentsOf(graph, node.id).some(id => byId.get(id)?.type === 'logic.if')) {
+         note('Else passes on nothing unless an If comes right before it.', node.id)
       }
    }
 
-   if (topoOrder(graph).length !== graph.nodes.length) {
-      errors.push({ message: 'The blocks form a loop. A workflow must flow one way.' })
-
-      return errors
+   if (!graph.nodes.some(node => OUTPUTS.has(node.type))) {
+      note('Nothing keeps the results: add "Add to list", "Export to CSV" or "Send via API".')
    }
 
-   const lists = graph.nodes.filter(node => node.type === 'output.list')
-
-   if (lists.length === 0) {
-      errors.push({ message: 'Add an "Add to list" block so the people found are kept.' })
-   }
-
-   for (const list of lists) {
-      const before = ancestorsOf(graph, list.id)
-
-      if (![...before].some(id => byId.get(id)?.type === 'score.icp')) {
-         errors.push({
-            nodeId: list.id,
-            message: 'Add to list needs a "Score against an ideal customer" block before it.',
-         })
+   for (const region of repeatRegions(graph)) {
+      if (region.kind === 'loop') {
+         note(`These blocks form a loop; it runs up to ${loopRoundsOf(graph)} rounds.`, region.start)
       }
    }
 
-   return errors
+   return problems
 }
+
+export const errorsOf = (problems: GraphError[]) => problems.filter(({ level }) => level === 'error')
 
 export type Estimate = {
    totalMicros: number
@@ -947,19 +1221,40 @@ const blockEstimate = (node: GraphNode, incoming: number, available: Available) 
 // Companies sent to the jobs search in one request.
 export const JOB_BATCH = 10
 
-// The most a run can cost: every "how many" is reached and nobody is filtered out. `available` is what is waiting in
-// the owner's lists.
+// The most a run can cost: every "how many" is reached, nobody is filtered out, and every loop runs all its rounds.
+// `available` is what is waiting in the owner's lists.
 export const estimateGraph = (graph: Graph, available: Available): Estimate => {
    const byId = new Map(graph.nodes.map(node => [node.id, node]))
+   const edges = forwardEdges(graph)
    const nodes: Estimate['nodes'] = {}
 
    for (const id of topoOrder(graph)) {
       const node = byId.get(id)
 
       if (node) {
-         const incoming = parentsOf(graph, id).reduce((sum, parent) => sum + (nodes[parent]?.items ?? 0), 0)
+         const incoming = edges
+            .filter(({ to }) => to === id)
+            .reduce((sum, { from }) => sum + (nodes[from]?.items ?? 0), 0)
 
          nodes[id] = blockEstimate(node, incoming, available)
+      }
+   }
+
+   const looped = new Set(
+      repeatRegions(graph)
+         .filter(({ kind }) => kind === 'loop')
+         .flatMap(({ nodes: ids }) => [...ids])
+   )
+   const rounds = loopRoundsOf(graph)
+
+   for (const id of looped) {
+      const estimate = nodes[id]
+
+      if (estimate) {
+         nodes[id] = {
+            items: estimate.items * rounds,
+            costMicros: estimate.costMicros * rounds,
+         }
       }
    }
 
@@ -1018,7 +1313,8 @@ export const GOALS = ['engagers', 'problem', 'accounts', 'lookalikes', 'watch'] 
 export type Goal = (typeof GOALS)[number]
 
 export type TemplateOptions = {
-   icpId: string
+   // Set on the canvas when left out; the Score block asks for it until then.
+   icpId?: string
    // Posts, profiles or companies the input takes, depending on the goal.
    posts: number
    // People per post or per company.
@@ -1055,10 +1351,10 @@ const linked = (pairs: string[][]) =>
    }))
 
 // Score, read full profiles of the qualified, keep them in the list. Starts at `depth`, after `from`.
-const tail = (from: string[], depth: number, icpId: string, enrich = true) => {
+const tail = (from: string[], depth: number, icpId: string | undefined, enrich = true) => {
    const nodes = [
       step('dedupe', 'process.dedupe', depth, 0),
-      step('score', 'score.icp', depth + 1, 0, { icpId }),
+      step('score', 'score.icp', depth + 1, 0, icpId ? { icpId } : {}),
       ...(enrich ? [step('enrich', 'collect.profile', depth + 2, 0)] : []),
       step('list', 'output.list', depth + (enrich ? 3 : 2), 0),
    ]
@@ -1171,6 +1467,12 @@ export const templateGraph = (goal: Goal, options: TemplateOptions): Graph => {
       edges: linked([...start.edges, ...rest.edges]),
    }
 }
+
+// A new workflow built from nothing: only "Run by hand".
+export const blankGraph = (): Graph => ({
+   nodes: [step('trigger', 'trigger.manual', 0, 0)],
+   edges: [],
+})
 
 // The schedule of a graph, or null when it is started by hand.
 export const scheduleOf = (graph: Graph): Schedule | null => {
