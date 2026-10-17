@@ -9,6 +9,8 @@ import { Callback } from './pages/Callback'
 import { Companies } from './pages/Companies'
 import { HealthStatus } from './pages/HealthStatus'
 import { Home } from './pages/Home'
+import { Icps } from './pages/Icps'
+import { Lists } from './pages/Lists'
 import { Login } from './pages/Login'
 import { Posts } from './pages/Posts'
 import { Profile } from './pages/Profile'
@@ -47,6 +49,8 @@ const App = () => (
          <Route path="/profiles" element={<Profiles />} />
          <Route path="/companies" element={<Companies />} />
          <Route path="/posts" element={<Posts />} />
+         <Route path="/lists" element={<Lists />} />
+         <Route path="/icps" element={<Icps />} />
          <Route path="/proxies" element={<Proxies />} />
          <Route path="/sessions" element={<Sessions />} />
          <Route path="/healthstatus" element={<HealthStatus />} />

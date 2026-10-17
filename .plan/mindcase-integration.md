@@ -6,6 +6,8 @@
 
 This plan is about how to use the Mindcase web data API for LinkedIn data. It also says what the scalable worker service and cron service must give it, because the owner wants those built first. No code is written until the owner answers the open questions and locks it.
 
+Update 2026-10-17: the owner widened the goal to an n8n-style workflow platform that finds interested people (commenters, reactors, employees) and moves them into lists. That is planned in `.plan/gtm-workflows.md`, which builds on this plan (the Mindcase facts, costs and the `apps/mindcase` worker stay here) and replaces its `EnrichmentRun` and cron prerequisites: the brain worker already provides scheduled jobs, and one-off enrichment becomes a one-step workflow. Read that plan first. Its decisions of 2026-10-17 also override this plan's money defaults (no spending caps, a wallet floor only, monthly billing per client) and its wording: the product body never shows the vendor's name, and clients never bring their own key or account.
+
 ## Goal
 
 Fill the target profiles and target companies with real data instead of typing it, and help find the right people at a target company, by calling Mindcase's LinkedIn APIs from a separate project (a worker, like the spider worker). Keep the cost, the personal data kept, and the failure modes under control from day one.
