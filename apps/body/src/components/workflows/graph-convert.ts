@@ -1,5 +1,6 @@
 import { type Edge, type Node } from '@xyflow/react'
 
+import { describeSchedule } from './schedule-text'
 import { type Block, type ConfigValue, type Graph, type GraphNode, type StepRun } from './types'
 
 // Turns the saved graph into React Flow nodes and edges and back. The graph is the source of truth; the canvas only
@@ -190,7 +191,7 @@ export const summaryOf = (block: Block, config: GraphNode['config'], icpName?: s
    }
 
    if (block.type === 'trigger.schedule') {
-      return values.every === 'hours' ? `Every ${show(values.hours)} hours` : `${values.every === 'week' ? 'Weekly' : 'Daily'} at ${show(values.at)} (${show(values.timeZone)})`
+      return describeSchedule(values)
    }
 
    return block.summary

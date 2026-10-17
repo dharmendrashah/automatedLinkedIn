@@ -1,3 +1,4 @@
+import { browserTimeZone } from '@/components/workflows/schedule-text'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -81,6 +82,7 @@ export const WorkflowNew = () => {
             name: name.trim(),
             start,
             description: start === 'blank' ? undefined : chosen?.title,
+            timeZone: browserTimeZone(),
          })
       }
    }

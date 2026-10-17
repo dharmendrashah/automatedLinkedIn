@@ -8,8 +8,10 @@ import {
    estimateGraph,
    flagshipGraph,
    nextScheduledRun,
+   nextScheduledRuns,
    previewGraph,
    scheduleOf,
+   scheduleSchema,
    templateGraph,
    validateGraph,
 } from './workflow'
@@ -139,12 +141,75 @@ describe('validateGraph', () => {
 })
 
 describe('nextScheduledRun', () => {
-   const base = {
+   const base = scheduleSchema.parse({
       hours: 24,
       at: '09:00',
       weekday: 1,
       timeZone: 'Asia/Kolkata',
-   }
+   })
+   const iso = (schedule: Partial<typeof base>, after: string) =>
+      nextScheduledRun(
+         {
+            ...base,
+            ...schedule,
+         },
+         new Date(after)
+      ).toISOString()
+
+   it('should skip the weekend, keep to chosen days and find a day of the month', () => {
+      // 2026-10-17 is a Saturday; 09:00 in Kolkata is 03:30 UTC.
+      expect(iso({ every: 'weekdays' }, '2026-10-17T02:00:00Z')).toBe('2026-10-19T03:30:00.000Z')
+      expect(
+         iso(
+            {
+               every: 'week',
+               days: ['1', '4'],
+            },
+            '2026-10-19T04:00:00Z'
+         )
+      ).toBe('2026-10-22T03:30:00.000Z')
+      expect(
+         iso(
+            {
+               every: 'month',
+               dayOfMonth: 5,
+            },
+            '2026-10-17T02:00:00Z'
+         )
+      ).toBe('2026-11-05T03:30:00.000Z')
+   })
+
+   it('should keep every few hours inside its window and on weekdays', () => {
+      const window = {
+         every: 'hours' as const,
+         hours: 4,
+         between: true,
+         from: '09:00',
+         until: '18:00',
+         weekdaysOnly: true,
+      }
+
+      expect(iso(window, '2026-10-19T03:30:00Z')).toBe('2026-10-19T07:30:00.000Z')
+      // Friday 16:30 plus 4 hours is past 18:00: the next opening is Monday 09:00.
+      expect(iso(window, '2026-10-16T11:00:00Z')).toBe('2026-10-19T03:30:00.000Z')
+      expect(
+         nextScheduledRuns(
+            {
+               ...base,
+               every: 'day',
+            },
+            new Date('2026-10-17T02:00:00Z'),
+            3
+         ).map(date => date.toISOString())
+      ).toEqual(['2026-10-17T03:30:00.000Z', '2026-10-18T03:30:00.000Z', '2026-10-19T03:30:00.000Z'])
+      expect(
+         scheduleSchema.safeParse({
+            ...window,
+            from: '18:00',
+            until: '09:00',
+         }).success
+      ).toBe(false)
+   })
 
    it('should find the next 09:00 in the chosen time zone', () => {
       expect(

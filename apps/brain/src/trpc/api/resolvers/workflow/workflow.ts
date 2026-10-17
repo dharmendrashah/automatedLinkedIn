@@ -5,7 +5,15 @@ import { CSV_MAX_ROWS, itemsCsv } from 'core'
 
 import { WorkflowService, WorkflowTriggerService, readGraph } from 'database'
 
-import { GOALS, blankGraph, catalog, graphSchema, templateGraph } from '@automatedLinkedIn/contracts'
+import {
+   GOALS,
+   blankGraph,
+   catalog,
+   graphSchema,
+   nextScheduledRuns,
+   scheduleSchema,
+   templateGraph,
+} from '@automatedLinkedIn/contracts'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -28,6 +36,8 @@ const createInput = z.object({
    name,
    start: z.enum(['blank', ...GOALS]),
    description: z.string().trim().max(200).optional(),
+   // The browser's time zone, for a template that runs on a schedule.
+   timeZone: z.string().trim().max(64).optional(),
 })
 
 const outputInput = z.object({
@@ -61,6 +71,13 @@ const withProblems = async <T extends { id: string; graph: unknown }>(userId: st
 export const workflow = router({
    catalog: ownerProcedure.query(() => catalog()),
 
+   // The next three starts of a schedule being edited, so the owner sees what it means. Invalid settings give none.
+   nextRuns: ownerProcedure.input(z.object({ schedule: z.record(z.string(), z.unknown()) })).query(({ input }) => {
+      const schedule = scheduleSchema.safeParse(input.schedule)
+
+      return schedule.success ? nextScheduledRuns(schedule.data, new Date(), 3).map(date => date.toISOString()) : []
+   }),
+
    list: ownerProcedure.query(async ({ ctx }) =>
       (await WorkflowService.list(ctx.user.id)).map(item => ({
          ...item,
@@ -80,7 +97,13 @@ export const workflow = router({
          WorkflowService.create(ctx.user.id, {
             name: input.name,
             goal: input.description ?? null,
-            graph: input.start === 'blank' ? blankGraph() : templateGraph(input.start, TEMPLATE_NUMBERS),
+            graph:
+               input.start === 'blank'
+                  ? blankGraph()
+                  : templateGraph(input.start, {
+                       ...TEMPLATE_NUMBERS,
+                       timeZone: input.timeZone,
+                    }),
          })
       )
 

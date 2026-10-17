@@ -51,16 +51,34 @@ const isTimeZone = (value: string) => {
    }
 }
 
-const scheduleSchema = z.object({
-   every: z.enum(['hours', 'day', 'week']).default('day'),
-   hours: z.number().int().min(1).max(24).default(24),
-   at: z
-      .string()
-      .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
-      .default('09:00'),
-   weekday: z.number().int().min(0).max(6).default(1),
-   timeZone: z.string().trim().min(1).max(64).refine(isTimeZone, 'is not a known time zone').default('UTC'),
-})
+const clockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+
+export const SCHEDULE_REPEATS = ['hours', 'day', 'weekdays', 'week', 'month'] as const
+
+export const scheduleSchema = z
+   .object({
+      every: z.enum(SCHEDULE_REPEATS).default('day'),
+      hours: z.number().int().min(1).max(24).default(24),
+      // Every few hours, only inside this window and, if set, only Monday to Friday.
+      between: z.boolean().default(false),
+      from: clockTime.default('09:00'),
+      until: clockTime.default('18:00'),
+      weekdaysOnly: z.boolean().default(false),
+      at: clockTime.default('09:00'),
+      // Days of the week, 0 is Sunday; saved as text because block settings hold plain values. Empty reads `weekday`,
+      // which schedules saved before kept.
+      days: z
+         .array(z.enum(['0', '1', '2', '3', '4', '5', '6']))
+         .max(7)
+         .default([]),
+      weekday: z.number().int().min(0).max(6).default(1),
+      dayOfMonth: z.number().int().min(1).max(28).default(1),
+      timeZone: z.string().trim().min(1).max(64).refine(isTimeZone, 'is not a known time zone').default('UTC'),
+   })
+   .refine(({ between, from, until }) => !between || from < until, {
+      message: 'must end after it starts',
+      path: ['until'],
+   })
 
 export type Schedule = z.infer<typeof scheduleSchema>
 
@@ -125,55 +143,8 @@ const BLOCKS = {
       input: null,
       output: 'start',
       config: scheduleSchema,
-      fields: [
-         {
-            key: 'every',
-            label: 'Runs',
-            kind: 'select',
-            options: [
-               {
-                  value: 'hours',
-                  label: 'Every few hours',
-               },
-               {
-                  value: 'day',
-                  label: 'Every day',
-               },
-               {
-                  value: 'week',
-                  label: 'Every week',
-               },
-            ],
-         },
-         {
-            key: 'hours',
-            label: 'Hours between runs',
-            kind: 'int',
-            min: 1,
-            max: 24,
-         },
-         {
-            key: 'at',
-            label: 'At (24 hour clock)',
-            kind: 'time',
-         },
-         {
-            key: 'weekday',
-            label: 'Day of the week',
-            kind: 'select',
-            options: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(
-               (label, day) => ({
-                  value: String(day),
-                  label,
-               })
-            ),
-         },
-         {
-            key: 'timeZone',
-            label: 'Time zone',
-            kind: 'text',
-         },
-      ],
+      // The browser draws its own schedule form from the schema's settings.
+      fields: [],
    },
    'input.posts': {
       group: 'Inputs',
@@ -1322,6 +1293,8 @@ export type TemplateOptions = {
    keywords?: string
    customer?: string
    titles?: string[]
+   // The owner's time zone, for a template that runs on a schedule.
+   timeZone?: string
 }
 
 const STEP_Y = 140
@@ -1448,7 +1421,10 @@ export const templateGraph = (goal: Goal, options: TemplateOptions): Graph => {
       },
       watch: {
          nodes: [
-            step('trigger', 'trigger.schedule', 0, 0, { every: 'week' }),
+            step('trigger', 'trigger.schedule', 0, 0, {
+               every: 'week',
+               ...(options.timeZone ? { timeZone: options.timeZone } : {}),
+            }),
             step('people', 'input.profiles', 1, 0, { howMany: options.posts }),
             step('posts', 'collect.postsOfPeople', 2, 0, { howMany: 3 }),
          ],
@@ -1481,8 +1457,6 @@ export const scheduleOf = (graph: Graph): Schedule | null => {
    return node ? scheduleSchema.parse(node.config) : null
 }
 
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
 const wallClock = (date: Date, timeZone: string) => {
    const parts = new Intl.DateTimeFormat('en-US', {
       timeZone,
@@ -1506,27 +1480,98 @@ const zonedToUtc = (wall: number, timeZone: string) => {
    return new Date(wall - (wallClock(new Date(first), timeZone) - first))
 }
 
+const HOUR_MS = 3_600_000
+
+const isWeekday = (day: number) => day >= 1 && day <= 5
+
+const daysOf = (schedule: Schedule) => (schedule.days.length > 0 ? schedule.days.map(Number) : [schedule.weekday])
+
+// Whether the schedule may start on this calendar day (a UTC midnight standing for the day in the schedule's zone).
+const runsOn = (schedule: Schedule, day: Date) => {
+   const weekday = day.getUTCDay()
+
+   switch (schedule.every) {
+      case 'weekdays':
+         return isWeekday(weekday)
+      case 'week':
+         return daysOf(schedule).includes(weekday)
+      case 'month':
+         return day.getUTCDate() === schedule.dayOfMonth
+      case 'hours':
+         return !schedule.weekdaysOnly || isWeekday(weekday)
+      default:
+         return true
+   }
+}
+
+const dayAfter = (day: Date, offset: number) =>
+   new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate() + offset))
+
+const startOn = (day: Date, time: string, timeZone: string) => {
+   const [hour, minute] = time.split(':').map(Number)
+
+   return zonedToUtc(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), hour, minute), timeZone)
+}
+
+// Every few hours, kept inside the allowed days and the "only between" window: a start outside them moves to the
+// next opening.
+const nextEveryFewHours = (schedule: Schedule, after: Date) => {
+   const candidate = new Date(after.getTime() + schedule.hours * HOUR_MS)
+
+   if (!schedule.between && !schedule.weekdaysOnly) {
+      return candidate
+   }
+
+   const wall = new Date(wallClock(candidate, schedule.timeZone))
+   const time = wall.toISOString().slice(11, 16)
+   const inWindow = !schedule.between || (time >= schedule.from && time < schedule.until)
+
+   if (inWindow && runsOn(schedule, wall)) {
+      return candidate
+   }
+
+   for (let offset = 0; offset <= 8; offset += 1) {
+      const day = dayAfter(wall, offset)
+      const opening = startOn(day, schedule.between ? schedule.from : '00:00', schedule.timeZone)
+
+      if (opening > candidate && runsOn(schedule, day)) {
+         return opening
+      }
+   }
+
+   return candidate
+}
+
 // The first start of the schedule strictly after `after`.
 export const nextScheduledRun = (schedule: Schedule, after: Date): Date => {
    if (schedule.every === 'hours') {
-      return new Date(after.getTime() + schedule.hours * 3_600_000)
+      return nextEveryFewHours(schedule, after)
    }
 
-   const [hour, minute] = schedule.at.split(':').map(Number)
    const today = new Date(wallClock(after, schedule.timeZone))
 
-   for (let offset = 0; offset <= 8; offset += 1) {
-      const day = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + offset))
-      const candidate = zonedToUtc(
-         Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), hour, minute),
-         schedule.timeZone
-      )
-      const rightDay = schedule.every === 'day' || WEEKDAYS[day.getUTCDay()] === WEEKDAYS[schedule.weekday]
+   // Two months covers every monthly day; the other repeats find a day within a week.
+   for (let offset = 0; offset <= 62; offset += 1) {
+      const day = dayAfter(today, offset)
+      const candidate = startOn(day, schedule.at, schedule.timeZone)
 
-      if (rightDay && candidate > after) {
+      if (runsOn(schedule, day) && candidate > after) {
          return candidate
       }
    }
 
-   return new Date(after.getTime() + 7 * 24 * 3_600_000)
+   return new Date(after.getTime() + 7 * 24 * HOUR_MS)
+}
+
+// The next few starts, to show the owner what the schedule means.
+export const nextScheduledRuns = (schedule: Schedule, after: Date, count: number) => {
+   const runs: Date[] = []
+   let last = after
+
+   for (let index = 0; index < count; index += 1) {
+      last = nextScheduledRun(schedule, last)
+      runs.push(last)
+   }
+
+   return runs
 }
