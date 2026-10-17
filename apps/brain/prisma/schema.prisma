@@ -127,6 +127,9 @@ model PersonSnapshot {
 enum PageKind {
   COMPANY
   POST
+  // A post's comments or reactions, under the post's slug.
+  POST_COMMENTS
+  POST_REACTIONS
 }
 
 // A company page or post the owner chose to read, allow-listed fields only. Kept while it is in /companies or /posts

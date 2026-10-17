@@ -111,7 +111,7 @@ export class CompanyPageService {
          operation: 'companies',
          params: { companies: [known.url] },
          reader,
-         store: async row => {
+         store: async ([row]) => {
             const data = companySnapshotFrom(row)
 
             await PrismaService.client.pageSnapshot.upsert({

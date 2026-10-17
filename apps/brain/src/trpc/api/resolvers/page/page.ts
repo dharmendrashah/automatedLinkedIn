@@ -1,6 +1,8 @@
 import { z } from 'zod'
 
-import { CompanyPageService, PostPageService } from 'database'
+import { CompanyPageService, PostEngagementService, PostPageService } from 'database'
+
+import { ALL_CAP } from '@automatedLinkedIn/contracts'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -40,5 +42,42 @@ export const postPage = router({
       .input(bySlug)
       .mutation(async ({ ctx, input }) =>
          present(await orConflict(PostPageService.readFull(ctx.user.id, input.slug, readerOf())), POST_MISSING)
+      ),
+
+   engagement: ownerProcedure
+      .input(bySlug)
+      .query(async ({ ctx, input }) =>
+         present(await PostEngagementService.detail(ctx.user.id, input.slug), POST_MISSING)
+      ),
+
+   readEngagement: ownerProcedure
+      .input(
+         bySlug.extend({
+            kind: z.enum(['comments', 'reactions']),
+            all: z.boolean(),
+         })
+      )
+      .mutation(async ({ ctx, input }) =>
+         present(
+            await orConflict(PostEngagementService.read(ctx.user.id, input.slug, input.kind, input.all, readerOf())),
+            POST_MISSING
+         )
+      ),
+
+   addToList: ownerProcedure
+      .input(
+         bySlug.extend({
+            listId: z.string().min(1),
+            slugs: z
+               .array(z.string().trim().min(1).max(200))
+               .min(1)
+               .max(ALL_CAP * 2),
+         })
+      )
+      .mutation(async ({ ctx, input }) =>
+         present(
+            await orConflict(PostEngagementService.addToList(ctx.user.id, input.slug, input.listId, input.slugs)),
+            'Post or list not found'
+         )
       ),
 })

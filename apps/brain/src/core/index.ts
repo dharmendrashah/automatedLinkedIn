@@ -44,3 +44,11 @@ export {
    readCompanySnapshot,
    readPostSnapshot,
 } from './pageSnapshot'
+export {
+   type CommentsSnapshotData,
+   type ReactionsSnapshotData,
+   commentsSnapshotFrom,
+   reactionsSnapshotFrom,
+   readCommentsSnapshot,
+   readReactionsSnapshot,
+} from './engagementSnapshot'

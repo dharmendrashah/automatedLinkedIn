@@ -140,7 +140,7 @@ export class PostPageService {
             maxResults: 1,
          },
          reader,
-         store: async row => {
+         store: async ([row]) => {
             const data = postSnapshotFrom(row)
 
             await PrismaService.client.pageSnapshot.upsert({

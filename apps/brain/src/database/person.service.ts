@@ -82,7 +82,7 @@ export class PersonService {
          operation: 'profiles',
          params: { queries: [known.url] },
          reader,
-         store: async row => {
+         store: async ([row]) => {
             const data = snapshotFrom(row)
 
             await PrismaService.client.personSnapshot.upsert({

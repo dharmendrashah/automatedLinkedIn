@@ -119,7 +119,7 @@ export class LinkedInPostService {
       return updateOwned(userId, id, { status })
    }
 
-   // The post read for it is deleted with it.
+   // The post read and its comments and reactions are deleted with it.
    public static async archiveForUser(userId: string, id: string) {
       const archived = await updateOwned(userId, id, { archivedAt: new Date() })
 
@@ -127,7 +127,7 @@ export class LinkedInPostService {
          await PrismaService.client.pageSnapshot.deleteMany({
             where: {
                userId,
-               kind: 'POST',
+               kind: { in: ['POST', 'POST_COMMENTS', 'POST_REACTIONS'] },
                slug: archived.slug,
             },
          })

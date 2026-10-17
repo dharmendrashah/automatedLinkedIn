@@ -82,7 +82,7 @@ export class RetentionService {
             SELECT 1 FROM "LinkedInCompany" c
             WHERE c."userId" = s."userId" AND c."slug" = s."slug" AND c."archivedAt" IS NULL
          ))
-         OR (s."kind" = 'POST' AND NOT EXISTS (
+         OR (s."kind" IN ('POST', 'POST_COMMENTS', 'POST_REACTIONS') AND NOT EXISTS (
             SELECT 1 FROM "LinkedInPost" p
             WHERE p."userId" = s."userId" AND p."slug" = s."slug" AND p."archivedAt" IS NULL
          ))`

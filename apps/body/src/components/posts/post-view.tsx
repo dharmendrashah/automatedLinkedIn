@@ -8,6 +8,7 @@ import { ExternalLink, MessageSquare, Repeat2, ThumbsUp, UserRound } from 'lucid
 import { useState } from 'react'
 
 import { type RouterOutputs, trpc } from '../../trpc'
+import { PostEngagement } from './post-engagement'
 
 type PostDetail = RouterOutputs['postPage']['detail']
 
@@ -229,6 +230,15 @@ export const PostView = ({ slug, onPerson }: { slug: string; onPerson: (slug: st
                </ul>
             )}
          </Section>
+         <PostEngagement
+            slug={data.slug}
+            archived={data.post.archivedAt !== null}
+            counts={{
+               comments: data.snapshot?.comments ?? null,
+               reactions: data.snapshot?.reactions ?? null,
+            }}
+            onPerson={onPerson}
+         />
          <Workspace detail={data} />
       </div>
    )

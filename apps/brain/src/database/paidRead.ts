@@ -10,12 +10,22 @@ import { WalletService } from './wallet.service'
 
 export type PageReader = Pick<DataClient, 'collect'>
 
-export type ReadKind = 'profile' | 'company' | 'post'
+export type ReadKind = 'profile' | 'company' | 'post' | 'comments' | 'reactions'
 
 const NOUNS: Record<ReadKind, string> = {
-   profile: 'profile',
-   company: 'company page',
-   post: 'post',
+   profile: 'this profile',
+   company: 'this company page',
+   post: 'this post',
+   comments: 'the comments on this post',
+   reactions: 'the reactions on this post',
+}
+
+const MISSING: Record<ReadKind, string> = {
+   profile: 'No profile was found at this link.',
+   company: 'No company page was found at this link.',
+   post: 'No post was found at this link.',
+   comments: 'No comments were found on this post.',
+   reactions: 'No reactions were found on this post.',
 }
 
 // What the monthly statement calls these reads.
@@ -23,20 +33,26 @@ export const READ_LABELS: Record<ReadKind, string> = {
    profile: 'Profile reads',
    company: 'Company reads',
    post: 'Post reads',
+   comments: 'Comment reads',
+   reactions: 'Reaction reads',
 }
+
+export type ReadRows = [Record<string, unknown>, ...Record<string, unknown>[]]
 
 type PaidRead = {
    userId: string
    kind: ReadKind
    slug: string
+   // Tells reads of one item apart that may each happen once a day, such as up to 100 comments and all of them.
+   variant?: string
    operation: string
    params: Record<string, unknown>
    reader: PageReader
-   // Keeps what was read; called with the first row only.
-   store: (row: Record<string, unknown>) => Promise<void>
+   // Keeps what was read; called only when at least one row came back.
+   store: (rows: ReadRows) => Promise<void>
 }
 
-export const paidRead = async ({ userId, kind, slug, operation, params, reader, store }: PaidRead) => {
+export const paidRead = async ({ userId, kind, slug, variant, operation, params, reader, store }: PaidRead) => {
    const noun = NOUNS[kind]
 
    if (await WalletService.belowFloor()) {
@@ -44,7 +60,7 @@ export const paidRead = async ({ userId, kind, slug, operation, params, reader, 
    }
 
    const day = new Date().toISOString().slice(0, 10)
-   const callId = `${kind}-read:${userId}:${slug}:${day}`
+   const callId = [`${kind}-read`, userId, slug, day, variant].filter(Boolean).join(':')
 
    await uniqueOr(
       PrismaService.client.spendLedger.create({
@@ -56,7 +72,7 @@ export const paidRead = async ({ userId, kind, slug, operation, params, reader, 
             month: day.slice(0, 7),
          },
       }),
-      `This ${noun} was already read today.`
+      `You already read ${noun} today.`
    )
 
    let charged = false
@@ -73,13 +89,13 @@ export const paidRead = async ({ userId, kind, slug, operation, params, reader, 
          data: { amountMicros: outcome.costMicros },
       })
 
-      const [row] = outcome.status === 'completed' ? outcome.rows : []
+      const [first, ...rest] = outcome.status === 'completed' ? outcome.rows : []
 
-      if (!row) {
-         throw new ConflictError(`No ${noun} was found at this link.`)
+      if (!first) {
+         throw new ConflictError(MISSING[kind])
       }
 
-      await store(row)
+      await store([first, ...rest])
    } catch (error) {
       // Nothing was paid, so the owner may try again today.
       if (!charged) {
@@ -87,7 +103,7 @@ export const paidRead = async ({ userId, kind, slug, operation, params, reader, 
       }
 
       throw error instanceof DataServiceError
-         ? new ConflictError(`Reading the ${noun} did not work. Please try again later.`)
+         ? new ConflictError(`Reading ${noun} did not work. Please try again later.`)
          : error
    }
 }
