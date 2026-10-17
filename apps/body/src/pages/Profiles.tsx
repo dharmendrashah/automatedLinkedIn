@@ -1,4 +1,5 @@
 import { ListToolbar } from '@/components/links/list-toolbar'
+import { linkStatuses } from '@/components/links/link-statuses'
 import { Pager } from '@/components/links/pager'
 import { useListState } from '@/components/links/use-list-state'
 import { AddProfilesDialog } from '@/components/profiles/add-profiles-dialog'
@@ -39,7 +40,12 @@ export const Profiles = () => {
             <AddProfilesDialog />
          </div>
 
-         <ListToolbar state={state} searchLabel="Search profiles" searchPlaceholder="Search name, company or link" />
+         <ListToolbar
+            state={state}
+            statuses={linkStatuses}
+            searchLabel="Search profiles"
+            searchPlaceholder="Search name, company or link"
+         />
 
          {actionError ? <p className="text-destructive text-sm">{actionError}</p> : null}
 

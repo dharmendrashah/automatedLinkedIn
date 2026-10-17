@@ -1,20 +1,22 @@
 import { type LinkedInLink } from 'core'
 
-import { type LinkedInProfileStatus } from 'generated/prisma/client'
+// Rules shared by the services that keep lists of pasted LinkedIn links (profiles, companies, posts). Each service
+// passes in what is specific to its table: the fields to search and the three calls on its own Prisma delegate.
 
-// Rules shared by the services that keep lists of pasted LinkedIn links (profiles, companies). Each service passes in
-// what is specific to its table: the fields to search and the three calls on its own Prisma delegate.
-
-export type RecordListQuery = {
+export type RecordListQuery<S extends string = 'NEW' | 'CONTACTED' | 'REPLIED'> = {
    search?: string
-   status?: LinkedInProfileStatus
+   status?: S
    tag?: string
    includeArchived?: boolean
    page: number
    pageSize: number
 }
 
-export const recordWhere = (userId: string, query: RecordListQuery, searchedFields: readonly string[]) => ({
+export const recordWhere = <S extends string>(
+   userId: string,
+   query: RecordListQuery<S>,
+   searchedFields: readonly string[]
+) => ({
    userId,
    ...(query.includeArchived ? {} : { archivedAt: null }),
    ...(query.status ? { status: query.status } : {}),

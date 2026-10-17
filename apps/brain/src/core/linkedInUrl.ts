@@ -9,7 +9,7 @@ const SECTIONS = {
    company: 'company',
 } as const
 
-export type LinkKind = keyof typeof SECTIONS
+export type LinkKind = keyof typeof SECTIONS | 'post'
 
 export type LinkedInLink = {
    slug: string
@@ -32,7 +32,54 @@ const decode = (segment: string) => {
    }
 }
 
-// Reduces any link to a person's profile or a company to its public identifier; null for anything else.
+// A post is identified by its type and numeric id, found in `/posts/<author>_<text>-activity-<id>-<code>` or in the
+// urn of `/feed/update/urn:li:activity:<id>`. A `lnkd.in/p/<code>` short link is kept as it is: its target is only
+// known by following the redirect, which is not done.
+const POST_TYPES = {
+   activity: 'activity',
+   share: 'share',
+   ugcpost: 'ugcPost',
+} as const
+
+const POST_FROM_SLUG = /[-_](activity|share|ugcpost)-(\d{15,25})(?:-\w+)?$/i
+const POST_FROM_URN = /^urn:li:(activity|share|ugcpost):(\d{15,25})$/i
+
+const SHORT_HOST = 'lnkd.in'
+const SHORT_CODE = /^[\w-]{4,40}$/
+
+const parseShortPostPath = (pathname: string): LinkedInLink | null => {
+   const [first, code] = pathname.split('/').filter(Boolean)
+
+   if (first !== 'p' || !code || !SHORT_CODE.test(code)) {
+      return null
+   }
+
+   return {
+      slug: `lnkd-${code}`,
+      url: `https://${SHORT_HOST}/p/${code}`,
+   }
+}
+
+const parsePostPath = (pathname: string): LinkedInLink | null => {
+   const [first, second, third] = pathname.split('/').filter(Boolean)
+   const segment = first === 'posts' ? second : first === 'feed' && second === 'update' ? third : undefined
+   const decoded = segment === undefined ? null : decode(segment)
+   const match = decoded === null ? null : (first === 'posts' ? POST_FROM_SLUG : POST_FROM_URN).exec(decoded)
+
+   if (!match) {
+      return null
+   }
+
+   const type = match[1].toLowerCase() as keyof typeof POST_TYPES
+   const [, , id] = match
+
+   return {
+      slug: `${type}-${id}`,
+      url: `https://www.linkedin.com/feed/update/urn:li:${POST_TYPES[type]}:${id}`,
+   }
+}
+
+// Reduces any link to a person's profile, a company or a post to its public identifier; null for anything else.
 export const parseLinkedInUrl = (raw: string, kind: LinkKind): LinkedInLink | null => {
    let parsed: URL
 
@@ -42,8 +89,22 @@ export const parseLinkedInUrl = (raw: string, kind: LinkKind): LinkedInLink | nu
       return null
    }
 
-   if (!['http:', 'https:'].includes(parsed.protocol) || !isLinkedInHost(parsed.hostname.toLowerCase())) {
+   if (!['http:', 'https:'].includes(parsed.protocol)) {
       return null
+   }
+
+   const host = parsed.hostname.toLowerCase()
+
+   if (kind === 'post' && host === SHORT_HOST) {
+      return parseShortPostPath(parsed.pathname)
+   }
+
+   if (!isLinkedInHost(host)) {
+      return null
+   }
+
+   if (kind === 'post') {
+      return parsePostPath(parsed.pathname)
    }
 
    const section = SECTIONS[kind]

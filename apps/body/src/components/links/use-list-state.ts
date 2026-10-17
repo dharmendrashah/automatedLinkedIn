@@ -5,9 +5,9 @@ import { type LinkStatus } from './types'
 export const PAGE_SIZE = 25
 
 // The search, filters and page of a list. A new filter starts again from the first page.
-export const useListState = () => {
+export const useListState = <S extends string = LinkStatus>() => {
    const [search, setSearch] = useState('')
-   const [status, setStatus] = useState<LinkStatus | 'all'>('all')
+   const [status, setStatus] = useState<S | 'all'>('all')
    const [tag, setTag] = useState<string>()
    const [includeArchived, setIncludeArchived] = useState(false)
    const [page, setPage] = useState(1)
@@ -24,7 +24,7 @@ export const useListState = () => {
          setSearch(value)
          setPage(1)
       },
-      setStatus: (value: LinkStatus | 'all') => {
+      setStatus: (value: S | 'all') => {
          setStatus(value)
          setPage(1)
       },
@@ -47,4 +47,4 @@ export const useListState = () => {
    }
 }
 
-export type ListState = ReturnType<typeof useListState>
+export type ListState<S extends string = LinkStatus> = ReturnType<typeof useListState<S>>
