@@ -1,3 +1,4 @@
+import { ApiAccess } from '@/components/workflows/api-access'
 import { RunDialog } from '@/components/workflows/run-dialog'
 import { RunDetailView, RunsTable } from '@/components/workflows/runs'
 import { WorkflowSettings } from '@/components/workflows/workflow-settings'
@@ -26,6 +27,7 @@ export const WorkflowPage = () => {
    const workflow = trpc.workflow.get.useQuery({ id }, { retry: false })
    const catalog = trpc.workflow.catalog.useQuery()
    const icps = trpc.icp.list.useQuery()
+   const workflows = trpc.workflow.list.useQuery()
    const runs = trpc.workflow.runs.useQuery(
       { workflowId: id },
       { refetchInterval: query => (query.state.data?.some(run => run.status === 'RUNNING') ? POLL_MS : false) }
@@ -54,7 +56,13 @@ export const WorkflowPage = () => {
    }
 
    const { data } = workflow
-   const scheduled = data.graph.nodes.some(({ type }) => type === 'trigger.schedule')
+   const triggers = new Set(data.graph.nodes.map(({ type }) => type))
+   const onLabel = [
+      triggers.has('trigger.schedule') ? 'on its schedule' : null,
+      triggers.has('trigger.api') ? 'when called' : null,
+      triggers.has('trigger.workflow') ? 'after the workflow it listens to' : null,
+   ].filter(Boolean)
+   const api = triggers.has('trigger.api')
 
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
@@ -70,7 +78,7 @@ export const WorkflowPage = () => {
                </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-               {scheduled ? (
+               {onLabel.length > 0 ? (
                   <div className="flex items-center gap-2">
                      <Checkbox
                         id="workflow-on"
@@ -83,7 +91,7 @@ export const WorkflowPage = () => {
                            })
                         }
                      />
-                     <Label htmlFor="workflow-on">Runs on its schedule</Label>
+                     <Label htmlFor="workflow-on">Runs {onLabel.join(' and ')}</Label>
                   </div>
                ) : null}
                <Button variant="outline" onClick={() => setMode('preview')}>
@@ -104,6 +112,7 @@ export const WorkflowPage = () => {
                <TabsTrigger value="canvas">Canvas</TabsTrigger>
                <TabsTrigger value="runs">Runs</TabsTrigger>
                <TabsTrigger value="settings">Settings</TabsTrigger>
+               {api ? <TabsTrigger value="api">API</TabsTrigger> : null}
             </TabsList>
             <TabsContent value="canvas" className="grid gap-3">
                {detail.data ? (
@@ -114,9 +123,11 @@ export const WorkflowPage = () => {
                ) : null}
                <WorkflowCanvas
                   key={data.updatedAt}
+                  workflowId={id}
                   graph={data.graph}
                   catalog={catalog.data}
                   icps={icps.data ?? []}
+                  workflows={workflows.data ?? []}
                   replay={replay && detail.data ? detail.data.steps : null}
                   saving={update.isPending}
                   saveError={update.error}
@@ -135,6 +146,11 @@ export const WorkflowPage = () => {
             <TabsContent value="settings">
                <WorkflowSettings workflow={data} />
             </TabsContent>
+            {api ? (
+               <TabsContent value="api">
+                  <ApiAccess workflowId={id} />
+               </TabsContent>
+            ) : null}
          </Tabs>
 
          <RunDialog

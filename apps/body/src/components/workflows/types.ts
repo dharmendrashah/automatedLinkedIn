@@ -44,4 +44,6 @@ export const triggerLabels: Record<Run['trigger'], string> = {
    MANUAL: 'By hand',
    SCHEDULE: 'Schedule',
    PREVIEW: 'Preview',
+   API: 'API call',
+   WORKFLOW: 'After a workflow',
 }

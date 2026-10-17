@@ -30,6 +30,8 @@ export type MemberListQuery = {
    listId: string
    state: WorkflowListMemberState
    status?: WorkflowListMemberStatus
+   // Only people marked for review after 180 days untouched.
+   needsReview?: boolean
    search?: string
    page: number
    pageSize: number
@@ -54,6 +56,8 @@ const memberSelect = {
    status: true,
    postUrl: true,
    score: true,
+   tags: true,
+   reviewAt: true,
    createdAt: true,
    updatedAt: true,
 } satisfies Prisma.WorkflowListMemberSelect
@@ -72,6 +76,9 @@ export type RunMember = {
    postUrl: string | null
    score: number | null
    signals: Prisma.InputJsonValue
+   tags: string[]
+   // From the owner's own /profiles: being there does not stop the person.
+   known: boolean
 }
 
 const ownedMember = (userId: string, id: string) => ({
@@ -194,8 +201,9 @@ export class WorkflowListService {
       return count > 0
    }
 
-   // The slugs among these the owner already has in a list or in /profiles, or must not contact.
-   public static async seenAmong(userId: string, slugs: string[]) {
+   // The slugs among these the owner must not contact or, unless the people are known (chosen by the owner or handed
+   // over by another workflow), already has in a list or in /profiles.
+   public static async seenAmong(userId: string, slugs: string[], options = { known: false }) {
       const db = PrismaService.client
       const where = {
          userId,
@@ -206,31 +214,37 @@ export class WorkflowListService {
             where,
             select: { slug: true },
          }),
-         db.workflowListMember.findMany({
-            where: {
-               slug: { in: slugs },
-               list: { userId },
-            },
-            select: { slug: true },
-         }),
-         db.linkedInProfile.findMany({
-            where,
-            select: { slug: true },
-         }),
+         options.known
+            ? []
+            : db.workflowListMember.findMany({
+                 where: {
+                    slug: { in: slugs },
+                    list: { userId },
+                 },
+                 select: { slug: true },
+              }),
+         options.known
+            ? []
+            : db.linkedInProfile.findMany({
+                 where,
+                 select: { slug: true },
+              }),
       ])
 
       return new Set([...suppressed, ...members, ...profiles].map(({ slug }) => slug))
    }
 
-   // Adds the people a run kept, skipping anyone seen meanwhile. Safe to repeat: the unique index skips repeats.
+   // Adds the people a run kept, skipping anyone seen meanwhile. Safe to repeat: the unique index skips repeats, and
+   // keeps a known person out of a list they are already in.
    public static async addFromRun(userId: string, listId: string, runId: string, people: RunMember[]) {
-      const seen = await WorkflowListService.seenAmong(
-         userId,
-         people.map(({ slug }) => slug)
-      )
-      const fresh = people.filter(({ slug }) => !seen.has(slug))
+      const slugsOf = (known: boolean) => people.filter(item => item.known === known).map(({ slug }) => slug)
+      const [seen, seenKnown] = await Promise.all([
+         WorkflowListService.seenAmong(userId, slugsOf(false)),
+         WorkflowListService.seenAmong(userId, slugsOf(true), { known: true }),
+      ])
+      const fresh = people.filter(({ slug, known }) => !(known ? seenKnown : seen).has(slug))
       const { count } = await PrismaService.client.workflowListMember.createMany({
-         data: fresh.map(member => ({
+         data: fresh.map(({ known: _known, ...member }) => ({
             ...member,
             listId,
             addedByRunId: runId,
@@ -241,12 +255,24 @@ export class WorkflowListService {
       return count
    }
 
+   // "Keep" on a person marked for review.
+   public static keepMember(userId: string, id: string) {
+      return orNull(
+         PrismaService.client.workflowListMember.update({
+            where: ownedMember(userId, id),
+            data: { reviewAt: null },
+            select: memberSelect,
+         })
+      )
+   }
+
    public static async members(userId: string, query: MemberListQuery) {
       const where: Prisma.WorkflowListMemberWhereInput = {
          listId: query.listId,
          list: { userId },
          state: query.state,
          ...(query.status ? { status: query.status } : {}),
+         ...(query.needsReview ? { reviewAt: { not: null } } : {}),
          ...(query.search
             ? {
                  OR: SEARCHED_FIELDS.map(field => ({
@@ -309,7 +335,11 @@ export class WorkflowListService {
       return orNull(
          PrismaService.client.workflowListMember.update({
             where: ownedMember(userId, id),
-            data: changes,
+            // Any change counts as touching the person, so a review mark goes away.
+            data: {
+               ...changes,
+               reviewAt: null,
+            },
             select: memberSelect,
          })
       )

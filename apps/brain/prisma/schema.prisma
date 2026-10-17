@@ -78,6 +78,9 @@ model WorkflowListMember {
   score        Int?
   signals      Json?
   addedByRunId String?
+  tags         String[]
+  // Set when the person was not touched for 180 days; deleted 30 days later unless touched or kept.
+  reviewAt     DateTime?
   createdAt    DateTime                 @default(now())
   updatedAt    DateTime                 @updatedAt
 
@@ -101,6 +104,8 @@ enum WorkflowTrigger {
   MANUAL
   SCHEDULE
   PREVIEW
+  API
+  WORKFLOW
 }
 
 enum WorkflowRunStatus {
@@ -132,9 +137,11 @@ model Workflow {
   qualifyScore Int           @default(60)
   maybeScore   Int           @default(40)
   maybeEnabled Boolean       @default(true)
-  // Only a scheduled workflow is switched on; nextRunAt is when the schedule job starts it next.
+  // Switched on: a schedule, API or chained workflow may start it; nextRunAt is when the schedule job starts it next.
   enabled      Boolean       @default(false)
   nextRunAt    DateTime?
+  // SHA-256 of the API token; the token itself is shown once.
+  apiTokenHash String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   runs         WorkflowRun[]
@@ -162,6 +169,10 @@ model WorkflowRun {
   qualified      Int               @default(0)
   maybe          Int               @default(0)
   discarded      Int               @default(0)
+  // Links sent by an API call, or the people a finished workflow passed on.
+  input          Json?
+  // How many workflows started this one in a chain.
+  depth          Int               @default(0)
   message        String?
   startedAt      DateTime          @default(now())
   finishedAt     DateTime?

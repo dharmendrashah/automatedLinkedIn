@@ -23,6 +23,7 @@ const membersInput = z.object({
    state,
    status: status.optional(),
    search: z.string().trim().max(100).optional(),
+   needsReview: z.boolean().optional(),
    page: z.number().int().min(1).default(1),
    pageSize: z.number().int().min(1).max(100).default(25),
 })
@@ -105,6 +106,13 @@ export const workflowList = router({
 
       return present(await WorkflowListService.updateMember(ctx.user.id, id, changes), MEMBER_MISSING)
    }),
+
+   // Keeps a person marked for review, so the 30-day delete does not take them.
+   keepMember: ownerProcedure
+      .input(byId)
+      .mutation(async ({ ctx, input }) =>
+         present(await WorkflowListService.keepMember(ctx.user.id, input.id), MEMBER_MISSING)
+      ),
 
    moveMember: ownerProcedure
       .input(byId.extend({ listId: z.string().min(1) }))

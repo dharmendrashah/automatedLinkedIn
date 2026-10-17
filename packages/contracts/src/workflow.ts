@@ -3,19 +3,26 @@ import { z } from 'zod'
 // The closed catalog of workflow blocks, the graph they form, and the pure rules on it (.plan/gtm-workflows.md).
 // Ids and labels are neutral: no data supplier is named here, because the browser shows these.
 
-export type ItemKind = 'start' | 'post' | 'profile'
+export type ItemKind = 'start' | 'post' | 'profile' | 'company'
 
 export const KIND_LABELS: Record<ItemKind, string> = {
    start: 'a start',
    post: 'posts',
    profile: 'people',
+   company: 'companies',
 }
 
 // Per row, in millionths of a dollar.
 export const PRICE_MICROS = {
    engagement: 2_000,
    profile: 4_000,
+   // People at a company: each profile plus a fee per page of 25.
+   employeePage: 100_000,
+   job: 1_000,
+   lookup: 4_000,
 } as const
+
+export const EMPLOYEE_PAGE = 25
 
 export type Field =
    | { key: string; label: string; kind: 'int'; min: number; max: number; hint?: string }
@@ -24,6 +31,9 @@ export type Field =
    | { key: string; label: string; kind: 'time' }
    | { key: string; label: string; kind: 'text' }
    | { key: string; label: string; kind: 'select'; options: { value: string; label: string }[] }
+   | { key: string; label: string; kind: 'multi'; options: { value: string; label: string }[] }
+   // Another workflow of the same owner.
+   | { key: string; label: string; kind: 'workflow' }
 
 const howMany = (max: number, fallback: number) => z.number().int().min(1).max(max).default(fallback)
 
@@ -57,11 +67,24 @@ export type Schedule = z.infer<typeof scheduleSchema>
 export const BLOCK_TYPES = [
    'trigger.manual',
    'trigger.schedule',
+   'trigger.api',
+   'trigger.workflow',
    'input.posts',
+   'input.profiles',
+   'input.companies',
+   'collect.findPosts',
+   'collect.postsOfPeople',
+   'collect.postsOfCompanies',
+   'collect.engagedPosts',
+   'collect.employees',
+   'collect.jobs',
+   'collect.domainLookup',
    'collect.commenters',
    'collect.reactors',
    'process.dedupe',
    'process.filter',
+   'process.topN',
+   'process.tag',
    'score.icp',
    'collect.profile',
    'output.list',
@@ -292,6 +315,334 @@ const BLOCKS = {
       config: empty,
       fields: [],
    },
+   'trigger.api': {
+      group: 'Triggers',
+      label: 'When called by API',
+      summary: 'Starts when another system calls this workflow with links.',
+      input: null,
+      output: 'start',
+      config: empty,
+      fields: [],
+   },
+   'trigger.workflow': {
+      group: 'Triggers',
+      label: 'When another workflow finishes',
+      summary: 'Starts with the people another workflow kept.',
+      input: null,
+      output: 'profile',
+      config: z.object({ workflowId: z.string().min(1) }),
+      fields: [
+         {
+            key: 'workflowId',
+            label: 'After this workflow',
+            kind: 'workflow',
+         },
+      ],
+   },
+   'input.profiles': {
+      group: 'Inputs',
+      label: 'Profiles',
+      summary: 'People from your profiles list, or the links you give.',
+      input: 'start',
+      output: 'profile',
+      config: z.object({
+         howMany: howMany(200, 25),
+         links: z.array(z.string().trim().min(1).max(300)).max(50).default([]),
+      }),
+      fields: [
+         {
+            key: 'howMany',
+            label: 'How many people',
+            kind: 'int',
+            min: 1,
+            max: 200,
+         },
+         {
+            key: 'links',
+            label: 'Only these profile links',
+            kind: 'words',
+            hint: 'Separate with commas. Empty takes people from your profiles list.',
+         },
+      ],
+   },
+   'input.companies': {
+      group: 'Inputs',
+      label: 'Companies',
+      summary: 'Companies from your companies list.',
+      input: 'start',
+      output: 'company',
+      config: z.object({ howMany: howMany(100, 10) }),
+      fields: [
+         {
+            key: 'howMany',
+            label: 'How many companies',
+            kind: 'int',
+            min: 1,
+            max: 100,
+         },
+      ],
+   },
+   'collect.findPosts': {
+      group: 'Collect',
+      label: 'Find posts',
+      summary: 'Finds recent posts that mention your keywords.',
+      input: 'start',
+      output: 'post',
+      config: z.object({
+         keywords: z.string().trim().min(1).max(200),
+         postedWithin: z.enum(['week', 'month', '3months']).default('month'),
+         howMany: howMany(100, 10),
+      }),
+      fields: [
+         {
+            key: 'keywords',
+            label: 'Keywords',
+            kind: 'text',
+         },
+         {
+            key: 'postedWithin',
+            label: 'Posted within',
+            kind: 'select',
+            options: [
+               {
+                  value: 'week',
+                  label: 'The last week',
+               },
+               {
+                  value: 'month',
+                  label: 'The last month',
+               },
+               {
+                  value: '3months',
+                  label: 'The last 3 months',
+               },
+            ],
+         },
+         {
+            key: 'howMany',
+            label: 'How many posts',
+            kind: 'int',
+            min: 1,
+            max: 100,
+         },
+      ],
+   },
+   'collect.postsOfPeople': {
+      group: 'Collect',
+      label: 'Posts of people',
+      summary: 'The recent posts of each person.',
+      input: 'profile',
+      output: 'post',
+      config: z.object({ howMany: howMany(50, 5) }),
+      fields: [
+         {
+            key: 'howMany',
+            label: 'How many posts per person',
+            kind: 'int',
+            min: 1,
+            max: 50,
+         },
+      ],
+   },
+   'collect.postsOfCompanies': {
+      group: 'Collect',
+      label: 'Posts of companies',
+      summary: 'The recent posts of each company.',
+      input: 'company',
+      output: 'post',
+      config: z.object({ howMany: howMany(50, 5) }),
+      fields: [
+         {
+            key: 'howMany',
+            label: 'How many posts per company',
+            kind: 'int',
+            min: 1,
+            max: 50,
+         },
+      ],
+   },
+   'collect.engagedPosts': {
+      group: 'Collect',
+      label: 'What this person engages with',
+      summary: 'The posts each person recently commented on or reacted to.',
+      input: 'profile',
+      output: 'post',
+      config: z.object({ howMany: howMany(50, 10) }),
+      fields: [
+         {
+            key: 'howMany',
+            label: 'How many comments and how many reactions per person',
+            kind: 'int',
+            min: 1,
+            max: 50,
+         },
+      ],
+   },
+   'collect.employees': {
+      group: 'Collect',
+      label: 'Find people at a company',
+      summary: 'People who work at each company, with their full profile.',
+      input: 'company',
+      output: 'profile',
+      config: z.object({
+         howMany: howMany(500, 25),
+         titles: words,
+         seniority: z
+            .array(z.enum(['120', '200', '210', '220', '300', '310', '320']))
+            .max(7)
+            .default([]),
+      }),
+      fields: [
+         {
+            key: 'howMany',
+            label: 'How many people per company',
+            kind: 'int',
+            min: 1,
+            max: 500,
+         },
+         {
+            key: 'titles',
+            label: 'Current job titles',
+            kind: 'words',
+            hint: 'Separate with commas. Empty takes any title.',
+         },
+         {
+            key: 'seniority',
+            label: 'Seniority',
+            kind: 'multi',
+            options: [
+               {
+                  value: '320',
+                  label: 'Owner or partner',
+               },
+               {
+                  value: '310',
+                  label: 'C-level',
+               },
+               {
+                  value: '300',
+                  label: 'VP',
+               },
+               {
+                  value: '220',
+                  label: 'Director',
+               },
+               {
+                  value: '210',
+                  label: 'Experienced manager',
+               },
+               {
+                  value: '200',
+                  label: 'Manager',
+               },
+               {
+                  value: '120',
+                  label: 'Senior',
+               },
+            ],
+         },
+      ],
+   },
+   'collect.jobs': {
+      group: 'Collect',
+      label: 'Find open jobs',
+      summary: 'Marks the companies hiring for a role, a reason to reach out now.',
+      input: 'company',
+      output: 'company',
+      config: z.object({
+         jobTitle: z.string().trim().min(1).max(100),
+         howMany: howMany(100, 25),
+         onlyHiring: z.boolean().default(true),
+      }),
+      fields: [
+         {
+            key: 'jobTitle',
+            label: 'Job title',
+            kind: 'text',
+         },
+         {
+            key: 'howMany',
+            label: 'How many jobs per 10 companies',
+            kind: 'int',
+            min: 1,
+            max: 100,
+         },
+         {
+            key: 'onlyHiring',
+            label: 'Keep',
+            kind: 'select',
+            options: [
+               {
+                  value: 'true',
+                  label: 'Only companies that are hiring',
+               },
+               {
+                  value: 'false',
+                  label: 'Every company, hiring ones marked',
+               },
+            ],
+         },
+      ],
+   },
+   'collect.domainLookup': {
+      group: 'Collect',
+      label: 'Find a company from its website',
+      summary: 'Turns website addresses into companies.',
+      input: 'start',
+      output: 'company',
+      config: z.object({
+         domains: z.array(z.string().trim().toLowerCase().min(3).max(200)).min(1).max(100),
+         howMany: howMany(100, 25),
+      }),
+      fields: [
+         {
+            key: 'domains',
+            label: 'Websites',
+            kind: 'words',
+            hint: 'Separate with commas, such as stripe.com, acme.io.',
+         },
+         {
+            key: 'howMany',
+            label: 'How many companies at most',
+            kind: 'int',
+            min: 1,
+            max: 100,
+         },
+      ],
+   },
+   'process.topN': {
+      group: 'Process',
+      label: 'Keep top N',
+      summary: 'Keeps only the highest scored people.',
+      input: 'profile',
+      output: 'profile',
+      config: z.object({ count: z.number().int().min(1).max(1_000).default(50) }),
+      fields: [
+         {
+            key: 'count',
+            label: 'How many to keep',
+            kind: 'int',
+            min: 1,
+            max: 1_000,
+         },
+      ],
+   },
+   'process.tag': {
+      group: 'Process',
+      label: 'Tag',
+      summary: 'Adds tags to everyone who passes, shown in the list.',
+      input: 'profile',
+      output: 'profile',
+      config: z.object({ tags: z.array(z.string().trim().toLowerCase().min(1).max(30)).min(1).max(10) }),
+      fields: [
+         {
+            key: 'tags',
+            label: 'Tags',
+            kind: 'words',
+            hint: 'Separate with commas. Up to 10, 30 characters each.',
+         },
+      ],
+   },
 } as const satisfies Record<BlockType, BlockSpec>
 
 export const blockOf = (type: BlockType): BlockSpec => BLOCKS[type]
@@ -499,41 +850,116 @@ export type Estimate = {
 }
 
 // The block's own schema fills defaults, so a node saved without settings still has its "how many".
-const howManyOf = (node: GraphNode) => {
-   const { howMany } = blockOf(node.type).config.parse(node.config)
+const howManyOf = (node: GraphNode) => numberOf(node, 'howMany')
 
-   return typeof howMany === 'number' ? howMany : 0
+const settingsOf = (node: GraphNode) => blockOf(node.type).config.safeParse(node.config).data ?? {}
+
+const numberOf = (node: GraphNode, key: string) => {
+   const value = settingsOf(node)[key]
+
+   return typeof value === 'number' ? value : 0
 }
 
-// The most a run can cost: every "how many" is reached and nobody is filtered out. `posts` is how many posts are
-// waiting in the posts list.
-export const estimateGraph = (graph: Graph, available: { posts: number }): Estimate => {
+const countOf = (node: GraphNode, key: string) => {
+   const value = settingsOf(node)[key]
+
+   return Array.isArray(value) ? value.length : 0
+}
+
+export type Available = { posts: number; profiles: number; companies: number }
+
+// What one block passes on and costs at most, given how many items reach it.
+const blockEstimate = (node: GraphNode, incoming: number, available: Available) => {
+   const many = howManyOf(node)
+
+   switch (node.type) {
+      case 'input.posts':
+         return {
+            items: Math.min(many, available.posts),
+            costMicros: 0,
+         }
+      case 'input.profiles':
+         return {
+            items: Math.min(many, countOf(node, 'links') || available.profiles),
+            costMicros: 0,
+         }
+      case 'input.companies':
+         return {
+            items: Math.min(many, available.companies),
+            costMicros: 0,
+         }
+      case 'collect.findPosts':
+         return {
+            items: many,
+            costMicros: many * PRICE_MICROS.engagement,
+         }
+      case 'collect.commenters':
+      case 'collect.reactors':
+      case 'collect.postsOfPeople':
+      case 'collect.postsOfCompanies':
+         return {
+            items: incoming * many,
+            costMicros: incoming * many * PRICE_MICROS.engagement,
+         }
+      case 'collect.engagedPosts':
+         return {
+            items: incoming * many * 2,
+            costMicros: incoming * many * 2 * PRICE_MICROS.engagement,
+         }
+      case 'collect.employees':
+         return {
+            items: incoming * many,
+            costMicros:
+               incoming * (many * PRICE_MICROS.profile + Math.ceil(many / EMPLOYEE_PAGE) * PRICE_MICROS.employeePage),
+         }
+      case 'collect.jobs':
+         return {
+            items: incoming,
+            costMicros: Math.ceil(incoming / JOB_BATCH) * many * PRICE_MICROS.job,
+         }
+      case 'collect.domainLookup': {
+         const found = Math.min(many, countOf(node, 'domains'))
+
+         return {
+            items: found,
+            costMicros: found * PRICE_MICROS.lookup,
+         }
+      }
+      case 'collect.profile':
+         return {
+            items: incoming,
+            costMicros: incoming * PRICE_MICROS.profile,
+         }
+      case 'process.topN':
+         return {
+            items: Math.min(incoming, numberOf(node, 'count')),
+            costMicros: 0,
+         }
+      default:
+         // Triggers start with nothing; what another workflow passes on is not known before it runs.
+         return {
+            items: isTrigger(node.type) ? 0 : incoming,
+            costMicros: 0,
+         }
+   }
+}
+
+// Companies sent to the jobs search in one request.
+export const JOB_BATCH = 10
+
+// The most a run can cost: every "how many" is reached and nobody is filtered out. `available` is what is waiting in
+// the owner's lists.
+export const estimateGraph = (graph: Graph, available: Available): Estimate => {
    const byId = new Map(graph.nodes.map(node => [node.id, node]))
    const nodes: Estimate['nodes'] = {}
 
    for (const id of topoOrder(graph)) {
       const node = byId.get(id)
 
-      if (!node) continue
+      if (node) {
+         const incoming = parentsOf(graph, id).reduce((sum, parent) => sum + (nodes[parent]?.items ?? 0), 0)
 
-      const incoming = parentsOf(graph, id).reduce((sum, parent) => sum + (nodes[parent]?.items ?? 0), 0)
-      let items = incoming
-      let costMicros = 0
-
-      if (node.type === 'input.posts') {
-         items = Math.min(howManyOf(node), available.posts)
-      } else if (node.type === 'collect.commenters' || node.type === 'collect.reactors') {
-         items = incoming * howManyOf(node)
-         costMicros = items * PRICE_MICROS.engagement
-      } else if (node.type === 'collect.profile') {
-         costMicros = incoming * PRICE_MICROS.profile
-      } else if (isTrigger(node.type)) {
-         items = 0
-      }
-
-      nodes[id] = {
-         items,
-         costMicros,
+         nodes[id] = blockEstimate(node, incoming, available)
       }
    }
 
@@ -548,66 +974,197 @@ export const PREVIEW_LIMITS = {
    perPost: 20,
 } as const
 
-// The same workflow on a small sample: one post and at most 20 people per collect block.
+// The most "how many" a preview uses per block: one input item or post, at most 20 people.
+const PREVIEW_CAPS: Partial<Record<BlockType, number>> = {
+   'input.posts': PREVIEW_LIMITS.posts,
+   'input.profiles': 1,
+   'input.companies': 1,
+   'collect.findPosts': PREVIEW_LIMITS.posts,
+   'collect.postsOfPeople': PREVIEW_LIMITS.posts,
+   'collect.postsOfCompanies': PREVIEW_LIMITS.posts,
+   'collect.engagedPosts': PREVIEW_LIMITS.posts,
+   'collect.commenters': PREVIEW_LIMITS.perPost,
+   'collect.reactors': PREVIEW_LIMITS.perPost,
+   'collect.employees': PREVIEW_LIMITS.perPost,
+   'collect.jobs': 10,
+   'collect.domainLookup': 1,
+}
+
+// The same workflow on a small sample.
 export const previewGraph = (graph: Graph): Graph => ({
    ...graph,
    nodes: graph.nodes.map(node => {
-      if (node.type === 'input.posts') {
-         return {
-            ...node,
-            config: { howMany: PREVIEW_LIMITS.posts },
-         }
-      }
+      const cap = PREVIEW_CAPS[node.type]
 
-      if (node.type === 'collect.commenters' || node.type === 'collect.reactors') {
-         return {
-            ...node,
-            config: { howMany: Math.min(howManyOf(node), PREVIEW_LIMITS.perPost) },
-         }
-      }
-
-      return node
+      return cap === undefined
+         ? node
+         : {
+              ...node,
+              config: {
+                 ...node.config,
+                 howMany: Math.min(howManyOf(node), cap),
+              },
+           }
    }),
 })
 
 // Template 1: posts you chose, their commenters and reactors, scored, the qualified enriched, kept in a list.
-export const flagshipGraph = (options: { icpId: string; posts: number; perPost: number }): Graph => {
-   const node = (id: string, type: BlockType, x: number, y: number, config: GraphNode['config'] = {}): GraphNode => ({
-      id,
-      type,
-      config,
-      position: {
-         x,
-         y,
-      },
-   })
+export const flagshipGraph = (options: { icpId: string; posts: number; perPost: number }): Graph =>
+   templateGraph('engagers', options)
+
+// The goals of the guided start; each builds one template.
+export const GOALS = ['engagers', 'problem', 'accounts', 'lookalikes', 'watch'] as const
+
+export type Goal = (typeof GOALS)[number]
+
+export type TemplateOptions = {
+   icpId: string
+   // Posts, profiles or companies the input takes, depending on the goal.
+   posts: number
+   // People per post or per company.
+   perPost: number
+   keywords?: string
+   customer?: string
+   titles?: string[]
+}
+
+const step = (
+   id: string,
+   type: BlockType,
+   column: number,
+   row: number,
+   config: GraphNode['config'] = {}
+): GraphNode => ({
+   id,
+   type,
+   config,
+   position: {
+      x: column * 240,
+      y: row * 160 + 40,
+   },
+})
+
+const linked = (pairs: string[][]) =>
+   pairs.map(([from, to]) => ({
+      from,
+      to,
+   }))
+
+// Score, read full profiles of the qualified, keep them in the list. Starts in `column`, after `from`.
+const tail = (from: string[], column: number, icpId: string, enrich = true) => {
+   const nodes = [
+      step('dedupe', 'process.dedupe', column, 0),
+      step('score', 'score.icp', column + 1, 0, { icpId }),
+      ...(enrich ? [step('enrich', 'collect.profile', column + 2, 0)] : []),
+      step('list', 'output.list', column + (enrich ? 3 : 2), 0),
+   ]
+   const edges = [
+      ...from.map(source => [source, 'dedupe']),
+      ['dedupe', 'score'],
+      ...(enrich
+         ? [
+              ['score', 'enrich'],
+              ['enrich', 'list'],
+           ]
+         : [['score', 'list']]),
+   ]
+
+   return {
+      nodes,
+      edges,
+   }
+}
+
+// Commenters and reactors of the posts from `from`, then the tail.
+const engagersOf = (from: string, column: number, options: TemplateOptions) => {
+   const rest = tail(['commenters', 'reactors'], column + 1, options.icpId)
 
    return {
       nodes: [
-         node('trigger', 'trigger.manual', 0, 120),
-         node('posts', 'input.posts', 240, 120, { howMany: options.posts }),
-         node('commenters', 'collect.commenters', 480, 40, { howMany: options.perPost }),
-         node('reactors', 'collect.reactors', 480, 200, { howMany: options.perPost }),
-         node('dedupe', 'process.dedupe', 720, 120),
-         node('score', 'score.icp', 960, 120, { icpId: options.icpId }),
-         node('enrich', 'collect.profile', 1200, 120),
-         node('list', 'output.list', 1440, 120),
-         node('done', 'output.markPosts', 480, 360),
+         step('commenters', 'collect.commenters', column, 0, { howMany: options.perPost }),
+         step('reactors', 'collect.reactors', column, 1, { howMany: options.perPost }),
+         ...rest.nodes,
       ],
-      edges: [
-         ['trigger', 'posts'],
-         ['posts', 'commenters'],
-         ['posts', 'reactors'],
-         ['posts', 'done'],
-         ['commenters', 'dedupe'],
-         ['reactors', 'dedupe'],
-         ['dedupe', 'score'],
-         ['score', 'enrich'],
-         ['enrich', 'list'],
-      ].map(([from, to]) => ({
-         from,
-         to,
-      })),
+      edges: [[from, 'commenters'], [from, 'reactors'], ...rest.edges],
+   }
+}
+
+export const templateGraph = (goal: Goal, options: TemplateOptions): Graph => {
+   if (goal === 'accounts') {
+      const rest = tail(['employees'], 3, options.icpId, false)
+
+      return {
+         nodes: [
+            step('trigger', 'trigger.manual', 0, 0),
+            step('companies', 'input.companies', 1, 0, { howMany: options.posts }),
+            step('employees', 'collect.employees', 2, 0, {
+               howMany: options.perPost,
+               titles: options.titles ?? [],
+            }),
+            ...rest.nodes,
+         ],
+         edges: linked([['trigger', 'companies'], ['companies', 'employees'], ...rest.edges]),
+      }
+   }
+
+   const starts: Record<Exclude<Goal, 'accounts'>, { nodes: GraphNode[]; edges: string[][]; last: string }> = {
+      engagers: {
+         nodes: [
+            step('trigger', 'trigger.manual', 0, 0),
+            step('posts', 'input.posts', 1, 0, { howMany: options.posts }),
+            step('done', 'output.markPosts', 2, 2),
+         ],
+         edges: [
+            ['trigger', 'posts'],
+            ['posts', 'done'],
+         ],
+         last: 'posts',
+      },
+      problem: {
+         nodes: [
+            step('trigger', 'trigger.manual', 0, 0),
+            step('posts', 'collect.findPosts', 1, 0, {
+               keywords: options.keywords ?? '',
+               howMany: options.posts,
+            }),
+         ],
+         edges: [['trigger', 'posts']],
+         last: 'posts',
+      },
+      lookalikes: {
+         nodes: [
+            step('trigger', 'trigger.manual', 0, 0),
+            step('customer', 'input.profiles', 1, 0, {
+               howMany: 1,
+               links: options.customer ? [options.customer] : [],
+            }),
+            step('posts', 'collect.engagedPosts', 2, 0, { howMany: options.posts }),
+         ],
+         edges: [
+            ['trigger', 'customer'],
+            ['customer', 'posts'],
+         ],
+         last: 'posts',
+      },
+      watch: {
+         nodes: [
+            step('trigger', 'trigger.schedule', 0, 0, { every: 'week' }),
+            step('people', 'input.profiles', 1, 0, { howMany: options.posts }),
+            step('posts', 'collect.postsOfPeople', 2, 0, { howMany: 3 }),
+         ],
+         edges: [
+            ['trigger', 'people'],
+            ['people', 'posts'],
+         ],
+         last: 'posts',
+      },
+   }
+   const start = starts[goal]
+   const rest = engagersOf(start.last, Math.max(...start.nodes.map(({ position }) => position.x)) / 240 + 1, options)
+
+   return {
+      nodes: [...start.nodes, ...rest.nodes],
+      edges: linked([...start.edges, ...rest.edges]),
    }
 }
 

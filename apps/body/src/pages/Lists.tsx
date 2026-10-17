@@ -15,6 +15,8 @@ import {
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { downloadFile } from '@/lib/download-file'
@@ -72,6 +74,7 @@ export const Lists = () => {
    const [tab, setTab] = useState<MemberState>('QUALIFIED')
    const [naming, setNaming] = useState<'create' | 'rename' | null>(null)
    const [confirm, setConfirm] = useState<Confirm | null>(null)
+   const [needsReview, setNeedsReview] = useState(false)
 
    const lists = trpc.workflowList.lists.useQuery(undefined, { retry: false })
    const current = lists.data?.find(list => list.id === chosenId) ?? lists.data?.[0]
@@ -84,6 +87,7 @@ export const Lists = () => {
          state: tab,
          search,
          status,
+         needsReview: needsReview || undefined,
          page,
          pageSize,
       },
@@ -123,11 +127,12 @@ export const Lists = () => {
    const moveMember = trpc.workflowList.moveMember.useMutation({ onSuccess: refresh })
    const deleteMember = trpc.workflowList.deleteMember.useMutation({ onSuccess: refresh })
    const doNotContact = trpc.workflowList.doNotContact.useMutation({ onSuccess: refresh })
+   const keepMember = trpc.workflowList.keepMember.useMutation({ onSuccess: refresh })
    const exportCsv = trpc.workflowList.exportCsv.useMutation({
       onSuccess: ({ fileName, csv }) => downloadFile(fileName, csv, 'text/csv;charset=utf-8'),
    })
 
-   const memberActions = [updateMember, moveMember, deleteMember, doNotContact]
+   const memberActions = [updateMember, moveMember, deleteMember, doNotContact, keepMember]
    const busyId = memberActions.find(action => action.isPending)?.variables?.id
    const actionError = [...memberActions, deleteList, exportCsv].find(action => action.error)?.error?.message
    const text = confirmText(confirm, current?.name ?? '')
@@ -228,6 +233,17 @@ export const Lists = () => {
                         ))}
                      </TabsList>
                   </Tabs>
+                  <div className="flex items-center gap-2">
+                     <Checkbox
+                        id="needs-review"
+                        checked={needsReview}
+                        onCheckedChange={checked => {
+                           setNeedsReview(checked === true)
+                           filters.setPage(1)
+                        }}
+                     />
+                     <Label htmlFor="needs-review">Needs review only</Label>
+                  </div>
                   <ListToolbar
                      state={filters}
                      statuses={memberStatuses}
@@ -275,6 +291,7 @@ export const Lists = () => {
                         member,
                      })
                   }
+                  onKeep={member => keepMember.mutate({ id: member.id })}
                />
 
                <Pager

@@ -1,9 +1,11 @@
 export { PrismaService } from './prisma.service'
 export { ConflictError } from './conflict'
 export { type IcpInput, IcpService } from './icp.service'
+export { RETENTION, RetentionService } from './retention.service'
 export { SpendService } from './spend.service'
 export { WalletService, floorMicros, warnMicros } from './wallet.service'
-export { type WorkflowChanges, WorkflowService, readGraph } from './workflow.service'
+export { MAX_CHAIN_DEPTH, type WorkflowChanges, WorkflowService, readGraph } from './workflow.service'
+export { API_LIMITS, type ApiInput, WorkflowTriggerService } from './workflowTrigger.service'
 export { type CallOutcome, STALE_CLAIM_MS, WorkflowRunService } from './workflowRun.service'
 export {
    EXPORT_LIMIT,
