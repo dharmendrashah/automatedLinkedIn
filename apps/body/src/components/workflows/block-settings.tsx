@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 
 import { BlockOutput } from './block-output'
 import { ScheduleSettings } from './schedule-settings'
-import { Chips, Stepper, TagInput } from './setting-inputs'
+import { Chips, SearchPick, Stepper, TagInput } from './setting-inputs'
 
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { type FlowNode } from './graph-convert'
@@ -26,7 +26,7 @@ type Props = {
    workflows: Choice[]
    // The blocks connected before this one.
    parents: Choice[]
-   onChange: (key: string, value: ConfigValue) => void
+   onChange: (patch: Record<string, ConfigValue>) => void
    onRemove: () => void
    onClose: () => void
    // The run shown on the canvas: the dialog then also shows what this block passed on in it.
@@ -59,10 +59,12 @@ const flowOf = (block: Block) => {
 }
 
 // A block's settings over the canvas. Every change applies at once; the canvas's Save keeps them.
-export const BlockSettings = ({ node, problems, icps, workflows, parents, onChange, onRemove, onClose, output }: Props) => {
+export const BlockSettings = ({ node, problems, icps, workflows, parents, onChange: onPatch, onRemove, onClose, output }: Props) => {
    if (!node) {
       return null
    }
+
+   const onChange = (key: string, value: ConfigValue) => onPatch({ [key]: value })
 
    const { block, config } = node.data
    const Icon = BLOCK_ICONS[block.type]
@@ -103,6 +105,12 @@ export const BlockSettings = ({ node, problems, icps, workflows, parents, onChan
                   )
                }
             />
+         )
+      }
+
+      if (item.kind === 'search') {
+         return (
+            <SearchPick id={id} options={item.options} max={item.max} value={Array.isArray(value) ? value : []} onChange={next => onChange(item.key, next)} />
          )
       }
 
@@ -198,6 +206,32 @@ export const BlockSettings = ({ node, problems, icps, workflows, parents, onChan
       )
    const main = block.fields.filter(item => !item.advanced)
    const more = block.fields.filter(item => item.advanced)
+   const isOn = (preset: Block['presets'][number]) =>
+      Object.entries(preset.config).every(([key, wanted]) => JSON.stringify(values[key]) === JSON.stringify(wanted))
+   const presets =
+      block.presets.length > 0 ? (
+         <div className="grid gap-2">
+            <Label>Quick start</Label>
+            <div className="flex flex-wrap gap-2">
+               {block.presets.map(preset => (
+                  <button
+                     key={preset.label}
+                     type="button"
+                     title={preset.hint}
+                     aria-pressed={isOn(preset)}
+                     onClick={() => onPatch(preset.config)}
+                     className={cn(
+                        'grid rounded-lg border px-3 py-1.5 text-left transition-colors',
+                        isOn(preset) ? 'border-primary bg-primary/10' : 'hover:bg-muted'
+                     )}
+                  >
+                     <span className="text-sm font-medium">{preset.label}</span>
+                     <span className="text-muted-foreground text-xs">{preset.hint}</span>
+                  </button>
+               ))}
+            </div>
+         </div>
+      ) : null
 
    const settings =
       block.type === 'trigger.schedule' ? (
@@ -206,6 +240,7 @@ export const BlockSettings = ({ node, problems, icps, workflows, parents, onChan
          <p className="text-muted-foreground text-sm">This block has nothing to set.</p>
       ) : (
          <div className="grid max-h-[60vh] gap-5 overflow-y-auto pr-1">
+            {presets}
             {main.map(row)}
             {more.length > 0 ? (
                <details className="group grid gap-5">

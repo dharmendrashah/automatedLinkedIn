@@ -223,6 +223,7 @@ type Employees = {
    yearsOfExperience?: string[]
    headcount?: string[]
    changedJobs?: boolean
+   industries?: string[]
 }
 
 export const employeesParams = (company: CompanyItem, config: Employees) =>
@@ -238,6 +239,7 @@ export const employeesParams = (company: CompanyItem, config: Employees) =>
       yearsOfExperience: config.yearsOfExperience,
       companyHeadcount: config.headcount,
       recentlyChangedJobs: config.changedJobs,
+      industries: config.industries,
    })
 
 type SearchPeople = {
@@ -248,6 +250,7 @@ type SearchPeople = {
    seniority: string[]
    functions: string[]
    headcount: string[]
+   industries: string[]
    yearsOfExperience: string[]
    changedJobs: boolean
    postedRecently: boolean
@@ -266,6 +269,7 @@ export const searchPeopleParams = (config: SearchPeople) =>
       seniorityLevel: config.seniority,
       function: config.functions,
       companyHeadcount: config.headcount,
+      industry: config.industries,
       yearsOfExperience: config.yearsOfExperience,
       recentlyChangedJobs: config.changedJobs,
       recentlyPostedOnLinkedIn: config.postedRecently,
@@ -318,7 +322,7 @@ export const employeesFrom = (rows: Row[], company: CompanyItem): PersonItem[] =
 type Jobs = {
    jobTitle: string
    howMany: number
-   locations?: string[]
+   location?: string
    workplace?: string
    employment?: string
    experience?: string
@@ -327,6 +331,7 @@ type Jobs = {
    sortBy?: string
    easyApply?: boolean
    fewApplicants?: boolean
+   industries?: string[]
 }
 
 export const jobsParams = (companies: CompanyItem[], config: Jobs) =>
@@ -334,7 +339,7 @@ export const jobsParams = (companies: CompanyItem[], config: Jobs) =>
       jobTitles: config.jobTitle,
       company: companies.map(({ name, slug }) => name ?? slug),
       maxResults: config.howMany,
-      locations: config.locations,
+      locations: config.location,
       workplaceType: config.workplace,
       employmentType: config.employment,
       experienceLevel: config.experience,
@@ -343,6 +348,7 @@ export const jobsParams = (companies: CompanyItem[], config: Jobs) =>
       sortBy: config.sortBy,
       easyApply: config.easyApply,
       under10Applicants: config.fewApplicants,
+      industryIds: config.industries,
    })
 
 const companyLinkOf = (url: unknown) => {

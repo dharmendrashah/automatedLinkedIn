@@ -187,11 +187,11 @@ const Editor = ({
       setOpenId(block.fields.length > 0 ? id : null)
    }
 
-   const setConfig = (key: string, value: ConfigValue) =>
+   const setConfig = (patch: Record<string, ConfigValue>) =>
       commit(canvas => ({
          ...canvas,
          nodes: canvas.nodes.map(node =>
-            node.id === openId ? { ...node, data: { ...node.data, config: { ...node.data.config, [key]: value } } } : node
+            node.id === openId ? { ...node, data: { ...node.data, config: { ...node.data.config, ...patch } } } : node
          ),
       }))
 

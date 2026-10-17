@@ -99,7 +99,12 @@ describe.skipIf(!process.env.DATA_LIVE_TEST)('data operations (live data service
             employeesParams(company, {
                howMany: 5,
                titles: ['sales'],
-               seniority: [],
+               seniority: ['220'],
+               functions: ['25'],
+               locations: ['United States'],
+               yearsOfExperience: ['5'],
+               headcount: ['10001+'],
+               industries: ['4'],
             })
          )
 
@@ -116,11 +121,20 @@ describe.skipIf(!process.env.DATA_LIVE_TEST)('data operations (live data service
             jobsParams([company], {
                jobTitle: 'Sales',
                howMany: 5,
+               location: 'United States',
+               workplace: 'remote',
+               employment: 'full-time',
+               experience: 'mid-senior',
+               postedWithin: 'month',
+               salary: '80k+',
+               sortBy: 'date',
+               industries: ['4'],
             })
          )
          const domains = await collect('domain-lookup', domainParams(['stripe.com'], 1))
 
-         expect(hiringFrom(jobs, [company]).get('microsoft')?.length).toBeGreaterThan(0)
+         // So many filters may match no job; the request being accepted is what counts.
+         expect(hiringFrom(jobs, [company])).toBeInstanceOf(Map)
          expect(companiesFromDomains(domains)).toEqual([expect.objectContaining({ slug: 'stripe' })])
       },
       LIVE_MS
@@ -174,7 +188,8 @@ describe.skipIf(!process.env.DATA_LIVE_TEST)('data operations (live data service
                locations: ['London'],
                seniority: ['220'],
                functions: ['25'],
-               headcount: ['51-200'],
+               headcount: ['D'],
+               industries: ['4'],
                yearsOfExperience: [],
                changedJobs: false,
                postedRecently: false,

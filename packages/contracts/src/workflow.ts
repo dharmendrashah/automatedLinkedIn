@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { INDUSTRY_PAIRS } from './industries'
+
 // The closed catalog of workflow blocks, the graph they form, and the pure rules on it (.plan/gtm-workflows.md).
 // Ids and labels are neutral: no data supplier is named here, because the browser shows these.
 
@@ -38,6 +40,8 @@ export type Field = (
    | { key: string; label: string; kind: 'text'; placeholder?: string }
    | { key: string; label: string; kind: 'select'; options: Option[] }
    | { key: string; label: string; kind: 'multi'; options: Option[] }
+   // Many choices from a long list, picked by typing.
+   | { key: string; label: string; kind: 'search'; options: Option[]; max: number }
    | { key: string; label: string; kind: 'toggle' }
    // "All" (the boolean `allKey`, capped at ALL_CAP) or "Up to" the number in `key`.
    | { key: string; label: string; kind: 'limit'; allKey: string; min: number; max: number }
@@ -140,6 +144,12 @@ const HEADCOUNTS = optionsOf([
    ['5001-10000', '5,001 to 10,000'],
    ['10001+', 'Over 10,000'],
 ])
+// People search names the same sizes with letters.
+const SEARCH_HEADCOUNTS = HEADCOUNTS.map((option, index) => ({
+   ...option,
+   value: 'ABCDEFGHI'.charAt(index),
+}))
+const INDUSTRIES = optionsOf(INDUSTRY_PAIRS)
 const YEARS = optionsOf([
    ['1', 'Under 1 year'],
    ['2', '1 to 2 years'],
@@ -195,10 +205,10 @@ const isOption = (choices: Option[]) => (value: string) => choices.some(option =
 const oneOf = (choices: Option[], fallback: string) =>
    z.string().refine(isOption(choices), 'is not a choice').default(fallback)
 
-const someOf = (choices: Option[]) =>
+const someOf = (choices: Option[], max = choices.length) =>
    z
       .array(z.string().refine(isOption(choices), 'is not a choice'))
-      .max(choices.length)
+      .max(max)
       .default([])
 
 const toggle = (fallback: boolean) => z.boolean().default(fallback)
@@ -294,6 +304,8 @@ type BlockSpec = {
    summary: string
    // What a block costs, in words, such as "about $0.002 per person". Free blocks have none.
    costHint?: string
+   // One-click starting points; each sets only its own settings.
+   presets?: Preset[]
    input: ItemKind | null
    output: ItemKind | null
    config: z.ZodType<Record<string, unknown>>
@@ -342,6 +354,26 @@ const BLOCKS = {
       label: 'Get commenters',
       summary: 'The people who commented on each post, with what they wrote.',
       costHint: 'about $0.002 per comment',
+      presets: [
+         {
+            label: 'Everyone',
+            hint: `All comments, up to ${ALL_CAP.toLocaleString('en-US')} a post`,
+            config: { all: true },
+         },
+         {
+            label: 'Quick look',
+            hint: 'Up to 20 a post',
+            config: {
+               all: false,
+               howMany: 20,
+            },
+         },
+         {
+            label: 'Recent only',
+            hint: 'Comments from the past week',
+            config: { postedWithin: 'week' },
+         },
+      ],
       input: 'post',
       output: 'profile',
       config: z.object({
@@ -380,6 +412,21 @@ const BLOCKS = {
       label: 'Get reactors',
       summary: 'The people who reacted to each post.',
       costHint: 'about $0.002 per reaction',
+      presets: [
+         {
+            label: 'Everyone',
+            hint: `All reactions, up to ${ALL_CAP.toLocaleString('en-US')} a post`,
+            config: { all: true },
+         },
+         {
+            label: 'Quick look',
+            hint: 'Up to 20 a post',
+            config: {
+               all: false,
+               howMany: 20,
+            },
+         },
+      ],
       input: 'post',
       output: 'profile',
       config: z.object({
@@ -476,6 +523,32 @@ const BLOCKS = {
       group: 'Process',
       label: 'Score against an ideal customer',
       summary: 'Gives each person a score from 0 to 100 and keeps the qualified and maybe ones.',
+      presets: [
+         {
+            label: 'Strict',
+            hint: 'Qualified at 75, maybe at 55',
+            config: {
+               qualifyScore: 75,
+               maybeScore: 55,
+            },
+         },
+         {
+            label: 'Balanced',
+            hint: 'Qualified at 60, maybe at 40',
+            config: {
+               qualifyScore: 60,
+               maybeScore: 40,
+            },
+         },
+         {
+            label: 'Wide net',
+            hint: 'Qualified at 45, maybe at 30',
+            config: {
+               qualifyScore: 45,
+               maybeScore: 30,
+            },
+         },
+      ],
       input: 'profile',
       output: 'profile',
       config: z
@@ -619,6 +692,24 @@ const BLOCKS = {
       label: 'Find posts',
       summary: 'Finds posts on LinkedIn that mention your keywords.',
       costHint: 'about $0.002 per post',
+      presets: [
+         {
+            label: 'Fresh conversations',
+            hint: 'Newest first, past week',
+            config: {
+               postedWithin: 'week',
+               sortBy: 'date',
+            },
+         },
+         {
+            label: 'Best of the month',
+            hint: 'Most relevant, past month',
+            config: {
+               postedWithin: 'month',
+               sortBy: 'relevance',
+            },
+         },
+      ],
       input: 'start',
       output: 'post',
       config: z.object({
@@ -796,6 +887,33 @@ const BLOCKS = {
       label: 'Find people at a company',
       summary: 'People who work at each company, with their full profile.',
       costHint: 'about $0.004 per person plus $0.10 per 25',
+      presets: [
+         {
+            label: 'Leadership',
+            hint: 'Directors, VPs, C-level, owners',
+            config: { seniority: ['220', '300', '310', '320'] },
+         },
+         {
+            label: 'Sales team',
+            hint: 'Everyone in sales',
+            config: { functions: ['25'] },
+         },
+         {
+            label: 'Marketing team',
+            hint: 'Everyone in marketing',
+            config: { functions: ['15'] },
+         },
+         {
+            label: 'Engineering team',
+            hint: 'Everyone in engineering',
+            config: { functions: ['8'] },
+         },
+         {
+            label: 'New joiners',
+            hint: 'Less than a year at the company',
+            config: { yearsAtCompany: ['1'] },
+         },
+      ],
       input: 'company',
       output: 'profile',
       config: z.object({
@@ -812,6 +930,7 @@ const BLOCKS = {
          yearsOfExperience: someOf(YEARS),
          headcount: someOf(HEADCOUNTS),
          changedJobs: toggle(false),
+         industries: someOf(INDUSTRIES, 50),
       }),
       fields: [
          {
@@ -904,6 +1023,14 @@ const BLOCKS = {
             advanced: true,
          },
          {
+            key: 'industries',
+            label: 'Industry',
+            kind: 'search',
+            options: INDUSTRIES,
+            max: 50,
+            advanced: true,
+         },
+         {
             key: 'changedJobs',
             label: 'Only people who changed jobs recently',
             kind: 'toggle',
@@ -916,13 +1043,30 @@ const BLOCKS = {
       label: 'Find open jobs',
       summary: 'Marks the companies hiring for a role, a reason to reach out now.',
       costHint: 'about $0.001 per job',
+      presets: [
+         {
+            label: 'Hiring this week',
+            hint: 'Jobs posted in the past week',
+            config: { postedWithin: 'week' },
+         },
+         {
+            label: 'Remote roles',
+            hint: 'Only remote jobs',
+            config: { workplace: 'remote' },
+         },
+         {
+            label: 'Leadership hires',
+            hint: 'Director and executive jobs',
+            config: { experience: 'director' },
+         },
+      ],
       input: 'company',
       output: 'company',
       config: z.object({
          jobTitle: z.string().trim().min(1).max(100),
          howMany: howMany(100, 25),
          onlyHiring: z.boolean().default(true),
-         locations: words,
+         location: z.string().trim().max(100).default(''),
          workplace: oneOf(WORKPLACES, 'any'),
          employment: oneOf(EMPLOYMENT, 'any'),
          experience: oneOf(EXPERIENCE, 'any'),
@@ -931,6 +1075,7 @@ const BLOCKS = {
          sortBy: oneOf(SORTS, 'relevance'),
          easyApply: toggle(false),
          fewApplicants: toggle(false),
+         industries: someOf(INDUSTRIES, 20),
       }),
       fields: [
          {
@@ -953,9 +1098,11 @@ const BLOCKS = {
             advanced: true,
          },
          {
-            key: 'locations',
+            key: 'location',
             label: 'Located in',
-            kind: 'words',
+            kind: 'text',
+            placeholder: 'United States',
+            hint: 'One city, region or country.',
             advanced: true,
          },
          {
@@ -991,6 +1138,14 @@ const BLOCKS = {
             label: 'Salary at least',
             kind: 'select',
             options: SALARIES,
+            advanced: true,
+         },
+         {
+            key: 'industries',
+            label: 'Industry',
+            kind: 'search',
+            options: INDUSTRIES,
+            max: 20,
             advanced: true,
          },
          {
@@ -1047,6 +1202,42 @@ const BLOCKS = {
       label: 'Search people',
       summary: 'Finds people on LinkedIn by keywords, job title, company, place and more.',
       costHint: 'about $0.004 per person',
+      presets: [
+         {
+            label: 'Decision makers',
+            hint: 'Directors, VPs, C-level, owners',
+            config: { seniority: ['220', '300', '310', '320'] },
+         },
+         {
+            label: 'Founders of small companies',
+            hint: 'Owners and C-level at 1 to 50 people',
+            config: {
+               seniority: ['310', '320'],
+               headcount: ['A', 'B', 'C'],
+            },
+         },
+         {
+            label: 'Sales leaders',
+            hint: 'Sales, director and up',
+            config: {
+               functions: ['25'],
+               seniority: ['220', '300', '310'],
+            },
+         },
+         {
+            label: 'Marketing leaders',
+            hint: 'Marketing, director and up',
+            config: {
+               functions: ['15'],
+               seniority: ['220', '300', '310'],
+            },
+         },
+         {
+            label: 'New in their job',
+            hint: 'Changed jobs recently',
+            config: { changedJobs: true },
+         },
+      ],
       input: 'start',
       output: 'profile',
       config: z.object({
@@ -1056,7 +1247,8 @@ const BLOCKS = {
          locations: words,
          seniority: someOf(SEARCH_SENIORITY),
          functions: someOf(FUNCTIONS),
-         headcount: someOf(HEADCOUNTS),
+         headcount: someOf(SEARCH_HEADCOUNTS),
+         industries: someOf(INDUSTRIES, 50),
          yearsOfExperience: someOf(YEARS),
          changedJobs: toggle(false),
          postedRecently: toggle(false),
@@ -1113,7 +1305,15 @@ const BLOCKS = {
             key: 'headcount',
             label: 'Company size',
             kind: 'multi',
-            options: HEADCOUNTS,
+            options: SEARCH_HEADCOUNTS,
+            advanced: true,
+         },
+         {
+            key: 'industries',
+            label: 'Industry',
+            kind: 'search',
+            options: INDUSTRIES,
+            max: 50,
             advanced: true,
          },
          {
@@ -1397,6 +1597,7 @@ export const catalog = (): CatalogBlock[] =>
          label,
          summary,
          costHint: spec.costHint ?? null,
+         presets: spec.presets ?? [],
          input,
          output,
          fields,
@@ -1417,12 +1618,15 @@ const configSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boo
 
 export type NodeConfig = z.infer<typeof configSchema>
 
+export type Preset = { label: string; hint: string; config: NodeConfig }
+
 export type CatalogBlock = {
    type: BlockType
    group: BlockSpec['group']
    label: string
    summary: string
    costHint: string | null
+   presets: Preset[]
    input: ItemKind | null
    output: ItemKind | null
    fields: Field[]

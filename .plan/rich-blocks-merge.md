@@ -74,6 +74,12 @@ Open questions: none.
 
 - `pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build`, brain integration tests with the fake data service (the new settings reach the request, Merge modes), one small live check of the new filters.
 
+## Follow-up (asked by the owner on 2026-10-18: "do this as well")
+
+- [x] 7. Presets: one-click starting points on the blocks where they help (Search people, Find people at a company, Find posts, Get commenters, Get reactors, Find open jobs, Score). A preset only sets its own settings.
+- [x] 8. Industry filter on Find people at a company, Search people and Find open jobs. The codes come from LinkedIn's public table (Industry Codes V2), kept only where the data service accepts them (checked with free 422s). Pick from a searchable list; up to 20 for jobs and 50 otherwise.
+- [x] 9. Fix found while probing: people search wants company size as letters A to I, not "51-200".
+
 ## Outcome
 
 Shipped:
@@ -97,5 +103,12 @@ Verified:
 
 Not verified:
 
-- The employees and jobs filters live.
 - The new form in a browser.
+
+Follow-up shipped (steps 7 to 9):
+
+- Presets ("Quick start") on seven blocks: Search people, Find people at a company, Find posts, Get commenters, Get reactors, Find open jobs and Score. A preset shows as on when its settings match.
+- Industry filter (434 codes, `packages/contracts/src/industries.ts`), picked through a searchable field kind `search`.
+- People-search company size now uses the letters A to I.
+- Find open jobs takes one location as text, because the data service rejects a list.
+- The employee and job filters ran live and were accepted. The jobs check found no job matching all filters at once, so that test now only checks the request is accepted.

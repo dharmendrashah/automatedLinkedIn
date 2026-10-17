@@ -10,6 +10,7 @@ const block = (type: Block['type'], input: Block['input'], output: Block['output
    label: type,
    summary: '',
    costHint: null,
+   presets: [],
    input,
    output,
    fields: [],

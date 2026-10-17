@@ -107,3 +107,72 @@ export const Chips = ({
    </div>
 )
 
+const SHOWN_MATCHES = 8
+
+// Many choices from a long list: type to find one, chosen ones show as chips.
+export const SearchPick = ({
+   id,
+   options,
+   value,
+   max,
+   onChange,
+}: {
+   id: string
+   options: { value: string; label: string }[]
+   value: string[]
+   max: number
+   onChange: (next: string[]) => void
+}) => {
+   const [query, setQuery] = useState('')
+   const words = query.trim().toLowerCase()
+   const matches = words
+      ? options
+           .filter(option => !value.includes(option.value) && option.label.toLowerCase().includes(words))
+           .slice(0, SHOWN_MATCHES)
+      : []
+   const labelOf = (code: string) => options.find(option => option.value === code)?.label ?? code
+   const full = value.length >= max
+
+   return (
+      <div className="grid gap-2">
+         {value.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+               {value.map(code => (
+                  <span key={code} title={labelOf(code)} className="bg-muted flex items-center gap-1 rounded-md px-2 py-0.5 text-xs">
+                     {labelOf(code).split(' > ').at(-1)}
+                     <button type="button" aria-label={`Remove ${labelOf(code)}`} onClick={() => onChange(value.filter(item => item !== code))}>
+                        <X className="size-3" />
+                     </button>
+                  </span>
+               ))}
+            </div>
+         ) : null}
+         <Input
+            id={id}
+            value={query}
+            disabled={full}
+            placeholder={full ? `Up to ${max}` : 'Type to search, such as software'}
+            onChange={event => setQuery(event.target.value)}
+         />
+         {matches.length > 0 ? (
+            <ul className="grid gap-1 rounded-md border p-1">
+               {matches.map(option => (
+                  <li key={option.value}>
+                     <button
+                        type="button"
+                        className="hover:bg-muted w-full rounded px-2 py-1 text-left text-sm"
+                        onClick={() => {
+                           onChange([...value, option.value])
+                           setQuery('')
+                        }}
+                     >
+                        {option.label}
+                     </button>
+                  </li>
+               ))}
+            </ul>
+         ) : null}
+      </div>
+   )
+}
+

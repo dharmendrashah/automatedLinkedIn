@@ -311,6 +311,7 @@ const employees = (ctx: Context) => {
       yearsOfExperience: wordsIn(config, 'yearsOfExperience'),
       headcount: wordsIn(config, 'headcount'),
       changedJobs: config.changedJobs === true,
+      industries: wordsIn(config, 'industries'),
    }
 
    return collectEach(
@@ -333,7 +334,7 @@ const jobs = async (ctx: Context): Promise<StepResult> => {
    const settings = {
       jobTitle: textIn(config, 'jobTitle'),
       howMany: numberIn(config, 'howMany'),
-      locations: wordsIn(config, 'locations'),
+      location: textIn(config, 'location'),
       workplace: textIn(config, 'workplace'),
       employment: textIn(config, 'employment'),
       experience: textIn(config, 'experience'),
@@ -342,6 +343,7 @@ const jobs = async (ctx: Context): Promise<StepResult> => {
       sortBy: textIn(config, 'sortBy'),
       easyApply: config.easyApply === true,
       fewApplicants: config.fewApplicants === true,
+      industries: wordsIn(config, 'industries'),
    }
 
    await WorkflowRunService.seedItems(ctx.at, companies)
@@ -408,6 +410,7 @@ const searchPeople = (ctx: Context) => {
             seniority: wordsIn(config, 'seniority'),
             functions: wordsIn(config, 'functions'),
             headcount: wordsIn(config, 'headcount'),
+            industries: wordsIn(config, 'industries'),
             yearsOfExperience: wordsIn(config, 'yearsOfExperience'),
             changedJobs: config.changedJobs === true,
             postedRecently: config.postedRecently === true,

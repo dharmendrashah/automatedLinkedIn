@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import {
    ALL_CAP,
+   type BlockType,
    GOALS,
    type Graph,
+   type NodeConfig,
+   blockOf,
    catalog,
    errorsOf,
    estimateGraph,
@@ -39,6 +42,29 @@ describe('workflow catalog', () => {
          includeReplies: false,
       })
       expect(JSON.stringify(blocks).toLowerCase()).not.toMatch(/mindcase|apify/)
+   })
+
+   it('should only let a preset set its own block settings, to values they accept', () => {
+      const required: Partial<Record<BlockType, NodeConfig>> = {
+         'collect.findPosts': { keywords: 'pipeline' },
+         'collect.jobs': { jobTitle: 'SDR' },
+         'score.icp': { icpId: 'icp-1' },
+      }
+
+      for (const block of catalog()) {
+         const keys = block.fields.flatMap(field => (field.kind === 'limit' ? [field.key, field.allKey] : [field.key]))
+
+         for (const { config } of block.presets) {
+            expect(keys).toEqual(expect.arrayContaining(Object.keys(config)))
+            expect(
+               blockOf(block.type).config.safeParse({
+                  ...block.defaults,
+                  ...required[block.type],
+                  ...config,
+               }).success
+            ).toBe(true)
+         }
+      }
    })
 })
 
