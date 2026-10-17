@@ -1,3 +1,5 @@
+import { DetailDrawers } from '@/components/details/detail-drawers'
+import { useDetailDrawer } from '@/components/details/use-detail-drawer'
 import { ListToolbar } from '@/components/links/list-toolbar'
 import { Pager } from '@/components/links/pager'
 import { useListState } from '@/components/links/use-list-state'
@@ -12,6 +14,7 @@ import { trpc } from '../trpc'
 export const Posts = () => {
    const utils = trpc.useUtils()
    const state = useListState<PostStatus>()
+   const drawer = useDetailDrawer()
 
    const list = trpc.linkedInPost.list.useQuery(state.query, {
       retry: false,
@@ -61,9 +64,11 @@ export const Posts = () => {
             onToggle={toggle}
             onArchive={post => archive.mutate({ id: post.id })}
             onRestore={post => restore.mutate({ id: post.id })}
+            onOpen={post => drawer.show('post', post.slug)}
          />
 
          <Pager total={list.data?.total ?? 0} page={state.page} onPage={state.setPage} noun={['post', 'posts']} />
+         <DetailDrawers kind="post" order={list.data?.items.map(({ slug }) => slug) ?? []} />
       </div>
    )
 }

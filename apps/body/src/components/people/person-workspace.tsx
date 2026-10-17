@@ -1,3 +1,4 @@
+import { NotesField } from '@/components/details/notes-field'
 import {
    AlertDialog,
    AlertDialogAction,
@@ -11,9 +12,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { readableError } from '@/lib/trpc-error'
 import { Ban, ListPlus, UserPlus } from 'lucide-react'
 import { useState } from 'react'
@@ -25,25 +24,9 @@ import { type PersonDetail } from './types'
 
 import { trpc } from '../../trpc'
 
-// Saves when the field loses focus and the text changed.
-const Notes = ({ id, value, onSave }: { id: string; value: string | null; onSave: (next: string) => void }) => {
-   const [draft, setDraft] = useState(value ?? '')
-
-   return (
-      <div className="grid gap-1.5">
-         <Label htmlFor={id}>Notes</Label>
-         <Textarea
-            id={id}
-            rows={3}
-            maxLength={2_000}
-            placeholder="What you know, why they fit, what to say"
-            value={draft}
-            onChange={event => setDraft(event.target.value)}
-            onBlur={() => (draft !== (value ?? '') ? onSave(draft) : undefined)}
-         />
-      </div>
-   )
-}
+const Notes = ({ id, value, onSave }: { id: string; value: string | null; onSave: (next: string) => void }) => (
+   <NotesField id={id} value={value} placeholder="What you know, why they fit, what to say" onSave={onSave} />
+)
 
 const Confirm = ({ trigger, title, description, action, onConfirm }: { trigger: React.ReactNode; title: string; description: string; action: string; onConfirm: () => void }) => (
    <AlertDialog>

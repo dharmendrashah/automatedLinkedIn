@@ -31,6 +31,7 @@ model User {
   workflowLists     WorkflowList[]
   suppressions      Suppression[]
   personSnapshots   PersonSnapshot[]
+  pageSnapshots     PageSnapshot[]
   icps              Icp[]
   workflows         Workflow[]
 }
@@ -96,6 +97,7 @@ model WorkflowListMember {
   @@unique([listId, slug])
   @@index([listId, state, createdAt])
   @@index([slug])
+  @@index([postUrl])
 }
 
 // People the owner must never contact or add again; profile slugs only.
@@ -120,6 +122,25 @@ model PersonSnapshot {
   fetchedAt DateTime @default(now())
 
   @@unique([userId, slug])
+}
+
+enum PageKind {
+  COMPANY
+  POST
+}
+
+// A company page or post the owner chose to read, allow-listed fields only. Kept while it is in /companies or /posts
+// and not archived.
+model PageSnapshot {
+  id        String   @id @default(uuid(7))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      PageKind
+  slug      String
+  data      Json
+  fetchedAt DateTime @default(now())
+
+  @@unique([userId, kind, slug])
 }
 
 enum WorkflowTrigger {
@@ -274,6 +295,8 @@ model SpendLedger {
   runId        String?
   callId       String   @unique
   amountMicros Int
+  // Names spend outside a workflow on the statement, such as "Company reads".
+  label        String?
   // Calendar month in UTC, such as 2026-10.
   month        String
   createdAt    DateTime @default(now())

@@ -25,7 +25,7 @@ import {
    Workflow,
 } from 'lucide-react'
 import { type FormEvent, type ReactNode, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 
 import { cn } from '@/lib/utils'
 
@@ -95,13 +95,16 @@ const TemplateCard = ({ template }: { template: Template }) => {
 // A new workflow in two steps: its name, then blank or a ready-made template. Everything else is set on the canvas.
 export const WorkflowNew = () => {
    const navigate = useNavigate()
+   const [params] = useSearchParams()
    const [name, setName] = useState('')
-   const [start, setStart] = useState<Start>('blank')
+   const [picked, setStart] = useState<Start | null>(null)
    const templates = trpc.workflow.templates.useQuery()
    const create = trpc.workflow.create.useMutation({
       onSuccess: workflow => void navigate(`/workflows/${workflow.id}`),
    })
    const list = templates.data ?? []
+   // A link such as "Find people here" can pick the template with ?start=<id>.
+   const start: Start = picked ?? list.find(({ id }) => id === params.get('start'))?.id ?? 'blank'
    const chosen = list.find(({ id }) => id === start)
    const groups = [...new Set(list.map(({ useCaseLabel }) => useCaseLabel))]
 

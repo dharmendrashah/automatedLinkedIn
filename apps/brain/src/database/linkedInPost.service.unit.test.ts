@@ -9,11 +9,13 @@ const mocks = vi.hoisted(() => ({
    createMany: vi.fn(),
    updateMany: vi.fn(),
    update: vi.fn(),
+   deleteSnapshots: vi.fn(),
 }))
 
 vi.mock('./prisma.service', () => ({
    PrismaService: {
       client: {
+         pageSnapshot: { deleteMany: mocks.deleteSnapshots },
          linkedInPost: {
             findMany: mocks.findMany,
             findFirst: mocks.findFirst,

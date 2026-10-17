@@ -5,6 +5,7 @@ import { router } from 'trpc'
 
 import { createContext } from './context'
 import {
+   companyPage,
    icp,
    linkedInAccount,
    linkedInCompany,
@@ -12,6 +13,7 @@ import {
    linkedInProfile,
    me,
    person,
+   postPage,
    proxyServer,
    session,
    status,
@@ -26,6 +28,8 @@ export type AppRouter = typeof appRouter
 
 export const appRouter = router({
    me,
+   companyPage,
+   postPage,
    icp,
    linkedInAccount,
    linkedInCompany,

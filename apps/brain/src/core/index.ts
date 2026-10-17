@@ -36,3 +36,11 @@ export {
    readSignals,
 } from './workflowItem'
 export { type PersonSnapshotData, readSnapshot, snapshotFrom } from './personSnapshot'
+export {
+   type CompanySnapshotData,
+   type PostSnapshotData,
+   companySnapshotFrom,
+   postSnapshotFrom,
+   readCompanySnapshot,
+   readPostSnapshot,
+} from './pageSnapshot'

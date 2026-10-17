@@ -1,9 +1,9 @@
 import { z } from 'zod'
 
+import { type Row, count, httpsLink as photoOf, rows, text } from './snapshotFields'
+
 // The full profile an owner chose to read, cut down to what helps judge a lead. Ids, contact details and anything
 // not listed here stop at `snapshotFrom`.
-
-type Row = Record<string, unknown>
 
 const MAX = {
    about: 2_600,
@@ -12,12 +12,6 @@ const MAX = {
    education: 10,
    skills: 30,
 }
-
-const text = (value: unknown, max = 300) =>
-   typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : null
-const count = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null)
-const rows = (value: unknown) =>
-   Array.isArray(value) ? value.filter((item): item is Row => typeof item === 'object' && item !== null) : []
 
 // Dates come as text or as { year, month }.
 const dateOf = (value: unknown) => {
@@ -32,12 +26,6 @@ const dateOf = (value: unknown) => {
    }
 
    return null
-}
-
-const photoOf = (value: unknown) => {
-   const link = text(value, 1_000)
-
-   return link?.startsWith('https://') ? link : null
 }
 
 const nullable = z.string().nullable()

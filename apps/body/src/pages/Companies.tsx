@@ -1,6 +1,8 @@
 import { AddCompaniesDialog } from '@/components/companies/add-companies-dialog'
 import { CompaniesTable } from '@/components/companies/companies-table'
 import { EditCompanyDialog } from '@/components/companies/edit-company-dialog'
+import { DetailDrawers } from '@/components/details/detail-drawers'
+import { useDetailDrawer } from '@/components/details/use-detail-drawer'
 import { ListToolbar } from '@/components/links/list-toolbar'
 import { linkStatuses } from '@/components/links/link-statuses'
 import { Pager } from '@/components/links/pager'
@@ -15,6 +17,7 @@ export const Companies = () => {
    const utils = trpc.useUtils()
    const state = useListState()
    const [toEdit, setToEdit] = useState<Company | null>(null)
+   const drawer = useDetailDrawer()
 
    const list = trpc.linkedInCompany.list.useQuery(state.query, {
       retry: false,
@@ -58,6 +61,7 @@ export const Companies = () => {
             onArchive={company => archive.mutate({ id: company.id })}
             onRestore={company => restore.mutate({ id: company.id })}
             onTag={state.setTag}
+            onOpen={company => drawer.show('company', company.slug)}
          />
 
          <Pager
@@ -68,6 +72,7 @@ export const Companies = () => {
          />
 
          <EditCompanyDialog company={toEdit} onClose={() => setToEdit(null)} />
+         <DetailDrawers kind="company" order={list.data?.items.map(({ slug }) => slug) ?? []} />
       </div>
    )
 }

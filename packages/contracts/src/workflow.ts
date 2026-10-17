@@ -22,6 +22,8 @@ export const PRICE_MICROS = {
    employeePage: 100_000,
    job: 1_000,
    lookup: 4_000,
+   // One company page read on demand.
+   companyPage: 4_000,
 } as const
 
 export const EMPLOYEE_PAGE = 25

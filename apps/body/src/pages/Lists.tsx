@@ -4,8 +4,6 @@ import { MembersTable } from '@/components/lists/members-table'
 import { ListToolbar } from '@/components/links/list-toolbar'
 import { Pager } from '@/components/links/pager'
 import { useListState } from '@/components/links/use-list-state'
-import { PersonDrawer } from '@/components/people/person-drawer'
-import { usePersonParam } from '@/components/people/use-person-param'
 import {
    AlertDialog,
    AlertDialogAction,
@@ -34,6 +32,9 @@ import {
    isListView,
    memberStatuses,
 } from '@/components/lists/types'
+
+import { DetailDrawers } from '@/components/details/detail-drawers'
+import { useDetailDrawer } from '@/components/details/use-detail-drawer'
 
 import { trpc } from '../trpc'
 
@@ -79,7 +80,7 @@ export const Lists = () => {
    const [naming, setNaming] = useState<'create' | 'rename' | null>(null)
    const [confirm, setConfirm] = useState<Confirm | null>(null)
    const [needsReview, setNeedsReview] = useState(false)
-   const [person, setPerson] = usePersonParam()
+   const drawer = useDetailDrawer()
 
    const lists = trpc.workflowList.lists.useQuery(undefined, { retry: false })
    const current = lists.data?.find(list => list.id === chosenId) ?? lists.data?.[0]
@@ -317,14 +318,9 @@ export const Lists = () => {
                      })
                   }
                   onKeep={member => keepMember.mutate({ id: member.id })}
-                  onOpen={member => setPerson(member.slug)}
+                  onOpen={member => drawer.show('person', member.slug)}
                />
-               <PersonDrawer
-                  slug={person}
-                  order={members.data?.items.map(({ slug }) => slug) ?? []}
-                  onOpen={setPerson}
-                  onClose={() => setPerson(null)}
-               />
+               <DetailDrawers kind="person" order={members.data?.items.map(({ slug }) => slug) ?? []} />
 
                <Pager
                   total={members.data?.total ?? 0}

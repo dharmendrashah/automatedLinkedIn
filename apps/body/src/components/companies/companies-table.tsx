@@ -29,9 +29,20 @@ type Props = {
    onArchive: (company: Company) => void
    onRestore: (company: Company) => void
    onTag: (tag: string) => void
+   onOpen: (company: Company) => void
 }
 
-export const CompaniesTable = ({ companies, loading, error, busyId, onEdit, onArchive, onRestore, onTag }: Props) => (
+export const CompaniesTable = ({
+   companies,
+   loading,
+   error,
+   busyId,
+   onEdit,
+   onArchive,
+   onRestore,
+   onTag,
+   onOpen,
+}: Props) => (
    <div className="overflow-hidden rounded-lg border">
       <Table>
          <TableHeader className="bg-muted/50">
@@ -56,14 +67,13 @@ export const CompaniesTable = ({ companies, loading, error, busyId, onEdit, onAr
             {companies?.map(company => (
                <TableRow key={company.id} className={cn(company.archivedAt && 'opacity-60')}>
                   <TableCell>
-                     <a
+                     <button
+                        type="button"
                         className="font-medium underline-offset-4 hover:underline"
-                        href={company.url}
-                        target="_blank"
-                        rel="noreferrer noopener"
+                        onClick={() => onOpen(company)}
                      >
                         {company.name ?? company.slug}
-                     </a>
+                     </button>
                      {details(company) ? <p className="text-muted-foreground text-xs">{details(company)}</p> : null}
                   </TableCell>
                   <TableCell>

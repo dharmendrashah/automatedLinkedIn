@@ -75,6 +75,17 @@ export class RetentionService {
             SELECT 1 FROM "LinkedInProfile" p
             WHERE p."userId" = s."userId" AND p."slug" = s."slug" AND p."archivedAt" IS NULL
          )`
+      // A company page or post is kept only while it is in /companies or /posts and not archived.
+      const pages = await db.$executeRaw`
+         DELETE FROM "PageSnapshot" s
+         WHERE (s."kind" = 'COMPANY' AND NOT EXISTS (
+            SELECT 1 FROM "LinkedInCompany" c
+            WHERE c."userId" = s."userId" AND c."slug" = s."slug" AND c."archivedAt" IS NULL
+         ))
+         OR (s."kind" = 'POST' AND NOT EXISTS (
+            SELECT 1 FROM "LinkedInPost" p
+            WHERE p."userId" = s."userId" AND p."slug" = s."slug" AND p."archivedAt" IS NULL
+         ))`
 
       return {
          items: items.count,
@@ -85,6 +96,7 @@ export class RetentionService {
          marked: marked.count,
          ledger: ledger.count,
          snapshots,
+         pages,
       }
    }
 }

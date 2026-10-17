@@ -1,30 +1,15 @@
 import { z } from 'zod'
 
-import { DataClient } from 'core/dataClient'
-
-import { MINDCASE_API_KEY, MINDCASE_RPM } from 'env'
-
 import { PersonService } from 'database'
 
 import { ownerProcedure, router } from 'trpc'
 
 import { orConflict, present } from '../owned'
+import { readerOf } from '../reader'
 
 const MISSING = 'Person not found in your profiles or lists'
 
 const bySlug = z.object({ slug: z.string().trim().toLowerCase().min(1).max(200) })
-
-// One client for the API process, made on the first read, so its pacing covers every profile read it sends.
-let reader: DataClient | null = null
-
-const readerOf = () => {
-   reader ??= new DataClient({
-      key: MINDCASE_API_KEY,
-      requestsPerMinute: MINDCASE_RPM,
-   })
-
-   return reader
-}
 
 // One person by profile slug, always scoped to ctx.user.id.
 export const person = router({
