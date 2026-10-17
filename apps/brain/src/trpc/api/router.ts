@@ -7,6 +7,7 @@ import { createContext } from './context'
 import {
    linkedInAccount,
    linkedInCompany,
+   linkedInPost,
    linkedInProfile,
    me,
    proxyServer,
@@ -22,6 +23,7 @@ export const appRouter = router({
    me,
    linkedInAccount,
    linkedInCompany,
+   linkedInPost,
    linkedInProfile,
    proxyServer,
    session,

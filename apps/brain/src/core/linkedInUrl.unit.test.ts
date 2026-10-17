@@ -72,6 +72,89 @@ describe('parseLinkedInUrl for a company', () => {
    })
 })
 
+const POST_ID = '7123456789012345678'
+
+const activity = {
+   slug: `activity-${POST_ID}`,
+   url: `https://www.linkedin.com/feed/update/urn:li:activity:${POST_ID}`,
+}
+
+describe('parseLinkedInUrl for a post', () => {
+   it.each([
+      `https://www.linkedin.com/posts/ada-lovelace_engines-are-fun-activity-${POST_ID}-AbCd`,
+      `https://www.linkedin.com/posts/ada-lovelace_engines-are-fun-activity-${POST_ID}-AbCd/?utm_source=share&rcm=x`,
+      `linkedin.com/posts/ada-lovelace_activity-${POST_ID}`,
+      `https://www.linkedin.com/feed/update/urn:li:activity:${POST_ID}`,
+      `https://www.linkedin.com/feed/update/urn:li:activity:${POST_ID}/?trk=x`,
+      `https://www.linkedin.com/feed/update/urn%3Ali%3Aactivity%3A${POST_ID}`,
+      `https://uk.linkedin.com/feed/update/URN:LI:ACTIVITY:${POST_ID}`,
+   ])('should reduce %s to the canonical post', raw => {
+      expect(parseLinkedInUrl(raw, 'post')).toEqual(activity)
+   })
+
+   it('should keep the share and ugcPost types in the slug and the link', () => {
+      expect(parseLinkedInUrl(`linkedin.com/posts/ada_x-share-${POST_ID}-Zz9`, 'post')).toEqual({
+         slug: `share-${POST_ID}`,
+         url: `https://www.linkedin.com/feed/update/urn:li:share:${POST_ID}`,
+      })
+      expect(parseLinkedInUrl(`linkedin.com/feed/update/urn:li:ugcPost:${POST_ID}`, 'post')).toEqual({
+         slug: `ugcpost-${POST_ID}`,
+         url: `https://www.linkedin.com/feed/update/urn:li:ugcPost:${POST_ID}`,
+      })
+   })
+
+   it.each([
+      'https://www.linkedin.com/in/ada-lovelace',
+      'https://www.linkedin.com/company/elitale',
+      'https://www.linkedin.com/feed/',
+      'https://www.linkedin.com/feed/update/urn:li:activity:123',
+      'https://www.linkedin.com/feed/update/urn:li:activity:abc',
+      'https://www.linkedin.com/feed/update/urn:li:comment:7123456789012345678',
+      `https://www.linkedin.com/posts/ada-lovelace_engines-${POST_ID}`,
+      `https://www.linkedin.com/pulse/activity-${POST_ID}`,
+      `https://example.com/feed/update/urn:li:activity:${POST_ID}`,
+      `https://linkedin.com.evil.com/feed/update/urn:li:activity:${POST_ID}`,
+      `https://www.linkedin.com/feed/update/urn:li:activity:${POST_ID}9999999999`,
+      'not a url',
+   ])('should reject %s', raw => {
+      expect(parseLinkedInUrl(raw, 'post')).toBeNull()
+   })
+
+   it('should keep a lnkd.in short link as it is, with its case', () => {
+      const short = {
+         slug: 'lnkd-gSSgfQQj',
+         url: 'https://lnkd.in/p/gSSgfQQj',
+      }
+
+      expect(parseLinkedInUrl('https://lnkd.in/p/gSSgfQQj', 'post')).toEqual(short)
+      expect(parseLinkedInUrl('lnkd.in/p/gSSgfQQj/?utm_source=share', 'post')).toEqual(short)
+      expect(parseLinkedInUrl('lnkd.in/p/gssgfqqj', 'post')?.slug).toBe('lnkd-gssgfqqj')
+   })
+
+   it.each([
+      'https://lnkd.in/p/',
+      'https://lnkd.in/p/a',
+      'https://lnkd.in/gSSgfQQj',
+      'https://lnkd.in/p/gSSg fQQj!',
+      'https://evil-lnkd.in/p/gSSgfQQj',
+      'https://lnkd.in.evil.com/p/gSSgfQQj',
+   ])('should reject the short link %s', raw => {
+      expect(parseLinkedInUrl(raw, 'post')).toBeNull()
+   })
+
+   it('should not accept a lnkd.in link as a profile or a company', () => {
+      expect(parseLinkedInUrl('https://lnkd.in/p/gSSgfQQj', 'profile')).toBeNull()
+      expect(parseLinkedInUrl('https://lnkd.in/p/gSSgfQQj', 'company')).toBeNull()
+   })
+
+   it('should not read a post link as a profile or a company', () => {
+      const raw = `https://www.linkedin.com/posts/ada-lovelace_x-activity-${POST_ID}-AbCd`
+
+      expect(parseLinkedInUrl(raw, 'profile')).toBeNull()
+      expect(parseLinkedInUrl(raw, 'company')).toBeNull()
+   })
+})
+
 describe('parseLinkedInUrls', () => {
    it('should split on whitespace, commas and semicolons and drop duplicates by slug', () => {
       const result = parseLinkedInUrls(

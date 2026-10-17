@@ -6,16 +6,19 @@ type Props = {
    name: string
    archived: boolean
    busy: boolean
-   onEdit: () => void
+   // Left out when the row has nothing to edit.
+   onEdit?: () => void
    onArchive: () => void
    onRestore: () => void
 }
 
 export const RowActions = ({ name, archived, busy, onEdit, onArchive, onRestore }: Props) => (
    <div className="flex items-center justify-end gap-1">
-      <Button variant="ghost" size="icon" aria-label={`Edit ${name}`} onClick={onEdit}>
-         <Pencil />
-      </Button>
+      {onEdit ? (
+         <Button variant="ghost" size="icon" aria-label={`Edit ${name}`} onClick={onEdit}>
+            <Pencil />
+         </Button>
+      ) : null}
       <Button
          variant="ghost"
          size="icon"

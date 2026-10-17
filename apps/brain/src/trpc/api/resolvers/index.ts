@@ -1,5 +1,6 @@
 export { linkedInAccount } from './linkedInAccount/linkedInAccount'
 export { linkedInCompany } from './linkedInCompany/linkedInCompany'
+export { linkedInPost } from './linkedInPost/linkedInPost'
 export { linkedInProfile } from './linkedInProfile/linkedInProfile'
 export { me } from './me/me'
 export { proxyServer } from './proxyServer/proxyServer'

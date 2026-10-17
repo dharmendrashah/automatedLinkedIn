@@ -2,6 +2,7 @@ import { AddCompaniesDialog } from '@/components/companies/add-companies-dialog'
 import { CompaniesTable } from '@/components/companies/companies-table'
 import { EditCompanyDialog } from '@/components/companies/edit-company-dialog'
 import { ListToolbar } from '@/components/links/list-toolbar'
+import { linkStatuses } from '@/components/links/link-statuses'
 import { Pager } from '@/components/links/pager'
 import { useListState } from '@/components/links/use-list-state'
 import { useState } from 'react'
@@ -39,7 +40,12 @@ export const Companies = () => {
             <AddCompaniesDialog />
          </div>
 
-         <ListToolbar state={state} searchLabel="Search companies" searchPlaceholder="Search name, industry or link" />
+         <ListToolbar
+            state={state}
+            statuses={linkStatuses}
+            searchLabel="Search companies"
+            searchPlaceholder="Search name, industry or link"
+         />
 
          {actionError ? <p className="text-destructive text-sm">{actionError}</p> : null}
 

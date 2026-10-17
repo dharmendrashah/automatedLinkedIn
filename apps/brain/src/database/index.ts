@@ -17,6 +17,7 @@ export {
    type LinkedInCompanyListQuery,
    LinkedInCompanyService,
 } from './linkedInCompany.service'
+export { type LinkedInPostListQuery, LinkedInPostService } from './linkedInPost.service'
 export {
    type LinkedInProfileChanges,
    type LinkedInProfileListQuery,
