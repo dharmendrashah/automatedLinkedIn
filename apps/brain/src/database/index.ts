@@ -13,6 +13,7 @@ export {
    type MemberInput,
    type MemberListQuery,
    type RunMember,
+   type SeenSkip,
    WorkflowListService,
 } from './workflowList.service'
 export {

@@ -4,6 +4,7 @@ import {
    type CompanyItem,
    type PersonItem,
    type PostItem,
+   type WorkflowItemData,
    expandShortPostLink,
    isShortPostLink,
    mergeBySlug,
@@ -16,11 +17,12 @@ import {
    LinkedInCompanyService,
    LinkedInPostService,
    LinkedInProfileService,
+   type SeenSkip,
    WorkflowListService,
    WorkflowRunService,
 } from 'database'
 
-import { type GraphNode } from '@automatedLinkedIn/contracts'
+import { ALL_CAP, type GraphNode } from '@automatedLinkedIn/contracts'
 
 import {
    ENRICH_BATCH,
@@ -40,6 +42,8 @@ import {
    profilesParams,
    reactorsFrom,
    reactorsParams,
+   searchPeopleParams,
+   searchedPeopleFrom,
 } from '../data/operations'
 import {
    type Context,
@@ -200,14 +204,25 @@ const afterWorkflow = async (ctx: Context): Promise<StepResult> => {
 }
 
 const engagement = (ctx: Context, kind: 'commenters' | 'reactors') => {
-   const howMany = numberIn(configOf(ctx.node), 'howMany')
+   const config = configOf(ctx.node)
+   const limit = config.all === true ? ALL_CAP : numberIn(config, 'howMany')
 
    return collectEach(
       ctx,
       postsOf(ctx.inputs).map(post => ({
          inputKey: post.slug,
          slug: kind === 'commenters' ? 'post-comments' : 'post-reactions',
-         params: kind === 'commenters' ? commentersParams(post, howMany) : reactorsParams(post, howMany),
+         params:
+            kind === 'commenters'
+               ? commentersParams(post, {
+                    limit,
+                    postedWithin: textIn(config, 'postedWithin'),
+                    includeReplies: config.includeReplies === true,
+                 })
+               : reactorsParams(post, {
+                    limit,
+                    reactionType: textIn(config, 'reactionType'),
+                 }),
          use: async rows => {
             const people = kind === 'commenters' ? commentersFrom(rows, post) : reactorsFrom(rows, post)
 
@@ -232,6 +247,12 @@ const findPosts = (ctx: Context) => {
             keywords: textIn(config, 'keywords'),
             postedWithin: textIn(config, 'postedWithin'),
             howMany: numberIn(config, 'howMany'),
+            sortBy: textIn(config, 'sortBy'),
+            contentType: textIn(config, 'contentType'),
+            includeReposts: config.includeReposts === true,
+            includeQuotePosts: config.includeQuotePosts === true,
+            authors: wordsIn(config, 'authors'),
+            mentioning: wordsIn(config, 'mentioning'),
          }),
          use: savePosts(ctx),
       },
@@ -239,21 +260,30 @@ const findPosts = (ctx: Context) => {
 }
 
 const postsOfEach = (ctx: Context, sources: { slug: string; url: string }[]) => {
-   const howMany = numberIn(configOf(ctx.node), 'howMany')
+   const config = configOf(ctx.node)
+   const settings = {
+      howMany: numberIn(config, 'howMany'),
+      postedWithin: textIn(config, 'postedWithin'),
+      includeReposts: config.includeReposts === true,
+   }
 
    return collectEach(
       ctx,
       sources.map(source => ({
          inputKey: source.slug,
          slug: 'posts',
-         params: postsOfParams(source.url, howMany),
+         params: postsOfParams(source.url, settings),
          use: savePosts(ctx),
       }))
    )
 }
 
 const engagedPosts = (ctx: Context) => {
-   const howMany = numberIn(configOf(ctx.node), 'howMany')
+   const config = configOf(ctx.node)
+   const settings = {
+      howMany: numberIn(config, 'howMany'),
+      postedWithin: textIn(config, 'postedWithin'),
+   }
 
    return collectEach(
       ctx,
@@ -261,7 +291,7 @@ const engagedPosts = (ctx: Context) => {
          ['profile-comments', 'profile-reactions'].map(slug => ({
             inputKey: `${item.slug}:${slug}`,
             slug,
-            params: engagedParams(item, howMany),
+            params: engagedParams(item, settings),
             use: savePosts(ctx),
          }))
       )
@@ -274,6 +304,13 @@ const employees = (ctx: Context) => {
       howMany: numberIn(config, 'howMany'),
       titles: wordsIn(config, 'titles'),
       seniority: wordsIn(config, 'seniority'),
+      functions: wordsIn(config, 'functions'),
+      locations: wordsIn(config, 'locations'),
+      pastTitles: wordsIn(config, 'pastTitles'),
+      yearsAtCompany: wordsIn(config, 'yearsAtCompany'),
+      yearsOfExperience: wordsIn(config, 'yearsOfExperience'),
+      headcount: wordsIn(config, 'headcount'),
+      changedJobs: config.changedJobs === true,
    }
 
    return collectEach(
@@ -296,6 +333,15 @@ const jobs = async (ctx: Context): Promise<StepResult> => {
    const settings = {
       jobTitle: textIn(config, 'jobTitle'),
       howMany: numberIn(config, 'howMany'),
+      locations: wordsIn(config, 'locations'),
+      workplace: textIn(config, 'workplace'),
+      employment: textIn(config, 'employment'),
+      experience: textIn(config, 'experience'),
+      postedWithin: textIn(config, 'postedWithin'),
+      salary: textIn(config, 'salary'),
+      sortBy: textIn(config, 'sortBy'),
+      easyApply: config.easyApply === true,
+      fewApplicants: config.fewApplicants === true,
    }
 
    await WorkflowRunService.seedItems(ctx.at, companies)
@@ -347,6 +393,33 @@ const domainLookup = (ctx: Context) => {
    ])
 }
 
+const searchPeople = (ctx: Context) => {
+   const config = configOf(ctx.node)
+
+   return collectEach(ctx, [
+      {
+         inputKey: 'search',
+         slug: 'profiles',
+         params: searchPeopleParams({
+            keywords: textIn(config, 'keywords'),
+            titles: wordsIn(config, 'titles'),
+            companies: wordsIn(config, 'companies'),
+            locations: wordsIn(config, 'locations'),
+            seniority: wordsIn(config, 'seniority'),
+            functions: wordsIn(config, 'functions'),
+            headcount: wordsIn(config, 'headcount'),
+            yearsOfExperience: wordsIn(config, 'yearsOfExperience'),
+            changedJobs: config.changedJobs === true,
+            postedRecently: config.postedRecently === true,
+            howMany: numberIn(config, 'howMany'),
+         }),
+         use: async rows => {
+            await WorkflowRunService.mergePeople(ctx.at, searchedPeopleFrom(rows).slice(0, numberIn(config, 'howMany')))
+         },
+      },
+   ])
+}
+
 // Reads the full profile of everyone it gets who was not read yet. After a Score block they are scored again and
 // the ones that no longer fit are dropped; without one they keep no score.
 const enrich = async (ctx: Context): Promise<StepResult> => {
@@ -354,7 +427,7 @@ const enrich = async (ctx: Context): Promise<StepResult> => {
    const people = mergeBySlug(peopleOf(ctx.inputs))
    const scoring = scoringNodeBefore(graph, node.id)
    const rules = scoring ? await rulesOf(run.userId, scoring) : null
-   const thresholds = thresholdsOf(run)
+   const thresholds = thresholdsOf(run, scoring)
    const toRead = people.filter(({ enriched }) => !enriched).sort((a, b) => a.slug.localeCompare(b.slug))
    let stopped = false
 
@@ -390,18 +463,24 @@ const enrich = async (ctx: Context): Promise<StepResult> => {
 
 const SEEN_CHUNK = 1_000
 
-// Drops people the owner already has or must not contact. Known people (picked by the owner or handed over by another
-// workflow) are dropped only when they must not be contacted.
-const notSeen = async (userId: string, people: PersonItem[]) => {
+// Drops people the owner already has, as the block says, or must not contact. Known people (picked by the owner or
+// handed over by another workflow) are dropped only when they must not be contacted.
+const notSeen = async (userId: string, people: PersonItem[], skip: SeenSkip) => {
    const seen = new Set<string>()
 
    for (const known of [false, true]) {
       const group = people.filter(item => item.known === known)
+      const groupSkip = known
+         ? {
+              lists: false,
+              profiles: false,
+           }
+         : skip
 
       for (let start = 0; start < group.length; start += SEEN_CHUNK) {
          const chunk = group.slice(start, start + SEEN_CHUNK).map(({ slug }) => slug)
 
-         for (const slug of await WorkflowListService.seenAmong(userId, chunk, { known })) {
+         for (const slug of await WorkflowListService.seenAmong(userId, chunk, groupSkip)) {
             seen.add(slug)
          }
       }
@@ -535,6 +614,48 @@ const forEach = async (ctx: Context): Promise<StepResult> => {
 
 const CSV_KEEP_DAYS = 90
 
+const identity = (item: WorkflowItemData) => `${item.kind}:${item.slug}`
+
+// Joins what its lines found: everything once, only what every line has, or only what the main line has and the
+// others do not. People found on several lines keep every reason.
+const merge = async (ctx: Context): Promise<StepResult> => {
+   const config = configOf(ctx.node)
+   const parents = parentsOf(ctx.graph, ctx.node.id)
+   const lines = await Promise.all(
+      parents.map(async nodeId => ({
+         nodeId,
+         keys: new Set(
+            (
+               await WorkflowRunService.items(ctx.run.id, [
+                  {
+                     nodeId,
+                     round: ctx.step.round,
+                  },
+               ])
+            ).map(identity)
+         ),
+      }))
+   )
+   const main = lines.find(({ nodeId }) => nodeId === config.main) ?? lines[0]
+   const others = lines.filter(line => line !== main)
+   const keep = (key: string) => {
+      if (config.mode === 'every') {
+         return lines.every(({ keys }) => keys.has(key))
+      }
+
+      if (config.mode === 'onlyMain') {
+         return Boolean(main?.keys.has(key)) && !others.some(({ keys }) => keys.has(key))
+      }
+
+      return true
+   }
+   const kept = ctx.inputs.filter(item => keep(identity(item)))
+   const people = mergeBySlug(peopleOf(kept))
+   const rest = [...new Map(kept.filter(({ kind }) => kind !== 'profile').map(item => [identity(item), item])).values()]
+
+   return keepItems(ctx, [...people, ...rest], ctx.inputs.length)
+}
+
 const exportCsv = async (ctx: Context): Promise<StepResult> => {
    await WorkflowRunService.replaceItems(ctx.at, ctx.inputs, new Date(Date.now() + CSV_KEEP_DAYS * DAY_MS))
 
@@ -601,11 +722,17 @@ export const EXECUTORS: Record<GraphNode['type'], (ctx: Context) => Promise<Step
    'collect.employees': employees,
    'collect.jobs': jobs,
    'collect.domainLookup': domainLookup,
+   'collect.searchPeople': searchPeople,
    'collect.profile': enrich,
    'process.dedupe': async ctx => {
       const people = mergeBySlug(peopleOf(ctx.inputs))
+      const config = configOf(ctx.node)
+      const skip = {
+         lists: config.skipListed !== false,
+         profiles: config.skipProfiles !== false,
+      }
 
-      return keepItems(ctx, await notSeen(ctx.run.userId, people), people.length)
+      return keepItems(ctx, await notSeen(ctx.run.userId, people, skip), people.length)
    },
    'process.filter': async ctx => {
       const people = mergeBySlug(peopleOf(ctx.inputs))
@@ -620,12 +747,13 @@ export const EXECUTORS: Record<GraphNode['type'], (ctx: Context) => Promise<Step
    },
    'process.topN': async ctx => {
       const people = mergeBySlug(peopleOf(ctx.inputs))
-      const best = [...people]
-         .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
-         .slice(0, numberIn(configOf(ctx.node), 'count'))
+      const config = configOf(ctx.node)
+      const valueOf = (item: PersonItem) => (config.by === 'followers' ? item.followers : item.score) ?? -1
+      const best = [...people].sort((a, b) => valueOf(b) - valueOf(a)).slice(0, numberIn(config, 'count'))
 
       return keepItems(ctx, best, people.length)
    },
+   'process.merge': merge,
    'process.tag': async ctx => {
       const people = mergeBySlug(peopleOf(ctx.inputs))
       const tags = wordsIn(configOf(ctx.node), 'tags')
@@ -639,7 +767,7 @@ export const EXECUTORS: Record<GraphNode['type'], (ctx: Context) => Promise<Step
    'score.icp': async ctx => {
       const people = mergeBySlug(peopleOf(ctx.inputs))
       const rules = await rulesOf(ctx.run.userId, ctx.node)
-      const { kept } = scorePeople(people, rules, thresholdsOf(ctx.run))
+      const { kept } = scorePeople(people, rules, thresholdsOf(ctx.run, ctx.node))
 
       return keepItems(ctx, kept, people.length)
    },

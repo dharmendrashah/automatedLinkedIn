@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+   ALL_CAP,
    GOALS,
    type Graph,
    catalog,
@@ -31,7 +32,12 @@ describe('workflow catalog', () => {
    it('should give every block defaults that pass its own schema and never name a supplier', () => {
       const blocks = catalog()
 
-      expect(blocks.find(block => block.type === 'collect.commenters')?.defaults).toEqual({ howMany: 50 })
+      expect(blocks.find(block => block.type === 'collect.commenters')?.defaults).toEqual({
+         all: false,
+         howMany: 50,
+         postedWithin: 'any',
+         includeReplies: false,
+      })
       expect(JSON.stringify(blocks).toLowerCase()).not.toMatch(/mindcase|apify/)
    })
 })
@@ -297,6 +303,26 @@ describe('estimateGraph', () => {
       const { totalMicros } = estimateGraph(previewGraph(flagship), available)
 
       expect(totalMicros).toBe(20 * 2_000 * 2 + 40 * 4_000)
+   })
+
+   it('should price "All" comments at the safety cap and never let a preview read all', () => {
+      const all: Graph = {
+         ...flagship,
+         nodes: flagship.nodes.map(node =>
+            node.id === 'commenters'
+               ? {
+                    ...node,
+                    config: { all: true },
+                 }
+               : node
+         ),
+      }
+
+      expect(estimateGraph(all, available).nodes.commenters.items).toBe(3 * ALL_CAP)
+      expect(previewGraph(all).nodes.find(({ id }) => id === 'commenters')?.config).toMatchObject({
+         all: false,
+         howMany: 20,
+      })
    })
 
    it('should count every round of a loop', () => {

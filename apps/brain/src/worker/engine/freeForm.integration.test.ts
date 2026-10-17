@@ -65,14 +65,16 @@ const fakeClient = () => ({
                          postAuthorUrl: profile('zed'),
                       },
                    ]
-                 : slug === 'posts'
-                   ? [
-                        {
-                           postUrl: post(Object.keys(NEXT).indexOf(author) + 10),
-                           postAuthorUrl: profile(NEXT[author] ?? 'end'),
-                        },
-                     ]
-                   : []
+                 : slug === 'profiles' && params.searchQuery
+                   ? [{ profileUrl: profile('bob') }, { profileUrl: profile('dee') }]
+                   : slug === 'posts'
+                     ? [
+                          {
+                             postUrl: post(Object.keys(NEXT).indexOf(author) + 10),
+                             postAuthorUrl: profile(NEXT[author] ?? 'end'),
+                          },
+                       ]
+                     : []
 
          return {
             jobId: `job-${slug}`,
@@ -246,6 +248,59 @@ describe('free-form workflows (database)', () => {
          page: 1,
          pages: 1,
          items: [expect.objectContaining({ slug: 'ada' })],
+      })
+   })
+
+   it('should merge a picked line and a search: everything once, only shared, or only the main line', async () => {
+      const merged = async (mode: string) => {
+         const { runId } = await runOf({
+            nodes: [
+               node('picked', 'input.profiles', { links: [profile('ada'), profile('bob')] }),
+               node('search', 'collect.searchPeople', { keywords: 'sales' }),
+               node('merge', 'process.merge', {
+                  mode,
+                  main: 'picked',
+               }),
+               node('csv', 'output.csv'),
+            ],
+            edges: [line('picked', 'merge'), line('search', 'merge'), line('merge', 'csv')],
+         })
+
+         return (await itemsAt(runId, 'csv')).map(({ slug }) => slug)
+      }
+
+      expect(await merged('all')).toEqual(['ada', 'bob', 'dee'])
+      expect(await merged('every')).toEqual(['bob'])
+      expect(await merged('onlyMain')).toEqual(['ada'])
+   })
+
+   it('should send "All" as the safety cap and leave out settings that mean any', async () => {
+      const { client } = await runOf({
+         nodes: [
+            node('find', 'collect.findPosts', {
+               keywords: 'pipeline',
+               howMany: 1,
+               sortBy: 'date',
+            }),
+            node('commenters', 'collect.commenters', {
+               all: true,
+               postedWithin: 'week',
+            }),
+         ],
+         edges: [line('find', 'commenters')],
+      })
+      const params = (slug: string) => client.collect.mock.calls.find(([called]) => called === slug)?.[1]
+
+      expect(params('posts')).toEqual({
+         queries: 'pipeline',
+         postedLimit: 'month',
+         maxResults: 1,
+         sortBy: 'date',
+      })
+      expect(params('post-comments')).toEqual({
+         posts: post(1),
+         maxResults: 1_000,
+         postedLimit: 'week',
       })
    })
 })

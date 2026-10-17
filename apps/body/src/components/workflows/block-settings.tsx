@@ -1,10 +1,11 @@
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { CircleAlert, Trash2 } from 'lucide-react'
+import { ChevronRight, CircleAlert, Trash2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -14,7 +15,7 @@ import { Chips, Stepper, TagInput } from './setting-inputs'
 
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { type FlowNode } from './graph-convert'
-import { type ConfigValue, type Field } from './types'
+import { type Block, type ConfigValue, type Field } from './types'
 
 type Choice = { id: string; name: string }
 
@@ -23,6 +24,8 @@ type Props = {
    problems: { message: string; level: 'error' | 'note' }[]
    icps: Choice[]
    workflows: Choice[]
+   // The blocks connected before this one.
+   parents: Choice[]
    onChange: (key: string, value: ConfigValue) => void
    onRemove: () => void
    onClose: () => void
@@ -34,8 +37,29 @@ const textOf = (value: ConfigValue | undefined) => (Array.isArray(value) ? value
 
 const SHORT_LIST = 4
 
+// The safety cap of "All"; the same number lives in the contracts package, which body does not load at runtime.
+const ALL_CAP = '1,000'
+
+const KINDS: Record<string, string> = {
+   post: 'posts',
+   profile: 'people',
+   company: 'companies',
+}
+
+// "Takes posts, gives people", from what the block reads and passes on.
+const flowOf = (block: Block) => {
+   if (block.type === 'process.merge') {
+      return 'Takes anything, gives one stream'
+   }
+
+   const takes = block.input && KINDS[block.input] ? `Takes ${KINDS[block.input]}` : 'Starts on its own'
+   const gives = block.output && KINDS[block.output] ? `gives ${KINDS[block.output]}` : ''
+
+   return [takes, gives].filter(Boolean).join(', ')
+}
+
 // A block's settings over the canvas. Every change applies at once; the canvas's Save keeps them.
-export const BlockSettings = ({ node, problems, icps, workflows, onChange, onRemove, onClose, output }: Props) => {
+export const BlockSettings = ({ node, problems, icps, workflows, parents, onChange, onRemove, onClose, output }: Props) => {
    if (!node) {
       return null
    }
@@ -82,20 +106,50 @@ export const BlockSettings = ({ node, problems, icps, workflows, onChange, onRem
          )
       }
 
+      if (item.kind === 'toggle') {
+         return (
+            <Checkbox id={id} checked={value === true} onCheckedChange={next => onChange(item.key, next === true)} />
+         )
+      }
+
+      if (item.kind === 'limit') {
+         const all = values[item.allKey] === true
+
+         return (
+            <div className="grid gap-2">
+               <Chips
+                  id={id}
+                  options={[
+                     { value: 'all', label: `All (up to ${ALL_CAP})` },
+                     { value: 'some', label: 'Up to a number' },
+                  ]}
+                  isOn={option => (option === 'all') === all}
+                  onToggle={option => onChange(item.allKey, option === 'all')}
+               />
+               {all ? null : (
+                  <Stepper id={`${id}-count`} value={Number(value ?? item.min)} min={item.min} max={item.max} onChange={next => onChange(item.key, next)} />
+               )}
+            </div>
+         )
+      }
+
       if (item.kind === 'select' && item.options.length <= SHORT_LIST) {
          return <Chips id={id} options={item.options} isOn={option => textOf(value) === option} onToggle={option => onChange(item.key, typed(item.key, option))} />
       }
 
-      if (item.kind === 'select' || item.kind === 'icp' || item.kind === 'workflow') {
+      if (item.kind === 'select' || item.kind === 'icp' || item.kind === 'workflow' || item.kind === 'parent') {
          const options =
             item.kind === 'icp'
                ? icps.map(icp => ({ value: icp.id, label: icp.name }))
                : item.kind === 'workflow'
                  ? workflows.map(other => ({ value: other.id, label: other.name }))
-                 : item.options
+                 : item.kind === 'parent'
+                   ? parents.map(parent => ({ value: parent.id, label: parent.name }))
+                   : item.options
          const placeholder = {
             icp: 'Pick an ideal customer',
             workflow: 'Pick a workflow',
+            parent: parents.length > 0 ? 'Pick a connected block' : 'Connect blocks into this one first',
             select: 'Pick one',
          }[item.kind]
 
@@ -119,11 +173,31 @@ export const BlockSettings = ({ node, problems, icps, workflows, onChange, onRem
          <Input
             id={id}
             type={item.kind === 'time' ? 'time' : 'text'}
+            placeholder={item.kind === 'text' ? item.placeholder : undefined}
             value={textOf(value)}
             onChange={event => onChange(item.key, event.target.value)}
          />
       )
    }
+
+   const row = (item: Field) =>
+      item.kind === 'toggle' ? (
+         <div key={item.key} className="grid gap-1">
+            <div className="flex items-center gap-2">
+               {field(item)}
+               <Label htmlFor={`setting-${node.id}-${item.key}`}>{item.label}</Label>
+            </div>
+            {item.hint ? <p className="text-muted-foreground text-xs">{item.hint}</p> : null}
+         </div>
+      ) : (
+         <div key={item.key} className="grid gap-2">
+            <Label htmlFor={`setting-${node.id}-${item.key}`}>{item.label}</Label>
+            {field(item)}
+            {item.hint ? <p className="text-muted-foreground text-xs">{item.hint}</p> : null}
+         </div>
+      )
+   const main = block.fields.filter(item => !item.advanced)
+   const more = block.fields.filter(item => item.advanced)
 
    const settings =
       block.type === 'trigger.schedule' ? (
@@ -132,13 +206,16 @@ export const BlockSettings = ({ node, problems, icps, workflows, onChange, onRem
          <p className="text-muted-foreground text-sm">This block has nothing to set.</p>
       ) : (
          <div className="grid max-h-[60vh] gap-5 overflow-y-auto pr-1">
-            {block.fields.map(item => (
-               <div key={item.key} className="grid gap-2">
-                  <Label htmlFor={`setting-${node.id}-${item.key}`}>{item.label}</Label>
-                  {field(item)}
-                  {'hint' in item && item.hint ? <p className="text-muted-foreground text-xs">{item.hint}</p> : null}
-               </div>
-            ))}
+            {main.map(row)}
+            {more.length > 0 ? (
+               <details className="group grid gap-5">
+                  <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center gap-1 text-sm">
+                     <ChevronRight className="size-4 transition-transform group-open:rotate-90" aria-hidden />
+                     More options ({more.length})
+                  </summary>
+                  <div className="mt-4 grid gap-5">{more.map(row)}</div>
+               </details>
+            ) : null}
          </div>
       )
 
@@ -153,6 +230,9 @@ export const BlockSettings = ({ node, problems, icps, workflows, onChange, onRem
                   <div className="grid gap-1 text-left">
                      <DialogTitle>{block.label}</DialogTitle>
                      <DialogDescription>{block.summary}</DialogDescription>
+                     <p className="text-muted-foreground text-xs">
+                        {[flowOf(block), block.costHint].filter(Boolean).join(' · ')}
+                     </p>
                   </div>
                </div>
             </DialogHeader>

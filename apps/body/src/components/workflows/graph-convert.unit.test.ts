@@ -9,6 +9,7 @@ const block = (type: Block['type'], input: Block['input'], output: Block['output
    group: 'Process',
    label: type,
    summary: '',
+   costHint: null,
    input,
    output,
    fields: [],

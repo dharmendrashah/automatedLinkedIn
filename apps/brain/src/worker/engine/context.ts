@@ -84,11 +84,24 @@ export const wordsIn = (config: Record<string, unknown>, key: string) => {
    return Array.isArray(value) ? value.map(String) : []
 }
 
-export const thresholdsOf = (run: Run) => ({
-   qualifyScore: run.qualifyScore,
-   maybeScore: run.maybeScore,
-   maybeEnabled: run.maybeEnabled,
-})
+// The Score block's own scores; a block saved before it had them uses the workflow's.
+export const thresholdsOf = (run: Run, scoring: GraphNode | null) => {
+   if (scoring && 'qualifyScore' in scoring.config) {
+      const config = configOf(scoring)
+
+      return {
+         qualifyScore: numberIn(config, 'qualifyScore'),
+         maybeScore: numberIn(config, 'maybeScore'),
+         maybeEnabled: config.keepMaybe !== false,
+      }
+   }
+
+   return {
+      qualifyScore: run.qualifyScore,
+      maybeScore: run.maybeScore,
+      maybeEnabled: run.maybeEnabled,
+   }
+}
 
 // The nearest "Score" block before a node: its ideal customer is the one people are scored against.
 export const scoringNodeBefore = (graph: Graph, id: string) => {

@@ -16,12 +16,36 @@ const linkOf = (url: unknown) => {
 
 export const ENRICH_BATCH = 25
 
-export const commentersParams = (post: PostItem, howMany: number) => ({
-   posts: post.url,
-   maxResults: howMany,
-})
+// Leaves out the settings that mean "any": the data service then applies no filter.
+const sent = (params: Record<string, unknown>) =>
+   Object.fromEntries(
+      Object.entries(params).filter(
+         ([, value]) =>
+            value !== undefined &&
+            value !== 'any' &&
+            value !== '' &&
+            value !== false &&
+            !(Array.isArray(value) && value.length === 0)
+      )
+   )
 
-export const reactorsParams = commentersParams
+export const commentersParams = (
+   post: PostItem,
+   config: { limit: number; postedWithin: string; includeReplies: boolean }
+) =>
+   sent({
+      posts: post.url,
+      maxResults: config.limit,
+      postedLimit: config.postedWithin,
+      includeReplies: config.includeReplies,
+   })
+
+export const reactorsParams = (post: PostItem, config: { limit: number; reactionType: string }) =>
+   sent({
+      posts: post.url,
+      maxResults: config.limit,
+      reactionTypeFilter: config.reactionType,
+   })
 
 export const profilesParams = (people: PersonItem[]) => ({ queries: people.map(({ url }) => url) })
 
@@ -148,31 +172,121 @@ export const postsFrom = (rows: Row[]): PostItem[] =>
          : []
    })
 
-export const findPostsParams = (config: { keywords: string; postedWithin: string; howMany: number }) => ({
-   queries: config.keywords,
-   postedLimit: config.postedWithin,
-   maxResults: config.howMany,
-})
+export const findPostsParams = (config: {
+   keywords: string
+   postedWithin: string
+   howMany: number
+   sortBy?: string
+   contentType?: string
+   includeReposts?: boolean
+   includeQuotePosts?: boolean
+   authors?: string[]
+   mentioning?: string[]
+}) =>
+   sent({
+      queries: config.keywords,
+      postedLimit: config.postedWithin,
+      maxResults: config.howMany,
+      sortBy: config.sortBy,
+      contentType: config.contentType === 'all' ? undefined : config.contentType,
+      includeReposts: config.includeReposts,
+      includeQuotePosts: config.includeQuotePosts,
+      authors: config.authors,
+      mentioning: config.mentioning,
+   })
 
-export const postsOfParams = (url: string, howMany: number) => ({
-   urls: url,
-   maxResults: howMany,
-})
+type PostsOf = { howMany: number; postedWithin?: string; includeReposts?: boolean }
 
-export const engagedParams = (person: PersonItem, howMany: number) => ({
-   profiles: person.url,
-   maxResults: howMany,
-})
+export const postsOfParams = (url: string, config: PostsOf) =>
+   sent({
+      urls: url,
+      maxResults: config.howMany,
+      postedLimit: config.postedWithin,
+      includeReposts: config.includeReposts,
+   })
 
-export const employeesParams = (
-   company: CompanyItem,
-   config: { howMany: number; titles: string[]; seniority: string[] }
-) => ({
-   companies: company.url,
-   maxResults: config.howMany,
-   ...(config.titles.length > 0 ? { jobTitles: config.titles } : {}),
-   ...(config.seniority.length > 0 ? { seniorityLevels: config.seniority } : {}),
-})
+export const engagedParams = (person: PersonItem, config: { howMany: number; postedWithin?: string }) =>
+   sent({
+      profiles: person.url,
+      maxResults: config.howMany,
+      postedLimit: config.postedWithin,
+   })
+
+type Employees = {
+   howMany: number
+   titles: string[]
+   seniority: string[]
+   functions?: string[]
+   locations?: string[]
+   pastTitles?: string[]
+   yearsAtCompany?: string[]
+   yearsOfExperience?: string[]
+   headcount?: string[]
+   changedJobs?: boolean
+}
+
+export const employeesParams = (company: CompanyItem, config: Employees) =>
+   sent({
+      companies: company.url,
+      maxResults: config.howMany,
+      jobTitles: config.titles,
+      seniorityLevels: config.seniority,
+      functions: config.functions,
+      locations: config.locations,
+      pastJobTitles: config.pastTitles,
+      yearsAtCompany: config.yearsAtCompany,
+      yearsOfExperience: config.yearsOfExperience,
+      companyHeadcount: config.headcount,
+      recentlyChangedJobs: config.changedJobs,
+   })
+
+type SearchPeople = {
+   keywords: string
+   titles: string[]
+   companies: string[]
+   locations: string[]
+   seniority: string[]
+   functions: string[]
+   headcount: string[]
+   yearsOfExperience: string[]
+   changedJobs: boolean
+   postedRecently: boolean
+   howMany: number
+}
+
+// A search reads whole pages of 25 people.
+export const SEARCH_PAGE = 25
+
+export const searchPeopleParams = (config: SearchPeople) =>
+   sent({
+      searchQuery: config.keywords,
+      currentJobTitles: config.titles,
+      currentCompanies: config.companies,
+      locations: config.locations,
+      seniorityLevel: config.seniority,
+      function: config.functions,
+      companyHeadcount: config.headcount,
+      yearsOfExperience: config.yearsOfExperience,
+      recentlyChangedJobs: config.changedJobs,
+      recentlyPostedOnLinkedIn: config.postedRecently,
+      maxProfiles: Math.ceil(config.howMany / SEARCH_PAGE) * SEARCH_PAGE,
+   })
+
+// People found by a search come with their full profile, so they are not read again.
+export const searchedPeopleFrom = (rows: Row[]): PersonItem[] =>
+   rows.flatMap(row => {
+      const link = linkOf(row.profileUrl) ?? linkOf(`https://www.linkedin.com/in/${text(row.handle) ?? ''}`)
+
+      return link
+         ? [
+              person({
+                 ...link,
+                 ...cardOf(row),
+                 enriched: true,
+              }),
+           ]
+         : []
+   })
 
 // Employees come with their full profile, so they are not read again. A hiring company adds its roles as a reason.
 export const employeesFrom = (rows: Row[], company: CompanyItem): PersonItem[] =>
@@ -201,11 +315,35 @@ export const employeesFrom = (rows: Row[], company: CompanyItem): PersonItem[] =
       ]
    })
 
-export const jobsParams = (companies: CompanyItem[], config: { jobTitle: string; howMany: number }) => ({
-   jobTitles: config.jobTitle,
-   company: companies.map(({ name, slug }) => name ?? slug),
-   maxResults: config.howMany,
-})
+type Jobs = {
+   jobTitle: string
+   howMany: number
+   locations?: string[]
+   workplace?: string
+   employment?: string
+   experience?: string
+   postedWithin?: string
+   salary?: string
+   sortBy?: string
+   easyApply?: boolean
+   fewApplicants?: boolean
+}
+
+export const jobsParams = (companies: CompanyItem[], config: Jobs) =>
+   sent({
+      jobTitles: config.jobTitle,
+      company: companies.map(({ name, slug }) => name ?? slug),
+      maxResults: config.howMany,
+      locations: config.locations,
+      workplaceType: config.workplace,
+      employmentType: config.employment,
+      experienceLevel: config.experience,
+      postedLimit: config.postedWithin,
+      salary: config.salary,
+      sortBy: config.sortBy,
+      easyApply: config.easyApply,
+      under10Applicants: config.fewApplicants,
+   })
 
 const companyLinkOf = (url: unknown) => {
    const raw = text(url)

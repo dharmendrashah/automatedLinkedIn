@@ -178,6 +178,29 @@ export const newNodeId = (type: string, nodes: { id: string }[]) => {
 
 const show = (value: ConfigValue | undefined) => (Array.isArray(value) ? value.join(', ') : String(value ?? ''))
 
+// What a block's "how many" counts.
+const UNITS: Partial<Record<Block['type'], string>> = {
+   'input.posts': 'posts',
+   'input.profiles': 'people',
+   'input.companies': 'companies',
+   'collect.findPosts': 'posts',
+   'collect.searchPeople': 'people',
+   'collect.domainLookup': 'companies',
+   'collect.commenters': 'per post',
+   'collect.reactors': 'per post',
+   'collect.postsOfPeople': 'posts per person',
+   'collect.engagedPosts': 'per person',
+   'collect.postsOfCompanies': 'posts per company',
+   'collect.employees': 'per company',
+   'collect.jobs': 'jobs per 10 companies',
+}
+
+const MERGE_MODES: Record<string, string> = {
+   all: 'Everything, each once',
+   every: 'Only what every line has',
+   onlyMain: 'Only what the main line alone has',
+}
+
 // One line under the block's title that says what it is set to.
 export const summaryOf = (block: Block, config: GraphNode['config'], icpName?: string) => {
    const values = { ...block.defaults, ...config }
@@ -186,8 +209,14 @@ export const summaryOf = (block: Block, config: GraphNode['config'], icpName?: s
       return icpName ? `Against "${icpName}"` : 'Pick an ideal customer'
    }
 
+   if (block.type === 'process.merge') {
+      return MERGE_MODES[show(values.mode)] ?? block.summary
+   }
+
    if ('howMany' in values) {
-      return `Up to ${show(values.howMany)}${block.type === 'input.posts' ? ' posts' : ' per post'}`
+      const unit = UNITS[block.type] ?? ''
+
+      return values.all === true ? `All ${unit}`.trim() : `Up to ${show(values.howMany)} ${unit}`.trim()
    }
 
    if (block.type === 'trigger.schedule') {

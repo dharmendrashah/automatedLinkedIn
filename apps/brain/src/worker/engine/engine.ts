@@ -131,7 +131,15 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps) => 
    }
 
    try {
-      const { inputs, passThrough } = sortInputs(await readInputs(run, graph, node, step), blockOf(node.type).input)
+      const read = await readInputs(run, graph, node, step)
+      // A Merge takes items of every kind as they are.
+      const { inputs, passThrough } =
+         node.type === 'process.merge'
+            ? {
+                 inputs: read,
+                 passThrough: [],
+              }
+            : sortInputs(read, blockOf(node.type).input)
       const result = await EXECUTORS[node.type]({
          run,
          graph,

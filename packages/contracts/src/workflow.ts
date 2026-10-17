@@ -24,16 +24,186 @@ export const PRICE_MICROS = {
 
 export const EMPLOYEE_PAGE = 25
 
-export type Field =
-   | { key: string; label: string; kind: 'int'; min: number; max: number; hint?: string }
-   | { key: string; label: string; kind: 'words'; hint?: string }
+// "All" comments or reactions still stops here per post, so a run's cost has an upper bound.
+export const ALL_CAP = 1_000
+
+type Option = { value: string; label: string }
+
+// `advanced` settings sit under "More options" so a block opens simple.
+export type Field = (
+   | { key: string; label: string; kind: 'int'; min: number; max: number }
+   | { key: string; label: string; kind: 'words' }
    | { key: string; label: string; kind: 'icp' }
    | { key: string; label: string; kind: 'time' }
-   | { key: string; label: string; kind: 'text' }
-   | { key: string; label: string; kind: 'select'; options: { value: string; label: string }[] }
-   | { key: string; label: string; kind: 'multi'; options: { value: string; label: string }[] }
+   | { key: string; label: string; kind: 'text'; placeholder?: string }
+   | { key: string; label: string; kind: 'select'; options: Option[] }
+   | { key: string; label: string; kind: 'multi'; options: Option[] }
+   | { key: string; label: string; kind: 'toggle' }
+   // "All" (the boolean `allKey`, capped at ALL_CAP) or "Up to" the number in `key`.
+   | { key: string; label: string; kind: 'limit'; allKey: string; min: number; max: number }
+   // One of the blocks connected before this one.
+   | { key: string; label: string; kind: 'parent' }
    // Another workflow of the same owner.
    | { key: string; label: string; kind: 'workflow' }
+) & { hint?: string; advanced?: boolean }
+
+const optionsOf = (pairs: [string, string][]): Option[] =>
+   pairs.map(([value, label]) => ({
+      value,
+      label,
+   }))
+
+// The choices the data service accepts, in plain words. "any" means the setting is not sent.
+const COMMENT_AGES = optionsOf([
+   ['any', 'Any time'],
+   ['24h', 'Past 24 hours'],
+   ['week', 'Past week'],
+   ['month', 'Past month'],
+])
+const POST_AGES = optionsOf([
+   ['any', 'Any time'],
+   ['1h', 'Past hour'],
+   ['24h', 'Past 24 hours'],
+   ['week', 'Past week'],
+   ['month', 'Past month'],
+   ['3months', 'Past 3 months'],
+   ['6months', 'Past 6 months'],
+   ['year', 'Past year'],
+])
+const JOB_AGES = optionsOf([
+   ['any', 'Any time'],
+   ['1h', 'Past hour'],
+   ['24h', 'Past 24 hours'],
+   ['week', 'Past week'],
+   ['month', 'Past month'],
+])
+const REACTION_TYPES = optionsOf([
+   ['any', 'Any reaction'],
+   ['LIKE', 'Like'],
+   ['PRAISE', 'Celebrate'],
+   ['EMPATHY', 'Support'],
+   ['APPRECIATION', 'Love'],
+   ['INTEREST', 'Insightful'],
+   ['ENTERTAINMENT', 'Funny'],
+])
+const CONTENT_TYPES = optionsOf([
+   ['all', 'Any kind'],
+   ['images', 'Images'],
+   ['videos', 'Videos'],
+   ['documents', 'Documents'],
+   ['live_videos', 'Live videos'],
+   ['jobs', 'Job posts'],
+   ['collaborative_articles', 'Collaborative articles'],
+])
+const SORTS = optionsOf([
+   ['relevance', 'Most relevant'],
+   ['date', 'Most recent'],
+])
+const FUNCTIONS = optionsOf(
+   [
+      'Accounting',
+      'Administrative',
+      'Arts and design',
+      'Business development',
+      'Community and social services',
+      'Consulting',
+      'Education',
+      'Engineering',
+      'Entrepreneurship',
+      'Finance',
+      'Healthcare services',
+      'Human resources',
+      'Information technology',
+      'Legal',
+      'Marketing',
+      'Media and communication',
+      'Military and protective services',
+      'Operations',
+      'Product management',
+      'Program and project management',
+      'Purchasing',
+      'Quality assurance',
+      'Real estate',
+      'Research',
+      'Sales',
+      'Customer success and support',
+   ].map((label, index) => [String(index + 1), label])
+)
+const HEADCOUNTS = optionsOf([
+   ['1', 'Just 1'],
+   ['2-10', '2 to 10'],
+   ['11-50', '11 to 50'],
+   ['51-200', '51 to 200'],
+   ['201-500', '201 to 500'],
+   ['501-1000', '501 to 1,000'],
+   ['1001-5000', '1,001 to 5,000'],
+   ['5001-10000', '5,001 to 10,000'],
+   ['10001+', 'Over 10,000'],
+])
+const YEARS = optionsOf([
+   ['1', 'Under 1 year'],
+   ['2', '1 to 2 years'],
+   ['3', '3 to 5 years'],
+   ['4', '6 to 10 years'],
+   ['5', 'Over 10 years'],
+])
+const SEARCH_SENIORITY = optionsOf([
+   ['100', 'In training'],
+   ['110', 'Entry level'],
+   ['120', 'Senior'],
+   ['130', 'Strategic'],
+   ['200', 'Entry level manager'],
+   ['210', 'Experienced manager'],
+   ['220', 'Director'],
+   ['300', 'Vice president'],
+   ['310', 'C-level'],
+   ['320', 'Owner or partner'],
+])
+const WORKPLACES = optionsOf([
+   ['any', 'Any'],
+   ['remote', 'Remote'],
+   ['hybrid', 'Hybrid'],
+   ['office', 'On site'],
+])
+const EMPLOYMENT = optionsOf([
+   ['any', 'Any'],
+   ['full-time', 'Full time'],
+   ['part-time', 'Part time'],
+   ['contract', 'Contract'],
+   ['temporary', 'Temporary'],
+   ['internship', 'Internship'],
+])
+const EXPERIENCE = optionsOf([
+   ['any', 'Any'],
+   ['internship', 'Internship'],
+   ['entry', 'Entry level'],
+   ['associate', 'Associate'],
+   ['mid-senior', 'Mid to senior'],
+   ['director', 'Director'],
+   ['executive', 'Executive'],
+])
+const SALARIES = optionsOf([
+   ['any', 'Any'],
+   ...['40k+', '60k+', '80k+', '100k+', '120k+', '140k+', '160k+', '180k+', '200k+'].map((value): [string, string] => [
+      value,
+      `$${value}`,
+   ]),
+])
+
+const isOption = (choices: Option[]) => (value: string) => choices.some(option => option.value === value)
+
+const oneOf = (choices: Option[], fallback: string) =>
+   z.string().refine(isOption(choices), 'is not a choice').default(fallback)
+
+const someOf = (choices: Option[]) =>
+   z
+      .array(z.string().refine(isOption(choices), 'is not a choice'))
+      .max(choices.length)
+      .default([])
+
+const toggle = (fallback: boolean) => z.boolean().default(fallback)
+
+const LINKS_HINT = 'Paste LinkedIn links, one by one.'
 
 const howMany = (max: number, fallback: number) => z.number().int().min(1).max(max).default(fallback)
 
@@ -97,12 +267,14 @@ export const BLOCK_TYPES = [
    'collect.employees',
    'collect.jobs',
    'collect.domainLookup',
+   'collect.searchPeople',
    'collect.commenters',
    'collect.reactors',
    'process.dedupe',
    'process.filter',
    'process.topN',
    'process.tag',
+   'process.merge',
    'score.icp',
    'collect.profile',
    'logic.if',
@@ -120,6 +292,8 @@ type BlockSpec = {
    group: 'Triggers' | 'Inputs' | 'Collect' | 'Process' | 'Logic' | 'Output'
    label: string
    summary: string
+   // What a block costs, in words, such as "about $0.002 per person". Free blocks have none.
+   costHint?: string
    input: ItemKind | null
    output: ItemKind | null
    config: z.ZodType<Record<string, unknown>>
@@ -166,17 +340,38 @@ const BLOCKS = {
    'collect.commenters': {
       group: 'Collect',
       label: 'Get commenters',
-      summary: 'The people who commented on each post.',
+      summary: 'The people who commented on each post, with what they wrote.',
+      costHint: 'about $0.002 per comment',
       input: 'post',
       output: 'profile',
-      config: z.object({ howMany: howMany(500, 50) }),
+      config: z.object({
+         all: toggle(false),
+         howMany: howMany(500, 50),
+         postedWithin: oneOf(COMMENT_AGES, 'any'),
+         includeReplies: toggle(false),
+      }),
       fields: [
          {
             key: 'howMany',
+            allKey: 'all',
             label: 'How many comments per post',
-            kind: 'int',
+            kind: 'limit',
             min: 1,
             max: 500,
+            hint: `"All" reads up to ${ALL_CAP.toLocaleString('en-US')} per post.`,
+         },
+         {
+            key: 'postedWithin',
+            label: 'Only comments from',
+            kind: 'select',
+            options: COMMENT_AGES,
+            advanced: true,
+         },
+         {
+            key: 'includeReplies',
+            label: 'Also people who replied to a comment',
+            kind: 'toggle',
+            advanced: true,
          },
       ],
    },
@@ -184,27 +379,55 @@ const BLOCKS = {
       group: 'Collect',
       label: 'Get reactors',
       summary: 'The people who reacted to each post.',
+      costHint: 'about $0.002 per reaction',
       input: 'post',
       output: 'profile',
-      config: z.object({ howMany: howMany(500, 50) }),
+      config: z.object({
+         all: toggle(false),
+         howMany: howMany(500, 50),
+         reactionType: oneOf(REACTION_TYPES, 'any'),
+      }),
       fields: [
          {
             key: 'howMany',
+            allKey: 'all',
             label: 'How many reactions per post',
-            kind: 'int',
+            kind: 'limit',
             min: 1,
             max: 500,
+            hint: `"All" reads up to ${ALL_CAP.toLocaleString('en-US')} per post.`,
+         },
+         {
+            key: 'reactionType',
+            label: 'Only this reaction',
+            kind: 'select',
+            options: REACTION_TYPES,
+            advanced: true,
          },
       ],
    },
    'process.dedupe': {
       group: 'Process',
       label: 'Remove duplicates',
-      summary: 'Keeps each person once and drops people you already have or must not contact.',
+      summary: 'Keeps each person once and leaves out people you already have. Do-not-contact people always go.',
       input: 'profile',
       output: 'profile',
-      config: empty,
-      fields: [],
+      config: z.object({
+         skipListed: toggle(true),
+         skipProfiles: toggle(true),
+      }),
+      fields: [
+         {
+            key: 'skipListed',
+            label: 'Leave out people already in any of my lists',
+            kind: 'toggle',
+         },
+         {
+            key: 'skipProfiles',
+            label: 'Leave out people in my LinkedIn profiles',
+            kind: 'toggle',
+         },
+      ],
    },
    'process.filter': {
       group: 'Process',
@@ -252,22 +475,55 @@ const BLOCKS = {
    'score.icp': {
       group: 'Process',
       label: 'Score against an ideal customer',
-      summary: 'Scores each person and keeps the qualified and maybe ones.',
+      summary: 'Gives each person a score from 0 to 100 and keeps the qualified and maybe ones.',
       input: 'profile',
       output: 'profile',
-      config: z.object({ icpId: z.string().min(1) }),
+      config: z
+         .object({
+            icpId: z.string().min(1),
+            qualifyScore: z.number().int().min(1).max(100).default(60),
+            maybeScore: z.number().int().min(1).max(100).default(40),
+            keepMaybe: toggle(true),
+         })
+         .refine(({ qualifyScore, maybeScore }) => maybeScore < qualifyScore, {
+            message: 'must be lower than the qualified score',
+            path: ['maybeScore'],
+         }),
       fields: [
          {
             key: 'icpId',
             label: 'Ideal customer',
             kind: 'icp',
          },
+         {
+            key: 'qualifyScore',
+            label: 'Qualified at or above',
+            kind: 'int',
+            min: 1,
+            max: 100,
+            hint: 'Higher gives fewer, better people.',
+         },
+         {
+            key: 'keepMaybe',
+            label: 'Also keep "maybe" people',
+            kind: 'toggle',
+         },
+         {
+            key: 'maybeScore',
+            label: 'Maybe at or above',
+            kind: 'int',
+            min: 1,
+            max: 100,
+            advanced: true,
+         },
       ],
    },
    'collect.profile': {
       group: 'Collect',
       label: 'Get full profile',
-      summary: 'Reads the full profile of qualified people and scores them again.',
+      summary:
+         'Reads the full profile of everyone who reaches it (job, company, place) and scores them again if a Score block came before.',
+      costHint: 'about $0.004 per person',
       input: 'profile',
       output: 'profile',
       config: empty,
@@ -361,38 +617,34 @@ const BLOCKS = {
    'collect.findPosts': {
       group: 'Collect',
       label: 'Find posts',
-      summary: 'Finds recent posts that mention your keywords.',
+      summary: 'Finds posts on LinkedIn that mention your keywords.',
+      costHint: 'about $0.002 per post',
       input: 'start',
       output: 'post',
       config: z.object({
          keywords: z.string().trim().min(1).max(200),
-         postedWithin: z.enum(['week', 'month', '3months']).default('month'),
+         postedWithin: oneOf(POST_AGES, 'month'),
          howMany: howMany(100, 10),
+         sortBy: oneOf(SORTS, 'relevance'),
+         contentType: oneOf(CONTENT_TYPES, 'all'),
+         includeReposts: toggle(false),
+         includeQuotePosts: toggle(false),
+         authors: z.array(z.string().trim().min(1).max(300)).max(20).default([]),
+         mentioning: z.array(z.string().trim().min(1).max(300)).max(20).default([]),
       }),
       fields: [
          {
             key: 'keywords',
             label: 'Keywords',
             kind: 'text',
+            placeholder: 'cold email deliverability',
+            hint: 'The words people use when they talk about it.',
          },
          {
             key: 'postedWithin',
             label: 'Posted within',
             kind: 'select',
-            options: [
-               {
-                  value: 'week',
-                  label: 'The last week',
-               },
-               {
-                  value: 'month',
-                  label: 'The last month',
-               },
-               {
-                  value: '3months',
-                  label: 'The last 3 months',
-               },
-            ],
+            options: POST_AGES,
          },
          {
             key: 'howMany',
@@ -401,15 +653,60 @@ const BLOCKS = {
             min: 1,
             max: 100,
          },
+         {
+            key: 'sortBy',
+            label: 'Show first',
+            kind: 'select',
+            options: SORTS,
+            advanced: true,
+         },
+         {
+            key: 'contentType',
+            label: 'Kind of post',
+            kind: 'select',
+            options: CONTENT_TYPES,
+            advanced: true,
+         },
+         {
+            key: 'includeReposts',
+            label: 'Include reposts',
+            kind: 'toggle',
+            advanced: true,
+         },
+         {
+            key: 'includeQuotePosts',
+            label: 'Include quote posts',
+            kind: 'toggle',
+            advanced: true,
+         },
+         {
+            key: 'authors',
+            label: 'Only posts by these people',
+            kind: 'words',
+            hint: LINKS_HINT,
+            advanced: true,
+         },
+         {
+            key: 'mentioning',
+            label: 'Only posts mentioning these people or companies',
+            kind: 'words',
+            hint: LINKS_HINT,
+            advanced: true,
+         },
       ],
    },
    'collect.postsOfPeople': {
       group: 'Collect',
       label: 'Posts of people',
       summary: 'The recent posts of each person.',
+      costHint: 'about $0.002 per post',
       input: 'profile',
       output: 'post',
-      config: z.object({ howMany: howMany(50, 5) }),
+      config: z.object({
+         howMany: howMany(50, 5),
+         postedWithin: oneOf(POST_AGES, 'any'),
+         includeReposts: toggle(false),
+      }),
       fields: [
          {
             key: 'howMany',
@@ -418,15 +715,32 @@ const BLOCKS = {
             min: 1,
             max: 50,
          },
+         {
+            key: 'postedWithin',
+            label: 'Posted within',
+            kind: 'select',
+            options: POST_AGES,
+         },
+         {
+            key: 'includeReposts',
+            label: 'Include reposts',
+            kind: 'toggle',
+            advanced: true,
+         },
       ],
    },
    'collect.postsOfCompanies': {
       group: 'Collect',
       label: 'Posts of companies',
-      summary: 'The recent posts of each company.',
+      summary: 'The recent posts of each company page.',
+      costHint: 'about $0.002 per post',
       input: 'company',
       output: 'post',
-      config: z.object({ howMany: howMany(50, 5) }),
+      config: z.object({
+         howMany: howMany(50, 5),
+         postedWithin: oneOf(POST_AGES, 'any'),
+         includeReposts: toggle(false),
+      }),
       fields: [
          {
             key: 'howMany',
@@ -435,15 +749,31 @@ const BLOCKS = {
             min: 1,
             max: 50,
          },
+         {
+            key: 'postedWithin',
+            label: 'Posted within',
+            kind: 'select',
+            options: POST_AGES,
+         },
+         {
+            key: 'includeReposts',
+            label: 'Include reposts',
+            kind: 'toggle',
+            advanced: true,
+         },
       ],
    },
    'collect.engagedPosts': {
       group: 'Collect',
       label: 'What this person engages with',
       summary: 'The posts each person recently commented on or reacted to.',
+      costHint: 'about $0.002 per post',
       input: 'profile',
       output: 'post',
-      config: z.object({ howMany: howMany(50, 10) }),
+      config: z.object({
+         howMany: howMany(50, 10),
+         postedWithin: oneOf(COMMENT_AGES, 'any'),
+      }),
       fields: [
          {
             key: 'howMany',
@@ -452,12 +782,20 @@ const BLOCKS = {
             min: 1,
             max: 50,
          },
+         {
+            key: 'postedWithin',
+            label: 'Only from',
+            kind: 'select',
+            options: COMMENT_AGES,
+            advanced: true,
+         },
       ],
    },
    'collect.employees': {
       group: 'Collect',
       label: 'Find people at a company',
       summary: 'People who work at each company, with their full profile.',
+      costHint: 'about $0.004 per person plus $0.10 per 25',
       input: 'company',
       output: 'profile',
       config: z.object({
@@ -467,6 +805,13 @@ const BLOCKS = {
             .array(z.enum(['120', '200', '210', '220', '300', '310', '320']))
             .max(7)
             .default([]),
+         functions: someOf(FUNCTIONS),
+         locations: words,
+         pastTitles: words,
+         yearsAtCompany: someOf(YEARS),
+         yearsOfExperience: someOf(YEARS),
+         headcount: someOf(HEADCOUNTS),
+         changedJobs: toggle(false),
       }),
       fields: [
          {
@@ -480,7 +825,7 @@ const BLOCKS = {
             key: 'titles',
             label: 'Current job titles',
             kind: 'words',
-            hint: 'Separate with commas. Empty takes any title.',
+            hint: 'Empty takes any title.',
          },
          {
             key: 'seniority',
@@ -517,24 +862,87 @@ const BLOCKS = {
                },
             ],
          },
+         {
+            key: 'functions',
+            label: 'Department',
+            kind: 'multi',
+            options: FUNCTIONS,
+            advanced: true,
+         },
+         {
+            key: 'locations',
+            label: 'Located in',
+            kind: 'words',
+            hint: 'Cities or countries, such as London or Germany.',
+            advanced: true,
+         },
+         {
+            key: 'pastTitles',
+            label: 'Past job titles',
+            kind: 'words',
+            advanced: true,
+         },
+         {
+            key: 'yearsAtCompany',
+            label: 'Years at the company',
+            kind: 'multi',
+            options: YEARS,
+            advanced: true,
+         },
+         {
+            key: 'yearsOfExperience',
+            label: 'Years of experience',
+            kind: 'multi',
+            options: YEARS,
+            advanced: true,
+         },
+         {
+            key: 'headcount',
+            label: 'Company size',
+            kind: 'multi',
+            options: HEADCOUNTS,
+            advanced: true,
+         },
+         {
+            key: 'changedJobs',
+            label: 'Only people who changed jobs recently',
+            kind: 'toggle',
+            advanced: true,
+         },
       ],
    },
    'collect.jobs': {
       group: 'Collect',
       label: 'Find open jobs',
       summary: 'Marks the companies hiring for a role, a reason to reach out now.',
+      costHint: 'about $0.001 per job',
       input: 'company',
       output: 'company',
       config: z.object({
          jobTitle: z.string().trim().min(1).max(100),
          howMany: howMany(100, 25),
          onlyHiring: z.boolean().default(true),
+         locations: words,
+         workplace: oneOf(WORKPLACES, 'any'),
+         employment: oneOf(EMPLOYMENT, 'any'),
+         experience: oneOf(EXPERIENCE, 'any'),
+         postedWithin: oneOf(JOB_AGES, 'any'),
+         salary: oneOf(SALARIES, 'any'),
+         sortBy: oneOf(SORTS, 'relevance'),
+         easyApply: toggle(false),
+         fewApplicants: toggle(false),
       }),
       fields: [
          {
             key: 'jobTitle',
             label: 'Job title',
             kind: 'text',
+            placeholder: 'Sales development representative',
+         },
+         {
+            key: 'onlyHiring',
+            label: 'Keep only companies that are hiring',
+            kind: 'toggle',
          },
          {
             key: 'howMany',
@@ -542,28 +950,75 @@ const BLOCKS = {
             kind: 'int',
             min: 1,
             max: 100,
+            advanced: true,
          },
          {
-            key: 'onlyHiring',
-            label: 'Keep',
+            key: 'locations',
+            label: 'Located in',
+            kind: 'words',
+            advanced: true,
+         },
+         {
+            key: 'workplace',
+            label: 'Workplace',
             kind: 'select',
-            options: [
-               {
-                  value: 'true',
-                  label: 'Only companies that are hiring',
-               },
-               {
-                  value: 'false',
-                  label: 'Every company, hiring ones marked',
-               },
-            ],
+            options: WORKPLACES,
+            advanced: true,
+         },
+         {
+            key: 'employment',
+            label: 'Employment',
+            kind: 'select',
+            options: EMPLOYMENT,
+            advanced: true,
+         },
+         {
+            key: 'experience',
+            label: 'Experience level',
+            kind: 'select',
+            options: EXPERIENCE,
+            advanced: true,
+         },
+         {
+            key: 'postedWithin',
+            label: 'Posted within',
+            kind: 'select',
+            options: JOB_AGES,
+            advanced: true,
+         },
+         {
+            key: 'salary',
+            label: 'Salary at least',
+            kind: 'select',
+            options: SALARIES,
+            advanced: true,
+         },
+         {
+            key: 'sortBy',
+            label: 'Show first',
+            kind: 'select',
+            options: SORTS,
+            advanced: true,
+         },
+         {
+            key: 'easyApply',
+            label: 'Only jobs with easy apply',
+            kind: 'toggle',
+            advanced: true,
+         },
+         {
+            key: 'fewApplicants',
+            label: 'Only jobs with under 10 applicants',
+            kind: 'toggle',
+            advanced: true,
          },
       ],
    },
    'collect.domainLookup': {
       group: 'Collect',
       label: 'Find a company from its website',
-      summary: 'Turns website addresses into companies.',
+      summary: 'Turns website addresses into company pages.',
+      costHint: 'about $0.004 per company',
       input: 'start',
       output: 'company',
       config: z.object({
@@ -575,7 +1030,7 @@ const BLOCKS = {
             key: 'domains',
             label: 'Websites',
             kind: 'words',
-            hint: 'Separate with commas, such as stripe.com, acme.io.',
+            hint: 'Such as stripe.com and acme.io.',
          },
          {
             key: 'howMany',
@@ -583,16 +1038,121 @@ const BLOCKS = {
             kind: 'int',
             min: 1,
             max: 100,
+            advanced: true,
+         },
+      ],
+   },
+   'collect.searchPeople': {
+      group: 'Collect',
+      label: 'Search people',
+      summary: 'Finds people on LinkedIn by keywords, job title, company, place and more.',
+      costHint: 'about $0.004 per person',
+      input: 'start',
+      output: 'profile',
+      config: z.object({
+         keywords: z.string().trim().max(200).default(''),
+         titles: words,
+         companies: words,
+         locations: words,
+         seniority: someOf(SEARCH_SENIORITY),
+         functions: someOf(FUNCTIONS),
+         headcount: someOf(HEADCOUNTS),
+         yearsOfExperience: someOf(YEARS),
+         changedJobs: toggle(false),
+         postedRecently: toggle(false),
+         howMany: howMany(500, 25),
+      }),
+      fields: [
+         {
+            key: 'keywords',
+            label: 'Keywords',
+            kind: 'text',
+            placeholder: 'growth marketing SaaS',
+         },
+         {
+            key: 'titles',
+            label: 'Current job titles',
+            kind: 'words',
+         },
+         {
+            key: 'locations',
+            label: 'Located in',
+            kind: 'words',
+            hint: 'Cities or countries, such as London or Germany.',
+         },
+         {
+            key: 'howMany',
+            label: 'How many people',
+            kind: 'int',
+            min: 1,
+            max: 500,
+            hint: 'Searched in pages of 25, so 25, 50 or 75 make the most of the price.',
+         },
+         {
+            key: 'companies',
+            label: 'Working at',
+            kind: 'words',
+            hint: 'Company names or LinkedIn company links.',
+            advanced: true,
+         },
+         {
+            key: 'seniority',
+            label: 'Seniority',
+            kind: 'multi',
+            options: SEARCH_SENIORITY,
+            advanced: true,
+         },
+         {
+            key: 'functions',
+            label: 'Department',
+            kind: 'multi',
+            options: FUNCTIONS,
+            advanced: true,
+         },
+         {
+            key: 'headcount',
+            label: 'Company size',
+            kind: 'multi',
+            options: HEADCOUNTS,
+            advanced: true,
+         },
+         {
+            key: 'yearsOfExperience',
+            label: 'Years of experience',
+            kind: 'multi',
+            options: YEARS,
+            advanced: true,
+         },
+         {
+            key: 'changedJobs',
+            label: 'Only people who changed jobs recently',
+            kind: 'toggle',
+            advanced: true,
+         },
+         {
+            key: 'postedRecently',
+            label: 'Only people who posted recently',
+            kind: 'toggle',
+            advanced: true,
          },
       ],
    },
    'process.topN': {
       group: 'Process',
       label: 'Keep top N',
-      summary: 'Keeps only the highest scored people.',
+      summary: 'Keeps only the best people, by score or by followers.',
       input: 'profile',
       output: 'profile',
-      config: z.object({ count: z.number().int().min(1).max(1_000).default(50) }),
+      config: z.object({
+         count: z.number().int().min(1).max(1_000).default(50),
+         by: oneOf(
+            optionsOf([
+               ['score', 'Highest score'],
+               ['followers', 'Most followers'],
+            ]),
+            'score'
+         ),
+      }),
       fields: [
          {
             key: 'count',
@@ -600,6 +1160,50 @@ const BLOCKS = {
             kind: 'int',
             min: 1,
             max: 1_000,
+         },
+         {
+            key: 'by',
+            label: 'Best by',
+            kind: 'select',
+            options: optionsOf([
+               ['score', 'Highest score'],
+               ['followers', 'Most followers'],
+            ]),
+         },
+      ],
+   },
+   'process.merge': {
+      group: 'Process',
+      label: 'Merge',
+      summary: 'Joins what two or more blocks found into one stream.',
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         mode: oneOf(
+            optionsOf([
+               ['all', 'Everything, each once'],
+               ['every', 'Only what every line has'],
+               ['onlyMain', 'Only what the main line has and the others do not'],
+            ]),
+            'all'
+         ),
+         main: z.string().max(40).default(''),
+      }),
+      fields: [
+         {
+            key: 'mode',
+            label: 'Keep',
+            kind: 'select',
+            options: optionsOf([
+               ['all', 'Everything, each once'],
+               ['every', 'Only what every line has'],
+               ['onlyMain', 'Only what the main line has and the others do not'],
+            ]),
+         },
+         {
+            key: 'main',
+            label: 'Main line (for the last choice)',
+            kind: 'parent',
          },
       ],
    },
@@ -785,12 +1389,14 @@ export const blockOf = (type: BlockType): BlockSpec => BLOCKS[type]
 export const catalog = (): CatalogBlock[] =>
    BLOCK_TYPES.map(type => {
       const { group, label, summary, input, output, fields, config } = BLOCKS[type]
+      const spec: BlockSpec = BLOCKS[type]
 
       return {
          type,
          group,
          label,
          summary,
+         costHint: spec.costHint ?? null,
          input,
          output,
          fields,
@@ -816,6 +1422,7 @@ export type CatalogBlock = {
    group: BlockSpec['group']
    label: string
    summary: string
+   costHint: string | null
    input: ItemKind | null
    output: ItemKind | null
    fields: Field[]
@@ -1016,7 +1623,7 @@ const edgeNotes = (graph: Graph, byId: Map<string, GraphNode>): GraphError[] =>
          ]
       }
 
-      if (gives === null || gives === needs || needs === 'start') {
+      if (gives === null || gives === needs || needs === 'start' || target.type === 'process.merge') {
          return []
       }
 
@@ -1139,7 +1746,14 @@ const blockEstimate = (node: GraphNode, incoming: number, available: Available) 
             costMicros: many * PRICE_MICROS.engagement,
          }
       case 'collect.commenters':
-      case 'collect.reactors':
+      case 'collect.reactors': {
+         const limit = settingsOf(node).all === true ? ALL_CAP : many
+
+         return {
+            items: incoming * limit,
+            costMicros: incoming * limit * PRICE_MICROS.engagement,
+         }
+      }
       case 'collect.postsOfPeople':
       case 'collect.postsOfCompanies':
          return {
@@ -1174,6 +1788,12 @@ const blockEstimate = (node: GraphNode, incoming: number, available: Available) 
          return {
             items: incoming,
             costMicros: incoming * PRICE_MICROS.profile,
+         }
+      case 'collect.searchPeople':
+         // Searched in whole pages of 25 people.
+         return {
+            items: many,
+            costMicros: Math.ceil(many / 25) * 25 * PRICE_MICROS.profile,
          }
       case 'process.topN':
          return {
@@ -1254,6 +1874,7 @@ const PREVIEW_CAPS: Partial<Record<BlockType, number>> = {
    'collect.employees': PREVIEW_LIMITS.perPost,
    'collect.jobs': 10,
    'collect.domainLookup': 1,
+   'collect.searchPeople': PREVIEW_LIMITS.perPost,
 }
 
 // The same workflow on a small sample.
@@ -1269,6 +1890,8 @@ export const previewGraph = (graph: Graph): Graph => ({
               config: {
                  ...node.config,
                  howMany: Math.min(howManyOf(node), cap),
+                 // A preview never reads "all".
+                 ...(node.config.all === true ? { all: false } : {}),
               },
            }
    }),

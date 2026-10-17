@@ -474,6 +474,20 @@ const Editor = ({
                   : null
             }
             icps={icps}
+            parents={edges
+               .filter(({ target }) => target === openId)
+               .flatMap(({ source }) => {
+                  const parent = nodeOf(source)
+
+                  return parent
+                     ? [
+                          {
+                             id: parent.id,
+                             name: parent.data.block.label,
+                          },
+                       ]
+                     : []
+               })}
             workflows={workflows.filter(({ id }) => id !== workflowId)}
             onChange={setConfig}
             onRemove={removeSelection}
