@@ -24,6 +24,17 @@ const KIND_WORDS = {
 
 export const blockOf = (catalog: Block[], type: string) => catalog.find(block => block.type === type)
 
+// The blocks the picker offers: after a block, only those that take what it gives; then those matching the search.
+export const choicesFor = (catalog: Block[], after: Block | null, query: string) => {
+   const words = query.trim().toLowerCase()
+
+   return catalog.filter(
+      block =>
+         (!after || (after.output !== null && block.input === after.output)) &&
+         (!words || `${block.label} ${block.summary}`.toLowerCase().includes(words))
+   )
+}
+
 export const toFlow = (
    graph: Graph,
    catalog: Block[],

@@ -1,0 +1,85 @@
+import {
+   Briefcase,
+   Building,
+   CheckCheck,
+   Clock,
+   CopyMinus,
+   FileSearch,
+   Funnel,
+   Globe,
+   Hand,
+   Heart,
+   IdCard,
+   ListOrdered,
+   ListPlus,
+   type LucideIcon,
+   MessageSquare,
+   Newspaper,
+   Search,
+   Tag,
+   Target,
+   ThumbsUp,
+   UserRound,
+   Users,
+   Webhook,
+   Workflow,
+} from 'lucide-react'
+
+import { type Block } from './types'
+
+export const BLOCK_ICONS: Record<Block['type'], LucideIcon> = {
+   'trigger.manual': Hand,
+   'trigger.schedule': Clock,
+   'trigger.api': Webhook,
+   'trigger.workflow': Workflow,
+   'input.posts': Newspaper,
+   'input.profiles': UserRound,
+   'input.companies': Building,
+   'collect.findPosts': Search,
+   'collect.postsOfPeople': FileSearch,
+   'collect.postsOfCompanies': FileSearch,
+   'collect.engagedPosts': Heart,
+   'collect.employees': Users,
+   'collect.jobs': Briefcase,
+   'collect.domainLookup': Globe,
+   'collect.commenters': MessageSquare,
+   'collect.reactors': ThumbsUp,
+   'process.dedupe': CopyMinus,
+   'process.filter': Funnel,
+   'process.topN': ListOrdered,
+   'process.tag': Tag,
+   'score.icp': Target,
+   'collect.profile': IdCard,
+   'output.list': ListPlus,
+   'output.markPosts': CheckCheck,
+}
+
+export const GROUPS: { group: Block['group']; emoji: string; tile: string }[] = [
+   {
+      group: 'Triggers',
+      emoji: '⚡',
+      tile: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+   },
+   {
+      group: 'Inputs',
+      emoji: '📥',
+      tile: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
+   },
+   {
+      group: 'Collect',
+      emoji: '🔎',
+      tile: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+   },
+   {
+      group: 'Process',
+      emoji: '⚙️',
+      tile: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+   },
+   {
+      group: 'Output',
+      emoji: '📤',
+      tile: 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300',
+   },
+]
+
+export const tileOf = (group: Block['group']) => GROUPS.find(item => item.group === group)?.tile ?? ''
