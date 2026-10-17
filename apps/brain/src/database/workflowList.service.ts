@@ -24,6 +24,7 @@ export type MemberChanges = {
    location?: string | null
    state?: WorkflowListMemberState
    status?: WorkflowListMemberStatus
+   notes?: string | null
 }
 
 // Which people of a list a view shows: one state or all of them, and optionally one label.
@@ -61,6 +62,11 @@ const memberSelect = {
    status: true,
    postUrl: true,
    score: true,
+   title: true,
+   company: true,
+   followers: true,
+   matched: true,
+   notes: true,
    tags: true,
    reviewAt: true,
    createdAt: true,
@@ -99,6 +105,10 @@ export type RunMember = {
    postUrl: string | null
    score: number | null
    signals: Prisma.InputJsonValue
+   title: string | null
+   company: string | null
+   followers: number | null
+   matched: string[]
    tags: string[]
    // From the owner's own /profiles: being there does not stop the person.
    known: boolean
@@ -277,6 +287,28 @@ export class WorkflowListService {
       return count
    }
 
+   // The owner's list member with this slug (a person is in at most one of the owner's lists), with why they were found.
+   public static async memberBySlug(userId: string, slug: string) {
+      const member = await PrismaService.client.workflowListMember.findFirst({
+         where: {
+            slug,
+            list: { userId },
+         },
+         select: {
+            ...memberSelect,
+            signals: true,
+            list: { select: { name: true } },
+         },
+      })
+
+      return member
+         ? {
+              ...member,
+              signals: readSignals(member.signals),
+           }
+         : null
+   }
+
    // "Keep" on a person marked for review.
    public static keepMember(userId: string, id: string) {
       return orNull(
@@ -421,6 +453,13 @@ export class WorkflowListService {
             where: {
                slug: member.slug,
                list: { userId },
+            },
+         })
+
+         await tx.personSnapshot.deleteMany({
+            where: {
+               userId,
+               slug: member.slug,
             },
          })
 

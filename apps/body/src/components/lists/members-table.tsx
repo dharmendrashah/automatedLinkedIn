@@ -46,6 +46,7 @@ type Props = {
    onDoNotContact: (member: Member) => void
    onDelete: (member: Member) => void
    onKeep: (member: Member) => void
+   onOpen: (member: Member) => void
 }
 
 export const MembersTable = ({
@@ -60,6 +61,7 @@ export const MembersTable = ({
    onDoNotContact,
    onDelete,
    onKeep,
+   onOpen,
 }: Props) => (
    <div className="overflow-hidden rounded-lg border">
       <Table>
@@ -88,14 +90,13 @@ export const MembersTable = ({
                return (
                   <TableRow key={member.id}>
                      <TableCell>
-                        <a
+                        <button
+                           type="button"
                            className="font-medium underline-offset-4 hover:underline"
-                           href={member.url}
-                           target="_blank"
-                           rel="noreferrer noopener"
+                           onClick={() => onOpen(member)}
                         >
                            {name}
-                        </a>
+                        </button>
                         {details(member) ? <p className="text-muted-foreground text-xs">{details(member)}</p> : null}
                         <div className="mt-1 flex flex-wrap gap-1">
                            {member.state === 'UNSCORED' ? null : (

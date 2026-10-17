@@ -1,4 +1,5 @@
 import { type WorkflowItemData, parseLinkedInUrl, person } from 'core'
+import { DataServiceError } from 'core/dataClient'
 
 import { WorkflowRunService, WorkflowTriggerService, readGraph } from 'database'
 
@@ -14,7 +15,6 @@ import {
    repeatRegions,
 } from '@automatedLinkedIn/contracts'
 
-import { DataServiceError } from '../data/dataClient'
 import { type EngineDeps, Paused, type Run, type Step, StepError, WALLET_LOW, WaitingOnRun, configOf } from './context'
 import { EXECUTORS } from './executors'
 

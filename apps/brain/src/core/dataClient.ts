@@ -1,4 +1,5 @@
-// HTTP client of the shared data service. Lives only in the brain worker; nothing it returns reaches the browser as is.
+// HTTP client of the shared data service, for the brain worker and on-demand profile reads. Nothing it returns
+// reaches the browser as is.
 
 const API = 'https://api.mindcase.co'
 const POLL_MS = 3_000

@@ -3,6 +3,11 @@ import { PrismaService } from './prisma.service'
 // What the data cost, from the ledger: per client and UTC month. Amounts only.
 
 const DELETED = 'Deleted workflow'
+// Spend outside a workflow: the full profiles the owner chose to read.
+const PROFILE_READS = 'Profile reads'
+
+const nameOf = (workflowId: string | null, names: Map<string, string>) =>
+   workflowId ? names.get(workflowId) || DELETED : PROFILE_READS
 
 const namesOf = async (workflowIds: string[]) => {
    const workflows = await PrismaService.client.workflow.findMany({
@@ -42,7 +47,7 @@ export class SpendService {
 
          month.totalMicros += amountMicros
          month.workflows.push({
-            name: (group.workflowId && names.get(group.workflowId)) || DELETED,
+            name: nameOf(group.workflowId, names),
             amountMicros,
          })
          months.set(group.month, month)
@@ -60,19 +65,21 @@ export class SpendService {
             month,
          },
          _sum: { amountMicros: true },
+         _count: { _all: true },
       })
       const names = await namesOf(groups.flatMap(({ workflowId }) => (workflowId ? [workflowId] : [])))
       const lines = new Map<string, { name: string; runs: number; amountMicros: number }>()
 
       for (const group of groups) {
-         const name = (group.workflowId && names.get(group.workflowId)) || DELETED
+         const name = nameOf(group.workflowId, names)
          const line = lines.get(name) ?? {
             name,
             runs: 0,
             amountMicros: 0,
          }
 
-         line.runs += 1
+         // A run counts once; profile reads have no run, so each read counts.
+         line.runs += group.runId ? 1 : group._count._all
          line.amountMicros += group._sum.amountMicros ?? 0
          lines.set(name, line)
       }

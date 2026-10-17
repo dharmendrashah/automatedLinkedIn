@@ -48,6 +48,7 @@ const updateInput = z.object({
    location: text(200).nullish(),
    state: state.optional(),
    status: status.optional(),
+   notes: text(2_000).nullish(),
 })
 
 const CSV_HEADER = ['Name', 'Headline', 'Location', 'Profile', 'State', 'Status', 'Labels', 'Found via', 'Date found']

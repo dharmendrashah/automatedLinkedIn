@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import { person } from 'core'
+import { DataClient } from 'core/dataClient'
 
 import { MINDCASE_API_KEY } from 'env'
 
-import { DataClient } from './dataClient'
 import {
    commentersFrom,
    commentersParams,

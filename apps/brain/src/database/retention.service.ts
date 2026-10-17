@@ -64,6 +64,17 @@ export class RetentionService {
          data: { reviewAt: now },
       })
       const ledger = await db.spendLedger.deleteMany({ where: { createdAt: { lt: ledgerCutoff } } })
+      // A full profile is kept only while the person is in one of the owner's lists or in /profiles.
+      const snapshots = await db.$executeRaw`
+         DELETE FROM "PersonSnapshot" s
+         WHERE NOT EXISTS (
+            SELECT 1 FROM "WorkflowListMember" m JOIN "WorkflowList" l ON l."id" = m."listId"
+            WHERE l."userId" = s."userId" AND m."slug" = s."slug"
+         )
+         AND NOT EXISTS (
+            SELECT 1 FROM "LinkedInProfile" p
+            WHERE p."userId" = s."userId" AND p."slug" = s."slug" AND p."archivedAt" IS NULL
+         )`
 
       return {
          items: items.count,
@@ -73,6 +84,7 @@ export class RetentionService {
          reviewed: reviewed.count,
          marked: marked.count,
          ledger: ledger.count,
+         snapshots,
       }
    }
 }

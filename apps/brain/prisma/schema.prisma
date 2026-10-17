@@ -30,6 +30,7 @@ model User {
   spiderSessions    SpiderSession[]
   workflowLists     WorkflowList[]
   suppressions      Suppression[]
+  personSnapshots   PersonSnapshot[]
   icps              Icp[]
   workflows         Workflow[]
 }
@@ -80,6 +81,12 @@ model WorkflowListMember {
   score        Int?
   signals      Json?
   addedByRunId String?
+  // From the run that added the person: current role, followers and the ideal-customer rules they matched.
+  title        String?
+  company      String?
+  followers    Int?
+  matched      String[]
+  notes        String?
   tags         String[]
   // Set when the person was not touched for 180 days; deleted 30 days later unless touched or kept.
   reviewAt     DateTime?
@@ -98,6 +105,19 @@ model Suppression {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   slug      String
   createdAt DateTime @default(now())
+
+  @@unique([userId, slug])
+}
+
+// A full profile the owner chose to read ("Read full profile"), allow-listed fields only. Kept while the person is in
+// one of the owner's lists or in /profiles; deleted with "Do not contact".
+model PersonSnapshot {
+  id        String   @id @default(uuid(7))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slug      String
+  data      Json
+  fetchedAt DateTime @default(now())
 
   @@unique([userId, slug])
 }

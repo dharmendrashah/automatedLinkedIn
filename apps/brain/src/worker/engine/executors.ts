@@ -523,6 +523,10 @@ const addToList = async (ctx: Context): Promise<StepResult> => {
          postUrl: item.signals[0]?.via ?? null,
          score: item.score,
          signals: item.signals,
+         title: item.title,
+         company: item.company,
+         followers: item.followers,
+         matched: item.matched,
          tags: item.tags,
          known: item.known,
       }))
