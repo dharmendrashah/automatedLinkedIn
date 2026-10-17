@@ -150,6 +150,28 @@ const SEARCH_HEADCOUNTS = HEADCOUNTS.map((option, index) => ({
    value: 'ABCDEFGHI'.charAt(index),
 }))
 const INDUSTRIES = optionsOf(INDUSTRY_PAIRS)
+export const RUN_WAITS = optionsOf([
+   ['none', "Don't wait"],
+   ['status', 'Wait until it is done (yes or no)'],
+   ['results', 'Wait for its results'],
+])
+const RUN_SENDS = optionsOf([
+   ['input', 'What reaches this block'],
+   ['nothing', 'Nothing, just start it'],
+])
+const GIVE_UP_AFTER = optionsOf([
+   ['15', '15 minutes'],
+   ['30', '30 minutes'],
+   ['60', '1 hour'],
+   ['120', '2 hours'],
+   ['240', '4 hours'],
+   ['480', '8 hours'],
+   ['720', '12 hours'],
+   ['1440', '24 hours'],
+])
+
+// Blocks that keep what they did not pass on for an Else after them.
+export const ELSE_SOURCES = new Set<BlockType>(['logic.if', 'logic.runWorkflow'])
 const YEARS = optionsOf([
    ['1', 'Under 1 year'],
    ['2', '1 to 2 years'],
@@ -289,6 +311,7 @@ export const BLOCK_TYPES = [
    'collect.profile',
    'logic.if',
    'logic.else',
+   'logic.runWorkflow',
    'logic.forEach',
    'output.list',
    'output.markPosts',
@@ -1515,11 +1538,54 @@ const BLOCKS = {
    'logic.else': {
       group: 'Logic',
       label: 'Else',
-      summary: 'The people the If before it did not pass on.',
+      summary: 'What the If or "Run another workflow" before it did not pass on.',
       input: 'profile',
       output: 'profile',
       config: empty,
       fields: [],
+   },
+   'logic.runWorkflow': {
+      group: 'Logic',
+      label: 'Run another workflow',
+      summary:
+         'Starts another of your workflows. Go on at once, wait for a yes or no, or wait for the people it saves.',
+      costHint: 'what the other workflow costs',
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         workflowId: z.string().min(1),
+         send: oneOf(RUN_SENDS, 'input'),
+         wait: oneOf(RUN_WAITS, 'none'),
+         giveUpAfter: oneOf(GIVE_UP_AFTER, '120'),
+      }),
+      fields: [
+         {
+            key: 'workflowId',
+            label: 'Workflow to run',
+            kind: 'workflow',
+         },
+         {
+            key: 'wait',
+            label: 'Wait',
+            kind: 'select',
+            options: RUN_WAITS,
+            hint: 'With "yes or no", what does not pass goes to an Else after this block.',
+         },
+         {
+            key: 'send',
+            label: 'Send it',
+            kind: 'select',
+            options: RUN_SENDS,
+         },
+         {
+            key: 'giveUpAfter',
+            label: 'Give up waiting after',
+            kind: 'select',
+            options: GIVE_UP_AFTER,
+            hint: 'The other workflow keeps running; this one goes on as "no".',
+            advanced: true,
+         },
+      ],
    },
    'logic.forEach': {
       group: 'Logic',
@@ -1827,7 +1893,13 @@ const edgeNotes = (graph: Graph, byId: Map<string, GraphNode>): GraphError[] =>
          ]
       }
 
-      if (gives === null || gives === needs || needs === 'start' || target.type === 'process.merge') {
+      if (
+         gives === null ||
+         gives === needs ||
+         needs === 'start' ||
+         target.type === 'process.merge' ||
+         target.type === 'logic.runWorkflow'
+      ) {
          return []
       }
 
@@ -1880,8 +1952,11 @@ export const validateGraph = (graph: Graph): GraphError[] => {
          note(`${BLOCKS[node.type].label} has nothing before it, so it gets nothing.`, node.id)
       }
 
-      if (node.type === 'logic.else' && !parentsOf(graph, node.id).some(id => byId.get(id)?.type === 'logic.if')) {
-         note('Else passes on nothing unless an If comes right before it.', node.id)
+      if (
+         node.type === 'logic.else' &&
+         !parentsOf(graph, node.id).some(id => ELSE_SOURCES.has(byId.get(id)?.type ?? 'logic.else'))
+      ) {
+         note('Else passes on nothing unless an If or "Run another workflow" comes right before it.', node.id)
       }
    }
 

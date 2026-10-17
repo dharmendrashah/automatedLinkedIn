@@ -167,10 +167,20 @@ export const workflow = router({
 
    runDetail: ownerProcedure.input(z.object({ runId: z.string().min(1) })).query(async ({ ctx, input }) => {
       const run = present(await WorkflowService.run(ctx.user.id, input.runId), RUN_MISSING)
+      const links = await WorkflowService.runLinks(ctx.user.id, [
+         run.parentRunId,
+         ...run.steps.map(({ childRunId }) => childRunId),
+      ])
+      const linkOf = (id: string | null) => (id ? (links.get(id) ?? null) : null)
 
       return {
          ...run,
          graph: readGraph(run.graph),
+         parent: linkOf(run.parentRunId),
+         steps: run.steps.map(step => ({
+            ...step,
+            child: linkOf(step.childRunId),
+         })),
       }
    }),
 

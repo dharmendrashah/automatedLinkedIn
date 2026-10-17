@@ -1,6 +1,8 @@
 import { type Prisma, type WorkflowTrigger } from 'generated/prisma/client'
 
 import {
+   type Available,
+   type Estimate,
    type Graph,
    type GraphError,
    errorsOf,
@@ -70,6 +72,7 @@ const stepSelect = {
    itemsOut: true,
    costMicros: true,
    message: true,
+   childRunId: true,
 } satisfies Prisma.WorkflowStepRunSelect
 
 const workflowTaken = (name: string) => `You already have a workflow named "${name}".`
@@ -138,6 +141,79 @@ const chainProblems = async (userId: string, graph: Graph, selfId: string | null
    return []
 }
 
+// The "Run another workflow" blocks of a graph and the workflow each one runs.
+const callsOf = (graph: Graph) =>
+   graph.nodes.flatMap(node =>
+      node.type === 'logic.runWorkflow' && typeof node.config.workflowId === 'string'
+         ? [
+              {
+                 nodeId: node.id,
+                 workflowId: node.config.workflowId,
+              },
+           ]
+         : []
+   )
+
+const ownedGraphs = async (userId: string, ids: string[]) =>
+   (
+      await PrismaService.client.workflow.findMany({
+         where: {
+            id: { in: ids },
+            userId,
+         },
+         select: {
+            id: true,
+            graph: true,
+         },
+      })
+   ).map(({ id, graph }) => ({
+      id,
+      graph: readGraph(graph),
+   }))
+
+// A "Run another workflow" block must run another of the owner's workflows, and the calls must not loop back.
+const callProblems = async (userId: string, graph: Graph, selfId: string | null): Promise<GraphError[]> => {
+   const problems: GraphError[] = []
+   const problem = (nodeId: string, message: string) =>
+      problems.push({
+         nodeId,
+         level: 'error',
+         message,
+      })
+
+   for (const call of callsOf(graph)) {
+      if (call.workflowId === selfId) {
+         problem(call.nodeId, 'A workflow cannot run itself. Pick another workflow.')
+         continue
+      }
+
+      const seen = new Set([call.workflowId])
+      let frontier = await ownedGraphs(userId, [call.workflowId])
+
+      if (frontier.length === 0) {
+         problem(call.nodeId, 'Pick one of your workflows to run.')
+         continue
+      }
+
+      for (let depth = 0; frontier.length > 0 && depth < MAX_CHAIN_DEPTH; depth += 1) {
+         const next = frontier.flatMap(({ graph: called }) => callsOf(called).map(({ workflowId }) => workflowId))
+
+         if (selfId && next.includes(selfId)) {
+            problem(call.nodeId, 'These workflows would run each other in a loop. Pick another workflow.')
+            break
+         }
+
+         frontier = await ownedGraphs(
+            userId,
+            next.filter(id => !seen.has(id))
+         )
+         next.forEach(id => seen.add(id))
+      }
+   }
+
+   return problems
+}
+
 export class WorkflowService {
    // The graph's own problems, ideal customers that are not the owner's, and a chain that would loop.
    public static async problems(userId: string, graph: Graph, selfId: string | null = null): Promise<GraphError[]> {
@@ -163,7 +239,12 @@ export class WorkflowService {
             message: 'Pick one of your ideal customers to score against.',
          }))
 
-      return [...validateGraph(graph), ...missing, ...(await chainProblems(userId, graph, selfId))]
+      return [
+         ...validateGraph(graph),
+         ...missing,
+         ...(await chainProblems(userId, graph, selfId)),
+         ...(await callProblems(userId, graph, selfId)),
+      ]
    }
 
    public static list(userId: string) {
@@ -282,15 +363,58 @@ export class WorkflowService {
          LinkedInCompanyService.countActive(userId),
       ])
 
-      return {
+      const available = {
          posts,
          profiles,
          companies,
-         ...estimateGraph(preview ? previewGraph(graph) : graph, {
-            posts,
-            profiles,
-            companies,
-         }),
+      }
+
+      return {
+         ...available,
+         ...(preview
+            ? estimateGraph(previewGraph(graph), available)
+            : await WorkflowService.withCalls(userId, graph, available, new Set())),
+      }
+   }
+
+   // The estimate of a graph plus, on each "Run another workflow" block, what the workflow it runs costs.
+   private static async withCalls(
+      userId: string,
+      graph: Graph,
+      available: Available,
+      seen: Set<string>
+   ): Promise<Estimate> {
+      const estimate = estimateGraph(graph, available)
+      const calls = callsOf(graph).filter(({ workflowId }) => !seen.has(workflowId))
+      const called = new Map(
+         (
+            await ownedGraphs(
+               userId,
+               calls.map(({ workflowId }) => workflowId)
+            )
+         ).map(({ id, graph: other }) => [id, other])
+      )
+      let { totalMicros } = estimate
+
+      for (const { nodeId, workflowId } of calls) {
+         const other = called.get(workflowId)
+         const node = estimate.nodes[nodeId]
+
+         if (other && node) {
+            const cost = (await WorkflowService.withCalls(userId, other, available, new Set([...seen, workflowId])))
+               .totalMicros
+
+            estimate.nodes[nodeId] = {
+               ...node,
+               costMicros: node.costMicros + cost,
+            }
+            totalMicros += cost
+         }
+      }
+
+      return {
+         ...estimate,
+         totalMicros,
       }
    }
 
@@ -301,7 +425,7 @@ export class WorkflowService {
       workflowId: string,
       trigger: WorkflowTrigger,
       runKey: string,
-      options: { input?: Prisma.InputJsonValue; depth?: number } = {}
+      options: { input?: Prisma.InputJsonValue; depth?: number; parentRunId?: string } = {}
    ) {
       const workflow = await WorkflowService.get(userId, workflowId)
 
@@ -349,6 +473,7 @@ export class WorkflowService {
                graph: runGraph,
                input: options.input,
                depth: options.depth ?? 0,
+               parentRunId: options.parentRunId,
                qualifyScore: workflow.qualifyScore,
                maybeScore: workflow.maybeScore,
                maybeEnabled: workflow.maybeEnabled,
@@ -389,12 +514,39 @@ export class WorkflowService {
          select: {
             ...runSelect,
             graph: true,
+            parentRunId: true,
             steps: {
                select: stepSelect,
                orderBy: [{ round: 'asc' }, { id: 'asc' }],
             },
          },
       })
+   }
+
+   // The owner's runs among these ids with their workflow, for links between a run and the runs it started.
+   public static async runLinks(userId: string, ids: (string | null)[]) {
+      const runs = await PrismaService.client.workflowRun.findMany({
+         where: {
+            userId,
+            id: { in: ids.filter((id): id is string => id !== null) },
+         },
+         select: {
+            id: true,
+            workflowId: true,
+            workflow: { select: { name: true } },
+         },
+      })
+
+      return new Map(
+         runs.map(run => [
+            run.id,
+            {
+               runId: run.id,
+               workflowId: run.workflowId,
+               workflowName: run.workflow.name,
+            },
+         ])
+      )
    }
 
    // One page of what a block of the owner's run passed on. null when the run is not the owner's.

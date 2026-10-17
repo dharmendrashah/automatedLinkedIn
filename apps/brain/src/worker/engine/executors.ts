@@ -22,7 +22,7 @@ import {
    WorkflowRunService,
 } from 'database'
 
-import { ALL_CAP, type GraphNode } from '@automatedLinkedIn/contracts'
+import { ALL_CAP, ELSE_SOURCES, type GraphNode } from '@automatedLinkedIn/contracts'
 
 import {
    ENRICH_BATCH,
@@ -48,12 +48,12 @@ import {
 import {
    type Context,
    DAY_MS,
-   ELSE_SUFFIX,
    type StepResult,
    WALLET_LOW,
    collectEach,
    companiesOf,
    configOf,
+   elseKey,
    keepItems,
    numberIn,
    paidCall,
@@ -66,6 +66,7 @@ import {
    thresholdsOf,
    wordsIn,
 } from './context'
+import { runWorkflow } from './runWorkflow'
 import { sendPages } from './sendApi'
 import { applyProfiles, conditionsOf, filterPeople, matches, scorePeople } from './steps'
 
@@ -569,11 +570,6 @@ const markPosts = async (ctx: Context): Promise<StepResult> => {
    }
 }
 
-const elseKey = (ctx: Context, ifId: string) => ({
-   ...ctx.at,
-   nodeId: `${ifId}${ELSE_SUFFIX}`,
-})
-
 // Passes on the people who match its conditions; the rest are kept aside for an Else block after it.
 const ifBlock = async (ctx: Context): Promise<StepResult> => {
    const people = mergeBySlug(peopleOf(ctx.inputs))
@@ -590,17 +586,16 @@ const ifBlock = async (ctx: Context): Promise<StepResult> => {
 }
 
 const elseBlock = async (ctx: Context): Promise<StepResult> => {
-   const ifIds = parentsOf(ctx.graph, ctx.node.id).filter(id =>
-      ctx.graph.nodes.some(node => node.id === id && node.type === 'logic.if')
+   const sources = parentsOf(ctx.graph, ctx.node.id).filter(id =>
+      ctx.graph.nodes.some(node => node.id === id && ELSE_SOURCES.has(node.type))
    )
-   const rest = peopleOf(
-      await WorkflowRunService.items(
-         ctx.run.id,
-         ifIds.map(id => elseKey(ctx, id))
-      )
+   const rest = await WorkflowRunService.items(
+      ctx.run.id,
+      sources.map(id => elseKey(ctx, id))
    )
+   const people = mergeBySlug(peopleOf(rest))
 
-   return keepItems(ctx, mergeBySlug(rest), rest.length)
+   return keepItems(ctx, [...people, ...rest.filter(({ kind }) => kind !== 'profile')], rest.length)
 }
 
 // Passes on one batch per round; the engine starts the next round while batches are left.
@@ -777,6 +772,7 @@ export const EXECUTORS: Record<GraphNode['type'], (ctx: Context) => Promise<Step
    'logic.if': ifBlock,
    'logic.else': elseBlock,
    'logic.forEach': forEach,
+   'logic.runWorkflow': runWorkflow,
    'output.list': addToList,
    'output.markPosts': markPosts,
    'output.csv': exportCsv,

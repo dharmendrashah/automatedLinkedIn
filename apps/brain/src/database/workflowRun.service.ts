@@ -234,6 +234,52 @@ export class WorkflowRunService {
       return PrismaService.client.workflowItem.count({ where: at })
    }
 
+   public static async idOfKey(runKey: string) {
+      const run = await PrismaService.client.workflowRun.findUnique({
+         where: { runKey },
+         select: { id: true },
+      })
+
+      return run?.id ?? null
+   }
+
+   public static setChildRun(stepId: string, childRunId: string) {
+      return PrismaService.client.workflowStepRun.update({
+         where: { id: stepId },
+         data: { childRunId },
+      })
+   }
+
+   // Where a run started by a "Run another workflow" block stands. null when it was deleted.
+   public static child(runId: string) {
+      return PrismaService.client.workflowRun.findUnique({
+         where: { id: runId },
+         select: {
+            status: true,
+            message: true,
+            startedAt: true,
+            workflow: { select: { name: true } },
+         },
+      })
+   }
+
+   // Everyone a run's "Add to list" blocks got, once.
+   public static async listedPeople(runId: string) {
+      const steps = await PrismaService.client.workflowStepRun.findMany({
+         where: {
+            runId,
+            type: 'output.list',
+         },
+         select: {
+            nodeId: true,
+            round: true,
+         },
+      })
+      const items = await WorkflowRunService.items(runId, steps)
+
+      return mergeBySlug(items.filter((item): item is PersonItem => item.kind === 'profile'))
+   }
+
    // Steps for the next round of a loop or For each; repeating it creates nothing twice.
    public static addRound(runId: string, steps: { nodeId: string; type: string }[], round: number) {
       return PrismaService.client.workflowStepRun.createMany({

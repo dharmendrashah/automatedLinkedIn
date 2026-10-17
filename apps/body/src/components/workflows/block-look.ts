@@ -2,6 +2,7 @@ import {
    Briefcase,
    Building,
    CheckCheck,
+   CirclePlay,
    Clock,
    CopyMinus,
    FileDown,
@@ -64,6 +65,7 @@ export const BLOCK_ICONS: Record<Block['type'], LucideIcon> = {
    'logic.if': Split,
    'logic.else': GitBranch,
    'logic.forEach': Repeat,
+   'logic.runWorkflow': CirclePlay,
    'output.csv': FileDown,
    'output.sendApi': Send,
 }

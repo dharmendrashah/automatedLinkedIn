@@ -201,6 +201,12 @@ const MERGE_MODES: Record<string, string> = {
    onlyMain: 'Only what the main line alone has',
 }
 
+const RUN_WAITS: Record<string, string> = {
+   none: 'Starts it and goes on',
+   status: 'Waits for a yes or no',
+   results: 'Waits for the people it saves',
+}
+
 // One line under the block's title that says what it is set to.
 export const summaryOf = (block: Block, config: GraphNode['config'], icpName?: string) => {
    const values = { ...block.defaults, ...config }
@@ -211,6 +217,10 @@ export const summaryOf = (block: Block, config: GraphNode['config'], icpName?: s
 
    if (block.type === 'process.merge') {
       return MERGE_MODES[show(values.mode)] ?? block.summary
+   }
+
+   if (block.type === 'logic.runWorkflow') {
+      return RUN_WAITS[show(values.wait)] ?? block.summary
    }
 
    if ('howMany' in values) {

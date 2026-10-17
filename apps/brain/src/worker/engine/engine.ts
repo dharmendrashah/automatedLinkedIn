@@ -1,4 +1,4 @@
-import { type WorkflowItemData, mergeBySlug, parseLinkedInUrl, person } from 'core'
+import { type WorkflowItemData, parseLinkedInUrl, person } from 'core'
 
 import { WorkflowRunService, WorkflowTriggerService, readGraph } from 'database'
 
@@ -15,7 +15,7 @@ import {
 } from '@automatedLinkedIn/contracts'
 
 import { DataServiceError } from '../data/dataClient'
-import { type EngineDeps, Paused, type Run, type Step, StepError, WALLET_LOW, configOf, peopleOf } from './context'
+import { type EngineDeps, Paused, type Run, type Step, StepError, WALLET_LOW, WaitingOnRun, configOf } from './context'
 import { EXECUTORS } from './executors'
 
 // Runs workflow graphs step by step, keeping every step's output in the database so a stopped worker resumes where it
@@ -27,6 +27,8 @@ export { type EngineDeps } from './context'
 const PASSED = new Set(['DONE', 'PARTIAL'])
 const FINISHED = new Set(['DONE', 'PARTIAL', 'FAILED'])
 const SCORING_STEPS = new Set(['score.icp', 'collect.profile'])
+// Blocks that take items of every kind as they are.
+const RAW_INPUTS = new Set(['process.merge', 'logic.runWorkflow'])
 
 const PLAIN_FAILURE = 'Something went wrong in this step. The platform owner has been told.'
 const NOT_CONFIGURED = 'Collecting data is not available right now. The platform owner has been told.'
@@ -110,7 +112,7 @@ const sortInputs = (items: WorkflowItemData[], needs: ItemKind | null) => {
    }
 }
 
-const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps) => {
+const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Promise<'waiting' | 'ended'> => {
    const node = graph.nodes.find(({ id }) => id === step.nodeId)
 
    if (!node) {
@@ -121,7 +123,7 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps) => 
          message: PLAIN_FAILURE,
       })
 
-      return
+      return 'ended'
    }
 
    const at = {
@@ -132,14 +134,12 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps) => 
 
    try {
       const read = await readInputs(run, graph, node, step)
-      // A Merge takes items of every kind as they are.
-      const { inputs, passThrough } =
-         node.type === 'process.merge'
-            ? {
-                 inputs: read,
-                 passThrough: [],
-              }
-            : sortInputs(read, blockOf(node.type).input)
+      const { inputs, passThrough } = RAW_INPUTS.has(node.type)
+         ? {
+              inputs: read,
+              passThrough: [],
+           }
+         : sortInputs(read, blockOf(node.type).input)
       const result = await EXECUTORS[node.type]({
          run,
          graph,
@@ -160,10 +160,10 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps) => 
          itemsOut: result.itemsOut + passThrough.length,
       })
    } catch (error) {
-      if (error instanceof Paused) {
+      if (error instanceof Paused || error instanceof WaitingOnRun) {
          await WorkflowRunService.release(step.id)
 
-         return
+         return error instanceof WaitingOnRun ? 'waiting' : 'ended'
       }
 
       const notConfigured = error instanceof DataServiceError && error.kind === 'CONFIG'
@@ -178,6 +178,8 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps) => 
          message: error instanceof StepError ? error.message : notConfigured ? NOT_CONFIGURED : PLAIN_FAILURE,
       })
    }
+
+   return 'ended'
 }
 
 // The blocks to run again after `round`: For each blocks with batches left, and loops whose way back found something
@@ -233,20 +235,7 @@ const nextRound = async (run: Run, graph: Graph, round: number) => {
 }
 
 // Everyone the run's "Add to list" blocks got, once.
-const listedPeople = async (run: Run) =>
-   mergeBySlug(
-      peopleOf(
-         await WorkflowRunService.items(
-            run.id,
-            run.steps
-               .filter(({ type }) => type === 'output.list')
-               .map(({ nodeId, round }) => ({
-                  nodeId,
-                  round,
-               }))
-         )
-      )
-   )
+const listedPeople = (run: Run) => WorkflowRunService.listedPeople(run.id)
 
 const finish = async (run: Run, deps: EngineDeps) => {
    const failed = run.steps.find(({ status }) => status === 'FAILED')
@@ -280,6 +269,8 @@ const finish = async (run: Run, deps: EngineDeps) => {
 // Runs every step that is ready, until the run ends or nothing more can start. True when it did something.
 export const advanceRun = async (runId: string, deps: EngineDeps) => {
    let progressed = false
+   // Steps waiting for another run are looked at once per call, not in a loop.
+   const waiting = new Set<string>()
 
    while (!deps.signal.aborted) {
       const run = await WorkflowRunService.load(runId)
@@ -327,6 +318,7 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
 
          return (
             (step.status === 'WAITING' || step.status === 'RUNNING') &&
+            !waiting.has(step.id) &&
             parentsPassed &&
             // Posts are marked done only after everything else has finished.
             (step.type !== 'output.markPosts' ||
@@ -342,7 +334,8 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
 
          claimed = true
          progressed = true
-         await runStep(
+
+         const outcome = await runStep(
             run,
             graph,
             {
@@ -351,6 +344,11 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
             },
             deps
          )
+
+         if (outcome === 'waiting') {
+            waiting.add(step.id)
+         }
+
          break
       }
 

@@ -175,6 +175,8 @@ model WorkflowRun {
   input          Json?
   // How many workflows started this one in a chain.
   depth          Int               @default(0)
+  // The run whose "Run another workflow" block started this one.
+  parentRunId    String?
   message        String?
   startedAt      DateTime          @default(now())
   finishedAt     DateTime?
@@ -183,6 +185,7 @@ model WorkflowRun {
 
   @@index([workflowId, startedAt])
   @@index([status])
+  @@index([parentRunId])
 }
 
 model WorkflowStepRun {
@@ -200,6 +203,8 @@ model WorkflowStepRun {
   round      Int                @default(0)
   // When a worker took the step; a step held too long is taken again.
   claimedAt  DateTime?
+  // The run a "Run another workflow" step started.
+  childRunId String?
   finishedAt DateTime?
   calls      WorkflowStepCall[]
 

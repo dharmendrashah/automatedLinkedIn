@@ -26,6 +26,12 @@ export type EngineDeps = {
 // Where an If keeps the people it did not pass on, for an Else after it.
 export const ELSE_SUFFIX = '~else'
 
+// The side output of an If or a "Run another workflow" block, read by an Else after it.
+export const elseKey = (ctx: { at: ItemKey }, sourceId: string) => ({
+   ...ctx.at,
+   nodeId: `${sourceId}${ELSE_SUFFIX}`,
+})
+
 export const DAY_MS = 24 * 60 * 60 * 1000
 
 export type StepResult = {
@@ -52,6 +58,9 @@ export class StepError extends Error {}
 
 // The worker is stopping; the step is given back and resumes later.
 export class Paused extends Error {}
+
+// The step waits for another run; it is given back and looked at again on a later tick.
+export class WaitingOnRun extends Error {}
 
 export const WALLET_LOW = 'Collecting stopped because the data wallet ran low. What was found so far is kept.'
 export const SERVICE_BUSY = 'The data service did not answer for some requests. What was found so far is kept.'

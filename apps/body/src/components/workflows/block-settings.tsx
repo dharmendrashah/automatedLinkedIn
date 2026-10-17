@@ -52,6 +52,10 @@ const flowOf = (block: Block) => {
       return 'Takes anything, gives one stream'
    }
 
+   if (block.type === 'logic.runWorkflow') {
+      return 'Takes anything, gives what it got or the people the other workflow saved'
+   }
+
    const takes = block.input && KINDS[block.input] ? `Takes ${KINDS[block.input]}` : 'Starts on its own'
    const gives = block.output && KINDS[block.output] ? `gives ${KINDS[block.output]}` : ''
 

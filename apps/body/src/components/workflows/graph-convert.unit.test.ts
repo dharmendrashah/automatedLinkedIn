@@ -74,6 +74,8 @@ describe('graph-convert', () => {
                itemsOut: 3,
                costMicros: 0,
                message: null,
+               childRunId: null,
+               child: null,
             },
          ],
       })
@@ -115,6 +117,8 @@ describe('graph-convert', () => {
          itemsOut: 2,
          costMicros: 10,
          message: null,
+         childRunId: null,
+         child: null,
       }
       const combined = combineRounds([
          {

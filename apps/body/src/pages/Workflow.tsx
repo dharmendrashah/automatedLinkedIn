@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { readableError } from '@/lib/trpc-error'
 import { FlaskConical, Play } from 'lucide-react'
 import { useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 
 import { trpc } from '../trpc'
 
@@ -18,10 +18,13 @@ const POLL_MS = 3_000
 
 export const WorkflowPage = () => {
    const { id = '' } = useParams()
+   // A link from another run opens this run on the Runs tab.
+   const [params] = useSearchParams()
+   const linkedRun = params.get('run')
    const utils = trpc.useUtils()
-   const [tab, setTab] = useState('canvas')
+   const [tab, setTab] = useState(linkedRun ? 'runs' : 'canvas')
    const [mode, setMode] = useState<'preview' | 'run' | null>(null)
-   const [runId, setRunId] = useState<string | null>(null)
+   const [runId, setRunId] = useState<string | null>(linkedRun)
    const [replay, setReplay] = useState(false)
 
    const workflow = trpc.workflow.get.useQuery({ id }, { retry: false })

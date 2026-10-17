@@ -151,7 +151,7 @@ describe('validateGraph', () => {
       }
 
       expect(validateGraph(graph).map(({ message }) => message)).toEqual([
-         'Else passes on nothing unless an If comes right before it.',
+         'Else passes on nothing unless an If or "Run another workflow" comes right before it.',
          'Nothing keeps the results: add "Add to list", "Export to CSV" or "Send via API".',
       ])
    })
