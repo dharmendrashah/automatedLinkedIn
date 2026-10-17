@@ -74,6 +74,7 @@ describe('LinkedInPostService', () => {
                {
                   userId: 'u1',
                   ...post('activity-3'),
+                  expandedUrl: null,
                },
             ],
             skipDuplicates: true,

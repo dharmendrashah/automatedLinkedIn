@@ -45,3 +45,15 @@ export const ownerProcedure = userProcedure.use(({ ctx, next }) => {
       },
    })
 })
+
+// The platform owner: the shared wallet and every client's spend.
+export const adminProcedure = ownerProcedure.use(({ ctx, next }) => {
+   if (ctx.user.role !== 'ADMIN') {
+      throw new TRPCError({
+         code: 'FORBIDDEN',
+         message: 'Only the platform owner can see this',
+      })
+   }
+
+   return next()
+})

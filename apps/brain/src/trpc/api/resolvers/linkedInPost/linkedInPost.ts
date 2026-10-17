@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { expandShortPostLink, isShortPostLink } from 'core'
+
 import { LinkedInPostService } from 'database'
 
 import { ownerProcedure, router } from 'trpc'
@@ -27,7 +29,14 @@ const NOUN = 'post'
 export const linkedInPost = router({
    create: ownerProcedure.input(createInput).mutation(async ({ ctx, input }) => {
       const { links, invalid } = readLinks(input.urls, 'post')
-      const saved = await LinkedInPostService.addMany(ctx.user.id, links)
+      // A failed expansion is retried by the worker before the post is sent anywhere.
+      const expanded = await Promise.all(
+         links.map(async link => ({
+            ...link,
+            expandedUrl: isShortPostLink(link.url) ? await expandShortPostLink(link.url) : null,
+         }))
+      )
+      const saved = await LinkedInPostService.addMany(ctx.user.id, expanded)
 
       return {
          ...saved,

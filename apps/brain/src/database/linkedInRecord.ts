@@ -53,15 +53,15 @@ export const orNull = async <T>(write: Promise<T>) => {
    }
 }
 
-export type LinkStore = {
+export type LinkStore<L extends LinkedInLink = LinkedInLink> = {
    existing: (slugs: string[]) => Promise<{ slug: string; archivedAt: Date | null }[]>
    restore: (slugs: string[]) => Promise<number>
-   create: (links: LinkedInLink[]) => Promise<number>
+   create: (links: L[]) => Promise<number>
 }
 
 // Saves each new link, restores archived ones and leaves live ones alone. Safe to repeat or to race: the store's
 // create must skip rows that already exist.
-export const addLinks = async (links: LinkedInLink[], store: LinkStore) => {
+export const addLinks = async <L extends LinkedInLink>(links: L[], store: LinkStore<L>) => {
    if (links.length === 0) {
       return {
          created: 0,

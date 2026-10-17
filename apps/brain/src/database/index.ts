@@ -1,11 +1,16 @@
 export { PrismaService } from './prisma.service'
 export { ConflictError } from './conflict'
 export { type IcpInput, IcpService } from './icp.service'
+export { SpendService } from './spend.service'
+export { WalletService, floorMicros, warnMicros } from './wallet.service'
+export { type WorkflowChanges, WorkflowService, readGraph } from './workflow.service'
+export { type CallOutcome, STALE_CLAIM_MS, WorkflowRunService } from './workflowRun.service'
 export {
    EXPORT_LIMIT,
    type MemberChanges,
    type MemberInput,
    type MemberListQuery,
+   type RunMember,
    WorkflowListService,
 } from './workflowList.service'
 export {

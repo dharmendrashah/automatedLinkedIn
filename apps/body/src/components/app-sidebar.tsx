@@ -24,6 +24,8 @@ import {
    UserCircle,
    Users,
    Video,
+   Wallet,
+   Workflow as WorkflowIcon,
 } from 'lucide-react'
 import { type ComponentProps } from 'react'
 import { useAuth } from 'react-oidc-context'
@@ -38,8 +40,10 @@ const navMain: NavItem[] = [
    { title: 'LinkedIn profiles', to: '/profiles', icon: Users },
    { title: 'LinkedIn companies', to: '/companies', icon: Building2 },
    { title: 'LinkedIn posts', to: '/posts', icon: FileText },
+   { title: 'Workflows', to: '/workflows', icon: WorkflowIcon },
    { title: 'Lists', to: '/lists', icon: ListChecks },
    { title: 'Ideal customers', to: '/icps', icon: Target },
+   { title: 'Usage', to: '/usage', icon: Wallet },
    { title: 'Proxies', to: '/proxies', icon: Network },
    { title: 'Sessions', to: '/sessions', icon: Video },
    { title: 'Service status', to: '/healthstatus', icon: Activity },

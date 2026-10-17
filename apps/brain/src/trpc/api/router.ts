@@ -16,6 +16,8 @@ import {
    status,
    takeover,
    task,
+   usage,
+   workflow,
    workflowList,
 } from './resolvers'
 
@@ -33,6 +35,8 @@ export const appRouter = router({
    status,
    takeover,
    task,
+   usage,
+   workflow,
    workflowList,
 })
 

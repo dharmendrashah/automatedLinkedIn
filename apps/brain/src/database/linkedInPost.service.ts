@@ -12,6 +12,7 @@ const postSelect = {
    id: true,
    slug: true,
    url: true,
+   expandedUrl: true,
    status: true,
    archivedAt: true,
    createdAt: true,
@@ -33,7 +34,7 @@ const updateOwned = (userId: string, id: string, data: Prisma.LinkedInPostUpdate
    )
 
 export class LinkedInPostService {
-   public static addMany(userId: string, posts: LinkedInLink[]) {
+   public static addMany(userId: string, posts: (LinkedInLink & { expandedUrl?: string | null })[]) {
       const table = PrismaService.client.linkedInPost
 
       return addLinks(posts, {
@@ -61,10 +62,11 @@ export class LinkedInPostService {
          create: async fresh =>
             (
                await table.createMany({
-                  data: fresh.map(({ slug, url }) => ({
+                  data: fresh.map(({ slug, url, expandedUrl }) => ({
                      userId,
                      slug,
                      url,
+                     expandedUrl: expandedUrl ?? null,
                   })),
                   skipDuplicates: true,
                })
@@ -112,4 +114,50 @@ export class LinkedInPostService {
    public static restoreForUser(userId: string, id: string) {
       return updateOwned(userId, id, { archivedAt: null })
    }
+
+   // The posts a workflow works through next: not done, not archived, oldest first.
+   public static waiting(userId: string, take: number) {
+      return PrismaService.client.linkedInPost.findMany({
+         where: waitingWhere(userId),
+         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+         take,
+         select: {
+            id: true,
+            slug: true,
+            url: true,
+            expandedUrl: true,
+         },
+      })
+   }
+
+   // Keeps the expanded form of a short link found later, so it is read only once.
+   public static saveExpanded(id: string, expandedUrl: string) {
+      return PrismaService.client.linkedInPost.update({
+         where: { id },
+         data: { expandedUrl },
+         select: { id: true },
+      })
+   }
+
+   public static countWaiting(userId: string) {
+      return PrismaService.client.linkedInPost.count({ where: waitingWhere(userId) })
+   }
+
+   public static async markProcessed(userId: string, ids: string[]) {
+      const { count } = await PrismaService.client.linkedInPost.updateMany({
+         where: {
+            userId,
+            id: { in: ids },
+         },
+         data: { status: 'PROCESSED' },
+      })
+
+      return count
+   }
 }
+
+const waitingWhere = (userId: string) => ({
+   userId,
+   status: 'UNPROCESSED' as const,
+   archivedAt: null,
+})
