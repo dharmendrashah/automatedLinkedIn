@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, describe, expect, it } from 'vitest'
 
+import { DataClient } from 'core/dataClient'
+
 import { MINDCASE_API_KEY } from 'env'
 
 import { IcpService, LinkedInPostService, PrismaService, UserService, WorkflowService } from 'database'
 
 import { flagshipGraph } from '@automatedLinkedIn/contracts'
 
-import { DataClient } from '../data/dataClient'
 import { advanceRun } from './engine'
 
 // Opt-in, spends real money (a few cents): WORKFLOW_LIVE_TEST=1 with MINDCASE_API_KEY and PostgreSQL. Not picked up

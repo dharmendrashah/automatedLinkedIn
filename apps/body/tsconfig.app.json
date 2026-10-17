@@ -16,6 +16,7 @@
       "trpc/*": ["../brain/src/trpc/*"],
       "auth": ["../brain/src/auth"],
       "core": ["../brain/src/core"],
+      "core/*": ["../brain/src/core/*"],
       "database": ["../brain/src/database"],
       "serviceStatus": ["../brain/src/serviceStatus"],
       "env": ["../brain/src/env"],

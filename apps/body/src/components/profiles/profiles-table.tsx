@@ -26,9 +26,10 @@ type Props = {
    onArchive: (profile: Profile) => void
    onRestore: (profile: Profile) => void
    onTag: (tag: string) => void
+   onOpen: (profile: Profile) => void
 }
 
-export const ProfilesTable = ({ profiles, loading, error, busyId, onEdit, onArchive, onRestore, onTag }: Props) => (
+export const ProfilesTable = ({ profiles, loading, error, busyId, onEdit, onArchive, onRestore, onTag, onOpen }: Props) => (
    <div className="overflow-hidden rounded-lg border">
       <Table>
          <TableHeader className="bg-muted/50">
@@ -52,14 +53,13 @@ export const ProfilesTable = ({ profiles, loading, error, busyId, onEdit, onArch
             {profiles?.map(profile => (
                <TableRow key={profile.id} className={cn(profile.archivedAt && 'opacity-60')}>
                   <TableCell>
-                     <a
+                     <button
+                        type="button"
                         className="font-medium underline-offset-4 hover:underline"
-                        href={profile.url}
-                        target="_blank"
-                        rel="noreferrer noopener"
+                        onClick={() => onOpen(profile)}
                      >
                         {profile.fullName ?? profile.slug}
-                     </a>
+                     </button>
                      {details(profile) ? <p className="text-muted-foreground text-xs">{details(profile)}</p> : null}
                   </TableCell>
                   <TableCell>

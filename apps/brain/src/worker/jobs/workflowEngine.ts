@@ -1,8 +1,9 @@
+import { DataClient } from 'core/dataClient'
+
 import { MINDCASE_API_KEY, MINDCASE_RPM } from 'env'
 
 import { WalletService, WorkflowRunService } from 'database'
 
-import { DataClient } from '../data/dataClient'
 import { advanceRun } from '../engine/engine'
 import { defineJob } from './defineJob'
 

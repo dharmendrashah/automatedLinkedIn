@@ -1,10 +1,10 @@
 import { type CompanyItem, type PersonItem, type PostItem, type WorkflowItemData, readSeniorities } from 'core'
+import { type DataClient, DataServiceError } from 'core/dataClient'
 
 import { IcpService, type ItemKey, WalletService, WorkflowRunService, floorMicros } from 'database'
 
 import { type Graph, type GraphNode, blockOf } from '@automatedLinkedIn/contracts'
 
-import { type DataClient, DataServiceError } from '../data/dataClient'
 import { type Post } from './sendApi'
 import { type ScoringRules } from './steps'
 

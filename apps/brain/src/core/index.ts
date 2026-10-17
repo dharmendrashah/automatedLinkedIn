@@ -35,3 +35,4 @@ export {
    readItem,
    readSignals,
 } from './workflowItem'
+export { type PersonSnapshotData, readSnapshot, snapshotFrom } from './personSnapshot'

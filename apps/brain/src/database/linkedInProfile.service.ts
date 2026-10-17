@@ -117,6 +117,18 @@ export class LinkedInProfileService {
       })
    }
 
+   public static bySlug(userId: string, slug: string) {
+      return PrismaService.client.linkedInProfile.findUnique({
+         where: {
+            userId_slug: {
+               userId,
+               slug,
+            },
+         },
+         select: profileSelect,
+      })
+   }
+
    public static updateForUser(userId: string, id: string, changes: LinkedInProfileChanges) {
       return updateOwned(userId, id, changes)
    }
