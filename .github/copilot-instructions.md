@@ -91,7 +91,7 @@ Turborepo behaviour differs between versions: read the docs bundled in the insta
 - Co-locate tests next to the source and write the test first.
 - Write the fewest tests that prove the behaviour: the happy path, the real edge and failure cases, and the contract. No duplicate cases, no tests of framework or trivial code, no assertions on implementation details.
 - Suffixes decide which runner picks a file up: `*.unit.test.ts` (no I/O, mock `env`, Prisma and adapters), `*.integration.test.ts` (real Postgres), `*.e2e.test.ts` (running server).
-- `apps/brain/vitest.config.mts` is `.mts` on purpose: `vite-tsconfig-paths` is ESM-only and brain is CJS. It extends the root `vitest.config.ts`.
+- `apps/brain/vitest.config.mts` is `.mts` on purpose: Vitest's config loader is ESM and brain is CJS. It extends the root `vitest.config.ts`, which resolves tsconfig `paths` natively (`resolve.tsconfigPaths: true`; the `vite-tsconfig-paths` plugin was removed on 2026-10-17).
 - Mock `module-alias` with `vi.mock('module-alias', ...)` and a named `addAliases` import; spying on a namespace import fails under ESM.
 
 ## Code style
@@ -131,6 +131,7 @@ Turborepo behaviour differs between versions: read the docs bundled in the insta
 | Frontend Engineer | `apps/body`, `packages/ui`, the tRPC client |
 | Toolchain Engineer | pnpm, Turborepo, TypeScript, lint, tests, Docker, CI |
 | Platform Engineer | Kubernetes-only deployment, platform agnostic (AWS and GCP knowledge) |
+| User - GTM Engineer, User - Agency Owner, User - Founder, User - Sales Rep, User - Platform Admin | Read-only reviewers that judge plans, flows and screens from a real user's seat (persona agents, not engineers); they never name the data supplier |
 
 ## Git and safety
 

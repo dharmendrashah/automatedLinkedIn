@@ -13,9 +13,17 @@ type Props<S extends string> = {
    statuses: Record<S, { label: string }>
    searchLabel: string
    searchPlaceholder: string
+   // Lists with hard deletes have nothing archived to show.
+   archivable?: boolean
 }
 
-export const ListToolbar = <S extends string>({ state, statuses, searchLabel, searchPlaceholder }: Props<S>) => {
+export const ListToolbar = <S extends string>({
+   state,
+   statuses,
+   searchLabel,
+   searchPlaceholder,
+   archivable = true,
+}: Props<S>) => {
    const isStatus = (value: string): value is S => value in statuses
 
    return (
@@ -52,14 +60,16 @@ export const ListToolbar = <S extends string>({ state, statuses, searchLabel, se
                </button>
             </Badge>
          ) : null}
-         <div className="flex items-center gap-2">
-            <Checkbox
-               id="show-archived"
-               checked={state.includeArchived}
-               onCheckedChange={checked => state.setIncludeArchived(checked === true)}
-            />
-            <Label htmlFor="show-archived">Show archived</Label>
-         </div>
+         {archivable ? (
+            <div className="flex items-center gap-2">
+               <Checkbox
+                  id="show-archived"
+                  checked={state.includeArchived}
+                  onCheckedChange={checked => state.setIncludeArchived(checked === true)}
+               />
+               <Label htmlFor="show-archived">Show archived</Label>
+            </div>
+         ) : null}
       </div>
    )
 }

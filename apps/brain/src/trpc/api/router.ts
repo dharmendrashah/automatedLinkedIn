@@ -5,6 +5,7 @@ import { router } from 'trpc'
 
 import { createContext } from './context'
 import {
+   icp,
    linkedInAccount,
    linkedInCompany,
    linkedInPost,
@@ -15,12 +16,14 @@ import {
    status,
    takeover,
    task,
+   workflowList,
 } from './resolvers'
 
 export type AppRouter = typeof appRouter
 
 export const appRouter = router({
    me,
+   icp,
    linkedInAccount,
    linkedInCompany,
    linkedInPost,
@@ -30,6 +33,7 @@ export const appRouter = router({
    status,
    takeover,
    task,
+   workflowList,
 })
 
 export const initializeTrpc = async (app: Application) => {

@@ -28,6 +28,86 @@ model User {
   linkedInPosts     LinkedInPost[]
   linkedInProfiles  LinkedInProfile[]
   spiderSessions    SpiderSession[]
+  workflowLists     WorkflowList[]
+  suppressions      Suppression[]
+  icps              Icp[]
+}
+
+enum WorkflowListMemberState {
+  QUALIFIED
+  MAYBE
+}
+
+enum WorkflowListMemberStatus {
+  NEW
+  IN_REVIEW
+  DONE
+  NOT_A_FIT
+}
+
+// A named list of people found by hand or by a workflow; separate from the target profiles.
+model WorkflowList {
+  id        String               @id @default(uuid(7))
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  members   WorkflowListMember[]
+
+  @@unique([userId, name])
+}
+
+// Only the minimal person fields are kept; a person is in at most one of the owner's lists.
+model WorkflowListMember {
+  id        String                   @id @default(uuid(7))
+  listId    String
+  list      WorkflowList             @relation(fields: [listId], references: [id], onDelete: Cascade)
+  slug      String
+  url       String
+  name      String?
+  headline  String?
+  location  String?
+  state     WorkflowListMemberState  @default(QUALIFIED)
+  status    WorkflowListMemberStatus @default(NEW)
+  // The post that surfaced the person; null when added by hand.
+  postUrl   String?
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+
+  @@unique([listId, slug])
+  @@index([listId, state, createdAt])
+  @@index([slug])
+}
+
+// People the owner must never contact or add again; profile slugs only.
+model Suppression {
+  id        String   @id @default(uuid(7))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slug      String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, slug])
+}
+
+// An ideal customer: the rules a person is scored against.
+model Icp {
+  id              String   @id @default(uuid(7))
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  includeTitles   String[]
+  excludeTitles   String[]
+  seniorities     String[]
+  industries      String[]
+  companySizes    String[]
+  locations       String[]
+  problemKeywords String[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, name])
 }
 
 enum LinkedInPostStatus {
