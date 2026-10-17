@@ -1,5 +1,6 @@
 import { type CompanyItem, type PersonItem, type PostItem, type WorkflowItemData, readSeniorities } from 'core'
 import { type DataClient, DataServiceError } from 'core/dataClient'
+import { advanceJob } from 'core/dataJob'
 
 import { IcpService, type ItemKey, WalletService, WorkflowRunService, floorMicros } from 'database'
 
@@ -16,7 +17,7 @@ export type Step = Run['steps'][number]
 type Log = { info: (message: string) => void; error: (message: string) => void }
 
 export type EngineDeps = {
-   client: Pick<DataClient, 'balanceMicros' | 'collect' | 'findJob'>
+   client: Pick<DataClient, 'balanceMicros' | 'start' | 'check' | 'findJob' | 'cancel'>
    signal: AbortSignal
    log: Log
    // How "Send via API" posts; tests swap it for a fake.
@@ -59,8 +60,8 @@ export class StepError extends Error {}
 // The worker is stopping; the step is given back and resumes later.
 export class Paused extends Error {}
 
-// The step waits for another run; it is given back and looked at again on a later tick.
-export class WaitingOnRun extends Error {}
+// The step waits for another run or for its paid requests; it is given back and looked at again on a later tick.
+export class Waiting extends Error {}
 
 export const WALLET_LOW = 'Collecting stopped because the data wallet ran low. What was found so far is kept.'
 export const SERVICE_BUSY = 'The data service did not answer for some requests. What was found so far is kept.'
@@ -157,7 +158,12 @@ const walletLow = async (client: EngineDeps['client']) => {
    return balance < floorMicros()
 }
 
-export type CallOutcome = 'done' | 'failed' | 'stop'
+// 'running': its job is in flight; 'later': waiting for a retry or for a free slot. 'stop' means no more paid requests,
+// for example when the wallet ran low.
+export type CallOutcome = 'done' | 'failed' | 'stop' | 'running' | 'later'
+
+// Jobs one step keeps in flight at the data service at a time.
+const MAX_IN_FLIGHT = 5
 
 type PaidCall = {
    ctx: Context
@@ -168,9 +174,16 @@ type PaidCall = {
    use: (rows: Record<string, unknown>[]) => Promise<void>
 }
 
-// One paid request, recorded before it is sent. A request already finished is skipped; one whose job id is known is
-// read again instead of paid twice. 'stop' means collecting must end, for example when the wallet ran low.
-export const paidCall = async ({ ctx, inputKey, slug, params, use }: PaidCall): Promise<CallOutcome> => {
+// One paid request, recorded before it is sent and moved one step per tick (see `advanceJob`): started, looked at,
+// retried when it failed without a charge. A finished request is skipped; a known job is looked at, never paid twice.
+const paidCall = async ({
+   ctx,
+   inputKey,
+   slug,
+   params,
+   use,
+   mayStart,
+}: PaidCall & { mayStart: boolean }): Promise<CallOutcome> => {
    const { run, step, deps } = ctx
    const call = await WorkflowRunService.call(step.id, inputKey)
 
@@ -182,7 +195,17 @@ export const paidCall = async ({ ctx, inputKey, slug, params, use }: PaidCall): 
       throw new Paused()
    }
 
-   if (await walletLow(deps.client)) {
+   if (call.retryAt && call.retryAt > new Date()) {
+      return 'later'
+   }
+
+   const fresh = !call.jobId && !call.sentAt
+
+   if (fresh && !mayStart) {
+      return 'later'
+   }
+
+   if (fresh && (await walletLow(deps.client))) {
       return 'stop'
    }
 
@@ -192,18 +215,56 @@ export const paidCall = async ({ ctx, inputKey, slug, params, use }: PaidCall): 
       runId: run.id,
       stepId: step.id,
    }
+   const fail = (error: string) =>
+      WorkflowRunService.finishCall(
+         call.id,
+         {
+            status: 'FAILED',
+            rows: 0,
+            costMicros: 0,
+            error,
+         },
+         booking
+      )
+   const where = `workflow run=${run.id} step=${step.nodeId}`
 
    try {
-      // A request sent before a crash may have started a job whose id was never saved.
-      const jobId =
-         call.jobId ??
-         (call.createdAt < (step.claimedAt ?? new Date()) ? await deps.client.findJob(slug, call.createdAt) : null)
-      const outcome = await deps.client.collect(slug, params, {
-         jobId,
-         onJobId: async id => {
-            await WorkflowRunService.saveJobId(call.id, id)
+      const next = await advanceJob(
+         deps.client,
+         {
+            slug,
+            params,
+            ...call,
          },
-      })
+         {
+            sending: async () => {
+               await WorkflowRunService.markSent(call.id)
+            },
+            started: async id => {
+               await WorkflowRunService.saveJobId(call.id, id)
+            },
+         }
+      )
+
+      if (next.status === 'running') {
+         return 'running'
+      }
+
+      if (next.status === 'retry') {
+         deps.log.error(`${where} request failed, retry ${call.attempts + 1}: ${next.error}`)
+         await WorkflowRunService.retryCall(call.id, next)
+
+         return 'later'
+      }
+
+      if (next.status === 'failed') {
+         deps.log.error(`${where} request failed after its retries: ${next.error}`)
+         await fail(next.error.slice(0, 300))
+
+         return 'failed'
+      }
+
+      const { outcome } = next
 
       await use(outcome.rows)
       await WorkflowRunService.finishCall(
@@ -227,17 +288,8 @@ export const paidCall = async ({ ctx, inputKey, slug, params, use }: PaidCall): 
          throw error
       }
 
-      deps.log.error(`workflow run=${run.id} step=${step.nodeId} request failed: ${error.kind} ${error.message}`)
-      await WorkflowRunService.finishCall(
-         call.id,
-         {
-            status: 'FAILED',
-            rows: 0,
-            costMicros: 0,
-            error: error.kind,
-         },
-         booking
-      )
+      deps.log.error(`${where} request failed: ${error.kind} ${error.message}`)
+      await fail(error.kind)
 
       return error.kind === 'BALANCE' ? 'stop' : 'failed'
    }
@@ -245,23 +297,29 @@ export const paidCall = async ({ ctx, inputKey, slug, params, use }: PaidCall): 
 
 export type Request = Omit<PaidCall, 'ctx'>
 
-// Sends one request per input, in order, and stops at the first 'stop'. The step's output is what `use` saved.
+// Moves every request of the step one step, a few jobs in flight at a time, and gives the step back until all have
+// ended. After a 'stop' nothing new is started; jobs already running still finish and are booked.
 export const collectEach = async (ctx: Context, requests: Request[]): Promise<StepResult> => {
    let failed = 0
+   let running = 0
+   let later = 0
    let stopped = false
 
    for (const request of requests) {
       const outcome = await paidCall({
          ctx,
          ...request,
+         mayStart: !stopped && running < MAX_IN_FLIGHT,
       })
 
-      if (outcome === 'stop') {
-         stopped = true
-         break
-      }
-
+      stopped ||= outcome === 'stop'
       failed += outcome === 'failed' ? 1 : 0
+      running += outcome === 'running' ? 1 : 0
+      later += outcome === 'later' ? 1 : 0
+   }
+
+   if (running > 0 || (later > 0 && !stopped)) {
+      throw new Waiting()
    }
 
    return {

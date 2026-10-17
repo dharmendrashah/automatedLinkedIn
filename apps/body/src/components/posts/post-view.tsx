@@ -1,4 +1,5 @@
 import { Cover, DetailLoading, DetailMissing, PersonRow, Picture, ReadButton } from '@/components/details/detail-parts'
+import { pollWhile } from '@/components/details/read-status'
 import { Section } from '@/components/people/person-sections'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -138,6 +139,7 @@ const ThePost = ({ detail, onPerson }: { detail: PostDetail; onPerson: (slug: st
                   what="post"
                   priceMicros={detail.readPriceMicros}
                   readAt={snapshot?.fetchedAt ?? null}
+                  read={detail.read}
                   pending={read.isPending}
                   error={read.error}
                   onRead={() => read.mutate({ slug: detail.slug })}
@@ -193,7 +195,13 @@ const Workspace = ({ detail }: { detail: PostDetail }) => {
 
 // One post, like on LinkedIn, with the people a workflow found from it.
 export const PostView = ({ slug, onPerson }: { slug: string; onPerson: (slug: string) => void }) => {
-   const detail = trpc.postPage.detail.useQuery({ slug }, { retry: false })
+   const detail = trpc.postPage.detail.useQuery(
+      { slug },
+      {
+         retry: false,
+         refetchInterval: query => pollWhile(query.state.data?.read),
+      }
+   )
    const data = detail.data
 
    if (!data) {

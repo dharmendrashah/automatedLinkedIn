@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { fakeDataClient } from 'core/fakeDataClient'
 
 import {
    IcpService,
@@ -34,23 +36,11 @@ const employees = [
    },
 ]
 
-const fakeClient = () => ({
-   balanceMicros: vi.fn(async () => 50_000_000),
-   findJob: vi.fn(async () => null),
-   collect: vi.fn(
-      async (slug: string, _params: Record<string, unknown>, known: { onJobId: (id: string) => Promise<void> }) => {
-         await known.onJobId(`job-${slug}`)
-
-         return {
-            jobId: `job-${slug}`,
-            status: 'completed' as const,
-            rows: slug === 'company-employees' ? employees : [],
-            costMicros: 100_000,
-            error: null,
-         }
-      }
-   ),
-})
+const fakeClient = () =>
+   fakeDataClient(slug => ({
+      rows: slug === 'company-employees' ? employees : [],
+      costMicros: 100_000,
+   }))
 
 const deps = (client: ReturnType<typeof fakeClient>) => ({
    client,
@@ -210,10 +200,9 @@ describe('workflow triggers and retention (database)', () => {
       const chained = await PrismaService.client.workflowRun.findFirst({ where: { workflowId: second.id } })
 
       expect(done?.status).toBe('SUCCEEDED')
-      expect(client.collect).toHaveBeenCalledWith(
+      expect(client.start).toHaveBeenCalledWith(
          'company-employees',
-         expect.objectContaining({ companies: 'https://www.linkedin.com/company/acme' }),
-         expect.anything()
+         expect.objectContaining({ companies: 'https://www.linkedin.com/company/acme' })
       )
       expect(chained).toMatchObject({
          trigger: 'WORKFLOW',

@@ -1,16 +1,18 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { fakeDataClient } from 'core/fakeDataClient'
 
 import { CompanyPageService } from './companyPage.service'
 import { ConflictError } from './conflict'
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
-import { type PageReader } from './paidRead'
 import { PostPageService } from './postPage.service'
 import { PrismaService } from './prisma.service'
 import { SpendService } from './spend.service'
 import { UserService } from './user.service'
 import { WalletService } from './wallet.service'
+import { workReads } from './workReads'
 import { WorkflowListService } from './workflowList.service'
 
 // Needs PostgreSQL. The data service is a fake: nothing is paid.
@@ -19,15 +21,11 @@ const email = `${randomUUID()}@elitale.com`
 const POST_SLUG = 'activity-7452924970042826753'
 const POST_URL = `https://www.linkedin.com/feed/update/urn:li:activity:7452924970042826753`
 
-const readerOf = (row: Record<string, unknown>, costMicros: number) => ({
-   collect: vi.fn<PageReader['collect']>(async () => ({
-      jobId: 'job-1',
-      status: 'completed' as const,
+const readerOf = (row: Record<string, unknown>, costMicros: number) =>
+   fakeDataClient(() => ({
       rows: [row],
       costMicros,
-      error: null,
-   })),
-})
+   }))
 
 let userId: string
 
@@ -101,7 +99,10 @@ describe('company and post pages (database)', () => {
          },
          4_000
       )
-      const company = await CompanyPageService.readFull(userId, 'stripe', reader)
+      await CompanyPageService.readFull(userId, 'stripe')
+      await workReads(userId, reader)
+
+      const company = await CompanyPageService.detail(userId, 'stripe')
 
       expect(company).toMatchObject({
          snapshot: {
@@ -116,15 +117,15 @@ describe('company and post pages (database)', () => {
          people: [expect.objectContaining({ slug: 'ada' })],
       })
       expect(JSON.stringify(company?.snapshot)).not.toContain('internal')
-      await expect(CompanyPageService.readFull(userId, 'stripe', reader)).rejects.toBeInstanceOf(ConflictError)
-      expect(reader.collect).toHaveBeenCalledTimes(1)
+      await expect(CompanyPageService.readFull(userId, 'stripe')).rejects.toBeInstanceOf(ConflictError)
+      expect(reader.start).toHaveBeenCalledTimes(1)
       expect(await CompanyPageService.detail(userId, 'nobody')).toBeNull()
    })
 
    it('should read a post, list the people found from it with their comment, and book it as a post read', async () => {
-      const post = await PostPageService.readFull(
+      await PostPageService.readFull(userId, POST_SLUG)
+      await workReads(
          userId,
-         POST_SLUG,
          readerOf(
             {
                postText: 'Pipeline is hard.',
@@ -135,6 +136,8 @@ describe('company and post pages (database)', () => {
             2_000
          )
       )
+
+      const post = await PostPageService.detail(userId, POST_SLUG)
       const [month] = await SpendService.usage(userId)
 
       expect(post).toMatchObject({
@@ -170,8 +173,6 @@ describe('company and post pages (database)', () => {
       await LinkedInPostService.archiveForUser(userId, post?.id ?? '')
 
       expect(await PrismaService.client.pageSnapshot.count({ where: { userId } })).toBe(0)
-      await expect(PostPageService.readFull(userId, POST_SLUG, readerOf({}, 0))).rejects.toThrow(
-         'Restore the post first.'
-      )
+      await expect(PostPageService.readFull(userId, POST_SLUG)).rejects.toThrow('Restore the post first.')
    })
 })

@@ -32,6 +32,7 @@ model User {
   suppressions      Suppression[]
   personSnapshots   PersonSnapshot[]
   pageSnapshots     PageSnapshot[]
+  dataReads         DataRead[]
   icps              Icp[]
   workflows         Workflow[]
 }
@@ -144,6 +145,52 @@ model PageSnapshot {
   fetchedAt DateTime @default(now())
 
   @@unique([userId, kind, slug])
+}
+
+enum DataReadKind {
+  PROFILE
+  COMPANY
+  POST
+  COMMENTS
+  REACTIONS
+}
+
+enum DataReadStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+// A paid read the owner asked for in a drawer, done by the brain worker: started, looked at, retried when it failed
+// without a charge, then stored as a snapshot. Never returned to the browser beyond its status and message.
+model DataRead {
+  id         String         @id @default(uuid(7))
+  userId     String
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind       DataReadKind
+  slug       String
+  // Tells reads of one item apart, such as the first 100 comments and all of them.
+  variant    String         @default("")
+  operation  String
+  params     Json
+  status     DataReadStatus @default(QUEUED)
+  // `userId:kind:slug:variant` while queued or running, null after; one read of an item at a time.
+  activeKey  String?        @unique
+  jobId      String?
+  sentAt     DateTime?
+  attempts   Int            @default(0)
+  retryAt    DateTime       @default(now())
+  // When a worker took it; a read held too long is taken again.
+  claimedAt  DateTime?
+  costMicros Int            @default(0)
+  // The sentence the owner reads when it failed.
+  message    String?
+  createdAt  DateTime       @default(now())
+  finishedAt DateTime?
+
+  @@index([status, retryAt])
+  @@index([userId, kind, slug])
 }
 
 enum WorkflowTrigger {
@@ -267,6 +314,11 @@ model WorkflowStepCall {
   rows       Int             @default(0)
   costMicros Int             @default(0)
   error      String?
+  // Failed attempts so far; one that failed without a charge is sent again at retryAt.
+  attempts   Int             @default(0)
+  retryAt    DateTime?
+  // Set just before the start is sent, so a start whose answer was lost is looked up instead of sent again.
+  sentAt     DateTime?
   createdAt  DateTime        @default(now())
   finishedAt DateTime?
 

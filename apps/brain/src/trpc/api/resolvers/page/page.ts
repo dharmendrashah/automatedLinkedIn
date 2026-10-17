@@ -7,14 +7,13 @@ import { ALL_CAP } from '@automatedLinkedIn/contracts'
 import { ownerProcedure, router } from 'trpc'
 
 import { orConflict, present } from '../owned'
-import { readerOf } from '../reader'
 
 const COMPANY_MISSING = 'Company not found in your companies'
 const POST_MISSING = 'Post not found in your posts'
 
 const bySlug = z.object({ slug: z.string().trim().min(1).max(200) })
 
-// A company or post of the owner by slug, always scoped to ctx.user.id, with the paid read the owner may ask for.
+// A company or post of the owner by slug, always scoped to ctx.user.id, with the paid read the owner may queue.
 export const companyPage = router({
    detail: ownerProcedure
       .input(bySlug)
@@ -25,10 +24,7 @@ export const companyPage = router({
    readFull: ownerProcedure
       .input(bySlug)
       .mutation(async ({ ctx, input }) =>
-         present(
-            await orConflict(CompanyPageService.readFull(ctx.user.id, input.slug.toLowerCase(), readerOf())),
-            COMPANY_MISSING
-         )
+         present(await orConflict(CompanyPageService.readFull(ctx.user.id, input.slug.toLowerCase())), COMPANY_MISSING)
       ),
 })
 
@@ -41,7 +37,7 @@ export const postPage = router({
    readFull: ownerProcedure
       .input(bySlug)
       .mutation(async ({ ctx, input }) =>
-         present(await orConflict(PostPageService.readFull(ctx.user.id, input.slug, readerOf())), POST_MISSING)
+         present(await orConflict(PostPageService.readFull(ctx.user.id, input.slug)), POST_MISSING)
       ),
 
    engagement: ownerProcedure
@@ -59,7 +55,7 @@ export const postPage = router({
       )
       .mutation(async ({ ctx, input }) =>
          present(
-            await orConflict(PostEngagementService.read(ctx.user.id, input.slug, input.kind, input.all, readerOf())),
+            await orConflict(PostEngagementService.read(ctx.user.id, input.slug, input.kind, input.all)),
             POST_MISSING
          )
       ),

@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { fakeDataClient } from 'core/fakeDataClient'
 
 import { IcpService, LinkedInPostService, PrismaService, UserService, WalletService, WorkflowService } from 'database'
 
@@ -36,56 +38,46 @@ const NEXT: Record<string, string> = {
    cy: 'dee',
 }
 
-const fakeClient = () => ({
-   balanceMicros: vi.fn(async () => 50_000_000),
-   findJob: vi.fn(async () => null),
-   collect: vi.fn(
-      async (slug: string, params: Record<string, unknown>, known: { onJobId: (id: string) => Promise<void> }) => {
-         await known.onJobId(`job-${slug}`)
+const fakeClient = () =>
+   fakeDataClient((slug, params) => {
+      const author = String(params.urls ?? '').split('/in/')[1] ?? ''
+      const rows: Record<string, unknown>[] =
+         slug === 'post-comments'
+            ? [
+                 {
+                    commenterUrl: profile('ada'),
+                    commenterFollowers: 900,
+                    commenterType: 'profile',
+                 },
+                 {
+                    commenterUrl: profile('bob'),
+                    commenterFollowers: 10,
+                    commenterType: 'profile',
+                 },
+              ]
+            : slug === 'posts' && params.queries
+              ? [
+                   {
+                      postUrl: post(1),
+                      postAuthorUrl: profile('zed'),
+                   },
+                ]
+              : slug === 'profiles' && params.searchQuery
+                ? [{ profileUrl: profile('bob') }, { profileUrl: profile('dee') }]
+                : slug === 'posts'
+                  ? [
+                       {
+                          postUrl: post(Object.keys(NEXT).indexOf(author) + 10),
+                          postAuthorUrl: profile(NEXT[author] ?? 'end'),
+                       },
+                    ]
+                  : []
 
-         const author = String(params.urls ?? '').split('/in/')[1] ?? ''
-         const rows: Record<string, unknown>[] =
-            slug === 'post-comments'
-               ? [
-                    {
-                       commenterUrl: profile('ada'),
-                       commenterFollowers: 900,
-                       commenterType: 'profile',
-                    },
-                    {
-                       commenterUrl: profile('bob'),
-                       commenterFollowers: 10,
-                       commenterType: 'profile',
-                    },
-                 ]
-               : slug === 'posts' && params.queries
-                 ? [
-                      {
-                         postUrl: post(1),
-                         postAuthorUrl: profile('zed'),
-                      },
-                   ]
-                 : slug === 'profiles' && params.searchQuery
-                   ? [{ profileUrl: profile('bob') }, { profileUrl: profile('dee') }]
-                   : slug === 'posts'
-                     ? [
-                          {
-                             postUrl: post(Object.keys(NEXT).indexOf(author) + 10),
-                             postAuthorUrl: profile(NEXT[author] ?? 'end'),
-                          },
-                       ]
-                     : []
-
-         return {
-            jobId: `job-${slug}`,
-            status: 'completed' as const,
-            rows,
-            costMicros: rows.length * 2_000,
-            error: null,
-         }
+      return {
+         rows,
+         costMicros: rows.length * 2_000,
       }
-   ),
-})
+   })
 
 const sent: { url: string; body: string; headers: Record<string, string> }[] = []
 
@@ -438,7 +430,7 @@ describe('free-form workflows (database)', () => {
          ],
          edges: [line('find', 'commenters')],
       })
-      const params = (slug: string) => client.collect.mock.calls.find(([called]) => called === slug)?.[1]
+      const params = (slug: string) => client.start.mock.calls.find(([called]) => called === slug)?.[1]
 
       expect(params('posts')).toEqual({
          queries: 'pipeline',

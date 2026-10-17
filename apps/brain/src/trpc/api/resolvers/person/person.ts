@@ -5,7 +5,6 @@ import { PersonService } from 'database'
 import { ownerProcedure, router } from 'trpc'
 
 import { orConflict, present } from '../owned'
-import { readerOf } from '../reader'
 
 const MISSING = 'Person not found in your profiles or lists'
 
@@ -17,10 +16,10 @@ export const person = router({
       .input(bySlug)
       .query(async ({ ctx, input }) => present(await PersonService.detail(ctx.user.id, input.slug), MISSING)),
 
-   // Pays one full-profile read for the owner's own person and keeps it.
+   // Queues a full-profile read of the owner's own person for the worker.
    readFull: ownerProcedure
       .input(bySlug)
       .mutation(async ({ ctx, input }) =>
-         present(await orConflict(PersonService.readFull(ctx.user.id, input.slug, readerOf())), MISSING)
+         present(await orConflict(PersonService.readFull(ctx.user.id, input.slug)), MISSING)
       ),
 })

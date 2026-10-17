@@ -1,10 +1,10 @@
-import { companySnapshotFrom, readCompanySnapshot } from 'core'
+import { readCompanySnapshot } from 'core'
 
 import { PRICE_MICROS } from '@automatedLinkedIn/contracts'
 
 import { ConflictError } from './conflict'
+import { DataReadService } from './dataRead.service'
 import { LinkedInCompanyService } from './linkedInCompany.service'
-import { type PageReader, paidRead } from './paidRead'
 import { PrismaService } from './prisma.service'
 
 // One company of the owner's /companies by slug: their own fields, the page they chose to read, and the people in
@@ -88,12 +88,13 @@ export class CompanyPageService {
                  }
                : null,
          people,
+         read: await DataReadService.latest(userId, 'COMPANY', slug),
          readPriceMicros: PRICE_MICROS.companyPage,
       }
    }
 
-   // Pays one company-page read and keeps it (see `paidRead`). null when the company is not the owner's.
-   public static async readFull(userId: string, slug: string, reader: PageReader) {
+   // Queues one company-page read for the worker. null when the company is not the owner's.
+   public static async readFull(userId: string, slug: string) {
       const known = await CompanyPageService.detail(userId, slug)
 
       if (!known) {
@@ -104,30 +105,12 @@ export class CompanyPageService {
          throw new ConflictError('Restore the company first.')
       }
 
-      await paidRead({
+      await DataReadService.queue({
          userId,
-         kind: 'company',
+         kind: 'COMPANY',
          slug,
          operation: 'companies',
          params: { companies: [known.url] },
-         reader,
-         store: async ([row]) => {
-            const data = companySnapshotFrom(row)
-
-            await PrismaService.client.pageSnapshot.upsert({
-               where: whereSnapshot(userId, slug),
-               create: {
-                  userId,
-                  kind: 'COMPANY',
-                  slug,
-                  data,
-               },
-               update: {
-                  data,
-                  fetchedAt: new Date(),
-               },
-            })
-         },
       })
 
       return CompanyPageService.detail(userId, slug)

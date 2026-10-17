@@ -1,10 +1,10 @@
-import { parseLinkedInUrl, postSnapshotFrom, readPostSnapshot, readSignals } from 'core'
+import { parseLinkedInUrl, readPostSnapshot, readSignals } from 'core'
 
 import { PRICE_MICROS } from '@automatedLinkedIn/contracts'
 
 import { ConflictError } from './conflict'
+import { DataReadService } from './dataRead.service'
 import { LinkedInPostService } from './linkedInPost.service'
-import { type PageReader, paidRead } from './paidRead'
 import { PrismaService } from './prisma.service'
 
 // One post of the owner's /posts by slug: the post they chose to read, its author when the owner knows them, and the
@@ -115,11 +115,12 @@ export class PostPageService {
             comment: readSignals(signals).find(signal => urls.includes(signal.via))?.excerpt ?? null,
          })),
          readPriceMicros: PRICE_MICROS.engagement,
+         read: await DataReadService.latest(userId, 'POST', slug),
       }
    }
 
-   // Pays one post read and keeps it (see `paidRead`). null when the post is not the owner's.
-   public static async readFull(userId: string, slug: string, reader: PageReader) {
+   // Queues one post read for the worker. null when the post is not the owner's.
+   public static async readFull(userId: string, slug: string) {
       const known = await PostPageService.detail(userId, slug)
 
       if (!known) {
@@ -130,32 +131,14 @@ export class PostPageService {
          throw new ConflictError('Restore the post first.')
       }
 
-      await paidRead({
+      await DataReadService.queue({
          userId,
-         kind: 'post',
+         kind: 'POST',
          slug,
          operation: 'posts',
          params: {
             urls: known.post.expandedUrl ?? known.url,
             maxResults: 1,
-         },
-         reader,
-         store: async ([row]) => {
-            const data = postSnapshotFrom(row)
-
-            await PrismaService.client.pageSnapshot.upsert({
-               where: whereSnapshot(userId, slug),
-               create: {
-                  userId,
-                  kind: 'POST',
-                  slug,
-                  data,
-               },
-               update: {
-                  data,
-                  fetchedAt: new Date(),
-               },
-            })
          },
       })
 

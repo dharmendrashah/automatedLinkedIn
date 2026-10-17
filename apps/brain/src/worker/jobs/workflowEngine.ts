@@ -1,17 +1,10 @@
-import { DataClient } from 'core/dataClient'
-
-import { MINDCASE_API_KEY, MINDCASE_RPM } from 'env'
+import { MINDCASE_API_KEY } from 'env'
 
 import { WalletService, WorkflowRunService } from 'database'
 
+import { dataClient as client } from '../data/client'
 import { advanceRun } from '../engine/engine'
 import { defineJob } from './defineJob'
-
-// One client for the process, so its pacing covers every request the worker sends.
-const client = new DataClient({
-   key: MINDCASE_API_KEY,
-   requestsPerMinute: MINDCASE_RPM,
-})
 
 // Moves every running workflow forward (.plan/gtm-phase-2-engine-canvas.md). A quiet tick writes no log line.
 export const workflowEngine = defineJob({

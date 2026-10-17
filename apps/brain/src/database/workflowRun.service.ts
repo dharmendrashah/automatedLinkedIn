@@ -316,6 +316,31 @@ export class WorkflowRunService {
       })
    }
 
+   public static markSent(callId: string) {
+      return PrismaService.client.workflowStepCall.update({
+         where: { id: callId },
+         data: { sentAt: new Date() },
+      })
+   }
+
+   // A request that failed without a charge is sent again at `at`; `restart` drops the failed job.
+   public static retryCall(callId: string, retry: { at: Date; restart: boolean; error: string }) {
+      return PrismaService.client.workflowStepCall.update({
+         where: { id: callId },
+         data: {
+            attempts: { increment: 1 },
+            retryAt: retry.at,
+            error: retry.error.slice(0, 300),
+            ...(retry.restart
+               ? {
+                    jobId: null,
+                    sentAt: null,
+                 }
+               : {}),
+         },
+      })
+   }
+
    // Ends a request and books what it cost to the client's month, once.
    public static finishCall(
       callId: string,

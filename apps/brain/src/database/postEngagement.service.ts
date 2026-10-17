@@ -1,21 +1,12 @@
-import {
-   EXCERPT_LENGTH,
-   type PersonItem,
-   commentsSnapshotFrom,
-   mergeBySlug,
-   person,
-   reactionsSnapshotFrom,
-   readCommentsSnapshot,
-   readReactionsSnapshot,
-} from 'core'
+import { EXCERPT_LENGTH, type PersonItem, mergeBySlug, person, readCommentsSnapshot, readReactionsSnapshot } from 'core'
 
-import { type PageKind } from 'generated/prisma/client'
+import { type DataReadKind, type PageKind } from 'generated/prisma/client'
 
 import { ALL_CAP, PRICE_MICROS } from '@automatedLinkedIn/contracts'
 
 import { ConflictError } from './conflict'
+import { DataReadService } from './dataRead.service'
 import { LinkedInPostService } from './linkedInPost.service'
-import { type PageReader, paidRead } from './paidRead'
 import { PrismaService } from './prisma.service'
 import { type RunMember, WorkflowListService } from './workflowList.service'
 
@@ -30,6 +21,11 @@ const SOME = 100
 const PAGE_KINDS: Record<EngagementKind, PageKind> = {
    comments: 'POST_COMMENTS',
    reactions: 'POST_REACTIONS',
+}
+
+const READ_KINDS: Record<EngagementKind, DataReadKind> = {
+   comments: 'COMMENTS',
+   reactions: 'REACTIONS',
 }
 
 const stored = (userId: string, slug: string) =>
@@ -142,12 +138,15 @@ export class PostEngagementService {
             some: SOME,
             all: ALL_CAP,
          },
+         reads: {
+            comments: await DataReadService.latest(userId, 'COMMENTS', slug),
+            reactions: await DataReadService.latest(userId, 'REACTIONS', slug),
+         },
       }
    }
 
-   // Pays one read of up to 100 (or all) comments or reactions and keeps it (see `paidRead`). null when the post is not
-   // the owner's.
-   public static async read(userId: string, slug: string, kind: EngagementKind, all: boolean, reader: PageReader) {
+   // Queues one read of up to 100 (or all) comments or reactions for the worker. null when the post is not the owner's.
+   public static async read(userId: string, slug: string, kind: EngagementKind, all: boolean) {
       const post = await LinkedInPostService.bySlug(userId, slug)
 
       if (!post) {
@@ -158,42 +157,16 @@ export class PostEngagementService {
          throw new ConflictError('Restore the post first.')
       }
 
-      const limit = all ? ALL_CAP : SOME
-
-      await paidRead({
+      await DataReadService.queue({
          userId,
-         kind,
+         kind: READ_KINDS[kind],
          slug,
-         variant: all ? 'all' : undefined,
+         variant: all ? 'all' : '',
          operation: kind === 'comments' ? 'post-comments' : 'post-reactions',
          params: {
             posts: post.expandedUrl ?? post.url,
-            maxResults: limit,
+            maxResults: all ? ALL_CAP : SOME,
             ...(kind === 'comments' ? { includeReplies: true } : {}),
-         },
-         reader,
-         store: async rows => {
-            const data = kind === 'comments' ? commentsSnapshotFrom(rows, limit) : reactionsSnapshotFrom(rows, limit)
-
-            await PrismaService.client.pageSnapshot.upsert({
-               where: {
-                  userId_kind_slug: {
-                     userId,
-                     kind: PAGE_KINDS[kind],
-                     slug,
-                  },
-               },
-               create: {
-                  userId,
-                  kind: PAGE_KINDS[kind],
-                  slug,
-                  data,
-               },
-               update: {
-                  data,
-                  fetchedAt: new Date(),
-               },
-            })
          },
       })
 
