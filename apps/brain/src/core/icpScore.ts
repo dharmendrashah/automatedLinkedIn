@@ -102,12 +102,14 @@ export const scoreIcp = (rules: IcpRules, sample: IcpSample): IcpScore => {
 export const SIGNAL_WEIGHTS = {
    problemComment: 20,
    comment: 10,
+   hiring: 10,
    reaction: 5,
 } as const
 
-type ScoredSignal = { type: 'commented' | 'reacted'; excerpt: string | null }
+type ScoredSignal = { type: 'commented' | 'reacted' | 'employee' | 'hiring'; excerpt: string | null }
 
-// Engagement adds to the headline score: a comment that names the problem counts most, a reaction least. Signals add up.
+// Engagement adds to the headline score: a comment that names the problem counts most, a reaction least; working at a
+// company that is hiring counts like a comment, and simply working at a target company adds nothing. Signals add up.
 export const scoreSignals = (problemKeywords: string[], signals: ScoredSignal[]) => {
    const matched: string[] = []
    let score = 0
@@ -122,7 +124,10 @@ export const scoreSignals = (problemKeywords: string[], signals: ScoredSignal[])
       } else if (signal.type === 'commented') {
          score += SIGNAL_WEIGHTS.comment
          matched.push('commented')
-      } else {
+      } else if (signal.type === 'hiring') {
+         score += SIGNAL_WEIGHTS.hiring
+         matched.push('company is hiring')
+      } else if (signal.type === 'reacted') {
          score += SIGNAL_WEIGHTS.reaction
          matched.push('reacted')
       }

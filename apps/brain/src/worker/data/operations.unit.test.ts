@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { commentersFrom, profilesFrom, reactorsFrom } from './operations'
+import {
+   commentersFrom,
+   companiesFromDomains,
+   employeesFrom,
+   hiringFrom,
+   postsFrom,
+   profilesFrom,
+   reactorsFrom,
+} from './operations'
 
 // core's index also loads services that read env; these pure mappers need none of it.
 vi.mock('env', () => ({}))
@@ -10,6 +18,14 @@ const post = {
    slug: 'activity-1',
    url: 'https://www.linkedin.com/feed/update/urn:li:activity:1',
    postId: 'p1',
+}
+
+const company = {
+   kind: 'company' as const,
+   slug: 'acme',
+   url: 'https://www.linkedin.com/company/acme',
+   name: 'Acme',
+   hiring: [],
 }
 
 describe('operations', () => {
@@ -101,5 +117,89 @@ describe('operations', () => {
          title: 'Head of Sales',
          company: 'Acme',
       })
+   })
+
+   it('should keep found posts without a posts-list id, so they are never marked done', () => {
+      expect(
+         postsFrom([
+            { postUrl: 'https://www.linkedin.com/posts/ada_growth-activity-7516986460906954752-AbCd?utm=x' },
+            { postUrl: 'nope' },
+         ])
+      ).toEqual([
+         expect.objectContaining({
+            kind: 'post',
+            postId: null,
+         }),
+      ])
+   })
+
+   it('should read employees as already enriched, with a hiring reason when the company hires', () => {
+      const [employee] = employeesFrom(
+         [
+            {
+               profileUrl: 'https://www.linkedin.com/in/grace',
+               headline: 'VP Sales',
+            },
+            { profileUrl: 'not a link' },
+         ],
+         {
+            ...company,
+            hiring: ['SDR'],
+         }
+      )
+
+      expect(employee).toMatchObject({
+         slug: 'grace',
+         enriched: true,
+         signals: [
+            {
+               type: 'hiring',
+               via: company.url,
+               excerpt: 'SDR',
+            },
+         ],
+      })
+   })
+
+   it('should match open roles to companies by link or by name, once per title', () => {
+      const roles = hiringFrom(
+         [
+            {
+               companyUrl: 'https://www.linkedin.com/company/acme',
+               jobTitle: 'SDR',
+            },
+            {
+               companyName: 'ACME',
+               jobTitle: 'SDR',
+            },
+            {
+               companyName: 'Other',
+               jobTitle: 'CTO',
+            },
+         ],
+         [company]
+      )
+
+      expect(roles).toEqual(new Map([['acme', ['SDR']]]))
+   })
+
+   it('should turn websites into companies and drop rows without a company link', () => {
+      expect(
+         companiesFromDomains([
+            {
+               domain: 'acme.com',
+               linkedinUrl: 'https://www.linkedin.com/company/acme',
+            },
+            { domain: 'none.com' },
+         ])
+      ).toEqual([
+         {
+            kind: 'company',
+            slug: 'acme',
+            url: expect.any(String),
+            name: 'acme.com',
+            hiring: [],
+         },
+      ])
    })
 })

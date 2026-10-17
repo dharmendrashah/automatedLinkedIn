@@ -12,7 +12,9 @@ import {
 } from '@automatedLinkedIn/contracts'
 
 import { ConflictError, uniqueOr } from './conflict'
+import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
+import { LinkedInProfileService } from './linkedInProfile.service'
 import { PrismaService } from './prisma.service'
 import { WalletService } from './wallet.service'
 
@@ -74,9 +76,66 @@ export const readGraph = (value: unknown): Graph => graphSchema.parse(value)
 
 const usesPosts = (graph: Graph) => graph.nodes.some(({ type }) => type === 'input.posts')
 
+// Triggers that start a workflow without a person pressing Run; the on/off switch governs them.
+const AUTOMATIC = new Set(['trigger.schedule', 'trigger.api', 'trigger.workflow'])
+
+// How many workflows may start one another in a row.
+export const MAX_CHAIN_DEPTH = 5
+
+const listenedTo = (graph: Graph) => {
+   const node = graph.nodes.find(({ type }) => type === 'trigger.workflow')
+   const id = node?.config.workflowId
+
+   return typeof id === 'string' ? id : null
+}
+
+// A "When another workflow finishes" block must name another of the owner's workflows, and the chain must not loop.
+const chainProblems = async (userId: string, graph: Graph, selfId: string | null): Promise<GraphError[]> => {
+   const node = graph.nodes.find(({ type }) => type === 'trigger.workflow')
+   let next = listenedTo(graph)
+
+   if (!node || !next) {
+      return []
+   }
+
+   for (let depth = 0; next && depth <= MAX_CHAIN_DEPTH * 2; depth += 1) {
+      if (next === selfId) {
+         return [
+            {
+               nodeId: node.id,
+               message: 'This chain of workflows would start itself again. Pick another workflow.',
+            },
+         ]
+      }
+
+      const before = await PrismaService.client.workflow.findFirst({
+         where: {
+            id: next,
+            userId,
+         },
+         select: { graph: true },
+      })
+
+      if (!before) {
+         return depth === 0
+            ? [
+                 {
+                    nodeId: node.id,
+                    message: 'Pick one of your workflows to run after.',
+                 },
+              ]
+            : []
+      }
+
+      next = listenedTo(readGraph(before.graph))
+   }
+
+   return []
+}
+
 export class WorkflowService {
-   // The graph's own problems plus ideal customers that are not the owner's.
-   public static async problems(userId: string, graph: Graph): Promise<GraphError[]> {
+   // The graph's own problems, ideal customers that are not the owner's, and a chain that would loop.
+   public static async problems(userId: string, graph: Graph, selfId: string | null = null): Promise<GraphError[]> {
       const icpIds = graph.nodes.flatMap(node =>
          node.type === 'score.icp' && typeof node.config.icpId === 'string' ? [node.config.icpId] : []
       )
@@ -95,7 +154,7 @@ export class WorkflowService {
             message: 'Pick one of your ideal customers to score against.',
          }))
 
-      return [...validateGraph(graph), ...missing]
+      return [...validateGraph(graph), ...missing, ...(await chainProblems(userId, graph, selfId))]
    }
 
    public static list(userId: string) {
@@ -164,11 +223,13 @@ export class WorkflowService {
       const enabled = changes.enabled ?? current.enabled
       const schedule = scheduleOf(graph)
 
-      if (enabled && !schedule) {
-         throw new ConflictError('Add an "On a schedule" block before switching the workflow on.')
+      if (enabled && !graph.nodes.some(({ type }) => AUTOMATIC.has(type))) {
+         throw new ConflictError(
+            'Add a schedule, an API or a "When another workflow finishes" trigger before switching the workflow on.'
+         )
       }
 
-      if (enabled && (await WorkflowService.problems(userId, graph)).length > 0) {
+      if (enabled && (await WorkflowService.problems(userId, graph, id)).length > 0) {
          throw new ConflictError('Fix the problems in the workflow before switching it on.')
       }
 
@@ -206,16 +267,33 @@ export class WorkflowService {
    }
 
    public static async estimate(userId: string, graph: Graph, preview: boolean) {
-      const posts = await LinkedInPostService.countWaiting(userId)
+      const [posts, profiles, companies] = await Promise.all([
+         LinkedInPostService.countWaiting(userId),
+         LinkedInProfileService.countActive(userId),
+         LinkedInCompanyService.countActive(userId),
+      ])
 
       return {
          posts,
-         ...estimateGraph(preview ? previewGraph(graph) : graph, { posts }),
+         profiles,
+         companies,
+         ...estimateGraph(preview ? previewGraph(graph) : graph, {
+            posts,
+            profiles,
+            companies,
+         }),
       }
    }
 
-   // Starts a run, or explains why it cannot start. null when the workflow is not the owner's.
-   public static async startRun(userId: string, workflowId: string, trigger: WorkflowTrigger, runKey: string) {
+   // Starts a run, or explains why it cannot start. null when the workflow is not the owner's. An API call or a
+   // finished workflow passes its items as `input`.
+   public static async startRun(
+      userId: string,
+      workflowId: string,
+      trigger: WorkflowTrigger,
+      runKey: string,
+      options: { input?: Prisma.InputJsonValue; depth?: number } = {}
+   ) {
       const workflow = await WorkflowService.get(userId, workflowId)
 
       if (!workflow) {
@@ -223,7 +301,7 @@ export class WorkflowService {
       }
 
       const graph = readGraph(workflow.graph)
-      const [problem] = await WorkflowService.problems(userId, graph)
+      const [problem] = await WorkflowService.problems(userId, graph, workflowId)
 
       if (problem) {
          throw new ConflictError(`Fix the workflow first: ${problem.message}`)
@@ -246,8 +324,9 @@ export class WorkflowService {
 
       const runGraph = trigger === 'PREVIEW' ? previewGraph(graph) : graph
       const { posts, totalMicros } = await WorkflowService.estimate(userId, runGraph, false)
+      const fromOutside = trigger === 'API' || trigger === 'WORKFLOW'
 
-      if (usesPosts(graph) && posts === 0) {
+      if (usesPosts(graph) && posts === 0 && !fromOutside) {
          throw new ConflictError('No posts are waiting in your posts list. Add some posts first.')
       }
 
@@ -259,6 +338,8 @@ export class WorkflowService {
                trigger,
                runKey,
                graph: runGraph,
+               input: options.input,
+               depth: options.depth ?? 0,
                qualifyScore: workflow.qualifyScore,
                maybeScore: workflow.maybeScore,
                maybeEnabled: workflow.maybeEnabled,
@@ -325,5 +406,21 @@ export class WorkflowService {
          where: { id },
          data: { nextRunAt },
       })
+   }
+
+   // The switched-on workflows of an owner that start when `workflowId` finishes.
+   public static async listeners(userId: string, workflowId: string) {
+      const workflows = await PrismaService.client.workflow.findMany({
+         where: {
+            userId,
+            enabled: true,
+         },
+         select: {
+            id: true,
+            graph: true,
+         },
+      })
+
+      return workflows.filter(({ graph }) => listenedTo(readGraph(graph)) === workflowId).map(({ id }) => id)
    }
 }

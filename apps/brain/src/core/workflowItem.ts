@@ -3,11 +3,11 @@ import { z } from 'zod'
 // What flows between workflow steps and is saved per step. Only the minimal person fields are kept.
 
 export type Signal = {
-   type: 'commented' | 'reacted'
-   // The post that surfaced the person.
+   // commented and reacted carry the post; employee and hiring carry the company.
+   type: 'commented' | 'reacted' | 'employee' | 'hiring'
    via: string
    at: string | null
-   // A short piece of the comment, enough to judge interest.
+   // A short piece of the comment, or the open roles of a hiring company.
    excerpt: string | null
 }
 
@@ -28,16 +28,29 @@ export type PersonItem = {
    band: Band | null
    matched: string[]
    enriched: boolean
+   // Came from the owner's own /profiles, so the Seen set lets the person through.
+   known: boolean
+   tags: string[]
 }
 
 export type PostItem = {
    kind: 'post'
    slug: string
    url: string
-   postId: string
+   // The row in the owner's posts list; null for a post a workflow found by itself.
+   postId: string | null
 }
 
-export type WorkflowItemData = PersonItem | PostItem
+export type CompanyItem = {
+   kind: 'company'
+   slug: string
+   url: string
+   name: string | null
+   // Open roles found for the company.
+   hiring: string[]
+}
+
+export type WorkflowItemData = PersonItem | PostItem | CompanyItem
 
 export const EXCERPT_LENGTH = 140
 
@@ -54,6 +67,8 @@ export const person = (fields: Pick<PersonItem, 'slug' | 'url'> & Partial<Person
    band: null,
    matched: [],
    enriched: false,
+   known: false,
+   tags: [],
    ...fields,
 })
 
@@ -68,6 +83,8 @@ export const mergePeople = (a: PersonItem, b: PersonItem): PersonItem => ({
    followers: a.followers ?? b.followers,
    title: a.title ?? b.title,
    company: a.company ?? b.company,
+   known: a.known || b.known,
+   tags: [...new Set([...a.tags, ...b.tags])],
    signals: [...a.signals, ...b.signals.filter(signal => !a.signals.some(known => sameSignal(known, signal)))],
 })
 
@@ -86,7 +103,7 @@ export const mergeBySlug = (people: PersonItem[]) => {
 const nullableText = z.string().nullable()
 
 const signalSchema = z.object({
-   type: z.enum(['commented', 'reacted']),
+   type: z.enum(['commented', 'reacted', 'employee', 'hiring']),
    via: z.string(),
    at: nullableText,
    excerpt: nullableText,
@@ -108,12 +125,22 @@ const itemSchema = z.discriminatedUnion('kind', [
       band: z.enum(['QUALIFIED', 'MAYBE']).nullable(),
       matched: z.array(z.string()),
       enriched: z.boolean(),
+      // Items saved before Phase 3 have neither.
+      known: z.boolean().default(false),
+      tags: z.array(z.string()).default([]),
    }),
    z.object({
       kind: z.literal('post'),
       slug: z.string(),
       url: z.string(),
-      postId: z.string(),
+      postId: z.string().nullable(),
+   }),
+   z.object({
+      kind: z.literal('company'),
+      slug: z.string(),
+      url: z.string(),
+      name: nullableText,
+      hiring: z.array(z.string()),
    }),
 ])
 

@@ -23,6 +23,7 @@ export { TaskQueue } from './taskQueue'
 export { parseTotpSecret } from './totp'
 export {
    type Band,
+   type CompanyItem,
    EXCERPT_LENGTH,
    type PersonItem,
    type PostItem,

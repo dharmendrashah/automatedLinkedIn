@@ -130,4 +130,30 @@ export class LinkedInCompanyService {
    public static restoreForUser(userId: string, id: string) {
       return updateOwned(userId, id, { archivedAt: null })
    }
+
+   // The companies a workflow reads, newest first.
+   public static recent(userId: string, take: number) {
+      return PrismaService.client.linkedInCompany.findMany({
+         where: {
+            userId,
+            archivedAt: null,
+         },
+         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+         take,
+         select: {
+            slug: true,
+            url: true,
+            name: true,
+         },
+      })
+   }
+
+   public static countActive(userId: string) {
+      return PrismaService.client.linkedInCompany.count({
+         where: {
+            userId,
+            archivedAt: null,
+         },
+      })
+   }
 }
