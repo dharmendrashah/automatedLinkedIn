@@ -21,8 +21,11 @@ import { cn } from '@/lib/utils'
 
 import { trpc } from '../../trpc'
 import { createApiUrl } from '../../trpc/config'
+import { type Graph } from './types'
 
 const COPIED_MS = 1_500
+// Ends a line of a shell command that goes on below.
+const BACKSLASH = String.fromCharCode(92)
 
 const CopyButton = ({ text, label }: { text: string; label: string }) => {
    const [copied, setCopied] = useState(false)
@@ -75,10 +78,32 @@ const RESPONSES: [string, string][] = [
    ['429', 'Too many calls this hour.'],
 ]
 
-type Props = { workflowId: string; enabled: boolean }
+// What each input block can take from a call, with an example link.
+const INPUTS = [
+   {
+      type: 'input.profiles',
+      field: 'profiles',
+      what: 'people',
+      example: 'https://www.linkedin.com/in/ada-lovelace',
+   },
+   {
+      type: 'input.posts',
+      field: 'posts',
+      what: 'posts',
+      example: 'https://www.linkedin.com/posts/ada-lovelace_engines-activity-7452924970042826753-AbCd',
+   },
+   {
+      type: 'input.companies',
+      field: 'companies',
+      what: 'companies',
+      example: 'https://www.linkedin.com/company/stripe',
+   },
+] as const
+
+type Props = { workflowId: string; enabled: boolean; graph: Graph }
 
 // How another system starts this workflow: what must be ready, the token, a copyable request, and the rules.
-export const ApiAccess = ({ workflowId, enabled }: Props) => {
+export const ApiAccess = ({ workflowId, enabled, graph }: Props) => {
    const [token, setToken] = useState<string | null>(null)
    const status = trpc.workflow.apiStatus.useQuery({ id: workflowId })
    const rotate = trpc.workflow.rotateToken.useMutation({
@@ -91,14 +116,17 @@ export const ApiAccess = ({ workflowId, enabled }: Props) => {
    const hasToken = Boolean(token) || status.data?.hasToken === true
    const ready = enabled && hasToken
    const limits = status.data?.limits
-   const body = '{\n  "profiles": ["https://www.linkedin.com/in/ada-lovelace"]\n}'
-   const curl = [
-      `curl -X POST '${address}' \\`,
-      `  -H 'Authorization: Bearer ${token ?? '<token>'}' \\`,
-      `  -H 'Content-Type: application/json' \\`,
-      `  -H 'Idempotency-Key: order-1234' \\`,
-      `  -d '${body.replace(/\n\s*/g, ' ')}'`,
-   ].join('\n')
+   const inputs = INPUTS.filter(({ type }) => graph.nodes.some(node => node.type === type))
+   const body =
+      inputs.length > 0
+         ? JSON.stringify(Object.fromEntries(inputs.map(({ field, example }) => [field, [example]])), null, 2)
+         : null
+   const lines = [
+      `curl -X POST '${address}'`,
+      `  -H 'Authorization: Bearer ${token ?? '<token>'}'`,
+      ...(body ? [`  -H 'Content-Type: application/json'`, `  -d '${body.replace(/\n\s*/g, ' ')}'`] : []),
+   ]
+   const curl = lines.join(` ${BACKSLASH}\n`)
    const createButton = (onClick?: () => void) => (
       <Button type="button" variant={hasToken ? 'outline' : 'default'} disabled={rotate.isPending} onClick={onClick}>
          {rotate.isPending ? <Loader2 className="animate-spin" /> : <KeyRound />}
@@ -175,14 +203,16 @@ export const ApiAccess = ({ workflowId, enabled }: Props) => {
                      <Tabs defaultValue="curl">
                         <TabsList>
                            <TabsTrigger value="curl">cURL</TabsTrigger>
-                           <TabsTrigger value="body">JSON body</TabsTrigger>
+                           {body ? <TabsTrigger value="body">JSON body</TabsTrigger> : null}
                         </TabsList>
                         <TabsContent value="curl">
                            <Code text={curl} label="Copy request" />
                         </TabsContent>
-                        <TabsContent value="body">
-                           <Code text={body} label="Copy body" />
-                        </TabsContent>
+                        {body ? (
+                           <TabsContent value="body">
+                              <Code text={body} label="Copy body" />
+                           </TabsContent>
+                        ) : null}
                      </Tabs>
                   </Step>
                </ol>
@@ -195,17 +225,26 @@ export const ApiAccess = ({ workflowId, enabled }: Props) => {
                   <CardTitle className="text-base">What to send</CardTitle>
                </CardHeader>
                <CardContent className="grid gap-2 text-sm">
-                  <p>
-                     Any of <code>profiles</code>, <code>posts</code> and <code>companies</code>: lists of LinkedIn links.
-                  </p>
+                  {inputs.length === 0 ? (
+                     <p>
+                        Nothing. This workflow finds what it needs itself, so a call with no body starts it.
+                     </p>
+                  ) : (
+                     <>
+                        <p>Links for its inputs, all optional:</p>
+                        <ul className="grid gap-1 text-xs">
+                           {inputs.map(({ field, what }) => (
+                              <li key={field}>
+                                 <code>{field}</code>: LinkedIn links of {what}. Left out, it uses your {what} list.
+                              </li>
+                           ))}
+                        </ul>
+                     </>
+                  )}
                   <ul className="text-muted-foreground grid list-disc gap-1 pl-5 text-xs">
-                     <li>Up to {limits?.items ?? 200} links per call in total.</li>
+                     {inputs.length > 0 ? <li>Up to {limits?.items ?? 200} links per call in total.</li> : null}
                      <li>
                         {status.data?.callsLastHour ?? 0} of {limits?.callsPerHour ?? 60} calls used this hour.
-                     </li>
-                     <li>
-                        The same <code>Idempotency-Key</code> within {limits?.keyHours ?? 24} hours answers with the run it
-                        already started.
                      </li>
                   </ul>
                </CardContent>

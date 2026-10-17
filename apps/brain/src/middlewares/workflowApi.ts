@@ -5,7 +5,8 @@ import { z } from 'zod'
 import { API_LIMITS, ConflictError, WorkflowTriggerService, readGraph } from 'database'
 
 // The address another system calls to start a workflow (.plan/gtm-phase-3-blocks-triggers.md):
-// POST /api/workflows/:id/run with "Authorization: Bearer <token>" and an optional "Idempotency-Key".
+// POST /api/workflows/:id/run with "Authorization: Bearer <token>". An optional "Idempotency-Key" still makes a
+// repeated call answer with the run it started.
 
 const links = z.array(z.string().trim().min(1).max(500)).max(API_LIMITS.items)
 
@@ -17,18 +18,16 @@ const bodySchema = z
    })
    .strict()
    .refine(
-      body => {
-         const total = (body.posts?.length ?? 0) + (body.profiles?.length ?? 0) + (body.companies?.length ?? 0)
-
-         return total > 0 && total <= API_LIMITS.items
-      },
-      { message: `Send between 1 and ${API_LIMITS.items} links in posts, profiles or companies.` }
+      body =>
+         (body.posts?.length ?? 0) + (body.profiles?.length ?? 0) + (body.companies?.length ?? 0) <= API_LIMITS.items,
+      { message: `Send at most ${API_LIMITS.items} links in posts, profiles or companies.` }
    )
 
 const KEY = /^[\w-]{1,100}$/
 const MAX_BODY = 64 * 1024
 
-// Read by hand: the body parser's types do not match Express 5's handler types here. Undefined when too big or not JSON.
+// Read by hand: the body parser's types do not match Express 5's handler types here. An empty body is {}: a workflow
+// that finds its own input needs nothing. Undefined when too big or not JSON.
 const readBody = async (stream: AsyncIterable<unknown>) => {
    const chunks: Buffer[] = []
    let size = 0
@@ -39,6 +38,10 @@ const readBody = async (stream: AsyncIterable<unknown>) => {
       }
 
       chunks.push(chunk)
+   }
+
+   if (size === 0) {
+      return {}
    }
 
    try {
