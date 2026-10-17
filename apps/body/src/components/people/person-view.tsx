@@ -1,4 +1,5 @@
 import { Cover, DetailLoading, DetailMissing, Picture, ReadButton } from '@/components/details/detail-parts'
+import { pollWhile } from '@/components/details/read-status'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DrawerDescription, DrawerTitle } from '@/components/ui/drawer'
@@ -58,6 +59,7 @@ const Header = ({ person }: { person: PersonDetail }) => {
                   what="full profile"
                   priceMicros={person.readPriceMicros}
                   readAt={snapshot?.fetchedAt ?? null}
+                  read={person.read}
                   pending={read.isPending}
                   error={read.error}
                   onRead={() => read.mutate({ slug: person.slug })}
@@ -70,7 +72,13 @@ const Header = ({ person }: { person: PersonDetail }) => {
 
 // One person, like their LinkedIn profile, so a lead can be judged without leaving the table.
 export const PersonView = ({ slug }: { slug: string }) => {
-   const detail = trpc.person.detail.useQuery({ slug }, { retry: false })
+   const detail = trpc.person.detail.useQuery(
+      { slug },
+      {
+         retry: false,
+         refetchInterval: query => pollWhile(query.state.data?.read),
+      }
+   )
    const person = detail.data
 
    if (!person) {

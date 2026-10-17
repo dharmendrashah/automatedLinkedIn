@@ -15,7 +15,7 @@ import {
    repeatRegions,
 } from '@automatedLinkedIn/contracts'
 
-import { type EngineDeps, Paused, type Run, type Step, StepError, WALLET_LOW, WaitingOnRun, configOf } from './context'
+import { type EngineDeps, Paused, type Run, type Step, StepError, WALLET_LOW, Waiting, configOf } from './context'
 import { EXECUTORS } from './executors'
 
 // Runs workflow graphs step by step, keeping every step's output in the database so a stopped worker resumes where it
@@ -160,10 +160,10 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
          itemsOut: result.itemsOut + passThrough.length,
       })
    } catch (error) {
-      if (error instanceof Paused || error instanceof WaitingOnRun) {
+      if (error instanceof Paused || error instanceof Waiting) {
          await WorkflowRunService.release(step.id)
 
-         return error instanceof WaitingOnRun ? 'waiting' : 'ended'
+         return error instanceof Waiting ? 'waiting' : 'ended'
       }
 
       const notConfigured = error instanceof DataServiceError && error.kind === 'CONFIG'
@@ -333,7 +333,6 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
          }
 
          claimed = true
-         progressed = true
 
          const outcome = await runStep(
             run,
@@ -345,8 +344,11 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
             deps
          )
 
+         // A step that only looked at its waiting jobs is not progress, so a quiet tick stays quiet.
          if (outcome === 'waiting') {
             waiting.add(step.id)
+         } else {
+            progressed = true
          }
 
          break

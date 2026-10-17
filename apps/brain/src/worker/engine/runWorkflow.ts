@@ -4,7 +4,7 @@ import {
    type Context,
    StepError,
    type StepResult,
-   WaitingOnRun,
+   Waiting,
    companiesOf,
    configOf,
    elseKey,
@@ -123,7 +123,7 @@ export const runWorkflow = async (ctx: Context): Promise<StepResult> => {
    }
 
    if (child?.status === 'RUNNING' && !gaveUp) {
-      throw new WaitingOnRun()
+      throw new Waiting()
    }
 
    const outcome = !child

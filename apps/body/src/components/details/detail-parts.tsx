@@ -7,6 +7,8 @@ import { type ReactNode, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
+import { isReading } from './read-status'
+
 // Pieces every detail drawer shares: the cover and picture, the paid read button, loading and missing states.
 
 const money = (micros: number) => `$${(micros / 1_000_000).toFixed(3)}`
@@ -42,24 +44,34 @@ type ReadProps = {
    what: string
    priceMicros: number
    readAt: string | null
+   // The newest read the worker has for this item.
+   read: { status: 'QUEUED' | 'RUNNING' | 'DONE' | 'FAILED'; message: string | null } | null
    pending: boolean
    error: { message: string } | null
    onRead: () => void
 }
 
-// The paid read: the price on the button, when it was last read, and why it did not work.
-export const ReadButton = ({ what, priceMicros, readAt, pending, error, onRead }: ReadProps) => (
-   <>
-      <Button variant="outline" size="sm" disabled={pending} onClick={onRead}>
-         {pending ? <Loader2 className="animate-spin" /> : readAt ? <RefreshCw /> : <FileSearch />}
-         {readAt ? 'Read again' : `Read ${what}`} · about {money(priceMicros)}
-      </Button>
-      {readAt ? (
-         <p className="text-muted-foreground basis-full text-xs">Read {new Date(readAt).toLocaleDateString()}.</p>
-      ) : null}
-      {error ? <p className="text-destructive basis-full text-sm">{readableError(error)}</p> : null}
-   </>
-)
+// The paid read: the price on the button, "Reading…" while the worker has it, when it was last read, and why it did
+// not work.
+export const ReadButton = ({ what, priceMicros, readAt, read, pending, error, onRead }: ReadProps) => {
+   const reading = isReading(read)
+
+   return (
+      <>
+         <Button variant="outline" size="sm" disabled={pending || reading} onClick={onRead}>
+            {pending || reading ? <Loader2 className="animate-spin" /> : readAt ? <RefreshCw /> : <FileSearch />}
+            {reading ? `Reading the ${what}…` : `${readAt ? 'Read again' : `Read ${what}`} · about ${money(priceMicros)}`}
+         </Button>
+         {reading ? (
+            <p className="text-muted-foreground basis-full text-xs">This can take a few minutes. You can close this and come back.</p>
+         ) : readAt ? (
+            <p className="text-muted-foreground basis-full text-xs">Read {new Date(readAt).toLocaleDateString()}.</p>
+         ) : null}
+         {read?.status === 'FAILED' && read.message ? <p className="text-destructive basis-full text-sm">{read.message}</p> : null}
+         {error ? <p className="text-destructive basis-full text-sm">{readableError(error)}</p> : null}
+      </>
+   )
+}
 
 export const DetailLoading = ({ what }: { what: string }) => (
    <div className="grid gap-3">

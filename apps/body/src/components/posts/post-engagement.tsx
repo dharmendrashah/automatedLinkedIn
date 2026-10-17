@@ -1,4 +1,5 @@
 import { formatUsd } from '@/components/workflows/types'
+import { isReading, pollWhile } from '@/components/details/read-status'
 import { Section } from '@/components/people/person-sections'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -52,6 +53,8 @@ const ReadChoices = ({ slug, kind, count, engagement }: { slug: string; kind: Ki
    })
    const { some, all } = engagement.limits
    const stored = engagement[kind]
+   const latest = engagement.reads[kind]
+   const reading = isReading(latest)
    const choices = [false, ...(count === null || count > some ? [true] : [])].map(everything => {
       const limit = everything ? all : some
       const rows = Math.min(count ?? limit, limit)
@@ -66,23 +69,33 @@ const ReadChoices = ({ slug, kind, count, engagement }: { slug: string; kind: Ki
 
    return (
       <div className="flex flex-wrap items-center gap-2">
-         {choices.map(({ everything, label, price }) => (
-            <Button
-               key={String(everything)}
-               variant={stored ? 'outline' : 'default'}
-               size="sm"
-               disabled={read.isPending}
-               onClick={() => read.mutate({ slug, kind, all: everything })}
-            >
-               {read.isPending && read.variables?.all === everything ? <Loader2 className="animate-spin" /> : null}
-               {label} · {price}
-            </Button>
-         ))}
+         {reading ? (
+            <p className="text-muted-foreground flex basis-full items-center gap-2 text-sm">
+               <Loader2 className="size-4 animate-spin" aria-hidden />
+               Reading the {kind}… This can take a few minutes. You can close this and come back.
+            </p>
+         ) : (
+            choices.map(({ everything, label, price }) => (
+               <Button
+                  key={String(everything)}
+                  variant={stored ? 'outline' : 'default'}
+                  size="sm"
+                  disabled={read.isPending}
+                  onClick={() => read.mutate({ slug, kind, all: everything })}
+               >
+                  {read.isPending && read.variables?.all === everything ? <Loader2 className="animate-spin" /> : null}
+                  {label} · {price}
+               </Button>
+            ))
+         )}
          {stored ? (
             <p className="text-muted-foreground basis-full text-xs">
                Read on {new Date(stored.fetchedAt).toLocaleDateString()}: {stored.items.length.toLocaleString()} {kind}
                {stored.items.length >= stored.limit ? `, the first ${stored.limit.toLocaleString()}` : ''}.
             </p>
+         ) : null}
+         {latest?.status === 'FAILED' && latest.message ? (
+            <p className="text-destructive basis-full text-sm">{latest.message}</p>
          ) : null}
          {read.error ? <p className="text-destructive basis-full text-sm">{readableError(read.error)}</p> : null}
       </div>
@@ -297,7 +310,13 @@ export const PostEngagement = ({
    counts: Record<Kind, number | null>
    onPerson: (slug: string) => void
 }) => {
-   const engagement = trpc.postPage.engagement.useQuery({ slug }, { retry: false })
+   const engagement = trpc.postPage.engagement.useQuery(
+      { slug },
+      {
+         retry: false,
+         refetchInterval: query => pollWhile(query.state.data?.reads.comments, query.state.data?.reads.reactions),
+      }
+   )
    const lists = trpc.workflowList.lists.useQuery()
    const [chosen, setChosen] = useState('')
    const listId = chosen || (lists.data?.[0]?.id ?? '')

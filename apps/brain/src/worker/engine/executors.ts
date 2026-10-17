@@ -49,14 +49,12 @@ import {
    type Context,
    DAY_MS,
    type StepResult,
-   WALLET_LOW,
    collectEach,
    companiesOf,
    configOf,
    elseKey,
    keepItems,
    numberIn,
-   paidCall,
    parentsOf,
    peopleOf,
    postsOf,
@@ -433,36 +431,32 @@ const enrich = async (ctx: Context): Promise<StepResult> => {
    const rules = scoring ? await rulesOf(run.userId, scoring) : null
    const thresholds = thresholdsOf(run, scoring)
    const toRead = people.filter(({ enriched }) => !enriched).sort((a, b) => a.slug.localeCompare(b.slug))
-   let stopped = false
+   const batches = Array.from({ length: Math.ceil(toRead.length / ENRICH_BATCH) }, (_, index) =>
+      toRead.slice(index * ENRICH_BATCH, (index + 1) * ENRICH_BATCH)
+   )
 
    await WorkflowRunService.seedItems(at, people)
 
-   for (let start = 0; start < toRead.length && !stopped; start += ENRICH_BATCH) {
-      const batch = toRead.slice(start, start + ENRICH_BATCH)
-      const outcome = await paidCall({
-         ctx,
-         inputKey: `batch-${start / ENRICH_BATCH}`,
+   const collected = await collectEach(
+      ctx,
+      batches.map((batch, index) => ({
+         inputKey: `batch-${index}`,
          slug: 'profiles',
          params: profilesParams(batch),
          use: async rows => {
             await WorkflowRunService.putItems(at, applyProfiles(batch, profilesFrom(rows), rules, thresholds))
          },
-      })
-
-      stopped = outcome === 'stop'
-   }
-
+      }))
+   )
    const read = peopleOf(await WorkflowRunService.items(run.id, [at]))
    const kept = rules ? read.filter(({ band }) => band !== null) : read
    const result = await keepItems(ctx, kept, people.length)
 
-   return stopped
-      ? {
-           ...result,
-           status: 'PARTIAL',
-           message: WALLET_LOW,
-        }
-      : result
+   return {
+      ...result,
+      status: collected.status,
+      message: collected.message,
+   }
 }
 
 const SEEN_CHUNK = 1_000

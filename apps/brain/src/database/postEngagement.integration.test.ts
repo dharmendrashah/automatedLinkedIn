@@ -1,14 +1,16 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { fakeDataClient } from 'core/fakeDataClient'
 
 import { ConflictError } from './conflict'
 import { LinkedInPostService } from './linkedInPost.service'
-import { type PageReader } from './paidRead'
 import { PostEngagementService } from './postEngagement.service'
 import { PrismaService } from './prisma.service'
 import { SpendService } from './spend.service'
 import { UserService } from './user.service'
 import { WalletService } from './wallet.service'
+import { workReads } from './workReads'
 import { WorkflowListService } from './workflowList.service'
 
 // Needs PostgreSQL. The data service is a fake: nothing is paid.
@@ -18,15 +20,46 @@ const POST_SLUG = 'activity-7452924970042826754'
 const POST_URL = 'https://www.linkedin.com/feed/update/urn:li:activity:7452924970042826754'
 const profile = (slug: string) => `https://www.linkedin.com/in/${slug}`
 
-const readerOf = (rows: Record<string, unknown>[]) => ({
-   collect: vi.fn<PageReader['collect']>(async () => ({
-      jobId: 'job-1',
-      status: 'completed' as const,
-      rows,
-      costMicros: rows.length * 2_000,
-      error: null,
-   })),
-})
+const COMMENTS = [
+   {
+      commenterName: 'Ada',
+      commenterUrl: profile('ada'),
+      comment: 'Agreed',
+   },
+   {
+      commenterName: 'Carol',
+      commenterUrl: profile('carol'),
+      comment: 'We need this',
+   },
+   {
+      commenterName: 'Stripe',
+      commenterUrl: 'https://www.linkedin.com/company/stripe',
+      commenterType: 'company',
+      comment: 'Thanks',
+   },
+]
+const REACTIONS = [
+   {
+      reactorName: 'Carol',
+      reactorUrl: profile('carol'),
+      reactionType: 'LIKE',
+   },
+   {
+      reactorName: 'Dan',
+      reactorUrl: profile('dan'),
+      reactionType: 'PRAISE',
+   },
+]
+
+const fakeService = () =>
+   fakeDataClient(slug => {
+      const rows = slug === 'post-comments' ? COMMENTS : REACTIONS
+
+      return {
+         rows,
+         costMicros: rows.length * 2_000,
+      }
+   })
 
 let userId: string
 let listId: string
@@ -58,62 +91,30 @@ describe('post comments and reactions (database)', () => {
    })
 
    it('should read comments and reactions once a day each and show who is already in a list', async () => {
-      const comments = readerOf([
-         {
-            commenterName: 'Ada',
-            commenterUrl: profile('ada'),
-            comment: 'Agreed',
-         },
-         {
-            commenterName: 'Carol',
-            commenterUrl: profile('carol'),
-            comment: 'We need this',
-         },
-         {
-            commenterName: 'Stripe',
-            commenterUrl: 'https://www.linkedin.com/company/stripe',
-            commenterType: 'company',
-            comment: 'Thanks',
-         },
-      ])
+      const service = fakeService()
 
-      await PostEngagementService.read(userId, POST_SLUG, 'comments', false, comments)
-      await expect(PostEngagementService.read(userId, POST_SLUG, 'comments', false, comments)).rejects.toBeInstanceOf(
+      await PostEngagementService.read(userId, POST_SLUG, 'comments', false)
+      await workReads(userId, service)
+      await expect(PostEngagementService.read(userId, POST_SLUG, 'comments', false)).rejects.toBeInstanceOf(
          ConflictError
       )
       // "All" is its own read the same day.
-      await PostEngagementService.read(userId, POST_SLUG, 'comments', true, comments)
+      await PostEngagementService.read(userId, POST_SLUG, 'comments', true)
+      await PostEngagementService.read(userId, POST_SLUG, 'reactions', false)
+      await workReads(userId, service)
 
-      const page = await PostEngagementService.read(
-         userId,
-         POST_SLUG,
-         'reactions',
-         false,
-         readerOf([
-            {
-               reactorName: 'Carol',
-               reactorUrl: profile('carol'),
-               reactionType: 'LIKE',
-            },
-            {
-               reactorName: 'Dan',
-               reactorUrl: profile('dan'),
-               reactionType: 'PRAISE',
-            },
-         ])
-      )
+      const page = await PostEngagementService.detail(userId, POST_SLUG)
       const [month] = await SpendService.usage(userId)
 
-      expect(comments.collect).toHaveBeenCalledTimes(2)
-      expect(comments.collect).toHaveBeenLastCalledWith(
-         'post-comments',
-         {
-            posts: POST_URL,
-            maxResults: 1_000,
-            includeReplies: true,
-         },
-         expect.anything()
-      )
+      expect(service.start).toHaveBeenCalledWith('post-comments', {
+         posts: POST_URL,
+         maxResults: 1_000,
+         includeReplies: true,
+      })
+      expect(page?.reads).toMatchObject({
+         comments: { status: 'DONE' },
+         reactions: { status: 'DONE' },
+      })
       expect(page?.comments?.items.map(({ slug, listName }) => [slug, listName])).toEqual([
          ['ada', expect.stringContaining('Leads')],
          ['carol', null],
@@ -158,43 +159,18 @@ describe('post comments and reactions (database)', () => {
       ])
    })
 
-   it('should say a read is still running, and retry one that never finished', async () => {
-      const callId = `reactions-read:${userId}:${POST_SLUG}:${new Date().toISOString().slice(0, 10)}:all`
-      const reader = readerOf([
-         {
-            reactorName: 'Erin',
-            reactorUrl: profile('erin'),
-         },
-      ])
-
-      await PrismaService.client.spendLedger.create({
-         data: {
-            userId,
-            callId,
-            amountMicros: 0,
-            month: new Date().toISOString().slice(0, 7),
-         },
-      })
-      await expect(PostEngagementService.read(userId, POST_SLUG, 'reactions', true, reader)).rejects.toThrow(
-         'still running'
-      )
-      await PrismaService.client.spendLedger.update({
-         where: { callId },
-         data: { createdAt: new Date(Date.now() - 20 * 60 * 1000) },
-      })
-
-      const page = await PostEngagementService.read(userId, POST_SLUG, 'reactions', true, reader)
-
-      expect(page?.reactions?.items.map(({ slug }) => slug)).toEqual(['erin'])
-   })
-
-   it('should delete the comments and reactions when the post is archived', async () => {
+   it('should drop a read whose post was archived before it started, and delete what was kept', async () => {
+      const service = fakeService()
       const post = await LinkedInPostService.bySlug(userId, POST_SLUG)
 
+      await PostEngagementService.read(userId, POST_SLUG, 'reactions', true)
       await LinkedInPostService.archiveForUser(userId, post?.id ?? '')
+      await workReads(userId, service)
 
+      expect(service.start).not.toHaveBeenCalled()
+      expect((await PostEngagementService.detail(userId, POST_SLUG))?.reads.reactions?.status).toBe('FAILED')
       expect(await PrismaService.client.pageSnapshot.count({ where: { userId } })).toBe(0)
-      await expect(PostEngagementService.read(userId, POST_SLUG, 'reactions', true, readerOf([]))).rejects.toThrow(
+      await expect(PostEngagementService.read(userId, POST_SLUG, 'reactions', true)).rejects.toThrow(
          'Restore the post first.'
       )
    })

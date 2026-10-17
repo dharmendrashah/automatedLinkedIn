@@ -64,6 +64,9 @@ export class RetentionService {
          data: { reviewAt: now },
       })
       const ledger = await db.spendLedger.deleteMany({ where: { createdAt: { lt: ledgerCutoff } } })
+      // A finished read keeps the link it read; the result itself lives in the snapshot.
+      const readCutoff = daysBefore(now, RETENTION.itemsDays)
+      const reads = await db.dataRead.deleteMany({ where: { finishedAt: { lt: readCutoff } } })
       // A full profile is kept only while the person is in one of the owner's lists or in /profiles.
       const snapshots = await db.$executeRaw`
          DELETE FROM "PersonSnapshot" s
@@ -95,6 +98,7 @@ export class RetentionService {
          reviewed: reviewed.count,
          marked: marked.count,
          ledger: ledger.count,
+         reads: reads.count,
          snapshots,
          pages,
       }

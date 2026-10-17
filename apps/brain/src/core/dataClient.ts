@@ -1,9 +1,9 @@
-// HTTP client of the shared data service, for the brain worker and on-demand profile reads. Nothing it returns
-// reaches the browser as is.
+// HTTP client of the shared data service. Only the brain worker uses it; nothing it returns reaches the browser as is.
 
 const API = 'https://api.mindcase.co'
 const POLL_MS = 3_000
-const RESULT_TIMEOUT_MS = 10 * 60 * 1000
+// How long a job may run before it is cancelled and counted as failed.
+export const RESULT_TIMEOUT_MS = 10 * 60 * 1000
 const RATE_WAIT_MS = 60_000
 const RETRIES = 2
 
@@ -70,30 +70,28 @@ export class DataClient {
       return Math.round(Number(body.usd_remaining ?? 0) * 1_000_000)
    }
 
-   // Starts a job, reports its id as soon as it is known, and waits for its rows and charge. With `jobId`, picks up a job
-   // started before instead of paying for a new one.
-   public async collect(
-      slug: string,
-      params: Json,
-      known: { jobId: string | null; onJobId: (jobId: string) => Promise<void> }
-   ): Promise<CollectOutcome> {
-      let { jobId } = known
-      let body: Json | null = null
+   // Starts a job without waiting for it; the caller saves the id and checks the job later.
+   public async start(slug: string, params: Json) {
+      const body = await this.request('POST', `/v1/data/linkedin/${slug}/run`, { params })
+      const jobId = text(body.job_id)
 
       if (!jobId) {
-         body = await this.request('POST', `/v1/data/linkedin/${slug}/run?wait=true&wait_timeout=55`, { params })
-         jobId = text(body.job_id)
-
-         if (!jobId) {
-            throw new DataServiceError('UNAVAILABLE', 'The data service did not return a job id')
-         }
-
-         await known.onJobId(jobId)
+         throw new DataServiceError('UNAVAILABLE', 'The data service did not return a job id')
       }
 
-      const finished = body && isTerminal(body.status) && body.truncated !== true ? body : await this.waitFor(jobId)
+      return jobId
+   }
+
+   // The job's rows and real charge once it has ended; null while it runs.
+   public async check(jobId: string): Promise<CollectOutcome | null> {
+      const finished = await this.request('GET', `/v1/jobs/${jobId}/results`)
+
+      if (!isTerminal(finished.status)) {
+         return null
+      }
+
       const job = await this.request('GET', `/v1/jobs/${jobId}`)
-      const status = isTerminal(finished.status) ? finished.status : 'failed'
+      const { status } = finished
 
       return {
          jobId,
@@ -102,6 +100,30 @@ export class DataClient {
          costMicros: Math.round(Number(job.usd_used ?? 0) * 1_000_000),
          error: text(finished.error) ?? text(job.error),
       }
+   }
+
+   public async cancel(jobId: string) {
+      await this.request('DELETE', `/v1/jobs/${jobId}`)
+   }
+
+   // Starts a job and waits for it in place. Only for the opt-in live tests; the worker never waits.
+   public async collect(slug: string, params: Json): Promise<CollectOutcome> {
+      const jobId = await this.start(slug, params)
+      const deadline = Date.now() + RESULT_TIMEOUT_MS
+
+      while (Date.now() < deadline) {
+         const outcome = await this.check(jobId)
+
+         if (outcome) {
+            return outcome
+         }
+
+         await this.sleep(POLL_MS)
+      }
+
+      await this.cancel(jobId).catch(() => undefined)
+
+      throw new DataServiceError('UNAVAILABLE', `Job ${jobId} did not finish in time`)
    }
 
    // A job of this kind created at or after `since`, for a request whose answer was lost.
@@ -116,24 +138,6 @@ export class DataClient {
       )
 
       return match ? text(match.id) : null
-   }
-
-   private async waitFor(jobId: string) {
-      const deadline = Date.now() + RESULT_TIMEOUT_MS
-
-      while (Date.now() < deadline) {
-         const body = await this.request('GET', `/v1/jobs/${jobId}/results`)
-
-         if (isTerminal(body.status)) {
-            return body
-         }
-
-         await this.sleep(POLL_MS)
-      }
-
-      await this.request('DELETE', `/v1/jobs/${jobId}`).catch(() => undefined)
-
-      throw new DataServiceError('UNAVAILABLE', `Job ${jobId} did not finish in time`)
    }
 
    private async pace() {

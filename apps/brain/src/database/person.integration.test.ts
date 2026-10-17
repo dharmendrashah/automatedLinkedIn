@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { fakeDataClient } from 'core/fakeDataClient'
 
 import { ConflictError } from './conflict'
 import { LinkedInProfileService } from './linkedInProfile.service'
-import { PersonService, type ProfileReader } from './person.service'
+import { PersonService } from './person.service'
 import { PrismaService } from './prisma.service'
 import { RetentionService } from './retention.service'
 import { UserService } from './user.service'
 import { WalletService } from './wallet.service'
+import { workReads } from './workReads'
 import { WorkflowListService } from './workflowList.service'
 
 // Needs PostgreSQL. The data service is a fake: nothing is paid.
@@ -15,28 +18,24 @@ import { WorkflowListService } from './workflowList.service'
 const email = `${randomUUID()}@elitale.com`
 const url = (slug: string) => `https://www.linkedin.com/in/${slug}`
 
-const fakeReader = (costMicros = 4_000) => ({
-   collect: vi.fn<ProfileReader['collect']>(async () => ({
-      jobId: 'job-1',
-      status: 'completed' as const,
-      rows: [
-         {
-            firstName: 'Ada',
-            lastName: 'Lovelace',
-            about: 'I write programs.',
-            experience: [
-               {
-                  position: 'Analyst',
-                  companyName: 'Engines',
-               },
-            ],
-            email: 'ada@example.com',
-         },
-      ],
-      costMicros,
-      error: null,
-   })),
-})
+const ADA = {
+   firstName: 'Ada',
+   lastName: 'Lovelace',
+   about: 'I write programs.',
+   experience: [
+      {
+         position: 'Analyst',
+         companyName: 'Engines',
+      },
+   ],
+   email: 'ada@example.com',
+}
+
+const fakeReader = () =>
+   fakeDataClient(() => ({
+      rows: [ADA],
+      costMicros: 4_000,
+   }))
 
 let userId: string
 let listId: string
@@ -109,11 +108,18 @@ describe('PersonService (database)', () => {
       expect(await PersonService.detail(userId, 'nobody')).toBeNull()
    })
 
-   it('should pay one full read a day, book it, and keep only the allow-listed fields', async () => {
+   it('should queue one full read a day, book it when the worker ends it, and keep only the allow-listed fields', async () => {
       const reader = fakeReader()
-      const read = await PersonService.readFull(userId, 'ada', reader)
+
+      expect((await PersonService.readFull(userId, 'ada'))?.read?.status).toBe('QUEUED')
+      // A double click joins the read already queued.
+      expect((await PersonService.readFull(userId, 'ada'))?.read?.status).toBe('QUEUED')
+      await workReads(userId, reader)
+
+      const read = await PersonService.detail(userId, 'ada')
       const ledger = await PrismaService.client.spendLedger.findMany({ where: { userId } })
 
+      expect(read?.read?.status).toBe('DONE')
       expect(read?.snapshot).toMatchObject({
          name: 'Ada Lovelace',
          about: 'I write programs.',
@@ -123,24 +129,52 @@ describe('PersonService (database)', () => {
       expect(ledger).toEqual([
          expect.objectContaining({
             amountMicros: 4_000,
+            label: 'Profile reads',
             workflowId: null,
             runId: null,
          }),
       ])
-      await expect(PersonService.readFull(userId, 'ada', reader)).rejects.toBeInstanceOf(ConflictError)
-      expect(reader.collect).toHaveBeenCalledTimes(1)
+      await expect(PersonService.readFull(userId, 'ada')).rejects.toBeInstanceOf(ConflictError)
+      expect(reader.start).toHaveBeenCalledTimes(1)
    })
 
-   it('should let the owner try again when a read failed before anything was paid', async () => {
-      const failing = {
-         collect: vi.fn<ProfileReader['collect']>(async () => {
-            throw new Error('network')
-         }),
-      }
+   it('should retry a read the data service failed without a charge, then keep it', async () => {
+      let failures = 1
+      const reader = fakeDataClient(() => {
+         if (failures > 0) {
+            failures -= 1
 
-      await expect(PersonService.readFull(userId, 'bob', failing)).rejects.toThrow('network')
-      expect(await PrismaService.client.spendLedger.count({ where: { userId } })).toBe(1)
-      expect((await PersonService.readFull(userId, 'bob', fakeReader()))?.snapshot?.name).toBe('Ada Lovelace')
+            return {
+               rows: [],
+               costMicros: 0,
+               status: 'failed',
+               error: 'System error',
+            }
+         }
+
+         return {
+            rows: [ADA],
+            costMicros: 4_000,
+         }
+      })
+
+      await PersonService.readFull(userId, 'bob')
+      await workReads(userId, reader)
+      expect((await PersonService.detail(userId, 'bob'))?.read?.status).toBe('RUNNING')
+
+      // The pause before the retry is over.
+      await PrismaService.client.dataRead.updateMany({
+         where: {
+            userId,
+            finishedAt: null,
+         },
+         data: { retryAt: new Date(0) },
+      })
+      await workReads(userId, reader)
+
+      expect((await PersonService.detail(userId, 'bob'))?.snapshot?.name).toBe('Ada Lovelace')
+      expect(reader.start).toHaveBeenCalledTimes(2)
+      expect(await PrismaService.client.spendLedger.count({ where: { userId } })).toBe(2)
    })
 
    it('should delete the full profile on do not contact and when the person is kept nowhere', async () => {
@@ -155,6 +189,6 @@ describe('PersonService (database)', () => {
 
       expect(await PrismaService.client.personSnapshot.count({ where: { userId } })).toBe(0)
       expect(await PersonService.detail(userId, 'ada')).toBeNull()
-      await expect(PersonService.readFull(userId, 'bob', fakeReader())).rejects.toBeInstanceOf(ConflictError)
+      await expect(PersonService.readFull(userId, 'bob')).rejects.toBeInstanceOf(ConflictError)
    })
 })

@@ -1,4 +1,5 @@
 import { Cover, DetailLoading, DetailMissing, PersonRow, Picture, ReadButton } from '@/components/details/detail-parts'
+import { pollWhile } from '@/components/details/read-status'
 import { NotesField } from '@/components/details/notes-field'
 import { About, Section } from '@/components/people/person-sections'
 import { Badge } from '@/components/ui/badge'
@@ -86,6 +87,7 @@ const Header = ({ detail }: { detail: CompanyDetail }) => {
                   what="company page"
                   priceMicros={detail.readPriceMicros}
                   readAt={snapshot?.fetchedAt ?? null}
+                  read={detail.read}
                   pending={read.isPending}
                   error={read.error}
                   onRead={() => read.mutate({ slug: detail.slug })}
@@ -161,7 +163,13 @@ const Workspace = ({ detail }: { detail: CompanyDetail }) => {
 
 // One company, like its LinkedIn page, with the people from the owner's lists who work there.
 export const CompanyView = ({ slug, onPerson }: { slug: string; onPerson: (slug: string) => void }) => {
-   const detail = trpc.companyPage.detail.useQuery({ slug }, { retry: false })
+   const detail = trpc.companyPage.detail.useQuery(
+      { slug },
+      {
+         retry: false,
+         refetchInterval: query => pollWhile(query.state.data?.read),
+      }
+   )
    const data = detail.data
 
    if (!data) {

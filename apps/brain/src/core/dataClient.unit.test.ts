@@ -30,68 +30,37 @@ const fakeService = (replies: Record<string, Reply[]>) => {
    }
 }
 
-const RUN = 'POST /v1/data/linkedin/post-comments/run?wait=true&wait_timeout=55'
+const RUN = 'POST /v1/data/linkedin/post-comments/run'
 
 describe('DataClient', () => {
-   it('should save the job id at once, return the rows and read the real charge', async () => {
-      const { client } = fakeService({
-         [RUN]: [
-            {
-               body: {
-                  job_id: 'job-1',
-                  status: 'completed',
-                  truncated: false,
-                  data: [{ commenterName: 'Ada' }],
-               },
-            },
-         ],
-         'GET /v1/jobs/job-1': [{ body: { usd_used: 0.002 } }],
-      })
-      const onJobId = vi.fn(async () => undefined)
+   it('should start a job without waiting and return its id', async () => {
+      const { client } = fakeService({ [RUN]: [{ body: { job_id: 'job-1' } }] })
 
-      await expect(
-         client.collect(
-            'post-comments',
-            { posts: 'x' },
-            {
-               jobId: null,
-               onJobId,
-            }
-         )
-      ).resolves.toEqual({
-         jobId: 'job-1',
-         status: 'completed',
-         rows: [{ commenterName: 'Ada' }],
-         costMicros: 2_000,
-         error: null,
-      })
-      expect(onJobId).toHaveBeenCalledWith('job-1')
+      await expect(client.start('post-comments', { posts: 'x' })).resolves.toBe('job-1')
    })
 
-   it('should resume a known job by polling, never starting a new one', async () => {
+   it('should report a running job as null, and a finished one with its rows and real charge', async () => {
       const { client, calls } = fakeService({
          'GET /v1/jobs/job-2/results': [
             { body: { status: 'running' } },
             {
                body: {
                   status: 'completed',
-                  data: [{}, {}],
+                  data: [{ commenterName: 'Ada' }, 'not a row'],
                },
             },
          ],
-         'GET /v1/jobs/job-2': [{ body: { usd_used: 0.004 } }],
+         'GET /v1/jobs/job-2': [{ body: { usd_used: 0.002 } }],
       })
 
-      const outcome = await client.collect(
-         'post-comments',
-         {},
-         {
-            jobId: 'job-2',
-            onJobId: async () => undefined,
-         }
-      )
-
-      expect(outcome.rows).toHaveLength(2)
+      await expect(client.check('job-2')).resolves.toBeNull()
+      await expect(client.check('job-2')).resolves.toEqual({
+         jobId: 'job-2',
+         status: 'completed',
+         rows: [{ commenterName: 'Ada' }],
+         costMicros: 2_000,
+         error: null,
+      })
       expect(calls.some(call => call.startsWith('POST'))).toBe(false)
    })
 
@@ -117,16 +86,7 @@ describe('DataClient', () => {
 
       await expect(client.balanceMicros()).rejects.toMatchObject({ kind: 'CONFIG' })
       await expect(client.balanceMicros()).rejects.toMatchObject({ kind: 'BALANCE' })
-      await expect(
-         client.collect(
-            'post-comments',
-            { nope: 1 },
-            {
-               jobId: null,
-               onJobId: async () => undefined,
-            }
-         )
-      ).rejects.toBeInstanceOf(DataServiceError)
+      await expect(client.start('post-comments', { nope: 1 })).rejects.toMatchObject({ kind: 'BAD_REQUEST' })
    })
 
    it('should not send a start again after a server error, and refuse to work without a key', async () => {
@@ -139,22 +99,13 @@ describe('DataClient', () => {
          ],
       })
 
-      await expect(
-         client.collect(
-            'post-comments',
-            {},
-            {
-               jobId: null,
-               onJobId: async () => undefined,
-            }
-         )
-      ).rejects.toMatchObject({ kind: 'UNAVAILABLE' })
+      await expect(client.start('post-comments', {})).rejects.toMatchObject({ kind: 'UNAVAILABLE' })
       expect(calls).toEqual([RUN])
       await expect(
          new DataClient({
             key: '',
             requestsPerMinute: 45,
          }).balanceMicros()
-      ).rejects.toMatchObject({ kind: 'CONFIG' })
+      ).rejects.toBeInstanceOf(DataServiceError)
    })
 })

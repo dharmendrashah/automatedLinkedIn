@@ -45,10 +45,7 @@ describe.skipIf(!process.env.DATA_LIVE_TEST)('data operations (live data service
    let spent = 0
 
    const collect = async (slug: string, params: Parameters<DataClient['collect']>[1]) => {
-      const outcome = await client.collect(slug, params, {
-         jobId: null,
-         onJobId: async () => undefined,
-      })
+      const outcome = await client.collect(slug, params)
 
       spent += outcome.costMicros
       console.log(slug, outcome.status, outcome.rows.length, 'rows', outcome.costMicros, 'micros', 'total', spent)

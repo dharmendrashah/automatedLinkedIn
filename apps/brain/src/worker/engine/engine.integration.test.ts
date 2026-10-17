@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { fakeDataClient } from 'core/fakeDataClient'
 
 import { IcpService, LinkedInPostService, PrismaService, UserService, WalletService, WorkflowService } from 'database'
 
@@ -58,25 +60,16 @@ const profiles = [
    },
 ]
 
-const fakeClient = () => ({
-   balanceMicros: vi.fn(async () => 50_000_000),
-   findJob: vi.fn(async () => null),
-   collect: vi.fn(
-      async (slug: string, _params: Record<string, unknown>, known: { onJobId: (id: string) => Promise<void> }) => {
-         const rows = slug === 'post-comments' ? comments : slug === 'post-reactions' ? reactions : profiles
+const answer = (slug: string) => {
+   const rows = slug === 'post-comments' ? comments : slug === 'post-reactions' ? reactions : profiles
 
-         await known.onJobId(`job-${slug}`)
+   return {
+      rows,
+      costMicros: rows.length * (slug === 'profiles' ? 4_000 : 2_000),
+   }
+}
 
-         return {
-            jobId: `job-${slug}`,
-            status: 'completed' as const,
-            rows,
-            costMicros: rows.length * (slug === 'profiles' ? 4_000 : 2_000),
-            error: null,
-         }
-      }
-   ),
-})
+const fakeClient = () => fakeDataClient(answer)
 
 const deps = (client: ReturnType<typeof fakeClient>) => ({
    client,
@@ -153,6 +146,45 @@ describe('workflow engine (database)', () => {
       await expect(LinkedInPostService.countWaiting(userId)).resolves.toBe(1)
    })
 
+   it('should retry a request the data service failed without a charge, holding the step until then', async () => {
+      let failures = 1
+      const client = fakeDataClient(slug => {
+         if (slug === 'post-comments' && failures > 0) {
+            failures -= 1
+
+            return {
+               rows: [],
+               costMicros: 0,
+               status: 'failed',
+               error: 'System error',
+            }
+         }
+
+         return answer(slug)
+      })
+      const run = await WorkflowService.startRun(userId, workflowId, 'PREVIEW', `retry-${randomUUID()}`)
+      const runId = run?.id ?? ''
+
+      await advanceRun(runId, deps(client))
+      expect((await WorkflowService.run(userId, runId))?.status).toBe('RUNNING')
+
+      // The pause before the retry is over.
+      await PrismaService.client.workflowStepCall.updateMany({
+         where: {
+            stepRun: { runId },
+            retryAt: { not: null },
+         },
+         data: { retryAt: new Date(0) },
+      })
+      await advanceRun(runId, deps(client))
+
+      expect(await WorkflowService.run(userId, runId)).toMatchObject({
+         status: 'SUCCEEDED',
+         qualified: 1,
+      })
+      expect(client.start.mock.calls.filter(([slug]) => slug === 'post-comments')).toHaveLength(2)
+   })
+
    it('should run the flagship flow, book the cost once and mark the post done last', async () => {
       const client = fakeClient()
       const run = await WorkflowService.startRun(userId, workflowId, 'MANUAL', `manual-${randomUUID()}`)
@@ -181,7 +213,7 @@ describe('workflow engine (database)', () => {
       ])
       expect(ledger._sum.amountMicros).toBe(2 * 2_000 + 2 * 2_000 + 4_000)
       expect(done?.costMicros).toBe(ledger._sum.amountMicros)
-      expect(client.collect).toHaveBeenCalledTimes(3)
+      expect(client.start).toHaveBeenCalledTimes(3)
       await expect(LinkedInPostService.countWaiting(userId)).resolves.toBe(0)
    })
 })
