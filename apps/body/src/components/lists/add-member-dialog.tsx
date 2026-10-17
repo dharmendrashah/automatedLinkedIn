@@ -15,7 +15,7 @@ import { readableError } from '@/lib/trpc-error'
 import { Loader2, Plus } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 
-import { type MemberState, isMemberState, memberStates } from './types'
+import { type SettableState, isSettableState, memberStates } from './types'
 
 import { trpc } from '../../trpc'
 import { TextField } from '../links/record-fields'
@@ -53,7 +53,7 @@ type Props = {
 export const AddMemberDialog = ({ listId, onAdded }: Props) => {
    const [open, setOpen] = useState(false)
    const [values, setValues] = useState(EMPTY)
-   const [state, setState] = useState<MemberState>('QUALIFIED')
+   const [state, setState] = useState<SettableState>('QUALIFIED')
 
    const add = trpc.workflowList.addMember.useMutation({
       onSuccess: () => {
@@ -115,14 +115,14 @@ export const AddMemberDialog = ({ listId, onAdded }: Props) => {
                   ))}
                   <div className="grid gap-2">
                      <Label htmlFor="member-state">Add as</Label>
-                     <Select value={state} onValueChange={next => (isMemberState(next) ? setState(next) : undefined)}>
+                     <Select value={state} onValueChange={next => (isSettableState(next) ? setState(next) : undefined)}>
                         <SelectTrigger id="member-state">
                            <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                           {Object.entries(memberStates).map(([value, { label }]) => (
+                           {(['QUALIFIED', 'MAYBE'] as const).map(value => (
                               <SelectItem key={value} value={value}>
-                                 {label}
+                                 {memberStates[value].label}
                               </SelectItem>
                            ))}
                         </SelectContent>

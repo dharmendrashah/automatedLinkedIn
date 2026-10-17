@@ -1,13 +1,17 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Eye } from 'lucide-react'
+import { Download, Eye } from 'lucide-react'
+import { useState } from 'react'
+import { Link } from 'react-router'
 
 import { cn } from '@/lib/utils'
 
 import { type Block, type Run, type RunDetail, formatUsd, runStatuses, triggerLabels } from './types'
 
-import { blockOf } from './graph-convert'
+import { BlockOutput } from './block-output'
+import { blockOf, combineRounds } from './graph-convert'
 
 const formatTime = (value: string) => new Date(value).toLocaleString()
 
@@ -76,10 +80,14 @@ type DetailProps = {
    catalog: Block[]
 }
 
-// One run step by step: how many went in and out of each block, the pass rate, and what each block cost.
+// One run step by step: how many went in and out of each block, the pass rate, what each block cost, and what it
+// passed on.
 export const RunDetailView = ({ run, catalog }: DetailProps) => {
+   const [shownNode, setShownNode] = useState<string | null>(null)
    const order = run.graph.nodes.map(({ id }) => id)
-   const steps = [...run.steps].sort((a, b) => order.indexOf(a.nodeId) - order.indexOf(b.nodeId))
+   const combined = combineRounds(run.steps)
+   const steps = [...combined.values()].sort((a, b) => order.indexOf(a.nodeId) - order.indexOf(b.nodeId))
+   const shownStep = shownNode ? combined.get(shownNode) : undefined
    const perQualified = run.qualified > 0 ? formatUsd(Math.round(run.costMicros / run.qualified)) : '–'
 
    return (
@@ -102,6 +110,15 @@ export const RunDetailView = ({ run, catalog }: DetailProps) => {
             </p>
          ) : null}
          {run.message ? <p className="text-destructive text-sm">{run.message}</p> : null}
+         {run.parent ? (
+            <p className="text-muted-foreground text-sm">
+               Started by{' '}
+               <Link className="underline" to={`/workflows/${run.parent.workflowId}?run=${run.parent.runId}`}>
+                  a run of "{run.parent.workflowName}"
+               </Link>
+               .
+            </p>
+         ) : null}
          <Table>
             <TableHeader>
                <TableRow>
@@ -112,22 +129,57 @@ export const RunDetailView = ({ run, catalog }: DetailProps) => {
                   <TableHead>Passed</TableHead>
                   <TableHead>Data cost</TableHead>
                   <TableHead>Note</TableHead>
+                  <TableHead className="w-28" />
                </TableRow>
             </TableHeader>
             <TableBody>
                {steps.map(step => (
                   <TableRow key={step.nodeId}>
-                     <TableCell>{blockOf(catalog, step.type)?.label ?? step.type}</TableCell>
+                     <TableCell>
+                        {blockOf(catalog, step.type)?.label ?? step.type}
+                        {step.round > 0 ? (
+                           <span className="text-muted-foreground text-xs"> · {step.round + 1} rounds</span>
+                        ) : null}
+                     </TableCell>
                      <TableCell>{step.status.toLowerCase()}</TableCell>
                      <TableCell>{step.itemsIn}</TableCell>
                      <TableCell>{step.itemsOut}</TableCell>
                      <TableCell>{percent(step.itemsOut, step.itemsIn)}</TableCell>
                      <TableCell>{step.costMicros > 0 ? formatUsd(step.costMicros) : '–'}</TableCell>
-                     <TableCell className="text-muted-foreground text-xs">{step.message}</TableCell>
+                     <TableCell className="text-muted-foreground text-xs">
+                        {step.message}
+                        {step.child ? (
+                           <>
+                              {' '}
+                              <Link className="underline" to={`/workflows/${step.child.workflowId}?run=${step.child.runId}`}>
+                                 Open its run
+                              </Link>
+                           </>
+                        ) : null}
+                     </TableCell>
+                     <TableCell>
+                        <Button variant="outline" size="sm" onClick={() => setShownNode(step.nodeId)}>
+                           {step.type === 'output.csv' ? <Download /> : <Eye />}
+                           {step.type === 'output.csv' ? 'CSV' : 'Output'}
+                        </Button>
+                     </TableCell>
                   </TableRow>
                ))}
             </TableBody>
          </Table>
+         <Dialog open={Boolean(shownStep)} onOpenChange={open => (open ? undefined : setShownNode(null))}>
+            <DialogContent className="sm:max-w-3xl">
+               <DialogHeader>
+                  <DialogTitle>
+                     {shownStep ? (blockOf(catalog, shownStep.type)?.label ?? shownStep.type) : ''}: what it passed on
+                  </DialogTitle>
+                  <DialogDescription>Kept 14 days; what reached an Export to CSV block is kept 90 days.</DialogDescription>
+               </DialogHeader>
+               {shownStep ? (
+                  <BlockOutput runId={run.id} nodeId={shownStep.nodeId} rounds={shownStep.round + 1} />
+               ) : null}
+            </DialogContent>
+         </Dialog>
       </div>
    )
 }

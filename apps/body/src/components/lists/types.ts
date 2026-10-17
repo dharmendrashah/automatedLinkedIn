@@ -15,15 +15,34 @@ export const memberStatuses: Record<MemberStatus, { label: string }> = {
 export const memberStates: Record<MemberState, { label: string }> = {
    QUALIFIED: { label: 'Qualified' },
    MAYBE: { label: 'Maybe' },
+   UNSCORED: { label: 'Unscored' },
 }
 
-export const isMemberStatus = (value: string): value is MemberStatus => value in memberStatuses
-export const isMemberState = (value: string): value is MemberState => value in memberStates
+// The views of a list: everyone, or one band. People added without scoring show only in All.
+export const LIST_VIEWS = {
+   ALL: 'All',
+   QUALIFIED: 'Qualified',
+   MAYBE: 'Maybe',
+} as const
 
-// The first reason a workflow found the person, in words: the comment they wrote, or that they reacted.
+export type ListView = keyof typeof LIST_VIEWS
+
+export const isListView = (value: string): value is ListView => value in LIST_VIEWS
+
+// States a person can be set to by hand.
+export type SettableState = Exclude<MemberState, 'UNSCORED'>
+
+export const isMemberStatus = (value: string): value is MemberStatus => value in memberStatuses
+export const isSettableState = (value: string): value is SettableState => value === 'QUALIFIED' || value === 'MAYBE'
+
+// The first reason a workflow found the person, in words: the comment they wrote, that they reacted, or the company.
 export const reasonOf = ([first]: Member['signals']) => {
    if (first?.type === 'commented') {
       return first.excerpt ? `Commented: "${first.excerpt}"` : 'Commented on a post'
+   }
+
+   if (first?.type === 'employee' || first?.type === 'hiring') {
+      return first.type === 'hiring' ? `Company is hiring: ${first.excerpt ?? ''}` : 'Works at a target company'
    }
 
    return first?.type === 'reacted' ? 'Reacted to a post' : 'A post they engaged with'

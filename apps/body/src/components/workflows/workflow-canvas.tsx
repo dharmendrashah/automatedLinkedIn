@@ -1,5 +1,6 @@
 import {
    Background,
+   ConnectionMode,
    Controls,
    type Edge,
    type EdgeChange,
@@ -16,18 +17,31 @@ import {
 import '@xyflow/react/dist/style.css'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { CircleAlert, Keyboard, Loader2, Plus, Redo2, Save, Undo2 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { CircleAlert, Info, Keyboard, Loader2, Plus, Redo2, Save, Undo2 } from 'lucide-react'
 import { useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
+
+import { cn } from '@/lib/utils'
 
 import { trpc } from '../../trpc'
 import { BlockNode } from './block-node'
 import { BlockPicker } from './block-picker'
 import { BlockSettings } from './block-settings'
 import { CanvasActions } from './canvas-actions'
-import { type FlowNode, canConnect, newNodeId, toFlow, toGraph } from './graph-convert'
+import {
+   DEFAULT_LOOP_ROUNDS,
+   type FlowNode,
+   MAX_LOOP_ROUNDS,
+   canConnect,
+   hasLoop,
+   newNodeId,
+   toFlow,
+   toGraph,
+} from './graph-convert'
 import { type History, record, redo, startHistory, undo } from './history'
 import { isLeftToRight, layoutTopToBottom, neighbourOf, placeBelow } from './layout'
 import { SHORTCUT_HELP, shortcutOf } from './shortcuts'
+import { browserTimeZone } from './schedule-text'
 import { type Block, type ConfigValue, type Graph, type StepRun, formatUsd } from './types'
 
 const NODE_TYPES = { block: BlockNode }
@@ -43,6 +57,8 @@ type Props = {
    workflows: { id: string; name: string }[]
    // A run to show on the canvas: each block's state and what passed along each line.
    replay: StepRun[] | null
+   // The run being shown, so a block's dialog can show what it passed on.
+   replayRunId: string | null
    saving: boolean
    saveError: { message: string } | null
    onSave: (graph: Graph) => void
@@ -50,7 +66,18 @@ type Props = {
 
 type Canvas = { nodes: FlowNode[]; edges: Edge[] }
 
-const Editor = ({ workflowId, graph, catalog, icps, workflows, replay, saving, saveError, onSave }: Props) => {
+const Editor = ({
+   workflowId,
+   graph,
+   catalog,
+   icps,
+   workflows,
+   replay,
+   replayRunId,
+   saving,
+   saveError,
+   onSave,
+}: Props) => {
    const { screenToFlowPosition } = useReactFlow()
    const wrapper = useRef<HTMLDivElement>(null)
    const icpNames = useMemo(() => new Map(icps.map(icp => [icp.id, icp.name])), [icps])
@@ -64,9 +91,10 @@ const Editor = ({ workflowId, graph, catalog, icps, workflows, replay, saving, s
    const [openId, setOpenId] = useState<string | null>(null)
    const [picker, setPicker] = useState<{ afterId: string | null } | null>(null)
    const [help, setHelp] = useState(false)
+   const [loopRounds, setLoopRounds] = useState(graph.loopRounds)
    const { nodes, edges } = history.present
 
-   const draft = useMemo(() => toGraph(nodes, edges), [nodes, edges])
+   const draft = useMemo(() => toGraph(nodes, edges, loopRounds), [nodes, edges, loopRounds])
    const deferred = useDeferredValue(draft)
    const estimate = trpc.workflow.estimate.useQuery(
       {
@@ -76,12 +104,14 @@ const Editor = ({ workflowId, graph, catalog, icps, workflows, replay, saving, s
       { placeholderData: previous => previous }
    )
    const problems = estimate.data?.problems ?? []
-   const invalid = new Set(problems.flatMap(({ nodeId }) => (nodeId ? [nodeId] : [])))
+   const nodesWith = (level: 'error' | 'note') =>
+      new Set(problems.flatMap(problem => (problem.nodeId && problem.level === level ? [problem.nodeId] : [])))
 
    // The replay and the problems are drawn on top of the editable nodes.
    const shown = toFlow(draft, catalog, {
       steps: replay ?? undefined,
-      invalid,
+      invalid: nodesWith('error'),
+      noted: nodesWith('note'),
       icpNames,
    })
 
@@ -131,9 +161,11 @@ const Editor = ({ workflowId, graph, catalog, icps, workflows, replay, saving, s
                position,
                data: {
                   block,
-                  config: {},
+                  // A new schedule runs in the owner's own time zone.
+                  config: block.type === 'trigger.schedule' ? { timeZone: browserTimeZone() } : {},
                   step: null,
                   invalid: false,
+                  noted: false,
                },
             },
          ],
@@ -144,6 +176,8 @@ const Editor = ({ workflowId, graph, catalog, icps, workflows, replay, saving, s
                     id: `${after.id}>${id}`,
                     source: after.id,
                     target: id,
+                    sourceHandle: 'bottom',
+                    targetHandle: 'top',
                  },
               ]
             : canvas.edges,
@@ -153,11 +187,11 @@ const Editor = ({ workflowId, graph, catalog, icps, workflows, replay, saving, s
       setOpenId(block.fields.length > 0 ? id : null)
    }
 
-   const setConfig = (key: string, value: ConfigValue) =>
+   const setConfig = (patch: Record<string, ConfigValue>) =>
       commit(canvas => ({
          ...canvas,
          nodes: canvas.nodes.map(node =>
-            node.id === openId ? { ...node, data: { ...node.data, config: { ...node.data.config, [key]: value } } } : node
+            node.id === openId ? { ...node, data: { ...node.data, config: { ...node.data.config, ...patch } } } : node
          ),
       }))
 
@@ -310,7 +344,8 @@ const Editor = ({ workflowId, graph, catalog, icps, workflows, replay, saving, s
                   }))
                }
                onNodeDragStart={() => setHistory(current => record(current, current.present))}
-               isValidConnection={({ source, target }) => canConnect(nodes, edges, source, target)}
+               isValidConnection={({ source, target }) => canConnect(edges, source, target)}
+               connectionMode={ConnectionMode.Loose}
                onConnect={connection =>
                   commit(canvas => ({
                      ...canvas,
@@ -348,19 +383,43 @@ const Editor = ({ workflowId, graph, catalog, icps, workflows, replay, saving, s
                                     setSelectedId(problem.nodeId ?? null)
                                     setOpenId(problem.nodeId ?? null)
                                  }}
-                                 className="text-destructive flex items-start gap-1.5 text-left text-xs enabled:hover:underline"
+                                 className={cn(
+                                    'flex items-start gap-1.5 text-left text-xs enabled:hover:underline',
+                                    problem.level === 'error' ? 'text-destructive' : 'text-warning'
+                                 )}
                               >
-                                 <CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                                 {problem.level === 'error' ? (
+                                    <CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                                 ) : (
+                                    <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                                 )}
                                  {problem.message}
                               </button>
                            </li>
                         ))}
                      </ul>
-                  ) : (
+                  ) : null}
+                  {problems.every(({ level }) => level === 'note') ? (
                      <p className="text-muted-foreground text-xs">
                         <span aria-hidden>✅ </span>Ready to run
                      </p>
-                  )}
+                  ) : null}
+                  {hasLoop(edges) ? (
+                     <label className="flex items-center gap-2 text-xs">
+                        <span aria-hidden>🔁</span> Loop rounds
+                        <Input
+                           type="number"
+                           min={1}
+                           max={MAX_LOOP_ROUNDS}
+                           className="h-7 w-16"
+                           value={loopRounds ?? DEFAULT_LOOP_ROUNDS}
+                           onChange={event => {
+                              setLoopRounds(Math.min(MAX_LOOP_ROUNDS, Math.max(1, Number(event.target.value) || 1)))
+                              setDirty(true)
+                           }}
+                        />
+                     </label>
+                  ) : null}
                   {saveError ? <p className="text-destructive text-xs">{saveError.message}</p> : null}
                </Panel>
                <Panel position="top-right" className="flex items-center gap-1">
@@ -402,8 +461,33 @@ const Editor = ({ workflowId, graph, catalog, icps, workflows, replay, saving, s
          />
          <BlockSettings
             node={openNode}
-            problems={problems.filter(({ nodeId }) => nodeId === openId).map(({ message }) => message)}
+            problems={problems.filter(({ nodeId }) => nodeId === openId)}
+            output={
+               replayRunId && openId
+                  ? {
+                       runId: replayRunId,
+                       rounds: Math.max(
+                          1,
+                          ...(replay ?? []).filter(({ nodeId }) => nodeId === openId).map(({ round }) => round + 1)
+                       ),
+                    }
+                  : null
+            }
             icps={icps}
+            parents={edges
+               .filter(({ target }) => target === openId)
+               .flatMap(({ source }) => {
+                  const parent = nodeOf(source)
+
+                  return parent
+                     ? [
+                          {
+                             id: parent.id,
+                             name: parent.data.block.label,
+                          },
+                       ]
+                     : []
+               })}
             workflows={workflows.filter(({ id }) => id !== workflowId)}
             onChange={setConfig}
             onRemove={removeSelection}

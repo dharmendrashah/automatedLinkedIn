@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -24,11 +25,11 @@ import { Download, ListPlus, Pencil, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
 import {
+   LIST_VIEWS,
+   type ListView,
    type Member,
-   type MemberState,
    type MemberStatus,
-   isMemberState,
-   memberStates,
+   isListView,
    memberStatuses,
 } from '@/components/lists/types'
 
@@ -71,7 +72,8 @@ export const Lists = () => {
    const utils = trpc.useUtils()
    const filters = useListState<MemberStatus>()
    const [chosenId, setChosenId] = useState<string>()
-   const [tab, setTab] = useState<MemberState>('QUALIFIED')
+   const [tab, setTab] = useState<ListView>('ALL')
+   const [label, setLabel] = useState('')
    const [naming, setNaming] = useState<'create' | 'rename' | null>(null)
    const [confirm, setConfirm] = useState<Confirm | null>(null)
    const [needsReview, setNeedsReview] = useState(false)
@@ -79,12 +81,16 @@ export const Lists = () => {
    const lists = trpc.workflowList.lists.useQuery(undefined, { retry: false })
    const current = lists.data?.find(list => list.id === chosenId) ?? lists.data?.[0]
    const listId = current?.id ?? ''
+   const view = {
+      state: tab === 'ALL' ? undefined : tab,
+      label: label.trim().toLowerCase() || undefined,
+   }
 
    const { search, status, page, pageSize } = filters.query
    const members = trpc.workflowList.members.useQuery(
       {
          listId,
-         state: tab,
+         ...view,
          search,
          status,
          needsReview: needsReview || undefined,
@@ -191,7 +197,12 @@ export const Lists = () => {
                      <Button
                         variant="outline"
                         disabled={exportCsv.isPending}
-                        onClick={() => exportCsv.mutate({ id: listId })}
+                        onClick={() =>
+                           exportCsv.mutate({
+                              id: listId,
+                              ...view,
+                           })
+                        }
                      >
                         <Download />
                         Export CSV
@@ -219,20 +230,31 @@ export const Lists = () => {
                   <Tabs
                      value={tab}
                      onValueChange={next => {
-                        if (isMemberState(next)) {
+                        if (isListView(next)) {
                            setTab(next)
                            filters.setPage(1)
                         }
                      }}
                   >
                      <TabsList>
-                        {Object.entries(memberStates).map(([value, { label }]) => (
+                        {Object.entries(LIST_VIEWS).map(([value, title]) => (
                            <TabsTrigger key={value} value={value}>
-                              {label}
+                              {title}
                            </TabsTrigger>
                         ))}
                      </TabsList>
                   </Tabs>
+                  <Input
+                     className="w-40"
+                     aria-label="Only people with this label"
+                     placeholder="Label"
+                     maxLength={30}
+                     value={label}
+                     onChange={event => {
+                        setLabel(event.target.value)
+                        filters.setPage(1)
+                     }}
+                  />
                   <div className="flex items-center gap-2">
                      <Checkbox
                         id="needs-review"

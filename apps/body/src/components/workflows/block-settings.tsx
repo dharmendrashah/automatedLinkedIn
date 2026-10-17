@@ -1,138 +1,74 @@
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { CircleAlert, Minus, Plus, Trash2, X } from 'lucide-react'
-import { useState } from 'react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ChevronRight, CircleAlert, Trash2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
+import { BlockOutput } from './block-output'
+import { ScheduleSettings } from './schedule-settings'
+import { Chips, SearchPick, Stepper, TagInput } from './setting-inputs'
+
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { type FlowNode } from './graph-convert'
-import { type ConfigValue, type Field } from './types'
+import { type Block, type ConfigValue, type Field } from './types'
 
 type Choice = { id: string; name: string }
 
 type Props = {
    node: FlowNode | null
-   problems: string[]
+   problems: { message: string; level: 'error' | 'note' }[]
    icps: Choice[]
    workflows: Choice[]
-   onChange: (key: string, value: ConfigValue) => void
+   // The blocks connected before this one.
+   parents: Choice[]
+   onChange: (patch: Record<string, ConfigValue>) => void
    onRemove: () => void
    onClose: () => void
+   // The run shown on the canvas: the dialog then also shows what this block passed on in it.
+   output?: { runId: string; rounds: number } | null
 }
 
 const textOf = (value: ConfigValue | undefined) => (Array.isArray(value) ? value.join(', ') : String(value ?? ''))
 
-const Stepper = ({ id, value, min, max, onChange }: { id: string; value: number; min: number; max: number; onChange: (next: number) => void }) => {
-   const clamp = (next: number) => Math.min(max, Math.max(min, Number.isFinite(next) ? next : min))
-
-   return (
-      <div className="flex w-44 items-center gap-1">
-         <Button type="button" variant="outline" size="icon" aria-label="Less" disabled={value <= min} onClick={() => onChange(clamp(value - 1))}>
-            <Minus />
-         </Button>
-         <Input
-            id={id}
-            type="number"
-            inputMode="numeric"
-            className="text-center"
-            min={min}
-            max={max}
-            value={value}
-            onChange={event => onChange(clamp(Number(event.target.value)))}
-         />
-         <Button type="button" variant="outline" size="icon" aria-label="More" disabled={value >= max} onClick={() => onChange(clamp(value + 1))}>
-            <Plus />
-         </Button>
-      </div>
-   )
-}
-
-// Words as chips: Enter or a comma adds one, Backspace on an empty box removes the last.
-const TagInput = ({ id, value, onChange }: { id: string; value: string[]; onChange: (next: string[]) => void }) => {
-   const [draft, setDraft] = useState('')
-   const add = () => {
-      const words = draft
-         .split(',')
-         .map(word => word.trim())
-         .filter(word => word && !value.includes(word))
-
-      if (words.length > 0) {
-         onChange([...value, ...words])
-      }
-
-      setDraft('')
-   }
-
-   return (
-      <div className="focus-within:ring-ring/50 flex min-h-9 flex-wrap items-center gap-1 rounded-md border px-2 py-1 focus-within:ring-2">
-         {value.map(word => (
-            <span key={word} className="bg-muted flex items-center gap-1 rounded-md px-2 py-0.5 text-xs">
-               {word}
-               <button type="button" aria-label={`Remove ${word}`} onClick={() => onChange(value.filter(item => item !== word))}>
-                  <X className="size-3" />
-               </button>
-            </span>
-         ))}
-         <input
-            id={id}
-            className="min-w-24 flex-1 bg-transparent text-sm outline-none"
-            placeholder={value.length === 0 ? 'Type and press Enter' : ''}
-            value={draft}
-            onChange={event => setDraft(event.target.value)}
-            onBlur={add}
-            onKeyDown={event => {
-               if (event.key === 'Enter' || event.key === ',') {
-                  event.preventDefault()
-                  add()
-               } else if (event.key === 'Backspace' && !draft && value.length > 0) {
-                  onChange(value.slice(0, -1))
-               }
-            }}
-         />
-      </div>
-   )
-}
-
-const Chips = ({
-   id,
-   options,
-   isOn,
-   onToggle,
-}: {
-   id: string
-   options: { value: string; label: string }[]
-   isOn: (value: string) => boolean
-   onToggle: (value: string) => void
-}) => (
-   <div id={id} className="flex flex-wrap gap-2">
-      {options.map(option => (
-         <button
-            key={option.value}
-            type="button"
-            aria-pressed={isOn(option.value)}
-            onClick={() => onToggle(option.value)}
-            className={cn(
-               'rounded-full border px-3 py-1 text-sm transition-colors',
-               isOn(option.value) ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted'
-            )}
-         >
-            {option.label}
-         </button>
-      ))}
-   </div>
-)
-
 const SHORT_LIST = 4
 
+// The safety cap of "All"; the same number lives in the contracts package, which body does not load at runtime.
+const ALL_CAP = '1,000'
+
+const KINDS: Record<string, string> = {
+   post: 'posts',
+   profile: 'people',
+   company: 'companies',
+}
+
+// "Takes posts, gives people", from what the block reads and passes on.
+const flowOf = (block: Block) => {
+   if (block.type === 'process.merge') {
+      return 'Takes anything, gives one stream'
+   }
+
+   if (block.type === 'logic.runWorkflow') {
+      return 'Takes anything, gives what it got or the people the other workflow saved'
+   }
+
+   const takes = block.input && KINDS[block.input] ? `Takes ${KINDS[block.input]}` : 'Starts on its own'
+   const gives = block.output && KINDS[block.output] ? `gives ${KINDS[block.output]}` : ''
+
+   return [takes, gives].filter(Boolean).join(', ')
+}
+
 // A block's settings over the canvas. Every change applies at once; the canvas's Save keeps them.
-export const BlockSettings = ({ node, problems, icps, workflows, onChange, onRemove, onClose }: Props) => {
+export const BlockSettings = ({ node, problems, icps, workflows, parents, onChange: onPatch, onRemove, onClose, output }: Props) => {
    if (!node) {
       return null
    }
+
+   const onChange = (key: string, value: ConfigValue) => onPatch({ [key]: value })
 
    const { block, config } = node.data
    const Icon = BLOCK_ICONS[block.type]
@@ -176,20 +112,56 @@ export const BlockSettings = ({ node, problems, icps, workflows, onChange, onRem
          )
       }
 
+      if (item.kind === 'search') {
+         return (
+            <SearchPick id={id} options={item.options} max={item.max} value={Array.isArray(value) ? value : []} onChange={next => onChange(item.key, next)} />
+         )
+      }
+
+      if (item.kind === 'toggle') {
+         return (
+            <Checkbox id={id} checked={value === true} onCheckedChange={next => onChange(item.key, next === true)} />
+         )
+      }
+
+      if (item.kind === 'limit') {
+         const all = values[item.allKey] === true
+
+         return (
+            <div className="grid gap-2">
+               <Chips
+                  id={id}
+                  options={[
+                     { value: 'all', label: `All (up to ${ALL_CAP})` },
+                     { value: 'some', label: 'Up to a number' },
+                  ]}
+                  isOn={option => (option === 'all') === all}
+                  onToggle={option => onChange(item.allKey, option === 'all')}
+               />
+               {all ? null : (
+                  <Stepper id={`${id}-count`} value={Number(value ?? item.min)} min={item.min} max={item.max} onChange={next => onChange(item.key, next)} />
+               )}
+            </div>
+         )
+      }
+
       if (item.kind === 'select' && item.options.length <= SHORT_LIST) {
          return <Chips id={id} options={item.options} isOn={option => textOf(value) === option} onToggle={option => onChange(item.key, typed(item.key, option))} />
       }
 
-      if (item.kind === 'select' || item.kind === 'icp' || item.kind === 'workflow') {
+      if (item.kind === 'select' || item.kind === 'icp' || item.kind === 'workflow' || item.kind === 'parent') {
          const options =
             item.kind === 'icp'
                ? icps.map(icp => ({ value: icp.id, label: icp.name }))
                : item.kind === 'workflow'
                  ? workflows.map(other => ({ value: other.id, label: other.name }))
-                 : item.options
+                 : item.kind === 'parent'
+                   ? parents.map(parent => ({ value: parent.id, label: parent.name }))
+                   : item.options
          const placeholder = {
             icp: 'Pick an ideal customer',
             workflow: 'Pick a workflow',
+            parent: parents.length > 0 ? 'Pick a connected block' : 'Connect blocks into this one first',
             select: 'Pick one',
          }[item.kind]
 
@@ -213,15 +185,82 @@ export const BlockSettings = ({ node, problems, icps, workflows, onChange, onRem
          <Input
             id={id}
             type={item.kind === 'time' ? 'time' : 'text'}
+            placeholder={item.kind === 'text' ? item.placeholder : undefined}
             value={textOf(value)}
             onChange={event => onChange(item.key, event.target.value)}
          />
       )
    }
 
+   const row = (item: Field) =>
+      item.kind === 'toggle' ? (
+         <div key={item.key} className="grid gap-1">
+            <div className="flex items-center gap-2">
+               {field(item)}
+               <Label htmlFor={`setting-${node.id}-${item.key}`}>{item.label}</Label>
+            </div>
+            {item.hint ? <p className="text-muted-foreground text-xs">{item.hint}</p> : null}
+         </div>
+      ) : (
+         <div key={item.key} className="grid gap-2">
+            <Label htmlFor={`setting-${node.id}-${item.key}`}>{item.label}</Label>
+            {field(item)}
+            {item.hint ? <p className="text-muted-foreground text-xs">{item.hint}</p> : null}
+         </div>
+      )
+   const main = block.fields.filter(item => !item.advanced)
+   const more = block.fields.filter(item => item.advanced)
+   const isOn = (preset: Block['presets'][number]) =>
+      Object.entries(preset.config).every(([key, wanted]) => JSON.stringify(values[key]) === JSON.stringify(wanted))
+   const presets =
+      block.presets.length > 0 ? (
+         <div className="grid gap-2">
+            <Label>Quick start</Label>
+            <div className="flex flex-wrap gap-2">
+               {block.presets.map(preset => (
+                  <button
+                     key={preset.label}
+                     type="button"
+                     title={preset.hint}
+                     aria-pressed={isOn(preset)}
+                     onClick={() => onPatch(preset.config)}
+                     className={cn(
+                        'grid rounded-lg border px-3 py-1.5 text-left transition-colors',
+                        isOn(preset) ? 'border-primary bg-primary/10' : 'hover:bg-muted'
+                     )}
+                  >
+                     <span className="text-sm font-medium">{preset.label}</span>
+                     <span className="text-muted-foreground text-xs">{preset.hint}</span>
+                  </button>
+               ))}
+            </div>
+         </div>
+      ) : null
+
+   const settings =
+      block.type === 'trigger.schedule' ? (
+         <ScheduleSettings values={values} onChange={onChange} />
+      ) : block.fields.length === 0 ? (
+         <p className="text-muted-foreground text-sm">This block has nothing to set.</p>
+      ) : (
+         <div className="grid max-h-[60vh] gap-5 overflow-y-auto pr-1">
+            {presets}
+            {main.map(row)}
+            {more.length > 0 ? (
+               <details className="group grid gap-5">
+                  <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center gap-1 text-sm">
+                     <ChevronRight className="size-4 transition-transform group-open:rotate-90" aria-hidden />
+                     More options ({more.length})
+                  </summary>
+                  <div className="mt-4 grid gap-5">{more.map(row)}</div>
+               </details>
+            ) : null}
+         </div>
+      )
+
    return (
       <Dialog open onOpenChange={next => (next ? undefined : onClose())}>
-         <DialogContent className="sm:max-w-xl">
+         <DialogContent className={output ? 'sm:max-w-3xl' : 'sm:max-w-xl'}>
             <DialogHeader>
                <div className="flex items-center gap-3">
                   <span className={cn('grid size-10 place-items-center rounded-lg', tileOf(block.group))}>
@@ -230,31 +269,46 @@ export const BlockSettings = ({ node, problems, icps, workflows, onChange, onRem
                   <div className="grid gap-1 text-left">
                      <DialogTitle>{block.label}</DialogTitle>
                      <DialogDescription>{block.summary}</DialogDescription>
+                     <p className="text-muted-foreground text-xs">
+                        {[flowOf(block), block.costHint].filter(Boolean).join(' · ')}
+                     </p>
                   </div>
                </div>
             </DialogHeader>
             {problems.length > 0 ? (
-               <ul className="text-destructive grid gap-1 text-sm">
+               <ul className="grid gap-1 text-sm">
                   {problems.map(problem => (
-                     <li key={problem} className="flex items-start gap-2">
+                     <li
+                        key={problem.message}
+                        className={cn(
+                           'flex items-start gap-2',
+                           problem.level === 'error' ? 'text-destructive' : 'text-warning'
+                        )}
+                     >
                         <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-                        {problem}
+                        {problem.message}
                      </li>
                   ))}
                </ul>
             ) : null}
-            {block.fields.length === 0 ? (
-               <p className="text-muted-foreground text-sm">This block has nothing to set.</p>
+            {output ? (
+               <Tabs defaultValue="output">
+                  <TabsList>
+                     <TabsTrigger value="output">Output of the run</TabsTrigger>
+                     <TabsTrigger value="settings">Settings</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="output">
+                     <BlockOutput
+                        runId={output.runId}
+                        nodeId={node.id}
+                        rounds={output.rounds}
+                        fileName={typeof config.fileName === 'string' ? config.fileName : undefined}
+                     />
+                  </TabsContent>
+                  <TabsContent value="settings">{settings}</TabsContent>
+               </Tabs>
             ) : (
-               <div className="grid max-h-[60vh] gap-5 overflow-y-auto pr-1">
-                  {block.fields.map(item => (
-                     <div key={item.key} className="grid gap-2">
-                        <Label htmlFor={`setting-${node.id}-${item.key}`}>{item.label}</Label>
-                        {field(item)}
-                        {'hint' in item && item.hint ? <p className="text-muted-foreground text-xs">{item.hint}</p> : null}
-                     </div>
-                  ))}
-               </div>
+               settings
             )}
             <DialogFooter className="sm:justify-between">
                <Button type="button" variant="ghost" className="text-destructive" onClick={onRemove}>

@@ -1,10 +1,11 @@
 import { type CompanyItem, type PersonItem, type PostItem, type WorkflowItemData, readSeniorities } from 'core'
 
-import { IcpService, WalletService, WorkflowRunService, floorMicros } from 'database'
+import { IcpService, type ItemKey, WalletService, WorkflowRunService, floorMicros } from 'database'
 
 import { type Graph, type GraphNode, blockOf } from '@automatedLinkedIn/contracts'
 
 import { type DataClient, DataServiceError } from '../data/dataClient'
+import { type Post } from './sendApi'
 import { type ScoringRules } from './steps'
 
 // What every step executor shares: the run it belongs to, its inputs, and the one way to make a paid request.
@@ -18,7 +19,20 @@ export type EngineDeps = {
    client: Pick<DataClient, 'balanceMicros' | 'collect' | 'findJob'>
    signal: AbortSignal
    log: Log
+   // How "Send via API" posts; tests swap it for a fake.
+   post?: Post
 }
+
+// Where an If keeps the people it did not pass on, for an Else after it.
+export const ELSE_SUFFIX = '~else'
+
+// The side output of an If or a "Run another workflow" block, read by an Else after it.
+export const elseKey = (ctx: { at: ItemKey }, sourceId: string) => ({
+   ...ctx.at,
+   nodeId: `${sourceId}${ELSE_SUFFIX}`,
+})
+
+export const DAY_MS = 24 * 60 * 60 * 1000
 
 export type StepResult = {
    status: 'DONE' | 'PARTIAL'
@@ -32,6 +46,8 @@ export type Context = {
    graph: Graph
    node: GraphNode
    step: Step
+   // Where this step's output is kept.
+   at: ItemKey
    inputs: WorkflowItemData[]
    preview: boolean
    deps: EngineDeps
@@ -42,6 +58,9 @@ export class StepError extends Error {}
 
 // The worker is stopping; the step is given back and resumes later.
 export class Paused extends Error {}
+
+// The step waits for another run; it is given back and looked at again on a later tick.
+export class WaitingOnRun extends Error {}
 
 export const WALLET_LOW = 'Collecting stopped because the data wallet ran low. What was found so far is kept.'
 export const SERVICE_BUSY = 'The data service did not answer for some requests. What was found so far is kept.'
@@ -74,11 +93,24 @@ export const wordsIn = (config: Record<string, unknown>, key: string) => {
    return Array.isArray(value) ? value.map(String) : []
 }
 
-export const thresholdsOf = (run: Run) => ({
-   qualifyScore: run.qualifyScore,
-   maybeScore: run.maybeScore,
-   maybeEnabled: run.maybeEnabled,
-})
+// The Score block's own scores; a block saved before it had them uses the workflow's.
+export const thresholdsOf = (run: Run, scoring: GraphNode | null) => {
+   if (scoring && 'qualifyScore' in scoring.config) {
+      const config = configOf(scoring)
+
+      return {
+         qualifyScore: numberIn(config, 'qualifyScore'),
+         maybeScore: numberIn(config, 'maybeScore'),
+         maybeEnabled: config.keepMaybe !== false,
+      }
+   }
+
+   return {
+      qualifyScore: run.qualifyScore,
+      maybeScore: run.maybeScore,
+      maybeEnabled: run.maybeEnabled,
+   }
+}
 
 // The nearest "Score" block before a node: its ideal customer is the one people are scored against.
 export const scoringNodeBefore = (graph: Graph, id: string) => {
@@ -235,13 +267,13 @@ export const collectEach = async (ctx: Context, requests: Request[]): Promise<St
    return {
       status: stopped || failed > 0 ? 'PARTIAL' : 'DONE',
       itemsIn: ctx.inputs.length,
-      itemsOut: await WorkflowRunService.countItems(ctx.run.id, ctx.node.id),
+      itemsOut: await WorkflowRunService.countItems(ctx.at),
       message: stopped ? WALLET_LOW : failed > 0 ? SERVICE_BUSY : undefined,
    }
 }
 
 export const keepItems = async (ctx: Context, items: WorkflowItemData[], itemsIn: number): Promise<StepResult> => {
-   await WorkflowRunService.replaceItems(ctx.run.id, ctx.node.id, items)
+   await WorkflowRunService.replaceItems(ctx.at, items)
 
    return {
       status: 'DONE',

@@ -30,6 +30,62 @@ export const filterPeople = (people: PersonItem[], config: FilterConfig) =>
          (config.headlineWords.length === 0 || hasWord(item.headline, config.headlineWords))
    )
 
+// The If block's conditions; a condition left at 0, "any" or empty is not checked.
+export type Conditions = {
+   match: 'all' | 'any'
+   minScore: number
+   minFollowers: number
+   signal: 'any' | 'commented' | 'reacted'
+   headlineHas: string[]
+   locationHas: string[]
+   companyHas: string[]
+   hasLabel: string[]
+}
+
+const numberAt = (config: Record<string, unknown>, key: string) => {
+   const value = config[key]
+
+   return typeof value === 'number' ? value : 0
+}
+
+const wordsAt = (config: Record<string, unknown>, key: string) => {
+   const value = config[key]
+
+   return Array.isArray(value) ? value.map(String) : []
+}
+
+export const conditionsOf = (config: Record<string, unknown>): Conditions => ({
+   match: config.match === 'any' ? 'any' : 'all',
+   minScore: numberAt(config, 'minScore'),
+   minFollowers: numberAt(config, 'minFollowers'),
+   signal: config.signal === 'commented' || config.signal === 'reacted' ? config.signal : 'any',
+   headlineHas: wordsAt(config, 'headlineHas'),
+   locationHas: wordsAt(config, 'locationHas'),
+   companyHas: wordsAt(config, 'companyHas'),
+   hasLabel: wordsAt(config, 'hasLabel'),
+})
+
+// True when the person meets all (or any) of the conditions set; with none set everyone matches.
+export const matches = (item: PersonItem, conditions: Conditions) => {
+   const checks = [
+      conditions.minScore > 0 ? (item.score ?? 0) >= conditions.minScore : null,
+      conditions.minFollowers > 0 ? (item.followers ?? 0) >= conditions.minFollowers : null,
+      conditions.signal === 'any' ? null : item.signals.some(({ type }) => type === conditions.signal),
+      conditions.headlineHas.length > 0
+         ? hasWord([item.headline, item.title].filter(Boolean).join(' '), conditions.headlineHas)
+         : null,
+      conditions.locationHas.length > 0 ? hasWord(item.location, conditions.locationHas) : null,
+      conditions.companyHas.length > 0 ? hasWord(item.company, conditions.companyHas) : null,
+      conditions.hasLabel.length > 0 ? item.tags.some(tag => conditions.hasLabel.includes(tag)) : null,
+   ].filter((check): check is boolean => check !== null)
+
+   if (checks.length === 0) {
+      return true
+   }
+
+   return conditions.match === 'all' ? checks.every(Boolean) : checks.some(Boolean)
+}
+
 export const bandOf = (score: number, thresholds: Thresholds): Band | null => {
    if (score >= thresholds.qualifyScore) {
       return 'QUALIFIED'
@@ -72,34 +128,31 @@ export type ProfileCard = {
    company: string | null
 }
 
-// Adds what the full profile showed and scores the person again; a profile that was not found keeps its first score.
+// Adds what the full profile showed and, when scoring is on, scores the person again. A profile that was not found
+// keeps what it had.
 export const applyProfiles = (
    people: PersonItem[],
    cards: Map<string, ProfileCard>,
-   rules: ScoringRules,
+   rules: ScoringRules | null,
    thresholds: Thresholds
-) =>
-   split(
-      people.map(item => {
-         const card = cards.get(item.slug)
+): PersonItem[] =>
+   people.map(item => {
+      const card = cards.get(item.slug)
 
-         if (!card || item.band !== 'QUALIFIED') {
-            return item
-         }
+      if (!card) {
+         return item
+      }
 
-         return rescore(
-            {
-               ...item,
-               name: card.name ?? item.name,
-               headline: card.headline ?? item.headline,
-               location: card.location ?? item.location,
-               followers: card.followers ?? item.followers,
-               title: card.title,
-               company: card.company,
-               enriched: true,
-            },
-            rules,
-            thresholds
-         )
-      })
-   )
+      const read = {
+         ...item,
+         name: card.name ?? item.name,
+         headline: card.headline ?? item.headline,
+         location: card.location ?? item.location,
+         followers: card.followers ?? item.followers,
+         title: card.title,
+         company: card.company,
+         enriched: true,
+      }
+
+      return rules ? rescore(read, rules, thresholds) : read
+   })

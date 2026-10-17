@@ -6,13 +6,14 @@ export { SpendService } from './spend.service'
 export { WalletService, floorMicros, warnMicros } from './wallet.service'
 export { MAX_CHAIN_DEPTH, type WorkflowChanges, WorkflowService, readGraph } from './workflow.service'
 export { API_LIMITS, type ApiInput, WorkflowTriggerService } from './workflowTrigger.service'
-export { type CallOutcome, STALE_CLAIM_MS, WorkflowRunService } from './workflowRun.service'
+export { type CallOutcome, type ItemKey, STALE_CLAIM_MS, WorkflowRunService } from './workflowRun.service'
 export {
    EXPORT_LIMIT,
    type MemberChanges,
    type MemberInput,
    type MemberListQuery,
    type RunMember,
+   type SeenSkip,
    WorkflowListService,
 } from './workflowList.service'
 export {

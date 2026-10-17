@@ -21,6 +21,32 @@ export type CallOutcome = {
    error: string | null
 }
 
+// Where a step's output lives: its block, and which round of a loop or For each batch.
+export type ItemKey = { runId: string; nodeId: string; round: number }
+
+const whereKey = ({ runId, nodeId, round }: ItemKey, slug: string) => ({
+   runId_nodeId_round_slug: {
+      runId,
+      nodeId,
+      round,
+      slug,
+   },
+})
+
+const rowOf = (at: ItemKey, item: WorkflowItemData, keepUntil: Date | null = null) => ({
+   ...at,
+   slug: item.slug,
+   data: json(item),
+   keepUntil,
+})
+
+const readAll = (rows: { data: unknown }[]) =>
+   rows.flatMap(({ data }) => {
+      const item = readItem(data)
+
+      return item ? [item] : []
+   })
+
 export class WorkflowRunService {
    public static async activeRunIds() {
       const runs = await PrismaService.client.workflowRun.findMany({
@@ -77,79 +103,92 @@ export class WorkflowRunService {
       })
    }
 
-   public static async items(runId: string, nodeIds: string[]) {
+   public static async items(runId: string, sources: { nodeId: string; round: number }[]) {
+      if (sources.length === 0) {
+         return []
+      }
+
       const rows = await PrismaService.client.workflowItem.findMany({
          where: {
             runId,
-            nodeId: { in: nodeIds },
+            OR: sources,
          },
          orderBy: { slug: 'asc' },
          select: { data: true },
       })
 
-      return rows.flatMap(({ data }) => {
-         const item = readItem(data)
+      return readAll(rows)
+   }
 
-         return item ? [item] : []
-      })
+   // One page of what a step passed on, for the owner to look at. All rounds unless one is asked for.
+   public static async page(runId: string, nodeId: string, round: number | undefined, skip: number, take: number) {
+      const where = {
+         runId,
+         nodeId,
+         ...(round === undefined ? {} : { round }),
+      }
+      const [rows, total] = await Promise.all([
+         PrismaService.client.workflowItem.findMany({
+            where,
+            orderBy: [{ round: 'asc' }, { slug: 'asc' }],
+            skip,
+            take,
+            select: {
+               round: true,
+               data: true,
+            },
+         }),
+         PrismaService.client.workflowItem.count({ where }),
+      ])
+
+      return {
+         total,
+         items: rows.flatMap(({ round: itemRound, data }) => {
+            const item = readItem(data)
+
+            return item
+               ? [
+                    {
+                       round: itemRound,
+                       item,
+                    },
+                 ]
+               : []
+         }),
+      }
    }
 
    // Replaces what a step produced, so running the step again gives the same result.
-   public static replaceItems(runId: string, nodeId: string, items: WorkflowItemData[]) {
+   public static replaceItems(at: ItemKey, items: WorkflowItemData[], keepUntil: Date | null = null) {
       return PrismaService.client.$transaction([
-         PrismaService.client.workflowItem.deleteMany({
-            where: {
-               runId,
-               nodeId,
-            },
-         }),
+         PrismaService.client.workflowItem.deleteMany({ where: at }),
          PrismaService.client.workflowItem.createMany({
-            data: items.map(item => ({
-               runId,
-               nodeId,
-               slug: item.slug,
-               data: json(item),
-            })),
+            data: items.map(item => rowOf(at, item, keepUntil)),
+            skipDuplicates: true,
          }),
       ])
    }
 
    // Adds people to a collect step's output, merging anyone it already holds.
-   public static mergePeople(runId: string, nodeId: string, people: PersonItem[]) {
+   public static mergePeople(at: ItemKey, people: PersonItem[]) {
       return PrismaService.client.$transaction(async tx => {
          const incoming = mergeBySlug(people)
          const known = await tx.workflowItem.findMany({
             where: {
-               runId,
-               nodeId,
+               ...at,
                slug: { in: incoming.map(({ slug }) => slug) },
             },
             select: { data: true },
          })
          const merged = mergeBySlug([
-            ...known.flatMap(({ data }) => {
-               const item = readItem(data)
-
-               return item?.kind === 'profile' ? [item] : []
-            }),
+            ...readAll(known).filter((item): item is PersonItem => item.kind === 'profile'),
             ...incoming,
          ])
 
          for (const item of merged) {
             await tx.workflowItem.upsert({
-               where: {
-                  runId_nodeId_slug: {
-                     runId,
-                     nodeId,
-                     slug: item.slug,
-                  },
-               },
-               create: {
-                  runId,
-                  nodeId,
-                  slug: item.slug,
-                  data: json(item),
-               },
+               where: whereKey(at, item.slug),
+               create: rowOf(at, item),
                update: { data: json(item) },
             })
          }
@@ -157,36 +196,20 @@ export class WorkflowRunService {
    }
 
    // Writes items that are not there yet and leaves the rest, so a resumed step keeps its progress.
-   public static seedItems(runId: string, nodeId: string, items: WorkflowItemData[]) {
+   public static seedItems(at: ItemKey, items: WorkflowItemData[]) {
       return PrismaService.client.workflowItem.createMany({
-         data: items.map(item => ({
-            runId,
-            nodeId,
-            slug: item.slug,
-            data: json(item),
-         })),
+         data: items.map(item => rowOf(at, item)),
          skipDuplicates: true,
       })
    }
 
    // Overwrites these items of a step.
-   public static putItems(runId: string, nodeId: string, items: WorkflowItemData[]) {
+   public static putItems(at: ItemKey, items: WorkflowItemData[]) {
       return PrismaService.client.$transaction(
          items.map(item =>
             PrismaService.client.workflowItem.upsert({
-               where: {
-                  runId_nodeId_slug: {
-                     runId,
-                     nodeId,
-                     slug: item.slug,
-                  },
-               },
-               create: {
-                  runId,
-                  nodeId,
-                  slug: item.slug,
-                  data: json(item),
-               },
+               where: whereKey(at, item.slug),
+               create: rowOf(at, item),
                update: { data: json(item) },
             })
          )
@@ -207,12 +230,65 @@ export class WorkflowRunService {
       })
    }
 
-   public static async countItems(runId: string, nodeId: string) {
-      return PrismaService.client.workflowItem.count({
+   public static async countItems(at: ItemKey) {
+      return PrismaService.client.workflowItem.count({ where: at })
+   }
+
+   public static async idOfKey(runKey: string) {
+      const run = await PrismaService.client.workflowRun.findUnique({
+         where: { runKey },
+         select: { id: true },
+      })
+
+      return run?.id ?? null
+   }
+
+   public static setChildRun(stepId: string, childRunId: string) {
+      return PrismaService.client.workflowStepRun.update({
+         where: { id: stepId },
+         data: { childRunId },
+      })
+   }
+
+   // Where a run started by a "Run another workflow" block stands. null when it was deleted.
+   public static child(runId: string) {
+      return PrismaService.client.workflowRun.findUnique({
+         where: { id: runId },
+         select: {
+            status: true,
+            message: true,
+            startedAt: true,
+            workflow: { select: { name: true } },
+         },
+      })
+   }
+
+   // Everyone a run's "Add to list" blocks got, once.
+   public static async listedPeople(runId: string) {
+      const steps = await PrismaService.client.workflowStepRun.findMany({
          where: {
             runId,
-            nodeId,
+            type: 'output.list',
          },
+         select: {
+            nodeId: true,
+            round: true,
+         },
+      })
+      const items = await WorkflowRunService.items(runId, steps)
+
+      return mergeBySlug(items.filter((item): item is PersonItem => item.kind === 'profile'))
+   }
+
+   // Steps for the next round of a loop or For each; repeating it creates nothing twice.
+   public static addRound(runId: string, steps: { nodeId: string; type: string }[], round: number) {
+      return PrismaService.client.workflowStepRun.createMany({
+         data: steps.map(step => ({
+            runId,
+            ...step,
+            round,
+         })),
+         skipDuplicates: true,
       })
    }
 

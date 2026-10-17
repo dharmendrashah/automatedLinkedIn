@@ -97,8 +97,8 @@ export const WorkflowSettings = ({ workflow }: { workflow: Workflow }) => {
             <Label htmlFor="maybe-enabled">Keep maybe people (for 30 days, without reading their full profile)</Label>
          </div>
          <p className="text-muted-foreground text-sm">
-            A higher qualified score gives fewer, better people and costs less. People below the maybe score are left
-            out after the run.
+            Each Score block now sets its own scores. These apply only to Score blocks added before that. A higher
+            qualified score gives fewer, better people and costs less.
          </p>
          {update.error ? <p className="text-destructive text-sm">{readableError(update.error)}</p> : null}
          <div className="flex flex-wrap justify-between gap-2">

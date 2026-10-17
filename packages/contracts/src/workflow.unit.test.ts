@@ -1,14 +1,22 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+   ALL_CAP,
+   type BlockType,
    GOALS,
    type Graph,
+   type NodeConfig,
+   blockOf,
    catalog,
+   errorsOf,
    estimateGraph,
    flagshipGraph,
    nextScheduledRun,
+   nextScheduledRuns,
    previewGraph,
    scheduleOf,
+   scheduleSchema,
+   templateCatalog,
    templateGraph,
    validateGraph,
 } from './workflow'
@@ -28,8 +36,36 @@ describe('workflow catalog', () => {
    it('should give every block defaults that pass its own schema and never name a supplier', () => {
       const blocks = catalog()
 
-      expect(blocks.find(block => block.type === 'collect.commenters')?.defaults).toEqual({ howMany: 50 })
+      expect(blocks.find(block => block.type === 'collect.commenters')?.defaults).toEqual({
+         all: false,
+         howMany: 50,
+         postedWithin: 'any',
+         includeReplies: false,
+      })
       expect(JSON.stringify(blocks).toLowerCase()).not.toMatch(/mindcase|apify/)
+   })
+
+   it('should only let a preset set its own block settings, to values they accept', () => {
+      const required: Partial<Record<BlockType, NodeConfig>> = {
+         'collect.findPosts': { keywords: 'pipeline' },
+         'collect.jobs': { jobTitle: 'SDR' },
+         'score.icp': { icpId: 'icp-1' },
+      }
+
+      for (const block of catalog()) {
+         const keys = block.fields.flatMap(field => (field.kind === 'limit' ? [field.key, field.allKey] : [field.key]))
+
+         for (const { config } of block.presets) {
+            expect(keys).toEqual(expect.arrayContaining(Object.keys(config)))
+            expect(
+               blockOf(block.type).config.safeParse({
+                  ...block.defaults,
+                  ...required[block.type],
+                  ...config,
+               }).success
+            ).toBe(true)
+         }
+      }
    })
 })
 
@@ -38,7 +74,7 @@ describe('validateGraph', () => {
       expect(validateGraph(flagship)).toEqual([])
    })
 
-   it('should refuse a connection between ports of different kinds', () => {
+   it('should let posts reach a block that needs people, using their authors, and only note it', () => {
       const graph: Graph = {
          ...flagship,
          edges: [
@@ -50,15 +86,19 @@ describe('validateGraph', () => {
          ],
       }
 
-      expect(validateGraph(graph)).toContainEqual({
-         nodeId: 'score',
-         message: 'Posts gives posts, but Score against an ideal customer needs people.',
-      })
+      expect(validateGraph(graph)).toEqual([
+         {
+            nodeId: 'score',
+            level: 'note',
+            message: 'Score against an ideal customer gets posts: it uses their authors.',
+         },
+      ])
    })
 
-   it('should refuse a loop, a missing trigger, an orphan and a list without scoring', () => {
+   it('should only note a missing trigger, an orphan, a list without scoring and a loop, never block on them', () => {
       const loop: Graph = {
          ...flagship,
+         loopRounds: 4,
          edges: [
             ...flagship.edges,
             {
@@ -67,32 +107,53 @@ describe('validateGraph', () => {
             },
          ],
       }
+      const free: Graph = {
+         nodes: without(without(flagship, 'trigger'), 'score').nodes,
+         edges: without(without(flagship, 'trigger'), 'score').edges,
+      }
 
-      expect(validateGraph(loop).map(({ message }) => message)).toContain(
-         'The blocks form a loop. A workflow must flow one way.'
-      )
-      expect(validateGraph(without(flagship, 'trigger')).map(({ message }) => message)).toEqual(
+      expect(errorsOf(validateGraph(loop))).toEqual([])
+      expect(validateGraph(loop)).toContainEqual({
+         nodeId: 'dedupe',
+         level: 'note',
+         message: 'These blocks form a loop; it runs up to 4 rounds.',
+      })
+      expect(errorsOf(validateGraph(free))).toEqual([])
+      expect(validateGraph(free).map(({ message }) => message)).toEqual(
          expect.arrayContaining([
-            'A workflow needs exactly one trigger.',
-            'Posts is not connected to anything before it.',
+            'No trigger: Run starts from the blocks with nothing before them.',
+            'Get full profile has nothing before it, so it gets nothing.',
          ])
       )
+   })
 
-      const unscored: Graph = {
-         nodes: without(flagship, 'score').nodes,
-         edges: [
-            ...without(flagship, 'score').edges,
+   it('should note an Else without an If before it and a workflow that keeps nothing', () => {
+      const graph: Graph = {
+         nodes: [
+            ...without(flagship, 'list').nodes.filter(({ type }) => type !== 'output.markPosts'),
             {
-               from: 'dedupe',
-               to: 'enrich',
+               id: 'else',
+               type: 'logic.else',
+               config: {},
+               position: {
+                  x: 0,
+                  y: 0,
+               },
+            },
+         ],
+         edges: [
+            ...without(flagship, 'list').edges.filter(({ to }) => to !== 'done'),
+            {
+               from: 'enrich',
+               to: 'else',
             },
          ],
       }
 
-      expect(validateGraph(unscored)).toContainEqual({
-         nodeId: 'list',
-         message: 'Add to list needs a "Score against an ideal customer" block before it.',
-      })
+      expect(validateGraph(graph).map(({ message }) => message)).toEqual([
+         'Else passes on nothing unless an If or "Run another workflow" comes right before it.',
+         'Nothing keeps the results: add "Add to list", "Export to CSV" or "Send via API".',
+      ])
    })
 
    it('should refuse a "how many" of 0, which the data service reads as everything', () => {
@@ -113,12 +174,75 @@ describe('validateGraph', () => {
 })
 
 describe('nextScheduledRun', () => {
-   const base = {
+   const base = scheduleSchema.parse({
       hours: 24,
       at: '09:00',
       weekday: 1,
       timeZone: 'Asia/Kolkata',
-   }
+   })
+   const iso = (schedule: Partial<typeof base>, after: string) =>
+      nextScheduledRun(
+         {
+            ...base,
+            ...schedule,
+         },
+         new Date(after)
+      ).toISOString()
+
+   it('should skip the weekend, keep to chosen days and find a day of the month', () => {
+      // 2026-10-17 is a Saturday; 09:00 in Kolkata is 03:30 UTC.
+      expect(iso({ every: 'weekdays' }, '2026-10-17T02:00:00Z')).toBe('2026-10-19T03:30:00.000Z')
+      expect(
+         iso(
+            {
+               every: 'week',
+               days: ['1', '4'],
+            },
+            '2026-10-19T04:00:00Z'
+         )
+      ).toBe('2026-10-22T03:30:00.000Z')
+      expect(
+         iso(
+            {
+               every: 'month',
+               dayOfMonth: 5,
+            },
+            '2026-10-17T02:00:00Z'
+         )
+      ).toBe('2026-11-05T03:30:00.000Z')
+   })
+
+   it('should keep every few hours inside its window and on weekdays', () => {
+      const window = {
+         every: 'hours' as const,
+         hours: 4,
+         between: true,
+         from: '09:00',
+         until: '18:00',
+         weekdaysOnly: true,
+      }
+
+      expect(iso(window, '2026-10-19T03:30:00Z')).toBe('2026-10-19T07:30:00.000Z')
+      // Friday 16:30 plus 4 hours is past 18:00: the next opening is Monday 09:00.
+      expect(iso(window, '2026-10-16T11:00:00Z')).toBe('2026-10-19T03:30:00.000Z')
+      expect(
+         nextScheduledRuns(
+            {
+               ...base,
+               every: 'day',
+            },
+            new Date('2026-10-17T02:00:00Z'),
+            3
+         ).map(date => date.toISOString())
+      ).toEqual(['2026-10-17T03:30:00.000Z', '2026-10-18T03:30:00.000Z', '2026-10-19T03:30:00.000Z'])
+      expect(
+         scheduleSchema.safeParse({
+            ...window,
+            from: '18:00',
+            until: '09:00',
+         }).success
+      ).toBe(false)
+   })
 
    it('should find the next 09:00 in the chosen time zone', () => {
       expect(
@@ -208,6 +332,42 @@ describe('estimateGraph', () => {
       expect(totalMicros).toBe(20 * 2_000 * 2 + 40 * 4_000)
    })
 
+   it('should price "All" comments at the safety cap and never let a preview read all', () => {
+      const all: Graph = {
+         ...flagship,
+         nodes: flagship.nodes.map(node =>
+            node.id === 'commenters'
+               ? {
+                    ...node,
+                    config: { all: true },
+                 }
+               : node
+         ),
+      }
+
+      expect(estimateGraph(all, available).nodes.commenters.items).toBe(3 * ALL_CAP)
+      expect(previewGraph(all).nodes.find(({ id }) => id === 'commenters')?.config).toMatchObject({
+         all: false,
+         howMany: 20,
+      })
+   })
+
+   it('should count every round of a loop', () => {
+      const loop: Graph = {
+         ...flagship,
+         loopRounds: 2,
+         edges: [
+            ...flagship.edges,
+            {
+               from: 'enrich',
+               to: 'dedupe',
+            },
+         ],
+      }
+
+      expect(estimateGraph(loop, available).nodes.enrich.costMicros).toBe(2 * 600 * 4_000)
+   })
+
    it('should price people at a company with the page fee and skip enriching them again', () => {
       const accounts = templateGraph('accounts', {
          icpId: 'icp-1',
@@ -233,9 +393,14 @@ describe('templates', () => {
          perPost: 20,
          keywords: 'outbound',
          customer: 'https://www.linkedin.com/in/ada',
+         jobTitle: 'SDR',
+         domains: ['stripe.com'],
       })
 
-      expect(validateGraph(graph)).toEqual([])
+      // The address to send to is only set on the canvas.
+      expect(validateGraph(graph).map(({ message }) => message)).toEqual(
+         goal === 'newInJob' ? [expect.stringContaining('Send via API')] : []
+      )
       expect(
          estimateGraph(graph, {
             posts: 1,
@@ -254,5 +419,17 @@ describe('templates', () => {
       const yOf = (id: string) => graph.nodes.find(node => node.id === id)?.position.y ?? Number.NaN
 
       expect(graph.edges.every(({ from, to }) => yOf(to) > yOf(from))).toBe(true)
+   })
+
+   it('should list every template once, grouped, with a cost per run and no supplier name', () => {
+      const templates = templateCatalog()
+
+      expect(templates.map(({ id }) => id)).toEqual([...GOALS])
+      expect(templates.every(({ costMicros }) => costMicros > 0)).toBe(true)
+      expect(templates.find(({ id }) => id === 'decisionMakers')).toMatchObject({
+         useCaseLabel: 'Find new leads',
+         costMicros: 50 * 4_000,
+      })
+      expect(JSON.stringify(templates).toLowerCase()).not.toMatch(/mindcase|apify/)
    })
 })

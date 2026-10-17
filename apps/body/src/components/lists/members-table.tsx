@@ -17,7 +17,7 @@ import { Loader2, MoreHorizontal, Users } from 'lucide-react'
 import {
    type ListSummary,
    type Member,
-   type MemberState,
+   type SettableState,
    type MemberStatus,
    isMemberStatus,
    reasonOf,
@@ -41,7 +41,7 @@ type Props = {
    // The owner's other lists, to move a person to.
    otherLists: ListSummary[]
    onStatus: (member: Member, status: MemberStatus) => void
-   onState: (member: Member, state: MemberState) => void
+   onState: (member: Member, state: SettableState) => void
    onMove: (member: Member, list: ListSummary) => void
    onDoNotContact: (member: Member) => void
    onDelete: (member: Member) => void
@@ -83,7 +83,7 @@ export const MembersTable = ({
             />
             {members?.map(member => {
                const name = member.name ?? member.slug
-               const otherState: MemberState = member.state === 'QUALIFIED' ? 'MAYBE' : 'QUALIFIED'
+               const otherState: SettableState = member.state === 'QUALIFIED' ? 'MAYBE' : 'QUALIFIED'
 
                return (
                   <TableRow key={member.id}>
@@ -97,16 +97,17 @@ export const MembersTable = ({
                            {name}
                         </a>
                         {details(member) ? <p className="text-muted-foreground text-xs">{details(member)}</p> : null}
-                        {member.tags.length > 0 || member.reviewAt ? (
-                           <div className="mt-1 flex flex-wrap gap-1">
-                              {member.reviewAt ? <Badge variant="destructive">Needs review</Badge> : null}
-                              {member.tags.map(tag => (
-                                 <Badge key={tag} variant="secondary">
-                                    {tag}
-                                 </Badge>
-                              ))}
-                           </div>
-                        ) : null}
+                        <div className="mt-1 flex flex-wrap gap-1">
+                           {member.state === 'UNSCORED' ? null : (
+                              <Badge variant="outline">{memberStates[member.state].label}</Badge>
+                           )}
+                           {member.reviewAt ? <Badge variant="destructive">Needs review</Badge> : null}
+                           {member.tags.map(tag => (
+                              <Badge key={tag} variant="secondary">
+                                 {tag}
+                              </Badge>
+                           ))}
+                        </div>
                      </TableCell>
                      <TableCell>
                         {member.postUrl ? (

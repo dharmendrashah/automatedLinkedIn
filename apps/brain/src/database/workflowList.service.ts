@@ -26,9 +26,14 @@ export type MemberChanges = {
    status?: WorkflowListMemberStatus
 }
 
-export type MemberListQuery = {
+// Which people of a list a view shows: one state or all of them, and optionally one label.
+export type MemberView = {
+   state?: WorkflowListMemberState
+   label?: string
+}
+
+export type MemberListQuery = MemberView & {
    listId: string
-   state: WorkflowListMemberState
    status?: WorkflowListMemberStatus
    // Only people marked for review after 180 days untouched.
    needsReview?: boolean
@@ -65,6 +70,24 @@ const memberSelect = {
 const SEARCHED_FIELDS = ['name', 'headline', 'location', 'slug'] as const
 
 const nameTaken = (name: string) => `You already have a list named "${name}".`
+
+// What counts as already seen besides do-not-contact, which always counts.
+export type SeenSkip = { lists: boolean; profiles: boolean }
+
+const SKIP_ALL: SeenSkip = {
+   lists: true,
+   profiles: true,
+}
+// Known people (chosen by the owner or handed over by another workflow) are only checked against do-not-contact.
+const SKIP_NONE: SeenSkip = {
+   lists: false,
+   profiles: false,
+}
+
+const viewWhere = ({ state, label }: MemberView): Prisma.WorkflowListMemberWhereInput => ({
+   ...(state ? { state } : {}),
+   ...(label ? { tags: { has: label } } : {}),
+})
 
 export type RunMember = {
    slug: string
@@ -201,9 +224,8 @@ export class WorkflowListService {
       return count > 0
    }
 
-   // The slugs among these the owner must not contact or, unless the people are known (chosen by the owner or handed
-   // over by another workflow), already has in a list or in /profiles.
-   public static async seenAmong(userId: string, slugs: string[], options = { known: false }) {
+   // The slugs among these the owner must not contact and, as asked, already has in a list or in /profiles.
+   public static async seenAmong(userId: string, slugs: string[], skip = SKIP_ALL) {
       const db = PrismaService.client
       const where = {
          userId,
@@ -214,7 +236,7 @@ export class WorkflowListService {
             where,
             select: { slug: true },
          }),
-         options.known
+         !skip.lists
             ? []
             : db.workflowListMember.findMany({
                  where: {
@@ -223,7 +245,7 @@ export class WorkflowListService {
                  },
                  select: { slug: true },
               }),
-         options.known
+         !skip.profiles
             ? []
             : db.linkedInProfile.findMany({
                  where,
@@ -240,7 +262,7 @@ export class WorkflowListService {
       const slugsOf = (known: boolean) => people.filter(item => item.known === known).map(({ slug }) => slug)
       const [seen, seenKnown] = await Promise.all([
          WorkflowListService.seenAmong(userId, slugsOf(false)),
-         WorkflowListService.seenAmong(userId, slugsOf(true), { known: true }),
+         WorkflowListService.seenAmong(userId, slugsOf(true), SKIP_NONE),
       ])
       const fresh = people.filter(({ slug, known }) => !(known ? seenKnown : seen).has(slug))
       const { count } = await PrismaService.client.workflowListMember.createMany({
@@ -270,7 +292,7 @@ export class WorkflowListService {
       const where: Prisma.WorkflowListMemberWhereInput = {
          listId: query.listId,
          list: { userId },
-         state: query.state,
+         ...viewWhere(query),
          ...(query.status ? { status: query.status } : {}),
          ...(query.needsReview ? { reviewAt: { not: null } } : {}),
          ...(query.search
@@ -406,8 +428,8 @@ export class WorkflowListService {
       })
    }
 
-   // The list name and its members, oldest first; null when the list is not the owner's.
-   public static exportList(userId: string, id: string) {
+   // The list name and the members of a view, oldest first; null when the list is not the owner's.
+   public static exportList(userId: string, id: string, view: MemberView = {}) {
       return PrismaService.client.workflowList.findFirst({
          where: {
             id,
@@ -416,6 +438,7 @@ export class WorkflowListService {
          select: {
             name: true,
             members: {
+               where: viewWhere(view),
                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
                take: EXPORT_LIMIT,
                select: memberSelect,
