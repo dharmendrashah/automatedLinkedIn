@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+   GOALS,
    type Graph,
    catalog,
    estimateGraph,
@@ -8,6 +9,7 @@ import {
    nextScheduledRun,
    previewGraph,
    scheduleOf,
+   templateGraph,
    validateGraph,
 } from './workflow'
 
@@ -182,8 +184,14 @@ describe('nextScheduledRun', () => {
 })
 
 describe('estimateGraph', () => {
+   const available = {
+      posts: 3,
+      profiles: 40,
+      companies: 4,
+   }
+
    it('should price the worst case: every comment and reaction, every person enriched', () => {
-      const { totalMicros, nodes } = estimateGraph(flagship, { posts: 3 })
+      const { totalMicros, nodes } = estimateGraph(flagship, available)
 
       expect(nodes.posts.items).toBe(3)
       expect(nodes.commenters).toEqual({
@@ -195,8 +203,45 @@ describe('estimateGraph', () => {
    })
 
    it('should shrink a preview to one post and 20 people per collect block', () => {
-      const { totalMicros } = estimateGraph(previewGraph(flagship), { posts: 3 })
+      const { totalMicros } = estimateGraph(previewGraph(flagship), available)
 
       expect(totalMicros).toBe(20 * 2_000 * 2 + 40 * 4_000)
+   })
+
+   it('should price people at a company with the page fee and skip enriching them again', () => {
+      const accounts = templateGraph('accounts', {
+         icpId: 'icp-1',
+         posts: 10,
+         perPost: 30,
+      })
+      const { nodes, totalMicros } = estimateGraph(accounts, available)
+
+      expect(nodes.companies.items).toBe(4)
+      expect(nodes.employees).toEqual({
+         items: 120,
+         costMicros: 4 * (30 * 4_000 + 2 * 100_000),
+      })
+      expect(totalMicros).toBe(nodes.employees.costMicros)
+   })
+})
+
+describe('templates', () => {
+   it.each(GOALS)('should build a valid %s workflow', goal => {
+      const graph = templateGraph(goal, {
+         icpId: 'icp-1',
+         posts: 5,
+         perPost: 20,
+         keywords: 'outbound',
+         customer: 'https://www.linkedin.com/in/ada',
+      })
+
+      expect(validateGraph(graph)).toEqual([])
+      expect(
+         estimateGraph(graph, {
+            posts: 1,
+            profiles: 1,
+            companies: 1,
+         }).totalMicros
+      ).toBeGreaterThan(0)
    })
 })

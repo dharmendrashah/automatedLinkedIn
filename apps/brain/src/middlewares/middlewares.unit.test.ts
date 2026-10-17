@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
    cookieParser: vi.fn(() => 'cookie-middleware'),
    initializeTrpc: vi.fn(),
    configHealth: vi.fn(),
+   configWorkflowApi: vi.fn(),
    env: { CORS_ORIGINS: ' http://localhost:3000 ,http://localhost:5173,, ' },
 }))
 
@@ -17,6 +18,8 @@ vi.mock('cookie-parser', () => ({ default: mocks.cookieParser }))
 vi.mock('trpc/api/router', () => ({ initializeTrpc: mocks.initializeTrpc }))
 
 vi.mock('./health', () => ({ Health: { config: mocks.configHealth } }))
+
+vi.mock('./workflowApi', () => ({ WorkflowApi: { config: mocks.configWorkflowApi } }))
 
 vi.mock('env', () => mocks.env)
 
@@ -36,12 +39,13 @@ describe('Middlewares', () => {
       })
    })
 
-   it('should register the health routes', () => {
+   it('should register the health routes and the workflow API', () => {
       const app = { use: vi.fn() }
 
       Middlewares.config(app as never)
 
       expect(mocks.configHealth).toHaveBeenCalledWith(app)
+      expect(mocks.configWorkflowApi).toHaveBeenCalledWith(app)
    })
 
    it('should register cors before the api', () => {

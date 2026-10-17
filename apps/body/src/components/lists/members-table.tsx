@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
    DropdownMenu,
@@ -44,6 +45,7 @@ type Props = {
    onMove: (member: Member, list: ListSummary) => void
    onDoNotContact: (member: Member) => void
    onDelete: (member: Member) => void
+   onKeep: (member: Member) => void
 }
 
 export const MembersTable = ({
@@ -57,6 +59,7 @@ export const MembersTable = ({
    onMove,
    onDoNotContact,
    onDelete,
+   onKeep,
 }: Props) => (
    <div className="overflow-hidden rounded-lg border">
       <Table>
@@ -94,6 +97,16 @@ export const MembersTable = ({
                            {name}
                         </a>
                         {details(member) ? <p className="text-muted-foreground text-xs">{details(member)}</p> : null}
+                        {member.tags.length > 0 || member.reviewAt ? (
+                           <div className="mt-1 flex flex-wrap gap-1">
+                              {member.reviewAt ? <Badge variant="destructive">Needs review</Badge> : null}
+                              {member.tags.map(tag => (
+                                 <Badge key={tag} variant="secondary">
+                                    {tag}
+                                 </Badge>
+                              ))}
+                           </div>
+                        ) : null}
                      </TableCell>
                      <TableCell>
                         {member.postUrl ? (
@@ -143,6 +156,9 @@ export const MembersTable = ({
                               </Button>
                            </DropdownMenuTrigger>
                            <DropdownMenuContent align="end">
+                              {member.reviewAt ? (
+                                 <DropdownMenuItem onSelect={() => onKeep(member)}>Keep</DropdownMenuItem>
+                              ) : null}
                               <DropdownMenuItem onSelect={() => onState(member, otherState)}>
                                  Mark as {memberStates[otherState].label}
                               </DropdownMenuItem>

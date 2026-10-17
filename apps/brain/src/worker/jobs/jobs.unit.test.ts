@@ -5,11 +5,13 @@ import { JOBS } from './registry'
 const mocks = vi.hoisted(() => ({
    runDue: vi.fn(),
    dispatchDue: vi.fn(),
+   retention: vi.fn(),
 }))
 
 vi.mock('database', () => ({
    ProxyScoringJob: { runDue: mocks.runDue },
    TaskDispatchService: { dispatchDue: mocks.dispatchDue },
+   RetentionService: { run: mocks.retention },
 }))
 
 vi.mock('env', () => ({
@@ -18,6 +20,7 @@ vi.mock('env', () => ({
 }))
 
 const [proxyScoring, taskDispatch] = JOBS
+const retention = JOBS.find(({ name }) => name === 'retention')
 const context = { signal: new AbortController().signal }
 
 describe('worker jobs', () => {
@@ -89,5 +92,20 @@ describe('worker jobs', () => {
       })
 
       await expect(taskDispatch.run(context)).resolves.toBeUndefined()
+   })
+
+   it('should report only what retention deleted or marked, and nothing on a quiet run', async () => {
+      mocks.retention.mockResolvedValueOnce({
+         items: 5,
+         runs: 0,
+         marked: 2,
+      })
+      mocks.retention.mockResolvedValueOnce({
+         items: 0,
+         runs: 0,
+      })
+
+      await expect(retention?.run(context)).resolves.toEqual({ summary: '5 items, 2 marked' })
+      await expect(retention?.run(context)).resolves.toBeUndefined()
    })
 })

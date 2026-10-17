@@ -28,9 +28,12 @@ import { type Block, type ConfigValue, type Graph, type StepRun, formatUsd } fro
 const NODE_TYPES = { block: BlockNode }
 
 type Props = {
+   workflowId: string
    graph: Graph
    catalog: Block[]
    icps: { id: string; name: string }[]
+   // The owner's other workflows, for "After another workflow".
+   workflows: { id: string; name: string }[]
    // A run to show on the canvas: each block's state and what passed along each line.
    replay: StepRun[] | null
    saving: boolean
@@ -38,7 +41,7 @@ type Props = {
    onSave: (graph: Graph) => void
 }
 
-const Editor = ({ graph, catalog, icps, replay, saving, saveError, onSave }: Props) => {
+const Editor = ({ workflowId, graph, catalog, icps, workflows, replay, saving, saveError, onSave }: Props) => {
    const { screenToFlowPosition } = useReactFlow()
    const icpNames = useMemo(() => new Map(icps.map(icp => [icp.id, icp.name])), [icps])
    const initial = useMemo(() => toFlow(graph, catalog, { icpNames }), [graph, catalog, icpNames])
@@ -49,7 +52,13 @@ const Editor = ({ graph, catalog, icps, replay, saving, saveError, onSave }: Pro
 
    const draft = useMemo(() => toGraph(nodes, edges), [nodes, edges])
    const deferred = useDeferredValue(draft)
-   const estimate = trpc.workflow.estimate.useQuery({ graph: deferred }, { placeholderData: previous => previous })
+   const estimate = trpc.workflow.estimate.useQuery(
+      {
+         id: workflowId,
+         graph: deferred,
+      },
+      { placeholderData: previous => previous }
+   )
    const problems = estimate.data?.problems ?? []
    const invalid = new Set(problems.flatMap(({ nodeId }) => (nodeId ? [nodeId] : [])))
 
@@ -189,7 +198,13 @@ const Editor = ({ graph, catalog, icps, replay, saving, saveError, onSave }: Pro
                </ReactFlow>
             </div>
             <div className="overflow-y-auto border-l">
-               <SettingsPanel node={selected} icps={icps} onChange={setConfig} onRemove={remove} />
+               <SettingsPanel
+                  node={selected}
+                  icps={icps}
+                  workflows={workflows.filter(({ id }) => id !== workflowId)}
+                  onChange={setConfig}
+                  onRemove={remove}
+               />
             </div>
          </div>
       </div>
