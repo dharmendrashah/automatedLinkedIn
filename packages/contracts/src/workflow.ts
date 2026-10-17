@@ -2105,8 +2105,20 @@ export const previewGraph = (graph: Graph): Graph => ({
 export const flagshipGraph = (options: { icpId: string; posts: number; perPost: number }): Graph =>
    templateGraph('engagers', options)
 
-// The goals of the guided start; each builds one template.
-export const GOALS = ['engagers', 'problem', 'accounts', 'lookalikes', 'watch'] as const
+// The ready-made templates; each id builds one graph.
+export const GOALS = [
+   'engagers',
+   'problem',
+   'accounts',
+   'lookalikes',
+   'watch',
+   'decisionMakers',
+   'hiring',
+   'websites',
+   'competitor',
+   'newInJob',
+   'sharedAudience',
+] as const
 
 export type Goal = (typeof GOALS)[number]
 
@@ -2120,9 +2132,19 @@ export type TemplateOptions = {
    keywords?: string
    customer?: string
    titles?: string[]
+   jobTitle?: string
+   domains?: string[]
    // The owner's time zone, for a template that runs on a schedule.
    timeZone?: string
 }
+
+// The sizes a template starts with; everything else is set on the canvas.
+export const TEMPLATE_NUMBERS = {
+   posts: 5,
+   perPost: 50,
+}
+
+const LEADERSHIP = ['220', '300', '310', '320']
 
 const STEP_Y = 140
 const BRANCH_X = 280
@@ -2189,7 +2211,120 @@ const engagersOf = (from: string, depth: number, options: TemplateOptions) => {
    }
 }
 
+type OwnGoal = 'decisionMakers' | 'hiring' | 'websites' | 'newInJob' | 'sharedAudience'
+
+const OWN_GOALS = new Set<Goal>(['decisionMakers', 'hiring', 'websites', 'newInJob', 'sharedAudience'])
+
+const isOwn = (goal: Goal): goal is OwnGoal => OWN_GOALS.has(goal)
+
+// The templates that do not end in "commenters and reactors of some posts".
+const ownGraph = (goal: OwnGoal, options: TemplateOptions): Graph => {
+   const leaders = {
+      howMany: options.perPost,
+      seniority: LEADERSHIP,
+   }
+
+   if (goal === 'hiring') {
+      const rest = tail(['employees'], 4, options.icpId, false)
+
+      return {
+         nodes: [
+            step('trigger', 'trigger.manual', 0, 0),
+            step('companies', 'input.companies', 1, 0, { howMany: options.posts * 4 }),
+            step('jobs', 'collect.jobs', 2, 0, { jobTitle: options.jobTitle ?? '' }),
+            step('employees', 'collect.employees', 3, 0, {
+               ...leaders,
+               howMany: 25,
+            }),
+            ...rest.nodes,
+         ],
+         edges: linked([['trigger', 'companies'], ['companies', 'jobs'], ['jobs', 'employees'], ...rest.edges]),
+      }
+   }
+
+   if (goal === 'websites') {
+      const rest = tail(['employees'], 3, options.icpId, false)
+
+      return {
+         nodes: [
+            step('trigger', 'trigger.manual', 0, 0),
+            step('sites', 'collect.domainLookup', 1, 0, { domains: options.domains ?? [] }),
+            step('employees', 'collect.employees', 2, 0, {
+               ...leaders,
+               howMany: 10,
+            }),
+            ...rest.nodes,
+            step('csv', 'output.csv', 6, 0),
+         ],
+         edges: linked([['trigger', 'sites'], ['sites', 'employees'], ...rest.edges, ['list', 'csv']]),
+      }
+   }
+
+   if (goal === 'newInJob') {
+      const rest = tail(['search'], 2, options.icpId, false)
+
+      return {
+         nodes: [
+            step('trigger', 'trigger.schedule', 0, 0, {
+               every: 'week',
+               ...(options.timeZone ? { timeZone: options.timeZone } : {}),
+            }),
+            step('search', 'collect.searchPeople', 1, 0, {
+               ...leaders,
+               howMany: 25,
+               changedJobs: true,
+            }),
+            ...rest.nodes,
+            step('send', 'output.sendApi', 5, 0),
+         ],
+         edges: linked([['trigger', 'search'], ...rest.edges, ['list', 'send']]),
+      }
+   }
+
+   if (goal === 'sharedAudience') {
+      const rest = tail(['merge'], 5, options.icpId)
+
+      return {
+         nodes: [
+            step('trigger', 'trigger.manual', 0, 0),
+            step('posts', 'input.posts', 1, 0, { howMany: options.posts }),
+            step('competitor', 'input.companies', 1, 1, { howMany: 1 }),
+            step('theirPosts', 'collect.postsOfCompanies', 2, 1, { howMany: options.posts }),
+            step('mine', 'collect.commenters', 2, 0, { howMany: options.perPost }),
+            step('theirs', 'collect.commenters', 3, 1, { howMany: options.perPost }),
+            step('merge', 'process.merge', 4, 0, { mode: 'every' }),
+            ...rest.nodes,
+         ],
+         edges: linked([
+            ['trigger', 'posts'],
+            ['trigger', 'competitor'],
+            ['posts', 'mine'],
+            ['competitor', 'theirPosts'],
+            ['theirPosts', 'theirs'],
+            ['mine', 'merge'],
+            ['theirs', 'merge'],
+            ...rest.edges,
+         ]),
+      }
+   }
+
+   const rest = tail(['search'], 2, options.icpId, false)
+
+   return {
+      nodes: [
+         step('trigger', 'trigger.manual', 0, 0),
+         step('search', 'collect.searchPeople', 1, 0, leaders),
+         ...rest.nodes,
+      ],
+      edges: linked([['trigger', 'search'], ...rest.edges]),
+   }
+}
+
 export const templateGraph = (goal: Goal, options: TemplateOptions): Graph => {
+   if (isOwn(goal)) {
+      return ownGraph(goal, options)
+   }
+
    if (goal === 'accounts') {
       const rest = tail(['employees'], 3, options.icpId, false)
 
@@ -2200,6 +2335,7 @@ export const templateGraph = (goal: Goal, options: TemplateOptions): Graph => {
             step('employees', 'collect.employees', 2, 0, {
                howMany: options.perPost,
                titles: options.titles ?? [],
+               seniority: LEADERSHIP,
             }),
             ...rest.nodes,
          ],
@@ -2207,7 +2343,10 @@ export const templateGraph = (goal: Goal, options: TemplateOptions): Graph => {
       }
    }
 
-   const starts: Record<Exclude<Goal, 'accounts'>, { nodes: GraphNode[]; edges: string[][]; last: string }> = {
+   const starts: Record<
+      Exclude<Goal, 'accounts' | OwnGoal>,
+      { nodes: GraphNode[]; edges: string[][]; last: string }
+   > = {
       engagers: {
          nodes: [
             step('trigger', 'trigger.manual', 0, 0),
@@ -2246,6 +2385,18 @@ export const templateGraph = (goal: Goal, options: TemplateOptions): Graph => {
          ],
          last: 'posts',
       },
+      competitor: {
+         nodes: [
+            step('trigger', 'trigger.manual', 0, 0),
+            step('competitor', 'input.companies', 1, 0, { howMany: 1 }),
+            step('posts', 'collect.postsOfCompanies', 2, 0, { howMany: options.posts }),
+         ],
+         edges: [
+            ['trigger', 'competitor'],
+            ['competitor', 'posts'],
+         ],
+         last: 'posts',
+      },
       watch: {
          nodes: [
             step('trigger', 'trigger.schedule', 0, 0, {
@@ -2276,6 +2427,165 @@ export const blankGraph = (): Graph => ({
    nodes: [step('trigger', 'trigger.manual', 0, 0)],
    edges: [],
 })
+
+export const USE_CASES = {
+   leads: 'Find new leads',
+   timing: 'Timing signals',
+   accounts: 'Account-based',
+   monitor: 'Monitor',
+} as const
+
+// Lucide icon names; the browser maps them to icons.
+export type TemplateIcon =
+   | 'MessageSquare'
+   | 'Search'
+   | 'Building'
+   | 'Heart'
+   | 'UserRound'
+   | 'UserSearch'
+   | 'Briefcase'
+   | 'Globe'
+   | 'Swords'
+   | 'Sparkles'
+   | 'Merge'
+
+type TemplateInfo = {
+   title: string
+   summary: string
+   icon: TemplateIcon
+   useCase: keyof typeof USE_CASES
+   needs: string
+   gives: string
+   // The sizes the cost is worked out for, in words.
+   assumes: string
+}
+
+const { posts: POSTS, perPost: PER_POST } = TEMPLATE_NUMBERS
+const IN_LIST = 'Qualified people in the workflow list'
+
+const TEMPLATES: Record<Goal, TemplateInfo> = {
+   engagers: {
+      title: 'People engaging with posts I choose',
+      summary: 'Commenters and reactors of the posts in your posts list.',
+      icon: 'MessageSquare',
+      useCase: 'leads',
+      needs: 'Posts in your posts list, an ideal customer',
+      gives: IN_LIST,
+      assumes: `${POSTS} posts, up to ${PER_POST} comments and ${PER_POST} reactions each`,
+   },
+   problem: {
+      title: 'People talking about my problem',
+      summary: 'Finds recent posts by keywords, then who engaged with them.',
+      icon: 'Search',
+      useCase: 'leads',
+      needs: 'Keywords, an ideal customer',
+      gives: IN_LIST,
+      assumes: `${POSTS} posts, up to ${PER_POST} comments and ${PER_POST} reactions each`,
+   },
+   lookalikes: {
+      title: 'People like my best customer',
+      summary: 'What your best customer engages with, then who else engaged there.',
+      icon: 'Heart',
+      useCase: 'leads',
+      needs: "Your best customer's profile link, an ideal customer",
+      gives: IN_LIST,
+      assumes: `${POSTS} comments and ${POSTS} reactions of your customer, ${PER_POST} people on each post`,
+   },
+   decisionMakers: {
+      title: 'Decision makers in my market',
+      summary: 'Searches LinkedIn for directors, VPs, C-level and owners, scores them and keeps the best.',
+      icon: 'UserSearch',
+      useCase: 'leads',
+      needs: 'Job titles or keywords, an ideal customer',
+      gives: IN_LIST,
+      assumes: `${PER_POST} people`,
+   },
+   competitor: {
+      title: "My competitor's audience",
+      summary: "Who comments on and reacts to your competitor's company posts.",
+      icon: 'Swords',
+      useCase: 'leads',
+      needs: 'Your competitor in your companies list, an ideal customer',
+      gives: IN_LIST,
+      assumes: `${POSTS} posts, up to ${PER_POST} comments and ${PER_POST} reactions each`,
+   },
+   sharedAudience: {
+      title: 'Engaged with me and my competitor',
+      summary: "Keeps only people who commented on both your posts and your competitor's posts.",
+      icon: 'Merge',
+      useCase: 'leads',
+      needs: 'Posts in your posts list, your competitor in your companies list, an ideal customer',
+      gives: IN_LIST,
+      assumes: `${POSTS} posts on each side, up to ${PER_POST} comments each`,
+   },
+   hiring: {
+      title: 'Companies hiring for a role',
+      summary: 'Finds which of your companies are hiring for a role, then their leaders.',
+      icon: 'Briefcase',
+      useCase: 'timing',
+      needs: 'Companies in your companies list, a job title, an ideal customer',
+      gives: IN_LIST,
+      assumes: `${POSTS * 4} companies, 25 leaders at each`,
+   },
+   newInJob: {
+      title: 'New in their job',
+      summary: 'Each week, decision makers who just changed jobs, sent to your system too.',
+      icon: 'Sparkles',
+      useCase: 'timing',
+      needs: 'Job titles or keywords, an ideal customer, your address for Send via API',
+      gives: 'Qualified people in the list and sent to your address, every week',
+      assumes: '25 people a run',
+   },
+   accounts: {
+      title: 'Who works at my target accounts',
+      summary: 'The leaders at the companies in your companies list.',
+      icon: 'Building',
+      useCase: 'accounts',
+      needs: 'Companies in your companies list, an ideal customer',
+      gives: IN_LIST,
+      assumes: `${POSTS} companies, ${PER_POST} leaders at each`,
+   },
+   websites: {
+      title: 'From a list of websites',
+      summary: 'Turns website addresses into companies, then finds their leaders.',
+      icon: 'Globe',
+      useCase: 'accounts',
+      needs: 'Website addresses, an ideal customer',
+      gives: 'Qualified people in the list and a CSV file',
+      assumes: '10 websites, 10 leaders at each',
+   },
+   watch: {
+      title: 'Watch people I care about',
+      summary: 'Each week, new posts of people in your profiles list and who engaged.',
+      icon: 'UserRound',
+      useCase: 'monitor',
+      needs: 'People in your profiles list, an ideal customer',
+      gives: IN_LIST,
+      assumes: `${POSTS} people, 3 posts each, up to ${PER_POST} comments and ${PER_POST} reactions per post`,
+   },
+}
+
+// Example inputs, so the cost counts what a user would fill in on the canvas.
+const PRICED_WITH: TemplateOptions = {
+   ...TEMPLATE_NUMBERS,
+   keywords: 'example',
+   jobTitle: 'example',
+   domains: Array.from({ length: 10 }, (_, index) => `site-${index + 1}.com`),
+}
+const FULL_LISTS: Available = {
+   posts: Number.MAX_SAFE_INTEGER,
+   profiles: Number.MAX_SAFE_INTEGER,
+   companies: Number.MAX_SAFE_INTEGER,
+}
+
+// The templates as plain data for the browser, with what one run costs at most at the starting sizes.
+export const templateCatalog = () =>
+   GOALS.map(id => ({
+      id,
+      ...TEMPLATES[id],
+      useCaseLabel: USE_CASES[TEMPLATES[id].useCase],
+      costMicros: estimateGraph(templateGraph(id, PRICED_WITH), FULL_LISTS).totalMicros,
+   }))
 
 // The schedule of a graph, or null when it is started by hand.
 export const scheduleOf = (graph: Graph): Schedule | null => {

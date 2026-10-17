@@ -1,78 +1,109 @@
 import { browserTimeZone } from '@/components/workflows/schedule-text'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { formatUsd } from '@/components/workflows/types'
 import { readableError } from '@/lib/trpc-error'
 import {
+   Briefcase,
    Building,
+   Globe,
    Heart,
    Loader2,
    type LucideIcon,
+   Merge,
    MessageSquare,
    Plus,
    Search,
+   Sparkles,
+   Swords,
    UserRound,
+   UserSearch,
    Workflow,
 } from 'lucide-react'
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, type ReactNode, useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { cn } from '@/lib/utils'
 
-import { trpc } from '../trpc'
+import { type RouterOutputs, trpc } from '../trpc'
 
-type Start = 'blank' | 'engagers' | 'problem' | 'accounts' | 'lookalikes' | 'watch'
+type Template = RouterOutputs['workflow']['templates'][number]
+type Start = 'blank' | Template['id']
 
-const STARTS: { id: Start; title: string; description: string; icon: LucideIcon }[] = [
-   {
-      id: 'blank',
-      title: 'Start blank',
-      description: 'An empty canvas with "Run by hand". Add any blocks you like.',
-      icon: Plus,
-   },
-   {
-      id: 'engagers',
-      title: 'People engaging with posts I choose',
-      description: 'Commenters and reactors of the posts in your posts list.',
-      icon: MessageSquare,
-   },
-   {
-      id: 'problem',
-      title: 'People talking about my problem',
-      description: 'Finds recent posts by keywords, then who engaged with them.',
-      icon: Search,
-   },
-   {
-      id: 'accounts',
-      title: 'Who works at my target accounts',
-      description: 'People at the companies in your companies list.',
-      icon: Building,
-   },
-   {
-      id: 'lookalikes',
-      title: 'People like my best customer',
-      description: 'What your best customer engages with, then who else engaged there.',
-      icon: Heart,
-   },
-   {
-      id: 'watch',
-      title: 'Watch people I care about',
-      description: 'Each week, new posts of people in your profiles list and who engaged.',
-      icon: UserRound,
-   },
-]
+const ICONS: Record<Template['icon'], LucideIcon> = {
+   MessageSquare,
+   Search,
+   Building,
+   Heart,
+   UserRound,
+   UserSearch,
+   Briefcase,
+   Globe,
+   Swords,
+   Sparkles,
+   Merge,
+}
+
+const Choice = ({ on, onPick, children }: { on: boolean; onPick: () => void; children: ReactNode }) => (
+   <button type="button" role="radio" aria-checked={on} onClick={onPick} className="text-left">
+      <Card className={cn('h-full transition-shadow hover:shadow-md', on && 'ring-primary ring-2')}>{children}</Card>
+   </button>
+)
+
+const TemplateCard = ({ template }: { template: Template }) => {
+   const Icon = ICONS[template.icon]
+
+   return (
+      <CardHeader className="flex flex-row items-start gap-3">
+         <span className="bg-muted grid size-9 shrink-0 place-items-center rounded-lg">
+            <Icon className="size-5" aria-hidden />
+         </span>
+         <div className="grid gap-2">
+            <div className="grid gap-1">
+               <CardTitle className="text-base">{template.title}</CardTitle>
+               <CardDescription>{template.summary}</CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-1">
+               <Badge variant="secondary" title={`For ${template.assumes}`}>
+                  Up to {formatUsd(template.costMicros)} a run
+               </Badge>
+               <Badge variant="outline">{template.useCaseLabel}</Badge>
+            </div>
+            <dl className="text-muted-foreground grid gap-0.5 text-xs">
+               <div>
+                  <dt className="inline font-medium">Needs: </dt>
+                  <dd className="inline">{template.needs}</dd>
+               </div>
+               <div>
+                  <dt className="inline font-medium">Gives: </dt>
+                  <dd className="inline">{template.gives}</dd>
+               </div>
+               <div>
+                  <dt className="inline font-medium">Cost for: </dt>
+                  <dd className="inline">{template.assumes}</dd>
+               </div>
+            </dl>
+         </div>
+      </CardHeader>
+   )
+}
 
 // A new workflow in two steps: its name, then blank or a ready-made template. Everything else is set on the canvas.
 export const WorkflowNew = () => {
    const navigate = useNavigate()
    const [name, setName] = useState('')
    const [start, setStart] = useState<Start>('blank')
+   const templates = trpc.workflow.templates.useQuery()
    const create = trpc.workflow.create.useMutation({
       onSuccess: workflow => void navigate(`/workflows/${workflow.id}`),
    })
-   const chosen = STARTS.find(({ id }) => id === start)
+   const list = templates.data ?? []
+   const chosen = list.find(({ id }) => id === start)
+   const groups = [...new Set(list.map(({ useCaseLabel }) => useCaseLabel))]
 
    const submit = (event: FormEvent) => {
       event.preventDefault()
@@ -81,7 +112,7 @@ export const WorkflowNew = () => {
          create.mutate({
             name: name.trim(),
             start,
-            description: start === 'blank' ? undefined : chosen?.title,
+            description: chosen?.title,
             timeZone: browserTimeZone(),
          })
       }
@@ -106,36 +137,45 @@ export const WorkflowNew = () => {
             />
          </section>
 
-         <section className="grid gap-3">
+         <section className="grid gap-4" role="radiogroup" aria-label="How to start">
             <h3 className="text-sm font-medium">2. Start blank or from a ready-made template</h3>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" role="radiogroup" aria-label="How to start">
-               {STARTS.map(item => {
-                  const Icon = item.icon
-
-                  return (
-                     <button
-                        key={item.id}
-                        type="button"
-                        role="radio"
-                        aria-checked={start === item.id}
-                        onClick={() => setStart(item.id)}
-                        className="text-left"
-                     >
-                        <Card className={cn('h-full transition-shadow hover:shadow-md', start === item.id && 'ring-primary ring-2')}>
-                           <CardHeader className="flex flex-row items-start gap-3">
-                              <span className="bg-muted grid size-9 shrink-0 place-items-center rounded-lg">
-                                 <Icon className="size-5" aria-hidden />
-                              </span>
-                              <div className="grid gap-1">
-                                 <CardTitle className="text-base">{item.title}</CardTitle>
-                                 <CardDescription>{item.description}</CardDescription>
-                              </div>
-                           </CardHeader>
-                        </Card>
-                     </button>
-                  )
-               })}
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+               <Choice on={start === 'blank'} onPick={() => setStart('blank')}>
+                  <CardHeader className="flex flex-row items-start gap-3">
+                     <span className="bg-muted grid size-9 shrink-0 place-items-center rounded-lg">
+                        <Plus className="size-5" aria-hidden />
+                     </span>
+                     <div className="grid gap-1">
+                        <CardTitle className="text-base">Start blank</CardTitle>
+                        <CardDescription>An empty canvas with "Run by hand". Add any blocks you like.</CardDescription>
+                     </div>
+                  </CardHeader>
+               </Choice>
             </div>
+            {templates.isLoading ? <Loader2 className="text-muted-foreground animate-spin" aria-label="Loading templates" /> : null}
+            {templates.error ? (
+               <Alert variant="destructive">
+                  <AlertDescription>{readableError(templates.error)}</AlertDescription>
+               </Alert>
+            ) : null}
+            {groups.map(group => (
+               <div key={group} className="grid gap-2">
+                  <h4 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">{group}</h4>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                     {list
+                        .filter(({ useCaseLabel }) => useCaseLabel === group)
+                        .map(template => (
+                           <Choice key={template.id} on={start === template.id} onPick={() => setStart(template.id)}>
+                              <TemplateCard template={template} />
+                           </Choice>
+                        ))}
+                  </div>
+               </div>
+            ))}
+            <p className="text-muted-foreground text-xs">
+               Costs are the most one run can spend at the starting sizes. Change the sizes on the canvas; its estimate is
+               the one to check before a run.
+            </p>
          </section>
 
          {create.error ? (

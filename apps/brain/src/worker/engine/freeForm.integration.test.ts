@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
-import { PrismaService, UserService, WalletService, WorkflowService } from 'database'
+import { IcpService, LinkedInPostService, PrismaService, UserService, WalletService, WorkflowService } from 'database'
 
-import { type Graph, type GraphNode } from '@automatedLinkedIn/contracts'
+import { GOALS, type Graph, type GraphNode, TEMPLATE_NUMBERS, templateGraph } from '@automatedLinkedIn/contracts'
 
 import { advanceRun } from './engine'
 
@@ -226,6 +226,58 @@ describe('free-form workflows (database)', () => {
          [1, 'cy'],
       ])
       expect((await WorkflowService.run(userId, loop.runId))?.status).toBe('SUCCEEDED')
+   })
+
+   it('should run every ready-made template to the end once its inputs are set', async () => {
+      const icp = await IcpService.create(userId, {
+         name: 'Template check',
+         includeTitles: ['growth'],
+         excludeTitles: [],
+         seniorities: [],
+         industries: [],
+         companySizes: [],
+         locations: [],
+         problemKeywords: [],
+      })
+      const withAddress = (graph: Graph): Graph => ({
+         ...graph,
+         nodes: graph.nodes.map(item =>
+            item.type === 'output.sendApi'
+               ? {
+                    ...item,
+                    config: { url: 'https://example.com/hook' },
+                 }
+               : item
+         ),
+      })
+      const statuses: [string, string | undefined][] = []
+
+      for (const [index, goal] of GOALS.entries()) {
+         // Templates that mark posts done use them up, so each run gets a fresh one.
+         await LinkedInPostService.addMany(userId, [
+            {
+               slug: `activity-74529249700428${String(500 + index).padStart(5, '0')}`,
+               url: post(500 + index),
+            },
+         ])
+
+         const { runId } = await runOf(
+            withAddress(
+               templateGraph(goal, {
+                  ...TEMPLATE_NUMBERS,
+                  icpId: icp.id,
+                  keywords: 'pipeline',
+                  customer: profile('ada'),
+                  jobTitle: 'SDR',
+                  domains: ['stripe.com'],
+               })
+            )
+         )
+
+         statuses.push([goal, (await WorkflowService.run(userId, runId))?.status])
+      }
+
+      expect(statuses).toEqual(GOALS.map(goal => [goal, 'SUCCEEDED']))
    })
 
    it('should send what reaches Send via API to the owner address with the secret header', async () => {

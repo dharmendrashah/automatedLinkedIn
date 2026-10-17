@@ -16,6 +16,7 @@ import {
    previewGraph,
    scheduleOf,
    scheduleSchema,
+   templateCatalog,
    templateGraph,
    validateGraph,
 } from './workflow'
@@ -392,9 +393,14 @@ describe('templates', () => {
          perPost: 20,
          keywords: 'outbound',
          customer: 'https://www.linkedin.com/in/ada',
+         jobTitle: 'SDR',
+         domains: ['stripe.com'],
       })
 
-      expect(validateGraph(graph)).toEqual([])
+      // The address to send to is only set on the canvas.
+      expect(validateGraph(graph).map(({ message }) => message)).toEqual(
+         goal === 'newInJob' ? [expect.stringContaining('Send via API')] : []
+      )
       expect(
          estimateGraph(graph, {
             posts: 1,
@@ -413,5 +419,17 @@ describe('templates', () => {
       const yOf = (id: string) => graph.nodes.find(node => node.id === id)?.position.y ?? Number.NaN
 
       expect(graph.edges.every(({ from, to }) => yOf(to) > yOf(from))).toBe(true)
+   })
+
+   it('should list every template once, grouped, with a cost per run and no supplier name', () => {
+      const templates = templateCatalog()
+
+      expect(templates.map(({ id }) => id)).toEqual([...GOALS])
+      expect(templates.every(({ costMicros }) => costMicros > 0)).toBe(true)
+      expect(templates.find(({ id }) => id === 'decisionMakers')).toMatchObject({
+         useCaseLabel: 'Find new leads',
+         costMicros: 50 * 4_000,
+      })
+      expect(JSON.stringify(templates).toLowerCase()).not.toMatch(/mindcase|apify/)
    })
 })

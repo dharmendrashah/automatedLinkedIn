@@ -7,11 +7,13 @@ import { WorkflowService, WorkflowTriggerService, readGraph } from 'database'
 
 import {
    GOALS,
+   TEMPLATE_NUMBERS,
    blankGraph,
    catalog,
    graphSchema,
    nextScheduledRuns,
    scheduleSchema,
+   templateCatalog,
    templateGraph,
 } from '@automatedLinkedIn/contracts'
 
@@ -25,12 +27,6 @@ const RUN_MISSING = 'Run not found'
 const byId = z.object({ id: z.string().min(1) })
 const name = z.string().trim().min(1).max(100)
 const score = z.number().int().min(1).max(100)
-
-// Ready-made templates start with these numbers; everything else is set on the canvas.
-const TEMPLATE_NUMBERS = {
-   posts: 5,
-   perPost: 50,
-}
 
 const createInput = z.object({
    name,
@@ -70,6 +66,8 @@ const withProblems = async <T extends { id: string; graph: unknown }>(userId: st
 // Every procedure scopes to ctx.user.id, so one user can never reach another's workflows or runs by id.
 export const workflow = router({
    catalog: ownerProcedure.query(() => catalog()),
+
+   templates: ownerProcedure.query(() => templateCatalog()),
 
    // The next three starts of a schedule being edited, so the owner sees what it means. Invalid settings give none.
    nextRuns: ownerProcedure.input(z.object({ schedule: z.record(z.string(), z.unknown()) })).query(({ input }) => {
