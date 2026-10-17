@@ -12,6 +12,7 @@ const postSelect = {
    id: true,
    slug: true,
    url: true,
+   expandedUrl: true,
    status: true,
    archivedAt: true,
    createdAt: true,
@@ -33,7 +34,7 @@ const updateOwned = (userId: string, id: string, data: Prisma.LinkedInPostUpdate
    )
 
 export class LinkedInPostService {
-   public static addMany(userId: string, posts: LinkedInLink[]) {
+   public static addMany(userId: string, posts: (LinkedInLink & { expandedUrl?: string | null })[]) {
       const table = PrismaService.client.linkedInPost
 
       return addLinks(posts, {
@@ -61,10 +62,11 @@ export class LinkedInPostService {
          create: async fresh =>
             (
                await table.createMany({
-                  data: fresh.map(({ slug, url }) => ({
+                  data: fresh.map(({ slug, url, expandedUrl }) => ({
                      userId,
                      slug,
                      url,
+                     expandedUrl: expandedUrl ?? null,
                   })),
                   skipDuplicates: true,
                })
@@ -123,7 +125,17 @@ export class LinkedInPostService {
             id: true,
             slug: true,
             url: true,
+            expandedUrl: true,
          },
+      })
+   }
+
+   // Keeps the expanded form of a short link found later, so it is read only once.
+   public static saveExpanded(id: string, expandedUrl: string) {
+      return PrismaService.client.linkedInPost.update({
+         where: { id },
+         data: { expandedUrl },
+         select: { id: true },
       })
    }
 

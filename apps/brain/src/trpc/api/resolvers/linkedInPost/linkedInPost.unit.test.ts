@@ -88,6 +88,7 @@ describe('linkedInPost resolvers', () => {
             {
                slug: `activity-${POST_ID}`,
                url: `https://www.linkedin.com/feed/update/urn:li:activity:${POST_ID}`,
+               expandedUrl: null,
             },
          ])
          expect(result).toEqual({
@@ -96,6 +97,37 @@ describe('linkedInPost resolvers', () => {
             skipped: 0,
             invalid: ['linkedin.com/in/ada-lovelace'],
          })
+      })
+
+      it('should keep a short link and save the post it redirects to', async () => {
+         const target = 'https://www.linkedin.com/posts/ada_x-share-7516986460906954752-Fh8V/'
+
+         vi.stubGlobal(
+            'fetch',
+            vi.fn(
+               async () =>
+                  new Response(null, {
+                     status: 301,
+                     headers: { location: `${target}?rcm=x` },
+                  })
+            )
+         )
+         mocks.addMany.mockResolvedValueOnce({
+            created: 1,
+            restored: 0,
+            skipped: 0,
+         })
+
+         await caller(authed()).create({ urls: 'https://lnkd.in/p/gtzWY58E' })
+
+         expect(mocks.addMany).toHaveBeenCalledWith('u1', [
+            {
+               slug: 'lnkd-gtzWY58E',
+               url: 'https://lnkd.in/p/gtzWY58E',
+               expandedUrl: target,
+            },
+         ])
+         vi.unstubAllGlobals()
       })
 
       it('should reject an empty paste and a paste with too many links', async () => {

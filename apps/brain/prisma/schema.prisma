@@ -272,17 +272,19 @@ enum LinkedInPostStatus {
 
 // A post the user wants to work through, saved from a pasted post link. The link is all that is kept.
 model LinkedInPost {
-  id         String             @id @default(uuid(7))
-  userId     String
-  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String             @id @default(uuid(7))
+  userId      String
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   // `<type>-<numeric id>` of the post (activity, share or ugcpost); unique per owner.
-  slug       String
-  url        String
-  status     LinkedInPostStatus @default(UNPROCESSED)
+  slug        String
+  url         String
+  // For a lnkd.in short link: the linkedin.com post it redirects to, without its query string.
+  expandedUrl String?
+  status      LinkedInPostStatus @default(UNPROCESSED)
   // Set when the owner removes the post; it can be restored.
-  archivedAt DateTime?
-  createdAt  DateTime           @default(now())
-  updatedAt  DateTime           @updatedAt
+  archivedAt  DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 
   @@unique([userId, slug])
   @@index([userId, archivedAt, createdAt])

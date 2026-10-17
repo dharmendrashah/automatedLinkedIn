@@ -1,4 +1,12 @@
-import { type PersonItem, type PostItem, type WorkflowItemData, mergeBySlug, readSeniorities } from 'core'
+import {
+   type PersonItem,
+   type PostItem,
+   type WorkflowItemData,
+   expandShortPostLink,
+   isShortPostLink,
+   mergeBySlug,
+   readSeniorities,
+} from 'core'
 
 import {
    IcpService,
@@ -403,6 +411,22 @@ const markPosts = async (ctx: Context): Promise<StepResult> => {
    }
 }
 
+// The data service cannot read lnkd.in short links: send the post they lead to. A short link not expanded when it was
+// saved is expanded now and kept; if that fails too, the short link is sent and that post finds nobody.
+const sendableUrl = async (post: { id: string; url: string; expandedUrl: string | null }) => {
+   if (post.expandedUrl || !isShortPostLink(post.url)) {
+      return post.expandedUrl ?? post.url
+   }
+
+   const expanded = await expandShortPostLink(post.url)
+
+   if (expanded) {
+      await LinkedInPostService.saveExpanded(post.id, expanded)
+   }
+
+   return expanded ?? post.url
+}
+
 const EXECUTORS: Record<GraphNode['type'], (ctx: Context) => Promise<StepResult>> = {
    'trigger.manual': async () => ({
       status: 'DONE',
@@ -416,12 +440,14 @@ const EXECUTORS: Record<GraphNode['type'], (ctx: Context) => Promise<StepResult>
    }),
    'input.posts': async ctx => {
       const posts = await LinkedInPostService.waiting(ctx.run.userId, numberIn(configOf(ctx.node), 'howMany'))
-      const items: PostItem[] = posts.map(post => ({
-         kind: 'post',
-         slug: post.slug,
-         url: post.url,
-         postId: post.id,
-      }))
+      const items: PostItem[] = await Promise.all(
+         posts.map(async post => ({
+            kind: 'post' as const,
+            slug: post.slug,
+            url: await sendableUrl(post),
+            postId: post.id,
+         }))
+      )
 
       await WorkflowRunService.replaceItems(ctx.run.id, ctx.node.id, items)
 
