@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { type IcpRules, scoreIcp } from './icpScore'
+import { type IcpRules, scoreIcp, scorePerson } from './icpScore'
 
 const rules: IcpRules = {
    includeTitles: ['growth', 'head of sales'],
@@ -8,6 +8,61 @@ const rules: IcpRules = {
    seniorities: ['VP', 'HEAD'],
    locations: ['london'],
 }
+
+describe('scorePerson', () => {
+   const withProblems = {
+      ...rules,
+      problemKeywords: ['pipeline'],
+   }
+
+   it('should add engagement to the headline score, problem comments first, and cap at 100', () => {
+      expect(
+         scorePerson(withProblems, {
+            headline: 'Growth lead',
+            location: null,
+            signals: [
+               {
+                  type: 'commented',
+                  excerpt: 'Our Pipeline is empty',
+               },
+               {
+                  type: 'reacted',
+                  excerpt: null,
+               },
+            ],
+         })
+      ).toEqual({
+         score: 55,
+         disqualified: false,
+         matched: ['title "growth"', 'comment mentions "pipeline"', 'reacted'],
+      })
+      expect(
+         scorePerson(withProblems, {
+            headline: 'Head of Sales, growth',
+            location: 'London',
+            signals: Array.from({ length: 4 }, () => ({
+               type: 'commented' as const,
+               excerpt: 'pipeline',
+            })),
+         }).score
+      ).toBe(100)
+   })
+
+   it('should keep an excluded title at 0 whatever the engagement', () => {
+      expect(
+         scorePerson(withProblems, {
+            headline: 'Sales intern',
+            location: null,
+            signals: [
+               {
+                  type: 'commented',
+                  excerpt: 'pipeline',
+               },
+            ],
+         }).score
+      ).toBe(0)
+   })
+})
 
 describe('scoreIcp', () => {
    it('should add title, seniority and location matches', () => {

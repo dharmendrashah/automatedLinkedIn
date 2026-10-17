@@ -19,3 +19,12 @@ export const memberStates: Record<MemberState, { label: string }> = {
 
 export const isMemberStatus = (value: string): value is MemberStatus => value in memberStatuses
 export const isMemberState = (value: string): value is MemberState => value in memberStates
+
+// The first reason a workflow found the person, in words: the comment they wrote, or that they reacted.
+export const reasonOf = ([first]: Member['signals']) => {
+   if (first?.type === 'commented') {
+      return first.excerpt ? `Commented: "${first.excerpt}"` : 'Commented on a post'
+   }
+
+   return first?.type === 'reacted' ? 'Reacted to a post' : 'A post they engaged with'
+}

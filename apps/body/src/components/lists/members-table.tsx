@@ -19,6 +19,7 @@ import {
    type MemberState,
    type MemberStatus,
    isMemberStatus,
+   reasonOf,
    memberStates,
    memberStatuses,
 } from './types'
@@ -102,11 +103,14 @@ export const MembersTable = ({
                               target="_blank"
                               rel="noreferrer noopener"
                            >
-                              A post they engaged with
+                              {reasonOf(member.signals)}
                            </a>
                         ) : (
                            <span className="text-muted-foreground">Added by hand</span>
                         )}
+                        {member.score !== null ? (
+                           <p className="text-muted-foreground text-xs">Score {member.score}</p>
+                        ) : null}
                      </TableCell>
                      <TableCell className="text-muted-foreground">{formatDate(member.createdAt)}</TableCell>
                      <TableCell>

@@ -12,6 +12,11 @@ vi.mock('database', () => ({
    TaskDispatchService: { dispatchDue: mocks.dispatchDue },
 }))
 
+vi.mock('env', () => ({
+   MINDCASE_API_KEY: '',
+   MINDCASE_RPM: 45,
+}))
+
 const [proxyScoring, taskDispatch] = JOBS
 const context = { signal: new AbortController().signal }
 

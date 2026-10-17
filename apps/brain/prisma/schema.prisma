@@ -31,6 +31,7 @@ model User {
   workflowLists     WorkflowList[]
   suppressions      Suppression[]
   icps              Icp[]
+  workflows         Workflow[]
 }
 
 enum WorkflowListMemberState {
@@ -54,26 +55,31 @@ model WorkflowList {
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
   members   WorkflowListMember[]
+  workflows Workflow[]
 
   @@unique([userId, name])
 }
 
 // Only the minimal person fields are kept; a person is in at most one of the owner's lists.
 model WorkflowListMember {
-  id        String                   @id @default(uuid(7))
-  listId    String
-  list      WorkflowList             @relation(fields: [listId], references: [id], onDelete: Cascade)
-  slug      String
-  url       String
-  name      String?
-  headline  String?
-  location  String?
-  state     WorkflowListMemberState  @default(QUALIFIED)
-  status    WorkflowListMemberStatus @default(NEW)
+  id           String                   @id @default(uuid(7))
+  listId       String
+  list         WorkflowList             @relation(fields: [listId], references: [id], onDelete: Cascade)
+  slug         String
+  url          String
+  name         String?
+  headline     String?
+  location     String?
+  state        WorkflowListMemberState  @default(QUALIFIED)
+  status       WorkflowListMemberStatus @default(NEW)
   // The post that surfaced the person; null when added by hand.
-  postUrl   String?
-  createdAt DateTime                 @default(now())
-  updatedAt DateTime                 @updatedAt
+  postUrl      String?
+  // Set when a workflow added the person: the score, why they were found, and the run.
+  score        Int?
+  signals      Json?
+  addedByRunId String?
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
 
   @@unique([listId, slug])
   @@index([listId, state, createdAt])
@@ -89,6 +95,155 @@ model Suppression {
   createdAt DateTime @default(now())
 
   @@unique([userId, slug])
+}
+
+enum WorkflowTrigger {
+  MANUAL
+  SCHEDULE
+  PREVIEW
+}
+
+enum WorkflowRunStatus {
+  RUNNING
+  SUCCEEDED
+  PARTIAL
+  FAILED
+}
+
+enum WorkflowStepStatus {
+  WAITING
+  RUNNING
+  DONE
+  PARTIAL
+  FAILED
+}
+
+// A graph of catalog blocks (packages/contracts workflow.ts) that finds people and adds them to its output list.
+model Workflow {
+  id           String        @id @default(uuid(7))
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  goal         String?
+  graph        Json
+  // A list in use by a workflow cannot be deleted.
+  outputListId String
+  outputList   WorkflowList  @relation(fields: [outputListId], references: [id], onDelete: Restrict)
+  qualifyScore Int           @default(60)
+  maybeScore   Int           @default(40)
+  maybeEnabled Boolean       @default(true)
+  // Only a scheduled workflow is switched on; nextRunAt is when the schedule job starts it next.
+  enabled      Boolean       @default(false)
+  nextRunAt    DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  runs         WorkflowRun[]
+
+  @@unique([userId, name])
+  @@index([enabled, nextRunAt])
+}
+
+// One execution. It keeps a copy of the graph it started with, so editing the workflow never changes it.
+model WorkflowRun {
+  id             String            @id @default(uuid(7))
+  workflowId     String
+  workflow       Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  userId         String
+  trigger        WorkflowTrigger
+  // Unique per start, so a repeated schedule tick or a double click cannot start the same run twice.
+  runKey         String            @unique
+  status         WorkflowRunStatus @default(RUNNING)
+  graph          Json
+  qualifyScore   Int
+  maybeScore     Int
+  maybeEnabled   Boolean
+  estimateMicros Int               @default(0)
+  costMicros     Int               @default(0)
+  qualified      Int               @default(0)
+  maybe          Int               @default(0)
+  discarded      Int               @default(0)
+  message        String?
+  startedAt      DateTime          @default(now())
+  finishedAt     DateTime?
+  steps          WorkflowStepRun[]
+  items          WorkflowItem[]
+
+  @@index([workflowId, startedAt])
+  @@index([status])
+}
+
+model WorkflowStepRun {
+  id         String             @id @default(uuid(7))
+  runId      String
+  run        WorkflowRun        @relation(fields: [runId], references: [id], onDelete: Cascade)
+  nodeId     String
+  type       String
+  status     WorkflowStepStatus @default(WAITING)
+  itemsIn    Int                @default(0)
+  itemsOut   Int                @default(0)
+  costMicros Int                @default(0)
+  message    String?
+  // When a worker took the step; a step held too long is taken again.
+  claimedAt  DateTime?
+  finishedAt DateTime?
+  calls      WorkflowStepCall[]
+
+  @@unique([runId, nodeId])
+}
+
+// One paid request of a collect step. The supplier's job id is saved as soon as it is known, so a restart reads that
+// job again instead of paying for a new one. Never returned to the browser.
+model WorkflowStepCall {
+  id         String          @id @default(uuid(7))
+  stepRunId  String
+  stepRun    WorkflowStepRun @relation(fields: [stepRunId], references: [id], onDelete: Cascade)
+  inputKey   String
+  jobId      String?
+  status     String          @default("STARTED")
+  rows       Int             @default(0)
+  costMicros Int             @default(0)
+  error      String?
+  createdAt  DateTime        @default(now())
+  finishedAt DateTime?
+
+  @@unique([stepRunId, inputKey])
+}
+
+// What a step produced. Raw personal data, so it is deleted with the run data after 14 days.
+model WorkflowItem {
+  id        String      @id @default(uuid(7))
+  runId     String
+  run       WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  nodeId    String
+  slug      String
+  data      Json
+  createdAt DateTime    @default(now())
+
+  @@unique([runId, nodeId, slug])
+  @@index([createdAt])
+}
+
+// One row per finished paid request: what the data cost, per client and month (UTC). Amounts only.
+model SpendLedger {
+  id           String   @id @default(uuid(7))
+  userId       String
+  workflowId   String?
+  runId        String?
+  callId       String   @unique
+  amountMicros Int
+  // Calendar month in UTC, such as 2026-10.
+  month        String
+  createdAt    DateTime @default(now())
+
+  @@index([userId, month])
+  @@index([month])
+}
+
+// The shared data wallet as the worker last saw it. One row.
+model DataWallet {
+  id            String   @id
+  balanceMicros Int
+  checkedAt     DateTime
 }
 
 // An ideal customer: the rules a person is scored against.
@@ -117,17 +272,19 @@ enum LinkedInPostStatus {
 
 // A post the user wants to work through, saved from a pasted post link. The link is all that is kept.
 model LinkedInPost {
-  id         String             @id @default(uuid(7))
-  userId     String
-  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String             @id @default(uuid(7))
+  userId      String
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   // `<type>-<numeric id>` of the post (activity, share or ugcpost); unique per owner.
-  slug       String
-  url        String
-  status     LinkedInPostStatus @default(UNPROCESSED)
+  slug        String
+  url         String
+  // For a lnkd.in short link: the linkedin.com post it redirects to, without its query string.
+  expandedUrl String?
+  status      LinkedInPostStatus @default(UNPROCESSED)
   // Set when the owner removes the post; it can be restored.
-  archivedAt DateTime?
-  createdAt  DateTime           @default(now())
-  updatedAt  DateTime           @updatedAt
+  archivedAt  DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 
   @@unique([userId, slug])
   @@index([userId, archivedAt, createdAt])
@@ -210,29 +367,29 @@ enum LinkedInAccountStatus {
 // encrypted JSON bundle ({ password?, totpSecret?, session? }); the booleans mirror which
 // secrets are set so metadata reads never decrypt.
 model LinkedInAccount {
-  id              String                @id @default(uuid(7))
-  userId          String
-  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  email           String
-  secret          String
-  secretIv        String
-  secretTag       String
-  keyVersion      Int                   @default(1)
-  hasPassword     Boolean               @default(false)
-  hasTotp         Boolean               @default(false)
-  hasSession      Boolean               @default(false)
-  status          LinkedInAccountStatus @default(PENDING)
+  id                    String                @id @default(uuid(7))
+  userId                String
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email                 String
+  secret                String
+  secretIv              String
+  secretTag             String
+  keyVersion            Int                   @default(1)
+  hasPassword           Boolean               @default(false)
+  hasTotp               Boolean               @default(false)
+  hasSession            Boolean               @default(false)
+  status                LinkedInAccountStatus @default(PENDING)
   // Short, non-secret reason for the current status.
-  statusMessage   String?
-  statusUpdatedAt DateTime              @default(now())
-  lastVerifiedAt  DateTime?
+  statusMessage         String?
+  statusUpdatedAt       DateTime              @default(now())
+  lastVerifiedAt        DateTime?
   // Id of the validation the account is waiting for. A result from the worker applies only if it carries this id.
   validationId          String?
   validationRequestedAt DateTime?
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
 
-  proxyServers ProxyServer[]
+  proxyServers   ProxyServer[]
   spiderSessions SpiderSession[]
 
   @@unique([userId, email])
@@ -261,55 +418,55 @@ enum ProxyServerStatus {
 // across accounts is itself a correlation risk. Credentials live in one AES-256-GCM bundle, same shape as
 // LinkedInAccount's, so CryptoService.seal/open is reused as is.
 model ProxyServer {
-  id                String            @id @default(uuid(7))
-  linkedInAccountId String
-  linkedInAccount   LinkedInAccount   @relation(fields: [linkedInAccountId], references: [id], onDelete: Cascade)
-  protocol          ProxyProtocol
-  host              String
-  port              Int
+  id                  String            @id @default(uuid(7))
+  linkedInAccountId   String
+  linkedInAccount     LinkedInAccount   @relation(fields: [linkedInAccountId], references: [id], onDelete: Cascade)
+  protocol            ProxyProtocol
+  host                String
+  port                Int
   // Sealed { username?, password? }; both optional, some proxies need neither.
-  secret            String
-  secretIv          String
-  secretTag         String
-  keyVersion        Int               @default(1)
-  status            ProxyServerStatus @default(PENDING)
+  secret              String
+  secretIv            String
+  secretTag           String
+  keyVersion          Int               @default(1)
+  status              ProxyServerStatus @default(PENDING)
   // Short, non-secret reason for the current status.
-  statusMessage     String?
-  lastTestedAt      DateTime?
+  statusMessage       String?
+  lastTestedAt        DateTime?
   // How long the last successful test took, in milliseconds; null when the proxy could not be reached.
-  latencyMs         Int?
+  latencyMs           Int?
   detectedCountryCode String?
   detectedCountry     String?
   detectedIp          String?
   // Preferred proxy for the account when more than one is ACTIVE; app-enforced, not a DB constraint.
-  isPrimary         Boolean           @default(false)
+  isPrimary           Boolean           @default(false)
   // 0 to 100, higher is better (.plan/proxy-ip-reputation.md): 70% IP reputation, 30% speed. Null when the proxy cannot be
   // scored (unreachable, no test yet). Without a reputation answer it is the speed alone and never above 89.
-  score             Int?
-  scoredAt          DateTime?
+  score               Int?
+  scoredAt            DateTime?
   // False when the score has no reputation behind it (no AbuseIPDB key, or the lookup failed).
-  scoreHasReputation Boolean?
+  scoreHasReputation  Boolean?
   // AbuseIPDB's answer for abuseIp, the address that was checked. Kept for a day and reused while the IP stays the same.
-  abuseIp           String?
-  abuseScore        Int?
-  abuseReports      Int?
+  abuseIp             String?
+  abuseScore          Int?
+  abuseReports        Int?
   abuseLastReportedAt DateTime?
-  abuseUsageType    String?
-  abuseIsp          String?
-  abuseIsTor        Boolean?
-  abuseCheckedAt    DateTime?
+  abuseUsageType      String?
+  abuseIsp            String?
+  abuseIsTor          Boolean?
+  abuseCheckedAt      DateTime?
   // What explains abuseScore (reasons, recent reports, reporters); see AbuseDetail in core. No report comments.
-  abuseDetail       Json?
+  abuseDetail         Json?
   // Short fixed reason the last lookup failed; null after a good one.
-  abuseError        String?
+  abuseError          String?
   // Problems the owner chose to live with (HealthIssue codes), and when. A different problem asks again.
-  riskAcceptedIssues String[]         @default([])
-  riskAcceptedAt    DateTime?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  riskAcceptedIssues  String[]          @default([])
+  riskAcceptedAt      DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
-  tests ProxyTest[]
-  scores ProxyScore[]
+  tests          ProxyTest[]
+  scores         ProxyScore[]
   spiderSessions SpiderSession[]
 
   @@index([linkedInAccountId])
@@ -318,19 +475,19 @@ model ProxyServer {
 
 // One scoring of a proxy, kept for 30 days. No secrets: only the address that was checked and the numbers.
 model ProxyScore {
-  id                 String            @id @default(uuid(7))
-  proxyServerId      String
-  proxyServer        ProxyServer       @relation(fields: [proxyServerId], references: [id], onDelete: Cascade)
-  scoredAt           DateTime          @default(now())
-  ip                 String
-  score              Int
+  id                String            @id @default(uuid(7))
+  proxyServerId     String
+  proxyServer       ProxyServer       @relation(fields: [proxyServerId], references: [id], onDelete: Cascade)
+  scoredAt          DateTime          @default(now())
+  ip                String
+  score             Int
   // Null when reputation was not checked.
-  abuseScore         Int?
-  latencyMs          Int?
-  reputationChecked  Boolean
+  abuseScore        Int?
+  latencyMs         Int?
+  reputationChecked Boolean
   // The AbuseDetail known when this score was made; null for entries saved before details were kept.
-  detail             Json?
-  status             ProxyServerStatus
+  detail            Json?
+  status            ProxyServerStatus
 
   @@index([proxyServerId, scoredAt])
   @@index([scoredAt])
@@ -385,27 +542,27 @@ enum SpiderSessionStatus {
 // the spider received (the validation id), so a session and its validation share one id. Holds no secret: the
 // proxy is kept as a snapshot without credentials, because proxies can be edited or removed later.
 model SpiderSession {
-  id                String              @id
+  id                String                  @id
   userId            String
-  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   linkedInAccountId String
-  linkedInAccount   LinkedInAccount     @relation(fields: [linkedInAccountId], references: [id], onDelete: Cascade)
+  linkedInAccount   LinkedInAccount         @relation(fields: [linkedInAccountId], references: [id], onDelete: Cascade)
   kind              SpiderSessionKind
-  status            SpiderSessionStatus @default(IN_PROGRESS)
+  status            SpiderSessionStatus     @default(IN_PROGRESS)
   // The spider's verdict: VALID, INVALID_CREDENTIALS, NEEDS_REAUTH or ERROR for an account check; NOT_DETECTED,
   // DETECTED, COULD_NOT_TELL or ERROR for a browser test. Null while in progress.
   outcome           String?
   // One short, fixed sentence from the spider (or brain when the task could not be queued).
   message           String?
   proxyServerId     String?
-  proxyServer       ProxyServer?        @relation(fields: [proxyServerId], references: [id], onDelete: SetNull)
+  proxyServer       ProxyServer?            @relation(fields: [proxyServerId], references: [id], onDelete: SetNull)
   proxyProtocol     ProxyProtocol?
   proxyHost         String?
   proxyPort         Int?
   proxyCountry      String?
   // What the run was given, as a small fixed non-secret object (see SpiderSessionService).
   requestParams     Json
-  startedAt         DateTime            @default(now())
+  startedAt         DateTime                @default(now())
   finishedAt        DateTime?
   durationMs        Int?
   // Where the recording lives in the bucket; null when nothing was recorded.
@@ -424,8 +581,8 @@ model SpiderSession {
   artifacts         SpiderSessionArtifact[]
   // The session this one is a retry of.
   retryOfId         String?
-  retryOf           SpiderSession?      @relation("SessionRetries", fields: [retryOfId], references: [id], onDelete: SetNull)
-  retries           SpiderSession[]     @relation("SessionRetries")
+  retryOf           SpiderSession?          @relation("SessionRetries", fields: [retryOfId], references: [id], onDelete: SetNull)
+  retries           SpiderSession[]         @relation("SessionRetries")
   // Present only while the task waits to be published (.plan/task-outbox.md).
   dispatch          TaskDispatch?
 
