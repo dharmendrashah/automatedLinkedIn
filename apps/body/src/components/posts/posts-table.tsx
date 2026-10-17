@@ -27,9 +27,10 @@ type Props = {
    onToggle: (post: Post) => void
    onArchive: (post: Post) => void
    onRestore: (post: Post) => void
+   onOpen: (post: Post) => void
 }
 
-export const PostsTable = ({ posts, loading, error, busyId, onToggle, onArchive, onRestore }: Props) => (
+export const PostsTable = ({ posts, loading, error, busyId, onToggle, onArchive, onRestore, onOpen }: Props) => (
    <div className="overflow-hidden rounded-lg border">
       <Table>
          <TableHeader className="bg-muted/50">
@@ -56,14 +57,13 @@ export const PostsTable = ({ posts, loading, error, busyId, onToggle, onArchive,
                return (
                   <TableRow key={post.id} className={cn(post.archivedAt && 'opacity-60')}>
                      <TableCell>
-                        <a
-                           className="font-medium break-all underline-offset-4 hover:underline"
-                           href={post.url}
-                           target="_blank"
-                           rel="noreferrer noopener"
+                        <button
+                           type="button"
+                           className="text-left font-medium break-all underline-offset-4 hover:underline"
+                           onClick={() => onOpen(post)}
                         >
                            {label(post)}
-                        </a>
+                        </button>
                      </TableCell>
                      <TableCell>
                         <span className="flex flex-wrap items-center gap-1">

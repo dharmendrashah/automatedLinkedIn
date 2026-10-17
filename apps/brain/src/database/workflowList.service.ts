@@ -266,9 +266,9 @@ export class WorkflowListService {
       return new Set([...suppressed, ...members, ...profiles].map(({ slug }) => slug))
    }
 
-   // Adds the people a run kept, skipping anyone seen meanwhile. Safe to repeat: the unique index skips repeats, and
-   // keeps a known person out of a list they are already in.
-   public static async addFromRun(userId: string, listId: string, runId: string, people: RunMember[]) {
+   // Adds the people a run kept (or the owner picked from a post, with no run), skipping anyone seen meanwhile. Safe to
+   // repeat: the unique index skips repeats, and keeps a known person out of a list they are already in.
+   public static async addFromRun(userId: string, listId: string, runId: string | null, people: RunMember[]) {
       const slugsOf = (known: boolean) => people.filter(item => item.known === known).map(({ slug }) => slug)
       const [seen, seenKnown] = await Promise.all([
          WorkflowListService.seenAmong(userId, slugsOf(false)),
@@ -285,6 +285,11 @@ export class WorkflowListService {
       })
 
       return count
+   }
+
+   // People the owner picked outside a run; null when the list is not theirs.
+   public static async addPicked(userId: string, listId: string, people: RunMember[]) {
+      return (await ownsList(userId, listId)) ? WorkflowListService.addFromRun(userId, listId, null, people) : null
    }
 
    // The owner's list member with this slug (a person is in at most one of the owner's lists), with why they were found.

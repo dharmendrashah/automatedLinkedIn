@@ -103,12 +103,37 @@ export class LinkedInPostService {
       })
    }
 
+   public static bySlug(userId: string, slug: string) {
+      return PrismaService.client.linkedInPost.findUnique({
+         where: {
+            userId_slug: {
+               userId,
+               slug,
+            },
+         },
+         select: postSelect,
+      })
+   }
+
    public static setStatus(userId: string, id: string, status: LinkedInPostStatus) {
       return updateOwned(userId, id, { status })
    }
 
-   public static archiveForUser(userId: string, id: string) {
-      return updateOwned(userId, id, { archivedAt: new Date() })
+   // The post read and its comments and reactions are deleted with it.
+   public static async archiveForUser(userId: string, id: string) {
+      const archived = await updateOwned(userId, id, { archivedAt: new Date() })
+
+      if (archived) {
+         await PrismaService.client.pageSnapshot.deleteMany({
+            where: {
+               userId,
+               kind: { in: ['POST', 'POST_COMMENTS', 'POST_REACTIONS'] },
+               slug: archived.slug,
+            },
+         })
+      }
+
+      return archived
    }
 
    public static restoreForUser(userId: string, id: string) {

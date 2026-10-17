@@ -119,12 +119,37 @@ export class LinkedInCompanyService {
       })
    }
 
+   public static bySlug(userId: string, slug: string) {
+      return PrismaService.client.linkedInCompany.findUnique({
+         where: {
+            userId_slug: {
+               userId,
+               slug,
+            },
+         },
+         select: companySelect,
+      })
+   }
+
    public static updateForUser(userId: string, id: string, changes: LinkedInCompanyChanges) {
       return updateOwned(userId, id, changes)
    }
 
-   public static archiveForUser(userId: string, id: string) {
-      return updateOwned(userId, id, { archivedAt: new Date() })
+   // The company page read for it is deleted with it.
+   public static async archiveForUser(userId: string, id: string) {
+      const archived = await updateOwned(userId, id, { archivedAt: new Date() })
+
+      if (archived) {
+         await PrismaService.client.pageSnapshot.deleteMany({
+            where: {
+               userId,
+               kind: 'COMPANY',
+               slug: archived.slug,
+            },
+         })
+      }
+
+      return archived
    }
 
    public static restoreForUser(userId: string, id: string) {

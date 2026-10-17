@@ -3,11 +3,11 @@ import { PrismaService } from './prisma.service'
 // What the data cost, from the ledger: per client and UTC month. Amounts only.
 
 const DELETED = 'Deleted workflow'
-// Spend outside a workflow: the full profiles the owner chose to read.
+// Spend outside a workflow carries its own label; the profile reads booked before labels existed have none.
 const PROFILE_READS = 'Profile reads'
 
-const nameOf = (workflowId: string | null, names: Map<string, string>) =>
-   workflowId ? names.get(workflowId) || DELETED : PROFILE_READS
+const nameOf = (group: { workflowId: string | null; label: string | null }, names: Map<string, string>) =>
+   group.workflowId ? names.get(group.workflowId) || DELETED : (group.label ?? PROFILE_READS)
 
 const namesOf = async (workflowIds: string[]) => {
    const workflows = await PrismaService.client.workflow.findMany({
@@ -25,7 +25,7 @@ export class SpendService {
    // Every month the client spent in, newest first, with the amount per workflow.
    public static async usage(userId: string) {
       const groups = await PrismaService.client.spendLedger.groupBy({
-         by: ['month', 'workflowId'],
+         by: ['month', 'workflowId', 'label'],
          where: { userId },
          _sum: { amountMicros: true },
          _count: { runId: true },
@@ -47,7 +47,7 @@ export class SpendService {
 
          month.totalMicros += amountMicros
          month.workflows.push({
-            name: nameOf(group.workflowId, names),
+            name: nameOf(group, names),
             amountMicros,
          })
          months.set(group.month, month)
@@ -59,7 +59,7 @@ export class SpendService {
    // The statement lines of one month: per workflow, the runs charged and the amount.
    public static async statement(userId: string, month: string) {
       const groups = await PrismaService.client.spendLedger.groupBy({
-         by: ['workflowId', 'runId'],
+         by: ['workflowId', 'runId', 'label'],
          where: {
             userId,
             month,
@@ -71,7 +71,7 @@ export class SpendService {
       const lines = new Map<string, { name: string; runs: number; amountMicros: number }>()
 
       for (const group of groups) {
-         const name = nameOf(group.workflowId, names)
+         const name = nameOf(group, names)
          const line = lines.get(name) ?? {
             name,
             runs: 0,

@@ -2,8 +2,6 @@ import { ListToolbar } from '@/components/links/list-toolbar'
 import { linkStatuses } from '@/components/links/link-statuses'
 import { Pager } from '@/components/links/pager'
 import { useListState } from '@/components/links/use-list-state'
-import { PersonDrawer } from '@/components/people/person-drawer'
-import { usePersonParam } from '@/components/people/use-person-param'
 import { AddProfilesDialog } from '@/components/profiles/add-profiles-dialog'
 import { EditProfileDialog } from '@/components/profiles/edit-profile-dialog'
 import { ProfilesTable } from '@/components/profiles/profiles-table'
@@ -11,13 +9,16 @@ import { useState } from 'react'
 
 import { type Profile } from '@/components/profiles/types'
 
+import { DetailDrawers } from '@/components/details/detail-drawers'
+import { useDetailDrawer } from '@/components/details/use-detail-drawer'
+
 import { trpc } from '../trpc'
 
 export const Profiles = () => {
    const utils = trpc.useUtils()
    const state = useListState()
    const [toEdit, setToEdit] = useState<Profile | null>(null)
-   const [person, setPerson] = usePersonParam()
+   const drawer = useDetailDrawer()
 
    const list = trpc.linkedInProfile.list.useQuery(state.query, {
       retry: false,
@@ -61,18 +62,13 @@ export const Profiles = () => {
             onArchive={profile => archive.mutate({ id: profile.id })}
             onRestore={profile => restore.mutate({ id: profile.id })}
             onTag={state.setTag}
-            onOpen={profile => setPerson(profile.slug)}
+            onOpen={profile => drawer.show('person', profile.slug)}
          />
 
          <Pager total={list.data?.total ?? 0} page={state.page} onPage={state.setPage} noun={['profile', 'profiles']} />
 
          <EditProfileDialog profile={toEdit} onClose={() => setToEdit(null)} />
-         <PersonDrawer
-            slug={person}
-            order={list.data?.items.map(({ slug }) => slug) ?? []}
-            onOpen={setPerson}
-            onClose={() => setPerson(null)}
-         />
+         <DetailDrawers kind="person" order={list.data?.items.map(({ slug }) => slug) ?? []} />
       </div>
    )
 }
