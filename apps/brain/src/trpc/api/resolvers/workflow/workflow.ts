@@ -126,6 +126,10 @@ export const workflow = router({
       return { token }
    }),
 
+   apiStatus: ownerProcedure
+      .input(byId)
+      .query(async ({ ctx, input }) => present(await WorkflowTriggerService.apiStatus(ctx.user.id, input.id), MISSING)),
+
    // The most a run can cost, for a saved workflow or a draft graph on the canvas.
    estimate: ownerProcedure
       .input(

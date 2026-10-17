@@ -152,7 +152,7 @@ export const WorkflowPage = () => {
             </TabsContent>
             {api ? (
                <TabsContent value="api">
-                  <ApiAccess workflowId={id} />
+                  <ApiAccess workflowId={id} enabled={data.enabled} />
                </TabsContent>
             ) : null}
          </Tabs>

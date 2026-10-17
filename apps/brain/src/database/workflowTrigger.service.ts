@@ -35,6 +35,25 @@ export class WorkflowTriggerService {
       return count === 1 ? token : null
    }
 
+   // Whether the owner's workflow has a token and how many calls it got this hour. null when it is not the owner's.
+   public static async apiStatus(userId: string, id: string) {
+      const workflow = await PrismaService.client.workflow.findFirst({
+         where: {
+            id,
+            userId,
+         },
+         select: { apiTokenHash: true },
+      })
+
+      return workflow
+         ? {
+              hasToken: workflow.apiTokenHash !== null,
+              callsLastHour: await WorkflowTriggerService.callsLastHour(id),
+              limits: API_LIMITS,
+           }
+         : null
+   }
+
    // The workflow this token opens, or null. Compared in constant time.
    public static async authorize(id: string, token: string) {
       const workflow = await PrismaService.client.workflow.findUnique({
