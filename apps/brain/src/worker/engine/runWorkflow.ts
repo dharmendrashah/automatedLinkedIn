@@ -97,6 +97,15 @@ export const runWorkflow = async (ctx: Context): Promise<StepResult> => {
 
    let childId = ctx.step.childRunId
 
+   if (ctx.run.stopRequestedAt) {
+      return passOn(
+         ctx,
+         childId
+            ? 'Stopped by you before the other workflow finished.'
+            : 'Stopped by you; the other workflow was not started.'
+      )
+   }
+
    if (!childId) {
       try {
          childId = await startChild(ctx, textIn(config, 'workflowId'), textIn(config, 'send'))
@@ -134,7 +143,9 @@ export const runWorkflow = async (ctx: Context): Promise<StepResult> => {
           ? 'finished'
           : child.status === 'PARTIAL'
             ? 'finished only partly'
-            : `failed${child.message ? `: ${child.message}` : ''}`
+            : child.status === 'STOPPED'
+              ? 'was stopped'
+              : `failed${child.message ? `: ${child.message}` : ''}`
 
    if (wait === 'status') {
       return child?.status === 'SUCCEEDED'

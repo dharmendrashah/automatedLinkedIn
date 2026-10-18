@@ -1,5 +1,7 @@
 import { StateRows } from '@/components/links/state-rows'
+import { runSentence } from '@/components/workflows/run-sentence'
 import { RunStatusBadge } from '@/components/workflows/runs'
+import { type WorkflowSummary, formatUsd } from '@/components/workflows/types'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Plus, Workflow as WorkflowIcon } from 'lucide-react'
@@ -8,9 +10,26 @@ import { Link } from 'react-router'
 import { trpc } from '../trpc'
 
 const COLUMNS = 5
+const POLL_MS = 3_000
+
+// The last run in a few words; a live run shows its spend so far.
+const lastRunText = (run: WorkflowSummary['runs'][number]) =>
+   run.status === 'RUNNING'
+      ? `${run.stopRequestedAt ? 'Stopping' : 'Running'} · about ${formatUsd(run.costMicros)} spent of up to ${formatUsd(run.estimateMicros)}`
+      : runSentence(
+           {
+              ...run,
+              steps: [],
+           },
+           type => type
+        )
 
 export const Workflows = () => {
-   const list = trpc.workflow.list.useQuery(undefined, { retry: false })
+   const list = trpc.workflow.list.useQuery(undefined, {
+      retry: false,
+      refetchInterval: query =>
+         query.state.data?.some(({ runs }) => runs[0]?.status === 'RUNNING') ? POLL_MS : false,
+   })
 
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
@@ -69,7 +88,20 @@ export const Workflows = () => {
                            <TableCell>
                               {scheduled ? (workflow.enabled ? 'On its schedule' : 'Schedule switched off') : 'By hand'}
                            </TableCell>
-                           <TableCell>{last ? <RunStatusBadge status={last.status} /> : '–'}</TableCell>
+                           <TableCell>
+                              {last ? (
+                                 last.status === 'RUNNING' ? (
+                                    <div className="grid gap-1">
+                                       <RunStatusBadge status={last.status} />
+                                       <span className="text-muted-foreground text-xs">{lastRunText(last)}</span>
+                                    </div>
+                                 ) : (
+                                    <span className="text-sm">{lastRunText(last)}</span>
+                                 )
+                              ) : (
+                                 '–'
+                              )}
+                           </TableCell>
                            <TableCell>{workflow.outputList.name}</TableCell>
                            <TableCell className="text-muted-foreground">
                               {last ? new Date(last.startedAt).toLocaleString() : '–'}

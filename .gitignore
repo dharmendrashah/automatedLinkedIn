@@ -8,6 +8,7 @@ node_modules/
 **/src/generated/**
 .env
 **/.env
+**/.env.test
 .turbo/
 **/dist/
 

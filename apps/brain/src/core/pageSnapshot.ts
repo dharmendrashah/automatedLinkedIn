@@ -86,7 +86,7 @@ export const companySnapshotFrom = (row: Row): CompanySnapshotData => {
    }
 }
 
-const postSchema = z.object({
+export const postSchema = z.object({
    text: nullable,
    author: z.object({
       name: nullable,

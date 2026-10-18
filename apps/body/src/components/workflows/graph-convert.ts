@@ -13,6 +13,8 @@ export type BlockData = {
    // An error stops a run; a note only explains.
    invalid: boolean
    noted: boolean
+   // Shown with a run that does not have this block: it was added after the run started.
+   faded: boolean
    icpName?: string
 }
 
@@ -46,6 +48,20 @@ export const choicesFor = (catalog: Block[], after: Block | null, query: string)
 
 const STATUS_ORDER = ['FAILED', 'RUNNING', 'WAITING', 'PARTIAL', 'DONE'] as const
 
+type Progress = NonNullable<StepRun['progress']>
+
+const addProgress = (a: Progress | null, b: Progress | null): Progress | null =>
+   a && b
+      ? {
+           requests: a.requests + b.requests,
+           done: a.done + b.done,
+           failed: a.failed + b.failed,
+           uncharged: a.uncharged + b.uncharged,
+           retrying: a.retrying + b.retrying,
+           nextRetryAt: [a.nextRetryAt, b.nextRetryAt].filter((at): at is string => Boolean(at)).sort()[0] ?? null,
+        }
+      : (a ?? b)
+
 // A block that ran in several rounds shows them added up, with the most telling state.
 export const combineRounds = (steps: StepRun[]) => {
    const byNode = new Map<string, StepRun>()
@@ -64,6 +80,7 @@ export const combineRounds = (steps: StepRun[]) => {
                  costMicros: known.costMicros + step.costMicros,
                  round: Math.max(known.round, step.round),
                  message: step.message ?? known.message,
+                 progress: addProgress(known.progress, step.progress),
               }
             : step
       )
@@ -93,6 +110,7 @@ export const toFlow = (
                     step: stepOf.get(node.id) ?? null,
                     invalid: extras.invalid?.has(node.id) ?? false,
                     noted: extras.noted?.has(node.id) ?? false,
+                    faded: stepOf.size > 0 && !stepOf.has(node.id),
                     icpName: extras.icpNames?.get(String(node.config.icpId ?? '')),
                  },
               },

@@ -8,6 +8,7 @@ import { BLOCK_ICONS, tileOf } from './block-look'
 import { CanvasActions } from './canvas-actions'
 import { type FlowNode, SIDES, summaryOf } from './graph-convert'
 import { NODE_WIDTH } from './layout'
+import { timeOf } from './run-sentence'
 import { formatUsd } from './types'
 
 const STEP_ICONS = {
@@ -36,13 +37,14 @@ const POSITIONS = {
 // One block: icon, title and settings in a line, during a run its state, and a "+" to add the next block. Lines
 // leave and enter on any side.
 export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
-   const { block, config, step, invalid, noted, icpName } = data
+   const { block, config, step, invalid, noted, faded, icpName } = data
    const { addAfter } = useContext(CanvasActions)
    const Icon = BLOCK_ICONS[block.type]
    const StepIcon = step ? STEP_ICONS[step.status] : null
+   const progress = step?.progress
 
    return (
-      <div className="group relative" style={{ width: NODE_WIDTH }}>
+      <div className={cn('group relative', faded && 'opacity-40')} style={{ width: NODE_WIDTH }}>
          <div
             className={cn(
                'bg-card flex items-start gap-3 rounded-xl border p-3 text-left shadow-sm transition-shadow hover:shadow-md',
@@ -69,10 +71,20 @@ export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
                {step && StepIcon ? (
                   <p className={cn('mt-1 flex items-center gap-1 text-xs', STEP_TONES[step.status])}>
                      <StepIcon className={cn('size-3.5', step.status === 'RUNNING' && 'animate-spin')} />
+                     {step.status === 'RUNNING' ? 'Working · ' : ''}
                      {step.itemsIn} in, {step.itemsOut} out
                      {step.costMicros > 0 ? ` · ${formatUsd(step.costMicros)}` : ''}
                   </p>
                ) : null}
+               {progress && progress.requests > progress.done ? (
+                  <p className="text-muted-foreground mt-0.5 text-xs">
+                     {progress.done} of {progress.requests} done
+                     {progress.retrying > 0 && progress.nextRetryAt
+                        ? ` · retrying ${progress.retrying} at ${timeOf(progress.nextRetryAt)}`
+                        : ''}
+                  </p>
+               ) : null}
+               {faded ? <p className="text-muted-foreground mt-1 text-xs">Not in this run</p> : null}
                {invalid ? (
                   <p className="text-destructive mt-1 flex items-center gap-1 text-xs">
                      <CircleAlert className="size-3.5" aria-hidden />

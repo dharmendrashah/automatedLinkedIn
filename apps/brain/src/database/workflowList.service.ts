@@ -1,4 +1,4 @@
-import { explainMatched, readSignals } from 'core'
+import { briefSignals, explainMatched, readSignals } from 'core'
 
 import { type Prisma, type WorkflowListMemberState, type WorkflowListMemberStatus } from 'generated/prisma/client'
 
@@ -366,7 +366,7 @@ export class WorkflowListService {
       return {
          items: items.map(item => ({
             ...item,
-            signals: readSignals(item.signals),
+            signals: briefSignals(item.signals),
          })),
          total,
       }

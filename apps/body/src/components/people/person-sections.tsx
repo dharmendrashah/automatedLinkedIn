@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge'
+import { PostCard } from '@/components/posts/post-body'
 import { timeAgo } from '@/lib/time-ago'
-import { BriefcaseBusiness, GraduationCap, MessageSquare, Sparkles, ThumbsUp, Building2, Target } from 'lucide-react'
+import { BriefcaseBusiness, ExternalLink, GraduationCap, MessageSquare, Sparkles, ThumbsUp, Building2, Target } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -162,20 +163,35 @@ const SIGNALS: Record<Member['signals'][number]['type'], { icon: ReactNode; labe
    },
 }
 
-// Why a workflow found the person: every signal, newest first.
+// Why a workflow found the person: every signal, newest first, with the post they engaged with when the run read it.
 export const WhyFound = ({ signals }: { signals: Member['signals'] }) => (
    <Section title="Why we found them">
-      <ul className="grid gap-3">
+      <ul className="grid gap-4">
          {[...signals]
             .sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''))
             .map((signal, index) => (
                <li key={`${signal.type}-${signal.via}-${index}`} className="grid grid-cols-[auto_1fr] gap-2 text-sm">
                   <span className="text-muted-foreground mt-0.5">{SIGNALS[signal.type].icon}</span>
-                  <div className="grid gap-0.5">
-                     <a className="font-medium underline-offset-4 hover:underline" href={signal.via} target="_blank" rel="noreferrer noopener">
-                        {SIGNALS[signal.type].label}
-                     </a>
-                     {signal.excerpt ? <q className="text-muted-foreground text-xs">{signal.excerpt}</q> : null}
+                  <div className="grid min-w-0 gap-1.5">
+                     <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                        <span className="font-medium">{SIGNALS[signal.type].label}</span>
+                        <a
+                           className="text-muted-foreground flex items-center gap-1 text-xs underline-offset-4 hover:underline"
+                           href={signal.via}
+                           target="_blank"
+                           rel="noreferrer noopener"
+                        >
+                           Open on LinkedIn
+                           <ExternalLink className="size-3" aria-hidden />
+                        </a>
+                     </div>
+                     {signal.post ? <PostCard post={signal.post} /> : null}
+                     {signal.excerpt ? (
+                        <p className="text-xs">
+                           <span className="text-muted-foreground">{signal.type === 'commented' ? 'Their comment: ' : ''}</span>
+                           <q>{signal.excerpt}</q>
+                        </p>
+                     ) : null}
                      {signal.at ? <span className="text-muted-foreground text-xs">{timeAgo(signal.at)}</span> : null}
                   </div>
                </li>

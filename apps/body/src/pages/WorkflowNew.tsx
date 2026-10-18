@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { formatUsd } from '@/components/workflows/types'
 import { readableError } from '@/lib/trpc-error'
 import {
+   ArrowRight,
    Briefcase,
    Building,
    Globe,
@@ -123,9 +124,23 @@ export const WorkflowNew = () => {
 
    return (
       <form onSubmit={submit} className="grid w-full gap-6 px-4 lg:px-6">
-         <div className="grid gap-1">
-            <h2 className="text-lg font-semibold">New workflow</h2>
-            <p className="text-muted-foreground text-sm">Name it, pick a start, and build it on the canvas.</p>
+         <div className="bg-background/95 supports-backdrop-filter:bg-background/80 sticky top-0 z-10 -mx-4 grid gap-2 border-b px-4 py-3 backdrop-blur lg:-mx-6 lg:px-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+               <div className="grid gap-1">
+                  <h2 className="text-lg font-semibold">New workflow</h2>
+                  <p className="text-muted-foreground text-sm">Name it, pick a start, and build it on the canvas.</p>
+               </div>
+               <Button type="submit" disabled={!name.trim() || create.isPending}>
+                  {create.isPending ? <Loader2 className="animate-spin" /> : <Workflow />}
+                  Open the canvas
+                  <ArrowRight aria-hidden />
+               </Button>
+            </div>
+            {create.error ? (
+               <Alert variant="destructive">
+                  <AlertDescription>{readableError(create.error)}</AlertDescription>
+               </Alert>
+            ) : null}
          </div>
 
          <section className="grid max-w-xl gap-2">
@@ -180,18 +195,6 @@ export const WorkflowNew = () => {
                the one to check before a run.
             </p>
          </section>
-
-         {create.error ? (
-            <Alert variant="destructive">
-               <AlertDescription>{readableError(create.error)}</AlertDescription>
-            </Alert>
-         ) : null}
-         <div>
-            <Button type="submit" disabled={!name.trim() || create.isPending}>
-               {create.isPending ? <Loader2 className="animate-spin" /> : <Workflow />}
-               Open the canvas
-            </Button>
-         </div>
       </form>
    )
 }

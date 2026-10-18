@@ -3,7 +3,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { fakeDataClient } from 'core/fakeDataClient'
 
-import { IcpService, LinkedInPostService, PrismaService, UserService, WalletService, WorkflowService } from 'database'
+import {
+   IcpService,
+   LinkedInPostService,
+   PrismaService,
+   UserService,
+   WalletService,
+   WorkflowRunService,
+   WorkflowService,
+} from 'database'
 
 import { flagshipGraph } from '@automatedLinkedIn/contracts'
 
@@ -168,6 +176,13 @@ describe('workflow engine (database)', () => {
       await advanceRun(runId, deps(client))
       expect((await WorkflowService.run(userId, runId))?.status).toBe('RUNNING')
 
+      const waiting = [...(await WorkflowRunService.progress(runId)).values()].find(({ retrying }) => retrying > 0)
+
+      expect(waiting).toMatchObject({
+         retrying: 1,
+         nextRetryAt: expect.any(Date),
+      })
+
       // The pause before the retry is over.
       await PrismaService.client.workflowStepCall.updateMany({
          where: {
@@ -183,6 +198,31 @@ describe('workflow engine (database)', () => {
          qualified: 1,
       })
       expect(client.start.mock.calls.filter(([slug]) => slug === 'post-comments')).toHaveLength(2)
+   })
+
+   it('should stop a run only after the jobs already paid for end, book them, and start nothing new', async () => {
+      let running = true
+      const client = fakeDataClient(slug => (running ? null : answer(slug)))
+      const run = await WorkflowService.startRun(userId, workflowId, 'PREVIEW', `stop-${randomUUID()}`)
+      const runId = run?.id ?? ''
+
+      await advanceRun(runId, deps(client))
+
+      const started = client.start.mock.calls.length
+
+      await expect(WorkflowService.requestStop(userId, runId)).resolves.toBe(true)
+      await expect(WorkflowService.requestStop(userId, runId)).resolves.toBe(false)
+      await advanceRun(runId, deps(client))
+      expect((await WorkflowService.run(userId, runId))?.status).toBe('RUNNING')
+
+      running = false
+      await advanceRun(runId, deps(client))
+
+      const stopped = await WorkflowService.run(userId, runId)
+
+      expect(stopped?.status).toBe('STOPPED')
+      expect(stopped?.costMicros).toBeGreaterThan(0)
+      expect(client.start.mock.calls.length).toBe(started)
    })
 
    it('should run the flagship flow, book the cost once and mark the post done last', async () => {
@@ -215,5 +255,35 @@ describe('workflow engine (database)', () => {
       expect(done?.costMicros).toBe(ledger._sum.amountMicros)
       expect(client.start).toHaveBeenCalledTimes(3)
       await expect(LinkedInPostService.countWaiting(userId)).resolves.toBe(0)
+      await expect(
+         PrismaService.client.personSnapshot.findMany({
+            where: { userId },
+            select: { slug: true },
+         })
+      ).resolves.toEqual([{ slug: 'ada-growth' }])
+   })
+
+   it('should use a full profile read in the last 30 days instead of paying for it again', async () => {
+      await PrismaService.client.workflowListMember.deleteMany({ where: { listId: outputListId } })
+      await PrismaService.client.linkedInPost.updateMany({
+         where: { userId },
+         data: { status: 'UNPROCESSED' },
+      })
+
+      const client = fakeClient()
+      const run = await WorkflowService.startRun(userId, workflowId, 'PREVIEW', `reuse-${randomUUID()}`)
+
+      await advanceRun(run?.id ?? '', deps(client))
+
+      const done = await WorkflowService.run(userId, run?.id ?? '')
+
+      expect(done).toMatchObject({
+         status: 'SUCCEEDED',
+         qualified: 1,
+      })
+      const read = client.start.mock.calls.filter(([slug]) => slug === 'profiles').map(([, params]) => params)
+
+      expect(read).toEqual([{ queries: ['https://www.linkedin.com/in/cy-growth'] }])
+      expect(done?.steps.map(({ message }) => message)).toContainEqual(expect.stringContaining('not paid again'))
    })
 })

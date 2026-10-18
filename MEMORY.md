@@ -184,6 +184,18 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-18: Reuse what workflows paid for (`.plan/reuse-workflow-reads.md`, done).
+   - "Get full profile" (`enrich`) saves a `PersonSnapshot` per profile it pays for (not in previews) through `PersonSnapshotService.save`, which is shared with the drawer read.
+   - It reuses snapshots from the last `RECENT_DAYS` (30) instead of paying again (`PersonSnapshotService.recent`, `cardFromSnapshot`). The estimate does not subtract them.
+   - Post items keep `preview` (`postSnapshotFrom`, from found posts or the owner's stored post read), and commenter and reactor signals carry `post`. Both are optional zod fields, so old JSON still parses.
+   - Table pages send `briefSignals` (no `post`); only the drawer (`memberBySlug`) gets the post. The drawer renders it with `PostCard` (`components/posts/post-body.tsx`).
+   - Unscored runs: "Done: N people added to the list for $X, $Y a person."
+- 2026-10-18: Workflows 10x Phase 2, live runs in plain words (`.plan/workflow-10x-phase-2-live-runs.md`, done).
+   - `runDetail` steps carry `progress` (`WorkflowRunService.progress`).
+   - `run-sentence.ts` builds the one-line status.
+   - Stop: `stopRequestedAt`, then the run winds down through the engine. `collectEach` treats it like a wallet stop (in-flight jobs finish and are kept, nothing new is paid, message `STOPPED_BY_YOU`), and it ends as `STOPPED`.
+   - Gotcha: integration tests use `apps/brain/.env.test` (git-ignored since 2026-10-18), which points at a separate local database `automatedlinkedin_test`. After a new migration, run `set -a; . apps/brain/.env.test; set +a; pnpm --filter @automatedLinkedIn/brain db:migrate:deploy`. Without the file, tests shared the dev database with a running dev worker, which could claim test `DataRead` rows.
+
 - 2026-10-18: Workflows 10x Phase 1, the leads inbox (`.plan/workflow-10x-phase-1-leads-inbox.md`, done). /lists is an inbox across all lists (`InboxService` and the routes `workflowList.inbox` / `setStatus` / `moveMany` / `removeMany` / `restore` / `doNotContactList` / `markSeen`).
    - **One status flow:** NEW, CONTACTED, REPLIED, NOT_A_FIT. `contactedAt` is set by `contactedFor`. IN_REVIEW and DONE were backfilled and are unused.
    - **Score reasons:** come from `explainMatched(matched)` (no column).

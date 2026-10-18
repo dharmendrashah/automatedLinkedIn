@@ -59,11 +59,13 @@ const runSelect = {
    maybe: true,
    discarded: true,
    message: true,
+   stopRequestedAt: true,
    startedAt: true,
    finishedAt: true,
 } satisfies Prisma.WorkflowRunSelect
 
 const stepSelect = {
+   id: true,
    nodeId: true,
    type: true,
    round: true,
@@ -503,6 +505,22 @@ export class WorkflowService {
          take: 50,
          select: runSelect,
       })
+   }
+
+   // Asks a live run to stop; the worker ends it once the jobs already paid for finished. False when it is not the
+   // owner's live run.
+   public static async requestStop(userId: string, runId: string) {
+      const { count } = await PrismaService.client.workflowRun.updateMany({
+         where: {
+            id: runId,
+            userId,
+            status: 'RUNNING',
+            stopRequestedAt: null,
+         },
+         data: { stopRequestedAt: new Date() },
+      })
+
+      return count === 1
    }
 
    public static run(userId: string, runId: string) {

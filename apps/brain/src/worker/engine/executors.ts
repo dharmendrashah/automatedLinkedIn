@@ -11,12 +11,16 @@ import {
    parseLinkedInUrl,
    person,
    readItem,
+   snapshotFrom,
 } from 'core'
 
 import {
    LinkedInCompanyService,
    LinkedInPostService,
    LinkedInProfileService,
+   PersonSnapshotService,
+   PostPageService,
+   RECENT_DAYS,
    type SeenSkip,
    WorkflowListService,
    WorkflowRunService,
@@ -26,6 +30,7 @@ import { ALL_CAP, ELSE_SOURCES, type GraphNode } from '@automatedLinkedIn/contra
 
 import {
    ENRICH_BATCH,
+   cardFromSnapshot,
    commentersFrom,
    commentersParams,
    companiesFromDomains,
@@ -38,6 +43,7 @@ import {
    jobsParams,
    postsFrom,
    postsOfParams,
+   profileRowsFrom,
    profilesFrom,
    profilesParams,
    reactorsFrom,
@@ -118,12 +124,17 @@ const inputPosts = async (ctx: Context): Promise<StepResult> => {
            expandedUrl: null,
         }))
       : await LinkedInPostService.waiting(ctx.run.userId, numberIn(configOf(ctx.node), 'howMany'))
+   const previews = await PostPageService.previews(
+      ctx.run.userId,
+      posts.map(({ slug }) => slug)
+   )
    const items: PostItem[] = await Promise.all(
       posts.map(async post => ({
          kind: 'post' as const,
          slug: post.slug,
          url: await sendableUrl(post),
          postId: post.id,
+         preview: previews.get(post.slug) ?? null,
       }))
    )
    const result = await keepItems(ctx, items, 0)
@@ -422,20 +433,33 @@ const searchPeople = (ctx: Context) => {
    ])
 }
 
-// Reads the full profile of everyone it gets who was not read yet. After a Score block they are scored again and
-// the ones that no longer fit are dropped; without one they keep no score.
+// Reads the full profile of everyone it gets who was not read yet. A full profile the owner got in the last 30 days
+// is used again instead of paid for, and every one it pays for is kept so the drawer shows it. After a Score block
+// they are scored again and the ones that no longer fit are dropped; without one they keep no score.
 const enrich = async (ctx: Context): Promise<StepResult> => {
    const { run, node, graph, at } = ctx
    const people = mergeBySlug(peopleOf(ctx.inputs))
    const scoring = scoringNodeBefore(graph, node.id)
    const rules = scoring ? await rulesOf(run.userId, scoring) : null
    const thresholds = thresholdsOf(run, scoring)
-   const toRead = people.filter(({ enriched }) => !enriched).sort((a, b) => a.slug.localeCompare(b.slug))
+   const pending = people.filter(({ enriched }) => !enriched)
+   const stored = await PersonSnapshotService.recent(
+      run.userId,
+      pending.map(({ slug }) => slug)
+   )
+   const reused = pending.filter(({ slug }) => stored.has(slug))
+   const toRead = pending.filter(({ slug }) => !stored.has(slug)).sort((a, b) => a.slug.localeCompare(b.slug))
    const batches = Array.from({ length: Math.ceil(toRead.length / ENRICH_BATCH) }, (_, index) =>
       toRead.slice(index * ENRICH_BATCH, (index + 1) * ENRICH_BATCH)
    )
 
    await WorkflowRunService.seedItems(at, people)
+
+   if (reused.length > 0) {
+      const cards = new Map([...stored].map(([slug, snapshot]) => [slug, cardFromSnapshot(snapshot)]))
+
+      await WorkflowRunService.putItems(at, applyProfiles(reused, cards, rules, thresholds))
+   }
 
    const collected = await collectEach(
       ctx,
@@ -444,6 +468,14 @@ const enrich = async (ctx: Context): Promise<StepResult> => {
          slug: 'profiles',
          params: profilesParams(batch),
          use: async rows => {
+            const found = profileRowsFrom(rows)
+
+            if (!ctx.preview) {
+               for (const [slug, row] of found) {
+                  await PersonSnapshotService.save(run.userId, slug, snapshotFrom(row))
+               }
+            }
+
             await WorkflowRunService.putItems(at, applyProfiles(batch, profilesFrom(rows), rules, thresholds))
          },
       }))
@@ -451,11 +483,12 @@ const enrich = async (ctx: Context): Promise<StepResult> => {
    const read = peopleOf(await WorkflowRunService.items(run.id, [at]))
    const kept = rules ? read.filter(({ band }) => band !== null) : read
    const result = await keepItems(ctx, kept, people.length)
+   const note = reused.length > 0 ? `${reused.length} read in the last ${RECENT_DAYS} days, not paid again.` : null
 
    return {
       ...result,
       status: collected.status,
-      message: collected.message,
+      message: [collected.message, note].filter(Boolean).join(' ') || undefined,
    }
 }
 

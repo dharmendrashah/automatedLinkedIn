@@ -213,6 +213,8 @@ enum WorkflowRunStatus {
   SUCCEEDED
   PARTIAL
   FAILED
+  // Stopped by the owner, after the requests already paid for finished.
+  STOPPED
 }
 
 enum WorkflowStepStatus {
@@ -275,6 +277,8 @@ model WorkflowRun {
   depth          Int               @default(0)
   // The run whose "Run another workflow" block started this one.
   parentRunId    String?
+  // Set when the owner asked to stop: nothing new starts, and the run ends as STOPPED once paid jobs finished.
+  stopRequestedAt DateTime?
   message        String?
   startedAt      DateTime          @default(now())
   finishedAt     DateTime?

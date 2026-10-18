@@ -183,11 +183,11 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
 }
 
 // The blocks to run again after `round`: For each blocks with batches left, and loops whose way back found something
-// new, up to the workflow's number of rounds. None when the round stopped on a low wallet.
+// new, up to the workflow's number of rounds. None when the round stopped on a low wallet or the owner stopped the run.
 const nextRound = async (run: Run, graph: Graph, round: number) => {
    const current = run.steps.filter(step => step.round === round)
 
-   if (current.some(({ message }) => message === WALLET_LOW)) {
+   if (run.stopRequestedAt || current.some(({ message }) => message === WALLET_LOW)) {
       return []
    }
 
@@ -238,6 +238,8 @@ const nextRound = async (run: Run, graph: Graph, round: number) => {
 const listedPeople = (run: Run) => WorkflowRunService.listedPeople(run.id)
 
 const finish = async (run: Run, deps: EngineDeps) => {
+   // A stopped run winds down like any other: paid jobs finish and are kept, nothing new is paid for.
+   const stopped = run.stopRequestedAt !== null
    const failed = run.steps.find(({ status }) => status === 'FAILED')
    const partial = run.steps.some(({ status }) => status === 'PARTIAL')
    const discarded = run.steps
@@ -251,13 +253,14 @@ const finish = async (run: Run, deps: EngineDeps) => {
    })
 
    const { count } = await WorkflowRunService.finishRun(run.id, {
-      status: failed ? 'FAILED' : partial ? 'PARTIAL' : 'SUCCEEDED',
+      status: stopped ? 'STOPPED' : failed ? 'FAILED' : partial ? 'PARTIAL' : 'SUCCEEDED',
       discarded,
-      message: failed?.message ?? undefined,
+      message: stopped ? undefined : (failed?.message ?? undefined),
    })
 
-   // Only the worker that ended the run starts the workflows listening to it, and never after a preview or a failure.
-   if (count === 1 && !failed && run.trigger !== 'PREVIEW') {
+   // Only the worker that ended the run starts the workflows listening to it, and never after a preview, a failure or
+   // a stop.
+   if (count === 1 && !failed && !stopped && run.trigger !== 'PREVIEW') {
       const started = await WorkflowTriggerService.startAfter(run, people)
 
       if (started > 0) {

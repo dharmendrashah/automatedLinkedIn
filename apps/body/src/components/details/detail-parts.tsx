@@ -21,14 +21,26 @@ const initialsOf = (name: string) =>
       .join('')
 
 // A round photo for people, a rounded square logo for companies; initials when there is none or it does not load.
-export const Picture = ({ name, image, square = false }: { name: string; image: string | null; square?: boolean }) => {
+export const Picture = ({
+   name,
+   image,
+   square = false,
+   className,
+}: {
+   name: string
+   image: string | null
+   square?: boolean
+   className?: string
+}) => {
    const [broken, setBroken] = useState(false)
    const shape = cn('bg-muted size-24 border-4 border-background', square ? 'rounded-xl' : 'rounded-full')
 
    return image && !broken ? (
-      <img src={image} alt="" referrerPolicy="no-referrer" className={cn(shape, 'object-cover')} onError={() => setBroken(true)} />
+      <img src={image} alt="" referrerPolicy="no-referrer" className={cn(shape, 'object-cover', className)} onError={() => setBroken(true)} />
    ) : (
-      <span className={cn(shape, 'text-muted-foreground grid place-items-center text-2xl font-semibold')}>{initialsOf(name)}</span>
+      <span className={cn(shape, 'text-muted-foreground grid place-items-center text-2xl font-semibold', className)}>
+         {initialsOf(name)}
+      </span>
    )
 }
 
