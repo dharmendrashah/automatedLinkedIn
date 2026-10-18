@@ -188,7 +188,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
    - `runDetail` steps carry `progress` (`WorkflowRunService.progress`).
    - `run-sentence.ts` builds the one-line status.
    - Stop: `stopRequestedAt`, then the run winds down through the engine. `collectEach` treats it like a wallet stop (in-flight jobs finish and are kept, nothing new is paid, message `STOPPED_BY_YOU`), and it ends as `STOPPED`.
-   - Gotcha: without `apps/brain/.env.test`, integration tests share the dev database with a running dev worker, which can claim test `DataRead` rows.
+   - Gotcha: integration tests use `apps/brain/.env.test` (git-ignored since 2026-10-18), which points at a separate local database `automatedlinkedin_test`. After a new migration, run `set -a; . apps/brain/.env.test; set +a; pnpm --filter @automatedLinkedIn/brain db:migrate:deploy`. Without the file, tests shared the dev database with a running dev worker, which could claim test `DataRead` rows.
 
 - 2026-10-18: Workflows 10x Phase 1, the leads inbox (`.plan/workflow-10x-phase-1-leads-inbox.md`, done). /lists is an inbox across all lists (`InboxService` and the routes `workflowList.inbox` / `setStatus` / `moveMany` / `removeMany` / `restore` / `doNotContactList` / `markSeen`).
    - **One status flow:** NEW, CONTACTED, REPLIED, NOT_A_FIT. `contactedAt` is set by `contactedFor`. IN_REVIEW and DONE were backfilled and are unused.
