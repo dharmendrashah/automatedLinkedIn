@@ -24,6 +24,7 @@ BASE_ENV = {
 JOB_START = "spider job started: Task 0d9f"
 JOB_HEARTBEAT = "spider job still running: Task 0d9f"
 JOB_END = "spider job finished: Task 0d9f"
+JOB_WAITING = "spider job waiting: Task 0d9f (its account is in use)"
 
 
 class FakeKube:
@@ -165,10 +166,11 @@ class ActivityTests(unittest.TestCase):
             JOB_START,
             JOB_HEARTBEAT,
             JOB_END,
+            JOB_WAITING,
         ]
 
-        self.assertEqual(ids.count_activity("spider-worker", lines), 3)
-        self.assertEqual(ids.count_activity("spider-api", lines), 3)
+        self.assertEqual(ids.count_activity("spider-worker", lines), 4)
+        self.assertEqual(ids.count_activity("spider-api", lines), 4)
 
     def test_spider_idle_polling_is_not_activity(self):
         lines = ["spider worker is waiting for tasks", '{"req":{"url":"/health"}}']

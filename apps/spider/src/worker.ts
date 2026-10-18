@@ -57,7 +57,8 @@ const main = async () => {
    const policy = HostPolicy.fromList(SPIDER_ALLOWED_HOSTS, SPIDER_ROBOTS_EXEMPT_HOSTS)
    const store = new GcsStore(SPIDER_GCS_BUCKET)
    const broker = new Broker(RABBITMQ_URL)
-   const accountLock = new AccountLock(store, SPIDER_ACCOUNT_LOCK_TTL_MS)
+   const warn = (message: string) => console.warn(message)
+   const accountLock = new AccountLock(store, SPIDER_ACCOUNT_LOCK_TTL_MS, Date.now, { warn })
    const limiter = new HostRateLimiter(SPIDER_MIN_DELAY_MS)
    // Scrape tasks and every other task each open a Firefox, so this worker does one of them at a time.
    const oneBrowser = new Mutex()

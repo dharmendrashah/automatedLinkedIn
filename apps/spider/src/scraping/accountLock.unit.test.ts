@@ -8,7 +8,7 @@ const memoryStore = () => {
    const objects = new Map<string, { body: string; version: number }>()
    let counter = 0
 
-   const store: Pick<ObjectStore, 'create' | 'getVersioned' | 'delete'> = {
+   const store: Pick<ObjectStore, 'create' | 'getVersioned' | 'delete' | 'replace'> = {
       create: vi.fn(async (key: string, body: string) => {
          if (objects.has(key)) {
             return undefined
@@ -38,6 +38,19 @@ const memoryStore = () => {
          if (objects.get(key)?.version === Number(version)) {
             objects.delete(key)
          }
+      }),
+      replace: vi.fn(async (key: string, body: string, _contentType: string, version: string) => {
+         if (objects.get(key)?.version !== Number(version)) {
+            return undefined
+         }
+
+         counter += 1
+         objects.set(key, {
+            body,
+            version: counter,
+         })
+
+         return String(counter)
       }),
    }
 
@@ -155,5 +168,91 @@ describe('AccountLock', () => {
       vi.mocked(store.create).mockRejectedValue(new Error('bucket unavailable'))
 
       await expect(new AccountLock(store, TTL).acquire('acc1', 'task-1')).rejects.toThrow('bucket unavailable')
+   })
+
+   it('should take over its own lease at once: the same task back again means its earlier run died', async () => {
+      const { store, objects } = memoryStore()
+      const lock = new AccountLock(store, TTL)
+
+      await lock.acquire('acc1', 'task-1')
+
+      await expect(lock.acquire('acc1', 'task-1')).resolves.toBeDefined()
+      expect(JSON.parse(objects.get('locks/acc1.json')?.body ?? '{}')).toMatchObject({ task_id: 'task-1' })
+   })
+
+   describe('while the task runs', () => {
+      it('should push the expiry forward every renewal, and stop once released', async () => {
+         vi.useFakeTimers({ now: Date.parse('2026-10-12T10:00:00.000Z') })
+
+         try {
+            const { store, objects } = memoryStore()
+            const lock = new AccountLock(store, TTL, Date.now, { renewMs: 10_000 })
+            const lease = await lock.acquire('acc1', 'task-1')
+
+            await vi.advanceTimersByTimeAsync(TTL * 2)
+
+            expect(JSON.parse(objects.get('locks/acc1.json')?.body ?? '{}')).toEqual({
+               task_id: 'task-1',
+               expires_at: '2026-10-12T10:03:00.000Z',
+            })
+            await expect(lock.acquire('acc1', 'task-2')).resolves.toBeUndefined()
+
+            await lease?.release()
+            await vi.advanceTimersByTimeAsync(TTL)
+
+            expect(objects.size).toBe(0)
+            expect(vi.mocked(store.replace).mock.calls.length).toBe(12)
+         } finally {
+            vi.useRealTimers()
+         }
+      })
+
+      it('should say so, and stop renewing, when another task took the lease over', async () => {
+         vi.useFakeTimers()
+
+         try {
+            const { store, objects } = memoryStore()
+            const warn = vi.fn()
+            const lock = new AccountLock(store, TTL, Date.now, {
+               renewMs: 10_000,
+               warn,
+            })
+
+            await lock.acquire('acc1', 'task-1')
+            objects.set('locks/acc1.json', {
+               body: '{"task_id":"task-2"}',
+               version: 500,
+            })
+            await vi.advanceTimersByTimeAsync(30_000)
+
+            expect(warn).toHaveBeenCalledTimes(1)
+            expect(warn).toHaveBeenCalledWith(expect.stringContaining('acc1'))
+            expect(vi.mocked(store.replace)).toHaveBeenCalledTimes(1)
+         } finally {
+            vi.useRealTimers()
+         }
+      })
+
+      it('should keep the run going when a renewal fails, and try again next time', async () => {
+         vi.useFakeTimers()
+
+         try {
+            const { store } = memoryStore()
+            const warn = vi.fn()
+            const lock = new AccountLock(store, TTL, Date.now, {
+               renewMs: 10_000,
+               warn,
+            })
+
+            await lock.acquire('acc1', 'task-1')
+            vi.mocked(store.replace).mockRejectedValueOnce(new Error('bucket hiccup'))
+            await vi.advanceTimersByTimeAsync(20_000)
+
+            expect(warn).toHaveBeenCalledTimes(1)
+            expect(vi.mocked(store.replace)).toHaveBeenCalledTimes(2)
+         } finally {
+            vi.useRealTimers()
+         }
+      })
    })
 })

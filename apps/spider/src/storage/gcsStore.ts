@@ -105,4 +105,25 @@ export class GcsStore implements ObjectStore {
          }
       }
    }
+
+   // `ifGenerationMatch` makes GCS refuse the write (412) once someone else changed or removed the object.
+   public async replace(key: string, body: string, contentType: string, version: string) {
+      const file = this.bucket.file(key)
+
+      try {
+         await file.save(body, {
+            contentType,
+            resumable: false,
+            preconditionOpts: { ifGenerationMatch: Number(version) },
+         })
+      } catch (error) {
+         if (statusOf(error) === 412 || statusOf(error) === 404) {
+            return undefined
+         }
+
+         throw error
+      }
+
+      return String(file.metadata.generation)
+   }
 }

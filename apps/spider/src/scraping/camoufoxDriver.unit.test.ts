@@ -143,6 +143,13 @@ describe('CamoufoxDriver', () => {
       expect(mocks.camoufox).toHaveBeenCalledWith(expect.objectContaining({ headless: true }))
    })
 
+   it('should keep Firefox to one content process, so a run fits in the worker memory', async () => {
+      await driver.open()
+
+      const prefs = { firefox_user_prefs: expect.objectContaining({ 'dom.ipc.processCount': 1 }) }
+      expect(mocks.camoufox).toHaveBeenCalledWith(expect.objectContaining(prefs))
+   })
+
    it('should start the browser on a virtual display when that is set', async () => {
       await new CamoufoxDriver({
          actionTimeoutMs: 1000,

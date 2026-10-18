@@ -78,6 +78,13 @@ export const createLinkedinLogin = ({ validator, baseUrl }: Options) =>
          oneAtATime: 'account',
       },
       limits: { timeoutMs: 3 * 60 * 1000 },
+      // A small video keeps the worker's memory down; it is enough to read the sign-in pages.
+      recording: {
+         videoSize: {
+            width: 640,
+            height: 360,
+         },
+      },
       run: async (context): Promise<TaskOutcome> => {
          const { browser, account } = context
 

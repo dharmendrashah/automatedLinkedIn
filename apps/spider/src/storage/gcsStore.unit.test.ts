@@ -147,6 +147,31 @@ describe('GcsStore', () => {
       })
    })
 
+   describe('replace', () => {
+      it('should overwrite only the version it was given and return the new one', async () => {
+         mocks.save.mockImplementation(async () => {
+            fileMetadata = { generation: '43' }
+         })
+
+         await expect(new GcsStore('my-bucket').replace('locks/a.json', '{}', 'application/json', '42')).resolves.toBe(
+            '43'
+         )
+         expect(mocks.save).toHaveBeenCalledWith('{}', {
+            contentType: 'application/json',
+            resumable: false,
+            preconditionOpts: { ifGenerationMatch: 42 },
+         })
+      })
+
+      it('should answer undefined when someone else changed or removed the object', async () => {
+         mocks.save.mockRejectedValue(Object.assign(new Error('Precondition Failed'), { code: 412 }))
+
+         await expect(
+            new GcsStore('my-bucket').replace('locks/a.json', '{}', 'application/json', '42')
+         ).resolves.toBeUndefined()
+      })
+   })
+
    describe('getVersioned', () => {
       it('should read the body of the generation it reports', async () => {
          mocks.getMetadata.mockResolvedValue([{ generation: '42' }])
