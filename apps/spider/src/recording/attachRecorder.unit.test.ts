@@ -93,6 +93,23 @@ describe('attachRecorder', () => {
       )
    })
 
+   it('should never read the body of a stream, which would wait for ever, but still note the response', async () => {
+      const { handlers, recorder } = setup()
+      const text = vi.fn(() => new Promise<string>(() => undefined))
+
+      handlers.response(
+         makeResponse({
+            type: 'fetch',
+            contentType: 'text/event-stream',
+            text,
+         })
+      )
+      await recorder.track.mock.calls[0][0]
+
+      expect(text).not.toHaveBeenCalled()
+      expect(recorder.network).toHaveBeenCalledWith(expect.not.objectContaining({ body: expect.anything() }))
+   })
+
    it('should hand every response to the recorder to finish before the run is saved', async () => {
       const { handlers, recorder } = setup()
 

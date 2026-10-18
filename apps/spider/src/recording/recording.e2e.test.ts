@@ -33,7 +33,17 @@ beforeAll(async () => {
       }
 
       if (pathname.startsWith('/feed')) {
-         return cookie.includes('signed=') ? html('<h1>feed</h1>') : redirect(response, '/login')
+         // Like LinkedIn's realtime connection: a stream that never ends must not keep the browser from closing.
+         return cookie.includes('signed=')
+            ? html("<h1>feed</h1><script>fetch('/realtime/connect')</script>")
+            : redirect(response, '/login')
+      }
+
+      if (pathname === '/realtime/connect') {
+         response.writeHead(200, { 'content-type': 'text/event-stream' })
+         response.write('data: hello\n\n')
+
+         return undefined
       }
 
       if (pathname === '/login' && request.method === 'GET') {
@@ -72,6 +82,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+   server.closeAllConnections()
    await new Promise(resolve => server.close(resolve))
 })
 
@@ -145,10 +156,12 @@ describe('A recorded run in a real browser', () => {
       const network = JSON.parse(run.text('network.json'))
       const logs = JSON.parse(run.text('logs.json'))
 
+      const calls: string[] = timeline.steps.map((step: { call: string }) => step.call)
+
       expect(timeline.outcome).toBe('ok')
-      expect(timeline.steps.map((step: { call: string }) => step.call)).toEqual(
-         expect.arrayContaining(['goto', 'fill', 'click'])
-      )
+      expect(calls).toEqual(expect.arrayContaining(['goto', 'fill']))
+      // Sent with the button under the password, or Enter when the page shows none there (this page puts it beside).
+      expect(calls.some(call => call === 'click' || call === 'press')).toBe(true)
       expect(timeline.steps.filter((step: { call: string }) => step.call === 'fill')).toEqual([
          expect.objectContaining({ length: 'ada@work.com'.length }),
          expect.objectContaining({ length: PASSWORD.length }),

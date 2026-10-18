@@ -184,6 +184,11 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-18: The spider never closed the browser after a LinkedIn sign-in (`.plan/spider-close-hang.md`, done).
+   - LinkedIn's realtime `text/event-stream` never ends, and the recorder awaited its body (`response.text()`) in `settle()` before `context.close()`, with no limit. `finish` is outside the task time limit, so the run hung for ever and blocked the worker.
+   - Now stream bodies are skipped, `settle()` is capped at 5 s, and `close()` caps the context close at 15 s.
+   - Gotcha: anything awaited in the runner's `finish` or `close` path must be time-bounded.
+
 - 2026-10-18: LinkedIn sign-in, the two-step code dialog (`.plan/linkedin-login-code-dialog.md`, done).
    - LinkedIn can ask for the code in a `<dialog>` over `/login` with no button; it sends itself after the 6th digit. The validator types the code once with `LoginSession.type` (no read-back), waits 3 s, and presses Enter once if the dialog stays.
    - After a sign-in, LinkedIn may show the ads consent page `/connect-services/ads_experience`. The spider clicks Accept (the owner's choice) and counts the account as signed in either way.

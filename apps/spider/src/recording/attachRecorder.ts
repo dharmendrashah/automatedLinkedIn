@@ -5,6 +5,8 @@ import { type LogLevel, type RunRecorder } from './recorder'
 // Only pages and fetch/XHR carry text worth reading; scripts, styles, images and fonts would only fill the record.
 const TEXT_TYPES = new Set(['document', 'xhr', 'fetch'])
 const TEXT_CONTENT = /text|json|xml/i
+// A stream (LinkedIn's realtime connection) never ends, so reading its body would wait for ever.
+const STREAM_CONTENT = /event-stream|multipart\/x-mixed-replace/i
 
 const levelOf = (type: ConsoleMessage['type'] extends () => infer T ? T : string): LogLevel => {
    if (type === 'error') {
@@ -40,9 +42,10 @@ export const attachRecorder = (page: Page, recorder: RunRecorder) => {
          const request = response.request()
          const type = request.resourceType()
          const headers = await responseHeaders(response)
+         const contentType = headers['content-type'] ?? ''
          let body: string | undefined
 
-         if (TEXT_TYPES.has(type) && TEXT_CONTENT.test(headers['content-type'] ?? '')) {
+         if (TEXT_TYPES.has(type) && TEXT_CONTENT.test(contentType) && !STREAM_CONTENT.test(contentType)) {
             // A redirect or a closed page has no body to read.
             body = await response.text().catch(() => undefined)
          }
