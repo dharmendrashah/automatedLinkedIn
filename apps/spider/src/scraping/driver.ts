@@ -28,6 +28,9 @@ export type OpenOptions = {
    exitIp?: string
    // The cookies and local storage the account had at the end of its last good sign-in.
    storageState?: SavedState
+   // The account's browser profile folder. With it the browser is the same Firefox profile every run (cookies, site storage,
+   // history, cache), and `storageState` only fills a profile that starts empty.
+   profileDir?: string
 }
 
 export interface BrowserDriver {
@@ -94,9 +97,16 @@ export interface SessionControl {
 }
 
 // What a browser holds between runs: the cookies and the local storage of each site. It carries login tokens.
+// One site's IndexedDB as Playwright takes and restores it. Its typings leave it out; nothing here reads inside it.
+export type IndexedDbState = unknown[]
+
 export type StorageState = {
    cookies: SessionCookie[]
-   origins: Array<{ origin: string; localStorage: Array<{ name: string; value: string }> }>
+   origins: Array<{
+      origin: string
+      localStorage: Array<{ name: string; value: string }>
+      indexedDB?: IndexedDbState
+   }>
 }
 
 // What a browser test needs on top of a login session: scrolling, reading the page, and a picture of all of it.

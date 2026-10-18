@@ -2,7 +2,7 @@ import { type Channel, type ConsumeMessage } from 'amqplib'
 
 import { type ScrapeTaskCommand } from '../types'
 
-import { AccountBusyError } from '../scraping/errors'
+import { AccountBusyError, ShutdownError } from '../scraping/errors'
 import { parseCommand } from '../types/schema'
 import { TASK_QUEUE } from './topology'
 
@@ -179,6 +179,14 @@ export const consumeQueue = async <T>(
       }
 
       waiting.delete(label(item))
+
+      // The worker is leaving: the next one takes the message at once, as if this worker had never taken it.
+      if (error instanceof ShutdownError) {
+         log.info(`spider job handed back, the worker is stopping: ${label(item)}`)
+         channel.nack(message, false, true)
+
+         return
+      }
 
       if (result.ok) {
          log.info(`spider job finished: ${label(item)}`)

@@ -1,4 +1,5 @@
 import { Storage } from '@google-cloud/storage'
+import { type Readable, type Writable } from 'node:stream'
 
 import { ObjectNotFoundError, type ObjectStore } from './store'
 
@@ -20,6 +21,19 @@ export class GcsStore implements ObjectStore {
       await this.bucket.file(key).save(body, {
          contentType,
          resumable: false,
+      })
+   }
+
+   // For an object too large to hold in memory, such as a browser profile. A missing object fails the stream with code 404.
+   public readStream(key: string): Readable {
+      return this.bucket.file(key).createReadStream()
+   }
+
+   // The object is replaced only when the stream ends without an error, so a cut-off upload keeps the old one.
+   public writeStream(key: string, contentType: string): Writable {
+      return this.bucket.file(key).createWriteStream({
+         contentType,
+         resumable: true,
       })
    }
 

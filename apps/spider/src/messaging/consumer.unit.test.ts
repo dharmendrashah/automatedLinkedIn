@@ -1,6 +1,6 @@
 import { type Mock, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { AccountBusyError } from '../scraping/errors'
+import { AccountBusyError, ShutdownError } from '../scraping/errors'
 import { MAX_RETRIES, consumeQueue, consumeTasks } from './consumer'
 import { TASK_QUEUE } from './topology'
 
@@ -213,6 +213,23 @@ describe('consumeTasks', () => {
          await consumer.stop()
 
          expect(channel.nack).toHaveBeenCalledWith(msg, false, true)
+      })
+   })
+
+   describe('when the worker is stopping', () => {
+      it('should put the message straight back in the queue, without a retry, a wait or a new copy', async () => {
+         const { channel, send } = setup()
+         const msg = message(command, 2)
+         const consumer = await consumeTasks(channel as never, vi.fn().mockRejectedValue(new ShutdownError()), options)
+
+         send(msg)
+         await consumer.stop()
+
+         expect(channel.nack).toHaveBeenCalledWith(msg, false, true)
+         expect(channel.ack).not.toHaveBeenCalled()
+         expect(republish).not.toHaveBeenCalled()
+         expect(sleep).not.toHaveBeenCalled()
+         expect(log.error).not.toHaveBeenCalled()
       })
    })
 

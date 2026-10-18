@@ -109,4 +109,51 @@ describe('SessionVault', () => {
       ).rejects.toThrow(/too large/)
       expect(store.put).not.toHaveBeenCalled()
    })
+
+   describe('with IndexedDB', () => {
+      const database = (value: string) => [
+         {
+            name: 'app',
+            version: 1,
+            stores: [
+               {
+                  name: 'auth',
+                  autoIncrement: false,
+                  records: [
+                     {
+                        key: 'token',
+                        value,
+                     },
+                  ],
+                  indexes: [],
+               },
+            ],
+         },
+      ]
+      const withDatabase = (value: string) => ({
+         ...state,
+         origins: [
+            {
+               ...state.origins[0],
+               indexedDB: database(value),
+            },
+         ],
+      })
+
+      it('should give back the IndexedDB of each site with the cookies and local storage', async () => {
+         const vault = new SessionVault(makeStore(), KEY)
+
+         await vault.save('acc1', withDatabase('kept'))
+
+         await expect(vault.load('acc1')).resolves.toEqual(withDatabase('kept'))
+      })
+
+      it('should still keep the cookies and local storage when IndexedDB is too large to keep', async () => {
+         const vault = new SessionVault(makeStore(), KEY)
+
+         await vault.save('acc1', withDatabase('x'.repeat(6_000_000)))
+
+         await expect(vault.load('acc1')).resolves.toEqual(state)
+      })
+   })
 })

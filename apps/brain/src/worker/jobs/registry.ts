@@ -1,4 +1,5 @@
 import { unique } from '../registry'
+import { accountDaily } from './accountDaily'
 import { dataReads } from './dataReads'
 import { proxyScoring } from './proxyScoring'
 import { retention } from './retention'
@@ -15,4 +16,5 @@ export const JOBS = unique('job', [
    dataWallet,
    dataReads,
    retention,
+   accountDaily,
 ])

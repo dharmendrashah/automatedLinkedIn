@@ -14,6 +14,9 @@ spec:
       labels:
         app.kubernetes.io/name: spider-worker
     spec:
+      # A stopping worker finishes the run in progress and saves its browser profile: up to SPIDER_SHUTDOWN_GRACE_MS (9 min),
+      # then hands the run back. This is longer, so the worker decides before Kubernetes kills it.
+      terminationGracePeriodSeconds: 600
       # GKE Workload Identity gives GCS access with no mounted key file (deploy/gcp-setup.md).
       serviceAccountName: spider-worker
       containers:
@@ -74,8 +77,14 @@ spec:
             # Firefox/Camoufox needs more shared memory than the container default, same as compose's shm_size.
             - name: dshm
               mountPath: /dev/shm
+            # The account's browser profile is unpacked here for one run (packed at most 1 GB) and deleted after it.
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: dshm
           emptyDir:
             medium: Memory
             sizeLimit: 1Gi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 4Gi

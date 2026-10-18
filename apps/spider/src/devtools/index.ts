@@ -5,6 +5,8 @@ import { join } from 'node:path'
 
 import { type ProxyConfig } from '@automatedLinkedIn/contracts'
 
+import { browserExecutablePath } from '../scraping/browserPath'
+import { clearWebsiteFilter } from '../scraping/websiteFilter'
 import { openProxyCredentials } from '../tasks/credentials'
 import { type SavedProxy, listSavedProxies, loadLocalDbConfig } from './localDb'
 import { choose, prompt } from './prompt'
@@ -25,6 +27,10 @@ const toProxyConfig = (proxy: SavedProxy, keyBase64: string): ProxyConfig => {
 }
 
 const main = async () => {
+   // A worker started from this install may have left its allowlist filter in the browser's policies; here every address is
+   // allowed.
+   await clearWebsiteFilter(await browserExecutablePath()).catch(() => undefined)
+
    const { databaseUrl, encryptionKey } = loadLocalDbConfig()
    const proxies = await listSavedProxies(databaseUrl)
 

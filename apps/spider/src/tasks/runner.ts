@@ -17,10 +17,11 @@ import { RecordedDetectionSession } from '../recording/recordedDetectionSession'
 import { type Recorder } from '../recording/recorder'
 import { type AccountLock } from '../scraping/accountLock'
 import { type DetectionDriver, type DetectionSession, type SessionControl, type StorageState } from '../scraping/driver'
-import { AccountBusyError, TaskError } from '../scraping/errors'
+import { AccountBusyError, ShutdownError, TaskError } from '../scraping/errors'
 import { type HostPolicy } from '../scraping/policy'
 import { type HostRateLimiter } from '../scraping/rateLimiter'
 import { type RobotsGuard } from '../scraping/robots'
+import { type ProfileCheckout, type Profiles } from '../sessions/profiles'
 import { type SessionVault } from '../sessions/sessionVault'
 import { ObjectNotFoundError, type ObjectStore } from '../storage/store'
 import { type Handover } from '../takeover/waitForOwner'
@@ -56,6 +57,9 @@ export type RunnerDeps = {
    exitGeo?: (proxy: ProxyConfig) => Promise<ExitRegion>
    // The cookies an account keeps between runs. Without it nothing is restored or kept (the local devtools).
    sessions?: Pick<SessionVault, 'load' | 'save'>
+   // The account's whole browser profile between runs (.plan/account-browser-profile.md). Without it every run starts a new
+   // browser from `sessions`.
+   profiles?: Profiles
    // Keeps the run's browser for its owner while they finish a check; resolves when they are done, leave, or time is up.
    handover?: (taskId: string, control: SessionControl) => Promise<Handover>
    // Resolves to nothing when the run is not to be kept; the task still runs.
@@ -65,6 +69,9 @@ export type RunnerDeps = {
    workerBuild: string
    pause?: (ms: number) => Promise<void>
    now?: () => number
+   // Aborted when the worker must stop before the run is done. The run in progress is given back (ShutdownError) and no new
+   // one starts. A run that finishes first is answered and saved as usual.
+   signal?: AbortSignal
 }
 
 class TimedOut extends Error {}
@@ -97,8 +104,9 @@ export const exhaustedResult = (command: TaskCommand, workerBuild: string, now =
 
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
 
-const withLimit = <T>(work: Promise<T>, ms: number) => {
+const withLimit = <T>(work: Promise<T>, ms: number, signal?: AbortSignal) => {
    let timer: NodeJS.Timeout | undefined
+   let onAbort: (() => void) | undefined
 
    // The work is left to fail on its own once the browser is closed; its late error must not crash the worker.
    work.catch(() => undefined)
@@ -107,8 +115,21 @@ const withLimit = <T>(work: Promise<T>, ms: number) => {
       work,
       new Promise<never>((_resolve, reject) => {
          timer = setTimeout(() => reject(new TimedOut()), ms)
+
+         if (signal?.aborted) {
+            reject(new ShutdownError())
+         } else {
+            onAbort = () => reject(new ShutdownError())
+            signal?.addEventListener('abort', onAbort, { once: true })
+         }
       }),
-   ]).finally(() => clearTimeout(timer))
+   ]).finally(() => {
+      clearTimeout(timer)
+
+      if (onAbort) {
+         signal?.removeEventListener('abort', onAbort)
+      }
+   })
 }
 
 // One task from a command to a published result. The only code that touches the browser, the bucket and the queue for a task,
@@ -116,6 +137,10 @@ const withLimit = <T>(work: Promise<T>, ms: number) => {
 // for problems the broker should retry (the browser crashing, the task throwing), and answers by itself for everything a
 // retry cannot fix.
 export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
+   if (deps.signal?.aborted) {
+      throw new ShutdownError()
+   }
+
    const { publishResult, now = Date.now, pause = wait } = deps
    const startedAt = now()
    const doneKey = `${runPrefix(command)}/done.json`
@@ -252,14 +277,21 @@ export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
       return skipDuplicate()
    }
 
+   let profile: ProfileCheckout | undefined
+
    try {
+      profile = account && deps.profiles ? await deps.profiles.checkout(account.id) : undefined
+
       return await execute(command, task, input.data, account, deps, {
          startedAt,
          publish,
          now,
          pause,
+         profile,
       })
    } finally {
+      // The temporary profile folder goes with every run; what was worth keeping is already in the bucket.
+      await profile?.release().catch(() => undefined)
       // A lease that cannot be released expires on its own, and the outcome is already recorded.
       await lease?.release().catch(() => undefined)
    }
@@ -273,6 +305,7 @@ type Shared = {
    ) => Promise<void>
    now: () => number
    pause: (ms: number) => Promise<void>
+   profile: ProfileCheckout | undefined
 }
 
 const allowedState = <T extends Pick<StorageState, 'origins'> & { cookies: Array<{ domain: string }> }>(
@@ -290,7 +323,7 @@ const execute = async (
    input: unknown,
    account: TaskContext['account'],
    deps: RunnerDeps,
-   { publish, pause }: Shared
+   { publish, pause, profile }: Shared
 ) => {
    const prefix = runPrefix(command)
 
@@ -369,6 +402,10 @@ const execute = async (
          await deps.sessions?.save(account.id, state).catch(error => {
             console.error(`Could not keep the session of ${account.id}: ${(error as Error).message}`)
          })
+         // The browser is closed by now, so the profile folder is complete.
+         await profile?.keep().catch(error => {
+            console.error(`Could not keep the browser profile of ${account.id}: ${(error as Error).message}`)
+         })
       }
 
       await publish(outcome, artifacts)
@@ -404,8 +441,19 @@ const execute = async (
          exitIp = exit.ip
       }
 
-      // Only sites the operator allowed are put back, the same rule as when it was kept.
-      const saved = account && deps.sessions ? await deps.sessions.load(account.id) : undefined
+      // Only sites the operator allowed are put back, the same rule as when it was kept. A profile that came back already
+      // holds its session, so the saved one only fills a new profile.
+      const saved = account && deps.sessions && !profile?.restored ? await deps.sessions.load(account.id) : undefined
+
+      if (profile) {
+         recorder?.log(
+            'spider',
+            'info',
+            profile.restored
+               ? 'Opened the browser profile of this account'
+               : 'Started a new browser profile for this account'
+         )
+      }
 
       session = await deps.driver.open({
          ...(command.proxy && { proxy: command.proxy }),
@@ -413,6 +461,7 @@ const execute = async (
          ...(device && { identity: device }),
          ...(exitIp && { exitIp }),
          ...(saved && { storageState: allowedState(saved, deps.policy) }),
+         ...(profile && { profileDir: profile.dir }),
       })
    } catch (error) {
       // A proxy that does not work is an answer to this task, not a reason to retry it.
@@ -523,7 +572,7 @@ const execute = async (
    }
 
    try {
-      outcome = await withLimit(task.run(context, input), task.limits.timeoutMs)
+      outcome = await withLimit(task.run(context, input), task.limits.timeoutMs, deps.signal)
    } catch (error) {
       if (error instanceof TimedOut) {
          return finish(

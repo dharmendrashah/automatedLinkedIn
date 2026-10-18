@@ -519,6 +519,9 @@ model LinkedInAccount {
   // Id of the validation the account is waiting for. A result from the worker applies only if it carries this id.
   validationId          String?
   validationRequestedAt DateTime?
+  // When the daily sign-in check and the daily visit run next: a random time each day (.plan/account-daily-check.md).
+  nextCheckAt           DateTime?
+  nextBrowseAt          DateTime?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 

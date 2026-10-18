@@ -9,7 +9,7 @@ import { type DeviceIdentity } from '../identity/deviceIdentity'
 import { type ExitRegion, type KeptRegion } from '../identity/region'
 import { Recorder } from '../recording/recorder'
 import { type SessionControl } from '../scraping/driver'
-import { AccountBusyError, TaskError } from '../scraping/errors'
+import { AccountBusyError, ShutdownError, TaskError } from '../scraping/errors'
 import { type SavedState } from '../sessions/sessionVault'
 import { ObjectNotFoundError } from '../storage/store'
 import { type TaskDefinition, type TaskOutcome, VisitError, defineTask } from './defineTask'
@@ -446,6 +446,67 @@ describe('runTask', () => {
          verdict: 'TIMED_OUT',
       })
       expect(session.close).toHaveBeenCalled()
+   })
+
+   describe('when the worker is told to stop', () => {
+      const stopping = (task: ReturnType<typeof demo> = demo({ run: () => new Promise(() => undefined) })) => {
+         const stop = new AbortController()
+
+         return {
+            stop,
+            ...setup({
+               task,
+               overrides: { signal: stop.signal },
+            }),
+         }
+      }
+
+      it('should close the browser and hand the run back without an answer, so the next worker redoes it', async () => {
+         const { stop, run, session, deps, published } = stopping()
+         const running = run()
+
+         await vi.waitFor(() => expect(deps.driver.open).toHaveBeenCalled())
+         stop.abort()
+
+         await expect(running).rejects.toBeInstanceOf(ShutdownError)
+         expect(session.close).toHaveBeenCalled()
+         expect(published).toEqual([])
+      })
+
+      it('should not start a run once the worker is stopping', async () => {
+         const { stop, run, deps } = stopping()
+
+         stop.abort()
+
+         await expect(run()).rejects.toBeInstanceOf(ShutdownError)
+         expect(deps.driver.open).not.toHaveBeenCalled()
+      })
+
+      it('should not keep the browser profile of a run that was stopped, and still clear its folder and lease', async () => {
+         const stop = new AbortController()
+         const checkout = {
+            dir: '/tmp/profile-acc1',
+            restored: true,
+            keep: vi.fn(async () => undefined),
+            release: vi.fn(async () => undefined),
+         }
+         const { run, deps } = setup({
+            task: accountTask({ run: () => new Promise(() => undefined) }),
+            overrides: {
+               signal: stop.signal,
+               profiles: { checkout: vi.fn(async () => checkout) },
+            },
+         })
+         const running = run(accountCommand)
+
+         await vi.waitFor(() => expect(deps.driver.open).toHaveBeenCalled())
+         stop.abort()
+
+         await expect(running).rejects.toBeInstanceOf(ShutdownError)
+         expect(checkout.keep).not.toHaveBeenCalled()
+         expect(checkout.release).toHaveBeenCalledTimes(1)
+         expect(vi.mocked(lease.release)).toHaveBeenCalled()
+      })
    })
 
    it('should treat a verdict the task did not declare as a fault of the task, not as an answer', async () => {
@@ -1144,6 +1205,80 @@ describe('a task that needs an account', () => {
       }
 
       await expect(run(another)).rejects.toThrow('bucket unavailable')
+   })
+
+   describe('with the account browser profile', () => {
+      const withProfile = (task: ReturnType<typeof demo>, restored: boolean) => {
+         const checkout = {
+            dir: '/tmp/profile-acc1',
+            restored,
+            keep: vi.fn(async () => undefined),
+            release: vi.fn(async () => undefined),
+         }
+         const profiles = { checkout: vi.fn(async (_id: string) => checkout) }
+         const sessions = {
+            load: vi.fn(async (_id: string): Promise<SavedState> => ({
+               cookies: [],
+               origins: [],
+            })),
+            save: vi.fn(async (_id: string, _state: unknown) => undefined),
+         }
+
+         return {
+            checkout,
+            profiles,
+            sessions,
+            ...setup({
+               task,
+               overrides: {
+                  sessions,
+                  profiles,
+               },
+            }),
+         }
+      }
+
+      it('should open the profile of the account, and keep it after a run that passed its check', async () => {
+         const { run, deps, profiles, checkout } = withProfile(committing(), true)
+
+         await run(accountCommand)
+
+         expect(profiles.checkout).toHaveBeenCalledWith('acc1')
+         expect(vi.mocked(deps.driver.open).mock.calls[0]?.[0]).toMatchObject({ profileDir: '/tmp/profile-acc1' })
+         expect(vi.mocked(deps.driver.open).mock.calls[0]?.[0]).not.toHaveProperty('storageState')
+         expect(checkout.keep).toHaveBeenCalledTimes(1)
+         expect(checkout.release).toHaveBeenCalledTimes(1)
+      })
+
+      it('should fill a new profile from the saved session', async () => {
+         const { run, deps } = withProfile(accountTask(), false)
+
+         await run(accountCommand)
+
+         expect(vi.mocked(deps.driver.open).mock.calls[0]?.[0]).toHaveProperty('storageState')
+      })
+
+      it.each([
+         ['a task that did not ask for it', accountTask()],
+         ['a failed run', committing('FAILED')],
+      ])('should not keep the profile of %s, and still clear its folder', async (_name, task) => {
+         const { run, checkout } = withProfile(task, true)
+
+         await run(accountCommand)
+
+         expect(checkout.keep).not.toHaveBeenCalled()
+         expect(checkout.release).toHaveBeenCalledTimes(1)
+      })
+
+      it('should still answer, and clear the folder, when the profile cannot be kept', async () => {
+         const { run, checkout, published } = withProfile(committing(), true)
+
+         checkout.keep.mockRejectedValueOnce(new Error('bucket unavailable'))
+         await run(accountCommand)
+
+         expect(published[0]).toMatchObject({ status: 'SUCCEEDED' })
+         expect(checkout.release).toHaveBeenCalledTimes(1)
+      })
    })
 })
 

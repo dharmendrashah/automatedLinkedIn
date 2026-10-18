@@ -38,6 +38,11 @@ export class HostPolicy {
       return this.allowedHosts.some(allowed => name === allowed || name.endsWith(`.${allowed}`))
    }
 
+   // The allowed hosts as listed, for the browser's own filter.
+   public hosts() {
+      return [...this.allowedHosts]
+   }
+
    // Hosts the operator decided not to check robots.txt for. Everything else about them is still enforced.
    public exemptsRobots(host: string) {
       const name = host.toLowerCase()

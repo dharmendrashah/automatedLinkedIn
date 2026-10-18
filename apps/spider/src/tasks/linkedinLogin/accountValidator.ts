@@ -109,6 +109,9 @@ const POLL_LOOK_MS = 250
 // How long the code dialog gets to send the code by itself before Enter is pressed once.
 const AUTO_SUBMIT_MS = 3000
 
+// How long a token sign-in waits before it looks at the feed again.
+const TOKEN_SETTLE_MS = 5000
+
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
 
 type PageKind = 'feed' | 'checkpoint' | 'login' | 'restricted' | 'consent' | 'other'
@@ -278,7 +281,13 @@ export class AccountValidator {
       const kind = kindOf(landed)
 
       if (kind === 'feed') {
-         return this.valid(session)
+         if (await this.tokenHolds(session)) {
+            return this.valid(session)
+         }
+
+         await session.clearCookies('li_at')
+
+         return undefined
       }
 
       if (kind === 'consent') {
@@ -290,6 +299,15 @@ export class AccountValidator {
       }
 
       return kind === 'checkpoint' ? this.fail('NEEDS_REAUTH', MESSAGES.securityCheck) : undefined
+   }
+
+   // LinkedIn can let a token open the feed once and cancel the session a second later (recorded 2026-10-18). Only a
+   // second feed, a few seconds on, counts as signed in.
+   private async tokenHolds(session: LoginSession) {
+      await (this.options.sleep ?? wait)(TOKEN_SETTLE_MS)
+      await this.options.pause(this.host)
+
+      return kindOf(await this.loadFeed(session)) === 'feed'
    }
 
    // A refused token can make LinkedIn redirect the feed to itself until it stops answering, because the browser keeps

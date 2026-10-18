@@ -16,3 +16,12 @@ export class AccountBusyError extends Error {
       this.name = 'AccountBusyError'
    }
 }
+
+// The worker was told to stop before the task could finish. The task did nothing wrong and is not failed: the message goes
+// back to the queue at once, without using up a retry, for the next worker to run from the last good profile.
+export class ShutdownError extends Error {
+   public constructor() {
+      super('The worker is stopping')
+      this.name = 'ShutdownError'
+   }
+}

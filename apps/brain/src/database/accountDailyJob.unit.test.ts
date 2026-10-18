@@ -1,0 +1,171 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { AccountDailyJob } from './accountDailyJob'
+import { TaskRefusedError, TaskUnavailableError } from './taskErrors'
+
+const mocks = vi.hoisted(() => {
+   const requestCheck = vi.fn()
+
+   return {
+      findMany: vi.fn(),
+      updateMany: vi.fn(),
+      requestCheck,
+      requestTask: vi.fn(),
+      validation: { request: requestCheck },
+   }
+})
+
+vi.mock('./prisma.service', () => ({
+   PrismaService: {
+      client: {
+         linkedInAccount: {
+            findMany: mocks.findMany,
+            updateMany: mocks.updateMany,
+         },
+      },
+   },
+}))
+vi.mock('./linkedInAccountValidation.service', () => ({ LinkedInAccountValidationService: mocks.validation }))
+vi.mock('./task.service', () => ({ TaskService: { request: mocks.requestTask } }))
+
+// 15:30 in India.
+const NOW = new Date('2026-10-19T10:00:00Z')
+const EARLIER = new Date('2026-10-19T09:00:00Z')
+const TOMORROW_8_IN_INDIA = new Date('2026-10-20T02:30:00Z')
+
+const account = (extra: Record<string, unknown> = {}) => ({
+   id: 'acc1',
+   userId: 'u1',
+   status: 'ACTIVE',
+   nextCheckAt: EARLIER,
+   nextBrowseAt: EARLIER,
+   lastVerifiedAt: new Date('2026-10-18T20:00:00Z'),
+   proxyServers: [
+      {
+         detectedCountryCode: 'IN',
+         isPrimary: true,
+         status: 'ACTIVE',
+      },
+   ],
+   ...extra,
+})
+
+const run = () => AccountDailyJob.runDue(NOW, () => 0)
+const movedTo = (field: 'nextCheckAt' | 'nextBrowseAt') =>
+   mocks.updateMany.mock.calls.filter(([{ data }]) => field in data).map(([{ data }]) => data[field])
+
+describe('AccountDailyJob', () => {
+   beforeEach(() => {
+      vi.resetAllMocks()
+      vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      mocks.updateMany.mockResolvedValue({ count: 1 })
+      mocks.requestCheck.mockResolvedValue(true)
+      mocks.requestTask.mockResolvedValue({ id: 's1' })
+   })
+
+   it('should ask for the sign-in check and the visit that are due, then draw tomorrow in the account timezone', async () => {
+      mocks.findMany.mockResolvedValue([account()])
+
+      await expect(run()).resolves.toEqual({
+         checks: 1,
+         visits: 1,
+      })
+
+      expect(mocks.requestCheck).toHaveBeenCalledWith('acc1')
+      expect(mocks.requestTask).toHaveBeenCalledWith({
+         userId: 'u1',
+         task: 'linkedin-browse',
+         accountId: 'acc1',
+         trigger: 'automatic',
+      })
+      expect(movedTo('nextCheckAt')).toEqual([TOMORROW_8_IN_INDIA])
+      expect(movedTo('nextBrowseAt')).toEqual([TOMORROW_8_IN_INDIA])
+   })
+
+   it('should count a good sign-in of the last 12 hours as the check of the day', async () => {
+      mocks.findMany.mockResolvedValue([account({ lastVerifiedAt: new Date('2026-10-19T09:30:00Z') })])
+
+      await expect(run()).resolves.toMatchObject({ checks: 0 })
+
+      expect(mocks.requestCheck).not.toHaveBeenCalled()
+      expect(movedTo('nextCheckAt')).toEqual([TOMORROW_8_IN_INDIA])
+   })
+
+   it('should only draw a time, later today, for an account that has none yet', async () => {
+      mocks.findMany.mockResolvedValue([
+         account({
+            nextCheckAt: null,
+            nextBrowseAt: null,
+         }),
+      ])
+
+      await run()
+
+      expect(mocks.requestCheck).not.toHaveBeenCalled()
+      expect(mocks.requestTask).not.toHaveBeenCalled()
+      expect(movedTo('nextCheckAt')).toEqual([new Date('2026-10-19T10:01:00Z')])
+   })
+
+   it('should skip the visit of the day, without asking for it, when the last good sign-in is older than a day', async () => {
+      mocks.findMany.mockResolvedValue([account({ lastVerifiedAt: new Date('2026-10-18T09:00:00Z') })])
+
+      await expect(run()).resolves.toMatchObject({ visits: 0 })
+
+      expect(mocks.requestTask).not.toHaveBeenCalled()
+      expect(movedTo('nextBrowseAt')).toEqual([TOMORROW_8_IN_INDIA])
+   })
+
+   it('should check, but not visit, an account whose last check failed', async () => {
+      mocks.findMany.mockResolvedValue([account({ status: 'ERROR' })])
+
+      await expect(run()).resolves.toEqual({
+         checks: 1,
+         visits: 0,
+      })
+      expect(mocks.requestTask).not.toHaveBeenCalled()
+   })
+
+   it('should keep the time of a check or visit that could not be queued, so the next pass tries again', async () => {
+      mocks.findMany.mockResolvedValue([account()])
+      mocks.requestCheck.mockResolvedValue(false)
+      mocks.requestTask.mockRejectedValue(new TaskRefusedError('A LinkedIn task is already running.'))
+
+      await expect(run()).resolves.toEqual({
+         checks: 0,
+         visits: 0,
+      })
+      expect(mocks.updateMany).not.toHaveBeenCalled()
+      expect(console.error).not.toHaveBeenCalled()
+   })
+
+   it('should say nothing while the worker does not know the visit yet', async () => {
+      mocks.findMany.mockResolvedValue([account()])
+      mocks.requestTask.mockRejectedValue(new TaskUnavailableError())
+
+      await run()
+
+      expect(console.error).not.toHaveBeenCalled()
+   })
+
+   it('should use UTC for an account without a known proxy country', async () => {
+      mocks.findMany.mockResolvedValue([account({ proxyServers: [] })])
+
+      await run()
+
+      expect(movedTo('nextCheckAt')).toEqual([new Date('2026-10-20T08:00:00Z')])
+   })
+
+   it('should move a time only when no other run moved it first', async () => {
+      mocks.findMany.mockResolvedValue([account()])
+
+      await run()
+
+      expect(mocks.updateMany).toHaveBeenCalledWith({
+         where: {
+            id: 'acc1',
+            nextCheckAt: EARLIER,
+         },
+         data: { nextCheckAt: TOMORROW_8_IN_INDIA },
+      })
+   })
+})
