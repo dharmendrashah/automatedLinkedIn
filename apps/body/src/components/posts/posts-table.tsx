@@ -8,12 +8,12 @@ import { cn } from '@/lib/utils'
 import { postStatuses } from './post-statuses'
 import { type Post } from './types'
 
+import { LabelCell } from '../labels/label-cell'
 import { StatusBadge } from '../links/link-status-badge'
 import { RowActions } from '../links/row-actions'
 import { SelectAllHead, SelectCell } from '../links/selection'
 import { type Selection } from '../links/use-selection'
 import { StateRows } from '../links/state-rows'
-import { TagBadges } from '../links/tag-badges'
 
 const COLUMNS = 6
 
@@ -32,10 +32,23 @@ type Props = {
    onRestore: (post: Post) => void
    onOpen: (post: Post) => void
    onTag: (tag: string) => void
+   saveTags: (post: Post, tags: string[]) => Promise<unknown>
    selection: Selection
 }
 
-export const PostsTable = ({ posts, loading, error, busyId, onToggle, onArchive, onRestore, onOpen, onTag, selection }: Props) => (
+export const PostsTable = ({
+   posts,
+   loading,
+   error,
+   busyId,
+   onToggle,
+   onArchive,
+   onRestore,
+   onOpen,
+   onTag,
+   saveTags,
+   selection,
+}: Props) => (
    <div className="overflow-hidden rounded-lg border">
       <Table>
          <TableHeader className="bg-muted/50">
@@ -80,7 +93,13 @@ export const PostsTable = ({ posts, loading, error, busyId, onToggle, onArchive,
                         </span>
                      </TableCell>
                      <TableCell>
-                        <TagBadges tags={post.tags} onTag={onTag} />
+                        <LabelCell
+                           tags={post.tags}
+                           kind="posts"
+                           name={label(post)}
+                           save={tags => saveTags(post, tags)}
+                           onFilter={onTag}
+                        />
                      </TableCell>
                      <TableCell className="text-muted-foreground">{formatDate(post.createdAt)}</TableCell>
                      <TableCell>

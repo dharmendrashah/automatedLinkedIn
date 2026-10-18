@@ -13,6 +13,7 @@ import {
    estimateGraph,
    flagshipGraph,
    inputPickOf,
+   inputTake,
    nextScheduledRun,
    nextScheduledRuns,
    previewGraph,
@@ -49,6 +50,40 @@ describe('input picks', () => {
       const labelled = blockOf('input.posts').config.safeParse({ labels: ['Fintech '] }).data
 
       expect(labelled).toMatchObject({ labels: ['fintech'] })
+   })
+
+   it('should take All up to the block cap, keep old numbers, and estimate from the live count', () => {
+      expect(inputTake('input.profiles', { all: true })).toBe(200)
+      expect(inputTake('input.profiles', { howMany: 25 })).toBe(25)
+      expect(inputTake('input.companies', {})).toBe(10)
+
+      const graph: Graph = {
+         nodes: [
+            {
+               id: 'people',
+               type: 'input.profiles',
+               config: { all: true },
+               position: {
+                  x: 0,
+                  y: 0,
+               },
+            },
+         ],
+         edges: [],
+      }
+      const available = {
+         posts: 0,
+         profiles: 500,
+         companies: 0,
+      }
+
+      expect(estimateGraph(graph, available).nodes.people.items).toBe(200)
+      expect(
+         estimateGraph(graph, {
+            ...available,
+            byNode: { people: 23 },
+         }).nodes.people.items
+      ).toBe(23)
    })
 
    it('should start today and this week at local midnight, and Monday, in the block time zone', () => {

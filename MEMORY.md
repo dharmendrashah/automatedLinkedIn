@@ -184,6 +184,12 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-18: Inline labels and chip pickers (`.plan/inline-labels-and-chip-pickers.md`, done).
+   - Labels are edited in place with `LabelCell`, and picked with `LabelMultiSelect` / `LabelOptions` (shadcn Popover + Command, `cmdk`).
+   - Block list settings use `ChipsInput`, with `suggest` set in contracts (labels, titles, locations, links, domains).
+   - Input blocks have "All or up to" (`all`, capped at `INPUT_MAX` 50/200/100; new blocks start on All). `inputTake` is shared by the estimate and the executors.
+   - The estimate uses live counts per input block (`Available.byNode`).
+   - Gotcha: shadcn `ui/popover.tsx` and `ui/command.tsx` were written by hand from the new-york Radix source (unified `radix-ui` import), not by the CLI.
 - 2026-10-18: Labels and filtered input blocks (`.plan/labels-and-input-filters.md`, done). Migration `add_post_tags`.
    - Labels (`tags` in the database) go up to `LABEL_MAX` (20, contracts) of 30 characters, lowercased. They work on /profiles, /companies, /posts and list members: bulk add or remove (`labelMany`), labels on add (merged into links already saved), and filters for any or all of them plus when added (in the URL).
    - Suggestions come from `label.list` (`LabelService`, owner only).

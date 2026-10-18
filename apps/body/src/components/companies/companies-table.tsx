@@ -6,12 +6,12 @@ import { cn } from '@/lib/utils'
 
 import { type Company } from './types'
 
+import { LabelCell } from '../labels/label-cell'
 import { LinkStatusBadge } from '../links/link-status-badge'
 import { RowActions } from '../links/row-actions'
 import { SelectAllHead, SelectCell } from '../links/selection'
 import { type Selection } from '../links/use-selection'
 import { StateRows } from '../links/state-rows'
-import { TagBadges } from '../links/tag-badges'
 
 const COLUMNS = 7
 
@@ -31,6 +31,7 @@ type Props = {
    onArchive: (company: Company) => void
    onRestore: (company: Company) => void
    onTag: (tag: string) => void
+   saveTags: (company: Company, tags: string[]) => Promise<unknown>
    onOpen: (company: Company) => void
    selection: Selection
 }
@@ -44,6 +45,7 @@ export const CompaniesTable = ({
    onArchive,
    onRestore,
    onTag,
+   saveTags,
    onOpen,
    selection,
 }: Props) => (
@@ -101,7 +103,13 @@ export const CompaniesTable = ({
                      </span>
                   </TableCell>
                   <TableCell>
-                     <TagBadges tags={company.tags} onTag={onTag} />
+                     <LabelCell
+                        tags={company.tags}
+                        kind="companies"
+                        name={company.name ?? company.slug}
+                        save={tags => saveTags(company, tags)}
+                        onFilter={onTag}
+                     />
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(company.createdAt)}</TableCell>
                   <TableCell>

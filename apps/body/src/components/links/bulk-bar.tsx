@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button'
 import { type ReactNode, useState } from 'react'
 import { toast } from 'sonner'
 
-import { LabelPicker } from '../labels/label-picker'
+import { LabelMultiSelect } from '../labels/label-multi-select'
 import { type LabelKind, labelledNote } from '../labels/labels'
 import { type Selection } from './use-selection'
 
@@ -34,7 +34,7 @@ export const BulkBar = ({
       <div className="bg-muted/50 flex flex-wrap items-center gap-2 rounded-lg border p-2 text-sm">
          <span className="px-1 font-medium">{count} selected</span>
          <div className="w-64">
-            <LabelPicker id={`bulk-${kind}-labels`} kind={kind} value={labels} onChange={setLabels} placeholder="Labels" />
+            <LabelMultiSelect id={`bulk-${kind}-labels`} kind={kind} value={labels} onChange={setLabels} placeholder="Pick labels" />
          </div>
          <Button size="sm" variant="outline" disabled={labels.length === 0 || pending} onClick={() => apply({ add: labels })}>
             Add labels

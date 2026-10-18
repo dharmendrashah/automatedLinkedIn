@@ -87,12 +87,16 @@ describe('input blocks', () => {
       ).toBe('Up to 50 people · labelled acme and fintech · added this week · new only')
    })
 
-   it('should start new profile and company blocks on new ones only, in the owner time zone', () => {
+   it('should start new input blocks on All, profiles and companies on new ones only, in the owner time zone', () => {
       expect(startConfig('input.profiles', 'Asia/Kolkata')).toEqual({
          timeZone: 'Asia/Kolkata',
+         all: true,
          statuses: ['NEW'],
       })
-      expect(startConfig('input.posts', 'Asia/Kolkata')).toEqual({ timeZone: 'Asia/Kolkata' })
+      expect(startConfig('input.posts', 'Asia/Kolkata')).toEqual({
+         timeZone: 'Asia/Kolkata',
+         all: true,
+      })
       expect(startConfig('collect.commenters', 'Asia/Kolkata')).toEqual({})
    })
 })

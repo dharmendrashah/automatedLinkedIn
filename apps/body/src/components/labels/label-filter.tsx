@@ -1,7 +1,7 @@
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 
 import { type LabelMatch } from '../links/use-list-state'
-import { LabelPicker } from './label-picker'
+import { LabelMultiSelect } from './label-multi-select'
 import { type LabelKind } from './labels'
 
 type Props = {
@@ -17,7 +17,7 @@ type Props = {
 export const LabelFilter = ({ id, kind, tags, match, onTags, onMatch }: Props) => (
    <div className="flex flex-wrap items-center gap-2">
       <div className="w-64">
-         <LabelPicker id={id} kind={kind} value={tags} onChange={onTags} placeholder="Filter by labels" />
+         <LabelMultiSelect id={id} kind={kind} value={tags} onChange={onTags} placeholder="Filter by labels" />
       </div>
       {tags.length > 1 ? (
          <ToggleGroup

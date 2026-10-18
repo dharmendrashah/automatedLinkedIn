@@ -29,10 +29,10 @@ import {
    workStatus,
 } from './types'
 
+import { LabelCell } from '../labels/label-cell'
 import { SelectAllHead, SelectCell } from '../links/selection'
 import { type Selection } from '../links/use-selection'
 import { StateRows } from '../links/state-rows'
-import { TagBadges } from '../links/tag-badges'
 
 const COLUMNS = 5
 
@@ -51,6 +51,7 @@ type Props = {
    emptyText: string
    onOpen: (member: InboxMember) => void
    onTag: (tag: string) => void
+   saveTags: (member: InboxMember, tags: string[]) => Promise<unknown>
    onStatus: (member: InboxMember, status: MemberStatus) => void
    onMessage: (member: InboxMember) => void
    onMove: (member: InboxMember, list: ListSummary) => void
@@ -76,6 +77,7 @@ export const InboxTable = ({
    emptyText,
    onOpen,
    onTag,
+   saveTags,
    onStatus,
    onMessage,
    onMove,
@@ -149,11 +151,15 @@ export const InboxTable = ({
                                  ) : null}
                               </p>
                            ) : null}
-                           {member.tags.length > 0 ? (
-                              <div className="mt-1">
-                                 <TagBadges tags={member.tags} onTag={onTag} />
-                              </div>
-                           ) : null}
+                           <div className="mt-1">
+                              <LabelCell
+                                 tags={member.tags}
+                                 kind="people"
+                                 name={name}
+                                 save={tags => saveTags(member, tags)}
+                                 onFilter={onTag}
+                              />
+                           </div>
                         </TableCell>
                         <TableCell>
                            <Badge variant="outline" className={cn(FITS[member.state].className)}>

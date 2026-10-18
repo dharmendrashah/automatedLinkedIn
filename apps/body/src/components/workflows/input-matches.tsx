@@ -3,9 +3,15 @@ import { CircleAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 import { trpc } from '../../trpc'
-import { INPUT_KINDS, type InputType } from './input-kinds'
+import { INPUT_CAPS, INPUT_KINDS, type InputType } from './input-kinds'
 import { timeOf } from './run-sentence'
 import { type ConfigValue } from './types'
+
+const SINGULAR: Record<InputType, string> = {
+   'input.posts': 'post',
+   'input.profiles': 'profile',
+   'input.companies': 'company',
+}
 
 // What the input block would take right now, so an empty or too narrow slice shows before a run.
 export const InputMatches = ({
@@ -37,7 +43,9 @@ export const InputMatches = ({
    }
 
    const { count, since } = matches.data
-   const howMany = Number(values.howMany ?? 0)
+   const all = values.all === true
+   const takes = all ? INPUT_CAPS[type] : Number(values.howMany ?? 0)
+   const one = count === 1
    const lastRun =
       values.added === 'lastRun'
          ? since
@@ -45,9 +53,9 @@ export const InputMatches = ({
             : 'no run finished yet, so the first one takes all that match'
          : null
    const parts = [
-      `${count} ${noun}${type === 'input.posts' ? ' waiting' : ''} match now`,
+      `${count} ${one ? SINGULAR[type] : noun}${type === 'input.posts' ? ' waiting' : ''} ${one ? 'matches' : 'match'} now`,
       lastRun,
-      count > howMany ? `this block takes ${howMany}` : null,
+      count > takes ? `this block takes the first ${takes}` : all ? 'this block takes them all' : null,
    ].filter(Boolean)
 
    return (

@@ -17,7 +17,7 @@ import { readableError } from '@/lib/trpc-error'
 import { Ban, ListPlus, UserPlus } from 'lucide-react'
 import { useState } from 'react'
 
-import { LabelPicker } from '../labels/label-picker'
+import { LabelCell } from '../labels/label-cell'
 import { isLinkStatus, linkStatuses } from '../links/link-statuses'
 import { isMemberStatus, memberStatuses } from '../lists/types'
 import { Section } from './person-sections'
@@ -91,12 +91,17 @@ export const Workspace = ({ person }: { person: PersonDetail }) => {
                      In the list <span className="font-medium">{member.list.name}</span>
                   </span>
                </div>
-               <LabelPicker
-                  id={`labels-member-${member.id}`}
+               <LabelCell
+                  tags={member.tags}
                   kind="people"
-                  value={member.tags}
-                  onChange={tags => updateMember.mutate({ id: member.id, tags })}
-                  placeholder="Add a label"
+                  name={name}
+                  save={async tags => {
+                     await updateMember.mutateAsync({
+                        id: member.id,
+                        tags,
+                     })
+                     await utils.person.detail.invalidate({ slug: person.slug })
+                  }}
                />
                <div className="flex flex-wrap gap-2">
                   <Select
@@ -189,12 +194,17 @@ export const Workspace = ({ person }: { person: PersonDetail }) => {
                   </Button>
                </div>
                <Notes key={`profile-${profile.id}`} id={`notes-profile-${profile.id}`} value={profile.notes} onSave={notes => updateProfile.mutate({ id: profile.id, notes })} />
-               <LabelPicker
-                  id={`labels-profile-${profile.id}`}
+               <LabelCell
+                  tags={profile.tags}
                   kind="profiles"
-                  value={profile.tags}
-                  onChange={tags => updateProfile.mutate({ id: profile.id, tags })}
-                  placeholder="Add a label"
+                  name={name}
+                  save={async tags => {
+                     await updateProfile.mutateAsync({
+                        id: profile.id,
+                        tags,
+                     })
+                     await utils.person.detail.invalidate({ slug: person.slug })
+                  }}
                />
             </div>
          ) : null}

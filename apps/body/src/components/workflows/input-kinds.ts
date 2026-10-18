@@ -9,4 +9,11 @@ export const INPUT_KINDS = {
 
 export type InputType = keyof typeof INPUT_KINDS
 
+// The most "All" takes per block; the same numbers are INPUT_MAX in contracts, which body does not load at runtime.
+export const INPUT_CAPS: Record<InputType, number> = {
+   'input.posts': 50,
+   'input.profiles': 200,
+   'input.companies': 100,
+}
+
 export const isInputType = (type: string): type is InputType => type in INPUT_KINDS

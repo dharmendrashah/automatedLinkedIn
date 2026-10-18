@@ -15,6 +15,7 @@ import {
 } from '@automatedLinkedIn/contracts'
 
 import { ConflictError, uniqueOr } from './conflict'
+import { InputPickService } from './inputPick.service'
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
 import { LinkedInProfileService } from './linkedInProfile.service'
@@ -358,17 +359,19 @@ export class WorkflowService {
       return count > 0
    }
 
-   public static async estimate(userId: string, graph: Graph, preview: boolean) {
-      const [posts, profiles, companies] = await Promise.all([
+   public static async estimate(userId: string, graph: Graph, preview: boolean, workflowId: string | null = null) {
+      const [posts, profiles, companies, byNode] = await Promise.all([
          LinkedInPostService.countWaiting(userId),
          LinkedInProfileService.countActive(userId),
          LinkedInCompanyService.countActive(userId),
+         InputPickService.counts(userId, graph, workflowId),
       ])
 
       const available = {
          posts,
          profiles,
          companies,
+         byNode,
       }
 
       return {
@@ -403,7 +406,13 @@ export class WorkflowService {
          const node = estimate.nodes[nodeId]
 
          if (other && node) {
-            const cost = (await WorkflowService.withCalls(userId, other, available, new Set([...seen, workflowId])))
+            // The per-block counts are this graph's; the other workflow's block ids may repeat them.
+            const totals = {
+               posts: available.posts,
+               profiles: available.profiles,
+               companies: available.companies,
+            }
+            const cost = (await WorkflowService.withCalls(userId, other, totals, new Set([...seen, workflowId])))
                .totalMicros
 
             estimate.nodes[nodeId] = {
@@ -458,7 +467,7 @@ export class WorkflowService {
       }
 
       const runGraph = trigger === 'PREVIEW' ? previewGraph(graph) : graph
-      const { posts, totalMicros } = await WorkflowService.estimate(userId, runGraph, false)
+      const { posts, totalMicros } = await WorkflowService.estimate(userId, runGraph, false, workflowId)
       const fromOutside = trigger === 'API' || trigger === 'WORKFLOW'
 
       if (usesPosts(graph) && posts === 0 && !fromOutside) {

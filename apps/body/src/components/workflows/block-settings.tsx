@@ -13,9 +13,9 @@ import { BlockOutput } from './block-output'
 import { INPUT_KINDS, isInputType } from './input-kinds'
 import { InputMatches } from './input-matches'
 import { ScheduleSettings } from './schedule-settings'
-import { Chips, SearchPick, Stepper, TagInput } from './setting-inputs'
+import { Chips, ChipsInput, SearchPick, Stepper } from './setting-inputs'
 
-import { LabelPicker } from '../labels/label-picker'
+import { LabelMultiSelect } from '../labels/label-multi-select'
 
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { type FlowNode } from './graph-convert'
@@ -42,8 +42,9 @@ const textOf = (value: ConfigValue | undefined) => (Array.isArray(value) ? value
 
 const SHORT_LIST = 4
 
-// The safety cap of "All"; the same number lives in the contracts package, which body does not load at runtime.
-const ALL_CAP = '1,000'
+// The safety cap of "All" when a block sets none; the same number lives in the contracts package, which body does not
+// load at runtime.
+const ALL_CAP = 1_000
 
 const KINDS: Record<string, string> = {
    post: 'posts',
@@ -99,14 +100,15 @@ export const BlockSettings = ({ node, workflowId, problems, icps, workflows, par
          const words = Array.isArray(value) ? value : []
 
          return item.suggest === 'labels' ? (
-            <LabelPicker
+            <LabelMultiSelect
                id={id}
-               kind={isInputType(block.type) ? INPUT_KINDS[block.type] : undefined}
+               kind={isInputType(block.type) ? INPUT_KINDS[block.type] : 'people'}
                value={words}
                onChange={next => onChange(item.key, next)}
+               placeholder="Pick or create labels"
             />
          ) : (
-            <TagInput id={id} value={words} onChange={next => onChange(item.key, next)} />
+            <ChipsInput id={id} kind={item.suggest} value={words} onChange={next => onChange(item.key, next)} />
          )
       }
 
@@ -148,7 +150,7 @@ export const BlockSettings = ({ node, workflowId, problems, icps, workflows, par
                <Chips
                   id={id}
                   options={[
-                     { value: 'all', label: `All (up to ${ALL_CAP})` },
+                     { value: 'all', label: `All (up to ${(item.allCap ?? ALL_CAP).toLocaleString('en-US')})` },
                      { value: 'some', label: 'Up to a number' },
                   ]}
                   isOn={option => (option === 'all') === all}
@@ -224,8 +226,14 @@ export const BlockSettings = ({ node, workflowId, problems, icps, workflows, par
             {item.hint ? <p className="text-muted-foreground text-xs">{item.hint}</p> : null}
          </div>
       )
-   const main = block.fields.filter(item => !item.advanced)
-   const more = block.fields.filter(item => item.advanced)
+   const shown = (item: Field) => {
+      const needed = item.showWhen
+      const list = needed ? values[needed.key] : undefined
+
+      return !needed || (Array.isArray(list) && list.length >= needed.atLeast)
+   }
+   const main = block.fields.filter(item => !item.advanced && shown(item))
+   const more = block.fields.filter(item => item.advanced && shown(item))
    const isOn = (preset: Block['presets'][number]) =>
       Object.entries(preset.config).every(([key, wanted]) => JSON.stringify(values[key]) === JSON.stringify(wanted))
    const presets =

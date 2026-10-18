@@ -6,12 +6,12 @@ import { cn } from '@/lib/utils'
 
 import { type Profile } from './types'
 
+import { LabelCell } from '../labels/label-cell'
 import { LinkStatusBadge } from '../links/link-status-badge'
 import { RowActions } from '../links/row-actions'
 import { SelectAllHead, SelectCell } from '../links/selection'
 import { type Selection } from '../links/use-selection'
 import { StateRows } from '../links/state-rows'
-import { TagBadges } from '../links/tag-badges'
 
 const COLUMNS = 6
 
@@ -28,11 +28,24 @@ type Props = {
    onArchive: (profile: Profile) => void
    onRestore: (profile: Profile) => void
    onTag: (tag: string) => void
+   saveTags: (profile: Profile, tags: string[]) => Promise<unknown>
    onOpen: (profile: Profile) => void
    selection: Selection
 }
 
-export const ProfilesTable = ({ profiles, loading, error, busyId, onEdit, onArchive, onRestore, onTag, onOpen, selection }: Props) => (
+export const ProfilesTable = ({
+   profiles,
+   loading,
+   error,
+   busyId,
+   onEdit,
+   onArchive,
+   onRestore,
+   onTag,
+   saveTags,
+   onOpen,
+   selection,
+}: Props) => (
    <div className="overflow-hidden rounded-lg border">
       <Table>
          <TableHeader className="bg-muted/50">
@@ -74,7 +87,13 @@ export const ProfilesTable = ({ profiles, loading, error, busyId, onEdit, onArch
                      </span>
                   </TableCell>
                   <TableCell>
-                     <TagBadges tags={profile.tags} onTag={onTag} />
+                     <LabelCell
+                        tags={profile.tags}
+                        kind="profiles"
+                        name={profile.fullName ?? profile.slug}
+                        save={tags => saveTags(profile, tags)}
+                        onFilter={onTag}
+                     />
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(profile.createdAt)}</TableCell>
                   <TableCell>

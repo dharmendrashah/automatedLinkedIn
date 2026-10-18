@@ -33,6 +33,15 @@ export const Posts = () => {
    const restore = trpc.linkedInPost.restore.useMutation({ onSuccess: refresh })
    const labelMany = trpc.linkedInPost.labelMany.useMutation({ onSuccess: refresh })
    const archiveMany = trpc.linkedInPost.archiveMany.useMutation({ onSuccess: refresh })
+   // Separate from `update`, so saving labels does not show the row's status as busy.
+   const updateTags = trpc.linkedInPost.update.useMutation()
+   const saveTags = async (post: Post, tags: string[]) => {
+      await updateTags.mutateAsync({
+         id: post.id,
+         tags,
+      })
+      await Promise.all([utils.linkedInPost.list.invalidate(), utils.label.list.invalidate()])
+   }
 
    const busyId = [update, archive, restore].find(mutation => mutation.isPending)?.variables?.id
    const actionError = [update, archive, restore, labelMany, archiveMany].find(action => action.error)?.error?.message
@@ -77,6 +86,7 @@ export const Posts = () => {
             onRestore={post => restore.mutate({ id: post.id })}
             onOpen={post => drawer.show('post', post.slug)}
             onTag={state.addTag}
+            saveTags={saveTags}
             selection={selection}
          />
 

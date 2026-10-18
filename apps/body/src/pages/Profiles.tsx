@@ -36,6 +36,14 @@ export const Profiles = () => {
    const restore = trpc.linkedInProfile.restore.useMutation({ onSuccess: refresh })
    const labelMany = trpc.linkedInProfile.labelMany.useMutation({ onSuccess: refresh })
    const archiveMany = trpc.linkedInProfile.archiveMany.useMutation({ onSuccess: refresh })
+   const update = trpc.linkedInProfile.update.useMutation()
+   const saveTags = async (profile: Profile, tags: string[]) => {
+      await update.mutateAsync({
+         id: profile.id,
+         tags,
+      })
+      await Promise.all([utils.linkedInProfile.list.invalidate(), utils.label.list.invalidate()])
+   }
 
    const busyId = archive.isPending ? archive.variables?.id : restore.isPending ? restore.variables?.id : undefined
    const actionError = [archive, restore, labelMany, archiveMany].find(action => action.error)?.error?.message
@@ -73,6 +81,7 @@ export const Profiles = () => {
             onArchive={profile => archive.mutate({ id: profile.id })}
             onRestore={profile => restore.mutate({ id: profile.id })}
             onTag={state.addTag}
+            saveTags={saveTags}
             onOpen={profile => drawer.show('person', profile.slug)}
             selection={selection}
          />

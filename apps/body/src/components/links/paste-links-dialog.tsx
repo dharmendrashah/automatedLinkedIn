@@ -16,7 +16,7 @@ import { readableError } from '@/lib/trpc-error'
 import { Loader2, Plus } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 
-import { LabelPicker } from '../labels/label-picker'
+import { LabelMultiSelect } from '../labels/label-multi-select'
 import { type LabelKind } from '../labels/labels'
 
 export type PasteMutation = {
@@ -111,7 +111,7 @@ export const PasteLinksDialog = ({
 
                <div className="grid gap-2">
                   <Label htmlFor="pasted-labels">Labels for everything you add (optional)</Label>
-                  <LabelPicker id="pasted-labels" kind={kind} value={labels} onChange={setLabels} placeholder="such as acme:fintech" />
+                  <LabelMultiSelect id="pasted-labels" kind={kind} value={labels} onChange={setLabels} placeholder="Pick or create labels" />
                   <p className="text-muted-foreground text-xs">Links you already have get these labels added to theirs.</p>
                </div>
 

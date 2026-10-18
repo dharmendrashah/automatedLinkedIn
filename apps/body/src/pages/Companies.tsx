@@ -35,6 +35,14 @@ export const Companies = () => {
    const restore = trpc.linkedInCompany.restore.useMutation({ onSuccess: refresh })
    const labelMany = trpc.linkedInCompany.labelMany.useMutation({ onSuccess: refresh })
    const archiveMany = trpc.linkedInCompany.archiveMany.useMutation({ onSuccess: refresh })
+   const update = trpc.linkedInCompany.update.useMutation()
+   const saveTags = async (company: Company, tags: string[]) => {
+      await update.mutateAsync({
+         id: company.id,
+         tags,
+      })
+      await Promise.all([utils.linkedInCompany.list.invalidate(), utils.label.list.invalidate()])
+   }
 
    const busyId = archive.isPending ? archive.variables?.id : restore.isPending ? restore.variables?.id : undefined
    const actionError = [archive, restore, labelMany, archiveMany].find(action => action.error)?.error?.message
@@ -72,6 +80,7 @@ export const Companies = () => {
             onArchive={company => archive.mutate({ id: company.id })}
             onRestore={company => restore.mutate({ id: company.id })}
             onTag={state.addTag}
+            saveTags={saveTags}
             onOpen={company => drawer.show('company', company.slug)}
             selection={selection}
          />

@@ -194,17 +194,25 @@ export const newNodeId = (type: string, nodes: { id: string }[]) => {
    return `${base}-${index}`
 }
 
-// What a new block starts with: a schedule and "added today" use the owner's time zone, and profiles and companies take
-// only new ones. Blocks saved before keep taking every status.
+// What a new block starts with: a schedule and "added today" use the owner's time zone, input blocks take all that match,
+// and profiles and companies take only new ones. Blocks saved before keep their number and every status.
 export const startConfig = (type: string, timeZone: string = browserTimeZone()): GraphNode['config'] => {
    if (type === 'input.profiles' || type === 'input.companies') {
       return {
          timeZone,
+         all: true,
          statuses: ['NEW'],
       }
    }
 
-   return type === 'trigger.schedule' || type === 'input.posts' ? { timeZone } : {}
+   if (type === 'input.posts') {
+      return {
+         timeZone,
+         all: true,
+      }
+   }
+
+   return type === 'trigger.schedule' ? { timeZone } : {}
 }
 
 const show = (value: ConfigValue | undefined) => (Array.isArray(value) ? value.join(', ') : String(value ?? ''))

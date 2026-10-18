@@ -176,7 +176,7 @@ export const workflow = router({
          const graph = input.graph ?? (saved ? readGraph(saved.graph) : null)
          const draft = present(graph, MISSING)
          const [estimate, problems] = await Promise.all([
-            WorkflowService.estimate(ctx.user.id, draft, input.preview),
+            WorkflowService.estimate(ctx.user.id, draft, input.preview, saved?.id ?? null),
             WorkflowService.problems(ctx.user.id, draft, input.id ?? null),
          ])
 

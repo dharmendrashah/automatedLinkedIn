@@ -28,7 +28,7 @@ import {
    WorkflowRunService,
 } from 'database'
 
-import { ALL_CAP, ELSE_SOURCES, type GraphNode, inputPickOf } from '@automatedLinkedIn/contracts'
+import { ALL_CAP, ELSE_SOURCES, type GraphNode, inputPickOf, inputTake } from '@automatedLinkedIn/contracts'
 
 import {
    ENRICH_BATCH,
@@ -129,7 +129,7 @@ const inputPosts = async (ctx: Context): Promise<StepResult> => {
            id: null,
            expandedUrl: null,
         }))
-      : await LinkedInPostService.waiting(ctx.run.userId, numberIn(configOf(ctx.node), 'howMany'), {
+      : await LinkedInPostService.waiting(ctx.run.userId, inputTake('input.posts', ctx.node.config), {
            ...(await pickFilter(ctx, 'input.posts')),
            statuses: [],
         })
@@ -170,7 +170,7 @@ const inputProfiles = async (ctx: Context): Promise<StepResult> => {
          : (
               await LinkedInProfileService.pick(
                  ctx.run.userId,
-                 numberIn(config, 'howMany'),
+                 inputTake('input.profiles', ctx.node.config),
                  await pickFilter(ctx, 'input.profiles')
               )
            ).map(profile =>
@@ -203,7 +203,7 @@ const inputCompanies = async (ctx: Context): Promise<StepResult> => {
       : (
            await LinkedInCompanyService.pick(
               ctx.run.userId,
-              numberIn(configOf(ctx.node), 'howMany'),
+              inputTake('input.companies', ctx.node.config),
               await pickFilter(ctx, 'input.companies')
            )
         ).map(company => ({

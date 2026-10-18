@@ -157,6 +157,14 @@ export const Lists = () => {
          void utils.label.list.invalidate()
       },
    })
+   const updateMember = trpc.workflowList.updateMember.useMutation()
+   const saveTags = async (member: InboxMember, tags: string[]) => {
+      await updateMember.mutateAsync({
+         id: member.id,
+         tags,
+      })
+      await Promise.all([utils.workflowList.inbox.invalidate(), utils.label.list.invalidate()])
+   }
 
    // People added after the owner leaves are marked new on the next visit.
    useEffect(() => {
@@ -441,6 +449,7 @@ export const Lists = () => {
                   emptyText={EMPTY[inboxView]}
                   onOpen={open}
                   onTag={tag => (tags.includes(tag) ? undefined : filtersChange(() => setTags([...tags, tag])))}
+                  saveTags={saveTags}
                   onStatus={(member, status) => actions.changeStatus([member], status)}
                   onMessage={actions.message}
                   onMove={(member, list) => actions.move([member], list)}
