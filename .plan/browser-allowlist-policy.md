@@ -66,6 +66,6 @@ Open questions: none.
    - e2e (`websiteFilter.e2e.test.ts`, real Camoufox in a copy-on-write clone of the browser): direct and redirected visits to another host are refused before reaching it; an asset is served from the cache after the profile is reopened.
 - Deviations:
    - Firefox ignores `browser.policies.alternatePath` in Camoufox (tested), so the filter lives in the install's one `policies.json`, shared by every launch of that install. The local tool clears it at start; a worker and the local tool must not share one install.
-   - Not run on Linux: the worker image's folder layout is assumed (`distribution/` next to the binary); the read-back check falls back to `route` if it is wrong.
+   - Checked on Linux inside the real worker image (built from `apps/spider/Dockerfile`, run as `node`; an arm64 build on this Mac, the layout and the code are the same for amd64): `distribution/policies.json` sits next to `camoufox-bin`, is owned by `node`, and the worker's own compiled `chooseBlocking` chose `browser`; a real Linux browser loaded the allowed host, refused another host directly and behind a redirect (no request reached it), and the asset was served from the cache on the second start (0 requests). The check script was run by hand and is not in the repo.
 - Follow-ups:
    - After deploy, check the worker log for "The allowlist is checked on every request" (the fallback), and a recording of a sign-in for the captcha frame and the cache hits.
