@@ -3,6 +3,7 @@ import { SiteHeader } from '@/components/site-header'
 import { TakeoverBanner } from '@/components/takeover/takeover-banner'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { Outlet } from 'react-router'
+import { Toaster } from 'sonner'
 
 import { RequireAuth } from '../auth/RequireAuth'
 
@@ -28,6 +29,7 @@ export const DashboardLayout = () => (
                </div>
             </div>
          </SidebarInset>
+         <Toaster position="bottom-center" />
       </SidebarProvider>
    </RequireAuth>
 )

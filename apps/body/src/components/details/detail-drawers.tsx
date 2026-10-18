@@ -18,11 +18,13 @@ type Props = {
    // What the page's table lists, in order, for Previous and Next.
    kind: DetailKind
    order: string[]
+   // Stays open beside the list while the owner keeps working it, instead of covering the page.
+   docked?: boolean
 }
 
 // The one detail drawer of a page: a person, a company or a post, like their LinkedIn page. A person opened from a
 // company or post replaces it, with a way back.
-export const DetailDrawers = ({ kind, order }: Props) => {
+export const DetailDrawers = ({ kind, order, docked = false }: Props) => {
    const { open, back, show, close } = useDetailDrawer()
    const index = open?.kind === kind ? order.indexOf(open.slug) : -1
    const previous = index > 0 ? order[index - 1] : undefined
@@ -30,8 +32,16 @@ export const DetailDrawers = ({ kind, order }: Props) => {
    const toPerson = (slug: string) => (open ? show('person', slug, open) : undefined)
 
    return (
-      <Drawer direction="right" open={Boolean(open)} onOpenChange={isOpen => (isOpen ? undefined : close())}>
-         <DrawerContent className={floatingDrawer('sm:max-w-xl')}>
+      <Drawer
+         direction="right"
+         modal={!docked}
+         open={Boolean(open)}
+         onOpenChange={isOpen => (isOpen ? undefined : close())}
+      >
+         <DrawerContent
+            className={floatingDrawer('sm:max-w-xl')}
+            onInteractOutside={docked ? event => event.preventDefault() : undefined}
+         >
             <div className="grid gap-3 overflow-y-auto p-4">
                {back ? (
                   <Button variant="ghost" size="sm" className="justify-self-start" onClick={() => show(back.kind, back.slug)}>

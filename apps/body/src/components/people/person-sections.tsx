@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge'
+import { timeAgo } from '@/lib/time-ago'
 import { BriefcaseBusiness, GraduationCap, MessageSquare, Sparkles, ThumbsUp, Building2, Target } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 
@@ -100,12 +101,12 @@ const STATE_TONE: Record<Member['state'], string> = {
 }
 
 const STATE_LABEL: Record<Member['state'], string> = {
-   QUALIFIED: 'Qualified',
+   QUALIFIED: 'Strong fit',
    MAYBE: 'Maybe',
-   UNSCORED: 'Not scored',
+   UNSCORED: 'No score yet',
 }
 
-// How well the person fits: the score a workflow gave and the rules behind it.
+// How well the person fits: the score a workflow gave and the reasons behind it, with the points each gave.
 export const Fit = ({ member }: { member: Member }) => (
    <Section title="Fit" className="bg-muted/30">
       <div className="flex items-center gap-3">
@@ -121,20 +122,23 @@ export const Fit = ({ member }: { member: Member }) => (
                </div>
             </div>
          ) : (
-            <span className="text-muted-foreground flex-1 text-sm">No workflow scored this person.</span>
+            <span className="text-muted-foreground flex-1 text-sm">No score yet: no workflow scored this person.</span>
          )}
          <Badge variant="outline" className={cn('border-transparent', STATE_TONE[member.state])}>
             {STATE_LABEL[member.state]}
          </Badge>
       </div>
-      {member.matched.length > 0 ? (
-         <div className="flex flex-wrap gap-1.5">
-            {member.matched.map(rule => (
-               <Badge key={rule} variant="secondary">
-                  {rule}
-               </Badge>
+      {member.reasons.length > 0 ? (
+         <ul className="grid gap-1 text-sm">
+            {member.reasons.map(reason => (
+               <li key={reason.label} className="flex justify-between gap-2">
+                  <span>{reason.label}</span>
+                  <span className="text-muted-foreground tabular-nums">+{reason.points}</span>
+               </li>
             ))}
-         </div>
+         </ul>
+      ) : member.score !== null ? (
+         <p className="text-muted-foreground text-xs">Reasons appear on the next run.</p>
       ) : null}
    </Section>
 )
@@ -158,22 +162,24 @@ const SIGNALS: Record<Member['signals'][number]['type'], { icon: ReactNode; labe
    },
 }
 
-// Why a workflow found the person, newest reason first as the workflow kept them.
+// Why a workflow found the person: every signal, newest first.
 export const WhyFound = ({ signals }: { signals: Member['signals'] }) => (
    <Section title="Why we found them">
       <ul className="grid gap-3">
-         {signals.map((signal, index) => (
-            <li key={`${signal.type}-${signal.via}-${index}`} className="grid grid-cols-[auto_1fr] gap-2 text-sm">
-               <span className="text-muted-foreground mt-0.5">{SIGNALS[signal.type].icon}</span>
-               <div className="grid gap-0.5">
-                  <a className="font-medium underline-offset-4 hover:underline" href={signal.via} target="_blank" rel="noreferrer noopener">
-                     {SIGNALS[signal.type].label}
-                  </a>
-                  {signal.excerpt ? <q className="text-muted-foreground text-xs">{signal.excerpt}</q> : null}
-                  {signal.at ? <span className="text-muted-foreground text-xs">{new Date(signal.at).toLocaleDateString()}</span> : null}
-               </div>
-            </li>
-         ))}
+         {[...signals]
+            .sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''))
+            .map((signal, index) => (
+               <li key={`${signal.type}-${signal.via}-${index}`} className="grid grid-cols-[auto_1fr] gap-2 text-sm">
+                  <span className="text-muted-foreground mt-0.5">{SIGNALS[signal.type].icon}</span>
+                  <div className="grid gap-0.5">
+                     <a className="font-medium underline-offset-4 hover:underline" href={signal.via} target="_blank" rel="noreferrer noopener">
+                        {SIGNALS[signal.type].label}
+                     </a>
+                     {signal.excerpt ? <q className="text-muted-foreground text-xs">{signal.excerpt}</q> : null}
+                     {signal.at ? <span className="text-muted-foreground text-xs">{timeAgo(signal.at)}</span> : null}
+                  </div>
+               </li>
+            ))}
       </ul>
    </Section>
 )

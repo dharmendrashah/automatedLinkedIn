@@ -1,9 +1,9 @@
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
-import { toCsv } from 'core'
+import { readSignals, toCsv } from 'core'
 
-import { WorkflowListService } from 'database'
+import { INBOX_VIEWS, InboxService, WorkflowListService } from 'database'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -18,7 +18,58 @@ const listName = z.string().trim().min(1).max(100)
 const state = z.enum(['QUALIFIED', 'MAYBE'])
 const viewState = z.enum(['QUALIFIED', 'MAYBE', 'UNSCORED'])
 const label = z.string().trim().toLowerCase().min(1).max(30)
-const status = z.enum(['NEW', 'IN_REVIEW', 'DONE', 'NOT_A_FIT'])
+const status = z.enum(['NEW', 'CONTACTED', 'REPLIED', 'NOT_A_FIT'])
+const ids = z.array(z.string().min(1)).min(1).max(200)
+const optionalText = (max: number) => z.string().max(max).nullable()
+const when = z.coerce.date().nullable()
+
+const statusInput = z.object({
+   ids,
+   status,
+})
+
+const moveInput = z.object({
+   ids,
+   listId: z.string().min(1),
+})
+
+const inboxInput = z.object({
+   view: z.enum(INBOX_VIEWS).default('TODO'),
+   listId: z.string().min(1).optional(),
+   fit: viewState.optional(),
+   untouched: z.boolean().optional(),
+   search: z.string().trim().max(100).optional(),
+   sort: z.enum(['fit', 'newest']).default('fit'),
+   page: z.number().int().min(1).default(1),
+   pageSize: z.number().int().min(1).max(100).default(50),
+})
+
+// What `remove` handed back, sent again by an undo. Only the owner's lists take it back (see InboxService.restore).
+const removedInput = z.object({
+   id: z.string().min(1),
+   listId: z.string().min(1),
+   slug: z.string().min(1).max(200),
+   url: z.string().min(1).max(500),
+   name: optionalText(200),
+   headline: optionalText(300),
+   location: optionalText(200),
+   state: viewState,
+   status: z.enum(['NEW', 'IN_REVIEW', 'DONE', 'NOT_A_FIT', 'CONTACTED', 'REPLIED']),
+   postUrl: optionalText(500),
+   score: z.number().int().min(0).max(100).nullable(),
+   // Re-read on the server, so only well-formed signals come back.
+   signals: z.unknown(),
+   addedByRunId: optionalText(100),
+   title: optionalText(300),
+   company: optionalText(300),
+   followers: z.number().int().min(0).nullable(),
+   matched: z.array(z.string().max(200)).max(30),
+   notes: optionalText(2_000),
+   tags: z.array(z.string().max(30)).max(20),
+   reviewAt: when,
+   contactedAt: when,
+   createdAt: z.coerce.date(),
+})
 
 // No state shows everyone in the list.
 const membersInput = z.object({
@@ -89,6 +140,44 @@ export const workflowList = router({
    members: ownerProcedure
       .input(membersInput)
       .query(({ ctx, input }) => WorkflowListService.members(ctx.user.id, input)),
+
+   // The leads inbox across all the owner's lists.
+   inbox: ownerProcedure.input(inboxInput).query(({ ctx, input }) => InboxService.inbox(ctx.user.id, input)),
+
+   doNotContactList: ownerProcedure.query(({ ctx }) => InboxService.suppressed(ctx.user.id)),
+
+   // When the owner leaves the inbox; people added after it show as new next time.
+   markSeen: ownerProcedure.mutation(async ({ ctx }) => {
+      await InboxService.markSeen(ctx.user.id)
+   }),
+
+   setStatus: ownerProcedure.input(statusInput).mutation(async ({ ctx, input }) => {
+      const changed = await InboxService.setStatus(ctx.user.id, input.ids, input.status)
+
+      return { changed }
+   }),
+
+   moveMany: ownerProcedure.input(moveInput).mutation(async ({ ctx, input }) => {
+      const moved = present(await InboxService.move(ctx.user.id, input.ids, input.listId), LIST_MISSING)
+
+      return { moved }
+   }),
+
+   removeMany: ownerProcedure
+      .input(z.object({ ids }))
+      .mutation(({ ctx, input }) => InboxService.remove(ctx.user.id, input.ids)),
+
+   restore: ownerProcedure
+      .input(z.object({ people: z.array(removedInput).min(1).max(200) }))
+      .mutation(async ({ ctx, input }) => ({
+         restored: await InboxService.restore(
+            ctx.user.id,
+            input.people.map(person => ({
+               ...person,
+               signals: readSignals(person.signals),
+            }))
+         ),
+      })),
 
    addMember: ownerProcedure.input(addInput).mutation(async ({ ctx, input }) => {
       const { listId, url, name, headline, location } = input

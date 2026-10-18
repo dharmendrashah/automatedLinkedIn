@@ -1,49 +1,83 @@
+import { timeAgo } from '@/lib/time-ago'
+
+import { strongestSignal } from './message'
+
 import { type RouterOutputs } from '../../trpc'
 
 export type ListSummary = RouterOutputs['workflowList']['lists'][number]
-export type Member = RouterOutputs['workflowList']['members']['items'][number]
-export type MemberState = Member['state']
-export type MemberStatus = Member['status']
+export type Inbox = RouterOutputs['workflowList']['inbox']
+export type InboxMember = Inbox['items'][number]
+export type InboxView = keyof Inbox['counts']
+export type Fit = InboxMember['state']
+type Signal = InboxMember['signals'][number]
+
+// The statuses a person can be set to; In review and Done were folded into New and Contacted.
+export type MemberStatus = 'NEW' | 'CONTACTED' | 'REPLIED' | 'NOT_A_FIT'
 
 export const memberStatuses: Record<MemberStatus, { label: string }> = {
-   NEW: { label: 'New' },
-   IN_REVIEW: { label: 'In review' },
-   DONE: { label: 'Done' },
+   NEW: { label: 'To do' },
+   CONTACTED: { label: 'Contacted' },
+   REPLIED: { label: 'Replied' },
    NOT_A_FIT: { label: 'Not a fit' },
 }
 
-export const memberStates: Record<MemberState, { label: string }> = {
-   QUALIFIED: { label: 'Qualified' },
-   MAYBE: { label: 'Maybe' },
-   UNSCORED: { label: 'Unscored' },
+export const isMemberStatus = (value: string): value is MemberStatus => value in memberStatuses
+
+// Statuses from before the one status flow: Done was contacted, In review was still to do.
+export const workStatus = (status: InboxMember['status']): MemberStatus =>
+   status === 'DONE' ? 'CONTACTED' : isMemberStatus(status) ? status : 'NEW'
+
+export const INBOX_TABS: Record<InboxView, string> = {
+   TODO: 'To do',
+   CONTACTED: 'Contacted',
+   REPLIED: 'Replied',
+   NOT_A_FIT: 'Not a fit',
+   ALL: 'All',
 }
 
-// The views of a list: everyone, or one band. People added without scoring show only in All.
-export const LIST_VIEWS = {
-   ALL: 'All',
-   QUALIFIED: 'Qualified',
-   MAYBE: 'Maybe',
-} as const
+export const isInboxView = (value: string): value is InboxView => value in INBOX_TABS
 
-export type ListView = keyof typeof LIST_VIEWS
+export const FITS: Record<Fit, { label: string; className: string }> = {
+   QUALIFIED: {
+      label: 'Strong fit',
+      className: 'bg-success/10 text-success border-transparent',
+   },
+   MAYBE: {
+      label: 'Maybe',
+      className: 'bg-warning/10 text-warning border-transparent',
+   },
+   UNSCORED: {
+      label: 'No score yet',
+      className: 'text-muted-foreground',
+   },
+}
 
-export const isListView = (value: string): value is ListView => value in LIST_VIEWS
+export const isFit = (value: string): value is Fit => value in FITS
 
-// States a person can be set to by hand.
-export type SettableState = Exclude<MemberState, 'UNSCORED'>
-
-export const isMemberStatus = (value: string): value is MemberStatus => value in memberStatuses
+// The fit a person added by hand starts with.
+export type SettableState = Exclude<Fit, 'UNSCORED'>
+export const memberStates = FITS
 export const isSettableState = (value: string): value is SettableState => value === 'QUALIFIED' || value === 'MAYBE'
 
-// The first reason a workflow found the person, in words: the comment they wrote, that they reacted, or the company.
-export const reasonOf = ([first]: Member['signals']) => {
-   if (first?.type === 'commented') {
-      return first.excerpt ? `Commented: "${first.excerpt}"` : 'Commented on a post'
-   }
+// One signal in words, with how long ago when it is known.
+export const signalText = (signal: Signal) => {
+   const when = signal.at ? ` ${timeAgo(signal.at)}` : ''
 
-   if (first?.type === 'employee' || first?.type === 'hiring') {
-      return first.type === 'hiring' ? `Company is hiring: ${first.excerpt ?? ''}` : 'Works at a target company'
-   }
+   if (signal.type === 'commented') return `Commented on a post${when}`
+   if (signal.type === 'reacted') return `Reacted to a post${when}`
+   if (signal.type === 'hiring') return `Company is hiring${signal.excerpt ? `: ${signal.excerpt}` : ''}`
 
-   return first?.type === 'reacted' ? 'Reacted to a post' : 'A post they engaged with'
+   return 'Works at a target company'
+}
+
+// The one line a row shows: their role, then the strongest reason they were found.
+export const reasonLine = (member: Pick<InboxMember, 'title' | 'company' | 'headline' | 'signals'>) => {
+   const role = member.title ? [member.title, member.company].filter(Boolean).join(' at ') : member.headline
+   const signal = strongestSignal(member.signals)
+
+   return {
+      role,
+      signal: signal ? signalText(signal) : 'Added by hand',
+      link: signal?.via ?? null,
+   }
 }
