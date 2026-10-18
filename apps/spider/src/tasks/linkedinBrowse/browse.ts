@@ -124,5 +124,12 @@ export const browseLinkedin = async (
       }
    }
 
+   // The session is kept after a DONE, so it must still open the feed at the very end; a cancelled one is never kept.
+   if (!(await openFeed())) {
+      return 'SIGNED_OUT'
+   }
+
+   log('Back on the feed, still signed in')
+
    return 'DONE'
 }

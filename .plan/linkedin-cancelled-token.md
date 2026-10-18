@@ -43,5 +43,5 @@ Open questions: none.
 ## Outcome
 
 - Shipped: `AccountValidator.tokenHolds` (5 s wait, a second feed through `loadFeed`; otherwise `li_at` is dropped and the token counts as refused); `browseAfterLogin` returns false on a `load` failure; `browseLinkedin.openFeed` drops `li_at` and retries once, a sign-in page then is SIGNED_OUT.
-- Deviations: none.
+- Deviations: added at the owner's request (2026-10-19): the daily visit ends by opening the feed again and answers DONE (which saves the session) only when it still opens, so a session LinkedIn cancels mid-visit is never saved over a good one.
 - Follow-ups: the owner re-runs `pnpm record` (daily visit) for the account; storing the password for token-only accounts avoids the cancelled token.

@@ -111,6 +111,7 @@ describe('browseLinkedin in a real browser, against a stand-in for LinkedIn', ()
          '/in/author-7002/',
          '/feed/update/urn:li:activity:7001/',
          '/in/author-7001/',
+         '/feed/',
       ])
    })
 

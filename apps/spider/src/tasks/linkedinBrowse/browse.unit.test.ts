@@ -70,7 +70,7 @@ describe('authorLink', () => {
 })
 
 describe('browseLinkedin', () => {
-   it('should read the feed, the own profile, then one post and its author', async () => {
+   it('should read the feed, the own profile, one post and its author, and end back on the feed', async () => {
       const { context, browse } = site()
 
       await expect(browse()).resolves.toBe('DONE')
@@ -80,6 +80,7 @@ describe('browseLinkedin', () => {
          `${BASE}/in/me/`,
          POST_1,
          `${BASE}/in/grace-hopper/`,
+         `${BASE}/feed/`,
       ])
       expect(context.browser.scrollBy).toHaveBeenCalled()
    })
@@ -96,7 +97,28 @@ describe('browseLinkedin', () => {
          `${BASE}/company/acme/`,
          POST_1,
          `${BASE}/in/grace-hopper/`,
+         `${BASE}/feed/`,
       ])
+   })
+
+   it('should not end DONE, so the session is not kept, when LinkedIn signed it out during the visit', async () => {
+      const { context, browse } = site()
+      const open = context.visit.getMockImplementation()
+
+      context.visit.mockImplementation(async (url: string) => {
+         if (url === `${BASE}/in/grace-hopper/`) {
+            throw new VisitError('load', 'The page did not load.')
+         }
+
+         // Only the first feed loads; the cancelled session sends the last one to the sign-in page.
+         if (url === `${BASE}/feed/` && context.visit.mock.calls.length > 1) {
+            return `${BASE}/uas/login`
+         }
+
+         return open ? open(url) : url
+      })
+
+      await expect(browse()).resolves.toBe('SIGNED_OUT')
    })
 
    it('should stop with SIGNED_OUT when the feed asks for a sign-in', async () => {
@@ -130,7 +152,7 @@ describe('browseLinkedin', () => {
       await expect(browse(() => 0.999999)).resolves.toBe('DONE')
 
       expect(context.warn).toHaveBeenCalledWith('robots.txt does not allow this page.')
-      expect(context.visit).toHaveBeenLastCalledWith(`${BASE}/in/grace-hopper/`)
+      expect(context.visit).toHaveBeenLastCalledWith(`${BASE}/feed/`)
    })
 
    it('should drop the token and answer SIGNED_OUT when the feed goes round in circles', async () => {
