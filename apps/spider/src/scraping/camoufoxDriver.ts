@@ -169,7 +169,7 @@ class CamoufoxSession implements DetectionSession {
    }
 
    public storageState() {
-      return this.context.storageState() as Promise<StorageState>
+      return this.context.storageState({ indexedDB: true }) as Promise<StorageState>
    }
 
    public pageText() {

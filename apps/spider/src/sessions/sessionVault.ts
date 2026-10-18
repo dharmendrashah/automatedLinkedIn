@@ -29,6 +29,8 @@ const savedStateSchema = z.object({
                value: z.string(),
             })
          ),
+         // Playwright's own shape, put back as it was taken.
+         indexedDB: z.array(z.unknown()).optional(),
       })
    ),
 })
@@ -37,11 +39,21 @@ export type SavedState = z.infer<typeof savedStateSchema>
 
 // A login session is a few hundred cookies at most; more is a page storing junk, not something to keep.
 const MAX_BYTES = 1_000_000
+// IndexedDB can hold a site's caches; above this it is left out and the rest is still kept.
+const MAX_BYTES_WITH_INDEXED_DB = 5_000_000
+
+const withoutIndexedDb = (state: StorageState): StorageState => ({
+   ...state,
+   origins: state.origins.map(({ origin, localStorage }) => ({
+      origin,
+      localStorage,
+   })),
+})
 
 type Store = Pick<ObjectStore, 'get' | 'put'>
 
-// An account's browser session (cookies and local storage) between runs, sealed with the credentials key: the bucket's
-// own encryption does not keep a login token from anyone who can read the bucket.
+// An account's browser session (cookies, local storage and IndexedDB) between runs, sealed with the credentials key: the
+// bucket's own encryption does not keep a login token from anyone who can read the bucket.
 export class SessionVault {
    public constructor(
       private readonly store: Store,
@@ -74,11 +86,14 @@ export class SessionVault {
    }
 
    public async save(accountId: string, state: StorageState): Promise<void> {
-      const text = JSON.stringify(state)
+      const rest = JSON.stringify(withoutIndexedDb(state))
 
-      if (Buffer.byteLength(text) > MAX_BYTES) {
+      if (Buffer.byteLength(rest) > MAX_BYTES) {
          throw new Error('The browser session is too large to keep')
       }
+
+      const full = JSON.stringify(state)
+      const text = Buffer.byteLength(full) <= MAX_BYTES_WITH_INDEXED_DB ? full : rest
 
       await this.store.put(
          sessionVaultKey(accountId),
