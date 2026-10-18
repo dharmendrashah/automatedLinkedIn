@@ -85,6 +85,7 @@ Open questions: none.
    - `AccountDailyJob` (`database/accountDailyJob.ts`) plus the worker job `account-daily` (every 10 min).
    - `linkedin-browse` (spider, `tasks/linkedinBrowse`): feed, own profile, 1 or 2 posts and their authors, from the saved session; DONE keeps the session.
    - `linkedInBrowse.hooks.ts`: SIGNED_OUT sets `nextCheckAt` to now.
+   - Local tool (`pnpm record`): picking the daily visit runs the sign-in check once first in the same session, since the tool keeps sessions only in memory; the visit is skipped if that sign-in fails.
 - Deviations:
    - Brain does not know the device's pinned timezone (the spider keeps it in the bucket), so the day is the timezone of the primary ACTIVE proxy's country (`detectedCountryCode`, one main zone per country, UTC when unknown).
    - A good sign-in within 12 h (the owner's own check, say) counts as the day's check: the job draws tomorrow instead of signing in again.

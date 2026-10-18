@@ -10,6 +10,8 @@ import { CamoufoxDriver } from '../scraping/camoufoxDriver'
 import { SessionVault } from '../sessions/sessionVault'
 import { openCredentials } from '../tasks/credentials'
 import { type TaskDefinition } from '../tasks/defineTask'
+import { TASK_NAME as BROWSE_TASK } from '../tasks/linkedinBrowse'
+import { TASK_NAME as LOGIN_TASK } from '../tasks/linkedinLogin'
 import { AccountValidator } from '../tasks/linkedinLogin/accountValidator'
 import { buildTasks } from '../tasks/registry'
 import { type RunnerDeps, runTask } from '../tasks/runner'
@@ -149,10 +151,11 @@ export const runTasks = async ({ proxy, databaseUrl, encryptionKey, outputRoot }
    })
 
    try {
-      for (let index = 1; index <= runs && !stopping; index += 1) {
+      // Runs one task once and prints its answer; undefined when the run ended without one.
+      const runOnce = async (run: TaskDefinition, runInput: Record<string, unknown>) => {
          const command = buildCommand({
-            task,
-            input,
+            task: run,
+            input: runInput,
             proxy,
             ...(account && { account }),
          })
@@ -187,36 +190,59 @@ export const runTasks = async ({ proxy, databaseUrl, encryptionKey, outputRoot }
             workerBuild: 'devtools',
          }
 
-         console.log(`\n--- Run ${index} of ${runs} ---`)
-
          try {
             await runTask(command, deps)
          } catch (error) {
             console.log(`The run stopped with an error: ${error instanceof Error ? error.message : 'unknown'}`)
          }
 
-         if (!result) {
-            records.push({
-               ok: false,
-               verdict: 'CRASHED',
-               durationMs: 0,
-            })
+         if (result) {
+            const label =
+               run.verdicts[result.verdict]?.label ??
+               RUNNER_VERDICTS[result.verdict as keyof typeof RUNNER_VERDICTS]?.label ??
+               result.verdict
 
-            continue
+            formatRun(result, label).forEach(line => console.log(line))
+            console.log(`Files: ${join(outputRoot, runPrefix(command))}`)
          }
 
-         const label =
-            task.verdicts[result.verdict]?.label ??
-            RUNNER_VERDICTS[result.verdict as keyof typeof RUNNER_VERDICTS]?.label ??
-            result.verdict
+         return result
+      }
 
-         formatRun(result, label).forEach(line => console.log(line))
-         console.log(`Files: ${join(outputRoot, runPrefix(command))}`)
-         records.push({
-            ok: result.status === 'SUCCEEDED',
-            verdict: result.verdict,
-            durationMs: Date.parse(result.finished_at) - Date.parse(result.started_at),
-         })
+      // On the worker the visit starts from the session its daily sign-in saved. Here nothing is saved between sessions,
+      // so the sign-in runs once first and the visits start from what it kept in memory.
+      const signIn = task.name === BROWSE_TASK ? tasks.find(found => found.name === LOGIN_TASK) : undefined
+
+      if (signIn) {
+         console.log('\n--- Sign-in first, so the visit has a session ---')
+
+         const signedIn = await runOnce(signIn, {})
+
+         if (signedIn?.status !== 'SUCCEEDED') {
+            console.log('The sign-in did not work, so the visit is not run.')
+
+            return
+         }
+      }
+
+      for (let index = 1; index <= runs && !stopping; index += 1) {
+         console.log(`\n--- Run ${index} of ${runs} ---`)
+
+         const result = await runOnce(task, input)
+
+         records.push(
+            result
+               ? {
+                    ok: result.status === 'SUCCEEDED',
+                    verdict: result.verdict,
+                    durationMs: Date.parse(result.finished_at) - Date.parse(result.started_at),
+                 }
+               : {
+                    ok: false,
+                    verdict: 'CRASHED',
+                    durationMs: 0,
+                 }
+         )
       }
    } finally {
       release()
