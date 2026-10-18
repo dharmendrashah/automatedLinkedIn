@@ -59,6 +59,8 @@ type Props = {
    replay: StepRun[] | null
    // The run being shown, so a block's dialog can show what it passed on.
    replayRunId: string | null
+   // A block to open on arrival, such as the one a run failed in.
+   focus?: string | null
    saving: boolean
    saveError: { message: string } | null
    onSave: (graph: Graph) => void
@@ -74,6 +76,7 @@ const Editor = ({
    workflows,
    replay,
    replayRunId,
+   focus = null,
    saving,
    saveError,
    onSave,
@@ -87,8 +90,8 @@ const Editor = ({
       startHistory(toFlow(relaid ? layoutTopToBottom(graph) : graph, catalog, { icpNames }))
    )
    const [dirty, setDirty] = useState(relaid)
-   const [selectedId, setSelectedId] = useState<string | null>(null)
-   const [openId, setOpenId] = useState<string | null>(null)
+   const [selectedId, setSelectedId] = useState<string | null>(focus)
+   const [openId, setOpenId] = useState<string | null>(focus)
    const [picker, setPicker] = useState<{ afterId: string | null } | null>(null)
    const [help, setHelp] = useState(false)
    const [loopRounds, setLoopRounds] = useState(graph.loopRounds)
@@ -166,6 +169,7 @@ const Editor = ({
                   step: null,
                   invalid: false,
                   noted: false,
+                  faded: false,
                },
             },
          ],

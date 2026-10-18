@@ -2,16 +2,17 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Download, Eye } from 'lucide-react'
+import { Download, Eye, Wrench } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 
 import { cn } from '@/lib/utils'
 
-import { type Block, type Run, type RunDetail, formatUsd, runStatuses, triggerLabels } from './types'
+import { type Block, type Run, type RunDetail, formatUsd, runStatuses, stepLabel, triggerLabels } from './types'
 
 import { BlockOutput } from './block-output'
 import { blockOf, combineRounds } from './graph-convert'
+import { runSentence } from './run-sentence'
 
 const formatTime = (value: string) => new Date(value).toLocaleString()
 
@@ -78,11 +79,12 @@ const percent = (part: number, whole: number) => (whole > 0 ? `${Math.round((par
 type DetailProps = {
    run: RunDetail
    catalog: Block[]
+   onOpenBlock: (nodeId: string) => void
 }
 
 // One run step by step: how many went in and out of each block, the pass rate, what each block cost, and what it
 // passed on.
-export const RunDetailView = ({ run, catalog }: DetailProps) => {
+export const RunDetailView = ({ run, catalog, onOpenBlock }: DetailProps) => {
    const [shownNode, setShownNode] = useState<string | null>(null)
    const order = run.graph.nodes.map(({ id }) => id)
    const combined = combineRounds(run.steps)
@@ -92,7 +94,8 @@ export const RunDetailView = ({ run, catalog }: DetailProps) => {
 
    return (
       <div className="grid gap-3 rounded-lg border p-4">
-         <div className="flex flex-wrap items-center gap-3 text-sm">
+         <p className="text-sm font-medium">{runSentence(run, type => blockOf(catalog, type)?.label ?? type)}</p>
+         <div className="text-muted-foreground flex flex-wrap items-center gap-3 text-sm">
             <RunStatusBadge status={run.status} />
             <span>{triggerLabels[run.trigger]}</span>
             <span>
@@ -109,7 +112,7 @@ export const RunDetailView = ({ run, catalog }: DetailProps) => {
                added to the list.
             </p>
          ) : null}
-         {run.message ? <p className="text-destructive text-sm">{run.message}</p> : null}
+         {run.message && run.status !== 'FAILED' ? <p className="text-destructive text-sm">{run.message}</p> : null}
          {run.parent ? (
             <p className="text-muted-foreground text-sm">
                Started by{' '}
@@ -129,7 +132,7 @@ export const RunDetailView = ({ run, catalog }: DetailProps) => {
                   <TableHead>Passed</TableHead>
                   <TableHead>Data cost</TableHead>
                   <TableHead>Note</TableHead>
-                  <TableHead className="w-28" />
+                  <TableHead className="w-56" />
                </TableRow>
             </TableHeader>
             <TableBody>
@@ -141,7 +144,7 @@ export const RunDetailView = ({ run, catalog }: DetailProps) => {
                            <span className="text-muted-foreground text-xs"> · {step.round + 1} rounds</span>
                         ) : null}
                      </TableCell>
-                     <TableCell>{step.status.toLowerCase()}</TableCell>
+                     <TableCell>{stepLabel(step)}</TableCell>
                      <TableCell>{step.itemsIn}</TableCell>
                      <TableCell>{step.itemsOut}</TableCell>
                      <TableCell>{percent(step.itemsOut, step.itemsIn)}</TableCell>
@@ -158,10 +161,18 @@ export const RunDetailView = ({ run, catalog }: DetailProps) => {
                         ) : null}
                      </TableCell>
                      <TableCell>
-                        <Button variant="outline" size="sm" onClick={() => setShownNode(step.nodeId)}>
-                           {step.type === 'output.csv' ? <Download /> : <Eye />}
-                           {step.type === 'output.csv' ? 'CSV' : 'Output'}
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                           {step.status === 'FAILED' || step.status === 'PARTIAL' ? (
+                              <Button variant="outline" size="sm" onClick={() => onOpenBlock(step.nodeId)}>
+                                 <Wrench />
+                                 Open the block
+                              </Button>
+                           ) : null}
+                           <Button variant="outline" size="sm" onClick={() => setShownNode(step.nodeId)}>
+                              {step.type === 'output.csv' ? <Download /> : <Eye />}
+                              {step.type === 'output.csv' ? 'CSV' : 'Output'}
+                           </Button>
+                        </div>
                      </TableCell>
                   </TableRow>
                ))}

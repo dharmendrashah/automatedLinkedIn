@@ -66,6 +66,7 @@ describe('graph-convert', () => {
       const { nodes, edges } = toFlow(graph, catalog, {
          steps: [
             {
+               id: 'step-posts',
                nodeId: 'posts',
                type: 'input.posts',
                status: 'DONE',
@@ -76,6 +77,7 @@ describe('graph-convert', () => {
                message: null,
                childRunId: null,
                child: null,
+               progress: null,
             },
          ],
       })
@@ -119,6 +121,8 @@ describe('graph-convert', () => {
          message: null,
          childRunId: null,
          child: null,
+         id: 'step-each',
+         progress: null,
       }
       const combined = combineRounds([
          {

@@ -64,6 +64,7 @@ export class Paused extends Error {}
 export class Waiting extends Error {}
 
 export const WALLET_LOW = 'Collecting stopped because the data wallet ran low. What was found so far is kept.'
+export const STOPPED_BY_YOU = 'Stopped by you. What was found so far is kept.'
 export const SERVICE_BUSY = 'The data service did not answer for some requests. What was found so far is kept.'
 
 export const peopleOf = (items: WorkflowItemData[]) =>
@@ -300,10 +301,11 @@ export type Request = Omit<PaidCall, 'ctx'>
 // Moves every request of the step one step, a few jobs in flight at a time, and gives the step back until all have
 // ended. After a 'stop' nothing new is started; jobs already running still finish and are booked.
 export const collectEach = async (ctx: Context, requests: Request[]): Promise<StepResult> => {
+   const byYou = ctx.run.stopRequestedAt !== null
    let failed = 0
    let running = 0
    let later = 0
-   let stopped = false
+   let stopped = byYou
 
    for (const request of requests) {
       const outcome = await paidCall({
@@ -326,7 +328,7 @@ export const collectEach = async (ctx: Context, requests: Request[]): Promise<St
       status: stopped || failed > 0 ? 'PARTIAL' : 'DONE',
       itemsIn: ctx.inputs.length,
       itemsOut: await WorkflowRunService.countItems(ctx.at),
-      message: stopped ? WALLET_LOW : failed > 0 ? SERVICE_BUSY : undefined,
+      message: stopped ? (byYou ? STOPPED_BY_YOU : WALLET_LOW) : failed > 0 ? SERVICE_BUSY : undefined,
    }
 }
 

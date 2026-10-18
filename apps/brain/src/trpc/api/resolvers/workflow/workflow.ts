@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { CSV_MAX_ROWS, itemsCsv } from 'core'
 
-import { WorkflowService, WorkflowTriggerService, readGraph } from 'database'
+import { WorkflowRunService, WorkflowService, WorkflowTriggerService, readGraph } from 'database'
 
 import {
    GOALS,
@@ -171,9 +171,9 @@ export const workflow = router({
 
    runDetail: ownerProcedure.input(z.object({ runId: z.string().min(1) })).query(async ({ ctx, input }) => {
       const run = present(await WorkflowService.run(ctx.user.id, input.runId), RUN_MISSING)
-      const links = await WorkflowService.runLinks(ctx.user.id, [
-         run.parentRunId,
-         ...run.steps.map(({ childRunId }) => childRunId),
+      const [links, progress] = await Promise.all([
+         WorkflowService.runLinks(ctx.user.id, [run.parentRunId, ...run.steps.map(({ childRunId }) => childRunId)]),
+         WorkflowRunService.progress(run.id),
       ])
       const linkOf = (id: string | null) => (id ? (links.get(id) ?? null) : null)
 
@@ -184,8 +184,14 @@ export const workflow = router({
          steps: run.steps.map(step => ({
             ...step,
             child: linkOf(step.childRunId),
+            progress: progress.get(step.id) ?? null,
          })),
       }
+   }),
+
+   // Nothing new starts; the worker ends the run as Stopped once the jobs already paid for have finished.
+   stopRun: ownerProcedure.input(z.object({ runId: z.string().min(1) })).mutation(async ({ ctx, input }) => {
+      present(await WorkflowService.requestStop(ctx.user.id, input.runId), RUN_MISSING)
    }),
 
    // One page of what a block passed on in a run (all rounds unless one is chosen).

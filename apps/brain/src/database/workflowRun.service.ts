@@ -24,6 +24,16 @@ export type CallOutcome = {
 // Where a step's output lives: its block, and which round of a loop or For each batch.
 export type ItemKey = { runId: string; nodeId: string; round: number }
 
+export type StepProgress = {
+   requests: number
+   done: number
+   failed: number
+   // Failed without a charge.
+   uncharged: number
+   retrying: number
+   nextRetryAt: Date | null
+}
+
 const whereKey = ({ runId, nodeId, round }: ItemKey, slug: string) => ({
    runId_nodeId_round_slug: {
       runId,
@@ -314,6 +324,48 @@ export class WorkflowRunService {
          where: { id: callId },
          data: { jobId },
       })
+   }
+
+   // Where each step's paid requests stand: done, failed (and how many of those cost nothing), and waiting to retry.
+   public static async progress(runId: string, now = new Date()) {
+      const calls = await PrismaService.client.workflowStepCall.findMany({
+         where: { stepRun: { runId } },
+         select: {
+            stepRunId: true,
+            status: true,
+            costMicros: true,
+            finishedAt: true,
+            retryAt: true,
+         },
+      })
+      const byStep = new Map<string, StepProgress>()
+
+      for (const call of calls) {
+         const step = byStep.get(call.stepRunId) ?? {
+            requests: 0,
+            done: 0,
+            failed: 0,
+            uncharged: 0,
+            retrying: 0,
+            nextRetryAt: null,
+         }
+         const failed = call.finishedAt !== null && call.status === 'FAILED'
+         const retrying = call.finishedAt === null && call.retryAt !== null && call.retryAt > now
+
+         step.requests += 1
+         step.done += call.finishedAt ? 1 : 0
+         step.failed += failed ? 1 : 0
+         step.uncharged += failed && call.costMicros === 0 ? 1 : 0
+         step.retrying += retrying ? 1 : 0
+
+         if (retrying && call.retryAt && (!step.nextRetryAt || call.retryAt < step.nextRetryAt)) {
+            step.nextRetryAt = call.retryAt
+         }
+
+         byStep.set(call.stepRunId, step)
+      }
+
+      return byStep
    }
 
    public static markSent(callId: string) {

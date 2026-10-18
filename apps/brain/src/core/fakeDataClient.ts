@@ -4,8 +4,9 @@ import { type CollectOutcome } from './dataClient'
 
 type Answer = Pick<CollectOutcome, 'rows' | 'costMicros'> & Partial<Pick<CollectOutcome, 'status' | 'error'>>
 
-// The data service for tests: each job ends the first time it is looked at, with what `answer` gives.
-export const fakeDataClient = (answer: (slug: string, params: Record<string, unknown>) => Answer) => {
+// The data service for tests: each job ends when looked at with what `answer` gives, or keeps running while it gives
+// null.
+export const fakeDataClient = (answer: (slug: string, params: Record<string, unknown>) => Answer | null) => {
    const jobs = new Map<string, { slug: string; params: Record<string, unknown> }>()
 
    return {
@@ -24,13 +25,14 @@ export const fakeDataClient = (answer: (slug: string, params: Record<string, unk
       }),
       check: vi.fn(async (jobId: string): Promise<CollectOutcome | null> => {
          const job = jobs.get(jobId)
+         const answered = job ? answer(job.slug, job.params) : null
 
-         return job
+         return answered
             ? {
                  jobId,
                  status: 'completed',
                  error: null,
-                 ...answer(job.slug, job.params),
+                 ...answered,
               }
             : null
       }),
