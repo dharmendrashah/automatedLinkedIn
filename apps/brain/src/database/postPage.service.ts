@@ -51,6 +51,23 @@ const knownAuthor = async (userId: string, url: string | null) => {
 }
 
 export class PostPageService {
+   // The posts the owner already read, by slug, so a workflow can show them without paying again.
+   public static async previews(userId: string, slugs: string[]) {
+      const rows = await PrismaService.client.pageSnapshot.findMany({
+         where: {
+            userId,
+            kind: 'POST',
+            slug: { in: slugs },
+         },
+         select: {
+            slug: true,
+            data: true,
+         },
+      })
+
+      return new Map(rows.map(({ slug, data }) => [slug, readPostSnapshot(data)]))
+   }
+
    // null when the post is not in the owner's /posts.
    public static async detail(userId: string, slug: string) {
       const [post, stored] = await Promise.all([

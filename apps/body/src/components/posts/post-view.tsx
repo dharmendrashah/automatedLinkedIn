@@ -5,68 +5,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DrawerDescription, DrawerTitle } from '@/components/ui/drawer'
 import { readableError } from '@/lib/trpc-error'
-import { ExternalLink, MessageSquare, Repeat2, ThumbsUp, UserRound } from 'lucide-react'
-import { useState } from 'react'
+import { ExternalLink, UserRound } from 'lucide-react'
 
 import { type RouterOutputs, trpc } from '../../trpc'
+import { PostMedia, PostNumbers, PostText } from './post-body'
 import { PostEngagement } from './post-engagement'
 
 type PostDetail = RouterOutputs['postPage']['detail']
-
-const TEXT_SHORT = 400
-
-const PostText = ({ text }: { text: string }) => {
-   const [open, setOpen] = useState(false)
-   const long = text.length > TEXT_SHORT
-
-   return (
-      <div className="grid gap-1">
-         <p className="text-sm whitespace-pre-line">{open || !long ? text : `${text.slice(0, TEXT_SHORT)}…`}</p>
-         {long ? (
-            <button
-               type="button"
-               className="text-muted-foreground justify-self-start text-xs underline"
-               onClick={() => setOpen(!open)}
-            >
-               {open ? 'Show less' : 'Show more'}
-            </button>
-         ) : null}
-      </div>
-   )
-}
-
-const Numbers = ({ snapshot }: { snapshot: NonNullable<PostDetail['snapshot']> }) => {
-   const numbers = [
-      {
-         Icon: ThumbsUp,
-         value: snapshot.reactions,
-         label: 'reactions',
-      },
-      {
-         Icon: MessageSquare,
-         value: snapshot.comments,
-         label: 'comments',
-      },
-      {
-         Icon: Repeat2,
-         value: snapshot.shares,
-         label: 'reposts',
-      },
-   ]
-
-   return (
-      <div className="text-muted-foreground flex flex-wrap gap-4 text-xs">
-         {numbers.map(({ Icon, value, label }) =>
-            value === null ? null : (
-               <span key={label} className="flex items-center gap-1">
-                  <Icon className="size-3.5" aria-hidden />
-                  {value.toLocaleString()} {label}
-               </span>
-            )
-         )}
-      </div>
-   )
-}
 
 // The post as it reads on LinkedIn: the author, the text, its media and how people reacted.
 const ThePost = ({ detail, onPerson }: { detail: PostDetail; onPerson: (slug: string) => void }) => {
@@ -101,19 +46,8 @@ const ThePost = ({ detail, onPerson }: { detail: PostDetail; onPerson: (slug: st
          </div>
          {snapshot?.repostNote ? <p className="text-muted-foreground text-xs">{snapshot.repostNote}</p> : null}
          {snapshot?.text ? <PostText text={snapshot.text} /> : null}
-         {snapshot?.media?.type?.toLowerCase().includes('image') ? (
-            <img src={snapshot.media.url} alt="" referrerPolicy="no-referrer" className="max-h-80 rounded-lg border object-cover" />
-         ) : snapshot?.media ? (
-            <a className="text-sm underline" href={snapshot.media.url} target="_blank" rel="noreferrer noopener">
-               Open the {snapshot.media.type ?? 'media'}
-            </a>
-         ) : null}
-         {snapshot?.articleUrl ? (
-            <a className="text-sm underline" href={snapshot.articleUrl} target="_blank" rel="noreferrer noopener">
-               Open the linked article
-            </a>
-         ) : null}
-         {snapshot ? <Numbers snapshot={snapshot} /> : null}
+         {snapshot ? <PostMedia media={snapshot.media} articleUrl={snapshot.articleUrl} /> : null}
+         {snapshot ? <PostNumbers post={snapshot} /> : null}
          <div className="flex flex-wrap items-center gap-2">
             <Button asChild size="sm">
                <a href={post.expandedUrl ?? post.url} target="_blank" rel="noreferrer noopener">

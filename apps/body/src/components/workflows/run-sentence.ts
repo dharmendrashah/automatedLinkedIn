@@ -16,6 +16,7 @@ type Step = {
    type: string
    status: 'WAITING' | 'RUNNING' | 'DONE' | 'PARTIAL' | 'FAILED'
    message: string | null
+   itemsOut: number
    progress: Progress | null
 }
 
@@ -32,6 +33,8 @@ type Run = {
 }
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
+
+const peopleCount = (count: number) => (count === 1 ? '1 person' : `${count} people`)
 
 const sum = (steps: Step[], key: keyof Omit<Progress, 'nextRetryAt'>) =>
    steps.reduce((total, step) => total + (step.progress?.[key] ?? 0), 0)
@@ -105,7 +108,18 @@ export const runSentence = (run: Run, labelOf: (type: string) => string, now: Da
    }
 
    const people = run.qualified + run.maybe + run.discarded
-   const share = people > 0 ? ` from ${plural(people, 'person').replace('persons', 'people')} (${Math.round((run.qualified / people) * 100)}%)` : ''
+   const listed = run.steps
+      .filter(({ type }) => type === 'output.list')
+      .reduce((total, { itemsOut }) => total + itemsOut, 0)
+
+   // Nothing was scored: say who reached the list instead of "0 qualified".
+   if (people === 0 && listed > 0) {
+      const each = formatUsd(Math.round(run.costMicros / listed))
+
+      return `Done: ${peopleCount(listed)} added to the list for ${formatUsd(run.costMicros)}, ${each} a person.`
+   }
+
+   const share = people > 0 ? ` from ${peopleCount(people)} (${Math.round((run.qualified / people) * 100)}%)` : ''
    const each = run.qualified > 0 ? `, ${formatUsd(Math.round(run.costMicros / run.qualified))} per qualified person` : ''
 
    return `Done: ${run.qualified} qualified and ${run.maybe} maybe${share} for ${formatUsd(run.costMicros)}${each}.`

@@ -1,4 +1,4 @@
-import { explainMatched, readSignals } from 'core'
+import { briefSignals, explainMatched } from 'core'
 
 import { type Prisma, type WorkflowListMemberState, type WorkflowListMemberStatus } from 'generated/prisma/client'
 
@@ -151,7 +151,7 @@ export class InboxService {
       return {
          items: items.map(item => ({
             ...item,
-            signals: readSignals(item.signals),
+            signals: briefSignals(item.signals),
             reasons: explainMatched(item.matched),
          })),
          total,

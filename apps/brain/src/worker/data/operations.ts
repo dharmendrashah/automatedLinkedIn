@@ -1,4 +1,13 @@
-import { type CompanyItem, EXCERPT_LENGTH, type PersonItem, type PostItem, parseLinkedInUrl, person } from 'core'
+import {
+   type CompanyItem,
+   EXCERPT_LENGTH,
+   type PersonItem,
+   type PersonSnapshotData,
+   type PostItem,
+   parseLinkedInUrl,
+   person,
+   postSnapshotFrom,
+} from 'core'
 
 // Turns the data service's rows into workflow items. Only the allow-listed fields survive; photos, ids and the
 // supplier's field names stop here.
@@ -70,6 +79,7 @@ export const commentersFrom = (rows: Row[], post: PostItem): PersonItem[] =>
                   via: post.url,
                   at: text(row.commentedAt),
                   excerpt: text(row.comment)?.slice(0, EXCERPT_LENGTH) ?? null,
+                  post: post.preview ?? null,
                },
             ],
          }),
@@ -96,6 +106,7 @@ export const reactorsFrom = (rows: Row[], post: PostItem): PersonItem[] =>
                   via: post.url,
                   at: null,
                   excerpt: null,
+                  post: post.preview ?? null,
                },
             ],
          }),
@@ -115,19 +126,34 @@ const currentRole = (experience: unknown) => {
    }
 }
 
-// The full-profile fields kept for each person, by slug. A profile that does not exist simply has no entry.
-export const profilesFrom = (rows: Row[]) =>
+// Each profile row by the person's slug. A profile that does not exist simply has no entry.
+export const profileRowsFrom = (rows: Row[]) =>
    new Map(
       rows.flatMap(row => {
          const link = linkOf(row.profileUrl) ?? linkOf(`https://www.linkedin.com/in/${text(row.handle) ?? ''}`)
 
-         if (!link) {
-            return []
-         }
-
-         return [[link.slug, cardOf(row)]]
+         return link ? [[link.slug, row] as const] : []
       })
    )
+
+// The full-profile fields kept on each person's workflow item, by slug.
+export const profilesFrom = (rows: Row[]) =>
+   new Map([...profileRowsFrom(rows)].map(([slug, row]) => [slug, cardOf(row)]))
+
+// The same fields from a full profile the owner already has, so it is not paid for again.
+export const cardFromSnapshot = (snapshot: PersonSnapshotData) => {
+   const current =
+      snapshot.experience.find(role => !role.end || role.end.toLowerCase() === 'present') ?? snapshot.experience[0]
+
+   return {
+      name: snapshot.name,
+      headline: snapshot.headline,
+      location: snapshot.location,
+      followers: snapshot.followers,
+      title: current?.title ?? null,
+      company: current?.company ?? null,
+   }
+}
 
 const cardOf = (row: Row) => {
    const name = [text(row.firstName), text(row.lastName)].filter(Boolean).join(' ')
@@ -167,6 +193,7 @@ export const postsFrom = (rows: Row[]): PostItem[] =>
                  ...link,
                  postId: null,
                  author: author?.url ?? null,
+                 preview: postSnapshotFrom(row),
               },
            ]
          : []

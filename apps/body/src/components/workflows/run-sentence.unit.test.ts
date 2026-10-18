@@ -96,6 +96,22 @@ describe('runSentence', () => {
       expect(
          runSentence(
             run({
+               status: 'SUCCEEDED',
+               costMicros: 52_000,
+               steps: [
+                  step({
+                     type: 'output.list',
+                     itemsOut: 8,
+                  }),
+               ],
+            }),
+            labelOf,
+            NOW
+         )
+      ).toBe('Done: 8 people added to the list for $0.052, $0.007 a person.')
+      expect(
+         runSentence(
+            run({
                status: 'PARTIAL',
                steps: [
                   step({

@@ -32,6 +32,7 @@ export {
    type PostItem,
    type Signal,
    type WorkflowItemData,
+   briefSignals,
    mergeBySlug,
    person,
    readItem,

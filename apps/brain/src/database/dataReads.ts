@@ -4,6 +4,7 @@ import { type DataReadKind, type PageKind, type Prisma } from 'generated/prisma/
 
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
+import { PersonSnapshotService } from './personSnapshot.service'
 import { PrismaService } from './prisma.service'
 
 // What each kind of on-demand read is called, keeps when it finishes, and whether it is still wanted. Messages are
@@ -94,20 +95,7 @@ export const DATA_READS: Record<DataReadKind, ReadSpec> = {
       missing: 'No profile was found at this link.',
       wanted: personWanted,
       store: async ({ userId, slug }, [row]) => {
-         const data = snapshotFrom(row)
-
-         await PrismaService.client.personSnapshot.upsert({
-            where: whereSlug(userId, slug),
-            create: {
-               userId,
-               slug,
-               data,
-            },
-            update: {
-               data,
-               fetchedAt: new Date(),
-            },
-         })
+         await PersonSnapshotService.save(userId, slug, snapshotFrom(row))
       },
    },
    COMPANY: {

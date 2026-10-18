@@ -255,5 +255,35 @@ describe('workflow engine (database)', () => {
       expect(done?.costMicros).toBe(ledger._sum.amountMicros)
       expect(client.start).toHaveBeenCalledTimes(3)
       await expect(LinkedInPostService.countWaiting(userId)).resolves.toBe(0)
+      await expect(
+         PrismaService.client.personSnapshot.findMany({
+            where: { userId },
+            select: { slug: true },
+         })
+      ).resolves.toEqual([{ slug: 'ada-growth' }])
+   })
+
+   it('should use a full profile read in the last 30 days instead of paying for it again', async () => {
+      await PrismaService.client.workflowListMember.deleteMany({ where: { listId: outputListId } })
+      await PrismaService.client.linkedInPost.updateMany({
+         where: { userId },
+         data: { status: 'UNPROCESSED' },
+      })
+
+      const client = fakeClient()
+      const run = await WorkflowService.startRun(userId, workflowId, 'PREVIEW', `reuse-${randomUUID()}`)
+
+      await advanceRun(run?.id ?? '', deps(client))
+
+      const done = await WorkflowService.run(userId, run?.id ?? '')
+
+      expect(done).toMatchObject({
+         status: 'SUCCEEDED',
+         qualified: 1,
+      })
+      const read = client.start.mock.calls.filter(([slug]) => slug === 'profiles').map(([, params]) => params)
+
+      expect(read).toEqual([{ queries: ['https://www.linkedin.com/in/cy-growth'] }])
+      expect(done?.steps.map(({ message }) => message)).toContainEqual(expect.stringContaining('not paid again'))
    })
 })

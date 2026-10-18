@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+   cardFromSnapshot,
    commentersFrom,
    companiesFromDomains,
    employeesFrom,
@@ -131,6 +132,73 @@ describe('operations', () => {
             postId: null,
          }),
       ])
+   })
+
+   it('should keep the whole post found, and hand it to the people who engaged with it', () => {
+      const text = 'Pipeline is hard. '.repeat(100).trim()
+      const [found] = postsFrom([
+         {
+            postUrl: 'https://www.linkedin.com/posts/ada_growth-activity-7516986460906954752-AbCd',
+            postText: text,
+            authorName: 'Ada',
+            reactions: 120,
+         },
+      ])
+
+      expect(found.preview).toMatchObject({
+         text,
+         author: { name: 'Ada' },
+         reactions: 120,
+      })
+
+      const [reactor] = reactorsFrom([{ reactorUrl: 'https://www.linkedin.com/in/grace' }], found)
+
+      expect(reactor.signals[0].post?.text).toBe(text)
+   })
+
+   it('should build the same card from a full profile already read', () => {
+      const role = {
+         location: null,
+         start: null,
+         description: null,
+      }
+
+      expect(
+         cardFromSnapshot({
+            name: 'Ada Lovelace',
+            headline: 'Head of Sales',
+            location: 'London',
+            about: null,
+            photo: null,
+            followers: 10,
+            connections: null,
+            openToWork: false,
+            hiring: false,
+            experience: [
+               {
+                  ...role,
+                  title: 'Advisor',
+                  company: 'Old Co',
+                  end: '2020',
+               },
+               {
+                  ...role,
+                  title: 'Head of Sales',
+                  company: 'Acme',
+                  end: null,
+               },
+            ],
+            education: [],
+            skills: [],
+         })
+      ).toEqual({
+         name: 'Ada Lovelace',
+         headline: 'Head of Sales',
+         location: 'London',
+         followers: 10,
+         title: 'Head of Sales',
+         company: 'Acme',
+      })
    })
 
    it('should read employees as already enriched, with a hiring reason when the company hires', () => {

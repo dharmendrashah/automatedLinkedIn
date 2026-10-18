@@ -184,6 +184,12 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-18: Reuse what workflows paid for (`.plan/reuse-workflow-reads.md`, done).
+   - "Get full profile" (`enrich`) saves a `PersonSnapshot` per profile it pays for (not in previews) through `PersonSnapshotService.save`, which is shared with the drawer read.
+   - It reuses snapshots from the last `RECENT_DAYS` (30) instead of paying again (`PersonSnapshotService.recent`, `cardFromSnapshot`). The estimate does not subtract them.
+   - Post items keep `preview` (`postSnapshotFrom`, from found posts or the owner's stored post read), and commenter and reactor signals carry `post`. Both are optional zod fields, so old JSON still parses.
+   - Table pages send `briefSignals` (no `post`); only the drawer (`memberBySlug`) gets the post. The drawer renders it with `PostCard` (`components/posts/post-body.tsx`).
+   - Unscored runs: "Done: N people added to the list for $X, $Y a person."
 - 2026-10-18: Workflows 10x Phase 2, live runs in plain words (`.plan/workflow-10x-phase-2-live-runs.md`, done).
    - `runDetail` steps carry `progress` (`WorkflowRunService.progress`).
    - `run-sentence.ts` builds the one-line status.

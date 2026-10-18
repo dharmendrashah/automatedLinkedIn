@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { type PostSnapshotData, postSchema } from './pageSnapshot'
+
 // What flows between workflow steps and is saved per step. Only the minimal person fields are kept.
 
 export type Signal = {
@@ -9,6 +11,8 @@ export type Signal = {
    at: string | null
    // A short piece of the comment, or the open roles of a hiring company.
    excerpt: string | null
+   // The post as the run read it, shown here instead of sending the owner to LinkedIn. Older signals have none.
+   post?: PostSnapshotData | null
 }
 
 export type Band = 'QUALIFIED' | 'MAYBE'
@@ -41,6 +45,8 @@ export type PostItem = {
    postId: string | null
    // The author's profile link when the data service gave it; a block that wants people uses the author.
    author?: string | null
+   // The post as the data service returned it, when a block found it.
+   preview?: PostSnapshotData | null
 }
 
 export type CompanyItem = {
@@ -109,6 +115,7 @@ const signalSchema = z.object({
    via: z.string(),
    at: nullableText,
    excerpt: nullableText,
+   post: postSchema.nullable().optional(),
 })
 
 const itemSchema = z.discriminatedUnion('kind', [
@@ -137,6 +144,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       url: z.string(),
       postId: z.string().nullable(),
       author: z.string().nullable().optional(),
+      preview: postSchema.nullable().optional(),
    }),
    z.object({
       kind: z.literal('company'),
@@ -151,3 +159,6 @@ const itemSchema = z.discriminatedUnion('kind', [
 export const readItem = (data: unknown): WorkflowItemData | null => itemSchema.safeParse(data).data ?? null
 
 export const readSignals = (data: unknown): Signal[] => z.array(signalSchema).safeParse(data).data ?? []
+
+// For table pages: the post body is only shown in the drawer.
+export const briefSignals = (data: unknown) => readSignals(data).map(({ post: _post, ...signal }) => signal)
