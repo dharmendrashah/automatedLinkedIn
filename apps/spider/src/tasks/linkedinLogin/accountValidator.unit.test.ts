@@ -46,6 +46,7 @@ const fakeSession = (script: Script) => {
 
    const session = {
       addCookies: vi.fn().mockResolvedValue(undefined),
+      clearCookies: vi.fn().mockResolvedValue(undefined),
       cookies: vi.fn().mockResolvedValue(feedCookies),
       goto: vi.fn(async (target: string) => {
          url = script.load(target)
@@ -594,6 +595,69 @@ describe('AccountValidator', () => {
             message: expect.stringMatching(/security check/i),
          })
          expect(session.fill).not.toHaveBeenCalled()
+      })
+
+      describe('when LinkedIn sends the feed round in circles for a refused token (recorded 2026-10-18)', () => {
+         // The feed fails to load while the token is in the browser; with `down`, it fails without it too.
+         const looping = (down = false) => {
+            const fake = fakeSession(site({ password: 'hunter2' }))
+            const base = site({ password: 'hunter2' })
+            let cleared = false
+
+            fake.session.clearCookies.mockImplementation(async () => {
+               cleared = true
+            })
+            fake.session.goto.mockImplementation(async (target: string) => {
+               if (target.startsWith(feed) && (down || !cleared)) {
+                  throw new Error('page.goto: NS_ERROR_NET_EMPTY_RESPONSE')
+               }
+
+               return base.load(target)
+            })
+
+            return fake
+         }
+
+         it('should drop the token from the browser and sign in with the password', async () => {
+            const { session, typed } = looping()
+            const verdict = await validator.validate(
+               session,
+               input({
+                  session: `li_at=${LI_AT}`,
+                  password: 'hunter2',
+               })
+            )
+
+            expect(verdict).toMatchObject({ outcome: 'VALID' })
+            expect(session.clearCookies).toHaveBeenCalledWith('li_at')
+            expect(typed[SELECTORS.password]).toBe('hunter2')
+         })
+
+         it('should say the token expired when there is no password', async () => {
+            const { session } = looping()
+
+            await expect(validator.validate(session, input({ session: `li_at=${LI_AT}` }))).resolves.toMatchObject({
+               outcome: 'NEEDS_REAUTH',
+               message: expect.stringMatching(/token/i),
+            })
+         })
+
+         it('should report ERROR, typing nothing, when the feed does not load without the token either', async () => {
+            const { session } = looping(true)
+            const verdict = await validator.validate(
+               session,
+               input({
+                  session: `li_at=${LI_AT}`,
+                  password: 'hunter2',
+               })
+            )
+
+            expect(verdict).toMatchObject({
+               outcome: 'ERROR',
+               message: expect.stringMatching(/did not let the check load/i),
+            })
+            expect(session.fill).not.toHaveBeenCalled()
+         })
       })
    })
 

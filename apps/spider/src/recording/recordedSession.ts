@@ -131,6 +131,10 @@ export class RecordedSession implements LoginSession {
       return this.step('cookies', {}, () => this.inner.cookies(), undefined, false)
    }
 
+   public async clearCookies(name: string) {
+      return this.step('clearCookies', {}, () => this.inner.clearCookies(name), undefined, false)
+   }
+
    public async close() {
       await this.inner.close()
    }

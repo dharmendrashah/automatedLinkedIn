@@ -274,7 +274,7 @@ export class AccountValidator {
       ])
       await this.options.pause(this.host)
 
-      const landed = await session.goto(`${this.options.baseUrl}/feed/`)
+      const landed = await this.loadFeed(session)
       const kind = kindOf(landed)
 
       if (kind === 'feed') {
@@ -290,6 +290,22 @@ export class AccountValidator {
       }
 
       return kind === 'checkpoint' ? this.fail('NEEDS_REAUTH', MESSAGES.securityCheck) : undefined
+   }
+
+   // A refused token can make LinkedIn redirect the feed to itself until it stops answering, because the browser keeps
+   // the token it is told to replace (recorded 2026-10-18). Without the token the feed is loaded once more; if that fails
+   // too, the site is down and the error goes on.
+   private async loadFeed(session: LoginSession) {
+      const feed = `${this.options.baseUrl}/feed/`
+
+      try {
+         return await session.goto(feed)
+      } catch {
+         await session.clearCookies('li_at')
+         await this.options.pause(this.host)
+
+         return session.goto(feed)
+      }
    }
 
    private async signIn(session: LoginSession, email: string, { password, totpSecret }: Credentials): Promise<Verdict> {

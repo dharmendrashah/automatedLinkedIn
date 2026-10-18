@@ -274,6 +274,10 @@ class CamoufoxSession implements DetectionSession {
       )
    }
 
+   public async clearCookies(name: string) {
+      await this.context.clearCookies({ name })
+   }
+
    public async goto(url: string, waitForSelector?: string) {
       const response = await this.page.goto(url, { waitUntil: 'domcontentloaded' })
 
