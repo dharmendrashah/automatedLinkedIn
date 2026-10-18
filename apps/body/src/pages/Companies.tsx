@@ -4,8 +4,10 @@ import { EditCompanyDialog } from '@/components/companies/edit-company-dialog'
 import { DetailDrawers } from '@/components/details/detail-drawers'
 import { useDetailDrawer } from '@/components/details/use-detail-drawer'
 import { ListToolbar } from '@/components/links/list-toolbar'
+import { LinkBulkBar } from '@/components/links/bulk-bar'
 import { linkStatuses } from '@/components/links/link-statuses'
 import { Pager } from '@/components/links/pager'
+import { useSelection } from '@/components/links/use-selection'
 import { useListState } from '@/components/links/use-list-state'
 import { useState } from 'react'
 
@@ -16,6 +18,7 @@ import { trpc } from '../trpc'
 export const Companies = () => {
    const utils = trpc.useUtils()
    const state = useListState()
+   const selection = useSelection()
    const [toEdit, setToEdit] = useState<Company | null>(null)
    const drawer = useDetailDrawer()
 
@@ -24,12 +27,25 @@ export const Companies = () => {
       placeholderData: previous => previous,
    })
 
-   const refresh = () => void utils.linkedInCompany.list.invalidate()
+   const refresh = () => {
+      void utils.linkedInCompany.list.invalidate()
+      void utils.label.list.invalidate()
+   }
    const archive = trpc.linkedInCompany.archive.useMutation({ onSuccess: refresh })
    const restore = trpc.linkedInCompany.restore.useMutation({ onSuccess: refresh })
+   const labelMany = trpc.linkedInCompany.labelMany.useMutation({ onSuccess: refresh })
+   const archiveMany = trpc.linkedInCompany.archiveMany.useMutation({ onSuccess: refresh })
+   const update = trpc.linkedInCompany.update.useMutation()
+   const saveTags = async (company: Company, tags: string[]) => {
+      await update.mutateAsync({
+         id: company.id,
+         tags,
+      })
+      await Promise.all([utils.linkedInCompany.list.invalidate(), utils.label.list.invalidate()])
+   }
 
    const busyId = archive.isPending ? archive.variables?.id : restore.isPending ? restore.variables?.id : undefined
-   const actionError = archive.error?.message ?? restore.error?.message
+   const actionError = [archive, restore, labelMany, archiveMany].find(action => action.error)?.error?.message
 
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
@@ -46,11 +62,14 @@ export const Companies = () => {
          <ListToolbar
             state={state}
             statuses={linkStatuses}
+            kind="companies"
             searchLabel="Search companies"
             searchPlaceholder="Search name, industry or link"
          />
 
          {actionError ? <p className="text-destructive text-sm">{actionError}</p> : null}
+
+         <LinkBulkBar kind="companies" selection={selection} labelMany={labelMany} archiveMany={archiveMany} />
 
          <CompaniesTable
             companies={list.data?.items}
@@ -60,8 +79,10 @@ export const Companies = () => {
             onEdit={setToEdit}
             onArchive={company => archive.mutate({ id: company.id })}
             onRestore={company => restore.mutate({ id: company.id })}
-            onTag={state.setTag}
+            onTag={state.addTag}
+            saveTags={saveTags}
             onOpen={company => drawer.show('company', company.slug)}
+            selection={selection}
          />
 
          <Pager

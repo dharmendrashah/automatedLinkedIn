@@ -7,6 +7,7 @@ import { createContext } from './context'
 import {
    companyPage,
    icp,
+   label,
    linkedInAccount,
    linkedInCompany,
    linkedInPost,
@@ -31,6 +32,7 @@ export const appRouter = router({
    companyPage,
    postPage,
    icp,
+   label,
    linkedInAccount,
    linkedInCompany,
    linkedInPost,

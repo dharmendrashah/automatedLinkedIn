@@ -1,6 +1,5 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
    DropdownMenu,
    DropdownMenuContent,
@@ -30,6 +29,9 @@ import {
    workStatus,
 } from './types'
 
+import { LabelCell } from '../labels/label-cell'
+import { SelectAllHead, SelectCell } from '../links/selection'
+import { type Selection } from '../links/use-selection'
 import { StateRows } from '../links/state-rows'
 
 const COLUMNS = 5
@@ -41,14 +43,15 @@ type Props = {
    view: InboxView
    // People added after this were not seen by the owner yet.
    seenAt: string | null
-   selected: Set<string>
+   selection: Selection
    // The few to start with, marked on the left.
    highlight: Set<string>
    activeSlug: string | undefined
    lists: ListSummary[]
    emptyText: string
-   onSelect: (ids: string[], on: boolean) => void
    onOpen: (member: InboxMember) => void
+   onTag: (tag: string) => void
+   saveTags: (member: InboxMember, tags: string[]) => Promise<unknown>
    onStatus: (member: InboxMember, status: MemberStatus) => void
    onMessage: (member: InboxMember) => void
    onMove: (member: InboxMember, list: ListSummary) => void
@@ -67,13 +70,14 @@ export const InboxTable = ({
    error,
    view,
    seenAt,
-   selected,
+   selection,
    highlight,
    activeSlug,
    lists,
    emptyText,
-   onSelect,
    onOpen,
+   onTag,
+   saveTags,
    onStatus,
    onMessage,
    onMove,
@@ -81,20 +85,13 @@ export const InboxTable = ({
    onBlock,
 }: Props) => {
    const ids = members?.map(({ id }) => id) ?? []
-   const allOn = ids.length > 0 && ids.every(id => selected.has(id))
 
    return (
       <div className="overflow-hidden rounded-lg border">
          <Table>
             <TableHeader className="bg-muted/50">
                <TableRow>
-                  <TableHead className="w-10">
-                     <Checkbox
-                        aria-label="Select everyone on this page"
-                        checked={allOn}
-                        onCheckedChange={checked => onSelect(ids, checked === true)}
-                     />
-                  </TableHead>
+                  <SelectAllHead ids={ids} selection={selection} noun="person" />
                   <TableHead>Person</TableHead>
                   <TableHead className="w-36">Fit</TableHead>
                   <TableHead className="w-48">Status</TableHead>
@@ -123,13 +120,7 @@ export const InboxTable = ({
                         data-state={member.slug === activeSlug ? 'selected' : undefined}
                         className={cn(highlight.has(member.id) && 'border-l-primary border-l-2')}
                      >
-                        <TableCell>
-                           <Checkbox
-                              aria-label={`Select ${name}`}
-                              checked={selected.has(member.id)}
-                              onCheckedChange={checked => onSelect([member.id], checked === true)}
-                           />
-                        </TableCell>
+                        <SelectCell id={member.id} name={name} selection={selection} />
                         <TableCell>
                            <div className="flex items-center gap-2">
                               {isNew ? <span className="bg-primary size-2 shrink-0 rounded-full" aria-label="New" /> : null}
@@ -160,6 +151,15 @@ export const InboxTable = ({
                                  ) : null}
                               </p>
                            ) : null}
+                           <div className="mt-1">
+                              <LabelCell
+                                 tags={member.tags}
+                                 kind="people"
+                                 name={name}
+                                 save={tags => saveTags(member, tags)}
+                                 onFilter={onTag}
+                              />
+                           </div>
                         </TableCell>
                         <TableCell>
                            <Badge variant="outline" className={cn(FITS[member.state].className)}>

@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
    addMany: vi.fn(),
    list: vi.fn(),
    getForUser: vi.fn(),
-   setStatus: vi.fn(),
+   updateForUser: vi.fn(),
    archiveForUser: vi.fn(),
    restoreForUser: vi.fn(),
 }))
@@ -19,7 +19,7 @@ vi.mock('database', () => ({
       addMany: mocks.addMany,
       list: mocks.list,
       getForUser: mocks.getForUser,
-      setStatus: mocks.setStatus,
+      updateForUser: mocks.updateForUser,
       archiveForUser: mocks.archiveForUser,
       restoreForUser: mocks.restoreForUser,
    },
@@ -84,13 +84,17 @@ describe('linkedInPost resolvers', () => {
          const urls = `linkedin.com/posts/ada_x-activity-${POST_ID}-AbCd?utm_source=share linkedin.com/in/ada-lovelace`
          const result = await caller(authed()).create({ urls })
 
-         expect(mocks.addMany).toHaveBeenCalledWith('u1', [
-            {
-               slug: `activity-${POST_ID}`,
-               url: `https://www.linkedin.com/feed/update/urn:li:activity:${POST_ID}`,
-               expandedUrl: null,
-            },
-         ])
+         expect(mocks.addMany).toHaveBeenCalledWith(
+            'u1',
+            [
+               {
+                  slug: `activity-${POST_ID}`,
+                  url: `https://www.linkedin.com/feed/update/urn:li:activity:${POST_ID}`,
+                  expandedUrl: null,
+               },
+            ],
+            []
+         )
          expect(result).toEqual({
             created: 1,
             restored: 0,
@@ -120,13 +124,17 @@ describe('linkedInPost resolvers', () => {
 
          await caller(authed()).create({ urls: 'https://lnkd.in/p/gtzWY58E' })
 
-         expect(mocks.addMany).toHaveBeenCalledWith('u1', [
-            {
-               slug: 'lnkd-gtzWY58E',
-               url: 'https://lnkd.in/p/gtzWY58E',
-               expandedUrl: target,
-            },
-         ])
+         expect(mocks.addMany).toHaveBeenCalledWith(
+            'u1',
+            [
+               {
+                  slug: 'lnkd-gtzWY58E',
+                  url: 'https://lnkd.in/p/gtzWY58E',
+                  expandedUrl: target,
+               },
+            ],
+            []
+         )
          vi.unstubAllGlobals()
       })
 
@@ -199,19 +207,23 @@ describe('linkedInPost resolvers', () => {
    })
 
    describe('update', () => {
-      it('should set the status for the current user', async () => {
-         mocks.setStatus.mockResolvedValueOnce({ id: 'p1' })
+      it('should set the status and labels for the current user', async () => {
+         mocks.updateForUser.mockResolvedValueOnce({ id: 'p1' })
 
          await caller(authed()).update({
             id: 'p1',
             status: 'PROCESSED',
+            tags: ['Acme'],
          })
 
-         expect(mocks.setStatus).toHaveBeenCalledWith('u1', 'p1', 'PROCESSED')
+         expect(mocks.updateForUser).toHaveBeenCalledWith('u1', 'p1', {
+            status: 'PROCESSED',
+            tags: ['acme'],
+         })
       })
 
       it('should answer NOT_FOUND for a foreign post and reject an unknown status', async () => {
-         mocks.setStatus.mockResolvedValueOnce(null)
+         mocks.updateForUser.mockResolvedValueOnce(null)
 
          await expect(
             caller(authed()).update({

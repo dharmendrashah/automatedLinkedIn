@@ -1,4 +1,5 @@
 export { icp } from './icp/icp'
+export { label } from './label/label'
 export { linkedInAccount } from './linkedInAccount/linkedInAccount'
 export { linkedInCompany } from './linkedInCompany/linkedInCompany'
 export { linkedInPost } from './linkedInPost/linkedInPost'

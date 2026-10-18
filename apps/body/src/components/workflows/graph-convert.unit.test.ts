@@ -2,7 +2,17 @@ import { describe, expect, it } from 'vitest'
 
 import { type Block, type Graph } from './types'
 
-import { canConnect, choicesFor, combineRounds, hasLoop, newNodeId, toFlow, toGraph } from './graph-convert'
+import {
+   canConnect,
+   choicesFor,
+   combineRounds,
+   hasLoop,
+   newNodeId,
+   startConfig,
+   summaryOf,
+   toFlow,
+   toGraph,
+} from './graph-convert'
 
 const block = (type: Block['type'], input: Block['input'], output: Block['output']): Block => ({
    type,
@@ -60,6 +70,36 @@ const graph: Graph = {
       },
    ],
 }
+
+describe('input blocks', () => {
+   const profiles = block('input.profiles', 'start', 'profile')
+
+   it('should say on the card which slice an input block takes', () => {
+      expect(summaryOf(profiles, { howMany: 50 })).toBe('Up to 50 people')
+      expect(
+         summaryOf(profiles, {
+            howMany: 50,
+            labels: ['acme', 'fintech'],
+            labelMatch: 'all',
+            added: 'week',
+            statuses: ['NEW'],
+         })
+      ).toBe('Up to 50 people · labelled acme and fintech · added this week · new only')
+   })
+
+   it('should start new input blocks on All, profiles and companies on new ones only, in the owner time zone', () => {
+      expect(startConfig('input.profiles', 'Asia/Kolkata')).toEqual({
+         timeZone: 'Asia/Kolkata',
+         all: true,
+         statuses: ['NEW'],
+      })
+      expect(startConfig('input.posts', 'Asia/Kolkata')).toEqual({
+         timeZone: 'Asia/Kolkata',
+         all: true,
+      })
+      expect(startConfig('collect.commenters', 'Asia/Kolkata')).toEqual({})
+   })
+})
 
 describe('graph-convert', () => {
    it('should round-trip a graph and label edges with what the run passed along', () => {

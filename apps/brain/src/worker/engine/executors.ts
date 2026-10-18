@@ -15,6 +15,8 @@ import {
 } from 'core'
 
 import {
+   InputPickService,
+   type InputType,
    LinkedInCompanyService,
    LinkedInPostService,
    LinkedInProfileService,
@@ -26,7 +28,7 @@ import {
    WorkflowRunService,
 } from 'database'
 
-import { ALL_CAP, ELSE_SOURCES, type GraphNode } from '@automatedLinkedIn/contracts'
+import { ALL_CAP, ELSE_SOURCES, type GraphNode, inputPickOf, inputTake } from '@automatedLinkedIn/contracts'
 
 import {
    ENRICH_BATCH,
@@ -115,6 +117,10 @@ const sendableUrl = async (post: { id: string | null; url: string; expandedUrl: 
    return expanded ?? post.url
 }
 
+// The slice of the owner's list the block's settings pick.
+const pickFilter = (ctx: Context, type: InputType) =>
+   InputPickService.filter(ctx.run.userId, inputPickOf(type, ctx.node.config), ctx.run.workflowId)
+
 const inputPosts = async (ctx: Context): Promise<StepResult> => {
    const sent = runInput(ctx).posts
    const posts = sent
@@ -123,7 +129,10 @@ const inputPosts = async (ctx: Context): Promise<StepResult> => {
            id: null,
            expandedUrl: null,
         }))
-      : await LinkedInPostService.waiting(ctx.run.userId, numberIn(configOf(ctx.node), 'howMany'))
+      : await LinkedInPostService.waiting(ctx.run.userId, inputTake('input.posts', ctx.node.config), {
+           ...(await pickFilter(ctx, 'input.posts')),
+           statuses: [],
+        })
    const previews = await PostPageService.previews(
       ctx.run.userId,
       posts.map(({ slug }) => slug)
@@ -141,7 +150,7 @@ const inputPosts = async (ctx: Context): Promise<StepResult> => {
 
    return {
       ...result,
-      message: items.length === 0 ? 'No posts were waiting in your posts list.' : undefined,
+      message: items.length === 0 ? 'No waiting posts in your posts list match this block.' : undefined,
    }
 }
 
@@ -158,7 +167,13 @@ const inputProfiles = async (ctx: Context): Promise<StepResult> => {
                  known: true,
               })
            )
-         : (await LinkedInProfileService.recent(ctx.run.userId, numberIn(config, 'howMany'))).map(profile =>
+         : (
+              await LinkedInProfileService.pick(
+                 ctx.run.userId,
+                 inputTake('input.profiles', ctx.node.config),
+                 await pickFilter(ctx, 'input.profiles')
+              )
+           ).map(profile =>
               person({
                  slug: profile.slug,
                  url: profile.url,
@@ -168,8 +183,12 @@ const inputProfiles = async (ctx: Context): Promise<StepResult> => {
                  known: true,
               })
            )
+   const result = await keepItems(ctx, mergeBySlug(people), 0)
 
-   return keepItems(ctx, mergeBySlug(people), 0)
+   return {
+      ...result,
+      message: people.length === 0 ? 'No profiles in your profiles list match this block.' : undefined,
+   }
 }
 
 const inputCompanies = async (ctx: Context): Promise<StepResult> => {
@@ -181,15 +200,25 @@ const inputCompanies = async (ctx: Context): Promise<StepResult> => {
            name: null,
            hiring: [],
         }))
-      : (await LinkedInCompanyService.recent(ctx.run.userId, numberIn(configOf(ctx.node), 'howMany'))).map(company => ({
+      : (
+           await LinkedInCompanyService.pick(
+              ctx.run.userId,
+              inputTake('input.companies', ctx.node.config),
+              await pickFilter(ctx, 'input.companies')
+           )
+        ).map(company => ({
            kind: 'company',
            slug: company.slug,
            url: company.url,
            name: company.name,
            hiring: [],
         }))
+   const result = await keepItems(ctx, companies, 0)
 
-   return keepItems(ctx, companies, 0)
+   return {
+      ...result,
+      message: companies.length === 0 ? 'No companies in your companies list match this block.' : undefined,
+   }
 }
 
 // The people the workflow this one listens to kept. They are known: being in its list does not stop them here.

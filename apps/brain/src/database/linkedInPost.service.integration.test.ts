@@ -60,7 +60,7 @@ describe('LinkedInPostService (database)', () => {
 
       const [first] = items.filter(item => item.slug === 'activity-7000000000000000001')
 
-      await LinkedInPostService.setStatus(userId, first.id, 'PROCESSED')
+      await LinkedInPostService.updateForUser(userId, first.id, { status: 'PROCESSED' })
       await LinkedInPostService.archiveForUser(userId, first.id)
 
       const live = await LinkedInPostService.list(userId, firstPage)
@@ -90,7 +90,7 @@ describe('LinkedInPostService (database)', () => {
       const [mine] = (await LinkedInPostService.list(userId, firstPage)).items
 
       await expect(LinkedInPostService.getForUser(otherUserId, mine.id)).resolves.toBeNull()
-      await expect(LinkedInPostService.setStatus(otherUserId, mine.id, 'PROCESSED')).resolves.toBeNull()
+      await expect(LinkedInPostService.updateForUser(otherUserId, mine.id, { status: 'PROCESSED' })).resolves.toBeNull()
       await expect(LinkedInPostService.archiveForUser(otherUserId, mine.id)).resolves.toBeNull()
    })
 })

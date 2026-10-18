@@ -1,6 +1,6 @@
 import { type Edge, type Node } from '@xyflow/react'
 
-import { describeSchedule } from './schedule-text'
+import { browserTimeZone, describeSchedule } from './schedule-text'
 import { type Block, type ConfigValue, type Graph, type GraphNode, type StepRun } from './types'
 
 // Turns the saved graph into React Flow nodes and edges and back. The graph is the source of truth; the canvas only
@@ -194,6 +194,27 @@ export const newNodeId = (type: string, nodes: { id: string }[]) => {
    return `${base}-${index}`
 }
 
+// What a new block starts with: a schedule and "added today" use the owner's time zone, input blocks take all that match,
+// and profiles and companies take only new ones. Blocks saved before keep their number and every status.
+export const startConfig = (type: string, timeZone: string = browserTimeZone()): GraphNode['config'] => {
+   if (type === 'input.profiles' || type === 'input.companies') {
+      return {
+         timeZone,
+         all: true,
+         statuses: ['NEW'],
+      }
+   }
+
+   if (type === 'input.posts') {
+      return {
+         timeZone,
+         all: true,
+      }
+   }
+
+   return type === 'trigger.schedule' ? { timeZone } : {}
+}
+
 const show = (value: ConfigValue | undefined) => (Array.isArray(value) ? value.join(', ') : String(value ?? ''))
 
 // What a block's "how many" counts.
@@ -225,6 +246,37 @@ const RUN_WAITS: Record<string, string> = {
    results: 'Waits for the people it saves',
 }
 
+const ADDED_WORDS: Record<string, string> = {
+   today: 'added today',
+   week: 'added this week',
+   '7d': 'added in the last 7 days',
+   '30d': 'added in the last 30 days',
+   lastRun: 'added since the last run',
+}
+
+const STATUS_WORDS: Record<string, string> = {
+   NEW: 'new',
+   CONTACTED: 'contacted',
+   REPLIED: 'replied',
+}
+
+const listOf = (value: ConfigValue | undefined) => (Array.isArray(value) ? value : [])
+
+// An input block's filters in a few words, such as "labelled fintech · added this week · new only".
+const pickOf = (values: Record<string, ConfigValue | undefined>) => {
+   const labels = listOf(values.labels)
+   const without = listOf(values.withoutLabels)
+   const statuses = listOf(values.statuses)
+   const joiner = values.labelMatch === 'all' ? ' and ' : ', '
+
+   return [
+      labels.length > 0 ? `labelled ${labels.join(joiner)}` : null,
+      without.length > 0 ? `not ${without.join(', ')}` : null,
+      ADDED_WORDS[show(values.added)] ?? null,
+      statuses.length > 0 && statuses.length < 3 ? `${statuses.map(status => STATUS_WORDS[status] ?? status).join(' or ')} only` : null,
+   ].filter((part): part is string => part !== null)
+}
+
 // One line under the block's title that says what it is set to.
 export const summaryOf = (block: Block, config: GraphNode['config'], icpName?: string) => {
    const values = { ...block.defaults, ...config }
@@ -243,8 +295,9 @@ export const summaryOf = (block: Block, config: GraphNode['config'], icpName?: s
 
    if ('howMany' in values) {
       const unit = UNITS[block.type] ?? ''
+      const amount = values.all === true ? `All ${unit}`.trim() : `Up to ${show(values.howMany)} ${unit}`.trim()
 
-      return values.all === true ? `All ${unit}`.trim() : `Up to ${show(values.howMany)} ${unit}`.trim()
+      return [amount, ...pickOf(values)].join(' · ')
    }
 
    if (block.type === 'trigger.schedule') {

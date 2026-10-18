@@ -71,7 +71,7 @@ describe('LinkedInProfileService (database)', () => {
       })
       const searched = await LinkedInProfileService.list(userId, {
          search: 'LOVELACE',
-         tag: 'vip',
+         tags: ['vip'],
          status: 'CONTACTED',
          includeArchived: true,
          page: 1,

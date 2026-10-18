@@ -10,8 +10,12 @@ import { ChevronRight, CircleAlert, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 import { BlockOutput } from './block-output'
+import { INPUT_KINDS, isInputType } from './input-kinds'
+import { InputMatches } from './input-matches'
 import { ScheduleSettings } from './schedule-settings'
-import { Chips, SearchPick, Stepper, TagInput } from './setting-inputs'
+import { Chips, ChipsInput, SearchPick, Stepper } from './setting-inputs'
+
+import { LabelMultiSelect } from '../labels/label-multi-select'
 
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { type FlowNode } from './graph-convert'
@@ -21,6 +25,7 @@ type Choice = { id: string; name: string }
 
 type Props = {
    node: FlowNode | null
+   workflowId: string
    problems: { message: string; level: 'error' | 'note' }[]
    icps: Choice[]
    workflows: Choice[]
@@ -37,8 +42,9 @@ const textOf = (value: ConfigValue | undefined) => (Array.isArray(value) ? value
 
 const SHORT_LIST = 4
 
-// The safety cap of "All"; the same number lives in the contracts package, which body does not load at runtime.
-const ALL_CAP = '1,000'
+// The safety cap of "All" when a block sets none; the same number lives in the contracts package, which body does not
+// load at runtime.
+const ALL_CAP = 1_000
 
 const KINDS: Record<string, string> = {
    post: 'posts',
@@ -63,7 +69,7 @@ const flowOf = (block: Block) => {
 }
 
 // A block's settings over the canvas. Every change applies at once; the canvas's Save keeps them.
-export const BlockSettings = ({ node, problems, icps, workflows, parents, onChange: onPatch, onRemove, onClose, output }: Props) => {
+export const BlockSettings = ({ node, workflowId, problems, icps, workflows, parents, onChange: onPatch, onRemove, onClose, output }: Props) => {
    if (!node) {
       return null
    }
@@ -91,7 +97,19 @@ export const BlockSettings = ({ node, problems, icps, workflows, parents, onChan
       }
 
       if (item.kind === 'words') {
-         return <TagInput id={id} value={Array.isArray(value) ? value : []} onChange={next => onChange(item.key, next)} />
+         const words = Array.isArray(value) ? value : []
+
+         return item.suggest === 'labels' ? (
+            <LabelMultiSelect
+               id={id}
+               kind={isInputType(block.type) ? INPUT_KINDS[block.type] : 'people'}
+               value={words}
+               onChange={next => onChange(item.key, next)}
+               placeholder="Pick or create labels"
+            />
+         ) : (
+            <ChipsInput id={id} kind={item.suggest} value={words} onChange={next => onChange(item.key, next)} />
+         )
       }
 
       if (item.kind === 'multi') {
@@ -132,7 +150,7 @@ export const BlockSettings = ({ node, problems, icps, workflows, parents, onChan
                <Chips
                   id={id}
                   options={[
-                     { value: 'all', label: `All (up to ${ALL_CAP})` },
+                     { value: 'all', label: `All (up to ${(item.allCap ?? ALL_CAP).toLocaleString('en-US')})` },
                      { value: 'some', label: 'Up to a number' },
                   ]}
                   isOn={option => (option === 'all') === all}
@@ -208,8 +226,14 @@ export const BlockSettings = ({ node, problems, icps, workflows, parents, onChan
             {item.hint ? <p className="text-muted-foreground text-xs">{item.hint}</p> : null}
          </div>
       )
-   const main = block.fields.filter(item => !item.advanced)
-   const more = block.fields.filter(item => item.advanced)
+   const shown = (item: Field) => {
+      const needed = item.showWhen
+      const list = needed ? values[needed.key] : undefined
+
+      return !needed || (Array.isArray(list) && list.length >= needed.atLeast)
+   }
+   const main = block.fields.filter(item => !item.advanced && shown(item))
+   const more = block.fields.filter(item => item.advanced && shown(item))
    const isOn = (preset: Block['presets'][number]) =>
       Object.entries(preset.config).every(([key, wanted]) => JSON.stringify(values[key]) === JSON.stringify(wanted))
    const presets =
@@ -244,6 +268,7 @@ export const BlockSettings = ({ node, problems, icps, workflows, parents, onChan
          <p className="text-muted-foreground text-sm">This block has nothing to set.</p>
       ) : (
          <div className="grid max-h-[60vh] gap-5 overflow-y-auto pr-1">
+            {isInputType(block.type) ? <InputMatches workflowId={workflowId} type={block.type} values={values} /> : null}
             {presets}
             {main.map(row)}
             {more.length > 0 ? (

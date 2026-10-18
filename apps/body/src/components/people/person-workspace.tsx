@@ -17,6 +17,7 @@ import { readableError } from '@/lib/trpc-error'
 import { Ban, ListPlus, UserPlus } from 'lucide-react'
 import { useState } from 'react'
 
+import { LabelCell } from '../labels/label-cell'
 import { isLinkStatus, linkStatuses } from '../links/link-statuses'
 import { isMemberStatus, memberStatuses } from '../lists/types'
 import { Section } from './person-sections'
@@ -52,8 +53,10 @@ export const Workspace = ({ person }: { person: PersonDetail }) => {
    const refresh = () => {
       void utils.person.detail.invalidate({ slug: person.slug })
       void utils.workflowList.members.invalidate()
+      void utils.workflowList.inbox.invalidate()
       void utils.workflowList.lists.invalidate()
       void utils.linkedInProfile.list.invalidate()
+      void utils.label.list.invalidate()
    }
    const lists = trpc.workflowList.lists.useQuery()
    const updateMember = trpc.workflowList.updateMember.useMutation({ onSuccess: refresh })
@@ -87,12 +90,19 @@ export const Workspace = ({ person }: { person: PersonDetail }) => {
                   <span className="text-sm">
                      In the list <span className="font-medium">{member.list.name}</span>
                   </span>
-                  {member.tags.map(tag => (
-                     <Badge key={tag} variant="secondary">
-                        {tag}
-                     </Badge>
-                  ))}
                </div>
+               <LabelCell
+                  tags={member.tags}
+                  kind="people"
+                  name={name}
+                  save={async tags => {
+                     await updateMember.mutateAsync({
+                        id: member.id,
+                        tags,
+                     })
+                     await utils.person.detail.invalidate({ slug: person.slug })
+                  }}
+               />
                <div className="flex flex-wrap gap-2">
                   <Select
                      value={member.status}
@@ -184,6 +194,18 @@ export const Workspace = ({ person }: { person: PersonDetail }) => {
                   </Button>
                </div>
                <Notes key={`profile-${profile.id}`} id={`notes-profile-${profile.id}`} value={profile.notes} onSave={notes => updateProfile.mutate({ id: profile.id, notes })} />
+               <LabelCell
+                  tags={profile.tags}
+                  kind="profiles"
+                  name={name}
+                  save={async tags => {
+                     await updateProfile.mutateAsync({
+                        id: profile.id,
+                        tags,
+                     })
+                     await utils.person.detail.invalidate({ slug: person.slug })
+                  }}
+               />
             </div>
          ) : null}
 

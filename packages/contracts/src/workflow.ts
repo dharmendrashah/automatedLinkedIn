@@ -33,10 +33,14 @@ export const ALL_CAP = 1_000
 
 type Option = { value: string; label: string }
 
-// `advanced` settings sit under "More options" so a block opens simple.
+// What a list field offers while typing: the owner's labels, common titles or places, or checks on links and sites.
+export type Suggest = 'labels' | 'titles' | 'locations' | 'links' | 'domains'
+
+// `advanced` settings sit under "More options" so a block opens simple. `showWhen` shows a setting only once another
+// list setting has at least that many values.
 export type Field = (
    | { key: string; label: string; kind: 'int'; min: number; max: number }
-   | { key: string; label: string; kind: 'words' }
+   | { key: string; label: string; kind: 'words'; suggest?: Suggest }
    | { key: string; label: string; kind: 'icp' }
    | { key: string; label: string; kind: 'time' }
    | { key: string; label: string; kind: 'text'; placeholder?: string }
@@ -45,13 +49,13 @@ export type Field = (
    // Many choices from a long list, picked by typing.
    | { key: string; label: string; kind: 'search'; options: Option[]; max: number }
    | { key: string; label: string; kind: 'toggle' }
-   // "All" (the boolean `allKey`, capped at ALL_CAP) or "Up to" the number in `key`.
-   | { key: string; label: string; kind: 'limit'; allKey: string; min: number; max: number }
+   // "All" (the boolean `allKey`, capped at `allCap`, ALL_CAP when not set) or "Up to" the number in `key`.
+   | { key: string; label: string; kind: 'limit'; allKey: string; min: number; max: number; allCap?: number }
    // One of the blocks connected before this one.
    | { key: string; label: string; kind: 'parent' }
    // Another workflow of the same owner.
    | { key: string; label: string; kind: 'workflow' }
-) & { hint?: string; advanced?: boolean }
+) & { hint?: string; advanced?: boolean; showWhen?: { key: string; atLeast: number } }
 
 const optionsOf = (pairs: [string, string][]): Option[] =>
    pairs.map(([value, label]) => ({
@@ -237,7 +241,7 @@ const someOf = (choices: Option[], max = choices.length) =>
 
 const toggle = (fallback: boolean) => z.boolean().default(fallback)
 
-const LINKS_HINT = 'Paste LinkedIn links, one by one.'
+const LINKS_HINT = 'Paste one or many LinkedIn links.'
 
 const howMany = (max: number, fallback: number) => z.number().int().min(1).max(max).default(fallback)
 
@@ -285,6 +289,154 @@ export const scheduleSchema = z
    })
 
 export type Schedule = z.infer<typeof scheduleSchema>
+
+// Which part of the owner's posts, profiles or companies an input block takes (.plan/labels-and-input-filters.md).
+export const ADDED_WINDOWS = ['any', 'today', 'week', '7d', '30d', 'lastRun'] as const
+
+export const LABEL_MAX = 20
+
+const labelList = z.array(z.string().trim().toLowerCase().min(1).max(30)).max(LABEL_MAX).default([])
+
+export const inputPickSchema = z.object({
+   added: z.enum(ADDED_WINDOWS).default('any'),
+   labels: labelList,
+   labelMatch: z.enum(['any', 'all']).default('any'),
+   withoutLabels: labelList,
+   // Empty takes every status; posts have none.
+   statuses: z
+      .array(z.enum(['NEW', 'CONTACTED', 'REPLIED']))
+      .max(3)
+      .default([]),
+   order: z.enum(['newest', 'oldest']).default('newest'),
+   timeZone: z.string().trim().min(1).max(64).refine(isTimeZone, 'is not a known time zone').default('UTC'),
+})
+
+export type InputPick = z.infer<typeof inputPickSchema>
+
+const ADDED = optionsOf([
+   ['any', 'Any time'],
+   ['today', 'Today'],
+   ['week', 'This week'],
+   ['7d', 'Last 7 days'],
+   ['30d', 'Last 30 days'],
+   ['lastRun', "Since this workflow's last run"],
+])
+
+const pickFields = (order: Option[]): Field[] => [
+   {
+      key: 'added',
+      label: 'Added',
+      kind: 'select',
+      options: ADDED,
+   },
+   {
+      key: 'labels',
+      label: 'With labels',
+      kind: 'words',
+      suggest: 'labels',
+      hint: 'Empty takes everything, whatever its labels.',
+   },
+   {
+      key: 'labelMatch',
+      label: 'Match',
+      kind: 'select',
+      options: optionsOf([
+         ['any', 'Any of these labels'],
+         ['all', 'All of these labels'],
+      ]),
+      showWhen: {
+         key: 'labels',
+         atLeast: 2,
+      },
+   },
+   {
+      key: 'withoutLabels',
+      label: 'Without labels',
+      kind: 'words',
+      suggest: 'labels',
+      advanced: true,
+   },
+   {
+      key: 'order',
+      label: 'Order',
+      kind: 'select',
+      options: order,
+      advanced: true,
+   },
+]
+
+export type InputType = 'input.posts' | 'input.profiles' | 'input.companies'
+
+// "All" on an input block takes at most this many, the same as the biggest "Up to".
+export const INPUT_MAX: Record<InputType, number> = {
+   'input.posts': 50,
+   'input.profiles': 200,
+   'input.companies': 100,
+}
+
+const inputHowMany = (type: InputType, noun: string): Field => ({
+   key: 'howMany',
+   allKey: 'all',
+   label: `How many ${noun}`,
+   kind: 'limit',
+   min: 1,
+   max: INPUT_MAX[type],
+   allCap: INPUT_MAX[type],
+   hint: `"All" takes every match, up to ${INPUT_MAX[type]}.`,
+})
+
+const NEWEST_FIRST = optionsOf([
+   ['newest', 'Newest first'],
+   ['oldest', 'Oldest first'],
+])
+
+const OLDEST_FIRST = optionsOf([
+   ['oldest', 'Oldest first'],
+   ['newest', 'Newest first'],
+])
+
+const statusField: Field = {
+   key: 'statuses',
+   label: 'Status',
+   kind: 'multi',
+   options: optionsOf([
+      ['NEW', 'New'],
+      ['CONTACTED', 'Contacted'],
+      ['REPLIED', 'Replied'],
+   ]),
+   hint: 'None picked takes every status.',
+}
+
+// Posts are worked through oldest first, as before; profiles and companies newest first.
+export const inputPickOf = (type: InputType, config: unknown): InputPick =>
+   inputPickSchema.parse({
+      order: type === 'input.posts' ? 'oldest' : 'newest',
+      ...(typeof config === 'object' && config !== null ? config : {}),
+   })
+
+const DAY_MS = 86_400_000
+
+// The first moment an item may have been added to be taken; null takes any.
+export const addedSince = (pick: Pick<InputPick, 'added' | 'timeZone'>, now: Date, lastRunAt: Date | null) => {
+   switch (pick.added) {
+      case 'any':
+         return null
+      case 'lastRun':
+         return lastRunAt
+      case '7d':
+         return new Date(now.getTime() - 7 * DAY_MS)
+      case '30d':
+         return new Date(now.getTime() - 30 * DAY_MS)
+      default: {
+         const wall = new Date(wallClock(now, pick.timeZone))
+         const midnight = Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate())
+         // Weeks start on Monday.
+         const back = pick.added === 'week' ? (wall.getUTCDay() + 6) % 7 : 0
+
+         return zonedToUtc(midnight - back * DAY_MS, pick.timeZone)
+      }
+   }
+}
 
 export const BLOCK_TYPES = [
    'trigger.manual',
@@ -363,16 +515,13 @@ const BLOCKS = {
       summary: 'Takes posts from your posts list that are not done yet.',
       input: 'start',
       output: 'post',
-      config: z.object({ howMany: howMany(50, 5) }),
-      fields: [
-         {
-            key: 'howMany',
-            label: 'How many posts',
-            kind: 'int',
-            min: 1,
-            max: 50,
-         },
-      ],
+      config: inputPickSchema.omit({ statuses: true }).extend({
+         // Blocks saved before "All" keep their number; new ones start on All (see the body's startConfig).
+         all: z.boolean().default(false),
+         howMany: howMany(50, 5),
+         order: z.enum(['newest', 'oldest']).default('oldest'),
+      }),
+      fields: [inputHowMany('input.posts', 'posts'), ...pickFields(OLDEST_FIRST)],
    },
    'collect.commenters': {
       group: 'Collect',
@@ -540,7 +689,7 @@ const BLOCKS = {
             key: 'headlineWords',
             label: 'Headline has one of these words',
             kind: 'words',
-            hint: 'Separate with commas. Empty keeps everyone.',
+            hint: 'Empty keeps everyone.',
          },
       ],
    },
@@ -675,24 +824,22 @@ const BLOCKS = {
       summary: 'People from your profiles list, or the links you give.',
       input: 'start',
       output: 'profile',
-      config: z.object({
+      config: inputPickSchema.extend({
+         all: z.boolean().default(false),
          howMany: howMany(200, 25),
          links: z.array(z.string().trim().min(1).max(300)).max(50).default([]),
       }),
       fields: [
-         {
-            key: 'howMany',
-            label: 'How many people',
-            kind: 'int',
-            min: 1,
-            max: 200,
-         },
+         inputHowMany('input.profiles', 'people'),
          {
             key: 'links',
             label: 'Only these profile links',
             kind: 'words',
-            hint: 'Separate with commas. Empty takes people from your profiles list.',
+            suggest: 'links',
+            hint: 'Paste one or many. Empty takes people from your profiles list, filtered below.',
          },
+         statusField,
+         ...pickFields(NEWEST_FIRST),
       ],
    },
    'input.companies': {
@@ -701,16 +848,11 @@ const BLOCKS = {
       summary: 'Companies from your companies list.',
       input: 'start',
       output: 'company',
-      config: z.object({ howMany: howMany(100, 10) }),
-      fields: [
-         {
-            key: 'howMany',
-            label: 'How many companies',
-            kind: 'int',
-            min: 1,
-            max: 100,
-         },
-      ],
+      config: inputPickSchema.extend({
+         all: z.boolean().default(false),
+         howMany: howMany(100, 10),
+      }),
+      fields: [inputHowMany('input.companies', 'companies'), statusField, ...pickFields(NEWEST_FIRST)],
    },
    'collect.findPosts': {
       group: 'Collect',
@@ -799,6 +941,7 @@ const BLOCKS = {
             key: 'authors',
             label: 'Only posts by these people',
             kind: 'words',
+            suggest: 'links',
             hint: LINKS_HINT,
             advanced: true,
          },
@@ -806,6 +949,7 @@ const BLOCKS = {
             key: 'mentioning',
             label: 'Only posts mentioning these people or companies',
             kind: 'words',
+            suggest: 'links',
             hint: LINKS_HINT,
             advanced: true,
          },
@@ -969,6 +1113,7 @@ const BLOCKS = {
             key: 'titles',
             label: 'Current job titles',
             kind: 'words',
+            suggest: 'titles',
             hint: 'Empty takes any title.',
          },
          {
@@ -1017,6 +1162,7 @@ const BLOCKS = {
             key: 'locations',
             label: 'Located in',
             kind: 'words',
+            suggest: 'locations',
             hint: 'Cities or countries, such as London or Germany.',
             advanced: true,
          },
@@ -1024,6 +1170,7 @@ const BLOCKS = {
             key: 'pastTitles',
             label: 'Past job titles',
             kind: 'words',
+            suggest: 'titles',
             advanced: true,
          },
          {
@@ -1210,6 +1357,7 @@ const BLOCKS = {
             key: 'domains',
             label: 'Websites',
             kind: 'words',
+            suggest: 'domains',
             hint: 'Such as stripe.com and acme.io.',
          },
          {
@@ -1290,11 +1438,13 @@ const BLOCKS = {
             key: 'titles',
             label: 'Current job titles',
             kind: 'words',
+            suggest: 'titles',
          },
          {
             key: 'locations',
             label: 'Located in',
             kind: 'words',
+            suggest: 'locations',
             hint: 'Cities or countries, such as London or Germany.',
          },
          {
@@ -1438,13 +1588,14 @@ const BLOCKS = {
       summary: 'Adds labels to everyone who passes, shown in the list.',
       input: 'profile',
       output: 'profile',
-      config: z.object({ tags: z.array(z.string().trim().toLowerCase().min(1).max(30)).min(1).max(10) }),
+      config: z.object({ tags: z.array(z.string().trim().toLowerCase().min(1).max(30)).min(1).max(LABEL_MAX) }),
       fields: [
          {
             key: 'tags',
             label: 'Labels',
             kind: 'words',
-            hint: 'Up to 10, 30 characters each.',
+            suggest: 'labels',
+            hint: `Up to ${LABEL_MAX}, 30 characters each.`,
          },
       ],
    },
@@ -1534,6 +1685,7 @@ const BLOCKS = {
             key: 'hasLabel',
             label: 'Has one of these labels',
             kind: 'words',
+            suggest: 'labels',
          },
       ],
    },
@@ -1999,7 +2151,17 @@ const countOf = (node: GraphNode, key: string) => {
    return Array.isArray(value) ? value.length : 0
 }
 
-export type Available = { posts: number; profiles: number; companies: number }
+// How many items reach each input block now, after its filters; the per-kind totals are used when a block is missing.
+export type Available = { posts: number; profiles: number; companies: number; byNode?: Record<string, number> }
+
+// How many items an input block takes at most: its number, or its cap for "All".
+export const inputTake = (type: InputType, config: unknown) => {
+   const settings: Record<string, unknown> = blockOf(type).config.safeParse(config).data ?? {}
+
+   return settings.all === true || typeof settings.howMany !== 'number' ? INPUT_MAX[type] : settings.howMany
+}
+
+const reaching = (node: GraphNode, available: Available, total: number) => available.byNode?.[node.id] ?? total
 
 // What one block passes on and costs at most, given how many items reach it.
 const blockEstimate = (node: GraphNode, incoming: number, available: Available) => {
@@ -2008,17 +2170,20 @@ const blockEstimate = (node: GraphNode, incoming: number, available: Available) 
    switch (node.type) {
       case 'input.posts':
          return {
-            items: Math.min(many, available.posts),
+            items: Math.min(inputTake(node.type, node.config), reaching(node, available, available.posts)),
             costMicros: 0,
          }
       case 'input.profiles':
          return {
-            items: Math.min(many, countOf(node, 'links') || available.profiles),
+            items: Math.min(
+               inputTake(node.type, node.config),
+               countOf(node, 'links') || reaching(node, available, available.profiles)
+            ),
             costMicros: 0,
          }
       case 'input.companies':
          return {
-            items: Math.min(many, available.companies),
+            items: Math.min(inputTake(node.type, node.config), reaching(node, available, available.companies)),
             costMicros: 0,
          }
       case 'collect.findPosts':

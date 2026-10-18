@@ -6,12 +6,14 @@ import { cn } from '@/lib/utils'
 
 import { type Company } from './types'
 
+import { LabelCell } from '../labels/label-cell'
 import { LinkStatusBadge } from '../links/link-status-badge'
 import { RowActions } from '../links/row-actions'
+import { SelectAllHead, SelectCell } from '../links/selection'
+import { type Selection } from '../links/use-selection'
 import { StateRows } from '../links/state-rows'
-import { TagBadges } from '../links/tag-badges'
 
-const COLUMNS = 6
+const COLUMNS = 7
 
 const formatDate = (value: string) => new Date(value).toLocaleDateString()
 
@@ -29,7 +31,9 @@ type Props = {
    onArchive: (company: Company) => void
    onRestore: (company: Company) => void
    onTag: (tag: string) => void
+   saveTags: (company: Company, tags: string[]) => Promise<unknown>
    onOpen: (company: Company) => void
+   selection: Selection
 }
 
 export const CompaniesTable = ({
@@ -41,16 +45,19 @@ export const CompaniesTable = ({
    onArchive,
    onRestore,
    onTag,
+   saveTags,
    onOpen,
+   selection,
 }: Props) => (
    <div className="overflow-hidden rounded-lg border">
       <Table>
          <TableHeader className="bg-muted/50">
             <TableRow>
+               <SelectAllHead ids={companies?.map(({ id }) => id) ?? []} selection={selection} noun="company" />
                <TableHead>Company</TableHead>
                <TableHead>Website</TableHead>
                <TableHead>Status</TableHead>
-               <TableHead>Tags</TableHead>
+               <TableHead>Labels</TableHead>
                <TableHead>Added</TableHead>
                <TableHead className="w-24" />
             </TableRow>
@@ -66,6 +73,7 @@ export const CompaniesTable = ({
             />
             {companies?.map(company => (
                <TableRow key={company.id} className={cn(company.archivedAt && 'opacity-60')}>
+                  <SelectCell id={company.id} name={company.name ?? company.slug} selection={selection} />
                   <TableCell>
                      <button
                         type="button"
@@ -95,7 +103,13 @@ export const CompaniesTable = ({
                      </span>
                   </TableCell>
                   <TableCell>
-                     <TagBadges tags={company.tags} onTag={onTag} />
+                     <LabelCell
+                        tags={company.tags}
+                        kind="companies"
+                        name={company.name ?? company.slug}
+                        save={tags => saveTags(company, tags)}
+                        onFilter={onTag}
+                     />
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(company.createdAt)}</TableCell>
                   <TableCell>

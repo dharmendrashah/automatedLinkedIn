@@ -134,11 +134,11 @@ describe('LinkedInPostService', () => {
       })
    })
 
-   describe('setStatus, archiveForUser and restoreForUser', () => {
+   describe('updateForUser, archiveForUser and restoreForUser', () => {
       it('should change a post only when it belongs to the user', async () => {
          mocks.update.mockResolvedValue({ id: 'p1' })
 
-         await LinkedInPostService.setStatus('u1', 'p1', 'PROCESSED')
+         await LinkedInPostService.updateForUser('u1', 'p1', { status: 'PROCESSED' })
          await LinkedInPostService.restoreForUser('u1', 'p1')
          await LinkedInPostService.archiveForUser('u1', 'p1')
 

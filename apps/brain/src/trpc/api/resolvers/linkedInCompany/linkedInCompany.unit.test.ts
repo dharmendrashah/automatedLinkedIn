@@ -82,12 +82,16 @@ describe('linkedInCompany resolvers', () => {
          const urls = 'linkedin.com/company/Elitale/jobs linkedin.com/in/ada-lovelace'
          const result = await caller(authed()).create({ urls })
 
-         expect(mocks.addMany).toHaveBeenCalledWith('u1', [
-            {
-               slug: 'elitale',
-               url: 'https://www.linkedin.com/company/elitale',
-            },
-         ])
+         expect(mocks.addMany).toHaveBeenCalledWith(
+            'u1',
+            [
+               {
+                  slug: 'elitale',
+                  url: 'https://www.linkedin.com/company/elitale',
+               },
+            ],
+            []
+         )
          expect(result).toEqual({
             created: 1,
             restored: 0,

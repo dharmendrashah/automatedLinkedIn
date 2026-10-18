@@ -413,6 +413,7 @@ model LinkedInPost {
   // For a lnkd.in short link: the linkedin.com post it redirects to, without its query string.
   expandedUrl String?
   status      LinkedInPostStatus @default(UNPROCESSED)
+  tags        String[]           @default([])
   // Set when the owner removes the post; it can be restored.
   archivedAt  DateTime?
   createdAt   DateTime           @default(now())

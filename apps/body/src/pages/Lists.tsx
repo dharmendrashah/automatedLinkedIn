@@ -14,8 +14,12 @@ import {
 } from '@/components/lists/types'
 import { useInboxActions } from '@/components/lists/use-inbox-actions'
 import { useTriageKeys } from '@/components/lists/use-triage-keys'
+import { LabelFilter } from '@/components/labels/label-filter'
+import { labelledNote } from '@/components/labels/labels'
+import { BulkBar } from '@/components/links/bulk-bar'
 import { Pager } from '@/components/links/pager'
-import { PAGE_SIZE } from '@/components/links/use-list-state'
+import { useSelection } from '@/components/links/use-selection'
+import { type LabelMatch, PAGE_SIZE } from '@/components/links/use-list-state'
 import {
    AlertDialog,
    AlertDialogAction,
@@ -44,6 +48,7 @@ import { timeAgo } from '@/lib/time-ago'
 import { Keyboard, ListChecks } from 'lucide-react'
 import { useDeferredValue, useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { toast } from 'sonner'
 
 import { cn } from '@/lib/utils'
 
@@ -84,8 +89,10 @@ export const Lists = () => {
    const [untouched, setUntouched] = useState(false)
    const [sort, setSort] = useState<'fit' | 'newest'>('fit')
    const [search, setSearch] = useState('')
+   const [tags, setTags] = useState<string[]>([])
+   const [tagMatch, setTagMatch] = useState<LabelMatch>('any')
    const [page, setPage] = useState(1)
-   const [selected, setSelected] = useState<Set<string>>(new Set())
+   const selection = useSelection()
    const [blocking, setBlocking] = useState<InboxMember[] | null>(null)
    const [naming, setNaming] = useState<'create' | 'rename' | null>(null)
    const [deleting, setDeleting] = useState(false)
@@ -104,6 +111,8 @@ export const Lists = () => {
          fit: isFit(fit) ? fit : undefined,
          untouched: untouched || undefined,
          search: deferredSearch.trim() || undefined,
+         tags: tags.length > 0 ? tags : undefined,
+         tagMatch: tags.length > 1 ? tagMatch : undefined,
          sort,
          page,
          pageSize: PAGE_SIZE,
@@ -141,6 +150,21 @@ export const Lists = () => {
    const exportCsv = trpc.workflowList.exportCsv.useMutation({
       onSuccess: ({ fileName, csv }) => downloadFile(fileName, csv, 'text/csv;charset=utf-8'),
    })
+   const labelMany = trpc.workflowList.labelMany.useMutation({
+      onSuccess: result => {
+         toast.success(labelledNote(result))
+         void utils.workflowList.inbox.invalidate()
+         void utils.label.list.invalidate()
+      },
+   })
+   const updateMember = trpc.workflowList.updateMember.useMutation()
+   const saveTags = async (member: InboxMember, tags: string[]) => {
+      await updateMember.mutateAsync({
+         id: member.id,
+         tags,
+      })
+      await Promise.all([utils.workflowList.inbox.invalidate(), utils.label.list.invalidate()])
+   }
 
    // People added after the owner leaves are marked new on the next visit.
    useEffect(() => {
@@ -159,7 +183,7 @@ export const Lists = () => {
    const data = inbox.data
    const items = data?.items ?? []
    const current = lists.data?.find(list => list.id === listId)
-   const chosen = items.filter(({ id }) => selected.has(id))
+   const chosen = items.filter(({ id }) => selection.selected.has(id))
    const index = items.findIndex(({ slug }) => slug === drawer.open?.slug)
    const active = index >= 0 ? items[index] : undefined
    // The five to start with: the best fits on the first page of To do.
@@ -169,7 +193,7 @@ export const Lists = () => {
    const filtersChange = (change: () => void) => {
       change()
       setPage(1)
-      setSelected(new Set())
+      selection.clear()
    }
 
    const open = (member: InboxMember | undefined) => (member ? drawer.show('person', member.slug) : undefined)
@@ -202,15 +226,7 @@ export const Lists = () => {
       view !== BLOCKED && !blocking && !help && !naming
    )
 
-   const select = (ids: string[], on: boolean) =>
-      setSelected(previous => {
-         const next = new Set(previous)
-
-         ids.forEach(id => (on ? next.add(id) : next.delete(id)))
-
-         return next
-      })
-   const afterBulk = () => setSelected(new Set())
+   const afterBulk = selection.clear
 
    return (
       <div className={cn('grid w-full gap-4 px-4 lg:px-6', drawer.open && 'xl:pr-[38rem]')}>
@@ -333,13 +349,32 @@ export const Lists = () => {
                      value={search}
                      onChange={event => filtersChange(() => setSearch(event.target.value))}
                   />
+                  <LabelFilter
+                     id="inbox-label-filter"
+                     kind="people"
+                     tags={tags}
+                     match={tagMatch}
+                     onTags={next => filtersChange(() => setTags(next))}
+                     onMatch={next => filtersChange(() => setTagMatch(next))}
+                  />
                </>
             )}
          </div>
 
          {chosen.length > 0 ? (
-            <div className="bg-muted/50 flex flex-wrap items-center gap-2 rounded-lg border p-2 text-sm">
-               <span className="px-1 font-medium">{chosen.length} selected</span>
+            <BulkBar
+               count={chosen.length}
+               kind="people"
+               pending={labelMany.isPending}
+               onLabel={({ add = [], remove = [] }) =>
+                  labelMany.mutate({
+                     ids: chosen.map(({ id }) => id),
+                     add,
+                     remove,
+                  })
+               }
+               onClear={afterBulk}
+            >
                <Button size="sm" variant="outline" onClick={() => (actions.changeStatus(chosen, 'CONTACTED'), afterBulk())}>
                   Mark contacted
                </Button>
@@ -374,10 +409,7 @@ export const Lists = () => {
                <Button size="sm" variant="outline" className="text-destructive" onClick={() => setBlocking(chosen)}>
                   Do not contact
                </Button>
-               <Button size="sm" variant="ghost" onClick={afterBulk}>
-                  Clear
-               </Button>
-            </div>
+            </BulkBar>
          ) : null}
 
          {view === BLOCKED ? (
@@ -410,13 +442,14 @@ export const Lists = () => {
                   error={undefined}
                   view={inboxView}
                   seenAt={data?.seenAt ?? null}
-                  selected={selected}
+                  selection={selection}
                   highlight={topFive}
                   activeSlug={drawer.open?.slug}
                   lists={lists.data ?? []}
                   emptyText={EMPTY[inboxView]}
-                  onSelect={select}
                   onOpen={open}
+                  onTag={tag => (tags.includes(tag) ? undefined : filtersChange(() => setTags([...tags, tag])))}
+                  saveTags={saveTags}
                   onStatus={(member, status) => actions.changeStatus([member], status)}
                   onMessage={actions.message}
                   onMove={(member, list) => actions.move([member], list)}
@@ -434,7 +467,7 @@ export const Lists = () => {
                   page={page}
                   onPage={next => {
                      setPage(next)
-                     setSelected(new Set())
+                     selection.clear()
                   }}
                   noun={['person', 'people']}
                />

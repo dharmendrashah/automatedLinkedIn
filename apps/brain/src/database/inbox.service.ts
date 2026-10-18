@@ -2,7 +2,7 @@ import { briefSignals, explainMatched } from 'core'
 
 import { type Prisma, type WorkflowListMemberState, type WorkflowListMemberStatus } from 'generated/prisma/client'
 
-import { pageArgs } from './linkedInRecord'
+import { type LabelChange, type LabelMatch, labelWhere, pageArgs, relabel } from './linkedInRecord'
 import { PrismaService } from './prisma.service'
 import { WorkflowListService, contactedFor } from './workflowList.service'
 
@@ -27,6 +27,8 @@ export type InboxQuery = {
    // Only people untouched for 180 days and marked for review.
    untouched?: boolean
    search?: string
+   tags?: string[]
+   tagMatch?: LabelMatch
    sort: 'fit' | 'newest'
    page: number
    pageSize: number
@@ -77,6 +79,7 @@ const baseWhere = (userId: string, query: Omit<InboxQuery, 'view' | 'sort' | 'pa
       ...(query.listId ? { listId: query.listId } : {}),
       ...(query.fit ? { state: query.fit } : {}),
       ...(query.untouched ? { reviewAt: { not: null } } : {}),
+      ...labelWhere(query.tags ?? [], query.tagMatch),
       ...(query.search
          ? {
               OR: SEARCHED.map(field => ({
@@ -203,6 +206,27 @@ export class InboxService {
       })
 
       return count
+   }
+
+   // People not in the owner's lists are left alone.
+   public static labelMany(userId: string, ids: string[], change: LabelChange) {
+      return PrismaService.client.$transaction(async tx =>
+         relabel(
+            await tx.workflowListMember.findMany({
+               where: owned(userId, ids),
+               select: {
+                  id: true,
+                  tags: true,
+               },
+            }),
+            change,
+            (id, tags) =>
+               tx.workflowListMember.update({
+                  where: { id },
+                  data: { tags },
+               })
+         )
+      )
    }
 
    // Deletes the people and hands back what they were, for an undo.

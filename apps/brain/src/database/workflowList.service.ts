@@ -25,6 +25,7 @@ export type MemberChanges = {
    state?: WorkflowListMemberState
    status?: WorkflowListMemberStatus
    notes?: string | null
+   tags?: string[]
 }
 
 // Which people of a list a view shows: one state or all of them, and optionally one label.
