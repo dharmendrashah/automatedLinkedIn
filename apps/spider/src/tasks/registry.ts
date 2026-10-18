@@ -1,5 +1,6 @@
 import { browserDetection } from './browserDetection'
 import { type TaskDefinition } from './defineTask'
+import { createLinkedinBrowse } from './linkedinBrowse'
 import { createLinkedinLogin } from './linkedinLogin'
 
 // What the tasks that need settings are built from. The worker fills it from its environment.
@@ -11,4 +12,5 @@ export type TaskConfig = {
 export const buildTasks = (config: TaskConfig): TaskDefinition[] => [
    browserDetection,
    createLinkedinLogin(config.linkedin),
+   createLinkedinBrowse({ baseUrl: config.linkedin.baseUrl }),
 ]

@@ -49,6 +49,7 @@ export {
    ProxyServerService,
 } from './proxyServer.service'
 export { ProxyScoringJob } from './proxyScoringJob'
+export { AccountDailyJob } from './accountDailyJob'
 export { retryRefusal } from './sessionRetry'
 export {
    SpiderRecordingUnavailableError,

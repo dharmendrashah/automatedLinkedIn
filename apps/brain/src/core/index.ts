@@ -1,6 +1,7 @@
 export { AbuseIpDbError, AbuseIpDbService, type AbuseDetail, type AbuseIpDbResult } from './abuseIpDb.service'
 export { CryptoService } from './crypto.service'
 export { toCsv } from './csv'
+export { dailyTime, timezoneOfCountry } from './dailyTime'
 export { CSV_MAX_ROWS, itemsCsv } from './itemCsv'
 export { HttpServer } from './httpServer'
 export { extractLiAt } from '@automatedLinkedIn/contracts'

@@ -2,6 +2,7 @@ import { type Prisma } from 'generated/prisma/client'
 
 import { type TaskResult, type TaskTrigger } from '@automatedLinkedIn/contracts'
 
+import { linkedInBrowseHooks } from './linkedInBrowse.hooks'
 import { linkedInLoginHooks } from './linkedInLogin.hooks'
 
 // Where a task needs brain to do something of its own: refuse a request for a reason only brain knows, or change brain's own
@@ -31,4 +32,7 @@ export type TaskHooks = {
    onResult?: (session: FinishedSession, result: TaskResult, tx: Prisma.TransactionClient) => Promise<void>
 }
 
-export const TASK_HOOKS: Record<string, TaskHooks> = { 'linkedin-login': linkedInLoginHooks }
+export const TASK_HOOKS: Record<string, TaskHooks> = {
+   'linkedin-login': linkedInLoginHooks,
+   'linkedin-browse': linkedInBrowseHooks,
+}
