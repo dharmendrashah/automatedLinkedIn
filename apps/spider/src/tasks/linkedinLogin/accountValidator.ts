@@ -48,15 +48,34 @@ const BUTTON = ':not([role="checkbox"]):not([role="switch"]):visible:below(input
 // A frame that only a challenge has. The badge of an invisible captcha is in a frame too, so it is not in here.
 const CHALLENGE = '#captcha-internal, iframe[src*="bframe" i], iframe[src*="arkose" i], iframe[src*="/checkpoint/" i]'
 
+// The old two-step page: its own ids and names, and a hidden recovery code form with the same ones.
+const PIN = 'input[name="pin"]:visible, #input__phone_verification_pin:visible'
+
+// Recorded 2026-10-18: the code box is a dialog over /login with one input and no button; the page sends the code after
+// the last digit. Nothing in it has a stable id, so the input is found by what it is, most specific first.
+const CODE_DIALOG = [
+   'input[autocomplete="one-time-code"]',
+   'input[inputmode="numeric"]',
+   'input[type="tel"]',
+   'input[type="number"]',
+   'input[type="text"]',
+]
+   .map(input => `dialog[open] ${input}:visible`)
+   .join(', ')
+
 export const SELECTORS = {
    username: 'input[autocomplete~="username"]:visible, input[type="email"]:visible, #username >> nth=0',
    password: 'input[type="password"]:visible, #password >> nth=0',
    submit: `button${BUTTON}, input[type="submit"]${BUTTON}, [role="button"]${BUTTON} >> nth=0`,
    loginErrors: ['#error-for-username', '#error-for-password'],
-   codeInput: 'input[name="pin"]:visible, #input__phone_verification_pin:visible',
-   // The two-step page holds the code form and a hidden recovery code form with the same ids and names.
-   codeField: 'input[name="pin"]:visible, #input__phone_verification_pin:visible >> nth=0',
+   codeInput: `${PIN}, ${CODE_DIALOG}`,
+   codeField: `${PIN}, ${CODE_DIALOG} >> nth=0`,
+   codeDialog: CODE_DIALOG,
    codeSubmit: '#two-step-submit-button:visible, button[type="submit"]:visible >> nth=0',
+   // Only a button inside the dialog: the sign-in button behind it would send the password again.
+   dialogSubmit: 'dialog[open] button[type="submit"]:visible >> nth=0',
+   // The ads consent page LinkedIn may show after a sign-in (recorded 2026-10-18); the owner chose to accept it.
+   consentAccept: 'button:has-text("Accept"):visible >> nth=0',
    challenge: CHALLENGE,
    // Read only once nothing else explains the page: it also takes the plain captcha frames.
    captcha: `${CHALLENGE}, iframe[src*="captcha" i]:visible, iframe[title*="captcha" i]:visible, [data-sitekey]:visible`,
@@ -72,9 +91,12 @@ const OUTCOME_WAIT_MS = 30_000
 const OUTCOME_POLL_MS = 2000
 const POLL_LOOK_MS = 250
 
+// How long the code dialog gets to send the code by itself before Enter is pressed once.
+const AUTO_SUBMIT_MS = 3000
+
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
 
-type PageKind = 'feed' | 'checkpoint' | 'login' | 'restricted' | 'other'
+type PageKind = 'feed' | 'checkpoint' | 'login' | 'restricted' | 'consent' | 'other'
 
 export const kindOf = (url: string): PageKind => {
    if (!URL.canParse(url)) {
@@ -89,6 +111,10 @@ export const kindOf = (url: string): PageKind => {
 
    if (pathname.startsWith('/checkpoint')) {
       return 'checkpoint'
+   }
+
+   if (pathname.startsWith('/connect-services/')) {
+      return 'consent'
    }
 
    if (pathname.startsWith('/flagship-web/login/login-restriction')) {
@@ -240,6 +266,10 @@ export class AccountValidator {
          return this.valid(session)
       }
 
+      if (kind === 'consent') {
+         return this.pastConsent(session)
+      }
+
       if (kind === 'restricted') {
          return this.fail('BLOCKED', MESSAGES.restricted)
       }
@@ -290,6 +320,10 @@ export class AccountValidator {
             return this.valid(session)
          }
 
+         if (kind === 'consent') {
+            return this.pastConsent(session)
+         }
+
          if (kind === 'restricted') {
             return this.fail('BLOCKED', MESSAGES.restricted)
          }
@@ -308,10 +342,7 @@ export class AccountValidator {
                return this.fail('NEEDS_REAUTH', MESSAGES.needsCode)
             }
 
-            await session.fill(SELECTORS.codeField, totpCode(totpSecret, (this.options.now ?? Date.now)()))
-            await this.options.pause(this.host)
-
-            landed = await this.afterSubmit(session, await session.click(SELECTORS.codeSubmit))
+            landed = await this.afterSubmit(session, await this.sendCode(session, landed, totpSecret), true)
             codeSent = true
 
             continue
@@ -326,15 +357,55 @@ export class AccountValidator {
       return this.fail('ERROR', MESSAGES.unexpected)
    }
 
+   // Types the code once, digit by digit, and sends it the way the page allows: its button, or for the dialog that has
+   // none, the page itself after the last digit, with Enter pressed once if it has not moved on. Never typed twice.
+   private async sendCode(session: LoginSession, landed: string, totpSecret: string) {
+      const inDialog = await session.exists(SELECTORS.codeDialog, LOOK_MS)
+      const button = inDialog ? SELECTORS.dialogSubmit : SELECTORS.codeSubmit
+
+      await session.type(SELECTORS.codeField, totpCode(totpSecret, (this.options.now ?? Date.now)()))
+      await this.options.pause(this.host)
+
+      if (await session.exists(button, LOOK_MS)) {
+         return session.click(button)
+      }
+
+      await (this.options.sleep ?? wait)(AUTO_SUBMIT_MS)
+
+      const now = await this.settled(session, landed)
+
+      return kindOf(now) === 'login' && (await session.exists(SELECTORS.codeDialog, POLL_LOOK_MS))
+         ? session.press('Enter')
+         : now
+   }
+
+   // The ads consent page LinkedIn may show once signed in: Accept, as the owner chose, then the feed. The account is
+   // signed in either way, so a page with no Accept button, or one that does not move on, still counts.
+   private async pastConsent(session: LoginSession): Promise<Verdict> {
+      try {
+         if (await session.exists(SELECTORS.consentAccept, LOOK_MS)) {
+            await this.options.pause(this.host)
+            await this.settled(session, await session.click(SELECTORS.consentAccept))
+         }
+      } catch {
+         // Signed in already; the consent choice can wait for the next visit.
+      }
+
+      return this.valid(session)
+   }
+
    // LinkedIn answers a submit on the same page and moves on a moment later, so the page is read once it stops moving.
    private async settled(session: LoginSession, landed: string) {
       return session.settled ? session.settled() : landed
    }
 
    // Where the browser is once the submit has played out: still on the sign-in page only if LinkedIn shows an error or asks
-   // for a code there, or has not moved on after the wait.
-   private async afterSubmit(session: LoginSession, first: string) {
-      const answers = [...SELECTORS.loginErrors, SELECTORS.codeInput, SELECTORS.challenge].join(', ')
+   // for a code there, or has not moved on after the wait. Once a code was sent, its dialog can stay a moment while LinkedIn
+   // checks it, so it is not an answer then.
+   private async afterSubmit(session: LoginSession, first: string, codeSent = false) {
+      const answers = [...SELECTORS.loginErrors, ...(codeSent ? [] : [SELECTORS.codeInput]), SELECTORS.challenge].join(
+         ', '
+      )
       const sleep = this.options.sleep ?? wait
       let landed = await this.settled(session, first)
 

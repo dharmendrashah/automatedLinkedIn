@@ -337,6 +337,13 @@ class CamoufoxSession implements DetectionSession {
       throw new Error('The field did not keep what was typed')
    }
 
+   public async type(selector: string, value: string) {
+      const field = this.page.locator(selector)
+
+      await field.click()
+      await field.pressSequentially(value, { delay: 120 })
+   }
+
    // The key goes to whatever has the focus, as when a person presses Enter after typing a password.
    public async press(key: string) {
       await this.page.keyboard.press(key)

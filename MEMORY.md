@@ -184,6 +184,11 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-18: LinkedIn sign-in, the two-step code dialog (`.plan/linkedin-login-code-dialog.md`, done).
+   - LinkedIn can ask for the code in a `<dialog>` over `/login` with no button; it sends itself after the 6th digit. The validator types the code once with `LoginSession.type` (no read-back), waits 3 s, and presses Enter once if the dialog stays.
+   - After a sign-in, LinkedIn may show the ads consent page `/connect-services/ads_experience`. The spider clicks Accept (the owner's choice) and counts the account as signed in either way.
+   - Gotcha: the spider login e2e tests need `--testTimeout=90000` locally; a Camoufox start makes each test take 7 to 34 s.
+
 - 2026-10-18: Inline labels and chip pickers (`.plan/inline-labels-and-chip-pickers.md`, done).
    - Labels are edited in place with `LabelCell`, and picked with `LabelMultiSelect` / `LabelOptions` (shadcn Popover + Command, `cmdk`).
    - Block list settings use `ChipsInput`, with `suggest` set in contracts (labels, titles, locations, links, domains).
