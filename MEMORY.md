@@ -184,6 +184,15 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-18: Workflows 10x Phase 1, the leads inbox (`.plan/workflow-10x-phase-1-leads-inbox.md`, done). /lists is an inbox across all lists (`InboxService` and the routes `workflowList.inbox` / `setStatus` / `moveMany` / `removeMany` / `restore` / `doNotContactList` / `markSeen`).
+   - **One status flow:** NEW, CONTACTED, REPLIED, NOT_A_FIT. `contactedAt` is set by `contactedFor`. IN_REVIEW and DONE were backfilled and are unused.
+   - **Score reasons:** come from `explainMatched(matched)` (no column).
+   - **New people:** `User.inboxSeenAt` is set when the owner leaves the page.
+   - **Undo of remove:** re-creates the rows the client kept, through `InboxService.restore`. It skips lists the owner does not own and people now suppressed or already in a list.
+   - **Toasts:** sonner's `Toaster` is mounted in `DashboardLayout`.
+
+- 2026-10-18: Workflows 10x roadmap locked (`.plan/workflow-10x.md`), from reviews by all five persona agents. Phases in order: 1 Leads inbox, 2 Live runs in plain words, 3 Spend caps (admin sets them), 4 Guided setup (a wizard next to the canvas; the canvas stays the default), 5 Tuning loop, 6 Editor, 7 Operator console. Not to build: an AI workflow generator, in-app message sending, lists that mix clients, and the shared wallet shown to clients.
+
 - 2026-10-18: Data service calls go through the brain worker only (`.plan/data-calls-through-worker.md`, done).
    - **Never wait:** `DataClient.start` / `check` / `cancel` replace the 10-minute in-place wait (`collect` is kept only for the opt-in live tests). `core/dataJob.ts` `advanceJob` does one step per tick: start (`sentAt` saved first, so a lost start is looked up with `findJob`), look, or cancel after `RESULT_TIMEOUT_MS`.
    - **Retries:** a request that failed with nothing charged (supplier "system error", no answer, 5xx, timeout) is retried after 1, 2, 5, 15 and 30 minutes. A charged failure is never sent again; bad requests, a missing key and an empty wallet are not retried.

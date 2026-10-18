@@ -16,6 +16,7 @@ export {
    type SeenSkip,
    WorkflowListService,
 } from './workflowList.service'
+export { INBOX_VIEWS, type InboxQuery, InboxService, type RemovedMember } from './inbox.service'
 export {
    LinkedInAccountConflictError,
    LinkedInAccountService,

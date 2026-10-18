@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('database', () => ({
    ConflictError: mocks.ConflictError,
+   INBOX_VIEWS: ['TODO', 'CONTACTED', 'REPLIED', 'NOT_A_FIT', 'ALL'],
    WorkflowListService: {
       addMember: mocks.addMember,
       moveMember: mocks.moveMember,

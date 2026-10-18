@@ -20,6 +20,8 @@ model User {
   role        Role     @default(USER)
   // Subject (`sub`) of the authentik account linked to this user.
   authentikId String?  @unique
+  // When the owner last left the leads inbox; people added after it are marked new.
+  inboxSeenAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -46,9 +48,12 @@ enum WorkflowListMemberState {
 
 enum WorkflowListMemberStatus {
   NEW
+  // No longer set: moved to NEW and CONTACTED by migration add_inbox_statuses_backfill.
   IN_REVIEW
   DONE
   NOT_A_FIT
+  CONTACTED
+  REPLIED
 }
 
 // A named list of people found by hand or by a workflow; separate from the target profiles.
@@ -77,6 +82,8 @@ model WorkflowListMember {
   location     String?
   state        WorkflowListMemberState  @default(QUALIFIED)
   status       WorkflowListMemberStatus @default(NEW)
+  // When the owner marked them contacted; cleared when they go back to New or Not a fit.
+  contactedAt  DateTime?
   // The post that surfaced the person; null when added by hand.
   postUrl      String?
   // Set when a workflow added the person: the score, why they were found, and the run.

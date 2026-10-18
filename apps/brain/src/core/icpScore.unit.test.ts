@@ -1,6 +1,58 @@
 import { describe, expect, it } from 'vitest'
 
-import { type IcpRules, scoreIcp, scorePerson } from './icpScore'
+import { type IcpRules, explainMatched, scoreIcp, scorePerson } from './icpScore'
+
+describe('explainMatched', () => {
+   it('should turn each stored match into a plain reason with its points, and skip what it does not know', () => {
+      expect(
+         explainMatched([
+            'title "growth"',
+            'seniority VP',
+            'location "london"',
+            'comment mentions "pipeline"',
+            'commented',
+            'company is hiring',
+            'reacted',
+            'something new',
+         ])
+      ).toEqual([
+         {
+            label: 'Title matches "growth"',
+            points: 30,
+         },
+         {
+            label: 'Seniority: VP',
+            points: 20,
+         },
+         {
+            label: 'Based in "london"',
+            points: 5,
+         },
+         {
+            label: 'Commented about "pipeline"',
+            points: 20,
+         },
+         {
+            label: 'Commented on a post',
+            points: 10,
+         },
+         {
+            label: 'Their company is hiring',
+            points: 10,
+         },
+         {
+            label: 'Reacted to a post',
+            points: 5,
+         },
+      ])
+      expect(explainMatched(['excluded title "intern"'])).toEqual([
+         {
+            label: 'Title excluded: "intern"',
+            points: 0,
+         },
+      ])
+   })
+})
 
 const rules: IcpRules = {
    includeTitles: ['growth', 'head of sales'],

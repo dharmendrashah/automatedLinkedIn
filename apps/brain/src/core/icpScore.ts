@@ -141,6 +141,88 @@ export const scoreSignals = (problemKeywords: string[], signals: ScoredSignal[])
 
 export const MAX_SCORE = 100
 
+export type Reason = { label: string; points: number }
+
+const SENIORITY_NAMES: Record<Seniority, string> = {
+   OWNER: 'Founder or owner',
+   CXO: 'C-level',
+   VP: 'VP',
+   HEAD: 'Head of',
+   DIRECTOR: 'Director',
+   MANAGER: 'Manager',
+}
+
+const quoted = (match: string, prefix: string) => (match.startsWith(prefix) ? match.slice(prefix.length) : null)
+
+// The matches a person was scored on, as plain reasons with the points each gave. Unknown matches are left out.
+export const explainMatched = (matched: string[]): Reason[] =>
+   matched.flatMap((match): Reason[] => {
+      const excluded = quoted(match, 'excluded title ')
+      const title = quoted(match, 'title ')
+      const level = quoted(match, 'seniority ')
+      const place = quoted(match, 'location ')
+      const problem = quoted(match, 'comment mentions ')
+
+      if (excluded)
+         return [
+            {
+               label: `Title excluded: ${excluded}`,
+               points: 0,
+            },
+         ]
+      if (title)
+         return [
+            {
+               label: `Title matches ${title}`,
+               points: ICP_WEIGHTS.title,
+            },
+         ]
+      if (level && isSeniority(level))
+         return [
+            {
+               label: `Seniority: ${SENIORITY_NAMES[level]}`,
+               points: ICP_WEIGHTS.seniority,
+            },
+         ]
+      if (place)
+         return [
+            {
+               label: `Based in ${place}`,
+               points: ICP_WEIGHTS.location,
+            },
+         ]
+      if (problem)
+         return [
+            {
+               label: `Commented about ${problem}`,
+               points: SIGNAL_WEIGHTS.problemComment,
+            },
+         ]
+      if (match === 'commented')
+         return [
+            {
+               label: 'Commented on a post',
+               points: SIGNAL_WEIGHTS.comment,
+            },
+         ]
+      if (match === 'company is hiring')
+         return [
+            {
+               label: 'Their company is hiring',
+               points: SIGNAL_WEIGHTS.hiring,
+            },
+         ]
+      if (match === 'reacted')
+         return [
+            {
+               label: 'Reacted to a post',
+               points: SIGNAL_WEIGHTS.reaction,
+            },
+         ]
+
+      return []
+   })
+
 // The whole score of a person a workflow found: the headline rules plus engagement, at most 100.
 export const scorePerson = (
    rules: IcpRules & { problemKeywords: string[] },

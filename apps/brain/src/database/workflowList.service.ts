@@ -1,4 +1,4 @@
-import { readSignals } from 'core'
+import { explainMatched, readSignals } from 'core'
 
 import { type Prisma, type WorkflowListMemberState, type WorkflowListMemberStatus } from 'generated/prisma/client'
 
@@ -60,6 +60,7 @@ const memberSelect = {
    location: true,
    state: true,
    status: true,
+   contactedAt: true,
    postUrl: true,
    score: true,
    title: true,
@@ -118,6 +119,10 @@ const ownedMember = (userId: string, id: string) => ({
    id,
    list: { userId },
 })
+
+// Contacted stamps the date; back to New or Not a fit clears it; Replied keeps it.
+export const contactedFor = (status: WorkflowListMemberStatus) =>
+   status === 'CONTACTED' ? { contactedAt: new Date() } : status === 'REPLIED' ? {} : { contactedAt: null }
 
 const ownsList = async (userId: string, id: string) =>
    Boolean(
@@ -310,6 +315,7 @@ export class WorkflowListService {
          ? {
               ...member,
               signals: readSignals(member.signals),
+              reasons: explainMatched(member.matched),
            }
          : null
    }
@@ -397,6 +403,7 @@ export class WorkflowListService {
             // Any change counts as touching the person, so a review mark goes away.
             data: {
                ...changes,
+               ...(changes.status ? contactedFor(changes.status) : {}),
                reviewAt: null,
             },
             select: memberSelect,
