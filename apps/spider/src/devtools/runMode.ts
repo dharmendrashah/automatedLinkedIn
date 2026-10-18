@@ -130,6 +130,7 @@ export const runTasks = async ({ proxy, databaseUrl, encryptionKey, outputRoot }
    const driver = new CamoufoxDriver({
       actionTimeoutMs: ACTION_TIMEOUT_MS,
       isAllowedNavigation: () => true,
+      blocking: 'none',
       headless: false,
       operatingSystems: [hostOs()],
    })

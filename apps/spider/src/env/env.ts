@@ -94,6 +94,18 @@ export class Environment {
             desc: 'Run each account in its own browser profile (cookies, site storage, history, cache), kept sealed in the bucket. Off: every run starts a new browser from the saved session. Worker only',
             default: true,
          }),
+         SPIDER_BLOCK_IN_BROWSER: bool({
+            desc: 'Let the browser itself refuse addresses that are not allowed (a Firefox policy), so its HTTP cache works. Off, or when the policy cannot be put in place: every request is checked, which keeps the cache off. Worker only',
+            default: true,
+         }),
+         SPIDER_SHUTDOWN_GRACE_MS: num({
+            desc: 'How long a stopping worker waits for the run in progress, in milliseconds, before it hands the run back to the queue. Keep it below the pod terminationGracePeriodSeconds. Worker only',
+            default: 540_000,
+         }),
+         SPIDER_EMBED_HOSTS: string({
+            desc: 'Comma-separated hosts whose frames LinkedIn needs (sign-in and captcha); the browser lets them load next to SPIDER_ALLOWED_HOSTS. Worker only',
+            default: 'google.com,gstatic.com,recaptcha.net,arkoselabs.com',
+         }),
          SPIDER_HEADLESS: string({
             desc: 'How the browser runs: true is headless Firefox, virtual is a real browser on an Xvfb display (Linux with Xvfb installed, which the worker image has). Worker only',
             choices: ['true', 'virtual'] as const,

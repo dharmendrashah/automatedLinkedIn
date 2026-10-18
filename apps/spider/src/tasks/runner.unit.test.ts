@@ -9,7 +9,7 @@ import { type DeviceIdentity } from '../identity/deviceIdentity'
 import { type ExitRegion, type KeptRegion } from '../identity/region'
 import { Recorder } from '../recording/recorder'
 import { type SessionControl } from '../scraping/driver'
-import { AccountBusyError, TaskError } from '../scraping/errors'
+import { AccountBusyError, ShutdownError, TaskError } from '../scraping/errors'
 import { type SavedState } from '../sessions/sessionVault'
 import { ObjectNotFoundError } from '../storage/store'
 import { type TaskDefinition, type TaskOutcome, VisitError, defineTask } from './defineTask'
@@ -446,6 +446,67 @@ describe('runTask', () => {
          verdict: 'TIMED_OUT',
       })
       expect(session.close).toHaveBeenCalled()
+   })
+
+   describe('when the worker is told to stop', () => {
+      const stopping = (task: ReturnType<typeof demo> = demo({ run: () => new Promise(() => undefined) })) => {
+         const stop = new AbortController()
+
+         return {
+            stop,
+            ...setup({
+               task,
+               overrides: { signal: stop.signal },
+            }),
+         }
+      }
+
+      it('should close the browser and hand the run back without an answer, so the next worker redoes it', async () => {
+         const { stop, run, session, deps, published } = stopping()
+         const running = run()
+
+         await vi.waitFor(() => expect(deps.driver.open).toHaveBeenCalled())
+         stop.abort()
+
+         await expect(running).rejects.toBeInstanceOf(ShutdownError)
+         expect(session.close).toHaveBeenCalled()
+         expect(published).toEqual([])
+      })
+
+      it('should not start a run once the worker is stopping', async () => {
+         const { stop, run, deps } = stopping()
+
+         stop.abort()
+
+         await expect(run()).rejects.toBeInstanceOf(ShutdownError)
+         expect(deps.driver.open).not.toHaveBeenCalled()
+      })
+
+      it('should not keep the browser profile of a run that was stopped, and still clear its folder and lease', async () => {
+         const stop = new AbortController()
+         const checkout = {
+            dir: '/tmp/profile-acc1',
+            restored: true,
+            keep: vi.fn(async () => undefined),
+            release: vi.fn(async () => undefined),
+         }
+         const { run, deps } = setup({
+            task: accountTask({ run: () => new Promise(() => undefined) }),
+            overrides: {
+               signal: stop.signal,
+               profiles: { checkout: vi.fn(async () => checkout) },
+            },
+         })
+         const running = run(accountCommand)
+
+         await vi.waitFor(() => expect(deps.driver.open).toHaveBeenCalled())
+         stop.abort()
+
+         await expect(running).rejects.toBeInstanceOf(ShutdownError)
+         expect(checkout.keep).not.toHaveBeenCalled()
+         expect(checkout.release).toHaveBeenCalledTimes(1)
+         expect(vi.mocked(lease.release)).toHaveBeenCalled()
+      })
    })
 
    it('should treat a verdict the task did not declare as a fault of the task, not as an answer', async () => {

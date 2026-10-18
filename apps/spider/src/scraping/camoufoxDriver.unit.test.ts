@@ -112,6 +112,35 @@ describe('CamoufoxDriver', () => {
       expect(mocks.browser.newContext).toHaveBeenCalledWith({})
    })
 
+   describe('how pages to other addresses are blocked', () => {
+      const open = (blocking?: 'route' | 'browser' | 'none') =>
+         new CamoufoxDriver({
+            actionTimeoutMs: 1000,
+            isAllowedNavigation: () => true,
+            ...(blocking && { blocking }),
+         }).open()
+
+      it('should check every request in the page, as before, unless told otherwise', async () => {
+         mocks.context.route.mockClear()
+
+         await open()
+         await open('route')
+
+         expect(mocks.context.route).toHaveBeenCalledTimes(2)
+      })
+
+      it.each(['browser', 'none'] as const)(
+         'should not intercept requests when the browser or nothing blocks (%s), so its HTTP cache works',
+         async blocking => {
+            mocks.context.route.mockClear()
+
+            await open(blocking)
+
+            expect(mocks.context.route).not.toHaveBeenCalled()
+         }
+      )
+   })
+
    describe('with the account browser profile', () => {
       const profileContext = () => ({
          ...mocks.context,

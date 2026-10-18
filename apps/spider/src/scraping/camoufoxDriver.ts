@@ -27,6 +27,12 @@ export type CamoufoxOptions = {
    // Page loads to anything else are blocked in the browser, not only checked afterwards. Frames inside an allowed page
    // (a captcha, a sign-in button) are parts of that page and are not held to it.
    isAllowedNavigation: (url: string) => boolean
+   // Who enforces `isAllowedNavigation`. route (default): every request is intercepted, which turns the browser's HTTP cache off.
+   // browser: the browser itself refuses (see websiteFilter.ts), nothing is intercepted and the cache works; the caller must have
+   // installed the filter. none: nothing is blocked, for the local tool, which allows every address.
+   blocking?: 'route' | 'browser' | 'none'
+   // Starts this browser instead of the installed one. Tests that change the browser's own policies use a copy.
+   executablePath?: string
    // `virtual` runs a real browser on an Xvfb display, which Camoufox advises over plain headless; `false` is a real
    // window, for the local devtools recorder only (apps/spider/src/devtools) — production never sets it.
    headless?: true | 'virtual' | false
@@ -499,7 +505,9 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver, DetectionDriv
       context.setDefaultTimeout(this.options.actionTimeoutMs)
       context.setDefaultNavigationTimeout(this.options.actionTimeoutMs)
 
-      await context.route('**/*', allowedRoute(this.options.isAllowedNavigation))
+      if ((this.options.blocking ?? 'route') === 'route') {
+         await context.route('**/*', allowedRoute(this.options.isAllowedNavigation))
+      }
 
       if (recorder) {
          attachRecorder(page, recorder)
@@ -513,13 +521,16 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver, DetectionDriv
       identity: OpenOptions['identity'],
       exitIp: OpenOptions['exitIp']
    ) {
-      return buildCamoufoxOptions(
-         this.options.headless ?? true,
-         proxy,
-         identity?.fingerprint ?? newFingerprint(this.options.operatingSystems),
-         identity,
-         exitIp
-      )
+      return {
+         ...buildCamoufoxOptions(
+            this.options.headless ?? true,
+            proxy,
+            identity?.fingerprint ?? newFingerprint(this.options.operatingSystems),
+            identity,
+            exitIp
+         ),
+         ...(this.options.executablePath && { executable_path: this.options.executablePath }),
+      }
    }
 
    private async start<T>(proxy: OpenOptions['proxy'], recorder: OpenOptions['recorder'], launch: () => Promise<T>) {

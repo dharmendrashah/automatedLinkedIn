@@ -17,7 +17,7 @@ import { RecordedDetectionSession } from '../recording/recordedDetectionSession'
 import { type Recorder } from '../recording/recorder'
 import { type AccountLock } from '../scraping/accountLock'
 import { type DetectionDriver, type DetectionSession, type SessionControl, type StorageState } from '../scraping/driver'
-import { AccountBusyError, TaskError } from '../scraping/errors'
+import { AccountBusyError, ShutdownError, TaskError } from '../scraping/errors'
 import { type HostPolicy } from '../scraping/policy'
 import { type HostRateLimiter } from '../scraping/rateLimiter'
 import { type RobotsGuard } from '../scraping/robots'
@@ -69,6 +69,9 @@ export type RunnerDeps = {
    workerBuild: string
    pause?: (ms: number) => Promise<void>
    now?: () => number
+   // Aborted when the worker must stop before the run is done. The run in progress is given back (ShutdownError) and no new
+   // one starts. A run that finishes first is answered and saved as usual.
+   signal?: AbortSignal
 }
 
 class TimedOut extends Error {}
@@ -101,8 +104,9 @@ export const exhaustedResult = (command: TaskCommand, workerBuild: string, now =
 
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
 
-const withLimit = <T>(work: Promise<T>, ms: number) => {
+const withLimit = <T>(work: Promise<T>, ms: number, signal?: AbortSignal) => {
    let timer: NodeJS.Timeout | undefined
+   let onAbort: (() => void) | undefined
 
    // The work is left to fail on its own once the browser is closed; its late error must not crash the worker.
    work.catch(() => undefined)
@@ -111,8 +115,21 @@ const withLimit = <T>(work: Promise<T>, ms: number) => {
       work,
       new Promise<never>((_resolve, reject) => {
          timer = setTimeout(() => reject(new TimedOut()), ms)
+
+         if (signal?.aborted) {
+            reject(new ShutdownError())
+         } else {
+            onAbort = () => reject(new ShutdownError())
+            signal?.addEventListener('abort', onAbort, { once: true })
+         }
       }),
-   ]).finally(() => clearTimeout(timer))
+   ]).finally(() => {
+      clearTimeout(timer)
+
+      if (onAbort) {
+         signal?.removeEventListener('abort', onAbort)
+      }
+   })
 }
 
 // One task from a command to a published result. The only code that touches the browser, the bucket and the queue for a task,
@@ -120,6 +137,10 @@ const withLimit = <T>(work: Promise<T>, ms: number) => {
 // for problems the broker should retry (the browser crashing, the task throwing), and answers by itself for everything a
 // retry cannot fix.
 export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
+   if (deps.signal?.aborted) {
+      throw new ShutdownError()
+   }
+
    const { publishResult, now = Date.now, pause = wait } = deps
    const startedAt = now()
    const doneKey = `${runPrefix(command)}/done.json`
@@ -551,7 +572,7 @@ const execute = async (
    }
 
    try {
-      outcome = await withLimit(task.run(context, input), task.limits.timeoutMs)
+      outcome = await withLimit(task.run(context, input), task.limits.timeoutMs, deps.signal)
    } catch (error) {
       if (error instanceof TimedOut) {
          return finish(

@@ -10,7 +10,9 @@ import {
    SPIDER_ACCOUNT_LOCK_TTL_MS,
    SPIDER_ACTION_TIMEOUT_MS,
    SPIDER_ALLOWED_HOSTS,
+   SPIDER_BLOCK_IN_BROWSER,
    SPIDER_BROWSER_PROFILES,
+   SPIDER_EMBED_HOSTS,
    SPIDER_GCS_BUCKET,
    SPIDER_HEADLESS,
    SPIDER_LINKEDIN_BASE_URL,
@@ -20,6 +22,7 @@ import {
    SPIDER_RECORD_VIDEO,
    SPIDER_ROBOTS_EXEMPT_HOSTS,
    SPIDER_ROBOTS_USER_AGENT,
+   SPIDER_SHUTDOWN_GRACE_MS,
    SPIDER_VALIDATION_MODE,
    SPIDER_WORKER_HEALTH_PORT,
 } from './env'
@@ -34,6 +37,7 @@ import { listenForInput, publishFrame } from './messaging/takeover'
 import { assertTopology } from './messaging/topology'
 import { Recorder } from './recording/recorder'
 import { AccountLock } from './scraping/accountLock'
+import { browserExecutablePath } from './scraping/browserPath'
 import { CamoufoxDriver } from './scraping/camoufoxDriver'
 import { ScrapeEngine } from './scraping/engine'
 import { Mutex } from './scraping/mutex'
@@ -41,6 +45,7 @@ import { HostPolicy } from './scraping/policy'
 import { processTask } from './scraping/processTask'
 import { HostRateLimiter } from './scraping/rateLimiter'
 import { RobotsGuard } from './scraping/robots'
+import { chooseBlocking } from './scraping/websiteFilter'
 import { BucketProfiles } from './sessions/profiles'
 import { SessionVault } from './sessions/sessionVault'
 import { GcsStore } from './storage/gcsStore'
@@ -65,6 +70,8 @@ const main = async () => {
    const limiter = new HostRateLimiter(SPIDER_MIN_DELAY_MS)
    // Scrape tasks and every other task each open a Firefox, so this worker does one of them at a time.
    const oneBrowser = new Mutex()
+   // Aborted when a stopping worker runs out of time (see the signal handler below).
+   const stop = new AbortController()
    const recordingMode = SPIDER_RECORDING
    // Off by default for tasks that do not insist on it: a recording holds what the browser showed.
    if (!policy.allowsUrl(SPIDER_LINKEDIN_BASE_URL)) {
@@ -77,6 +84,16 @@ const main = async () => {
       actionTimeoutMs: SPIDER_ACTION_TIMEOUT_MS,
       isAllowedNavigation: url => policy.allowsUrl(url),
       headless: SPIDER_HEADLESS === 'virtual' ? 'virtual' : true,
+      blocking: SPIDER_BLOCK_IN_BROWSER
+         ? await chooseBlocking({
+              executablePath: browserExecutablePath,
+              hosts: policy.hosts(),
+              embedHosts: SPIDER_EMBED_HOSTS.split(',')
+                 .map(host => host.trim().toLowerCase())
+                 .filter(Boolean),
+              warn,
+           })
+         : 'route',
    })
 
    const engine = new ScrapeEngine({
@@ -141,6 +158,7 @@ const main = async () => {
                   limiter,
                   store,
                   accountLock,
+                  signal: stop.signal,
                   identities: new IdentityStore(store, createDeviceIdentity),
                   exitGeo: lookupExit,
                   sessions: new SessionVault(store, LINKEDIN_CRED_ENC_KEY),
@@ -211,11 +229,24 @@ const main = async () => {
    for (const signal of ['SIGINT', 'SIGTERM']) {
       process.once(signal, () => {
          stopping = true
+         console.log(
+            `spider worker is stopping: finishing the run in progress, for at most ${SPIDER_SHUTDOWN_GRACE_MS} ms`
+         )
 
-         // Finish the task in progress, take no new one, then leave.
+         // A run that does not finish in time is given back to the queue, and the next worker redoes it from the last good
+         // profile. Kubernetes' own limit (terminationGracePeriodSeconds) is longer than this, so this decides first.
+         const timer = setTimeout(() => {
+            console.warn('spider worker ran out of time: handing the run in progress back to the queue')
+            stop.abort()
+         }, SPIDER_SHUTDOWN_GRACE_MS)
+
+         // Finish the task in progress, take no new one, then leave. A second signal leaves at once (no handler is left).
          Promise.all([consumer.stop(), taskConsumer.stop()])
             .then(() => broker.close())
-            .finally(() => process.exit(0))
+            .finally(() => {
+               clearTimeout(timer)
+               process.exit(0)
+            })
       })
    }
 

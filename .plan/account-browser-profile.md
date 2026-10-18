@@ -78,7 +78,7 @@ Open questions: none.
    - Worker: `SPIDER_BROWSER_PROFILES` (default on), a 4 Gi `emptyDir` at `/tmp`.
    - Local tool: profiles under `.devtools-recordings/profiles/<account>` and the device identity on disk too (`LocalStore.get` / `create`), so a profile always goes with the same device; a visit signs in first only when the account has no local profile yet.
 - Deviations:
-   - The HTTP cache is packed and restored, but Playwright does not use it while request routing is on ("Enabling routing disables http cache"), and the driver routes every request for the navigation allowlist. So pages are not served from the cache yet. Using it needs the allowlist check without `context.route` (for example a Firefox policy or proxy-level block), a separate decision.
+   - The HTTP cache is packed and restored, but Playwright does not use it while request routing is on ("Enabling routing disables http cache"), and the driver routes every request for the navigation allowlist. So pages are not served from the cache yet. Using it needs the allowlist check without `context.route`; done in `.plan/browser-allowlist-policy.md`.
    - The local tool's profile is used in place, so a failed local run also changes it (there is no copy to throw away).
 - Follow-ups:
    - Decide how to enforce the allowlist without routing, if the cache should serve pages.
