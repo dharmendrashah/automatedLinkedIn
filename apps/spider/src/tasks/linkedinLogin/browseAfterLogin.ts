@@ -1,5 +1,5 @@
 import { type TaskContext, VisitError } from '../defineTask'
-import { kindOf } from './accountValidator'
+import { SELECTORS, kindOf } from './accountValidator'
 
 const SCROLLS = 4
 const SCROLL_PX = 700
@@ -27,7 +27,7 @@ export const browseAfterLogin = async (
       await scroll()
 
       // LinkedIn sends /in/me/ to the profile of whoever is signed in.
-      const landed = await visit(`${baseUrl}/in/me/`)
+      let landed = await visit(`${baseUrl}/in/me/`)
 
       if (['login', 'checkpoint'].includes(kindOf(landed))) {
          warn('LinkedIn asked for a sign-in again on the profile page')
@@ -35,7 +35,14 @@ export const browseAfterLogin = async (
          return false
       }
 
-      log('Opened the own profile')
+      // Its ads consent page can come first; it is accepted, as the owner chose, and the profile opened again.
+      if (kindOf(landed) === 'consent' && (await browser.exists(SELECTORS.consentAccept, 1500))) {
+         await browser.click(SELECTORS.consentAccept)
+         log('Accepted the ads consent page')
+         landed = await visit(`${baseUrl}/in/me/`)
+      }
+
+      log(kindOf(landed) === 'consent' ? 'Stayed on the ads consent page' : 'Opened the own profile')
       await scroll()
       await pause(between(STAY_MIN_MS, STAY_MAX_MS, random))
    } catch (error) {

@@ -13,7 +13,8 @@ export type LogSource = 'browser' | 'spider' | 'engine'
 
 export type LogLevel = 'info' | 'warn' | 'error'
 
-export type StepCall = 'goto' | 'click' | 'fill' | 'press' | 'exists' | 'extract' | 'cookies' | 'addCookies' | 'scroll'
+export type StepCall =
+   'goto' | 'click' | 'fill' | 'type' | 'press' | 'exists' | 'extract' | 'cookies' | 'addCookies' | 'scroll'
 
 // One thing the spider did in the browser. `t` is the time in milliseconds since the run started, when it finished.
 export type StepEntry = {
@@ -90,6 +91,7 @@ export type RecorderOptions = {
    now?: () => number
    tmpRoot?: string
    maxVideoBytes?: number
+   settleMs?: number
 }
 
 const MAX_ENTRIES = 500
@@ -99,6 +101,8 @@ const MAX_SCREENSHOTS = 40
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024
 const MAX_ATTACHMENTS = 20
 const MAX_ATTACHMENT_BYTES = 1024 * 1024
+// The most the end of a run waits for network captures still running, so none can keep the browser open.
+const SETTLE_MS = 5000
 // A secret shorter than this would blank out ordinary words.
 const MIN_SECRET_LENGTH = 4
 
@@ -238,7 +242,18 @@ export class Recorder implements RunRecorder {
    }
 
    public async settle() {
-      await Promise.allSettled([...this.pending])
+      let timer: NodeJS.Timeout | undefined
+      const late = new Promise<'late'>(resolve => {
+         timer = setTimeout(() => resolve('late'), this.options.settleMs ?? SETTLE_MS)
+      })
+      const ended = await Promise.race([Promise.allSettled([...this.pending]).then(() => 'done' as const), late])
+
+      clearTimeout(timer)
+
+      if (ended === 'late') {
+         this.notes.push(`${this.pending.size} network captures did not finish in time and were left out.`)
+         this.pending.clear()
+      }
    }
 
    // A file for the run that is not one of the standard ones. Stored under files/ with the run's secrets masked.

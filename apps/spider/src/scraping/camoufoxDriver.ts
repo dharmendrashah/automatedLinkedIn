@@ -32,6 +32,8 @@ export type CamoufoxOptions = {
    headless?: true | 'virtual' | false
    // Limits the fingerprint to these systems. Only a run on a desktop passes it (see `newFingerprint`).
    operatingSystems?: FingerprintOs[]
+   // Tests shorten how long closing the page may take; production keeps the default.
+   closeTimeoutMs?: number
 }
 
 // The longest the cursor takes to glide to a point, in seconds. Camoufox's own 1.5 s made every click of a person taking over
@@ -61,6 +63,8 @@ export const buildCamoufoxOptions = (
 
 // A page that is stuck should not hold up the screenshot of the step that failed.
 const SNAPSHOT_TIMEOUT_MS = 5000
+// The most closing the page and writing its video may take before the browser is closed anyway.
+const CONTEXT_CLOSE_MS = 15_000
 
 // Blocks a load of the page itself (and its redirects) to an address the operator did not allow. The frames an allowed page
 // embeds are not checked: LinkedIn's captcha lives in a frame of google.com, and without it the check can never be passed.
@@ -103,7 +107,8 @@ class CamoufoxSession implements DetectionSession {
       private readonly browser: Browser,
       private readonly context: BrowserContext,
       private readonly page: Page,
-      private readonly recorder?: RunRecorder
+      private readonly recorder?: RunRecorder,
+      private readonly closeTimeoutMs = CONTEXT_CLOSE_MS
    ) {}
 
    // The owner's hands on the page. Nothing here is recorded as a step: what they type could be a code or a password.
@@ -337,6 +342,13 @@ class CamoufoxSession implements DetectionSession {
       throw new Error('The field did not keep what was typed')
    }
 
+   public async type(selector: string, value: string) {
+      const field = this.page.locator(selector)
+
+      await field.click()
+      await field.pressSequentially(value, { delay: 120 })
+   }
+
    // The key goes to whatever has the focus, as when a person presses Enter after typing a password.
    public async press(key: string) {
       await this.page.keyboard.press(key)
@@ -359,12 +371,21 @@ class CamoufoxSession implements DetectionSession {
    }
 
    // Closing releases the browser's memory; the worker takes its next task only after this. The video file is
-   // complete only once the context is closed, and the recorder's pending captures need the page to be there.
+   // complete only once the context is closed, and the recorder's pending captures need the page to be there. A context
+   // that does not close in time is left to the browser's close, so a run always ends.
    public async close() {
+      let timer: NodeJS.Timeout | undefined
+
       try {
          await this.recorder?.settle()
-         await this.context.close()
+         await Promise.race([
+            this.context.close(),
+            new Promise<void>(resolve => {
+               timer = setTimeout(resolve, this.closeTimeoutMs)
+            }),
+         ])
       } finally {
+         clearTimeout(timer)
          await this.browser.close()
       }
    }
@@ -404,7 +425,7 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver, DetectionDriv
             attachRecorder(page, recorder)
          }
 
-         return new CamoufoxSession(browser, context, page, recorder)
+         return new CamoufoxSession(browser, context, page, recorder, this.options.closeTimeoutMs)
       } catch (error) {
          await browser.close()
 

@@ -41,6 +41,14 @@ const noFormPage =
 const twoStepPage =
    '<form method="post" action="/checkpoint/challenge/abc"><input name="pin" id="input__phone_verification_pin" maxlength="6"><button type="submit" id="two-step-submit-button">Verify</button></form><div style="display:none"><form method="post" action="/checkpoint/challenge/abc"><input name="pin" id="input__phone_verification_pin" maxlength="8"><button type="submit" id="two-step-submit-button">Recover</button></form></div>'
 
+// Recorded 2026-10-18: the code box is a dialog over /login with one input and no button; it sends itself after the 6th
+// digit. A right code then passes the ads consent page on its way to the feed.
+const codeDialogPage =
+   '<p>Signing in</p><dialog open><p>Enter the code</p><input inputmode="numeric" maxlength="6"></dialog><script>const box=document.querySelector("dialog input");box.addEventListener("input",()=>{if(box.value.length===6){location.href="/dialog-code?c="+box.value}})</script>'
+
+const consentPage =
+   '<h1>Ads</h1><button type="button" onclick="location.href=\'/feed/?st=true\'"><span>Accept</span></button>'
+
 beforeAll(async () => {
    server = createServer(async (request, response) => {
       const { pathname } = new URL(request.url ?? '/', 'http://localhost')
@@ -90,6 +98,10 @@ beforeAll(async () => {
             return redirect('/checkpoint/lg/login-submit')
          }
 
+         if (form.get('u')?.startsWith('dialog')) {
+            return html(codeDialogPage)
+         }
+
          return form.get('u')?.startsWith('twostep')
             ? redirect('/checkpoint/challenge/abc')
             : redirect('/feed/', { 'set-cookie': 'signed=yes; Path=/' })
@@ -109,6 +121,19 @@ beforeAll(async () => {
          return form.get('pin') === totpCode(TOTP_SECRET, Date.now())
             ? redirect('/feed/', { 'set-cookie': 'signed=yes; Path=/' })
             : html('<form method="post"><input name="pin"><button type="submit">Verify</button></form>')
+      }
+
+      if (pathname === '/dialog-code') {
+         const typed = new URL(request.url ?? '/', 'http://localhost').searchParams.get('c')
+         const signedCookie = { 'set-cookie': 'signed=yes; Path=/' }
+
+         return typed === totpCode(TOTP_SECRET, Date.now())
+            ? redirect('/connect-services/ads_experience/?session_redirect=%2Ffeed%2F', signedCookie)
+            : redirect('/login?again=1')
+      }
+
+      if (pathname.startsWith('/connect-services/')) {
+         return html(consentPage)
       }
 
       response.writeHead(404)
@@ -204,5 +229,15 @@ describe('AccountValidator in a real browser, against a stand-in for LinkedIn', 
          outcome: 'NEEDS_REAUTH',
          message: expect.stringMatching(/two-step/i),
       })
+   })
+
+   it('should type the code into the dialog that sends itself, then accept the consent page', async () => {
+      const verdict = await run('dialog@work.com', {
+         password: PASSWORD,
+         totpSecret: TOTP_SECRET,
+      })
+
+      expect(verdict.outcome).toBe('VALID')
+      expect(verdict.outcome === 'VALID' && verdict.cookies.some(({ name }) => name === 'signed')).toBe(true)
    })
 })

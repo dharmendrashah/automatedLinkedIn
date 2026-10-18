@@ -38,6 +38,8 @@ export interface BrowserDriver {
 // get it, so they cannot type credentials.
 export interface LoginSession extends BrowserSession {
    fill: (selector: string, value: string) => Promise<void>
+   // Types key by key once, without reading the field back: for a code box that sends itself after the last digit.
+   type: (selector: string, value: string) => Promise<void>
    // Presses a key in the element that has the focus (Enter sends a form) and returns the url afterwards.
    press: (key: string) => Promise<string>
    // Whether the element shows up within `timeoutMs`.

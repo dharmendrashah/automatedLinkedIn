@@ -519,6 +519,20 @@ describe('CamoufoxDriver', () => {
 
       expect(mocks.events).toEqual(['settled', 'context closed'])
    })
+
+   it('should still close the browser when closing the page never ends, so a run always finishes', async () => {
+      const quick = new CamoufoxDriver({
+         actionTimeoutMs: 1000,
+         isAllowedNavigation: () => true,
+         closeTimeoutMs: 10,
+      })
+      const session = await quick.open()
+
+      mocks.context.close.mockImplementationOnce(() => new Promise(() => undefined))
+      await session.close()
+
+      expect(mocks.browser.close).toHaveBeenCalled()
+   })
 })
 
 describe('allowedRoute', () => {

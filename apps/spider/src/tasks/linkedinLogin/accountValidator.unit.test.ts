@@ -36,6 +36,8 @@ type Script = {
    elements: (url: string) => string[]
    // Where the browser is once the redirects after a submit are done, when that differs from where the submit left it.
    settle?: (url: string) => string
+   // What typing into a field does to the page, such as a code box that sends itself after the last digit.
+   type?: (selector: string, value: string, url: string) => string
 }
 
 const fakeSession = (script: Script) => {
@@ -62,6 +64,10 @@ const fakeSession = (script: Script) => {
       }),
       fill: vi.fn(async (selector: string, value: string) => {
          typed[selector] = value
+      }),
+      type: vi.fn(async (selector: string, value: string) => {
+         typed[selector] = value
+         url = script.type ? script.type(selector, value, url) : url
       }),
       exists: vi.fn(async (selector: string) => script.elements(url).some(element => selector.includes(element))),
       settled: vi.fn(async () => {
@@ -116,7 +122,7 @@ const site = (
       }
 
       if (url === checkpoint) {
-         return rules.challenge === 'code' ? [SELECTORS.codeInput] : []
+         return rules.challenge === 'code' ? [SELECTORS.codeInput, SELECTORS.codeSubmit] : []
       }
 
       return []
@@ -812,6 +818,153 @@ describe('AccountValidator', () => {
          expect(text).not.toContain('wrongPASSWORD')
          expect(text).not.toContain(TOTP_SECRET)
          expect(text).not.toContain(LI_AT)
+      })
+   })
+
+   // Recorded 2026-10-18: the code is asked for in a dialog over /login, with no button; the page sends it after the last
+   // digit. LinkedIn may then show its ads consent page before the feed.
+   describe('with the two-step code in a dialog', () => {
+      const consent = `${BASE}/connect-services/ads_experience/?session_redirect=${encodeURIComponent(feed)}`
+      const code = totpCode(TOTP_SECRET, NOW)
+      const credentials = {
+         password: 'hunter2',
+         totpSecret: TOTP_SECRET,
+      }
+
+      // `sendsItself`: the page sends the code after the last digit; otherwise only Enter does. `lingers`: how many more
+      // looks the dialog stays on screen after a right code. `then`: where a right code leads.
+      const dialogSite = (rules: {
+         right?: string
+         sendsItself?: boolean
+         lingers?: number
+         then?: 'feed' | 'consent'
+         acceptShown?: boolean
+      }): Script => {
+         let sent = false
+         let looks = rules.lingers ?? 0
+         const after = rules.then === 'consent' ? consent : feed
+         const right = (typed: Record<string, string>) => typed[SELECTORS.codeField] === (rules.right ?? code)
+
+         return {
+            load: target => (target.startsWith(feed) ? login : target),
+            submit: (selector, typed, url) => {
+               if (selector === SELECTORS.consentAccept) {
+                  return feed
+               }
+
+               if (url === login && typed[SELECTORS.codeField] !== undefined) {
+                  sent = right(typed)
+
+                  return login
+               }
+
+               return typed[SELECTORS.password] === 'hunter2' ? login : `${BASE}/somewhere`
+            },
+            type: (_selector, value, url) => {
+               sent = Boolean(rules.sendsItself) && value === (rules.right ?? code)
+
+               return url
+            },
+            settle: url => {
+               if (url !== login || !sent) {
+                  return url
+               }
+
+               looks -= 1
+
+               return looks < 0 ? after : login
+            },
+            elements: url => {
+               if (url === login) {
+                  return sent && looks < 0 ? [] : [SELECTORS.username, SELECTORS.password, SELECTORS.codeDialog]
+               }
+
+               return url === consent && rules.acceptShown !== false ? [SELECTORS.consentAccept] : []
+            },
+         }
+      }
+
+      it('should type the code into the dialog that has no button, and sign in once the page sends it', async () => {
+         const { session, typed } = fakeSession(dialogSite({ sendsItself: true }))
+
+         await expect(validator.validate(session, input(credentials))).resolves.toMatchObject({ outcome: 'VALID' })
+         expect(typed[SELECTORS.codeField]).toBe(code)
+         expect(session.type).toHaveBeenCalledTimes(1)
+         expect(session.click).not.toHaveBeenCalledWith(SELECTORS.codeSubmit)
+      })
+
+      it('should not call the code wrong while the dialog is still on screen after it was sent', async () => {
+         const { session } = fakeSession(
+            dialogSite({
+               sendsItself: true,
+               lingers: 3,
+            })
+         )
+
+         await expect(validator.validate(session, input(credentials))).resolves.toMatchObject({ outcome: 'VALID' })
+         expect(session.type).toHaveBeenCalledTimes(1)
+      })
+
+      it('should press Enter once when the dialog does not send the code by itself', async () => {
+         const { session } = fakeSession(dialogSite({ sendsItself: false }))
+
+         await expect(validator.validate(session, input(credentials))).resolves.toMatchObject({ outcome: 'VALID' })
+         expect(session.press).toHaveBeenCalledTimes(2)
+         expect(session.type).toHaveBeenCalledTimes(1)
+      })
+
+      it('should call a code wrong after one try when the dialog stays, so a wrong key cannot lock the account', async () => {
+         const { session } = fakeSession(
+            dialogSite({
+               right: '000000',
+               sendsItself: true,
+            })
+         )
+
+         await expect(validator.validate(session, input(credentials))).resolves.toMatchObject({
+            outcome: 'NEEDS_REAUTH',
+            message: expect.stringMatching(/did not accept the two-step code/i),
+         })
+         expect(session.type).toHaveBeenCalledTimes(1)
+      })
+
+      it('should accept the ads consent page LinkedIn shows after the code, and be signed in', async () => {
+         const { session } = fakeSession(
+            dialogSite({
+               sendsItself: true,
+               then: 'consent',
+            })
+         )
+
+         await expect(validator.validate(session, input(credentials))).resolves.toMatchObject({ outcome: 'VALID' })
+         expect(session.click).toHaveBeenCalledWith(SELECTORS.consentAccept)
+      })
+
+      it('should still be signed in when the consent page shows no Accept button', async () => {
+         const { session } = fakeSession(
+            dialogSite({
+               sendsItself: true,
+               then: 'consent',
+               acceptShown: false,
+            })
+         )
+
+         await expect(validator.validate(session, input(credentials))).resolves.toMatchObject({ outcome: 'VALID' })
+         expect(session.click).not.toHaveBeenCalledWith(SELECTORS.consentAccept)
+      })
+
+      it('should get past the consent page when the saved token leads there, without typing', async () => {
+         const { session } = fakeSession({
+            load: target => (target.startsWith(feed) ? consent : target),
+            submit: selector => (selector === SELECTORS.consentAccept ? feed : consent),
+            elements: url => (url === consent ? [SELECTORS.consentAccept] : []),
+         })
+
+         const verdict = await validator.validate(session, input({ session: `li_at=${LI_AT}` }))
+
+         expect(verdict).toMatchObject({ outcome: 'VALID' })
+         expect(session.fill).not.toHaveBeenCalled()
+         expect(session.click).toHaveBeenCalledWith(SELECTORS.consentAccept)
       })
    })
 })

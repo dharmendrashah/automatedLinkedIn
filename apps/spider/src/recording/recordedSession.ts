@@ -77,6 +77,19 @@ export class RecordedSession implements LoginSession {
       )
    }
 
+   public async type(selector: string, value: string) {
+      this.recorder.addSecret(value)
+
+      return this.step(
+         'type',
+         {
+            selector,
+            length: value.length,
+         },
+         () => this.inner.type(selector, value)
+      )
+   }
+
    public async press(key: string) {
       return this.step(
          'press',

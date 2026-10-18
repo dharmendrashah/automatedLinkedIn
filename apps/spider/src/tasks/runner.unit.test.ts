@@ -42,6 +42,7 @@ const makeSession = () => ({
    click: vi.fn(),
    extract: vi.fn(),
    fill: vi.fn(),
+   type: vi.fn(),
    press: vi.fn(async (_key: string) => 'https://example.com/'),
    exists: vi.fn(async () => true),
    scrollBy: vi.fn(async () => false),

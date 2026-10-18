@@ -376,6 +376,16 @@ describe('Recorder', () => {
 
       expect(JSON.parse(String(store.objects.get(`${prefix}/network.json`)))).toHaveLength(1)
    })
+
+   it('should stop waiting for a capture that never ends, so the browser can close', async () => {
+      const { recorder } = start({ settleMs: 10 })
+      const run = await recorder
+
+      run.track(new Promise(() => undefined))
+
+      await expect(run.settle()).resolves.toBeUndefined()
+      await expect(run.settle()).resolves.toBeUndefined()
+   })
 })
 
 describe('Recorder in the task layout', () => {
