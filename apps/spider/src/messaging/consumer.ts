@@ -18,8 +18,9 @@ export type ConsumerOptions = {
    backoffMs?: number[]
    // How long a task waits before it is tried again because another task holds its account.
    busyDelayMs?: number
-   // How often a job that is still running writes a heartbeat line to the log.
+   // How often a job that is still running (or waiting for its account) writes a line to the log.
    heartbeatMs?: number
+   now?: () => number
 }
 
 export const RETRIES_HEADER = 'x-retries'
@@ -72,9 +73,21 @@ export const consumeQueue = async <T>(
       backoffMs = BACKOFF_MS,
       busyDelayMs = BUSY_DELAY_MS,
       heartbeatMs = HEARTBEAT_MS,
+      now = Date.now,
    }: ConsumerOptions
 ) => {
    let inFlight: Promise<void> = Promise.resolve()
+   // Jobs waiting for their account, with when their waiting line was last logged.
+   const waiting = new Map<string, number>()
+
+   const logWaiting = (name: string) => {
+      const last = waiting.get(name)
+
+      if (last === undefined || now() - last >= heartbeatMs) {
+         log.info(`spider job waiting: ${name} (its account is in use)`)
+         waiting.set(name, now())
+      }
+   }
 
    // Publishes a copy after a wait, then drops the original. If the copy cannot be published the original goes
    // back to the queue rather than being lost.
@@ -122,7 +135,9 @@ export const consumeQueue = async <T>(
    // so a retry or a wait does not look like a running job.
    const runJob = async (item: T): Promise<{ ok: true } | { ok: false; error: unknown }> => {
       const name = label(item)
-      log.info(`spider job started: ${name}`)
+      if (!waiting.has(name)) {
+         log.info(`spider job started: ${name}`)
+      }
       const heartbeat = setInterval(() => log.info(`spider job still running: ${name}`), heartbeatMs)
 
       try {
@@ -153,18 +168,21 @@ export const consumeQueue = async <T>(
       }
 
       const result = await runJob(item)
+      const { error } = result.ok ? { error: undefined } : result
 
-      if (result.ok) {
-         log.info(`spider job finished: ${label(item)}`)
-         channel.ack(message)
+      // The task did nothing wrong: it waits for the other task and keeps the retries it has left.
+      if (error instanceof AccountBusyError) {
+         logWaiting(label(item))
+         await requeue(message, busyDelayMs, readRetries(message))
 
          return
       }
 
-      const { error } = result
-      // The task did nothing wrong: it waits for the other task and keeps the retries it has left.
-      if (error instanceof AccountBusyError) {
-         await requeue(message, busyDelayMs, readRetries(message))
+      waiting.delete(label(item))
+
+      if (result.ok) {
+         log.info(`spider job finished: ${label(item)}`)
+         channel.ack(message)
 
          return
       }

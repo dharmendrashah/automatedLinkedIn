@@ -21,6 +21,8 @@ export interface ObjectStore {
    getVersioned: (key: string) => Promise<{ body: string; version: string }>
    // Deletes the object only while it still has this version. A missing or changed object is not an error.
    delete: (key: string, version: string) => Promise<void>
+   // Overwrites the object only while it still has this version. Resolves to the new version, or undefined when it changed.
+   replace: (key: string, body: string, contentType: string, version: string) => Promise<string | undefined>
 }
 
 export const resultKey = ({ task_type: type, task_id: id }: ScrapeTaskCommand) => `results/${type}/${id}.json`

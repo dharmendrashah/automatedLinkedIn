@@ -40,6 +40,14 @@ export type CamoufoxOptions = {
 // a run arrive more than a second late.
 const HUMANIZE_MAX_S = 0.7
 
+// The worker runs one page at a time, so one content process is enough; each extra one cost hundreds of MB and got the
+// worker killed for memory on staging (2026-10-19). The memory cache is capped in case it is ever turned on.
+const MEMORY_PREFS = {
+   'dom.ipc.processCount': 1,
+   'dom.ipc.processCount.webIsolated': 1,
+   'browser.cache.memory.capacity': 16_384,
+}
+
 // What CamoufoxDriver passes to Camoufox(), shared with the local devtools recorder so both start the exact same
 // browser identity instead of keeping two copies of these options. A stored `pin` (language, timezone) wins over what
 // the proxy's address would draw, so one account does not change language between runs.
@@ -52,6 +60,8 @@ export const buildCamoufoxOptions = (
 ) => ({
    headless,
    humanize: HUMANIZE_MAX_S,
+   // A copy: Camoufox writes its own prefs into this object.
+   firefox_user_prefs: { ...MEMORY_PREFS },
    fingerprint,
    ...(pin.locale && { locale: pin.locale }),
    ...(pin.timezone && { config: { timezone: pin.timezone } }),

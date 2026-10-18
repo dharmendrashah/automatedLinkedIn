@@ -5,7 +5,7 @@ logged real activity for IDLE_MINUTES, the staging node pool is scaled to zero, 
 
 What counts as activity:
   brain, brain-worker         any request, result or job line, except health checks and known retry noise
-  spider-api, spider-worker   only the job lines "spider job started / still running / finished"
+  spider-api, spider-worker   only the job lines "spider job started / still running / waiting / finished"
 Authentik pods are neither read nor waited for: sign-ins only count once they reach brain.
 
 The checker does nothing while a deploy holds the lock (deploy_lock_until in the state ConfigMap), and it only acts
@@ -39,7 +39,7 @@ from typing import Optional
 
 ACTIVITY_APPS = ("brain", "brain-worker", "spider-api", "spider-worker")
 SPIDER_APPS = ("spider-api", "spider-worker")
-JOB_MARKERS = ("spider job started", "spider job still running", "spider job finished")
+JOB_MARKERS = ("spider job started", "spider job still running", "spider job waiting", "spider job finished")
 NOISE_MARKERS = (
     "/health",
     "/healthz",

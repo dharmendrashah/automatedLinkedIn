@@ -292,6 +292,39 @@ describe('consumeTasks', () => {
          expect(log.info.mock.calls.length).toBe(countAtFinish)
       })
 
+      it('should log a job waiting for its account once a minute instead of starting it again', async () => {
+         const { channel, send } = setup()
+         let clock = 0
+         const handler = vi
+            .fn()
+            .mockRejectedValueOnce(new AccountBusyError())
+            .mockRejectedValueOnce(new AccountBusyError())
+            .mockRejectedValueOnce(new AccountBusyError())
+            .mockResolvedValueOnce(undefined)
+         sleep.mockImplementation(async ms => {
+            clock += ms
+         })
+         const consumer = await consumeTasks(channel as never, handler, {
+            ...options,
+            busyDelayMs: 40_000,
+            now: () => clock,
+         })
+
+         for (let attempt = 0; attempt < 4; attempt++) {
+            send(message(command))
+            await new Promise(resolve => setTimeout(resolve, 0))
+         }
+         await consumer.stop()
+
+         const waiting = `spider job waiting: Task ${command.task_id} (its account is in use)`
+         expect(log.info.mock.calls.map(call => call[0])).toEqual([
+            `spider job started: Task ${command.task_id}`,
+            waiting,
+            waiting,
+            `spider job finished: Task ${command.task_id}`,
+         ])
+      })
+
       it('should not log a finish for a job that failed and is retried', async () => {
          const { channel, send } = setup()
          const handler = vi.fn().mockRejectedValue(new Error('boom'))

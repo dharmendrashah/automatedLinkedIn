@@ -56,8 +56,8 @@ export class Environment {
             default: 'automatedlinkedin-spider',
          }),
          SPIDER_ACCOUNT_LOCK_TTL_MS: num({
-            desc: 'How long one task may hold its account before another task may take over. Longer than the longest task',
-            default: 1_800_000,
+            desc: 'How long an account lease lasts without renewal. A running task renews it every fifth of this, so a crashed worker frees its account within this time',
+            default: 300_000,
          }),
          SPIDER_ACCOUNT_BUSY_DELAY_MS: num({
             desc: 'How long a task waits before it is tried again because another task holds its account',
