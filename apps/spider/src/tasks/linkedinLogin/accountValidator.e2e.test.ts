@@ -32,6 +32,12 @@ let server: Server
 let origin: string
 // The new LinkedIn page has no form: Enter does nothing and a button sends what was typed.
 let noForm = false
+// The masked email of the account a "Welcome back" page remembers, and whether "another account" leaves that page.
+let remembered: { masked: string; switches: boolean } | undefined
+
+// Recorded 2026-10-18: the page names the remembered account and has only a password box and a "Sign in" button.
+const welcomePage = (masked: string) =>
+   `<p>Welcome back</p><div><p>Ada Lovelace</p><p>${masked}</p></div><div><input id="p1" type="password" autocomplete="current-password webauthn"></div><div><button type="button" id="go">Sign in</button></div><a href="/login/">Sign in using another account</a><script>document.getElementById("go").onclick=()=>{location.href="/spa-signin?p="+encodeURIComponent(document.getElementById("p1").value)}</script>`
 
 // A checkbox made of a button, the sign-in button, then a button of the footer.
 const noFormPage =
@@ -78,7 +84,11 @@ beforeAll(async () => {
             : html('<p>no</p>')
       }
 
-      if (pathname === '/login' && request.method === 'GET') {
+      if ((pathname === '/login' || pathname === '/login/') && request.method === 'GET') {
+         if (remembered && !signedIn(cookie) && (pathname === '/login' || !remembered.switches)) {
+            return html(welcomePage(remembered.masked))
+         }
+
          if (noForm && !signedIn(cookie)) {
             return html(noFormPage)
          }
@@ -239,5 +249,32 @@ describe('AccountValidator in a real browser, against a stand-in for LinkedIn', 
 
       expect(verdict.outcome).toBe('VALID')
       expect(verdict.outcome === 'VALID' && verdict.cookies.some(({ name }) => name === 'signed')).toBe(true)
+   })
+
+   describe('on the "Welcome back" page of a remembered account', () => {
+      const welcome = async (masked: string, switches: boolean) => {
+         remembered = {
+            masked,
+            switches,
+         }
+
+         try {
+            return await run('ada@work.com', { password: PASSWORD })
+         } finally {
+            remembered = undefined
+         }
+      }
+
+      it('should sign in with only the password when it remembers this account', async () => {
+         await expect(welcome('a*****@work.com', true)).resolves.toMatchObject({ outcome: 'VALID' })
+      })
+
+      it('should pick another account and use the whole form when it remembers someone else', async () => {
+         await expect(welcome('b*****@other.com', true)).resolves.toMatchObject({ outcome: 'VALID' })
+      })
+
+      it('should report ERROR when another account still shows the remembered page', async () => {
+         await expect(welcome('b*****@other.com', false)).resolves.toMatchObject({ outcome: 'ERROR' })
+      })
    })
 })

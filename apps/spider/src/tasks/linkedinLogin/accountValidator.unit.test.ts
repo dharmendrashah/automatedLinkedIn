@@ -3,7 +3,7 @@ import { type Mock, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SECURITY_CHECK_MESSAGE } from '@automatedLinkedIn/contracts'
 
 import { type LoginSession } from '../../scraping/driver'
-import { AccountValidator, SELECTORS } from './accountValidator'
+import { AccountValidator, SELECTORS, rememberedAccount } from './accountValidator'
 import { totpCode } from './totp'
 
 const BASE = 'https://www.linkedin.com'
@@ -742,6 +742,62 @@ describe('AccountValidator', () => {
 
          expect(verdict).toMatchObject({ outcome: 'ERROR' })
          expect(JSON.stringify(verdict)).not.toContain('TOPSECRETDETAIL')
+      })
+   })
+
+   describe('on the "Welcome back" page of a remembered account (recorded 2026-10-18)', () => {
+      const welcome = `${BASE}/login?welcome`
+
+      // /login shows a remembered account with only a password box; another account leads to `afterSwitch`.
+      const remembered = (shown: string, afterSwitch = login): Script => {
+         const base = site({ password: 'hunter2' })
+
+         return {
+            ...base,
+            load: target => (target === login ? welcome : base.load(target)),
+            submit: (selector, typed, url) =>
+               selector === SELECTORS.otherAccount ? afterSwitch : base.submit(selector, typed, url),
+            elements: url => (url === welcome ? [SELECTORS.password, rememberedAccount(shown)] : base.elements(url)),
+         }
+      }
+
+      it('should type only the password when the page remembers this account', async () => {
+         const { session, typed } = fakeSession(remembered('ada@work.com'))
+         const verdict = await validator.validate(session, input({ password: 'hunter2' }))
+
+         expect(verdict).toMatchObject({ outcome: 'VALID' })
+         expect(typed).toEqual({ [SELECTORS.password]: 'hunter2' })
+      })
+
+      it('should switch to another account and use the whole form when the page remembers someone else', async () => {
+         const { session, typed } = fakeSession(remembered('bob@other.com'))
+         const verdict = await validator.validate(session, input({ password: 'hunter2' }))
+
+         expect(verdict).toMatchObject({ outcome: 'VALID' })
+         expect(session.click).toHaveBeenCalledWith(SELECTORS.otherAccount)
+         expect(typed).toEqual({
+            [SELECTORS.username]: 'ada@work.com',
+            [SELECTORS.password]: 'hunter2',
+         })
+      })
+
+      it('should type nothing and report ERROR when switching account still shows no email field', async () => {
+         const { session } = fakeSession(remembered('bob@other.com', welcome))
+
+         await expect(validator.validate(session, input({ password: 'hunter2' }))).resolves.toMatchObject({
+            outcome: 'ERROR',
+            message: expect.stringMatching(/does not understand/i),
+         })
+         expect(session.fill).not.toHaveBeenCalled()
+      })
+   })
+
+   describe('rememberedAccount', () => {
+      it('should match the masked email by its first letter and domain, whatever the case', () => {
+         const selector = rememberedAccount('Ada.Lovelace+x@Work.co.uk')
+
+         expect(selector).toContain(String.raw`^\\s*a\\*+@work\\.co\\.uk\\s*$`)
+         expect(selector).toMatch(/"i"\):visible$/)
       })
    })
 
