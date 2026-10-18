@@ -58,6 +58,14 @@ describe('browseAfterLogin', () => {
       expect(context.warn).toHaveBeenCalledWith('The address is not on the spider allowlist.')
    })
 
+   it('should not keep the session when LinkedIn will not load the profile right after the sign-in', async () => {
+      const { browse } = setup(async () => {
+         throw new VisitError('load', 'The page did not load.')
+      })
+
+      await expect(browse()).resolves.toBe(false)
+   })
+
    it('should keep the login when the browser fails while it looks around, without quoting the error', async () => {
       const { context, browse } = setup(async () => `${BASE}/in/ada/`)
 

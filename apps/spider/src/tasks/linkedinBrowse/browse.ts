@@ -52,8 +52,23 @@ export const browseLinkedin = async (
 
       return ['login', 'checkpoint'].includes(kindOf(landed)) ? undefined : landed
    }
+   // A cancelled session makes LinkedIn send the feed round in circles (recorded 2026-10-18): without the token it is loaded
+   // once more, and a sign-in page then says signed out. A second failure goes on as an error.
+   const openFeed = async () => {
+      try {
+         return await open(`${baseUrl}/feed/`)
+      } catch (error) {
+         if (!(error instanceof VisitError && error.reason === 'load')) {
+            throw error
+         }
 
-   const feed = await open(`${baseUrl}/feed/`)
+         await browser.clearCookies('li_at')
+
+         return open(`${baseUrl}/feed/`)
+      }
+   }
+
+   const feed = await openFeed()
 
    if (!feed) {
       return 'SIGNED_OUT'

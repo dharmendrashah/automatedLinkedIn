@@ -47,6 +47,11 @@ export const browseAfterLogin = async (
       await pause(between(STAY_MIN_MS, STAY_MAX_MS, random))
    } catch (error) {
       warn(error instanceof VisitError ? error.message : 'The visit to the profile stopped early')
+
+      // A page LinkedIn will not load right after a sign-in is a session it cancelled (recorded 2026-10-18).
+      if (error instanceof VisitError && error.reason === 'load') {
+         return false
+      }
    }
 
    return true

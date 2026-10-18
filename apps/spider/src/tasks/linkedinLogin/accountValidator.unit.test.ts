@@ -659,6 +659,60 @@ describe('AccountValidator', () => {
             expect(session.fill).not.toHaveBeenCalled()
          })
       })
+
+      describe('when LinkedIn lets the token open the feed once and then cancels it (recorded 2026-10-18)', () => {
+         // The first feed loads; from then on it goes round in circles while the token is in the browser.
+         const cancelled = () => {
+            const fake = fakeSession(site({ password: 'hunter2' }))
+            const base = site({ password: 'hunter2' })
+            let feeds = 0
+            let cleared = false
+
+            fake.session.clearCookies.mockImplementation(async () => {
+               cleared = true
+            })
+            fake.session.goto.mockImplementation(async (target: string) => {
+               if (!target.startsWith(feed) || cleared) {
+                  return base.load(target)
+               }
+
+               feeds += 1
+
+               if (feeds > 1) {
+                  throw new Error('page.goto: NS_ERROR_REDIRECT_LOOP')
+               }
+
+               return feed
+            })
+
+            return fake
+         }
+
+         it('should wait, look again, and sign in with the password instead of keeping the cancelled token', async () => {
+            const { session, typed } = cancelled()
+            const verdict = await validator.validate(
+               session,
+               input({
+                  session: `li_at=${LI_AT}`,
+                  password: 'hunter2',
+               })
+            )
+
+            expect(verdict).toMatchObject({ outcome: 'VALID' })
+            expect(sleep).toHaveBeenCalledWith(5000)
+            expect(session.clearCookies).toHaveBeenCalledWith('li_at')
+            expect(typed[SELECTORS.password]).toBe('hunter2')
+         })
+
+         it('should say the token expired when there is no password', async () => {
+            const { session } = cancelled()
+
+            await expect(validator.validate(session, input({ session: `li_at=${LI_AT}` }))).resolves.toMatchObject({
+               outcome: 'NEEDS_REAUTH',
+               message: expect.stringMatching(/token/i),
+            })
+         })
+      })
    })
 
    describe('with a password', () => {

@@ -20,6 +20,7 @@ const setup = (pages: Record<string, string> = {}, html: Record<string, string> 
          pageHtml: vi.fn(async () => html[at] ?? ''),
          exists: vi.fn(async () => false),
          click: vi.fn(async () => at),
+         clearCookies: vi.fn(async () => undefined),
       },
       visit: vi.fn(async (url: string) => {
          at = pages[url] ?? url
@@ -130,6 +131,24 @@ describe('browseLinkedin', () => {
 
       expect(context.warn).toHaveBeenCalledWith('robots.txt does not allow this page.')
       expect(context.visit).toHaveBeenLastCalledWith(`${BASE}/in/grace-hopper/`)
+   })
+
+   it('should drop the token and answer SIGNED_OUT when the feed goes round in circles', async () => {
+      const { context, browse } = setup()
+
+      context.visit.mockRejectedValueOnce(new VisitError('load', 'The page did not load.'))
+      context.visit.mockResolvedValueOnce(`${BASE}/uas/login`)
+
+      await expect(browse()).resolves.toBe('SIGNED_OUT')
+      expect(context.browser.clearCookies).toHaveBeenCalledWith('li_at')
+   })
+
+   it('should let a feed that loads neither way fail as an error', async () => {
+      const { context, browse } = setup()
+
+      context.visit.mockRejectedValue(new VisitError('load', 'The page did not load.'))
+
+      await expect(browse()).rejects.toThrow('The page did not load.')
    })
 
    it('should still be done when the feed shows no post', async () => {

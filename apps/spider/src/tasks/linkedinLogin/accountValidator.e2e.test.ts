@@ -16,6 +16,9 @@ const TOKEN = 'AQEDARz1x2aBcD3eFgHiJkLmNoPqRsTuVwXyZ0123456789-_abcdefghijklmnop
 const PASSWORD = 'hunter2'
 // A token the stand-in refuses by sending the feed to itself, as LinkedIn did on 2026-10-18.
 const LOOPING_TOKEN = 'AQEDARz1x2aBcD3eFgHiJkLmNoPqRsTuVwXyZ0123456789-_LOOPLOOPLOOPLOOPLOOPLOOPLOOP'
+// A token the stand-in accepts for one feed and then cancels, as LinkedIn did on 2026-10-18.
+const ONCE_TOKEN = 'AQEDARz1x2aBcD3eFgHiJkLmNoPqRsTuVwXyZ0123456789-_ONCEONCEONCEONCEONCEONCEONCE'
+let onceTokenFeeds = 0
 const TOTP_SECRET = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'
 
 const page = (body: string) => `<!doctype html><html><body>${body}</body></html>`
@@ -79,6 +82,12 @@ beforeAll(async () => {
       if (pathname.startsWith('/feed')) {
          if (cookie.includes(`li_at=${LOOPING_TOKEN}`)) {
             return redirect('/feed/')
+         }
+
+         if (cookie.includes(`li_at=${ONCE_TOKEN}`)) {
+            onceTokenFeeds += 1
+
+            return onceTokenFeeds === 1 ? html('<h1>feed</h1>') : redirect('/feed/')
          }
 
          return signedIn(cookie) ? html('<h1>feed</h1>') : redirect('/login')
@@ -224,6 +233,19 @@ describe('AccountValidator in a real browser, against a stand-in for LinkedIn', 
 
       expect(verdict.outcome).toBe('VALID')
       expect(verdict.outcome === 'VALID' && verdict.cookies.some(({ value }) => value === LOOPING_TOKEN)).toBe(false)
+   })
+
+   it('should not keep a token that opens the feed once and is then cancelled, and sign in with the password', async () => {
+      onceTokenFeeds = 0
+
+      const verdict = await run('ada@work.com', {
+         session: `li_at=${ONCE_TOKEN}`,
+         password: PASSWORD,
+      })
+
+      expect(verdict.outcome).toBe('VALID')
+      expect(verdict.outcome === 'VALID' && verdict.cookies.some(({ value }) => value === ONCE_TOKEN)).toBe(false)
+      expect(verdict.outcome === 'VALID' && verdict.cookies.some(({ name }) => name === 'signed')).toBe(true)
    })
 
    it('should report a wrong password, which LinkedIn shows on a /checkpoint/ page', async () => {
