@@ -184,6 +184,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-19: LinkedIn's "Welcome back" sign-in page (remembered account: masked email, password box only) is handled (`.plan/linkedin-remembered-account.md`, done). The password alone is typed only when the masked email's first letter and domain match (`rememberedAccount(email)`, a `:text-matches` selector); otherwise "Sign in using another account", and ERROR if that still shows no email field. A refused `li_at` can make `/feed/` redirect to itself until a 429 (run `f0ad6392`); `AccountValidator.loadFeed` then drops `li_at` (`LoginSession.clearCookies`) and loads the feed once more, so the password fallback runs, and a second failure stays ERROR (`.plan/linkedin-refused-token-loop.md`).
 - 2026-10-19: Spider worker OOM kills and a 30-minute account block after a crash (`.plan/spider-memory-and-lease.md`, done).
    - Worker memory limit 3Gi, request 1536Mi (a sign-in peaked at 1.7Gi; `/dev/shm` counts against the limit). Firefox runs with one content process (`MEMORY_PREFS` in `camoufoxDriver.ts`; Camoufox mutates `firefox_user_prefs`, so pass a copy). Sign-in videos are 640x360.
    - Account lease: 5 min TTL with a heartbeat, same-task takeover. A busy task logs `spider job waiting: ...` once a minute instead of `spider job started`; the idle checker counts it as work.

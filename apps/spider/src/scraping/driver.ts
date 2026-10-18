@@ -37,6 +37,8 @@ export interface BrowserDriver {
 // What account validation needs on top of a browser: typing into a form and looking at the page. Scrape tasks never
 // get it, so they cannot type credentials.
 export interface LoginSession extends BrowserSession {
+   // Removes the browser's cookies of that name, such as a token LinkedIn refused but cannot make the browser forget.
+   clearCookies: (name: string) => Promise<void>
    fill: (selector: string, value: string) => Promise<void>
    // Types key by key once, without reading the field back: for a code box that sends itself after the last digit.
    type: (selector: string, value: string) => Promise<void>

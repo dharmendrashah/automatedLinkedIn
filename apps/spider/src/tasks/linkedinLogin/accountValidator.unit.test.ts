@@ -3,7 +3,7 @@ import { type Mock, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SECURITY_CHECK_MESSAGE } from '@automatedLinkedIn/contracts'
 
 import { type LoginSession } from '../../scraping/driver'
-import { AccountValidator, SELECTORS } from './accountValidator'
+import { AccountValidator, SELECTORS, rememberedAccount } from './accountValidator'
 import { totpCode } from './totp'
 
 const BASE = 'https://www.linkedin.com'
@@ -46,6 +46,7 @@ const fakeSession = (script: Script) => {
 
    const session = {
       addCookies: vi.fn().mockResolvedValue(undefined),
+      clearCookies: vi.fn().mockResolvedValue(undefined),
       cookies: vi.fn().mockResolvedValue(feedCookies),
       goto: vi.fn(async (target: string) => {
          url = script.load(target)
@@ -595,6 +596,69 @@ describe('AccountValidator', () => {
          })
          expect(session.fill).not.toHaveBeenCalled()
       })
+
+      describe('when LinkedIn sends the feed round in circles for a refused token (recorded 2026-10-18)', () => {
+         // The feed fails to load while the token is in the browser; with `down`, it fails without it too.
+         const looping = (down = false) => {
+            const fake = fakeSession(site({ password: 'hunter2' }))
+            const base = site({ password: 'hunter2' })
+            let cleared = false
+
+            fake.session.clearCookies.mockImplementation(async () => {
+               cleared = true
+            })
+            fake.session.goto.mockImplementation(async (target: string) => {
+               if (target.startsWith(feed) && (down || !cleared)) {
+                  throw new Error('page.goto: NS_ERROR_NET_EMPTY_RESPONSE')
+               }
+
+               return base.load(target)
+            })
+
+            return fake
+         }
+
+         it('should drop the token from the browser and sign in with the password', async () => {
+            const { session, typed } = looping()
+            const verdict = await validator.validate(
+               session,
+               input({
+                  session: `li_at=${LI_AT}`,
+                  password: 'hunter2',
+               })
+            )
+
+            expect(verdict).toMatchObject({ outcome: 'VALID' })
+            expect(session.clearCookies).toHaveBeenCalledWith('li_at')
+            expect(typed[SELECTORS.password]).toBe('hunter2')
+         })
+
+         it('should say the token expired when there is no password', async () => {
+            const { session } = looping()
+
+            await expect(validator.validate(session, input({ session: `li_at=${LI_AT}` }))).resolves.toMatchObject({
+               outcome: 'NEEDS_REAUTH',
+               message: expect.stringMatching(/token/i),
+            })
+         })
+
+         it('should report ERROR, typing nothing, when the feed does not load without the token either', async () => {
+            const { session } = looping(true)
+            const verdict = await validator.validate(
+               session,
+               input({
+                  session: `li_at=${LI_AT}`,
+                  password: 'hunter2',
+               })
+            )
+
+            expect(verdict).toMatchObject({
+               outcome: 'ERROR',
+               message: expect.stringMatching(/did not let the check load/i),
+            })
+            expect(session.fill).not.toHaveBeenCalled()
+         })
+      })
    })
 
    describe('with a password', () => {
@@ -742,6 +806,62 @@ describe('AccountValidator', () => {
 
          expect(verdict).toMatchObject({ outcome: 'ERROR' })
          expect(JSON.stringify(verdict)).not.toContain('TOPSECRETDETAIL')
+      })
+   })
+
+   describe('on the "Welcome back" page of a remembered account (recorded 2026-10-18)', () => {
+      const welcome = `${BASE}/login?welcome`
+
+      // /login shows a remembered account with only a password box; another account leads to `afterSwitch`.
+      const remembered = (shown: string, afterSwitch = login): Script => {
+         const base = site({ password: 'hunter2' })
+
+         return {
+            ...base,
+            load: target => (target === login ? welcome : base.load(target)),
+            submit: (selector, typed, url) =>
+               selector === SELECTORS.otherAccount ? afterSwitch : base.submit(selector, typed, url),
+            elements: url => (url === welcome ? [SELECTORS.password, rememberedAccount(shown)] : base.elements(url)),
+         }
+      }
+
+      it('should type only the password when the page remembers this account', async () => {
+         const { session, typed } = fakeSession(remembered('ada@work.com'))
+         const verdict = await validator.validate(session, input({ password: 'hunter2' }))
+
+         expect(verdict).toMatchObject({ outcome: 'VALID' })
+         expect(typed).toEqual({ [SELECTORS.password]: 'hunter2' })
+      })
+
+      it('should switch to another account and use the whole form when the page remembers someone else', async () => {
+         const { session, typed } = fakeSession(remembered('bob@other.com'))
+         const verdict = await validator.validate(session, input({ password: 'hunter2' }))
+
+         expect(verdict).toMatchObject({ outcome: 'VALID' })
+         expect(session.click).toHaveBeenCalledWith(SELECTORS.otherAccount)
+         expect(typed).toEqual({
+            [SELECTORS.username]: 'ada@work.com',
+            [SELECTORS.password]: 'hunter2',
+         })
+      })
+
+      it('should type nothing and report ERROR when switching account still shows no email field', async () => {
+         const { session } = fakeSession(remembered('bob@other.com', welcome))
+
+         await expect(validator.validate(session, input({ password: 'hunter2' }))).resolves.toMatchObject({
+            outcome: 'ERROR',
+            message: expect.stringMatching(/does not understand/i),
+         })
+         expect(session.fill).not.toHaveBeenCalled()
+      })
+   })
+
+   describe('rememberedAccount', () => {
+      it('should match the masked email by its first letter and domain, whatever the case', () => {
+         const selector = rememberedAccount('Ada.Lovelace+x@Work.co.uk')
+
+         expect(selector).toContain(String.raw`^\\s*a\\*+@work\\.co\\.uk\\s*$`)
+         expect(selector).toMatch(/"i"\):visible$/)
       })
    })
 

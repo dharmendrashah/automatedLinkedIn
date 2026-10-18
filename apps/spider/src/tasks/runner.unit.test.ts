@@ -37,6 +37,7 @@ const PREFIX = runPrefix(command)
 
 const makeSession = () => ({
    addCookies: vi.fn(),
+   clearCookies: vi.fn(),
    cookies: vi.fn(),
    goto: vi.fn(async (url: string) => url),
    click: vi.fn(),

@@ -76,13 +76,28 @@ export const SELECTORS = {
    dialogSubmit: 'dialog[open] button[type="submit"]:visible >> nth=0',
    // The ads consent page LinkedIn may show after a sign-in (recorded 2026-10-18); the owner chose to accept it.
    consentAccept: 'button:has-text("Accept"):visible >> nth=0',
+   // "Sign in using another account" on the "Welcome back" page of a remembered account (recorded 2026-10-18).
+   otherAccount: 'a[href$="/login/"]:visible >> nth=0',
    challenge: CHALLENGE,
    // Read only once nothing else explains the page: it also takes the plain captcha frames.
    captcha: `${CHALLENGE}, iframe[src*="captcha" i]:visible, iframe[title*="captcha" i]:visible, [data-sitekey]:visible`,
 }
 
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+// The masked email ("t*****@elitale.com") the "Welcome back" page shows for the account it remembers, found by its shape
+// so the page language does not matter and the page's text never reaches the code.
+export const rememberedAccount = (email: string) => {
+   const [local = '', domain = ''] = email.toLowerCase().split('@')
+   const masked = `^\\s*${escapeRegExp(local.charAt(0))}\\*+@${escapeRegExp(domain)}\\s*$`
+
+   return `:text-matches(${JSON.stringify(masked)}, "i"):visible`
+}
+
 // How long to look for an element that may or may not appear after a page loads.
 const LOOK_MS = 1500
+// The page after \"Sign in using another account\" is a new load.
+const SWITCH_LOOK_MS = 5000
 
 // After a submit the sign-in page can keep its address for a while: a spinner, then LinkedIn's own quick security check
 // ("Kurze Sicherheitspruefung"), then a move to the feed or a challenge. It is read again every few seconds until it moves
@@ -259,7 +274,7 @@ export class AccountValidator {
       ])
       await this.options.pause(this.host)
 
-      const landed = await session.goto(`${this.options.baseUrl}/feed/`)
+      const landed = await this.loadFeed(session)
       const kind = kindOf(landed)
 
       if (kind === 'feed') {
@@ -277,6 +292,22 @@ export class AccountValidator {
       return kind === 'checkpoint' ? this.fail('NEEDS_REAUTH', MESSAGES.securityCheck) : undefined
    }
 
+   // A refused token can make LinkedIn redirect the feed to itself until it stops answering, because the browser keeps
+   // the token it is told to replace (recorded 2026-10-18). Without the token the feed is loaded once more; if that fails
+   // too, the site is down and the error goes on.
+   private async loadFeed(session: LoginSession) {
+      const feed = `${this.options.baseUrl}/feed/`
+
+      try {
+         return await session.goto(feed)
+      } catch {
+         await session.clearCookies('li_at')
+         await this.options.pause(this.host)
+
+         return session.goto(feed)
+      }
+   }
+
    private async signIn(session: LoginSession, email: string, { password, totpSecret }: Credentials): Promise<Verdict> {
       await this.options.pause(this.host)
 
@@ -286,8 +317,16 @@ export class AccountValidator {
          return this.valid(session)
       }
 
+      const form = await this.formFor(session, email)
+
+      if (form === 'none') {
+         return this.fail('ERROR', MESSAGES.unexpected)
+      }
+
       try {
-         await session.fill(SELECTORS.username, email)
+         if (form === 'full') {
+            await session.fill(SELECTORS.username, email)
+         }
          await session.fill(SELECTORS.password, password ?? '')
       } catch {
          // The form did not keep what was typed; nothing was sent, which a wrong password or e-mail would count against the account.
@@ -299,6 +338,23 @@ export class AccountValidator {
       landed = await this.afterSubmit(session, await this.submit(session))
 
       return this.settle(session, landed, totpSecret)
+   }
+
+   // Which fields to type into. The \"Welcome back\" page of a remembered account has only a password box: it is used when it
+   // remembers this account, otherwise \"another account\" is picked so this account's password never goes to someone else.
+   private async formFor(session: LoginSession, email: string): Promise<'full' | 'password' | 'none'> {
+      if ((await session.exists(SELECTORS.username, LOOK_MS)) || !(await session.exists(SELECTORS.password, LOOK_MS))) {
+         return 'full'
+      }
+
+      if (await session.exists(rememberedAccount(email), LOOK_MS)) {
+         return 'password'
+      }
+
+      await this.options.pause(this.host)
+      await session.click(SELECTORS.otherAccount)
+
+      return (await session.exists(SELECTORS.username, SWITCH_LOOK_MS)) ? 'full' : 'none'
    }
 
    // The button under the password; the Enter key only when the page shows none.

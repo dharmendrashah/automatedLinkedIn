@@ -14,7 +14,17 @@ export type LogSource = 'browser' | 'spider' | 'engine'
 export type LogLevel = 'info' | 'warn' | 'error'
 
 export type StepCall =
-   'goto' | 'click' | 'fill' | 'type' | 'press' | 'exists' | 'extract' | 'cookies' | 'addCookies' | 'scroll'
+   | 'goto'
+   | 'click'
+   | 'fill'
+   | 'type'
+   | 'press'
+   | 'exists'
+   | 'extract'
+   | 'cookies'
+   | 'addCookies'
+   | 'clearCookies'
+   | 'scroll'
 
 // One thing the spider did in the browser. `t` is the time in milliseconds since the run started, when it finished.
 export type StepEntry = {
