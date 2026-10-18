@@ -35,13 +35,13 @@ import {
    canConnect,
    hasLoop,
    newNodeId,
+   startConfig,
    toFlow,
    toGraph,
 } from './graph-convert'
 import { type History, record, redo, startHistory, undo } from './history'
 import { isLeftToRight, layoutTopToBottom, neighbourOf, placeBelow } from './layout'
 import { SHORTCUT_HELP, shortcutOf } from './shortcuts'
-import { browserTimeZone } from './schedule-text'
 import { type Block, type ConfigValue, type Graph, type StepRun, formatUsd } from './types'
 
 const NODE_TYPES = { block: BlockNode }
@@ -164,8 +164,7 @@ const Editor = ({
                position,
                data: {
                   block,
-                  // A new schedule runs in the owner's own time zone.
-                  config: block.type === 'trigger.schedule' ? { timeZone: browserTimeZone() } : {},
+                  config: startConfig(block.type),
                   step: null,
                   invalid: false,
                   noted: false,
@@ -465,6 +464,7 @@ const Editor = ({
          />
          <BlockSettings
             node={openNode}
+            workflowId={workflowId}
             problems={problems.filter(({ nodeId }) => nodeId === openId)}
             output={
                replayRunId && openId

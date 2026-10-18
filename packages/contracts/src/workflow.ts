@@ -36,7 +36,8 @@ type Option = { value: string; label: string }
 // `advanced` settings sit under "More options" so a block opens simple.
 export type Field = (
    | { key: string; label: string; kind: 'int'; min: number; max: number }
-   | { key: string; label: string; kind: 'words' }
+   // `suggest: 'labels'` offers the owner's labels while typing.
+   | { key: string; label: string; kind: 'words'; suggest?: 'labels' }
    | { key: string; label: string; kind: 'icp' }
    | { key: string; label: string; kind: 'time' }
    | { key: string; label: string; kind: 'text'; placeholder?: string }
@@ -286,6 +287,130 @@ export const scheduleSchema = z
 
 export type Schedule = z.infer<typeof scheduleSchema>
 
+// Which part of the owner's posts, profiles or companies an input block takes (.plan/labels-and-input-filters.md).
+export const ADDED_WINDOWS = ['any', 'today', 'week', '7d', '30d', 'lastRun'] as const
+
+export const LABEL_MAX = 20
+
+const labelList = z.array(z.string().trim().toLowerCase().min(1).max(30)).max(LABEL_MAX).default([])
+
+export const inputPickSchema = z.object({
+   added: z.enum(ADDED_WINDOWS).default('any'),
+   labels: labelList,
+   labelMatch: z.enum(['any', 'all']).default('any'),
+   withoutLabels: labelList,
+   // Empty takes every status; posts have none.
+   statuses: z
+      .array(z.enum(['NEW', 'CONTACTED', 'REPLIED']))
+      .max(3)
+      .default([]),
+   order: z.enum(['newest', 'oldest']).default('newest'),
+   timeZone: z.string().trim().min(1).max(64).refine(isTimeZone, 'is not a known time zone').default('UTC'),
+})
+
+export type InputPick = z.infer<typeof inputPickSchema>
+
+const ADDED = optionsOf([
+   ['any', 'Any time'],
+   ['today', 'Today'],
+   ['week', 'This week'],
+   ['7d', 'Last 7 days'],
+   ['30d', 'Last 30 days'],
+   ['lastRun', "Since this workflow's last run"],
+])
+
+const pickFields = (order: Option[]): Field[] => [
+   {
+      key: 'added',
+      label: 'Added',
+      kind: 'select',
+      options: ADDED,
+   },
+   {
+      key: 'labels',
+      label: 'With labels',
+      kind: 'words',
+      suggest: 'labels',
+      hint: 'Empty takes everything, whatever its labels.',
+   },
+   {
+      key: 'labelMatch',
+      label: 'Match',
+      kind: 'select',
+      options: optionsOf([
+         ['any', 'Any of these labels'],
+         ['all', 'All of these labels'],
+      ]),
+   },
+   {
+      key: 'withoutLabels',
+      label: 'Without labels',
+      kind: 'words',
+      suggest: 'labels',
+      advanced: true,
+   },
+   {
+      key: 'order',
+      label: 'Order',
+      kind: 'select',
+      options: order,
+      advanced: true,
+   },
+]
+
+const NEWEST_FIRST = optionsOf([
+   ['newest', 'Newest first'],
+   ['oldest', 'Oldest first'],
+])
+
+const OLDEST_FIRST = optionsOf([
+   ['oldest', 'Oldest first'],
+   ['newest', 'Newest first'],
+])
+
+const statusField: Field = {
+   key: 'statuses',
+   label: 'Status',
+   kind: 'multi',
+   options: optionsOf([
+      ['NEW', 'New'],
+      ['CONTACTED', 'Contacted'],
+      ['REPLIED', 'Replied'],
+   ]),
+   hint: 'None picked takes every status.',
+}
+
+// Posts are worked through oldest first, as before; profiles and companies newest first.
+export const inputPickOf = (type: 'input.posts' | 'input.profiles' | 'input.companies', config: unknown): InputPick =>
+   inputPickSchema.parse({
+      order: type === 'input.posts' ? 'oldest' : 'newest',
+      ...(typeof config === 'object' && config !== null ? config : {}),
+   })
+
+const DAY_MS = 86_400_000
+
+// The first moment an item may have been added to be taken; null takes any.
+export const addedSince = (pick: Pick<InputPick, 'added' | 'timeZone'>, now: Date, lastRunAt: Date | null) => {
+   switch (pick.added) {
+      case 'any':
+         return null
+      case 'lastRun':
+         return lastRunAt
+      case '7d':
+         return new Date(now.getTime() - 7 * DAY_MS)
+      case '30d':
+         return new Date(now.getTime() - 30 * DAY_MS)
+      default: {
+         const wall = new Date(wallClock(now, pick.timeZone))
+         const midnight = Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate())
+         // Weeks start on Monday.
+         const back = pick.added === 'week' ? (wall.getUTCDay() + 6) % 7 : 0
+
+         return zonedToUtc(midnight - back * DAY_MS, pick.timeZone)
+      }
+   }
+}
+
 export const BLOCK_TYPES = [
    'trigger.manual',
    'trigger.schedule',
@@ -363,7 +488,10 @@ const BLOCKS = {
       summary: 'Takes posts from your posts list that are not done yet.',
       input: 'start',
       output: 'post',
-      config: z.object({ howMany: howMany(50, 5) }),
+      config: inputPickSchema.omit({ statuses: true }).extend({
+         howMany: howMany(50, 5),
+         order: z.enum(['newest', 'oldest']).default('oldest'),
+      }),
       fields: [
          {
             key: 'howMany',
@@ -372,6 +500,7 @@ const BLOCKS = {
             min: 1,
             max: 50,
          },
+         ...pickFields(OLDEST_FIRST),
       ],
    },
    'collect.commenters': {
@@ -675,7 +804,7 @@ const BLOCKS = {
       summary: 'People from your profiles list, or the links you give.',
       input: 'start',
       output: 'profile',
-      config: z.object({
+      config: inputPickSchema.extend({
          howMany: howMany(200, 25),
          links: z.array(z.string().trim().min(1).max(300)).max(50).default([]),
       }),
@@ -691,8 +820,10 @@ const BLOCKS = {
             key: 'links',
             label: 'Only these profile links',
             kind: 'words',
-            hint: 'Separate with commas. Empty takes people from your profiles list.',
+            hint: 'Separate with commas. Empty takes people from your profiles list, filtered below.',
          },
+         statusField,
+         ...pickFields(NEWEST_FIRST),
       ],
    },
    'input.companies': {
@@ -701,7 +832,7 @@ const BLOCKS = {
       summary: 'Companies from your companies list.',
       input: 'start',
       output: 'company',
-      config: z.object({ howMany: howMany(100, 10) }),
+      config: inputPickSchema.extend({ howMany: howMany(100, 10) }),
       fields: [
          {
             key: 'howMany',
@@ -710,6 +841,8 @@ const BLOCKS = {
             min: 1,
             max: 100,
          },
+         statusField,
+         ...pickFields(NEWEST_FIRST),
       ],
    },
    'collect.findPosts': {

@@ -16,8 +16,11 @@ import { readableError } from '@/lib/trpc-error'
 import { Loader2, Plus } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 
+import { LabelPicker } from '../labels/label-picker'
+import { type LabelKind } from '../labels/labels'
+
 export type PasteMutation = {
-   mutate: (input: { urls: string }, options?: { onSuccess?: () => void }) => void
+   mutate: (input: { urls: string; labels: string[] }, options?: { onSuccess?: () => void }) => void
    reset: () => void
    isPending: boolean
    error: { message: string } | null
@@ -26,6 +29,7 @@ export type PasteMutation = {
 
 type Props = {
    mutation: PasteMutation
+   kind: LabelKind
    triggerLabel: string
    title: string
    description: string
@@ -39,6 +43,7 @@ type Props = {
 // Asks for pasted links and shows what was added, restored, skipped and left out.
 export const PasteLinksDialog = ({
    mutation,
+   kind,
    triggerLabel,
    title,
    description,
@@ -49,19 +54,27 @@ export const PasteLinksDialog = ({
 }: Props) => {
    const [open, setOpen] = useState(false)
    const [urls, setUrls] = useState('')
+   const [labels, setLabels] = useState<string[]>([])
 
    const onOpenChange = (next: boolean) => {
       setOpen(next)
 
       if (!next) {
          setUrls('')
+         setLabels([])
          mutation.reset()
       }
    }
 
    const submit = (event: FormEvent) => {
       event.preventDefault()
-      mutation.mutate({ urls }, { onSuccess: () => setUrls('') })
+      mutation.mutate(
+         {
+            urls,
+            labels,
+         },
+         { onSuccess: () => setUrls('') }
+      )
    }
 
    const result = mutation.data
@@ -94,6 +107,12 @@ export const PasteLinksDialog = ({
                   <p id="pasted-links-hint" className="text-muted-foreground text-xs">
                      {hint}
                   </p>
+               </div>
+
+               <div className="grid gap-2">
+                  <Label htmlFor="pasted-labels">Labels for everything you add (optional)</Label>
+                  <LabelPicker id="pasted-labels" kind={kind} value={labels} onChange={setLabels} placeholder="such as acme:fintech" />
+                  <p className="text-muted-foreground text-xs">Links you already have get these labels added to theirs.</p>
                </div>
 
                {result ? (

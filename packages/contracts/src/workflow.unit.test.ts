@@ -6,11 +6,13 @@ import {
    GOALS,
    type Graph,
    type NodeConfig,
+   addedSince,
    blockOf,
    catalog,
    errorsOf,
    estimateGraph,
    flagshipGraph,
+   inputPickOf,
    nextScheduledRun,
    nextScheduledRuns,
    previewGraph,
@@ -30,6 +32,91 @@ const flagship = flagshipGraph({
 const without = (graph: Graph, id: string): Graph => ({
    nodes: graph.nodes.filter(node => node.id !== id),
    edges: graph.edges.filter(edge => edge.from !== id && edge.to !== id),
+})
+
+describe('input picks', () => {
+   it('should read a block saved before the filters as "everything", posts oldest first', () => {
+      expect(inputPickOf('input.profiles', { howMany: 25 })).toEqual({
+         added: 'any',
+         labels: [],
+         labelMatch: 'any',
+         withoutLabels: [],
+         statuses: [],
+         order: 'newest',
+         timeZone: 'UTC',
+      })
+      expect(inputPickOf('input.posts', {}).order).toBe('oldest')
+      const labelled = blockOf('input.posts').config.safeParse({ labels: ['Fintech '] }).data
+
+      expect(labelled).toMatchObject({ labels: ['fintech'] })
+   })
+
+   it('should start today and this week at local midnight, and Monday, in the block time zone', () => {
+      // Wednesday 2026-10-14, 01:30 in Kolkata (20:00 UTC the day before).
+      const now = new Date('2026-10-13T20:00:00Z')
+      const zone = { timeZone: 'Asia/Kolkata' }
+
+      expect(
+         addedSince(
+            {
+               ...zone,
+               added: 'today',
+            },
+            now,
+            null
+         )?.toISOString()
+      ).toBe('2026-10-13T18:30:00.000Z')
+      expect(
+         addedSince(
+            {
+               ...zone,
+               added: 'week',
+            },
+            now,
+            null
+         )?.toISOString()
+      ).toBe('2026-10-11T18:30:00.000Z')
+      expect(
+         addedSince(
+            {
+               ...zone,
+               added: '7d',
+            },
+            now,
+            null
+         )?.toISOString()
+      ).toBe('2026-10-06T20:00:00.000Z')
+      expect(
+         addedSince(
+            {
+               ...zone,
+               added: 'any',
+            },
+            now,
+            null
+         )
+      ).toBeNull()
+      expect(
+         addedSince(
+            {
+               ...zone,
+               added: 'lastRun',
+            },
+            now,
+            null
+         )
+      ).toBeNull()
+      expect(
+         addedSince(
+            {
+               ...zone,
+               added: 'lastRun',
+            },
+            now,
+            now
+         )
+      ).toBe(now)
+   })
 })
 
 describe('workflow catalog', () => {

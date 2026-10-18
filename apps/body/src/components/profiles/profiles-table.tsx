@@ -8,10 +8,12 @@ import { type Profile } from './types'
 
 import { LinkStatusBadge } from '../links/link-status-badge'
 import { RowActions } from '../links/row-actions'
+import { SelectAllHead, SelectCell } from '../links/selection'
+import { type Selection } from '../links/use-selection'
 import { StateRows } from '../links/state-rows'
 import { TagBadges } from '../links/tag-badges'
 
-const COLUMNS = 5
+const COLUMNS = 6
 
 const formatDate = (value: string) => new Date(value).toLocaleDateString()
 
@@ -27,16 +29,18 @@ type Props = {
    onRestore: (profile: Profile) => void
    onTag: (tag: string) => void
    onOpen: (profile: Profile) => void
+   selection: Selection
 }
 
-export const ProfilesTable = ({ profiles, loading, error, busyId, onEdit, onArchive, onRestore, onTag, onOpen }: Props) => (
+export const ProfilesTable = ({ profiles, loading, error, busyId, onEdit, onArchive, onRestore, onTag, onOpen, selection }: Props) => (
    <div className="overflow-hidden rounded-lg border">
       <Table>
          <TableHeader className="bg-muted/50">
             <TableRow>
+               <SelectAllHead ids={profiles?.map(({ id }) => id) ?? []} selection={selection} noun="profile" />
                <TableHead>Profile</TableHead>
                <TableHead>Status</TableHead>
-               <TableHead>Tags</TableHead>
+               <TableHead>Labels</TableHead>
                <TableHead>Added</TableHead>
                <TableHead className="w-24" />
             </TableRow>
@@ -52,6 +56,7 @@ export const ProfilesTable = ({ profiles, loading, error, busyId, onEdit, onArch
             />
             {profiles?.map(profile => (
                <TableRow key={profile.id} className={cn(profile.archivedAt && 'opacity-60')}>
+                  <SelectCell id={profile.id} name={profile.fullName ?? profile.slug} selection={selection} />
                   <TableCell>
                      <button
                         type="button"

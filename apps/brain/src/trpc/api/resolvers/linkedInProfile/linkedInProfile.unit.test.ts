@@ -79,14 +79,21 @@ describe('linkedInProfile resolvers', () => {
             skipped: 0,
          })
 
-         const result = await caller(authed()).create({ urls: 'linkedin.com/in/Ada-Lovelace/ https://example.com/x' })
+         const result = await caller(authed()).create({
+            urls: 'linkedin.com/in/Ada-Lovelace/ https://example.com/x',
+            labels: [' Acme ', 'acme'],
+         })
 
-         expect(mocks.addMany).toHaveBeenCalledWith('u1', [
-            {
-               slug: 'ada-lovelace',
-               url: 'https://www.linkedin.com/in/ada-lovelace',
-            },
-         ])
+         expect(mocks.addMany).toHaveBeenCalledWith(
+            'u1',
+            [
+               {
+                  slug: 'ada-lovelace',
+                  url: 'https://www.linkedin.com/in/ada-lovelace',
+               },
+            ],
+            ['acme']
+         )
          expect(result).toEqual({
             created: 1,
             restored: 0,
@@ -167,8 +174,8 @@ describe('linkedInProfile resolvers', () => {
          })
       })
 
-      it('should reject more than 10 tags and a tag over 30 characters', async () => {
-         const many = Array.from({ length: 11 }, (_, index) => `t${index}`)
+      it('should reject more than 20 labels and a label over 30 characters', async () => {
+         const many = Array.from({ length: 21 }, (_, index) => `t${index}`)
 
          await expect(
             caller(authed()).update({

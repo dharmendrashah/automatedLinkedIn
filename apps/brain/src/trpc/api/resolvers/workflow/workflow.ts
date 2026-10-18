@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { CSV_MAX_ROWS, itemsCsv } from 'core'
 
-import { WorkflowRunService, WorkflowService, WorkflowTriggerService, readGraph } from 'database'
+import { InputPickService, WorkflowRunService, WorkflowService, WorkflowTriggerService, readGraph } from 'database'
 
 import {
    GOALS,
@@ -11,6 +11,7 @@ import {
    blankGraph,
    catalog,
    graphSchema,
+   inputPickSchema,
    nextScheduledRuns,
    scheduleSchema,
    templateCatalog,
@@ -75,6 +76,37 @@ export const workflow = router({
 
       return schedule.success ? nextScheduledRuns(schedule.data, new Date(), 3).map(date => date.toISOString()) : []
    }),
+
+   // How many items an input block with these settings would take now, and from when, so the owner sees an empty slice
+   // before running. Invalid settings count as none.
+   inputMatches: ownerProcedure
+      .input(
+         z.object({
+            workflowId: z.string().min(1).nullable(),
+            type: z.enum(['input.posts', 'input.profiles', 'input.companies']),
+            config: z.record(z.string(), z.unknown()),
+         })
+      )
+      .query(async ({ ctx, input }) => {
+         const pick = inputPickSchema.safeParse({
+            order: input.type === 'input.posts' ? 'oldest' : 'newest',
+            ...input.config,
+         })
+
+         if (!pick.success) {
+            return {
+               count: 0,
+               since: null,
+            }
+         }
+
+         const filter = await InputPickService.filter(ctx.user.id, pick.data, input.workflowId)
+
+         return {
+            count: await InputPickService.count(ctx.user.id, input.type, filter),
+            since: filter.since?.toISOString() ?? null,
+         }
+      }),
 
    list: ownerProcedure.query(async ({ ctx }) =>
       (await WorkflowService.list(ctx.user.id)).map(item => ({

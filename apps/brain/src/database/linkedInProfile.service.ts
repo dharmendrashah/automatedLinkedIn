@@ -2,7 +2,18 @@ import { type LinkedInLink } from 'core'
 
 import { type LinkedInProfileStatus, type Prisma } from 'generated/prisma/client'
 
-import { type RecordListQuery, addLinks, orNull, pageArgs, recordWhere } from './linkedInRecord'
+import {
+   type InputFilter,
+   type LabelChange,
+   type RecordListQuery,
+   addLinks,
+   inputOrder,
+   inputWhere,
+   orNull,
+   pageArgs,
+   recordWhere,
+   relabel,
+} from './linkedInRecord'
 import { PrismaService } from './prisma.service'
 
 // null clears a field; undefined leaves it unchanged.
@@ -49,10 +60,11 @@ const updateOwned = (userId: string, id: string, data: Prisma.LinkedInProfileUpd
    )
 
 export class LinkedInProfileService {
-   public static addMany(userId: string, profiles: LinkedInLink[]) {
+   // New links get the labels; links already saved get them added to theirs.
+   public static async addMany(userId: string, profiles: LinkedInLink[], labels: string[] = []) {
       const table = PrismaService.client.linkedInProfile
 
-      return addLinks(profiles, {
+      const saved = await addLinks(profiles, {
          existing: slugs =>
             table.findMany({
                where: {
@@ -81,11 +93,62 @@ export class LinkedInProfileService {
                      userId,
                      slug,
                      url,
+                     ...(labels.length > 0 ? { tags: labels } : {}),
                   })),
                   skipDuplicates: true,
                })
             ).count,
       })
+
+      if (labels.length > 0) {
+         await LinkedInProfileService.labelMany(
+            userId,
+            { slug: { in: profiles.map(({ slug }) => slug) } },
+            {
+               add: labels,
+               remove: [],
+            }
+         )
+      }
+
+      return saved
+   }
+
+   // Rows that are not the owner's are left alone.
+   public static labelMany(userId: string, which: Prisma.LinkedInProfileWhereInput, change: LabelChange) {
+      return PrismaService.client.$transaction(async tx =>
+         relabel(
+            await tx.linkedInProfile.findMany({
+               where: {
+                  ...which,
+                  userId,
+               },
+               select: {
+                  id: true,
+                  tags: true,
+               },
+            }),
+            change,
+            (id, tags) =>
+               tx.linkedInProfile.update({
+                  where: { id },
+                  data: { tags },
+               })
+         )
+      )
+   }
+
+   public static async archiveMany(userId: string, ids: string[]) {
+      const { count } = await PrismaService.client.linkedInProfile.updateMany({
+         where: {
+            userId,
+            id: { in: ids },
+            archivedAt: null,
+         },
+         data: { archivedAt: new Date() },
+      })
+
+      return count
    }
 
    public static async list(userId: string, query: LinkedInProfileListQuery) {
@@ -141,14 +204,11 @@ export class LinkedInProfileService {
       return updateOwned(userId, id, { archivedAt: null })
    }
 
-   // The profiles a workflow reads, newest first.
-   public static recent(userId: string, take: number) {
+   // The profiles a workflow's input block takes.
+   public static pick(userId: string, take: number, filter: InputFilter<LinkedInProfileStatus>) {
       return PrismaService.client.linkedInProfile.findMany({
-         where: {
-            userId,
-            archivedAt: null,
-         },
-         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+         where: inputWhere(userId, filter),
+         orderBy: inputOrder(filter.order),
          take,
          select: {
             slug: true,
@@ -158,6 +218,10 @@ export class LinkedInProfileService {
             location: true,
          },
       })
+   }
+
+   public static countPicked(userId: string, filter: InputFilter<LinkedInProfileStatus>) {
+      return PrismaService.client.linkedInProfile.count({ where: inputWhere(userId, filter) })
    }
 
    public static countActive(userId: string) {

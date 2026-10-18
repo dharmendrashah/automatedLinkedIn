@@ -1,4 +1,4 @@
-import { Badge } from '@/components/ui/badge'
+import { LabelBadge } from '../labels/label-badge'
 
 type Props = {
    tags: string[]
@@ -8,9 +8,7 @@ type Props = {
 export const TagBadges = ({ tags, onTag }: Props) => (
    <span className="flex flex-wrap gap-1">
       {tags.map(tag => (
-         <button key={tag} type="button" aria-label={`Show only ${tag}`} onClick={() => onTag(tag)}>
-            <Badge variant="secondary">{tag}</Badge>
-         </button>
+         <LabelBadge key={tag} label={tag} clickLabel={`Show only ${tag}`} onClick={() => onTag(tag)} />
       ))}
    </span>
 )

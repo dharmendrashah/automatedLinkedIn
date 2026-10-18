@@ -72,7 +72,7 @@ describe('LinkedInCompanyService (database)', () => {
       const searched = await LinkedInCompanyService.list(userId, {
          ...firstPage,
          search: 'ELITALE.COM',
-         tag: 'partner',
+         tags: ['partner'],
          status: 'CONTACTED',
          includeArchived: true,
       })

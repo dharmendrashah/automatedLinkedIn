@@ -2,7 +2,18 @@ import { type LinkedInLink } from 'core'
 
 import { type LinkedInCompanyStatus, type Prisma } from 'generated/prisma/client'
 
-import { type RecordListQuery, addLinks, orNull, pageArgs, recordWhere } from './linkedInRecord'
+import {
+   type InputFilter,
+   type LabelChange,
+   type RecordListQuery,
+   addLinks,
+   inputOrder,
+   inputWhere,
+   orNull,
+   pageArgs,
+   recordWhere,
+   relabel,
+} from './linkedInRecord'
 import { PrismaService } from './prisma.service'
 
 // null clears a field; undefined leaves it unchanged.
@@ -51,10 +62,11 @@ const updateOwned = (userId: string, id: string, data: Prisma.LinkedInCompanyUpd
    )
 
 export class LinkedInCompanyService {
-   public static addMany(userId: string, companies: LinkedInLink[]) {
+   // New links get the labels; links already saved get them added to theirs.
+   public static async addMany(userId: string, companies: LinkedInLink[], labels: string[] = []) {
       const table = PrismaService.client.linkedInCompany
 
-      return addLinks(companies, {
+      const saved = await addLinks(companies, {
          existing: slugs =>
             table.findMany({
                where: {
@@ -83,10 +95,79 @@ export class LinkedInCompanyService {
                      userId,
                      slug,
                      url,
+                     ...(labels.length > 0 ? { tags: labels } : {}),
                   })),
                   skipDuplicates: true,
                })
             ).count,
+      })
+
+      if (labels.length > 0) {
+         await LinkedInCompanyService.labelMany(
+            userId,
+            { slug: { in: companies.map(({ slug }) => slug) } },
+            {
+               add: labels,
+               remove: [],
+            }
+         )
+      }
+
+      return saved
+   }
+
+   // Rows that are not the owner's are left alone.
+   public static labelMany(userId: string, which: Prisma.LinkedInCompanyWhereInput, change: LabelChange) {
+      return PrismaService.client.$transaction(async tx =>
+         relabel(
+            await tx.linkedInCompany.findMany({
+               where: {
+                  ...which,
+                  userId,
+               },
+               select: {
+                  id: true,
+                  tags: true,
+               },
+            }),
+            change,
+            (id, tags) =>
+               tx.linkedInCompany.update({
+                  where: { id },
+                  data: { tags },
+               })
+         )
+      )
+   }
+
+   // Their company page reads are deleted with them, as for one.
+   public static archiveMany(userId: string, ids: string[]) {
+      return PrismaService.client.$transaction(async tx => {
+         const where = {
+            userId,
+            id: { in: ids },
+            archivedAt: null,
+         }
+         const slugs = (
+            await tx.linkedInCompany.findMany({
+               where,
+               select: { slug: true },
+            })
+         ).map(({ slug }) => slug)
+         const { count } = await tx.linkedInCompany.updateMany({
+            where,
+            data: { archivedAt: new Date() },
+         })
+
+         await tx.pageSnapshot.deleteMany({
+            where: {
+               userId,
+               kind: 'COMPANY',
+               slug: { in: slugs },
+            },
+         })
+
+         return count
       })
    }
 
@@ -156,14 +237,11 @@ export class LinkedInCompanyService {
       return updateOwned(userId, id, { archivedAt: null })
    }
 
-   // The companies a workflow reads, newest first.
-   public static recent(userId: string, take: number) {
+   // The companies a workflow's input block takes.
+   public static pick(userId: string, take: number, filter: InputFilter<LinkedInCompanyStatus>) {
       return PrismaService.client.linkedInCompany.findMany({
-         where: {
-            userId,
-            archivedAt: null,
-         },
-         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+         where: inputWhere(userId, filter),
+         orderBy: inputOrder(filter.order),
          take,
          select: {
             slug: true,
@@ -171,6 +249,10 @@ export class LinkedInCompanyService {
             name: true,
          },
       })
+   }
+
+   public static countPicked(userId: string, filter: InputFilter<LinkedInCompanyStatus>) {
+      return PrismaService.client.linkedInCompany.count({ where: inputWhere(userId, filter) })
    }
 
    public static countActive(userId: string) {

@@ -140,11 +140,15 @@ describe('LinkedInProfileService', () => {
          })
       })
 
-      it('should apply search, status and tag filters and include archived rows on request', async () => {
+      it('should apply search, status, label and added filters and include archived rows on request', async () => {
+         const addedSince = new Date('2026-10-12T00:00:00Z')
+
          await LinkedInProfileService.list('u1', {
             search: 'ada',
             status: 'REPLIED',
-            tag: 'vip',
+            tags: ['vip', 'fintech'],
+            tagMatch: 'all',
+            addedSince,
             includeArchived: true,
             page: 1,
             pageSize: 10,
@@ -155,7 +159,8 @@ describe('LinkedInProfileService', () => {
          expect(where).toEqual({
             userId: 'u1',
             status: 'REPLIED',
-            tags: { has: 'vip' },
+            tags: { hasEvery: ['vip', 'fintech'] },
+            createdAt: { gte: addedSince },
             OR: expect.arrayContaining([
                {
                   fullName: {

@@ -4,7 +4,7 @@ import { LinkedInCompanyService } from 'database'
 
 import { ownerProcedure, router } from 'trpc'
 
-import { byId, createInput, found, listInput, readLinks, status, tags, text } from '../linkedInRecord'
+import { byId, createInput, found, ids, labelInput, listInput, readLinks, status, tags, text } from '../linkedInRecord'
 
 const isHttpUrl = (value: string) => {
    try {
@@ -40,7 +40,7 @@ const NOUN = 'company'
 export const linkedInCompany = router({
    create: ownerProcedure.input(createInput).mutation(async ({ ctx, input }) => {
       const { links, invalid } = readLinks(input.urls, 'company')
-      const saved = await LinkedInCompanyService.addMany(ctx.user.id, links)
+      const saved = await LinkedInCompanyService.addMany(ctx.user.id, links, input.labels)
 
       return {
          ...saved,
@@ -71,4 +71,14 @@ export const linkedInCompany = router({
       .mutation(async ({ ctx, input }) =>
          found(await LinkedInCompanyService.restoreForUser(ctx.user.id, input.id), NOUN)
       ),
+
+   labelMany: ownerProcedure
+      .input(labelInput)
+      .mutation(({ ctx, input }) => LinkedInCompanyService.labelMany(ctx.user.id, { id: { in: input.ids } }, input)),
+
+   archiveMany: ownerProcedure.input(z.object({ ids })).mutation(async ({ ctx, input }) => {
+      const archived = await LinkedInCompanyService.archiveMany(ctx.user.id, input.ids)
+
+      return { archived }
+   }),
 })

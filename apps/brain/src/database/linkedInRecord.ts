@@ -1,16 +1,29 @@
 import { type LinkedInLink } from 'core'
 
+import { LABEL_MAX } from '@automatedLinkedIn/contracts'
+
 // Rules shared by the services that keep lists of pasted LinkedIn links (profiles, companies, posts). Each service
 // passes in what is specific to its table: the fields to search and the three calls on its own Prisma delegate.
+
+export type LabelMatch = 'any' | 'all'
 
 export type RecordListQuery<S extends string = 'NEW' | 'CONTACTED' | 'REPLIED'> = {
    search?: string
    status?: S
-   tag?: string
+   tags?: string[]
+   tagMatch?: LabelMatch
+   addedSince?: Date
    includeArchived?: boolean
    page: number
    pageSize: number
 }
+
+export const LABEL_LIMIT = LABEL_MAX
+
+export const labelWhere = (labels: string[], match: LabelMatch = 'any', without: string[] = []) => ({
+   ...(labels.length > 0 ? { tags: match === 'all' ? { hasEvery: labels } : { hasSome: labels } } : {}),
+   ...(without.length > 0 ? { NOT: { tags: { hasSome: without } } } : {}),
+})
 
 export const recordWhere = <S extends string>(
    userId: string,
@@ -20,7 +33,8 @@ export const recordWhere = <S extends string>(
    userId,
    ...(query.includeArchived ? {} : { archivedAt: null }),
    ...(query.status ? { status: query.status } : {}),
-   ...(query.tag ? { tags: { has: query.tag } } : {}),
+   ...labelWhere(query.tags ?? [], query.tagMatch),
+   ...(query.addedSince ? { createdAt: { gte: query.addedSince } } : {}),
    ...(query.search
       ? {
            OR: searchedFields.map(field => ({
@@ -37,6 +51,78 @@ export const pageArgs = ({ page, pageSize }: Pick<RecordListQuery, 'page' | 'pag
    skip: (page - 1) * pageSize,
    take: pageSize,
 })
+
+// The slice of a list a workflow's input block takes. Empty statuses means every status.
+export type InputFilter<S extends string = string> = {
+   since: Date | null
+   labels: string[]
+   labelMatch: LabelMatch
+   withoutLabels: string[]
+   statuses: S[]
+   order: 'newest' | 'oldest'
+}
+
+export const EVERYTHING: InputFilter<never> = {
+   since: null,
+   labels: [],
+   labelMatch: 'any',
+   withoutLabels: [],
+   statuses: [],
+   order: 'newest',
+}
+
+export const inputWhere = <S extends string>(userId: string, filter: InputFilter<S>) => ({
+   userId,
+   archivedAt: null,
+   ...(filter.since ? { createdAt: { gte: filter.since } } : {}),
+   ...(filter.statuses.length > 0 ? { status: { in: filter.statuses } } : {}),
+   ...labelWhere(filter.labels, filter.labelMatch, filter.withoutLabels),
+})
+
+export const inputOrder = (order: InputFilter['order']) =>
+   order === 'oldest'
+      ? [{ createdAt: 'asc' as const }, { id: 'asc' as const }]
+      : [{ createdAt: 'desc' as const }, { id: 'desc' as const }]
+
+export type LabelChange = { add: string[]; remove: string[] }
+
+// Removes first, then adds after the labels already there; `full` when some did not fit under the limit.
+export const mergeLabels = (current: string[], { add, remove }: LabelChange) => {
+   const kept = current.filter(label => !remove.includes(label))
+   const added = [...new Set(add)].filter(label => !kept.includes(label))
+   const labels = [...kept, ...added].slice(0, LABEL_LIMIT)
+
+   return {
+      labels,
+      full: labels.length < kept.length + added.length,
+   }
+}
+
+// Applies one change to many rows, writing only the rows it changes.
+export const relabel = async (
+   rows: { id: string; tags: string[] }[],
+   change: LabelChange,
+   write: (id: string, tags: string[]) => Promise<unknown>
+) => {
+   let changed = 0
+   let full = 0
+
+   for (const row of rows) {
+      const { labels, full: over } = mergeLabels(row.tags, change)
+
+      full += over ? 1 : 0
+
+      if (labels.join('\n') !== row.tags.join('\n')) {
+         await write(row.id, labels)
+         changed += 1
+      }
+   }
+
+   return {
+      changed,
+      full,
+   }
+}
 
 const isNotFound = (error: unknown) => (error as { code?: string } | null)?.code === 'P2025'
 

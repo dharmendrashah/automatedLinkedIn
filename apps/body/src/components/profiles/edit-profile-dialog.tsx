@@ -82,7 +82,7 @@ const EditForm = ({ profile, onClose }: FormProps) => {
                value={values.status}
                onChange={status => setValues(current => ({ ...current, status }))}
             />
-            <TagsField id="profile-tags" value={values.tags} onChange={value => change('tags', value)} />
+            <TagsField id="profile-tags" kind="profiles" value={values.tags} onChange={value => change('tags', value)} />
          </div>
          <NotesField id="profile-notes" value={values.notes} onChange={value => change('notes', value)} />
       </EditFrame>

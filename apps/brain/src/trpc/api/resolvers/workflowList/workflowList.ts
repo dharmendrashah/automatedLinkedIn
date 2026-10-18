@@ -7,7 +7,7 @@ import { INBOX_VIEWS, InboxService, WorkflowListService } from 'database'
 
 import { ownerProcedure, router } from 'trpc'
 
-import { readLinks, text } from '../linkedInRecord'
+import { labelFilter, labelInput, readLinks, tags, text } from '../linkedInRecord'
 import { orConflict, present } from '../owned'
 
 const LIST_MISSING = 'List not found'
@@ -39,6 +39,7 @@ const inboxInput = z.object({
    fit: viewState.optional(),
    untouched: z.boolean().optional(),
    search: z.string().trim().max(100).optional(),
+   ...labelFilter,
    sort: z.enum(['fit', 'newest']).default('fit'),
    page: z.number().int().min(1).default(1),
    pageSize: z.number().int().min(1).max(100).default(50),
@@ -100,6 +101,7 @@ const updateInput = z.object({
    state: state.optional(),
    status: status.optional(),
    notes: text(2_000).nullish(),
+   tags: tags.optional(),
 })
 
 const CSV_HEADER = ['Name', 'Headline', 'Location', 'Profile', 'State', 'Status', 'Labels', 'Found via', 'Date found']
@@ -166,6 +168,10 @@ export const workflowList = router({
    removeMany: ownerProcedure
       .input(z.object({ ids }))
       .mutation(({ ctx, input }) => InboxService.remove(ctx.user.id, input.ids)),
+
+   labelMany: ownerProcedure
+      .input(labelInput)
+      .mutation(({ ctx, input }) => InboxService.labelMany(ctx.user.id, input.ids, input)),
 
    restore: ownerProcedure
       .input(z.object({ people: z.array(removedInput).min(1).max(200) }))

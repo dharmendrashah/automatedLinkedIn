@@ -6,21 +6,17 @@ import { LinkedInPostService } from 'database'
 
 import { ownerProcedure, router } from 'trpc'
 
-import { byId, createInput, found, listInput, readLinks } from '../linkedInRecord'
+import { byId, createInput, found, ids, labelInput, listInput, readLinks, tags } from '../linkedInRecord'
 
 const postStatus = z.enum(['UNPROCESSED', 'PROCESSED'])
 
-// Posts have no tags and their own statuses.
-const postListInput = listInput
-   .omit({
-      status: true,
-      tag: true,
-   })
-   .extend({ status: postStatus.optional() })
+// Posts have their own statuses.
+const postListInput = listInput.omit({ status: true }).extend({ status: postStatus.optional() })
 
 const updateInput = z.object({
    id: z.string().min(1),
-   status: postStatus,
+   status: postStatus.optional(),
+   tags: tags.optional(),
 })
 
 const NOUN = 'post'
@@ -36,7 +32,7 @@ export const linkedInPost = router({
             expandedUrl: isShortPostLink(link.url) ? await expandShortPostLink(link.url) : null,
          }))
       )
-      const saved = await LinkedInPostService.addMany(ctx.user.id, expanded)
+      const saved = await LinkedInPostService.addMany(ctx.user.id, expanded, input.labels)
 
       return {
          ...saved,
@@ -50,11 +46,11 @@ export const linkedInPost = router({
       .input(byId)
       .query(async ({ ctx, input }) => found(await LinkedInPostService.getForUser(ctx.user.id, input.id), NOUN)),
 
-   update: ownerProcedure
-      .input(updateInput)
-      .mutation(async ({ ctx, input }) =>
-         found(await LinkedInPostService.setStatus(ctx.user.id, input.id, input.status), NOUN)
-      ),
+   update: ownerProcedure.input(updateInput).mutation(async ({ ctx, input }) => {
+      const { id, ...changes } = input
+
+      return found(await LinkedInPostService.updateForUser(ctx.user.id, id, changes), NOUN)
+   }),
 
    archive: ownerProcedure
       .input(byId)
@@ -63,4 +59,14 @@ export const linkedInPost = router({
    restore: ownerProcedure
       .input(byId)
       .mutation(async ({ ctx, input }) => found(await LinkedInPostService.restoreForUser(ctx.user.id, input.id), NOUN)),
+
+   labelMany: ownerProcedure
+      .input(labelInput)
+      .mutation(({ ctx, input }) => LinkedInPostService.labelMany(ctx.user.id, { id: { in: input.ids } }, input)),
+
+   archiveMany: ownerProcedure.input(z.object({ ids })).mutation(async ({ ctx, input }) => {
+      const archived = await LinkedInPostService.archiveMany(ctx.user.id, input.ids)
+
+      return { archived }
+   }),
 })

@@ -10,9 +10,12 @@ import { type Post } from './types'
 
 import { StatusBadge } from '../links/link-status-badge'
 import { RowActions } from '../links/row-actions'
+import { SelectAllHead, SelectCell } from '../links/selection'
+import { type Selection } from '../links/use-selection'
 import { StateRows } from '../links/state-rows'
+import { TagBadges } from '../links/tag-badges'
 
-const COLUMNS = 4
+const COLUMNS = 6
 
 const formatDate = (value: string) => new Date(value).toLocaleDateString()
 
@@ -28,15 +31,19 @@ type Props = {
    onArchive: (post: Post) => void
    onRestore: (post: Post) => void
    onOpen: (post: Post) => void
+   onTag: (tag: string) => void
+   selection: Selection
 }
 
-export const PostsTable = ({ posts, loading, error, busyId, onToggle, onArchive, onRestore, onOpen }: Props) => (
+export const PostsTable = ({ posts, loading, error, busyId, onToggle, onArchive, onRestore, onOpen, onTag, selection }: Props) => (
    <div className="overflow-hidden rounded-lg border">
       <Table>
          <TableHeader className="bg-muted/50">
             <TableRow>
+               <SelectAllHead ids={posts?.map(({ id }) => id) ?? []} selection={selection} noun="post" />
                <TableHead>Post</TableHead>
                <TableHead>Status</TableHead>
+               <TableHead>Labels</TableHead>
                <TableHead>Added</TableHead>
                <TableHead className="w-28" />
             </TableRow>
@@ -56,6 +63,7 @@ export const PostsTable = ({ posts, loading, error, busyId, onToggle, onArchive,
 
                return (
                   <TableRow key={post.id} className={cn(post.archivedAt && 'opacity-60')}>
+                     <SelectCell id={post.id} name={label(post)} selection={selection} />
                      <TableCell>
                         <button
                            type="button"
@@ -70,6 +78,9 @@ export const PostsTable = ({ posts, loading, error, busyId, onToggle, onArchive,
                            <StatusBadge {...postStatuses[post.status]} />
                            {post.archivedAt ? <Badge variant="secondary">Archived</Badge> : null}
                         </span>
+                     </TableCell>
+                     <TableCell>
+                        <TagBadges tags={post.tags} onTag={onTag} />
                      </TableCell>
                      <TableCell className="text-muted-foreground">{formatDate(post.createdAt)}</TableCell>
                      <TableCell>

@@ -184,6 +184,15 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-18: Labels and filtered input blocks (`.plan/labels-and-input-filters.md`, done). Migration `add_post_tags`.
+   - Labels (`tags` in the database) go up to `LABEL_MAX` (20, contracts) of 30 characters, lowercased. They work on /profiles, /companies, /posts and list members: bulk add or remove (`labelMany`), labels on add (merged into links already saved), and filters for any or all of them plus when added (in the URL).
+   - Suggestions come from `label.list` (`LabelService`, owner only).
+   - Input blocks take `inputPickSchema` settings (added window incl. "since the last run", labels any/all, without labels, status, order, timeZone). Old configs read as everything.
+   - "Since the last run" uses the start of the last SUCCEEDED or PARTIAL non-preview run (`InputPickService.lastRunAt`).
+   - New profile and company blocks start as "New only" (`startConfig` in the body).
+   - The block form shows a live count (`workflow.inputMatches`).
+   - Gotcha: the body's oxlint `only-export-components` warns on non-component exports in `.tsx`; keep helpers in `.ts` files (`labels/labels.ts`, `links/use-selection.ts`, `workflows/input-kinds.ts`).
+
 - 2026-10-18: Reuse what workflows paid for (`.plan/reuse-workflow-reads.md`, done).
    - "Get full profile" (`enrich`) saves a `PersonSnapshot` per profile it pays for (not in previews) through `PersonSnapshotService.save`, which is shared with the drawer read.
    - It reuses snapshots from the last `RECENT_DAYS` (30) instead of paying again (`PersonSnapshotService.recent`, `cardFromSnapshot`). The estimate does not subtract them.

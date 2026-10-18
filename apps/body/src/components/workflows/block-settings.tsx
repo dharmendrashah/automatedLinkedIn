@@ -10,8 +10,12 @@ import { ChevronRight, CircleAlert, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 import { BlockOutput } from './block-output'
+import { INPUT_KINDS, isInputType } from './input-kinds'
+import { InputMatches } from './input-matches'
 import { ScheduleSettings } from './schedule-settings'
 import { Chips, SearchPick, Stepper, TagInput } from './setting-inputs'
+
+import { LabelPicker } from '../labels/label-picker'
 
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { type FlowNode } from './graph-convert'
@@ -21,6 +25,7 @@ type Choice = { id: string; name: string }
 
 type Props = {
    node: FlowNode | null
+   workflowId: string
    problems: { message: string; level: 'error' | 'note' }[]
    icps: Choice[]
    workflows: Choice[]
@@ -63,7 +68,7 @@ const flowOf = (block: Block) => {
 }
 
 // A block's settings over the canvas. Every change applies at once; the canvas's Save keeps them.
-export const BlockSettings = ({ node, problems, icps, workflows, parents, onChange: onPatch, onRemove, onClose, output }: Props) => {
+export const BlockSettings = ({ node, workflowId, problems, icps, workflows, parents, onChange: onPatch, onRemove, onClose, output }: Props) => {
    if (!node) {
       return null
    }
@@ -91,7 +96,18 @@ export const BlockSettings = ({ node, problems, icps, workflows, parents, onChan
       }
 
       if (item.kind === 'words') {
-         return <TagInput id={id} value={Array.isArray(value) ? value : []} onChange={next => onChange(item.key, next)} />
+         const words = Array.isArray(value) ? value : []
+
+         return item.suggest === 'labels' ? (
+            <LabelPicker
+               id={id}
+               kind={isInputType(block.type) ? INPUT_KINDS[block.type] : undefined}
+               value={words}
+               onChange={next => onChange(item.key, next)}
+            />
+         ) : (
+            <TagInput id={id} value={words} onChange={next => onChange(item.key, next)} />
+         )
       }
 
       if (item.kind === 'multi') {
@@ -244,6 +260,7 @@ export const BlockSettings = ({ node, problems, icps, workflows, parents, onChan
          <p className="text-muted-foreground text-sm">This block has nothing to set.</p>
       ) : (
          <div className="grid max-h-[60vh] gap-5 overflow-y-auto pr-1">
+            {isInputType(block.type) ? <InputMatches workflowId={workflowId} type={block.type} values={values} /> : null}
             {presets}
             {main.map(row)}
             {more.length > 0 ? (

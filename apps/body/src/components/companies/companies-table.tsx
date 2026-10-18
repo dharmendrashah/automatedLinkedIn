@@ -8,10 +8,12 @@ import { type Company } from './types'
 
 import { LinkStatusBadge } from '../links/link-status-badge'
 import { RowActions } from '../links/row-actions'
+import { SelectAllHead, SelectCell } from '../links/selection'
+import { type Selection } from '../links/use-selection'
 import { StateRows } from '../links/state-rows'
 import { TagBadges } from '../links/tag-badges'
 
-const COLUMNS = 6
+const COLUMNS = 7
 
 const formatDate = (value: string) => new Date(value).toLocaleDateString()
 
@@ -30,6 +32,7 @@ type Props = {
    onRestore: (company: Company) => void
    onTag: (tag: string) => void
    onOpen: (company: Company) => void
+   selection: Selection
 }
 
 export const CompaniesTable = ({
@@ -42,15 +45,17 @@ export const CompaniesTable = ({
    onRestore,
    onTag,
    onOpen,
+   selection,
 }: Props) => (
    <div className="overflow-hidden rounded-lg border">
       <Table>
          <TableHeader className="bg-muted/50">
             <TableRow>
+               <SelectAllHead ids={companies?.map(({ id }) => id) ?? []} selection={selection} noun="company" />
                <TableHead>Company</TableHead>
                <TableHead>Website</TableHead>
                <TableHead>Status</TableHead>
-               <TableHead>Tags</TableHead>
+               <TableHead>Labels</TableHead>
                <TableHead>Added</TableHead>
                <TableHead className="w-24" />
             </TableRow>
@@ -66,6 +71,7 @@ export const CompaniesTable = ({
             />
             {companies?.map(company => (
                <TableRow key={company.id} className={cn(company.archivedAt && 'opacity-60')}>
+                  <SelectCell id={company.id} name={company.name ?? company.slug} selection={selection} />
                   <TableCell>
                      <button
                         type="button"

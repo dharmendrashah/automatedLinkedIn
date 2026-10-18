@@ -2,11 +2,27 @@ import { type LinkedInLink } from 'core'
 
 import { type LinkedInPostStatus, type Prisma } from 'generated/prisma/client'
 
-import { type RecordListQuery, addLinks, orNull, pageArgs, recordWhere } from './linkedInRecord'
+import {
+   EVERYTHING,
+   type InputFilter,
+   type LabelChange,
+   type RecordListQuery,
+   addLinks,
+   inputOrder,
+   inputWhere,
+   orNull,
+   pageArgs,
+   recordWhere,
+   relabel,
+} from './linkedInRecord'
 import { PrismaService } from './prisma.service'
 
-// Posts have no tags, so a list is never narrowed by one.
-export type LinkedInPostListQuery = Omit<RecordListQuery<LinkedInPostStatus>, 'tag'>
+export type LinkedInPostListQuery = RecordListQuery<LinkedInPostStatus>
+
+const ALL_WAITING: InputFilter<never> = {
+   ...EVERYTHING,
+   order: 'oldest',
+}
 
 const postSelect = {
    id: true,
@@ -14,6 +30,7 @@ const postSelect = {
    url: true,
    expandedUrl: true,
    status: true,
+   tags: true,
    archivedAt: true,
    createdAt: true,
    updatedAt: true,
@@ -34,10 +51,15 @@ const updateOwned = (userId: string, id: string, data: Prisma.LinkedInPostUpdate
    )
 
 export class LinkedInPostService {
-   public static addMany(userId: string, posts: (LinkedInLink & { expandedUrl?: string | null })[]) {
+   // New links get the labels; links already saved get them added to theirs.
+   public static async addMany(
+      userId: string,
+      posts: (LinkedInLink & { expandedUrl?: string | null })[],
+      labels: string[] = []
+   ) {
       const table = PrismaService.client.linkedInPost
 
-      return addLinks(posts, {
+      const saved = await addLinks(posts, {
          existing: slugs =>
             table.findMany({
                where: {
@@ -67,10 +89,79 @@ export class LinkedInPostService {
                      slug,
                      url,
                      expandedUrl: expandedUrl ?? null,
+                     ...(labels.length > 0 ? { tags: labels } : {}),
                   })),
                   skipDuplicates: true,
                })
             ).count,
+      })
+
+      if (labels.length > 0) {
+         await LinkedInPostService.labelMany(
+            userId,
+            { slug: { in: posts.map(({ slug }) => slug) } },
+            {
+               add: labels,
+               remove: [],
+            }
+         )
+      }
+
+      return saved
+   }
+
+   // Rows that are not the owner's are left alone.
+   public static labelMany(userId: string, which: Prisma.LinkedInPostWhereInput, change: LabelChange) {
+      return PrismaService.client.$transaction(async tx =>
+         relabel(
+            await tx.linkedInPost.findMany({
+               where: {
+                  ...which,
+                  userId,
+               },
+               select: {
+                  id: true,
+                  tags: true,
+               },
+            }),
+            change,
+            (id, tags) =>
+               tx.linkedInPost.update({
+                  where: { id },
+                  data: { tags },
+               })
+         )
+      )
+   }
+
+   // Their post reads, comments and reactions are deleted with them, as for one.
+   public static archiveMany(userId: string, ids: string[]) {
+      return PrismaService.client.$transaction(async tx => {
+         const where = {
+            userId,
+            id: { in: ids },
+            archivedAt: null,
+         }
+         const slugs = (
+            await tx.linkedInPost.findMany({
+               where,
+               select: { slug: true },
+            })
+         ).map(({ slug }) => slug)
+         const { count } = await tx.linkedInPost.updateMany({
+            where,
+            data: { archivedAt: new Date() },
+         })
+
+         await tx.pageSnapshot.deleteMany({
+            where: {
+               userId,
+               kind: { in: ['POST', 'POST_COMMENTS', 'POST_REACTIONS'] },
+               slug: { in: slugs },
+            },
+         })
+
+         return count
       })
    }
 
@@ -115,8 +206,8 @@ export class LinkedInPostService {
       })
    }
 
-   public static setStatus(userId: string, id: string, status: LinkedInPostStatus) {
-      return updateOwned(userId, id, { status })
+   public static updateForUser(userId: string, id: string, changes: { status?: LinkedInPostStatus; tags?: string[] }) {
+      return updateOwned(userId, id, changes)
    }
 
    // The post read and its comments and reactions are deleted with it.
@@ -140,11 +231,11 @@ export class LinkedInPostService {
       return updateOwned(userId, id, { archivedAt: null })
    }
 
-   // The posts a workflow works through next: not done, not archived, oldest first.
-   public static waiting(userId: string, take: number) {
+   // The posts a workflow works through next: not done, not archived, oldest first unless the block says otherwise.
+   public static waiting(userId: string, take: number, filter: InputFilter<never> = ALL_WAITING) {
       return PrismaService.client.linkedInPost.findMany({
-         where: waitingWhere(userId),
-         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+         where: waitingWhere(userId, filter),
+         orderBy: inputOrder(filter.order),
          take,
          select: {
             id: true,
@@ -164,8 +255,8 @@ export class LinkedInPostService {
       })
    }
 
-   public static countWaiting(userId: string) {
-      return PrismaService.client.linkedInPost.count({ where: waitingWhere(userId) })
+   public static countWaiting(userId: string, filter: InputFilter<never> = ALL_WAITING) {
+      return PrismaService.client.linkedInPost.count({ where: waitingWhere(userId, filter) })
    }
 
    public static async markProcessed(userId: string, ids: string[]) {
@@ -181,8 +272,7 @@ export class LinkedInPostService {
    }
 }
 
-const waitingWhere = (userId: string) => ({
-   userId,
+const waitingWhere = (userId: string, filter: InputFilter<never>) => ({
+   ...inputWhere(userId, filter),
    status: 'UNPROCESSED' as const,
-   archivedAt: null,
 })
