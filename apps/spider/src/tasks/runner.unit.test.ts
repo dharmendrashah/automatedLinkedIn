@@ -1145,6 +1145,80 @@ describe('a task that needs an account', () => {
 
       await expect(run(another)).rejects.toThrow('bucket unavailable')
    })
+
+   describe('with the account browser profile', () => {
+      const withProfile = (task: ReturnType<typeof demo>, restored: boolean) => {
+         const checkout = {
+            dir: '/tmp/profile-acc1',
+            restored,
+            keep: vi.fn(async () => undefined),
+            release: vi.fn(async () => undefined),
+         }
+         const profiles = { checkout: vi.fn(async (_id: string) => checkout) }
+         const sessions = {
+            load: vi.fn(async (_id: string): Promise<SavedState> => ({
+               cookies: [],
+               origins: [],
+            })),
+            save: vi.fn(async (_id: string, _state: unknown) => undefined),
+         }
+
+         return {
+            checkout,
+            profiles,
+            sessions,
+            ...setup({
+               task,
+               overrides: {
+                  sessions,
+                  profiles,
+               },
+            }),
+         }
+      }
+
+      it('should open the profile of the account, and keep it after a run that passed its check', async () => {
+         const { run, deps, profiles, checkout } = withProfile(committing(), true)
+
+         await run(accountCommand)
+
+         expect(profiles.checkout).toHaveBeenCalledWith('acc1')
+         expect(vi.mocked(deps.driver.open).mock.calls[0]?.[0]).toMatchObject({ profileDir: '/tmp/profile-acc1' })
+         expect(vi.mocked(deps.driver.open).mock.calls[0]?.[0]).not.toHaveProperty('storageState')
+         expect(checkout.keep).toHaveBeenCalledTimes(1)
+         expect(checkout.release).toHaveBeenCalledTimes(1)
+      })
+
+      it('should fill a new profile from the saved session', async () => {
+         const { run, deps } = withProfile(accountTask(), false)
+
+         await run(accountCommand)
+
+         expect(vi.mocked(deps.driver.open).mock.calls[0]?.[0]).toHaveProperty('storageState')
+      })
+
+      it.each([
+         ['a task that did not ask for it', accountTask()],
+         ['a failed run', committing('FAILED')],
+      ])('should not keep the profile of %s, and still clear its folder', async (_name, task) => {
+         const { run, checkout } = withProfile(task, true)
+
+         await run(accountCommand)
+
+         expect(checkout.keep).not.toHaveBeenCalled()
+         expect(checkout.release).toHaveBeenCalledTimes(1)
+      })
+
+      it('should still answer, and clear the folder, when the profile cannot be kept', async () => {
+         const { run, checkout, published } = withProfile(committing(), true)
+
+         checkout.keep.mockRejectedValueOnce(new Error('bucket unavailable'))
+         await run(accountCommand)
+
+         expect(published[0]).toMatchObject({ status: 'SUCCEEDED' })
+         expect(checkout.release).toHaveBeenCalledTimes(1)
+      })
+   })
 })
 
 describe('a task that stops for its owner', () => {

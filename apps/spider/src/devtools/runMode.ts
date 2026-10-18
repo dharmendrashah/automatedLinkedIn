@@ -7,6 +7,7 @@ import { IdentityStore } from '../identity/identityStore'
 import { lookupExit } from '../identity/lookupExit'
 import { Recorder } from '../recording/recorder'
 import { CamoufoxDriver } from '../scraping/camoufoxDriver'
+import { DiskProfiles } from '../sessions/profiles'
 import { SessionVault } from '../sessions/sessionVault'
 import { openCredentials } from '../tasks/credentials'
 import { type TaskDefinition } from '../tasks/defineTask'
@@ -135,11 +136,12 @@ export const runTasks = async ({ proxy, databaseUrl, encryptionKey, outputRoot }
 
    const records: RunRecord[] = []
    let stopping = false
-   // The same device, language and signed-in session for every run of an account in this session, as on the worker;
-   // nothing is kept after it.
+   // The device and the browser profile of an account stay on this computer between sessions, as on the worker they stay in
+   // the bucket (.plan/account-browser-profile.md). The signed-in session only lives for this session.
    const memory = new MemoryStore()
-   const identities = new IdentityStore(memory, () => createDeviceIdentity(hostOs()))
+   const identities = new IdentityStore(store, () => createDeviceIdentity(hostOs()))
    const sessions = new SessionVault(memory, encryptionKey)
+   const profiles = new DiskProfiles(join(outputRoot, 'profiles'))
 
    const release = handleInterrupt(() => {
       if (stopping) {
@@ -167,6 +169,7 @@ export const runTasks = async ({ proxy, databaseUrl, encryptionKey, outputRoot }
             store,
             identities,
             sessions,
+            profiles,
             exitGeo: lookupExit,
             // The browser window is open in front of the person running this, so they finish a check right there.
             handover: async () =>
@@ -209,9 +212,11 @@ export const runTasks = async ({ proxy, databaseUrl, encryptionKey, outputRoot }
          return result
       }
 
-      // On the worker the visit starts from the session its daily sign-in saved. Here nothing is saved between sessions,
-      // so the sign-in runs once first and the visits start from what it kept in memory.
-      const signIn = task.name === BROWSE_TASK ? tasks.find(found => found.name === LOGIN_TASK) : undefined
+      // On the worker the visit starts from the profile its daily sign-in kept. Here an account that has no profile on this
+      // computer yet signs in first, so the visit has a session.
+      const hasProfile = account ? (await profiles.checkout(account.id)).restored : false
+      const signIn =
+         task.name === BROWSE_TASK && !hasProfile ? tasks.find(found => found.name === LOGIN_TASK) : undefined
 
       if (signIn) {
          console.log('\n--- Sign-in first, so the visit has a session ---')

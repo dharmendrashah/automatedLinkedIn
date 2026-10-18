@@ -33,6 +33,9 @@ export const sessionKey = (accountId: string) => `sessions/${accountId}/state.js
 // The sealed copy a task run keeps; `sessionKey` above is the plain one only the older scrape engine reads.
 export const sessionVaultKey = (accountId: string) => `sessions/${accountId}/state.enc.json`
 
+// The account's whole browser profile, packed and sealed (.plan/account-browser-profile.md).
+export const profileKey = (accountId: string) => `profiles/${accountId}/profile.tar.gz.enc`
+
 export const lockKey = (accountId: string) => `locks/${accountId}.json`
 
 export const identityKey = (accountId: string) => `identities/${accountId}/identity.json`

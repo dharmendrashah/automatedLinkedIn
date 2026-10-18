@@ -112,6 +112,66 @@ describe('CamoufoxDriver', () => {
       expect(mocks.browser.newContext).toHaveBeenCalledWith({})
    })
 
+   describe('with the account browser profile', () => {
+      const profileContext = () => ({
+         ...mocks.context,
+         pages: vi.fn(() => [mocks.page]),
+         setStorageState: vi.fn(async (_state: unknown) => undefined),
+      })
+
+      it('should start the profile folder as a persistent browser, with the cache on and the run options', async () => {
+         const context = profileContext()
+
+         mocks.camoufox.mockResolvedValueOnce(context as never)
+         await driver.open({
+            profileDir: '/tmp/profile-1',
+            proxy: { server: 'http://proxy.example.net:80' },
+            recorder: makeRecorder('/tmp/video') as never,
+         })
+
+         expect(mocks.camoufox).toHaveBeenCalledWith(
+            expect.objectContaining({
+               persistent_context: true,
+               user_data_dir: '/tmp/profile-1',
+               enable_cache: true,
+               ignoreHTTPSErrors: true,
+               recordVideo: { dir: '/tmp/video' },
+            })
+         )
+         expect(mocks.browser.newContext).not.toHaveBeenCalled()
+         expect(context.setStorageState).not.toHaveBeenCalled()
+      })
+
+      it('should put the saved session into a profile that starts empty', async () => {
+         const context = profileContext()
+         const storageState = {
+            cookies: [],
+            origins: [],
+         }
+
+         mocks.camoufox.mockResolvedValueOnce(context as never)
+         await driver.open({
+            profileDir: '/tmp/profile-1',
+            storageState,
+         })
+
+         expect(context.setStorageState).toHaveBeenCalledWith(storageState)
+      })
+
+      it('should close the profile browser by closing its context', async () => {
+         const context = profileContext()
+
+         mocks.camoufox.mockResolvedValueOnce(context as never)
+         mocks.browser.close.mockClear()
+         const session = await driver.open({ profileDir: '/tmp/profile-1' })
+
+         await session.close()
+
+         expect(context.close).toHaveBeenCalled()
+         expect(mocks.browser.close).not.toHaveBeenCalled()
+      })
+   })
+
    it('should start from the cookies and local storage an account kept', async () => {
       const storageState = {
          cookies: [],

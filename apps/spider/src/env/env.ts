@@ -90,6 +90,10 @@ export class Environment {
             desc: 'Include a video of the browser in a recording. Needs the ffmpeg build of Playwright in the image',
             default: true,
          }),
+         SPIDER_BROWSER_PROFILES: bool({
+            desc: 'Run each account in its own browser profile (cookies, site storage, history, cache), kept sealed in the bucket. Off: every run starts a new browser from the saved session. Worker only',
+            default: true,
+         }),
          SPIDER_HEADLESS: string({
             desc: 'How the browser runs: true is headless Firefox, virtual is a real browser on an Xvfb display (Linux with Xvfb installed, which the worker image has). Worker only',
             choices: ['true', 'virtual'] as const,

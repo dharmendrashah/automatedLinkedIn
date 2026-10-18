@@ -28,6 +28,9 @@ export type OpenOptions = {
    exitIp?: string
    // The cookies and local storage the account had at the end of its last good sign-in.
    storageState?: SavedState
+   // The account's browser profile folder. With it the browser is the same Firefox profile every run (cookies, site storage,
+   // history, cache), and `storageState` only fills a profile that starts empty.
+   profileDir?: string
 }
 
 export interface BrowserDriver {

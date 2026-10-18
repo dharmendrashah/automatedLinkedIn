@@ -21,7 +21,7 @@ export type ProxyCredentials = z.infer<typeof proxyBundleSchema>
 
 const SUPPORTED_KEY_VERSION = 1
 
-const keyOf = (keyBase64: string) => {
+export const keyOf = (keyBase64: string) => {
    const key = Buffer.from(keyBase64, 'base64')
 
    if (key.length !== 32) {

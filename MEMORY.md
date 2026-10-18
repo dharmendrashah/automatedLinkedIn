@@ -184,6 +184,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-19: Each account now runs in its own Firefox profile (`.plan/account-browser-profile.md`): sealed tar.gz in `profiles/<account>/profile.tar.gz.enc`, unpacked into a temp folder per run (worker `/tmp` emptyDir 4 Gi), kept only after a run that passed its check; `state.json` stays as the backup. `SPIDER_BROWSER_PROFILES=false` turns it off. Gotcha: Playwright disables the HTTP cache whenever `context.route` is on, and the driver routes every request for the allowlist, so the packed cache is not used yet. The local tool keeps profiles and device identities on disk under `.devtools-recordings/`.
+
 - 2026-10-19: The saved account session (`sessions/<account>/state.json`, sealed) now holds IndexedDB too, next to cookies and local storage (`storageState({ indexedDB: true })`, `.plan/session-indexeddb.md`). Playwright 1.62's typings omit `indexedDB` in the state object, so it is typed `unknown[]`. Over 5 MB the IndexedDB part is dropped and the rest kept.
 
 - 2026-10-19: LinkedIn can accept a stored `li_at` for one feed and cancel the session a second later (realtime 401, then every page loops). A token sign-in now waits 5 s and loads the feed again before it counts (`AccountValidator.tokenHolds`); `browseAfterLogin` keeps no session when the profile will not load; the daily visit answers SIGNED_OUT on a looping feed, and ends back on the feed so only a session that still opens it is saved (`.plan/linkedin-cancelled-token.md`).

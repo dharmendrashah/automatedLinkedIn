@@ -1,7 +1,7 @@
 import { Camoufox } from 'camoufox'
 import { FingerprintGenerator } from 'fingerprint-generator'
 
-import { type Browser, type BrowserContext, type Page, type Route } from 'playwright-core'
+import { type BrowserContext, type Page, type Route } from 'playwright-core'
 
 import { type ExtractedRecord, type SessionCookie } from '../types'
 
@@ -71,6 +71,19 @@ export const buildCamoufoxOptions = (
    }),
 })
 
+// What the run asks of its browser context, for a new context and for a profile launch alike. A proxy may re-sign secure
+// websites with its own certificate, even an expired one. The owner accepts that (.plan/proxy-accept-resigned-https.md),
+// so the browser trusts whatever the proxy presents.
+const contextOptions = (proxy: OpenOptions['proxy'], recorder: OpenOptions['recorder']) => ({
+   ...(proxy && { ignoreHTTPSErrors: true }),
+   ...(recorder?.videoDir && {
+      recordVideo: {
+         dir: recorder.videoDir,
+         ...(recorder.videoSize && { size: recorder.videoSize }),
+      },
+   }),
+})
+
 // A page that is stuck should not hold up the screenshot of the step that failed.
 const SNAPSHOT_TIMEOUT_MS = 5000
 // The most closing the page and writing its video may take before the browser is closed anyway.
@@ -114,7 +127,8 @@ export const newFingerprint = (operatingSystems: FingerprintOs[] = ['windows', '
 
 class CamoufoxSession implements DetectionSession {
    public constructor(
-      private readonly browser: Browser,
+      // Ends the browser once its context is closed (or did not close in time).
+      private readonly closeBrowser: () => Promise<void>,
       private readonly context: BrowserContext,
       private readonly page: Page,
       private readonly recorder?: RunRecorder,
@@ -400,7 +414,7 @@ class CamoufoxSession implements DetectionSession {
          ])
       } finally {
          clearTimeout(timer)
-         await this.browser.close()
+         await this.closeBrowser()
       }
    }
 }
@@ -411,35 +425,32 @@ class CamoufoxSession implements DetectionSession {
 export class CamoufoxDriver implements BrowserDriver, LoginDriver, DetectionDriver {
    public constructor(private readonly options: CamoufoxOptions) {}
 
-   public async open({ proxy, recorder, identity, storageState, exitIp }: OpenOptions = {}): Promise<DetectionSession> {
-      const browser = await this.launch(proxy, recorder, identity, exitIp)
+   public async open(options: OpenOptions = {}): Promise<DetectionSession> {
+      return options.profileDir ? this.openProfile(options, options.profileDir) : this.openFresh(options)
+   }
+
+   private async openFresh({
+      proxy,
+      recorder,
+      identity,
+      storageState,
+      exitIp,
+   }: OpenOptions): Promise<DetectionSession> {
+      const browser = await this.start(proxy, recorder, () => Camoufox(this.launchOptions(proxy, identity, exitIp)))
 
       try {
-         // A proxy may re-sign secure websites with its own certificate, even an expired one. The owner accepts that
-         // (.plan/proxy-accept-resigned-https.md), so the browser trusts whatever the proxy presents.
          const context = await browser.newContext({
-            ...(proxy && { ignoreHTTPSErrors: true }),
+            ...contextOptions(proxy, recorder),
             ...(storageState && { storageState }),
-            ...(recorder?.videoDir && {
-               recordVideo: {
-                  dir: recorder.videoDir,
-                  ...(recorder.videoSize && { size: recorder.videoSize }),
-               },
-            }),
          })
 
-         context.setDefaultTimeout(this.options.actionTimeoutMs)
-         context.setDefaultNavigationTimeout(this.options.actionTimeoutMs)
-
-         await context.route('**/*', allowedRoute(this.options.isAllowedNavigation))
-
-         const page = await context.newPage()
-
-         if (recorder) {
-            attachRecorder(page, recorder)
-         }
-
-         return new CamoufoxSession(browser, context, page, recorder, this.options.closeTimeoutMs)
+         return new CamoufoxSession(
+            () => browser.close(),
+            context,
+            await this.prepare(context, recorder, await context.newPage()),
+            recorder,
+            this.options.closeTimeoutMs
+         )
       } catch (error) {
          await browser.close()
 
@@ -447,22 +458,73 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver, DetectionDriv
       }
    }
 
-   private async launch(
+   // The account's own Firefox profile: the browser and its one context are the same thing, so the run's context options go
+   // into the launch. The cache is on here, as a person's browser has it (.plan/account-browser-profile.md).
+   private async openProfile(
+      { proxy, recorder, identity, storageState, exitIp }: OpenOptions,
+      profileDir: string
+   ): Promise<DetectionSession> {
+      const context = await this.start(proxy, recorder, () =>
+         Camoufox({
+            ...this.launchOptions(proxy, identity, exitIp),
+            ...contextOptions(proxy, recorder),
+            persistent_context: true,
+            user_data_dir: profileDir,
+            enable_cache: true,
+         })
+      )
+
+      try {
+         if (storageState) {
+            await context.setStorageState(storageState)
+         }
+
+         const page = context.pages()[0] ?? (await context.newPage())
+
+         return new CamoufoxSession(
+            async () => undefined,
+            context,
+            await this.prepare(context, recorder, page),
+            recorder,
+            this.options.closeTimeoutMs
+         )
+      } catch (error) {
+         await context.close()
+
+         throw error
+      }
+   }
+
+   private async prepare(context: BrowserContext, recorder: OpenOptions['recorder'], page: Page) {
+      context.setDefaultTimeout(this.options.actionTimeoutMs)
+      context.setDefaultNavigationTimeout(this.options.actionTimeoutMs)
+
+      await context.route('**/*', allowedRoute(this.options.isAllowedNavigation))
+
+      if (recorder) {
+         attachRecorder(page, recorder)
+      }
+
+      return page
+   }
+
+   private launchOptions(
       proxy: OpenOptions['proxy'],
-      recorder: OpenOptions['recorder'],
       identity: OpenOptions['identity'],
       exitIp: OpenOptions['exitIp']
    ) {
+      return buildCamoufoxOptions(
+         this.options.headless ?? true,
+         proxy,
+         identity?.fingerprint ?? newFingerprint(this.options.operatingSystems),
+         identity,
+         exitIp
+      )
+   }
+
+   private async start<T>(proxy: OpenOptions['proxy'], recorder: OpenOptions['recorder'], launch: () => Promise<T>) {
       try {
-         return await Camoufox(
-            buildCamoufoxOptions(
-               this.options.headless ?? true,
-               proxy,
-               identity?.fingerprint ?? newFingerprint(this.options.operatingSystems),
-               identity,
-               exitIp
-            )
-         )
+         return await launch()
       } catch (error) {
          recorder?.log(
             'engine',

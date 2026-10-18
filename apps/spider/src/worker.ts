@@ -10,6 +10,7 @@ import {
    SPIDER_ACCOUNT_LOCK_TTL_MS,
    SPIDER_ACTION_TIMEOUT_MS,
    SPIDER_ALLOWED_HOSTS,
+   SPIDER_BROWSER_PROFILES,
    SPIDER_GCS_BUCKET,
    SPIDER_HEADLESS,
    SPIDER_LINKEDIN_BASE_URL,
@@ -40,6 +41,7 @@ import { HostPolicy } from './scraping/policy'
 import { processTask } from './scraping/processTask'
 import { HostRateLimiter } from './scraping/rateLimiter'
 import { RobotsGuard } from './scraping/robots'
+import { BucketProfiles } from './sessions/profiles'
 import { SessionVault } from './sessions/sessionVault'
 import { GcsStore } from './storage/gcsStore'
 import { waitForOwner } from './takeover/waitForOwner'
@@ -59,6 +61,7 @@ const main = async () => {
    const broker = new Broker(RABBITMQ_URL)
    const warn = (message: string) => console.warn(message)
    const accountLock = new AccountLock(store, SPIDER_ACCOUNT_LOCK_TTL_MS, Date.now, { warn })
+   const profiles = new BucketProfiles(store, LINKEDIN_CRED_ENC_KEY, { warn })
    const limiter = new HostRateLimiter(SPIDER_MIN_DELAY_MS)
    // Scrape tasks and every other task each open a Firefox, so this worker does one of them at a time.
    const oneBrowser = new Mutex()
@@ -141,6 +144,7 @@ const main = async () => {
                   identities: new IdentityStore(store, createDeviceIdentity),
                   exitGeo: lookupExit,
                   sessions: new SessionVault(store, LINKEDIN_CRED_ENC_KEY),
+                  ...(SPIDER_BROWSER_PROFILES && { profiles }),
                   handover: (taskId, control) =>
                      waitForOwner(taskId, control, {
                         publishFrame: async frame => publishFrame(await broker.publishChannel(), frame),

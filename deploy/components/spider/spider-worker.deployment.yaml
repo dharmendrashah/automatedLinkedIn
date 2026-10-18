@@ -74,8 +74,14 @@ spec:
             # Firefox/Camoufox needs more shared memory than the container default, same as compose's shm_size.
             - name: dshm
               mountPath: /dev/shm
+            # The account's browser profile is unpacked here for one run (packed at most 1 GB) and deleted after it.
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: dshm
           emptyDir:
             medium: Memory
             sizeLimit: 1Gi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 4Gi
