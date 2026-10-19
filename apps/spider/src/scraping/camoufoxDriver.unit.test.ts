@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
       content: vi.fn(async () => '<html>page</html>'),
       mouse: {
          wheel: vi.fn(async () => undefined),
+         move: vi.fn(async (_x: number, _y: number) => undefined),
          click: vi.fn(async (_x: number, _y: number) => undefined),
       },
       keyboard: {
@@ -491,17 +492,80 @@ describe('CamoufoxDriver', () => {
       })
    })
 
-   it('should scroll the page with the mouse wheel and say whether there is more below', async () => {
-      const session = await driver.open()
+   describe('scrollBy', () => {
+      type Reading = { y: number; more: boolean; width: number; height: number }
+      const reading = (y: number, more = true): Reading => ({
+         y,
+         more,
+         width: 1280,
+         height: 720,
+      })
 
-      mocks.page.evaluate.mockResolvedValueOnce(true)
+      // The page is at the top until the wheel has been turned, then 600 px down.
+      const wheelMovesPage = () =>
+         mocks.page.evaluate.mockImplementation(async () =>
+            mocks.page.mouse.wheel.mock.calls.length > 0 ? reading(600) : reading(0)
+         )
 
-      await expect(session.scrollBy(600)).resolves.toBe(true)
-      expect(mocks.page.mouse.wheel).toHaveBeenCalledWith(0, 600)
+      it('should put the pointer on the page once, turn the wheel there, and say whether there is more below', async () => {
+         const session = await driver.open()
 
-      mocks.page.evaluate.mockResolvedValueOnce(false)
+         wheelMovesPage()
 
-      await expect(session.scrollBy(600)).resolves.toBe(false)
+         await expect(session.scrollBy(600)).resolves.toBe(true)
+
+         const [[x, y]] = mocks.page.mouse.move.mock.calls
+
+         // Over the middle of the page, where a person's pointer rests while reading.
+         expect(x).toBeGreaterThan(1280 * 0.3)
+         expect(x).toBeLessThan(1280 * 0.7)
+         expect(y).toBeGreaterThan(720 * 0.3)
+         expect(y).toBeLessThan(720 * 0.8)
+         expect(mocks.page.mouse.wheel).toHaveBeenCalledWith(0, 600)
+
+         await session.scrollBy(600)
+
+         expect(mocks.page.mouse.move).toHaveBeenCalledTimes(1)
+      })
+
+      it('should scroll with a script when the wheel moved nothing, as on a page whose header swallows it', async () => {
+         const session = await driver.open()
+
+         // The reading never changes until the script runs.
+         let scripted = false
+
+         mocks.page.evaluate.mockImplementation(async (_script?: unknown, pixels?: unknown) => {
+            if (typeof pixels === 'number') {
+               scripted = true
+
+               return undefined
+            }
+
+            return scripted ? reading(600) : reading(0)
+         })
+
+         await expect(session.scrollBy(600)).resolves.toBe(true)
+         expect(mocks.page.evaluate).toHaveBeenCalledWith(expect.any(Function), 600)
+      })
+
+      it('should not force a scroll at the end of the page, where nothing can move', async () => {
+         const session = await driver.open()
+
+         mocks.page.evaluate.mockImplementation(async () => reading(2000, false))
+
+         await expect(session.scrollBy(600)).resolves.toBe(false)
+         expect(mocks.page.evaluate).not.toHaveBeenCalledWith(expect.any(Function), 600)
+      })
+
+      it('should scroll up as well, and stop at the top', async () => {
+         const session = await driver.open()
+
+         mocks.page.evaluate.mockImplementation(async () => reading(0))
+
+         await expect(session.scrollBy(-300)).resolves.toBe(true)
+         expect(mocks.page.mouse.wheel).toHaveBeenCalledWith(0, -300)
+         expect(mocks.page.evaluate).not.toHaveBeenCalledWith(expect.any(Function), -300)
+      })
    })
 
    it('should hand out the cookies and the local storage the browser holds', async () => {

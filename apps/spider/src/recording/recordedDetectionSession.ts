@@ -7,6 +7,15 @@ import { type Recorder } from './recorder'
 export class RecordedDetectionSession extends RecordedSession implements DetectionSession {
    // Present only when the browser can be probed, so a task can tell.
    public readonly probe?: () => Promise<ProbeReading>
+   // Likewise for the page inspection and for what a hand does on the page: the run's video shows them, and the task logs
+   // what it did, so they are not steps of their own.
+   public readonly inspect?: DetectionSession['inspect']
+   public readonly clickLink?: DetectionSession['clickLink']
+   public readonly clickInside?: DetectionSession['clickInside']
+   public readonly clickSelector?: DetectionSession['clickSelector']
+   public readonly back?: DetectionSession['back']
+   public readonly hover?: DetectionSession['hover']
+   public readonly drift?: DetectionSession['drift']
 
    public constructor(
       private readonly detector: DetectionSession,
@@ -14,10 +23,38 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
    ) {
       super(detector, recorder)
 
-      const { probe } = detector
+      const { probe, inspect, clickLink, clickInside, clickSelector, back, hover, drift } = detector
 
       if (probe) {
          this.probe = () => probe.call(detector)
+      }
+
+      if (inspect) {
+         this.inspect = options => inspect.call(detector, options)
+      }
+
+      if (clickLink) {
+         this.clickLink = (href, avoid) => clickLink.call(detector, href, avoid)
+      }
+
+      if (clickInside) {
+         this.clickInside = (box, avoid) => clickInside.call(detector, box, avoid)
+      }
+
+      if (clickSelector) {
+         this.clickSelector = selector => clickSelector.call(detector, selector)
+      }
+
+      if (back) {
+         this.back = () => back.call(detector)
+      }
+
+      if (hover) {
+         this.hover = (x, y) => hover.call(detector, x, y)
+      }
+
+      if (drift) {
+         this.drift = () => drift.call(detector)
       }
    }
 

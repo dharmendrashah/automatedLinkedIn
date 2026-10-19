@@ -105,6 +105,8 @@ export type RecorderOptions = {
 }
 
 const MAX_ENTRIES = 500
+// A walk of ten minutes logs every scroll and every page's console; the last lines are the ones that say how it ended.
+const MAX_LOG_LINES = 2000
 const MAX_BODY_BYTES = 64 * 1024
 const MAX_TOTAL_BODY_BYTES = 2 * 1024 * 1024
 const MAX_SCREENSHOTS = 40
@@ -181,7 +183,7 @@ export class Recorder implements RunRecorder {
    }
 
    public log(source: LogSource, level: LogLevel, message: string) {
-      if (this.logs.length < MAX_ENTRIES) {
+      if (this.logs.length < MAX_LOG_LINES) {
          this.logs.push({
             t: this.elapsed(),
             source,

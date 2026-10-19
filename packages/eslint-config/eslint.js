@@ -7,7 +7,17 @@ const prettierPlugin = require('eslint-plugin-prettier')
 const unusedImports = require('eslint-plugin-unused-imports')
 
 module.exports = [
-   { ignores: ['**/node_modules/**', '**/.turbo/**', '**/dist/**', '**/dev-dist/**', '**/coverage/**', '**/generated/**'] },
+   {
+      ignores: [
+         '**/node_modules/**',
+         '**/.turbo/**',
+         '**/dist/**',
+         '**/dev-dist/**',
+         '**/coverage/**',
+         '**/generated/**',
+         '**/.devtools-recordings/**',
+      ],
+   },
    js.configs.recommended,
    ...tsPlugin.configs['flat/recommended'],
    prettierConfig,

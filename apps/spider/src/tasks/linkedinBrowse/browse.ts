@@ -1,135 +1,125 @@
-import { type TaskContext, VisitError } from '../defineTask'
-import { SELECTORS, kindOf } from '../linkedinLogin/accountValidator'
-import { between } from '../linkedinLogin/browseAfterLogin'
+import { handsOf } from '../../browsing/hands'
+import { createOverlay } from '../../browsing/overlay'
+import { createReader } from '../../browsing/reader'
+import { createKeep } from '../../browsing/snapshot'
+import { runTargets } from '../../browsing/targets'
+import { POST_BLOCK, POST_WINDOW } from '../../linkedin/markup'
+import { SignedOut, createSession } from '../../linkedin/session'
+import { type TaskContext } from '../defineTask'
+import { createFinder } from './finder'
+import { createRoutes } from './routes'
+import { WalkState } from './state'
+import { createVisits } from './visits'
+import { BUDGET_MS, PACE, STAYS, planWalk } from './walk'
 
-type Context = Pick<TaskContext, 'browser' | 'visit' | 'pause' | 'log' | 'warn'>
+type Context = Pick<TaskContext, 'browser' | 'visit' | 'pause' | 'log' | 'warn' | 'attach' | 'screenshot'>
 
-const POST = /href="((?:https:\/\/www\.linkedin\.com)?\/feed\/update\/urn:li:(?:activity|share|ugcPost):\d+\/?)/g
-const PROFILE = /href="((?:https:\/\/www\.linkedin\.com)?\/(?:in|company)\/[\w%-]+\/?)/g
+// DONE: the feed was read, at least one whole cycle (out of the feed and back) was made, and the feed still opens at the end.
+// NO_CYCLE: signed in, but nothing could be opened from the feed. SIGNED_OUT: LinkedIn asked for a sign-in.
+export type BrowseOutcome = 'DONE' | 'SIGNED_OUT' | 'NO_CYCLE'
 
-// Links of the page that stay on the site, as full addresses without a query, each once.
-const linksOf = (html: string, pattern: RegExp, baseUrl: string) => {
-   const { origin } = new URL(baseUrl)
-   const found = [...html.matchAll(pattern)].map(([, href]) => new URL(href ?? '', origin))
+// After this many targets in a row that came to nothing the walk stops: something is wrong and more clicks will not mend it.
+const MAX_FAILURES_IN_A_ROW = 4
 
-   return [...new Set(found.filter(url => url.origin === origin).map(({ origin: at, pathname }) => `${at}${pathname}`))]
-}
-
-export const postLinks = (html: string, baseUrl: string) => linksOf(html, POST, baseUrl)
-
-// The page header links to the own profile first, so the first other member or company is whoever posted.
-export const authorLink = (html: string, baseUrl: string, ownProfile: string) =>
-   linksOf(html, PROFILE, baseUrl).find(url => url !== ownProfile && !url.endsWith('/in/me/'))
-
-const pick = <T>(items: T[], count: number, random: () => number) => {
-   const left = [...items]
-   const picked: T[] = []
-
-   while (picked.length < count && left.length > 0) {
-      picked.push(...left.splice(Math.floor(random() * left.length), 1))
-   }
-
-   return picked
-}
-
-export type BrowseOutcome = 'DONE' | 'SIGNED_OUT'
-
-// A daily look around the account, as its owner would: down the feed, their own profile, then one or two posts and who
-// posted them. It only reads; nothing is liked, followed, sent or kept from those pages.
+// A day of browsing as its owner would: the feed read for two or three minutes, then five to eight times out of the feed into
+// a post, a profile, or a post and the profile of who posted it, and back. It only reads: it clicks links to members and
+// companies and the "more" of a post, never a button that does something, and keeps nothing of what it sees unless `snapshots`
+// is set, when the first feed, post, window and profile are kept with the run to study how the real pages are built.
+//
+// This is only the wiring: pacing is `browsing/reader`, the window is `browsing/overlay`, the loop is `browsing/targets`, what
+// LinkedIn looks like is in `linkedin/`, and the ways out of the feed are `routes`.
 export const browseLinkedin = async (
-   { browser, visit, pause, log, warn }: Context,
+   context: Context,
    baseUrl: string,
-   random: () => number = Math.random
+   random: () => number = Math.random,
+   snapshots = false,
+   now: () => number = Date.now
 ): Promise<BrowseOutcome> => {
-   const readDown = async (min: number, max: number) => {
-      for (let count = between(min, max, random); count > 0; count -= 1) {
-         await browser.scrollBy(between(400, 900, random))
-         await pause(between(1000, 3500, random))
+   const { browser, visit, pause, log, warn } = context
+   const hands = handsOf(browser)
+   const reader = createReader({
+      hands,
+      pause,
+      random,
+      now,
+      pace: PACE,
+   })
+   const session = createSession({
+      browser,
+      hands,
+      visit,
+      log,
+      baseUrl,
+   })
+   const keep = createKeep(context, snapshots, POST_BLOCK)
+   const state = new WalkState()
+   const finder = createFinder({
+      hands,
+      reader,
+      state,
+      baseUrl,
+      random,
+      log,
+      keep,
+   })
+   const visits = createVisits({
+      hands,
+      reader,
+      overlay: createOverlay({
+         hands,
+         reader,
+         spec: POST_WINDOW,
+      }),
+      session,
+      log,
+      keep,
+   })
+   const { walkRoute } = createRoutes({
+      state,
+      finder,
+      visits,
+      session,
+      reader,
+      log,
+      warn,
+   })
+
+   try {
+      const walk = planWalk(random)
+
+      await session.acceptConsent(await session.openFeed())
+      log(`Reading the feed for about ${Math.round(walk.feedMs / 1000)} seconds`)
+      await reader.dwell([walk.feedMs, walk.feedMs])
+      await keep('feed')
+
+      const cycles = await runTargets({
+         targets: walk.targets,
+         step: walkRoute,
+         recover: async () => {
+            await session.openFeed()
+         },
+         between: () => reader.dwell(STAYS.between),
+         elapsed: reader.elapsed,
+         budgetMs: BUDGET_MS,
+         maxFailuresInARow: MAX_FAILURES_IN_A_ROW,
+         isFatal: error => error instanceof SignedOut,
+         warn,
+         says: {
+            stepStopped: 'A step of the walk stopped early',
+            notRecovered: 'The feed could not be opened again',
+         },
+      })
+
+      // The session is kept after a DONE, so it must still open the feed at the very end; a cancelled one is never kept.
+      await session.openFeed()
+      log(`Made ${cycles} round trips, back on the feed and still signed in`)
+
+      return cycles > 0 ? 'DONE' : 'NO_CYCLE'
+   } catch (error) {
+      if (error instanceof SignedOut) {
+         return 'SIGNED_OUT'
       }
+
+      throw error
    }
-   const open = async (url: string) => {
-      const landed = await visit(url)
-
-      return ['login', 'checkpoint'].includes(kindOf(landed)) ? undefined : landed
-   }
-   // A cancelled session makes LinkedIn send the feed round in circles (recorded 2026-10-18): without the token it is loaded
-   // once more, and a sign-in page then says signed out. A second failure goes on as an error.
-   const openFeed = async () => {
-      try {
-         return await open(`${baseUrl}/feed/`)
-      } catch (error) {
-         if (!(error instanceof VisitError && error.reason === 'load')) {
-            throw error
-         }
-
-         await browser.clearCookies('li_at')
-
-         return open(`${baseUrl}/feed/`)
-      }
-   }
-
-   const feed = await openFeed()
-
-   if (!feed) {
-      return 'SIGNED_OUT'
-   }
-
-   if (kindOf(feed) === 'consent' && (await browser.exists(SELECTORS.consentAccept, 1500))) {
-      await browser.click(SELECTORS.consentAccept)
-      log('Accepted the ads consent page')
-   }
-
-   await readDown(4, 8)
-   const posts = pick(postLinks(await browser.pageHtml(), baseUrl), between(1, 2, random), random)
-
-   // LinkedIn sends /in/me/ to the profile of whoever is signed in.
-   const own = await open(`${baseUrl}/in/me/`)
-
-   if (!own) {
-      return 'SIGNED_OUT'
-   }
-
-   log('Opened the own profile')
-   await readDown(2, 5)
-   await pause(between(10_000, 20_000, random))
-
-   if (posts.length === 0) {
-      log('The feed showed no post to open')
-   }
-
-   for (const post of posts) {
-      try {
-         if (!(await open(post))) {
-            return 'SIGNED_OUT'
-         }
-
-         await readDown(1, 3)
-         await pause(between(5000, 15_000, random))
-         const author = authorLink(await browser.pageHtml(), baseUrl, own)
-
-         if (!author) {
-            log('The post links to no author')
-            continue
-         }
-
-         if (!(await open(author))) {
-            return 'SIGNED_OUT'
-         }
-
-         log('Opened the profile of who posted')
-         await readDown(1, 3)
-         await pause(between(8000, 15_000, random))
-      } catch (error) {
-         warn(error instanceof VisitError ? error.message : 'A post could not be read')
-      }
-   }
-
-   // The session is kept after a DONE, so it must still open the feed at the very end; a cancelled one is never kept.
-   if (!(await openFeed())) {
-      return 'SIGNED_OUT'
-   }
-
-   log('Back on the feed, still signed in')
-
-   return 'DONE'
 }

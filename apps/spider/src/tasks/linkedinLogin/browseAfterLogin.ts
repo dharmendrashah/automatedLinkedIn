@@ -1,3 +1,4 @@
+import { between } from '../../browsing/random'
 import { type TaskContext, VisitError } from '../defineTask'
 import { SELECTORS, kindOf } from './accountValidator'
 
@@ -5,8 +6,6 @@ const SCROLLS = 4
 const SCROLL_PX = 700
 const STAY_MIN_MS = 15_000
 const STAY_MAX_MS = 20_000
-
-export const between = (min: number, max: number, random: () => number) => min + Math.floor(random() * (max - min + 1))
 
 // What a person does after signing in: reads down the feed, opens their own profile and stays a while. It says whether the
 // browser is still signed in afterwards, so a session that got logged out is not kept. A page that cannot be opened is
