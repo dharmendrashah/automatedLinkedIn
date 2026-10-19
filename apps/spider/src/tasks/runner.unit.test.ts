@@ -211,6 +211,7 @@ const setup = (
       policy: {
          allowsUrl: vi.fn((url: string) => !url.includes('elsewhere')),
          allowsCookieDomain: vi.fn((domain: string) => domain.endsWith('linkedin.com')),
+         exemptsRobots: vi.fn(() => false),
       },
       accountLock: { acquire: vi.fn(async () => lease) },
       openCredentials: vi.fn(() => credentials),
@@ -385,6 +386,7 @@ describe('runTask', () => {
             policy: {
                allowsUrl: vi.fn(() => false),
                allowsCookieDomain: vi.fn(() => false),
+               exemptsRobots: vi.fn(() => false),
             },
          },
       })
@@ -606,6 +608,23 @@ describe('runTask', () => {
          expect(deps.robots.check).toHaveBeenCalledWith(new URL('https://example.com/page'))
          expect(deps.limiter.wait).toHaveBeenCalledWith('example.com')
          expect(session.goto).toHaveBeenCalledWith('https://example.com/page', undefined)
+      })
+
+      it('should not read robots.txt for a host the operator exempted, but still keep the rate limit', async () => {
+         const { run, session, deps } = visiting('https://www.example.com/page', {
+            robots: { check: vi.fn(async () => ({ allowed: false })) },
+            policy: {
+               allowsUrl: vi.fn(() => true),
+               allowsCookieDomain: vi.fn(() => true),
+               exemptsRobots: vi.fn((host: string) => host.endsWith('example.com')),
+            },
+         })
+
+         await run()
+
+         expect(deps.robots.check).not.toHaveBeenCalled()
+         expect(deps.limiter.wait).toHaveBeenCalledWith('www.example.com')
+         expect(session.goto).toHaveBeenCalledWith('https://www.example.com/page', undefined)
       })
 
       it.each([

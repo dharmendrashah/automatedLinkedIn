@@ -214,6 +214,7 @@ describe('the task contract on a real RabbitMQ', () => {
             policy: {
                allowsUrl: () => true,
                allowsCookieDomain: () => true,
+               exemptsRobots: () => false,
             },
             robots: { check: async () => ({ allowed: true }) },
             limiter: { wait: async () => undefined },

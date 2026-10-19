@@ -42,7 +42,7 @@ export type RecordingRequest = {
 export type RunnerDeps = {
    tasks: TaskDefinition[]
    driver: DetectionDriver
-   policy: Pick<HostPolicy, 'allowsUrl' | 'allowsCookieDomain'>
+   policy: Pick<HostPolicy, 'allowsUrl' | 'allowsCookieDomain' | 'exemptsRobots'>
    robots: Pick<RobotsGuard, 'check'>
    limiter: Pick<HostRateLimiter, 'wait'>
    // `get` and `create` keep a marker of every answered command (a second delivery is then skipped); without them (the
@@ -499,14 +499,17 @@ const execute = async (
          throw new VisitError('not-allowed', 'The address is not on the spider allowlist.')
       }
 
-      try {
-         if (!(await deps.robots.check(url)).allowed) {
-            throw new VisitError('robots', 'The site does not allow it in robots.txt.')
+      // An operator decision for this host (SPIDER_ROBOTS_EXEMPT_HOSTS). The rate limit still applies.
+      if (!deps.policy.exemptsRobots(url.hostname)) {
+         try {
+            if (!(await deps.robots.check(url)).allowed) {
+               throw new VisitError('robots', 'The site does not allow it in robots.txt.')
+            }
+         } catch (error) {
+            throw error instanceof VisitError
+               ? error
+               : new VisitError('robots-unreadable', 'robots.txt could not be checked.')
          }
-      } catch (error) {
-         throw error instanceof VisitError
-            ? error
-            : new VisitError('robots-unreadable', 'robots.txt could not be checked.')
       }
 
       await deps.limiter.wait(url.hostname)

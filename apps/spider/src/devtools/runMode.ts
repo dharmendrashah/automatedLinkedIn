@@ -49,6 +49,7 @@ const freeRules = {
    policy: {
       allowsUrl: () => true,
       allowsCookieDomain: () => true,
+      exemptsRobots: () => true,
    },
    robots: { check: async () => ({ allowed: true }) },
    limiter: { wait: async () => undefined },
