@@ -27,6 +27,15 @@ vi.mock('./prisma.service', () => ({
 }))
 vi.mock('./linkedInAccountValidation.service', () => ({ LinkedInAccountValidationService: mocks.validation }))
 vi.mock('./task.service', () => ({ TaskService: { request: mocks.requestTask } }))
+// The real time helpers without the rest of `core`, whose modules read the environment (DATABASE_URL) when they load.
+vi.mock('core', async () => {
+   const { dailyTime, timezoneOfCountry } = await import('../core/dailyTime')
+
+   return {
+      dailyTime,
+      timezoneOfCountry,
+   }
+})
 
 // 15:30 in India.
 const NOW = new Date('2026-10-19T10:00:00Z')
