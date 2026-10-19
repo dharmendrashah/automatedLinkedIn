@@ -16,6 +16,7 @@ import {
    type DetectionSession,
    type LoginDriver,
    type OpenOptions,
+   type PageInspection,
    type ProbeReading,
    type SessionControl,
    type StorageState,
@@ -105,6 +106,25 @@ export const allowedRoute = (isAllowed: (url: string) => boolean) => (route: Rou
       : route.continue()
 }
 
+// A wheel scrolls smoothly: how long to wait before reading where the page ended up, and how often to look until it rests.
+const SCROLL_SETTLE_MS = 120
+const SCROLL_POLL_MS = 60
+const SCROLL_POLLS = 8
+
+// A hand rests on a link for a moment before it clicks, and a page that does not answer a click in time is not followed.
+const HOVER_MIN_MS = 150
+const HOVER_RANGE_MS = 300
+const LINK_NAVIGATION_MS = 15_000
+
+const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+// A feed holds hundreds of links; these caps keep an inspection small enough to save with the run.
+const INSPECT_LIMITS = {
+   maxLinks: 600,
+   maxControls: 300,
+   maxBlocks: 40,
+}
+
 // How long to wait for the redirects after a submit.
 const SETTLE_TIMEOUT_MS = 4000
 
@@ -132,6 +152,9 @@ export const newFingerprint = (operatingSystems: FingerprintOs[] = ['windows', '
    }).fingerprint
 
 class CamoufoxSession implements DetectionSession {
+   // Where the pointer rests: it is put over the page before the first scroll or click (see scrollBy).
+   private pointer: { x: number; y: number } | undefined
+
    public constructor(
       // Ends the browser once its context is closed (or did not close in time).
       private readonly closeBrowser: () => Promise<void>,
@@ -181,11 +204,352 @@ class CamoufoxSession implements DetectionSession {
       return this.page.content()
    }
 
-   // The wheel, as a person scrolls, so the page sees real scroll events. True while there is more page below.
+   // Every link and control that has a box, with where it is, whether something covers it and what surrounds it. With `block`,
+   // also what each element of that selector carries and holds. Read-only.
+   public inspect(options: { block?: string } = {}): Promise<PageInspection> {
+      return this.page.evaluate(
+         ({ maxLinks, maxControls, maxBlocks, block }) => {
+            const cut = (value: string | null | undefined, max = 80) =>
+               (value ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
+            const view = {
+               width: window.innerWidth,
+               height: window.innerHeight,
+            }
+            const describe = (element: Element) => {
+               const role = element.getAttribute('role')
+               const data = Array.from(element.attributes)
+                  .filter(({ name }) => name.startsWith('data-'))
+                  .slice(0, 3)
+                  .map(({ name, value }) => `[${name}=${cut(value, 60)}]`)
+
+               return `${element.tagName.toLowerCase()}${role ? `[role=${role}]` : ''}${data.join('')}`
+            }
+            const read = (element: Element) => {
+               const rect = element.getBoundingClientRect()
+
+               if (rect.width === 0 || rect.height === 0) {
+                  return undefined
+               }
+
+               const inView = rect.left >= 0 && rect.top >= 0 && rect.right <= view.width && rect.bottom <= view.height
+               const top = inView
+                  ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+                  : null
+               const path: string[] = []
+
+               for (let parent = element.parentElement; parent && path.length < 8; parent = parent.parentElement) {
+                  path.push(describe(parent))
+               }
+
+               return {
+                  tag: element.tagName.toLowerCase(),
+                  ...(element instanceof HTMLAnchorElement && { href: element.href }),
+                  text: cut(element.textContent),
+                  label: cut(element.getAttribute('aria-label')),
+                  role: element.getAttribute('role') ?? '',
+                  view: element.getAttribute('data-view-name') ?? '',
+                  box: {
+                     x: Math.round(rect.left),
+                     y: Math.round(rect.top),
+                     width: Math.round(rect.width),
+                     height: Math.round(rect.height),
+                  },
+                  inView,
+                  covered: inView && !(top && (top === element || element.contains(top))),
+                  path,
+               }
+            }
+            const collect = (selector: string, max: number) =>
+               Array.from(document.querySelectorAll(selector))
+                  .slice(0, max)
+                  .map(read)
+                  .filter(found => found !== undefined)
+            const keyed = /urn:li:|\d{12,}/
+            const readBlock = (element: Element) => {
+               const keys = new Set<string>()
+               const marks = new Set<string>()
+
+               for (const inner of [
+                  element,
+                  ...Array.from(
+                     element.querySelectorAll(
+                        '[componentkey], [data-sdui-anchor-id], [data-view-name], [id*="urn:li:"]'
+                     )
+                  ),
+               ]) {
+                  for (const name of ['componentkey', 'data-sdui-anchor-id', 'id']) {
+                     const value = inner.getAttribute(name)
+
+                     if (value && keyed.test(value) && keys.size < 40) {
+                        keys.add(cut(value, 400))
+                     }
+                  }
+
+                  const mark = inner.getAttribute('data-view-name')
+
+                  if (mark && marks.size < 60) {
+                     marks.add(mark)
+                  }
+               }
+
+               return {
+                  keys: Array.from(keys),
+                  marks: Array.from(marks),
+                  links: Array.from(element.querySelectorAll('a[href]'))
+                     .slice(0, 40)
+                     .map(read)
+                     .filter(found => found !== undefined),
+               }
+            }
+
+            return {
+               url: location.href,
+               title: document.title,
+               viewport: view,
+               scrollY: Math.round(window.scrollY),
+               links: collect('a[href]', maxLinks),
+               controls: collect('button, [role="button"], [role="menuitem"], summary, input', maxControls),
+               blocks: block ? Array.from(document.querySelectorAll(block)).slice(0, maxBlocks).map(readBlock) : [],
+            }
+         },
+         {
+            ...INSPECT_LIMITS,
+            block: options.block,
+         }
+      )
+   }
+
+   // Where the page is scrolled to and how big the window is.
+   private scrollReading() {
+      return this.page.evaluate(() => ({
+         y: Math.round(window.scrollY),
+         more: window.scrollY + window.innerHeight < document.documentElement.scrollHeight - 2,
+         width: window.innerWidth,
+         height: window.innerHeight,
+      }))
+   }
+
+   // The wheel moves the page smoothly; this waits until it has come to rest.
+   private async scrollRest() {
+      await wait(SCROLL_SETTLE_MS)
+
+      let reading = await this.scrollReading()
+
+      for (let tries = 0; tries < SCROLL_POLLS; tries += 1) {
+         await wait(SCROLL_POLL_MS)
+
+         const next = await this.scrollReading()
+
+         if (next.y === reading.y) {
+            return next
+         }
+
+         reading = next
+      }
+
+      return reading
+   }
+
+   // The wheel, as a person scrolls, so the page sees real scroll events. True while there is more page below. A wheel goes to
+   // whatever is under the pointer, and the pointer starts in the corner, over LinkedIn's header, which let the feed stay at the
+   // top for a whole visit (recorded 2026-10-19). So the pointer rests over the middle of the page first, and a wheel that still
+   // moved nothing, with room to move, is followed by a scroll made by the page itself.
    public async scrollBy(pixels: number) {
+      const before = await this.scrollReading()
+
+      if (!this.pointer) {
+         await this.moveTo(before.width * (0.4 + Math.random() * 0.2), before.height * (0.45 + Math.random() * 0.25))
+      }
+
       await this.page.mouse.wheel(0, pixels)
 
-      return this.page.evaluate(() => window.scrollY + window.innerHeight < document.documentElement.scrollHeight - 2)
+      const after = await this.scrollRest()
+      const room = pixels > 0 ? before.more : before.y > 0
+
+      if (after.y === before.y && room) {
+         await this.page.evaluate(
+            by =>
+               window.scrollBy({
+                  top: by,
+                  behavior: 'smooth',
+               }),
+            pixels
+         )
+
+         return (await this.scrollRest()).more
+      }
+
+      return after.more
+   }
+
+   private async moveTo(x: number, y: number) {
+      this.pointer = {
+         x: Math.round(x),
+         y: Math.round(y),
+      }
+      await this.page.mouse.move(this.pointer.x, this.pointer.y)
+   }
+
+   // A spot of an element in view where the element itself is on top and nothing matching `avoid` is under the pointer, so a
+   // click there lands on the element and not on a button that sits inside it or a tray that covers it.
+   private spot(find: {
+      selector: string
+      href?: string
+      box?: { x: number; y: number; width: number; height: number }
+      avoid: string
+   }) {
+      return this.page.evaluate(({ selector, href, box, avoid }) => {
+         const view = {
+            width: window.innerWidth,
+            height: window.innerHeight,
+         }
+         const elements = Array.from(document.querySelectorAll(selector))
+            .filter(element => href === undefined || (element instanceof HTMLAnchorElement && element.href === href))
+            .filter(element => {
+               if (!box) {
+                  return true
+               }
+
+               // The very element that was listed, found again by where it is.
+               const at = element.getBoundingClientRect()
+
+               return (
+                  Math.abs(at.left - box.x) <= 8 &&
+                  Math.abs(at.top - box.y) <= 8 &&
+                  Math.abs(at.width - box.width) <= 8 &&
+                  Math.abs(at.height - box.height) <= 8
+               )
+            })
+            .sort(() => Math.random() - 0.5)
+
+         for (const element of elements) {
+            const rect = element.getBoundingClientRect()
+
+            if (rect.width < 4 || rect.height < 4 || rect.right <= 0 || rect.bottom <= 0) {
+               continue
+            }
+
+            const left = Math.max(rect.left, 0)
+            const right = Math.min(rect.right, view.width)
+            const top = Math.max(rect.top, 0)
+            const bottom = Math.min(rect.bottom, view.height)
+            const points: Array<{ x: number; y: number }> = []
+
+            for (let row = 0; row < 4; row += 1) {
+               for (let column = 0; column < 6; column += 1) {
+                  points.push({
+                     x: left + ((right - left) * (column + 0.5)) / 6,
+                     y: top + ((bottom - top) * (row + 0.5)) / 4,
+                  })
+               }
+            }
+
+            for (const point of points.sort(() => Math.random() - 0.5)) {
+               const on = document.elementFromPoint(point.x, point.y)
+
+               if (on && (on === element || element.contains(on)) && !(avoid && on.closest(avoid))) {
+                  return {
+                     x: Math.round(point.x),
+                     y: Math.round(point.y),
+                  }
+               }
+            }
+         }
+
+         return undefined
+      }, find)
+   }
+
+   // The pointer glides to the spot, rests there a moment as a hand does, then clicks.
+   private async pressAt({ x, y }: { x: number; y: number }) {
+      await this.moveTo(x, y)
+      await wait(HOVER_MIN_MS + Math.random() * HOVER_RANGE_MS)
+      await this.page.mouse.click(x, y)
+   }
+
+   public async clickLink(href: string, avoid: string) {
+      const spot = await this.spot({
+         selector: 'a[href]',
+         href,
+         avoid,
+      })
+
+      if (!spot) {
+         return undefined
+      }
+
+      const before = this.page.url()
+
+      await this.pressAt(spot)
+
+      try {
+         await this.page.waitForURL(url => url.href !== before, {
+            timeout: LINK_NAVIGATION_MS,
+            waitUntil: 'commit',
+         })
+      } catch {
+         return undefined
+      }
+
+      await this.page.waitForLoadState('domcontentloaded').catch(() => undefined)
+
+      return this.page.url()
+   }
+
+   // Clicks the link that was listed at this place, for one that answers a click in script and does not change the address (an
+   // image that opens a window). True when a spot of it was found and clicked.
+   public async clickInside(box: { x: number; y: number; width: number; height: number }, avoid: string) {
+      const spot = await this.spot({
+         selector: 'a[href]',
+         box,
+         avoid,
+      })
+
+      if (!spot) {
+         return false
+      }
+
+      await this.pressAt(spot)
+
+      return true
+   }
+
+   public async clickSelector(selector: string) {
+      const spot = await this.spot({
+         selector,
+         avoid: '',
+      })
+
+      if (!spot) {
+         return false
+      }
+
+      await this.pressAt(spot)
+
+      return true
+   }
+
+   public async back() {
+      await this.page.goBack({ waitUntil: 'domcontentloaded' })
+
+      return this.page.url()
+   }
+
+   public hover(x: number, y: number) {
+      return this.moveTo(x, y)
+   }
+
+   // A hand is never quite still: the pointer moves a little from where it rests.
+   public async drift() {
+      const { width, height } = await this.scrollReading()
+      const at = this.pointer ?? {
+         x: width / 2,
+         y: height / 2,
+      }
+      const near = (value: number, limit: number) =>
+         Math.min(limit - 5, Math.max(5, value + (Math.random() - 0.5) * 160))
+
+      await this.moveTo(near(at.x, width), near(at.y, height))
    }
 
    public storageState() {

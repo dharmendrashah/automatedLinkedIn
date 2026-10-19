@@ -86,6 +86,47 @@ export type ProbeReading = {
    worker?: ProbeFacts
 }
 
+// A link or a control of the page as it shows on screen: where it is and what surrounds it, which is what tells a safe thing
+// to click from a button that does something. Text and labels are cut short.
+export type InspectedElement = {
+   tag: string
+   // The full address of a link.
+   href?: string
+   text: string
+   label: string
+   role: string
+   // The element's own data-view-name, when it has one.
+   view: string
+   box: { x: number; y: number; width: number; height: number }
+   // The whole box is inside the window.
+   inView: boolean
+   // Something else is on top of the middle of its box (a docked tray, a pop-up).
+   covered: boolean
+   // The elements around it, nearest first, as `tag[role=..][data-name=value]`.
+   path: string[]
+}
+
+// A repeated part of a page (a post of a feed) with what it carries and holds. It has no box of its own: such wrappers are
+// often `display: contents`, so where it is comes from the links inside.
+export type InspectedBlock = {
+   // Identifiers in its markup (component keys, anchor ids) that hold a urn or a long number.
+   keys: string[]
+   // The data-view-name values found inside it.
+   marks: string[]
+   links: InspectedElement[]
+}
+
+export type PageInspection = {
+   url: string
+   title: string
+   viewport: { width: number; height: number }
+   scrollY: number
+   links: InspectedElement[]
+   controls: InspectedElement[]
+   // Only when asked for with a `block` selector.
+   blocks: InspectedBlock[]
+}
+
 // What a person at the keyboard can do to a page, for human takeover. Positions are fractions of the page, so the owner's
 // screen size does not matter. There is no way to run code in the page.
 export interface SessionControl {
@@ -111,7 +152,7 @@ export type StorageState = {
 
 // What a browser test needs on top of a login session: scrolling, reading the page, and a picture of all of it.
 export interface DetectionSession extends LoginSession {
-   // Scrolls down by `pixels` and says whether there is more page below.
+   // Scrolls down by `pixels` (up when negative) and says whether there is more page below.
    scrollBy: (pixels: number) => Promise<boolean>
    pageText: () => Promise<string>
    pageHtml: () => Promise<string>
@@ -119,6 +160,23 @@ export interface DetectionSession extends LoginSession {
    identity: () => Promise<BrowserIdentity>
    // What the page, an iframe and a worker each report about the browser. A fake browser may leave it out.
    probe?: () => Promise<ProbeReading>
+   // The links and controls of the page as they show on screen, and, with `block`, what each element of that selector holds.
+   // A fake browser may leave it out, as it may the ones that follow.
+   inspect?: (options?: { block?: string }) => Promise<PageInspection>
+   // Clicks a link to `href` as a person does: the pointer glides to a spot of it where nothing covers it and nothing that
+   // matches `avoid` is under the pointer, rests a moment, then clicks. Resolves to where the browser is afterwards, or
+   // undefined when there was no such spot or the page did not change.
+   clickLink?: (href: string, avoid: string) => Promise<string | undefined>
+   // Clicks the link that was listed at this place, where nothing covers it and nothing that matches `avoid` is under the pointer,
+   // for a link the page answers without changing the address (an image that opens a window). Says whether it did.
+   clickInside?: (box: InspectedElement['box'], avoid: string) => Promise<boolean>
+   // Clicks the first element of `selector` that is in view and not covered, and says whether it did.
+   clickSelector?: (selector: string) => Promise<boolean>
+   // One step back in the browser's history, and where it ended.
+   back?: () => Promise<string>
+   // Rests the pointer at a point of the window, or moves it a little, as a hand does while reading.
+   hover?: (x: number, y: number) => Promise<void>
+   drift?: () => Promise<void>
    // Present when a person can take over the page.
    control?: SessionControl
    storageState: () => Promise<StorageState>

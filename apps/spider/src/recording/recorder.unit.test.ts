@@ -213,22 +213,25 @@ describe('Recorder', () => {
       expect(entries[59].bodyDropped).toBe(true)
    })
 
-   it('should keep at most 500 requests and 500 log lines', async () => {
+   it('should keep at most 500 requests and 2000 log lines', async () => {
       const { recorder, store } = start()
       const run = await recorder
 
-      for (let index = 0; index < 520; index += 1) {
-         run.network({
-            ...request,
-            body: undefined,
-         })
+      for (let index = 0; index < 2020; index += 1) {
+         if (index < 520) {
+            run.network({
+               ...request,
+               body: undefined,
+            })
+         }
+
          run.log('browser', 'info', `line ${index}`)
       }
 
       const prefix = (await run.finish({ failed: false })) as string
 
       expect(JSON.parse(String(store.objects.get(`${prefix}/network.json`)))).toHaveLength(500)
-      expect(JSON.parse(String(store.objects.get(`${prefix}/logs.json`)))).toHaveLength(500)
+      expect(JSON.parse(String(store.objects.get(`${prefix}/logs.json`)))).toHaveLength(2000)
    })
 
    it('should upload screenshots and the page html of a failure, and the video when there is one', async () => {

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
-import { type TaskOutcome, defineTask } from '../defineTask'
-import { browseLinkedin } from './browse'
+import { type TaskOutcome, VisitError, defineTask } from '../defineTask'
+import { type BrowseOutcome, browseLinkedin } from './browse'
 
 export const TASK_NAME = 'linkedin-browse'
 
@@ -9,7 +9,7 @@ type Options = {
    baseUrl: string
 }
 
-const ANSWERS: Record<'DONE' | 'SIGNED_OUT', TaskOutcome> = {
+const ANSWERS: Record<BrowseOutcome | 'ERROR', TaskOutcome> = {
    DONE: {
       status: 'SUCCEEDED',
       verdict: 'DONE',
@@ -21,6 +21,16 @@ const ANSWERS: Record<'DONE' | 'SIGNED_OUT', TaskOutcome> = {
       verdict: 'SIGNED_OUT',
       message: 'LinkedIn asked for a sign-in, so the sign-in check runs next.',
    },
+   NO_CYCLE: {
+      status: 'FAILED',
+      verdict: 'ERROR',
+      message: 'The visit could not open a post or a profile from the feed.',
+   },
+   ERROR: {
+      status: 'FAILED',
+      verdict: 'ERROR',
+      message: 'The visit stopped early.',
+   },
 }
 
 // The daily look around an account that signed in fine, at its own random time (.plan/account-daily-check.md). It starts
@@ -30,8 +40,14 @@ export const createLinkedinBrowse = ({ baseUrl }: Options) =>
       name: TASK_NAME,
       version: 1,
       title: 'LinkedIn daily visit',
-      description: 'Reads the feed, the own profile and one or two posts with their authors, from the saved session.',
-      input: z.strictObject({}),
+      description:
+         'Reads the feed for a few minutes, then goes into five to eight posts and profiles and back, from the saved session.',
+      input: z.strictObject({
+         snapshots: z
+            .boolean()
+            .default(false)
+            .describe('Keep the feed, a post and a profile with the run, to study how the pages are built.'),
+      }),
       needs: {
          proxy: 'required',
          account: true,
@@ -46,17 +62,31 @@ export const createLinkedinBrowse = ({ baseUrl }: Options) =>
             label: 'Signed out',
             tone: 'failure',
          },
+         ERROR: {
+            label: 'The visit did not finish',
+            tone: 'failure',
+         },
       },
       policy: {
          cooldownMs: 60 * 60 * 1000,
          oneAtATime: 'account',
       },
-      limits: { timeoutMs: 6 * 60 * 1000 },
+      // The walk begins no new target after 9.5 minutes (see walk.ts); the rest is room for the one in progress.
+      limits: { timeoutMs: 12 * 60 * 1000 },
       recording: {
          videoSize: {
             width: 640,
             height: 360,
          },
       },
-      run: async context => ANSWERS[await browseLinkedin(context, baseUrl)],
+      run: async (context, { snapshots }) => {
+         // A failure of the walk is an answer, not a crash: a crash is run again, and a visit of ten minutes must not be.
+         try {
+            return ANSWERS[await browseLinkedin(context, baseUrl, Math.random, snapshots)]
+         } catch (error) {
+            context.warn(error instanceof VisitError ? error.message : 'The visit stopped early')
+
+            return ANSWERS.ERROR
+         }
+      },
    })

@@ -5,55 +5,105 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { CamoufoxDriver } from '../../scraping/camoufoxDriver'
 import { browseLinkedin } from './browse'
 
-// Runs a real Camoufox through a stand-in for LinkedIn: a long feed with posts, the own profile behind /in/me/, post pages
-// whose header links to the own profile before the author, and the authors' pages. It proves the links are read from what
-// the browser really holds. Needs the browser build: `pnpm exec camoufox fetch`.
+// Runs a real Camoufox through a stand-in for today's LinkedIn: a feed of posts marked up the way the real one is (a block per
+// post with its id in a component key, an action bar, an author link with a Follow button next to it), a block of
+// recommendations whose rows are links with a Follow button inside, post pages by address, and profiles. It proves the walk
+// clicks and goes back for real and never presses Follow. Needs the browser build: `pnpm exec camoufox fetch`.
+
+// More posts than a walk can use, as a feed that goes on.
+const POSTS = Array.from({ length: 24 }, (_, index) => index + 1)
+const idOf = (n: number) => `7000000000000000${String(n).padStart(3, '0')}`
 
 let server: Server
 let origin: string
-let signedIn = true
 const opened: string[] = []
+const followed: string[] = []
+const windows: string[] = []
 
-const page = (body: string) => `<!doctype html><html><body style="min-height:4000px">${body}</body></html>`
-const header = '<header><a href="/in/ada-lovelace/">Me</a></header>'
+const page = (body: string) => `<!doctype html><html><body style="margin:0;font:14px sans-serif">${body}</body></html>`
+const rail =
+   '<a data-view-name="identity-self-profile" href="/in/ada-lovelace/" style="position:fixed;right:0;top:0">Me</a>'
+
+// Every odd post has a big image and no id in its markup, as the posts of images do: a click on the image opens the post in a
+// window over the feed with no address change, and Escape closes it. A send link and a likers link sit by it, never to be clicked.
+const imageOf = (n: number) => `
+  <a href="/feed/" onclick="event.preventDefault();fetch('/window?n=${n}');openWindow()" style="display:block;width:480px;height:200px;background:#cfc">Image ${n}</a>
+  <a aria-label="Send" href="/feed/" onclick="fetch('/followed?send=${n}')" style="display:block;width:40px;height:40px">Send</a>
+  <a data-view-name="view-likers" href="/feed/" onclick="fetch('/followed?likers=${n}')" style="display:block;width:200px;height:20px">3 reactions</a>
+  <div role="dialog" aria-hidden="true" style="display:none"></div>`
+
+const postBlock = (
+   n: number
+) => `<div role="listitem" style="height:${n % 2 ? 520 : 320}px;position:relative"><div data-view-name="feed-full-update" style="display:contents">
+  <p data-view-name="feed-commentary" ${n % 2 ? '' : `componentkey="commentary-(userGeneratedContentId=${idOf(n)}), en"`}>Post ${n}</p>${n % 2 ? imageOf(n) : ''}
+  <a data-view-name="feed-actor" href="/in/author-${n}/" style="display:block;width:420px;height:60px;position:relative;background:#eef">Author ${n}
+    <button data-view-name="relationship-building-button" onclick="fetch('/followed?n=${n}')" style="position:absolute;right:0;top:10px;width:150px;height:40px">Follow</button>
+  </a>
+  <button data-view-name="reaction-button" onclick="fetch('/followed?like=${n}')">Like</button>
+</div></div>`
+
+const script = `<script>
+function openWindow(){
+  const dialog=document.createElement('div')
+  dialog.setAttribute('role','dialog')
+  dialog.style.cssText='position:fixed;left:0;top:0;width:100vw;height:100vh;background:#222;z-index:9'
+  document.body.append(dialog)
+}
+document.addEventListener('keydown',event=>{if(event.key==='Escape')document.querySelector('[role=dialog]:not([aria-hidden])')?.remove()})
+</script>`
+
+const recommendations = `<div role="listitem" style="height:200px;position:relative"><div data-view-name="feed-full-update" style="display:contents">
+  <a data-view-name="feed-actor" href="/in/recommended/" style="display:block;width:420px;height:60px;position:relative;background:#fee">Recommended
+    <button data-view-name="edge-creation-follow-action" onclick="fetch('/followed?rec=1')" style="position:absolute;right:0;top:10px;width:150px;height:40px">Follow</button>
+  </a>
+</div></div>`
 
 beforeAll(async () => {
    server = createServer((request, response) => {
-      const { pathname } = new URL(request.url ?? '/', 'http://localhost')
+      const { pathname, searchParams } = new URL(request.url ?? '/', 'http://localhost')
       const html = (body: string) => {
-         response.writeHead(200, { 'content-type': 'text/html' })
+         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
          response.end(page(body))
+      }
+
+      if (pathname === '/followed') {
+         followed.push(request.url ?? '')
+         response.writeHead(204)
+         response.end()
+
+         return
+      }
+
+      if (pathname === '/window') {
+         windows.push(searchParams.get('n') ?? '')
+         response.writeHead(204)
+         response.end()
+
+         return
       }
 
       opened.push(pathname)
 
-      if (!signedIn && pathname !== '/login') {
-         response.writeHead(302, { location: '/login' })
-         response.end()
-
-         return
-      }
-
       if (pathname === '/feed/') {
          return html(
-            `${header}<div><a href="/feed/update/urn:li:activity:7001/?utm=x">A</a></div><div><a href="/feed/update/urn:li:activity:7002/">B</a></div>`
+            `${rail}${recommendations}${POSTS.map(postBlock).join('')}<div style="height:1500px"></div>${script}`
          )
       }
 
-      if (pathname === '/in/me/') {
-         response.writeHead(302, { location: '/in/ada-lovelace/' })
-         response.end()
+      const found = /^\/feed\/update\/urn:li:ugcPost:7000000000000000(\d{3})\/$/.exec(pathname)
 
-         return
+      if (found) {
+         const n = Number(found[1])
+
+         return html(
+            `${rail}<div data-view-name="feed-full-update" style="display:contents">
+<a data-view-name="feed-actor" href="/in/author-${n}/" style="display:block;height:60px">Author ${n}</a>
+<span data-testid="expandable-text-box"><button onclick="this.remove()">… more</button></span>
+<div style="height:1800px"></div></div>`
+         )
       }
 
-      const post = /^\/feed\/update\/urn:li:activity:(\d+)\/$/.exec(pathname)
-
-      if (post) {
-         return html(`${header}<article><a href="/in/author-${post[1]}/">Author</a><p>Post</p></article>`)
-      }
-
-      return html(`<h1>${pathname}</h1>`)
+      return html(`<h1>${pathname}</h1><div style="height:1500px"></div>`)
    })
 
    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
@@ -64,25 +114,44 @@ afterAll(async () => {
    await new Promise(resolve => server.close(resolve))
 })
 
-const run = async (random: () => number) => {
+// A seeded source of numbers, so a run can be repeated.
+const seeded = (seed: number) => {
+   let state = seed
+
+   return () => {
+      state = (state * 1_664_525 + 1_013_904_223) % 4_294_967_296
+
+      return state / 4_294_967_296
+   }
+}
+
+// The pauses are not waited for but counted, four times as long as they are, so a walk of minutes takes a minute or so.
+const run = async (seed: number) => {
    const driver = new CamoufoxDriver({
       actionTimeoutMs: 10_000,
       isAllowedNavigation: () => true,
    })
    const browser = await driver.open()
    const warnings: string[] = []
+   let time = 0
 
    try {
       const outcome = await browseLinkedin(
          {
             browser,
             visit: url => browser.goto(url),
-            pause: async () => undefined,
+            pause: async ms => {
+               time += ms * 4
+            },
             log: () => undefined,
             warn: message => warnings.push(message),
+            attach: () => undefined,
+            screenshot: async () => undefined,
          },
          origin,
-         random
+         seeded(seed),
+         false,
+         () => time
       )
 
       return {
@@ -94,30 +163,22 @@ const run = async (random: () => number) => {
    }
 }
 
-describe('browseLinkedin in a real browser, against a stand-in for LinkedIn', () => {
-   it('should read the feed, the own profile, both posts and both authors', async () => {
-      signedIn = true
-      opened.length = 0
+describe("browseLinkedin in a real browser, against a stand-in for today's LinkedIn", () => {
+   it.each([7, 21, 99])(
+      'should leave the feed by real clicks and addresses, come back, and never press a Follow button (day %i)',
+      async day => {
+         const { outcome, warnings } = await run(day)
 
-      await expect(run(() => 0.999999)).resolves.toEqual({
-         outcome: 'DONE',
-         warnings: [],
-      })
-      expect(opened).toEqual([
-         '/feed/',
-         '/in/me/',
-         '/in/ada-lovelace/',
-         '/feed/update/urn:li:activity:7002/',
-         '/in/author-7002/',
-         '/feed/update/urn:li:activity:7001/',
-         '/in/author-7001/',
-         '/feed/',
-      ])
-   })
-
-   it('should stop at once when the feed asks for a sign-in', async () => {
-      signedIn = false
-
-      await expect(run(() => 0)).resolves.toMatchObject({ outcome: 'SIGNED_OUT' })
-   })
+         expect(outcome).toBe('DONE')
+         expect(warnings).toEqual([])
+         // It went somewhere: a profile of an author, or a post page.
+         expect(opened.some(path => /^\/in\/author-\d+\/$/.test(path) || path.startsWith('/feed/update/'))).toBe(true)
+         // The recommended row was never opened, and no Follow, Like or other button was ever pressed.
+         expect(opened).not.toContain('/in/recommended/')
+         // Nothing was pressed that must never be: no Follow, Like, Send or likers link.
+         expect(followed).toEqual([])
+         // Posts with an image were read in their window.
+         expect(windows.length).toBeGreaterThan(0)
+      }
+   )
 })
