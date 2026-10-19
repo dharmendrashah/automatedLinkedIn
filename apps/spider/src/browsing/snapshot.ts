@@ -1,4 +1,4 @@
-import { type TaskContext } from '../defineTask'
+import { type DetectionSession } from '../scraping/driver'
 
 // The run keeps at most 1 MB per file, and a feed is several MB of scripts, styles and icons the markup does not need.
 const MAX_CHARS = 900_000
@@ -12,13 +12,17 @@ export const compactHtml = (html: string) =>
       .replace(/\s{2,}/g, ' ')
       .slice(0, MAX_CHARS)
 
+// What it keeps a page with: the browser, and where a run puts files and pictures.
+export type Keeper = {
+   browser: Pick<DetectionSession, 'pageHtml' | 'inspect' | 'screenshot'>
+   attach: (name: string, content: string, contentType: string) => void
+   screenshot: (name: string, png: Buffer) => Promise<void>
+   warn: (message: string) => void
+}
+
 // Keeps what the page is made of (its markup, every link and control with its place, a picture) with the run, to study how
 // the real pages are built. It holds other members' public text, so it is only done when the owner asks for it.
-export const snapshotPage = async (
-   { browser, attach, screenshot, warn }: Pick<TaskContext, 'browser' | 'attach' | 'screenshot' | 'warn'>,
-   name: string,
-   block?: string
-) => {
+export const snapshotPage = async ({ browser, attach, screenshot, warn }: Keeper, name: string, block?: string) => {
    try {
       attach(`${name}.html`, compactHtml(await browser.pageHtml()), 'text/html')
 
@@ -35,5 +39,17 @@ export const snapshotPage = async (
       }
    } catch {
       warn('The page could not be kept for study')
+   }
+}
+
+// Keeps each name once, and only when the owner asked for it.
+export const createKeep = (keeper: Keeper, enabled: boolean, block?: string) => {
+   const kept = new Set<string>()
+
+   return async (name: string) => {
+      if (enabled && !kept.has(name)) {
+         kept.add(name)
+         await snapshotPage(keeper, name, block)
+      }
    }
 }

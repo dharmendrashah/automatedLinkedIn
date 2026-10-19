@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { compactHtml, snapshotPage } from './snapshot'
+import { compactHtml, createKeep, snapshotPage } from './snapshot'
 
 describe('compactHtml', () => {
    it('should drop scripts, styles and icons, which hide the markup and fill the file', () => {
@@ -80,5 +80,28 @@ describe('snapshotPage', () => {
 
       await expect(snap('feed')).resolves.toBeUndefined()
       expect(context.warn).toHaveBeenCalledWith('The page could not be kept for study')
+   })
+})
+
+describe('createKeep', () => {
+   const keeper = () => ({
+      browser: { pageHtml: vi.fn(async () => '<html></html>') },
+      attach: vi.fn(),
+      screenshot: vi.fn(async () => undefined),
+      warn: vi.fn(),
+   })
+
+   it('should keep each name once, and nothing when it was not asked to', async () => {
+      const asked = keeper()
+      const keep = createKeep(asked as never, true)
+      const notAsked = keeper()
+      const keepNothing = createKeep(notAsked as never, false)
+
+      await keep('feed')
+      await keep('feed')
+      await keepNothing('feed')
+
+      expect(asked.attach).toHaveBeenCalledTimes(1)
+      expect(notAsked.attach).not.toHaveBeenCalled()
    })
 })

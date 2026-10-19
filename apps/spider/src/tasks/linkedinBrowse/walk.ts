@@ -1,4 +1,5 @@
-import { between } from '../linkedinLogin/browseAfterLogin'
+import { between } from '../../browsing/random'
+import { type Pace } from '../../browsing/reader'
 
 export type Route = 'post' | 'profile' | 'post-profile'
 
@@ -38,20 +39,23 @@ export const planWalk = (random: () => number): Walk => ({
    targets: Array.from({ length: between(TARGETS[0], TARGETS[1], random) }, () => pickRoute(random)),
 })
 
-// How long a person stays where they are, in milliseconds, and how much they pause between two small moves.
-export const TIMING = {
-   // On a post's own page, on a profile, and on the feed between two targets.
-   post: [15_000, 40_000],
-   profile: [12_000, 30_000],
-   between: [10_000, 35_000],
-   // Looking at a post in the feed before opening it.
-   notice: [600, 1800],
+// How a person moves on a page (see `browsing/reader`), and how long they stay where they are, in milliseconds.
+export const PACE: Pace = {
    // One small move: how far a scroll goes down and up, and how long a pause lasts after it.
    down: [250, 700],
    up: [120, 380],
    read: [1200, 5500],
    glance: [2000, 6000],
    linger: [4000, 9000],
+}
+
+export const STAYS = {
+   // On a post's own page, on a profile, and on the feed between two targets.
+   post: [15_000, 40_000],
+   profile: [12_000, 30_000],
+   between: [10_000, 35_000],
+   // Looking at a post in the feed before opening it.
+   notice: [600, 1800],
 } as const
 
 // No new target is begun after this much of the run; the time limit of the task is longer, so a slow target can finish.

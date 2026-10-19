@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { type InspectedBlock, type InspectedElement, type PageInspection } from '../../scraping/driver'
-import { DIALOG, NEVER_CLICK, POST_BLOCK, authorOf, authorOnPage, imageOf, postAddress, readFeed } from './feedReader'
+import { type InspectedBlock, type InspectedElement, type PageInspection } from '../scraping/driver'
+import { authorOf, authorOnPage, imageOf, postAddress, readFeed } from './feedReader'
+import { DIALOG, NEVER_CLICK, POST_BLOCK } from './markup'
 
 const BASE = 'https://www.linkedin.com'
 

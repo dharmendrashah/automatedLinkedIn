@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { DIALOG, DISMISS, NEVER_CLICK } from '../../linkedin/markup'
 import { type InspectedBlock, type InspectedElement, type PageInspection } from '../../scraping/driver'
 import { VisitError } from '../defineTask'
 import { browseLinkedin } from './browse'
-import { DIALOG, DISMISS, NEVER_CLICK } from './feedReader'
 
 const BASE = 'https://www.linkedin.com'
 const FEED = `${BASE}/feed/`
