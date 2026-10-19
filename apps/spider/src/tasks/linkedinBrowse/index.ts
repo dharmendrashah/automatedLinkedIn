@@ -48,7 +48,7 @@ export const createLinkedinBrowse = ({ baseUrl }: Options) =>
          },
       },
       policy: {
-         cooldownMs: 0,
+         cooldownMs: 60 * 60 * 1000,
          oneAtATime: 'account',
       },
       limits: { timeoutMs: 6 * 60 * 1000 },

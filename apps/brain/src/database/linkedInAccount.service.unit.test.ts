@@ -9,6 +9,7 @@ import {
 const mocks = vi.hoisted(() => ({
    create: vi.fn(),
    findMany: vi.fn(),
+   findSessions: vi.fn(),
    findFirst: vi.fn(),
    update: vi.fn(),
    deleteMany: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('./prisma.service', () => ({
             update: mocks.update,
             deleteMany: mocks.deleteMany,
          },
+         spiderSession: { findMany: mocks.findSessions },
       },
    },
 }))
@@ -169,6 +171,10 @@ describe('LinkedInAccountService', () => {
    })
 
    describe('listForUser', () => {
+      beforeEach(() => {
+         mocks.findSessions.mockResolvedValue([])
+      })
+
       it('should scope to the user and never select secret columns', () => {
          mocks.findMany.mockResolvedValueOnce([])
 
@@ -193,7 +199,48 @@ describe('LinkedInAccountService', () => {
             statusMessage: true,
             statusUpdatedAt: true,
             lastVerifiedAt: true,
+            nextBrowseAt: true,
          })
+      })
+
+      it('should give each account its newest visit, or none', async () => {
+         const visit = {
+            id: 's2',
+            linkedInAccountId: 'a1',
+            status: 'SUCCEEDED',
+            verdict: 'DONE',
+            message: 'Looked around LinkedIn as the account.',
+            trigger: 'manual',
+            startedAt: new Date('2026-10-19T09:00:00Z'),
+            finishedAt: new Date('2026-10-19T09:04:00Z'),
+         }
+
+         mocks.findMany.mockResolvedValueOnce([{ id: 'a1' }, { id: 'a2' }])
+         mocks.findSessions.mockResolvedValueOnce([visit])
+
+         const accounts = await LinkedInAccountService.listForUser('u1')
+
+         expect(mocks.findSessions).toHaveBeenCalledWith(
+            expect.objectContaining({
+               where: {
+                  userId: 'u1',
+                  task: 'linkedin-browse',
+                  linkedInAccountId: { in: ['a1', 'a2'] },
+               },
+               distinct: ['linkedInAccountId'],
+               orderBy: { startedAt: 'desc' },
+            })
+         )
+         expect(accounts[0].lastVisit).toEqual({
+            id: 's2',
+            status: 'SUCCEEDED',
+            verdict: 'DONE',
+            message: 'Looked around LinkedIn as the account.',
+            trigger: 'manual',
+            startedAt: visit.startedAt,
+            finishedAt: visit.finishedAt,
+         })
+         expect(accounts[1].lastVisit).toBeNull()
       })
    })
 
