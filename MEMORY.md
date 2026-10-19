@@ -56,6 +56,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 ## Gotchas
 
 - The file-read tool can return stale content right after an edit; confirm with `sed -n` or grep in a terminal before editing again.
+- Brain unit tests pass locally and fail in CI when they import the real `core` barrel (`from 'core'`): its modules read `env` at import, and CI has no `.env.test` (it is git-ignored, only `.env.test-example` is tracked), so envalid exits on the missing `DATABASE_URL`. Mock `core` or `env` in the test, as the other service tests do, and check a new brain unit test with `.env.test` moved away and `env -u DATABASE_URL`.
 - `prisma migrate dev` stops at a hidden y/N prompt when a unique key changes; piping its output hides the prompt and it hangs. Use `--create-only`, read the SQL, then `migrate deploy`.
 - Brain's Express types do not line up with `body-parser`/Node types (two `@types/node` versions and a stub `express-serve-static-core` package): `express.json()` does not type-check as a route handler and `Request` is not seen as an `IncomingMessage`. `workflowApi.ts` reads the body from the stream after `request instanceof Readable`.
 - Company employees cost $0.004 a person plus $0.10 per page of 25 (5 people cost $0.12 live); the estimate already prices it that way.
@@ -183,6 +184,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - Security: the local git remote URL embeds a personal access token. It should be rotated and the remote reset to a clean URL.
 
 ## Changelog
+
+- 2026-10-19: CI failed on `main` after PR #68: `accountDailyJob.unit.test.ts` imported the real `core` barrel, which needs `DATABASE_URL`, absent in CI. The test now mocks `core` with only `dailyTime` and `timezoneOfCountry`; all brain unit tests pass with no `.env.test` (see the Gotchas entry).
 
 - 2026-10-19: Two spider changes. (1) The browser enforces the allowlist itself (`.plan/browser-allowlist-policy.md`): `WebsiteFilter` in Camoufox's `policies.json` (block all, except `SPIDER_ALLOWED_HOSTS` and `SPIDER_EMBED_HOSTS`), driver `blocking: 'browser'`, so no `context.route` and the HTTP cache of the profile works. Firefox ignores `browser.policies.alternatePath` here, so the file is per install and shared: the local tool clears the filter at start. The worker falls back to `route` (with a warning) when the filter cannot be written; `SPIDER_BLOCK_IN_BROWSER=false` forces it. Verified in the Linux worker image (policies file next to `camoufox-bin`, writable by `node`; filter and cache work). Frames of other hosts are blocked unless listed (before, they were allowed). (2) Graceful shutdown (`.plan/spider-graceful-shutdown.md`): SIGTERM finishes the run (profile kept), aborts it after `SPIDER_SHUTDOWN_GRACE_MS` (540 s) and hands it back to the queue without a retry (`ShutdownError`); `terminationGracePeriodSeconds: 600`.
 
