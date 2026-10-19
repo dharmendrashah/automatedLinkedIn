@@ -185,6 +185,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-19: A task's cooldown (`policy.cooldown_ms`, checked in `TaskService.checkPolicy`) now holds the next run back only after a SUCCEEDED run; after a failed (or never answered) run the owner can run again at once. It applies to every task (browser test 5 min, daily visit 1 h); the sign-in check's own 5 minute wait lives in its hook and is unchanged.
+
 - 2026-10-19: Staging daily visit failed every time ("The browser failed", 4 attempts, log: "The site does not allow it in robots.txt."). The runner's `context.visit` read robots.txt for every host, ignoring `SPIDER_ROBOTS_EXEMPT_HOSTS` (only the old scrape engine honoured it), and LinkedIn's robots.txt disallows unlisted agents. The sign-in check never hit it because it navigates through the driver directly. `visit` now skips robots for an exempt host (rate limit kept). Still open: a `VisitError` that escapes a task (feed, own profile, final feed) crashes the run and is retried 3 times instead of ending as a readable verdict.
 
 - 2026-10-19: CI failed on `main` after PR #71: `linkedInBrowse.hooks.ts` imported the `core` barrel, and `taskHooks` is loaded (unmocked) by `task.service` and `taskHooks` unit tests, so envalid exited without `DATABASE_URL`. Hooks now import `core/dailyTime` (no imports of its own). Gotcha: a file reachable from `taskHooks.ts` must never import the `core` barrel; use `core/<file>`.

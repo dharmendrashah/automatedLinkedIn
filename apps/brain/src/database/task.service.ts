@@ -261,7 +261,8 @@ export class TaskService {
          throw new TaskRefusedError(`A ${definition.title.toLowerCase()} is already running.`)
       }
 
-      if (age < policy.cooldown_ms) {
+      // Only a run that went through holds the next one back; after a failure the owner may try again at once.
+      if (last.status === 'SUCCEEDED' && age < policy.cooldown_ms) {
          const minutes = Math.ceil((policy.cooldown_ms - age) / MINUTE_MS)
 
          throw new TaskRefusedError(`Wait ${minutes} minute(s) before running this again.`)

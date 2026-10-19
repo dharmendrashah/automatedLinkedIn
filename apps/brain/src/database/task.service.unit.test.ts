@@ -418,9 +418,9 @@ describe('TaskService', () => {
          await expect(ask()).resolves.toEqual({ id: expect.any(String) })
       })
 
-      it('should keep the cooldown of the task between two runs, and say how long is left', async () => {
+      it('should keep the cooldown of the task after a good run, and say how long is left', async () => {
          mocks.findSession.mockResolvedValue({
-            status: 'FAILED',
+            status: 'SUCCEEDED',
             startedAt: ago(2 * MINUTE_MS),
          })
 
@@ -429,6 +429,15 @@ describe('TaskService', () => {
          mocks.findSession.mockResolvedValue({
             status: 'SUCCEEDED',
             startedAt: ago(6 * MINUTE_MS),
+         })
+
+         await expect(ask()).resolves.toEqual({ id: expect.any(String) })
+      })
+
+      it('should run again at once after a run that failed', async () => {
+         mocks.findSession.mockResolvedValue({
+            status: 'FAILED',
+            startedAt: ago(MINUTE_MS),
          })
 
          await expect(ask()).resolves.toEqual({ id: expect.any(String) })
