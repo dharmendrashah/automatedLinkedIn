@@ -9,7 +9,7 @@ import { TaskRefusedError } from './taskErrors'
 
 const mocks = vi.hoisted(() => ({ dailyTime: vi.fn() }))
 
-vi.mock('core', () => ({
+vi.mock('core/dailyTime', () => ({
    dailyTime: mocks.dailyTime,
    timezoneOfCountry: (code: string | null) => (code === 'IN' ? 'Asia/Kolkata' : 'UTC'),
 }))
@@ -35,6 +35,7 @@ const request = (trigger: 'manual' | 'automatic') => ({
    trigger,
 })
 const TOMORROW = new Date('2026-10-20T08:00:00Z')
+const NOW = new Date('2026-10-19T10:00:00Z')
 const session = {
    id: 's1',
    userId: 'u1',
@@ -45,7 +46,7 @@ const result = (verdict: string) => ({ verdict }) as TaskResult
 
 describe('linkedin-browse hooks', () => {
    beforeEach(() => {
-      vi.useFakeTimers({ now: new Date('2026-10-19T10:00:00Z') })
+      vi.useFakeTimers({ now: NOW })
       updateMany.mockReset().mockResolvedValue({ count: 1 })
       findUnique.mockReset().mockResolvedValue({ status: 'ACTIVE' })
       findProxy.mockReset().mockResolvedValue({ detectedCountryCode: 'IN' })
@@ -64,9 +65,7 @@ describe('linkedin-browse hooks', () => {
       it('should count a visit asked for by hand as the visit of the day, drawn in the day of the proxy country', async () => {
          await linkedInBrowseHooks.onRequest?.(request('manual'), tx)
 
-         expect(mocks.dailyTime).toHaveBeenCalledWith(new Date('2026-10-19T10:00:00Z'), 'Asia/Kolkata', {
-            today: false,
-         })
+         expect(mocks.dailyTime).toHaveBeenCalledWith(NOW, 'Asia/Kolkata', { today: false })
          expect(update).toHaveBeenCalledWith({
             where: { id: 'acc1' },
             data: { nextBrowseAt: TOMORROW },
