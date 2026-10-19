@@ -20,5 +20,8 @@ export class TaskOwnershipError extends Error {
    }
 }
 
+// The task ran a moment ago. The owner may run it again after confirming; an automatic request never can.
+export class TaskRecentError extends TaskRefusedError {}
+
 // An automatic request that does not apply right now. Not a failure, so it is never logged.
 export class TaskSkippedError extends TaskRefusedError {}

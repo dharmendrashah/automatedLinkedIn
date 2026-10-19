@@ -9,11 +9,13 @@ const mocks = vi.hoisted(() => {
    class ProxyServerOwnershipError extends Error {}
    class TaskOwnershipError extends Error {}
    class TaskRefusedError extends Error {}
+   class TaskRecentError extends TaskRefusedError {}
 
    return {
       ProxyServerOwnershipError,
       TaskOwnershipError,
       TaskRefusedError,
+      TaskRecentError,
       catalog: vi.fn(),
       request: vi.fn(),
    }
@@ -23,6 +25,7 @@ vi.mock('database', () => ({
    ProxyServerOwnershipError: mocks.ProxyServerOwnershipError,
    TaskOwnershipError: mocks.TaskOwnershipError,
    TaskRefusedError: mocks.TaskRefusedError,
+   TaskRecentError: mocks.TaskRecentError,
    TaskService: {
       catalog: mocks.catalog,
       request: mocks.request,
@@ -95,8 +98,26 @@ describe('task resolvers', () => {
          proxyId: 'p1',
          accountId: undefined,
          input: { word: 'hello' },
+         confirmed: undefined,
          trigger: 'manual',
       })
+   })
+
+   it('should ask for confirmation when the task ran a moment ago, and pass the confirmation on', async () => {
+      mocks.request.mockRejectedValueOnce(new mocks.TaskRecentError('Wait 5 minute(s) before running this again.'))
+
+      await expect(caller().run({ task: 'linkedin-browse' })).rejects.toMatchObject({
+         code: 'CONFLICT',
+         message: 'Wait 5 minute(s) before running this again.',
+      })
+
+      mocks.request.mockResolvedValueOnce({ id: 's2' })
+      await caller().run({
+         task: 'linkedin-browse',
+         confirmed: true,
+      })
+
+      expect(mocks.request).toHaveBeenLastCalledWith(expect.objectContaining({ confirmed: true }))
    })
 
    it('should answer not found for a proxy or account that is not the users', async () => {

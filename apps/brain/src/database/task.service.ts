@@ -19,6 +19,7 @@ import { TaskDispatchService } from './taskDispatch.service'
 import {
    TaskNeedsProxyError,
    TaskOwnershipError,
+   TaskRecentError,
    TaskRefusedError,
    TaskSkippedError,
    TaskUnavailableError,
@@ -48,6 +49,8 @@ type RequestOptions = {
    everyMs?: number
    // The owner changed the connection since the last run, which makes `everyMs` not apply.
    changed?: boolean
+   // The owner was told it ran a moment ago and wants it anyway.
+   confirmed?: boolean
 }
 
 type Scope = 'proxy' | 'account' | 'none'
@@ -154,6 +157,7 @@ export class TaskService {
          trigger,
          everyMs: options.everyMs,
          changed: options.changed,
+         confirmed: options.confirmed,
       })
 
       const id = randomUUID()
@@ -229,6 +233,7 @@ export class TaskService {
          trigger: TaskTrigger
          everyMs?: number
          changed?: boolean
+         confirmed?: boolean
       }
    ) {
       const { policy } = definition
@@ -261,10 +266,11 @@ export class TaskService {
          throw new TaskRefusedError(`A ${definition.title.toLowerCase()} is already running.`)
       }
 
-      if (age < policy.cooldown_ms) {
+      // Only a run that went through holds the next one back, and the owner may confirm and run anyway.
+      if (last.status === 'SUCCEEDED' && age < policy.cooldown_ms && !scope.confirmed) {
          const minutes = Math.ceil((policy.cooldown_ms - age) / MINUTE_MS)
 
-         throw new TaskRefusedError(`Wait ${minutes} minute(s) before running this again.`)
+         throw new TaskRecentError(`Wait ${minutes} minute(s) before running this again.`)
       }
 
       if (scope.everyMs && !scope.changed && age < scope.everyMs) {
