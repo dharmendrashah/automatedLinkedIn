@@ -1,0 +1,63 @@
+name: Accessibility barrier
+description: Report something in the web app that is hard or impossible to use with a keyboard, a screen reader, zoom or another assistive tool
+title: 'Accessibility: '
+labels: [accessibility]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for telling us. Accessibility reports are expertise, not complaints.
+
+        You do not need to tell us about a disability or share any personal information. Do not include passwords, tokens, or personal data from LinkedIn profiles in text, screenshots, or recordings. See [ACCESSIBILITY.md](https://github.com/dharmendrashah/automatedLinkedIn/blob/main/ACCESSIBILITY.md) for what we aim for and what we already know is not good enough.
+  - type: textarea
+    id: task
+    attributes:
+      label: What were you trying to do, and what went wrong?
+      description: Describe the task and the barrier in your own words.
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Page or screen
+      description: Where in the web app it happened, such as the Accounts page, the workflow canvas, or a run's recording.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the Accounts page
+        2. Press Tab until ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What would have worked for you?
+      description: Optional. What you expected to happen or to hear.
+  - type: dropdown
+    id: input
+    attributes:
+      label: How were you using the app?
+      multiple: true
+      options:
+        - Keyboard only
+        - Screen reader
+        - Screen magnifier or browser zoom
+        - Voice control
+        - Switch or other alternative input
+        - High contrast, dark mode, or reduced motion
+        - Something else
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system, browser and assistive technology
+      description: With versions where you know them.
+      placeholder: macOS 15, Safari 18, VoiceOver
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Screenshot or recording
+      description: Optional. Only if you are comfortable sharing one. Drag a file here.
