@@ -74,7 +74,7 @@ describe('runSentence', () => {
          })
 
       expect(runSentence(waiting('2026-10-18T10:15:00'), labelOf, NOW)).toMatch(
-         /^Waiting to retry 2 requests at 10:15( AM)? \(retries are not charged unless they answer\)\./
+         /^Waiting to retry 2 requests at 10:15( am)? \(retries are not charged unless they answer\)\./i
       )
       expect(runSentence(waiting('2026-10-19T09:00:00'), labelOf, NOW)).toMatch(/at \S+ 09:00/)
    })

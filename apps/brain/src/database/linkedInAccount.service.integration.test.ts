@@ -110,6 +110,43 @@ describe('LinkedInAccountService (database)', () => {
       })
    })
 
+   it('should list the newest visit of each account, and no other task or user', async () => {
+      const owner = await UserService.findByEmail(email)
+      const [account] = await LinkedInAccountService.listForUser(owner!.id)
+
+      expect(account.lastVisit).toBeNull()
+
+      const session = (id: string, task: string, startedAt: string) =>
+         PrismaService.client.spiderSession.create({
+            data: {
+               id,
+               userId: owner!.id,
+               linkedInAccountId: account.id,
+               kind: 'TASK',
+               status: 'SUCCEEDED',
+               verdict: 'DONE',
+               task,
+               trigger: 'manual',
+               requestParams: {},
+               startedAt: new Date(startedAt),
+            },
+         })
+      const older = randomUUID()
+      const newer = randomUUID()
+
+      await session(older, 'linkedin-browse', '2026-10-18T09:00:00Z')
+      await session(newer, 'linkedin-browse', '2026-10-19T09:00:00Z')
+      await session(randomUUID(), 'linkedin-login', '2026-10-19T10:00:00Z')
+
+      const [listed] = await LinkedInAccountService.listForUser(owner!.id)
+
+      expect(listed.lastVisit).toMatchObject({
+         id: newer,
+         verdict: 'DONE',
+         trigger: 'manual',
+      })
+   })
+
    it('should delete an owned account', async () => {
       const owner = await UserService.findByEmail(email)
       const [account] = await LinkedInAccountService.listForUser(owner!.id)

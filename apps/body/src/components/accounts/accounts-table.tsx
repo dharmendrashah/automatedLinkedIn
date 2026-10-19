@@ -17,6 +17,8 @@ import { TestButton } from '../test-button'
 import { loginTestBlocker } from './login-test'
 import { StatusBadge } from './status-badge'
 import { TotpCode } from './totp-cell'
+import { visitBlocker, visitRunning } from './visit'
+import { VisitCell } from './visit-cell'
 
 const formatDate = (value: string | Date | null) => (value ? new Date(value).toLocaleDateString() : '—')
 
@@ -27,6 +29,8 @@ type Props = {
    busyId: string | undefined
    // The id of the account a login test was just asked for.
    testingId: string | undefined
+   // The id of the account a visit was just asked for.
+   visitingId: string | undefined
    // The accounts that have a proxy that works; undefined while the proxies are loading.
    accountsWithProxy: Set<string> | undefined
    // The totp secret of each account whose code is currently shown; absent until the owner asks to see it.
@@ -34,6 +38,7 @@ type Props = {
    revealingTotpId: string | undefined
    onEdit: (account: Account) => void
    onTestLogin: (account: Account) => void
+   onVisit: (account: Account) => void
    onReveal: (account: Account) => void
    onShowTotpCode: (account: Account) => void
    onHideTotpCode: (account: Account) => void
@@ -47,11 +52,13 @@ export const AccountsTable = ({
    error,
    busyId,
    testingId,
+   visitingId,
    accountsWithProxy,
    totpCodes,
    revealingTotpId,
    onEdit,
    onTestLogin,
+   onVisit,
    onReveal,
    onShowTotpCode,
    onHideTotpCode,
@@ -67,6 +74,7 @@ export const AccountsTable = ({
                <TableHead>Credentials</TableHead>
                <TableHead>Two-step code</TableHead>
                <TableHead>Last verified</TableHead>
+               <TableHead>Daily visit</TableHead>
                <TableHead>Added</TableHead>
                <TableHead className="w-44" />
             </TableRow>
@@ -74,21 +82,21 @@ export const AccountsTable = ({
          <TableBody>
             {loading ? (
                <TableRow>
-                  <TableCell colSpan={7}>
+                  <TableCell colSpan={8}>
                      <Skeleton className="h-8 w-full" />
                   </TableCell>
                </TableRow>
             ) : null}
             {error ? (
                <TableRow>
-                  <TableCell colSpan={7} className="text-destructive h-24 text-center text-sm">
+                  <TableCell colSpan={8} className="text-destructive h-24 text-center text-sm">
                      {error}
                   </TableCell>
                </TableRow>
             ) : null}
             {accounts?.length === 0 ? (
                <TableRow>
-                  <TableCell colSpan={7} className="text-muted-foreground h-24 text-center text-sm">
+                  <TableCell colSpan={8} className="text-muted-foreground h-24 text-center text-sm">
                      <KeyRound className="mx-auto mb-2 size-5" />
                      No LinkedIn accounts yet. Use Add account to store one.
                   </TableCell>
@@ -120,6 +128,14 @@ export const AccountsTable = ({
                      )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(account.lastVerifiedAt)}</TableCell>
+                  <TableCell>
+                     <VisitCell
+                        account={account}
+                        blocker={visitBlocker(account.status, accountsWithProxy?.has(account.id))}
+                        busy={visitingId === account.id || visitRunning(account)}
+                        onVisit={() => onVisit(account)}
+                     />
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(account.createdAt)}</TableCell>
                   <TableCell>
                      <div className="flex items-center justify-end gap-1">

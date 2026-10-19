@@ -10,6 +10,9 @@ export type LinkedInSecrets = {
    session?: string
 }
 
+// The spider task that looks around an account once a day.
+export const VISIT_TASK = 'linkedin-browse'
+
 // undefined leaves a field unchanged; null or '' clears it; a string sets it.
 export type LinkedInSecretsPatch = {
    password?: string | null
@@ -47,6 +50,7 @@ const metadataSelect = {
    statusMessage: true,
    statusUpdatedAt: true,
    lastVerifiedAt: true,
+   nextBrowseAt: true,
    createdAt: true,
    updatedAt: true,
 } satisfies Prisma.LinkedInAccountSelect
@@ -129,11 +133,50 @@ export class LinkedInAccountService {
       }
    }
 
-   public static listForUser(userId: string) {
-      return PrismaService.client.linkedInAccount.findMany({
+   public static async listForUser(userId: string) {
+      const accounts = await PrismaService.client.linkedInAccount.findMany({
          where: { userId },
          orderBy: { createdAt: 'asc' },
          select: metadataSelect,
+      })
+      // The newest visit of each account, in one query for all of them.
+      const visits = await PrismaService.client.spiderSession.findMany({
+         where: {
+            userId,
+            task: VISIT_TASK,
+            linkedInAccountId: { in: accounts.map(({ id }) => id) },
+         },
+         distinct: ['linkedInAccountId'],
+         orderBy: { startedAt: 'desc' },
+         select: {
+            id: true,
+            linkedInAccountId: true,
+            status: true,
+            verdict: true,
+            message: true,
+            trigger: true,
+            startedAt: true,
+            finishedAt: true,
+         },
+      })
+
+      return accounts.map(account => {
+         const found = visits.find(({ linkedInAccountId }) => linkedInAccountId === account.id)
+
+         return {
+            ...account,
+            lastVisit: found
+               ? {
+                    id: found.id,
+                    status: found.status,
+                    verdict: found.verdict,
+                    message: found.message,
+                    trigger: found.trigger,
+                    startedAt: found.startedAt,
+                    finishedAt: found.finishedAt,
+                 }
+               : null,
+         }
       })
    }
 

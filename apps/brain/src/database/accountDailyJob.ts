@@ -1,5 +1,6 @@
 import { dailyTime, timezoneOfCountry } from 'core'
 
+import { VISIT_TASK } from './linkedInAccount.service'
 import { LinkedInAccountValidationService } from './linkedInAccountValidation.service'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
@@ -10,7 +11,6 @@ const MAX_PER_RUN = 100
 const DAY_MS = 24 * 60 * 60 * 1000
 // A good sign-in this recent (the owner's own check, say) counts as the day's check.
 const RECENT_SIGN_IN_MS = 12 * 60 * 60 * 1000
-const VISIT_TASK = 'linkedin-browse'
 
 type Due = Awaited<ReturnType<typeof findDue>>[number]
 type Field = 'nextCheckAt' | 'nextBrowseAt'
