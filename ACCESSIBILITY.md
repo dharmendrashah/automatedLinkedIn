@@ -41,7 +41,7 @@ If you change anything a person sees or operates, please check the following bef
 
 If you hit a barrier, please tell us. We treat accessibility reports as expertise, not complaints.
 
-1. **Open an issue** using the **Bug report** template and start the title with "Accessibility:". There is no separate accessibility template.
+1. **Open an issue** using the [Accessibility barrier](https://github.com/dharmendrashah/automatedLinkedIn/issues/new?template=accessibility.yml) template. It asks for the items listed below.
 2. If you cannot use GitHub, email **dharmendrashaheagle@gmail.com** with the subject `ACCESSIBILITY: automatedLinkedIn`.
 3. Include what you can:
    - What you were trying to do and what went wrong.

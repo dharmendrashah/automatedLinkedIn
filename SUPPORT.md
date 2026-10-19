@@ -23,10 +23,11 @@ Thanks for using automatedLinkedIn. This project is maintained on a best-effort 
 | --- | --- |
 | Report a bug | Open an issue with the **Bug report** template. |
 | Request a feature | Open an issue with the **Feature request** template. |
+| Report an accessibility barrier | Open an issue with the **Accessibility barrier** template. See [ACCESSIBILITY.md](ACCESSIBILITY.md). |
 | Ask a usage or setup question | Start a GitHub Discussion in the **Q&A** category. |
 | Report a security problem | Follow [SECURITY.md](SECURITY.md). Do not use public issues. |
 | Report a conduct problem | See [Enforcement](CODE_OF_CONDUCT.md#enforcement) in the Code of Conduct. |
-| Contribute a fix or feature | Read [Contributing](README.md#contributing) and use the pull request template. |
+| Contribute a fix or feature | Read [CONTRIBUTING.md](CONTRIBUTING.md) and use the pull request template. |
 
 ## What to include
 

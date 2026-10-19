@@ -185,6 +185,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-19: Added `CONTRIBUTING.md` (repo root; links to the Code of Conduct, SUPPORT, SECURITY, ACCESSIBILITY, the PR template and `.plan/_template.md` instead of repeating them) and an `accessibility.yml` issue form (label `accessibility`, which must exist in the repo). `ACCESSIBILITY.md`, `SUPPORT.md` and the README now point at them, so accessibility reports no longer go to the Bug report template.
+
 - 2026-10-19: Added `ACCESSIBILITY.md` (from the owner's template, adapted to the `apps/body` web app): WCAG 2.2 AA as a goal only, no audit done, no accessibility scan in CI, reports go to the Bug report template titled "Accessibility:" or by email. Its resolution goals (30/60/90 days) come from the template and are written as best-effort, in line with `SUPPORT.md`. Known limitations listed from how the app is built: the takeover view is a picture stream, the canvas and drag and drop are unchecked, recordings are silent video.
 - 2026-10-19: CI failed on `main` after PR #68: `accountDailyJob.unit.test.ts` imported the real `core` barrel, which needs `DATABASE_URL`, absent in CI. The test now mocks `core` with only `dailyTime` and `timezoneOfCountry`; all brain unit tests pass with no `.env.test` (see the Gotchas entry).
 

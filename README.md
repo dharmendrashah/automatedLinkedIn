@@ -72,7 +72,7 @@ Automating LinkedIn activity can violate LinkedIn's Terms of Service and local p
 
 ## Contributing
 
-Contributions are welcome. Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before participating. Every pull request answers one question first: what issue does it solve for the end user? (See the [pull request template](.github/pull_request_template.md).)
+Contributions are welcome. Please read the [contributing guide](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) before participating. Every pull request answers one question first: what issue does it solve for the end user? (See the [pull request template](.github/pull_request_template.md).)
 
 ### AI-assisted development
 
