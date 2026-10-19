@@ -4,7 +4,13 @@ import { type TaskCatalogEntry } from '@automatedLinkedIn/contracts'
 
 import { ProxyServerOwnershipError } from './proxyServer.service'
 import { TaskService } from './task.service'
-import { TaskNeedsProxyError, TaskOwnershipError, TaskRefusedError, TaskUnavailableError } from './taskErrors'
+import {
+   TaskNeedsProxyError,
+   TaskOwnershipError,
+   TaskRecentError,
+   TaskRefusedError,
+   TaskUnavailableError,
+} from './taskErrors'
 import { TASK_HOOKS } from './taskHooks'
 
 const mocks = vi.hoisted(() => ({
@@ -425,6 +431,7 @@ describe('TaskService', () => {
          })
 
          await expect(ask()).rejects.toThrow('3 minute')
+         await expect(ask()).rejects.toBeInstanceOf(TaskRecentError)
 
          mocks.findSession.mockResolvedValue({
             status: 'SUCCEEDED',
@@ -432,6 +439,22 @@ describe('TaskService', () => {
          })
 
          await expect(ask()).resolves.toEqual({ id: expect.any(String) })
+      })
+
+      it('should run inside the cooldown once the owner confirmed it, but never beside a run in progress', async () => {
+         mocks.findSession.mockResolvedValue({
+            status: 'SUCCEEDED',
+            startedAt: ago(2 * MINUTE_MS),
+         })
+
+         await expect(ask({ confirmed: true })).resolves.toEqual({ id: expect.any(String) })
+
+         mocks.findSession.mockResolvedValue({
+            status: 'IN_PROGRESS',
+            startedAt: ago(MINUTE_MS),
+         })
+
+         await expect(ask({ confirmed: true })).rejects.toThrow('already running')
       })
 
       it('should run again at once after a run that failed', async () => {

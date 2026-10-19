@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
-import { ProxyServerOwnershipError, TaskOwnershipError, TaskRefusedError, TaskService } from 'database'
+import { ProxyServerOwnershipError, TaskOwnershipError, TaskRecentError, TaskRefusedError, TaskService } from 'database'
 
 import { RUNNER_VERDICTS, TASK_NAME_PATTERN } from '@automatedLinkedIn/contracts'
 
@@ -18,6 +18,8 @@ const runInput = z.object({
       .record(z.string(), z.unknown())
       .refine(value => JSON.stringify(value).length <= MAX_INPUT_BYTES, { message: 'The input is too large.' })
       .optional(),
+   // The owner saw that it ran a moment ago and wants it again anyway.
+   confirmed: z.boolean().optional(),
 })
 
 // What is safe to say to the browser. Anything unexpected is logged here and reported without its details.
@@ -25,6 +27,13 @@ const asTrpcError = (error: unknown) => {
    if (error instanceof ProxyServerOwnershipError || error instanceof TaskOwnershipError) {
       return new TRPCError({
          code: 'NOT_FOUND',
+         message: error.message,
+      })
+   }
+
+   if (error instanceof TaskRecentError) {
+      return new TRPCError({
+         code: 'CONFLICT',
          message: error.message,
       })
    }
@@ -61,6 +70,7 @@ export const task = router({
             proxyId: input.proxyId,
             accountId: input.accountId,
             input: input.input,
+            confirmed: input.confirmed,
             trigger: 'manual',
          })
       } catch (error) {

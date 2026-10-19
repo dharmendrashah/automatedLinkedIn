@@ -62,7 +62,13 @@ export { TakeoverNotFoundError, TakeoverService } from './takeover.service'
 export { TASK_HOOKS } from './taskHooks'
 export { TaskDispatchService } from './taskDispatch.service'
 export { TaskService } from './task.service'
-export { TaskNeedsProxyError, TaskOwnershipError, TaskRefusedError, TaskUnavailableError } from './taskErrors'
+export {
+   TaskNeedsProxyError,
+   TaskOwnershipError,
+   TaskRecentError,
+   TaskRefusedError,
+   TaskUnavailableError,
+} from './taskErrors'
 export { PersonService } from './person.service'
 export { PersonSnapshotService, RECENT_DAYS } from './personSnapshot.service'
 export { CompanyPageService } from './companyPage.service'

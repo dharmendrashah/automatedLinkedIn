@@ -1,5 +1,6 @@
 import { AccountsTable } from '@/components/accounts/accounts-table'
 import { AddAccountDialog } from '@/components/accounts/add-account-dialog'
+import { ConfirmRunDialog } from '@/components/accounts/confirm-run-dialog'
 import { DeleteAccountDialog } from '@/components/accounts/delete-account-dialog'
 import { EditAccountDialog } from '@/components/accounts/edit-account-dialog'
 import { LOGIN_TASK } from '@/components/accounts/login-test'
@@ -11,7 +12,9 @@ import { Link } from 'react-router'
 
 import { type Account } from '@/components/accounts/types'
 
-import { trpc } from '../trpc'
+import { type RouterInputs, trpc } from '../trpc'
+
+type RunInput = RouterInputs['task']['run']
 
 // A visit takes a few minutes; look again until the newest one has an answer.
 const VISIT_POLL_MS = 3000
@@ -53,10 +56,20 @@ export const Accounts = () => {
    const setPaused = trpc.linkedInAccount.setPaused.useMutation({ onSuccess: refresh })
    // The worker signs in or visits through the account's most reliable proxy; the server picks it and says why when it cannot.
    // A visit counts as the day's visit, so the list shows a new next time once it is asked for.
+   // The server refuses a run that follows a good one too soon; the owner can confirm and send it again.
+   const [recent, setRecent] = useState<{ run: RunInput; message: string } | null>(null)
    const runTask = trpc.task.run.useMutation({
       onSuccess: () => {
          refresh()
          void utils.session.list.invalidate()
+      },
+      onError: (error, run) => {
+         if (error.data?.code === 'CONFLICT') {
+            setRecent({
+               run,
+               message: error.message,
+            })
+         }
       },
    })
    const remove = trpc.linkedInAccount.delete.useMutation({
@@ -67,10 +80,12 @@ export const Accounts = () => {
    })
 
    const busyId = setPaused.isPending ? setPaused.variables?.id : remove.isPending ? remove.variables?.id : undefined
-   const pendingFor = (task: string) => (runTask.isPending && runTask.variables?.task === task ? runTask.variables.accountId : undefined)
+   const pendingFor = (task: string) =>
+      runTask.isPending && runTask.variables?.task === task ? runTask.variables.accountId : undefined
    const testingId = pendingFor(LOGIN_TASK)
    const visitingId = pendingFor(VISIT_TASK)
-   const actionError = setPaused.error?.message ?? remove.error?.message ?? runTask.error?.message
+   const actionError =
+      setPaused.error?.message ?? remove.error?.message ?? (recent ? undefined : runTask.error?.message)
    const startedSession = runTask.data
 
    return (
@@ -131,6 +146,20 @@ export const Accounts = () => {
             account={toDelete}
             onCancel={() => setToDelete(null)}
             onConfirm={account => remove.mutate({ id: account.id })}
+         />
+         <ConfirmRunDialog
+            message={recent?.message ?? null}
+            onCancel={() => setRecent(null)}
+            onConfirm={() => {
+               if (recent) {
+                  runTask.mutate({
+                     ...recent.run,
+                     confirmed: true,
+                  })
+               }
+
+               setRecent(null)
+            }}
          />
       </div>
    )
