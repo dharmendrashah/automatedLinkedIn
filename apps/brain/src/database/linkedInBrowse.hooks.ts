@@ -1,4 +1,4 @@
-import { dailyTime, timezoneOfCountry } from 'core'
+import { dailyTime, timezoneOfCountry } from 'core/dailyTime'
 
 import { TaskRefusedError } from './taskErrors'
 import { type TaskHooks } from './taskHooks'

@@ -185,6 +185,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-19: CI failed on `main` after PR #71: `linkedInBrowse.hooks.ts` imported the `core` barrel, and `taskHooks` is loaded (unmocked) by `task.service` and `taskHooks` unit tests, so envalid exited without `DATABASE_URL`. Hooks now import `core/dailyTime` (no imports of its own). Gotcha: a file reachable from `taskHooks.ts` must never import the `core` barrel; use `core/<file>`.
+
 - 2026-10-19: Daily visit on `/accounts` (`.plan/account-daily-visit-panel.md`, done). New column "Daily visit" (last result with link to Sessions, next time, "Visit now" button; list polls every 3 s while a visit runs). `linkedInAccount.list` now returns `nextBrowseAt` and `lastVisit` (newest `linkedin-browse` session, one query for all accounts). The task's `onRequest` hook refuses an account that is not ACTIVE, and a visit that is not automatic moves `nextBrowseAt` to the next day (it counts as the day's visit, moved when asked, even if the run later fails). Task cooldown is 1 hour (applies to the daily job too). The sign-in check has no such panel yet (later). Not run: the page in a browser behind sign-in, a real visit on LinkedIn. Also fixed `run-sentence.unit.test.ts`, which assumed an upper-case "AM" from the machine's locale formatting.
 
 - 2026-10-19: Added `CONTRIBUTING.md` (repo root; links to the Code of Conduct, SUPPORT, SECURITY, ACCESSIBILITY, the PR template and `.plan/_template.md` instead of repeating them) and an `accessibility.yml` issue form (label `accessibility`, which must exist in the repo). `ACCESSIBILITY.md`, `SUPPORT.md` and the README now point at them, so accessibility reports no longer go to the Bug report template.
