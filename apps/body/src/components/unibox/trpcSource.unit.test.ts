@@ -300,7 +300,7 @@ describe('createTrpcSource.send', () => {
          ok: false,
          unsure: true,
       })
-      expect(never).toHaveBeenCalledTimes(90)
+      expect(never).toHaveBeenCalledTimes(460)
    })
 
    it('should show the sentence of a refusal of brain, and nothing of any other error', async () => {
@@ -370,7 +370,7 @@ describe('createTrpcSource.send', () => {
             { kind: 'FILE', name: 'large.pdf', file: large },
          ],
          'c1',
-         percent => seen.push(percent)
+         { progress: percent => seen.push(percent) }
       )
 
       // 1 byte then 3: half of the first is 12.5 percent, all of it 25, then 25 + 37.5 and 100.
@@ -413,19 +413,63 @@ describe('createTrpcSource.send', () => {
       expect(mutate).not.toHaveBeenCalled()
    })
 
-   it('should follow a reply with files for much longer than one of words only', async () => {
-      const upload = vi.fn(async () => ({ ok: true as const }))
-      const never = vi.fn().mockResolvedValue({ id: 'r1', state: 'SENDING' })
-      const { client } = fake({ send: { mutate: vi.fn().mockResolvedValue({ id: 'r1' }) }, reply: { query: never } })
+   it('should say when the reply started, and follow a reply brain already has, as the one just sent', async () => {
+      const started = vi.fn()
+      const { client } = fake({
+         send: { mutate: vi.fn().mockResolvedValue({ id: 'r1' }) },
+         reply: { query: replies({ state: 'SENT' }, { state: 'FAILED', failure: 'LinkedIn did not send the reply.' }) },
+      })
+      const source = createTrpcSource(client, { wait })
 
-      await expect(
-         createTrpcSource(client, { wait, upload }).send(
-            {} as never,
-            'Hi',
-            [{ kind: 'FILE', name: 'cv.pdf', file: PDF }],
-            'c1'
-         )
-      ).resolves.toMatchObject({ ok: false, unsure: true })
-      expect(never).toHaveBeenCalledTimes(300)
+      await source.send({} as never, 'Hi', [], 'c1', { started })
+
+      expect(started).toHaveBeenCalledWith('r1')
+      await expect(source.follow?.('r1')).resolves.toEqual({
+         ok: false,
+         reason: 'LinkedIn did not send the reply.',
+      })
+   })
+
+   it('should keep a reply with its text and the names of its files, for brain to say where it is', async () => {
+      const reply = {
+         id: 'r1',
+         text: 'Tomorrow works.',
+         files: [{ kind: 'FILE', name: 'cv.pdf', bytes: 9 }],
+         startedAt: '2026-10-22T09:30:00.000Z',
+         failure: null,
+      }
+      const { client } = fake({
+         conversations: {
+            query: vi
+               .fn()
+               .mockResolvedValue([
+                  conversation({ reply: { ...reply, state: 'SENDING' } }),
+                  conversation({ id: 'c2', reply: { ...reply, state: 'UNKNOWN' } }),
+                  conversation({ id: 'c3', reply: { ...reply, state: 'FAILED', failure: 'Nope.' } }),
+               ]),
+         },
+      })
+      const [sending, unknown, failed] = (await createTrpcSource(client).load()).conversations
+
+      expect(sending?.sending).toEqual({
+         text: 'Tomorrow works.',
+         attachments: [{ kind: 'FILE', name: 'cv.pdf', bytes: 9 }],
+         at: Date.parse('2026-10-22T09:30:00.000Z'),
+         since: Date.parse('2026-10-22T09:30:00.000Z'),
+         replyId: 'r1',
+      })
+      expect(sending).not.toHaveProperty('failed')
+      expect(unknown?.failed).toMatchObject({ unsure: true, replyId: 'r1', text: 'Tomorrow works.' })
+      expect(failed?.failed).toMatchObject({ reason: 'Nope.', replyId: 'r1' })
+      expect(failed?.failed).not.toHaveProperty('unsure')
+   })
+
+   it('should tell brain a reply that did not go was dismissed', async () => {
+      const mutate = vi.fn().mockResolvedValue({ changed: 1 })
+      const { client } = fake({ dismissReply: { mutate } })
+
+      await createTrpcSource(client).dismissReply?.('r1')
+
+      expect(mutate).toHaveBeenCalledWith({ id: 'r1' })
    })
 })

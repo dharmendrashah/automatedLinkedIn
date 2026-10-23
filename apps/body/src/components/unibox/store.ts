@@ -9,7 +9,13 @@ export type Action =
    | { type: 'UNDO_SEND'; id: string }
    // How much of the files of the reply is uploaded, in percent.
    | { type: 'PROGRESS'; id: string; percent: number }
-   | { type: 'SENT'; id: string; now: number }
+   // The reply is on its way: brain has it (its id), from when.
+   | { type: 'STARTED'; id: string; replyId: string; since: number }
+   // LinkedIn took the reply. The message is shown when it is stored; until then the reply stays as it is, marked done.
+   | { type: 'SENT'; id: string }
+   // The wait for the stored message is over. When it did not come (`stored` false) the reply is shown as a message of ours until the
+   // next read brings the real one.
+   | { type: 'FINISHED'; id: string; now: number; stored: boolean }
    | { type: 'FAIL'; id: string; reason: string; unsure?: boolean }
    | { type: 'DISMISS_FAILED'; id: string }
    | { type: 'RECEIVE'; id: string; message: UniboxMessage }
@@ -91,10 +97,40 @@ export const reduce = (state: UniboxConversation[], action: Action): UniboxConve
                  }
                : c
          )
+      case 'STARTED':
+         return change(state, [action.id], c =>
+            c.sending
+               ? {
+                    ...c,
+                    sending: {
+                       ...c.sending,
+                       replyId: action.replyId,
+                       since: action.since,
+                    },
+                 }
+               : c
+         )
       case 'SENT':
+         return change(state, [action.id], c =>
+            c.sending && !c.sending.done
+               ? {
+                    ...c,
+                    unread: false,
+                    sending: {
+                       ...c.sending,
+                       done: true,
+                    },
+                 }
+               : c
+         )
+      case 'FINISHED':
          return change(state, [action.id], c => {
             if (!c.sending) {
                return c
+            }
+
+            if (action.stored) {
+               return without(c, 'sending')
             }
 
             const message: UniboxMessage = {
@@ -109,7 +145,6 @@ export const reduce = (state: UniboxConversation[], action: Action): UniboxConve
 
             return {
                ...without(c, 'sending'),
-               unread: false,
                messages: [...c.messages, message],
             }
          })
@@ -123,6 +158,7 @@ export const reduce = (state: UniboxConversation[], action: Action): UniboxConve
                        text: c.sending.text,
                        attachments: c.sending.attachments,
                        ...(action.unsure && { unsure: true }),
+                       ...(c.sending.replyId && { replyId: c.sending.replyId }),
                     },
                  }
                : c

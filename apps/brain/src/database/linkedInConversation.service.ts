@@ -5,6 +5,7 @@ import { type Prisma } from 'generated/prisma/client'
 import { type MessagesFile, keptPrefix, sentKey } from '@automatedLinkedIn/contracts'
 
 import { summaryOf, timelineOf } from './conversationImport'
+import { type ConversationReply, latestReplies } from './conversationReply'
 import { PrismaService } from './prisma.service'
 
 type Tx = Prisma.TransactionClient
@@ -166,7 +167,7 @@ const conversationSelect = {
 
 type ConversationRow = Prisma.LinkedInConversationGetPayload<{ select: typeof conversationSelect }>
 
-const conversationOut = (row: ConversationRow, messages: MessageRow[]) => ({
+const conversationOut = (row: ConversationRow, messages: MessageRow[], reply?: ConversationReply) => ({
    id: row.id,
    accountId: row.accountId,
    kind: row.kind,
@@ -181,6 +182,8 @@ const conversationOut = (row: ConversationRow, messages: MessageRow[]) => ({
    // Closed by the owner, and nothing came after.
    done: row.doneMessageCount !== null && row.doneMessageCount === row.messageCount,
    messages: messages.map(messageOut),
+   // The reply being sent, or the one that did not go and was not dismissed, so the page shows it after a reload.
+   ...(reply && { reply }),
 })
 
 export type ConversationView = ReturnType<typeof conversationOut>
@@ -215,7 +218,9 @@ export class LinkedInConversationService {
          },
       })
 
-      return rows.map(({ messages, ...row }) => conversationOut(row, messages.toReversed()))
+      const replies = await latestReplies(userId)
+
+      return rows.map(({ messages, ...row }) => conversationOut(row, messages.toReversed(), replies.get(row.id)))
    }
 
    // One conversation with its newest messages (at most 500), oldest first; null for one that is not the owner's.
@@ -240,9 +245,10 @@ export class LinkedInConversationService {
       }
 
       const { messages, ...rest } = row
+      const replies = await latestReplies(userId)
 
       return {
-         ...conversationOut(rest, messages.toReversed()),
+         ...conversationOut(rest, messages.toReversed(), replies.get(row.id)),
          // True when older messages were stored but not sent.
          truncated: row.messageCount > messages.length,
       }

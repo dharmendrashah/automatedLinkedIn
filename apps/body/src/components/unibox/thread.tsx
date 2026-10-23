@@ -17,7 +17,6 @@ import {
    CircleAlert,
    CornerUpLeft,
    Info,
-   Loader2,
    MailOpen,
    PanelRight,
    Users,
@@ -29,7 +28,8 @@ import { cn } from '@/lib/utils'
 import { AvatarPair } from './account-avatar'
 import { AccountChip } from './account-chip'
 import { type Row } from './inbox'
-import { AttachmentView, MessageBubble } from './message-bubble'
+import { MessageBubble } from './message-bubble'
+import { SendingBubble } from './sending-bubble'
 import { useShared } from './shared'
 import { lastReplyAt } from './status'
 import { StatusChip } from './status-chip'
@@ -72,6 +72,8 @@ export const Thread = ({
 }: Props) => {
    const { now } = useShared()
    const { conversation, account, status } = row
+   // A reply loaded from brain after a reload has the names of its files and no files, so it cannot be sent again as it is.
+   const filesLost = conversation.failed?.attachments.some(({ kind, file }) => kind !== 'LINK' && !file) ?? false
    const scroller = useRef<HTMLDivElement>(null)
    const [away, setAway] = useState(false)
    const days = useMemo(() => buildThread(conversation.messages, now), [conversation.messages, now])
@@ -241,50 +243,7 @@ export const Thread = ({
                   </div>
                ))}
                {conversation.sending ? (
-                  <div className="mb-3 flex justify-end" role="status">
-                     <div className="flex max-w-[min(34rem,85%)] flex-col gap-1.5 rounded-2xl rounded-br-md bg-primary/60 px-3.5 py-2 text-sm text-primary-foreground">
-                        <div className="flex items-center gap-2">
-                           <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
-                           <span className="min-w-0 break-words whitespace-pre-wrap">
-                              {conversation.sending.text ||
-                                 (conversation.sending.attachments.length > 0 ? 'Sending files' : 'Attachment')}
-                           </span>
-                           {canUndo ? (
-                              <Button variant="secondary" size="xs" onClick={onUndoSend}>
-                                 <CornerUpLeft /> Undo
-                              </Button>
-                           ) : null}
-                        </div>
-                        {conversation.sending.attachments.length > 0 ? (
-                           <div className="flex flex-wrap gap-1.5">
-                              {conversation.sending.attachments.map((attachment, index) => (
-                                 <AttachmentView
-                                    key={index}
-                                    attachment={attachment}
-                                    own
-                                    messageId=""
-                                    index={index}
-                                 />
-                              ))}
-                           </div>
-                        ) : null}
-                        {conversation.sending.progress !== undefined ? (
-                           <div
-                              role="progressbar"
-                              aria-label="Uploading the files"
-                              aria-valuemin={0}
-                              aria-valuemax={100}
-                              aria-valuenow={conversation.sending.progress}
-                              className="h-1 overflow-hidden rounded-full bg-primary-foreground/30"
-                           >
-                              <div
-                                 className="h-full bg-primary-foreground transition-[width]"
-                                 style={{ width: `${conversation.sending.progress}%` }}
-                              />
-                           </div>
-                        ) : null}
-                     </div>
-                  </div>
+                  <SendingBubble sending={conversation.sending} now={now} canUndo={canUndo} onUndo={onUndoSend} />
                ) : null}
                {conversation.failed ? (
                   <div
@@ -300,8 +259,14 @@ export const Thread = ({
                         <p className="mt-1 truncate text-xs opacity-80">
                            Your reply is kept: {conversation.failed.text || 'an attachment'}
                         </p>
+                        {filesLost ? (
+                           <p className="mt-1 text-xs">
+                              Its files were not kept on this page. Dismiss it to get the words back, then attach the files
+                              again.
+                           </p>
+                        ) : null}
                         <div className="mt-2 flex gap-2">
-                           {conversation.failed.unsure ? (
+                           {filesLost ? null : conversation.failed.unsure ? (
                               <AlertDialog>
                                  <AlertDialogTrigger asChild>
                                     <Button variant="outline" size="xs">

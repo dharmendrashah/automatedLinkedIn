@@ -153,4 +153,11 @@ export const unibox = router({
       .query(async ({ ctx, input }) =>
          present(await LinkedInReplyService.get(ctx.user.id, input.id), 'Reply not found')
       ),
+
+   // The owner dismisses a reply that did not go, so the page stops showing it after a reload.
+   dismissReply: ownerProcedure.input(z.object({ id })).mutation(async ({ ctx, input }) => {
+      present(await LinkedInReplyService.dismiss(ctx.user.id, input.id), 'Reply not found')
+
+      return { dismissed: true }
+   }),
 })

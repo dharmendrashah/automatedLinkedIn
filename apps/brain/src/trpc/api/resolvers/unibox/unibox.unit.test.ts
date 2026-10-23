@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
    request: vi.fn(),
    send: vi.fn(),
    uploadForm: vi.fn(),
+   dismiss: vi.fn(),
    reply: vi.fn(),
    TaskRefusedError: class TaskRefusedError extends Error {},
 }))
@@ -33,6 +34,7 @@ vi.mock('database', () => ({
    LinkedInReplyService: {
       send: mocks.send,
       uploadForm: mocks.uploadForm,
+      dismiss: mocks.dismiss,
       get: mocks.reply,
    },
    REPLY_LIMITS: { maxChars: 4000 },
@@ -269,6 +271,15 @@ describe('unibox router', () => {
       })
       await expect(caller().reply({ id: 'r9' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
       expect(mocks.reply).toHaveBeenCalledWith('u1', 'r1')
+   })
+
+   it('should dismiss a reply that did not go for the owner, and say not found for one that is not theirs or cannot be dismissed', async () => {
+      mocks.dismiss.mockResolvedValueOnce(true)
+      mocks.dismiss.mockResolvedValueOnce(false)
+
+      await expect(caller().dismissReply({ id: 'r1' })).resolves.toEqual({ dismissed: true })
+      await expect(caller().dismissReply({ id: 'r9' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      expect(mocks.dismiss).toHaveBeenCalledWith('u1', 'r1')
    })
 
    it('should give the owner a signed form for one file, and say why when it is refused', async () => {

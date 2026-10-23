@@ -16,7 +16,9 @@ export const withDevFile = (file: UniboxSource, real: UniboxSource, hasFile: () 
       open: id => active.open(id),
       refresh: accountIds => active.refresh(accountIds),
       fileLink: (messageId, index) => (active.fileLink ? active.fileLink(messageId, index) : Promise.reject(new Error('No file'))),
-      send: (account, text, attachments, conversationId, onProgress) =>
-         active.send(account, text, attachments, conversationId, onProgress),
+      send: (account, text, attachments, conversationId, events) =>
+         active.send(account, text, attachments, conversationId, events),
+      follow: replyId => (active.follow ? active.follow(replyId) : Promise.reject(new Error('Nothing to follow'))),
+      dismissReply: replyId => active.dismissReply?.(replyId) ?? Promise.resolve(),
    }
 }

@@ -152,6 +152,31 @@ describe('LinkedInReplyService (database)', () => {
       await expect(LinkedInReplyService.get(otherUserId, sent?.id ?? '')).resolves.toBeNull()
    })
 
+   it('should let the owner dismiss a reply that did not go, once, and never one that is being sent, went or is not theirs', async () => {
+      const row = (state: 'FAILED' | 'UNKNOWN' | 'SENDING' | 'SENT') => ({
+         userId,
+         accountId,
+         conversationId,
+         text: 'x',
+         state,
+         sessionId: randomUUID(),
+      })
+      const [failed, unsure, sending, sent] = await Promise.all(
+         (['FAILED', 'UNKNOWN', 'SENDING', 'SENT'] as const).map(state =>
+            PrismaService.client.linkedInReply.create({ data: row(state) })
+         )
+      )
+
+      await expect(LinkedInReplyService.dismiss(userId, failed?.id ?? '')).resolves.toBe(true)
+      await expect(LinkedInReplyService.dismiss(userId, unsure?.id ?? '')).resolves.toBe(true)
+      await expect(LinkedInReplyService.dismiss(userId, sending?.id ?? '')).resolves.toBe(false)
+      await expect(LinkedInReplyService.dismiss(userId, sent?.id ?? '')).resolves.toBe(false)
+      await expect(LinkedInReplyService.dismiss(otherUserId, failed?.id ?? '')).resolves.toBe(false)
+      await expect(
+         PrismaService.client.linkedInReply.findUniqueOrThrow({ where: { id: failed?.id ?? '' } })
+      ).resolves.toMatchObject({ dismissedAt: expect.any(Date) })
+   })
+
    it('should refuse a second reply while one is being sent from the account, by the database too', async () => {
       await LinkedInReplyService.send(userId, conversationId, 'One')
 

@@ -175,6 +175,21 @@ export class LinkedInReplyService {
       })
    }
 
+   // The owner dismisses a reply that did not go (or may not have), so the page stops showing it after a reload. A reply that is being
+   // sent or went cannot be dismissed. False for one that is not the owner's or cannot be.
+   public static async dismiss(userId: string, id: string) {
+      const { count } = await PrismaService.client.linkedInReply.updateMany({
+         where: {
+            id,
+            userId,
+            state: { in: ['FAILED', 'UNKNOWN'] },
+         },
+         data: { dismissedAt: new Date() },
+      })
+
+      return count > 0
+   }
+
    // A reply still sending long after its task could have ended was lost with its run. It may have gone, so it is unsure, never
    // failed. Resolves to how many were ended.
    public static async endStale(now = new Date()) {

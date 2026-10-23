@@ -79,13 +79,34 @@ describe('send', () => {
       expect(reduce(start, { type: 'PROGRESS', id: 'c1', percent: 50 })).toBe(start)
    })
 
-   it('should put it in the conversation as ours once sent, and read it, so the conversation is replied', () => {
-      const sent = reduce(sending, { type: 'SENT', id: 'c1', now: 6000 })
-      const last = of(sent).messages.at(-1)
+   it('should say the reply is on its way, with its id and from when, and keep the id if it fails', () => {
+      const started = reduce(sending, { type: 'STARTED', id: 'c1', replyId: 'r1', since: 5000 })
 
-      expect(statusOf(of(sent))).toBe('REPLIED')
-      expect(last).toMatchObject({ direction: 'ME', text: 'Thanks', at: 6000 })
+      expect(of(started).sending).toMatchObject({ replyId: 'r1', since: 5000 })
+      expect(reduce(start, { type: 'STARTED', id: 'c1', replyId: 'r1', since: 1 })).toBe(start)
+      expect(of(reduce(started, { type: 'FAIL', id: 'c1', reason: 'No.' })).failed).toMatchObject({ replyId: 'r1' })
+   })
+
+   it('should keep the reply as it is when LinkedIn took it, marked done and read, until its message is stored', () => {
+      const sent = reduce(sending, { type: 'SENT', id: 'c1' })
+
+      expect(statusOf(of(sent))).toBe('REPLYING')
+      expect(of(sent).sending).toMatchObject({ done: true, text: 'Thanks' })
+      expect(of(sent).messages).toHaveLength(1)
       expect(of(sent).unread).toBe(false)
+      expect(reduce(sent, { type: 'SENT', id: 'c1' })).toBe(sent)
+   })
+
+   it('should drop the reply once its stored message is there, and show it as ours when the message did not come', () => {
+      const sent = reduce(sending, { type: 'SENT', id: 'c1' })
+      const stored = reduce(sent, { type: 'FINISHED', id: 'c1', now: 6000, stored: true })
+      const gaveUp = reduce(sent, { type: 'FINISHED', id: 'c1', now: 6000, stored: false })
+
+      expect(of(stored).sending).toBeUndefined()
+      expect(of(stored).messages).toHaveLength(1)
+      expect(of(gaveUp).sending).toBeUndefined()
+      expect(of(gaveUp).messages.at(-1)).toMatchObject({ direction: 'ME', text: 'Thanks', at: 6000 })
+      expect(statusOf(of(gaveUp))).toBe('REPLIED')
    })
 
    it('should keep the reply when it fails, so it can be sent again, and clear it once sent', () => {
@@ -129,13 +150,13 @@ describe('send', () => {
          attachments: [{ kind: 'FILE', name: 'plan.pdf' }],
          now: 1,
       })
-      const sent = reduce(withFile, { type: 'SENT', id: 'c1', now: 2 })
+      const sent = reduce(withFile, { type: 'FINISHED', id: 'c1', now: 2, stored: false })
 
       expect(of(sent).messages.at(-1)?.attachments).toEqual([{ kind: 'FILE', name: 'plan.pdf' }])
    })
 
    it('should ignore an action for a conversation that is not there', () => {
-      expect(reduce(start, { type: 'SENT', id: 'zzz', now: 1 })).toEqual(start)
+      expect(reduce(start, { type: 'SENT', id: 'zzz' })).toEqual(start)
    })
 })
 
