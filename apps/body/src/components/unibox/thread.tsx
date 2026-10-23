@@ -29,7 +29,7 @@ import { cn } from '@/lib/utils'
 import { AvatarPair } from './account-avatar'
 import { AccountChip } from './account-chip'
 import { type Row } from './inbox'
-import { MessageBubble } from './message-bubble'
+import { AttachmentView, MessageBubble } from './message-bubble'
 import { useShared } from './shared'
 import { lastReplyAt } from './status'
 import { StatusChip } from './status-chip'
@@ -242,15 +242,46 @@ export const Thread = ({
                ))}
                {conversation.sending ? (
                   <div className="mb-3 flex justify-end" role="status">
-                     <div className="flex max-w-[min(34rem,85%)] items-center gap-2 rounded-2xl rounded-br-md bg-primary/60 px-3.5 py-2 text-sm text-primary-foreground">
-                        <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
-                        <span className="min-w-0 break-words whitespace-pre-wrap">
-                           {conversation.sending.text || 'Attachment'}
-                        </span>
-                        {canUndo ? (
-                           <Button variant="secondary" size="xs" onClick={onUndoSend}>
-                              <CornerUpLeft /> Undo
-                           </Button>
+                     <div className="flex max-w-[min(34rem,85%)] flex-col gap-1.5 rounded-2xl rounded-br-md bg-primary/60 px-3.5 py-2 text-sm text-primary-foreground">
+                        <div className="flex items-center gap-2">
+                           <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                           <span className="min-w-0 break-words whitespace-pre-wrap">
+                              {conversation.sending.text ||
+                                 (conversation.sending.attachments.length > 0 ? 'Sending files' : 'Attachment')}
+                           </span>
+                           {canUndo ? (
+                              <Button variant="secondary" size="xs" onClick={onUndoSend}>
+                                 <CornerUpLeft /> Undo
+                              </Button>
+                           ) : null}
+                        </div>
+                        {conversation.sending.attachments.length > 0 ? (
+                           <div className="flex flex-wrap gap-1.5">
+                              {conversation.sending.attachments.map((attachment, index) => (
+                                 <AttachmentView
+                                    key={index}
+                                    attachment={attachment}
+                                    own
+                                    messageId=""
+                                    index={index}
+                                 />
+                              ))}
+                           </div>
+                        ) : null}
+                        {conversation.sending.progress !== undefined ? (
+                           <div
+                              role="progressbar"
+                              aria-label="Uploading the files"
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                              aria-valuenow={conversation.sending.progress}
+                              className="h-1 overflow-hidden rounded-full bg-primary-foreground/30"
+                           >
+                              <div
+                                 className="h-full bg-primary-foreground transition-[width]"
+                                 style={{ width: `${conversation.sending.progress}%` }}
+                              />
+                           </div>
                         ) : null}
                      </div>
                   </div>

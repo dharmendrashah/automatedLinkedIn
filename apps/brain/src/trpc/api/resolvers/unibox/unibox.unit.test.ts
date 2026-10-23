@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
    fileLink: vi.fn(),
    request: vi.fn(),
    send: vi.fn(),
+   uploadForm: vi.fn(),
    reply: vi.fn(),
    TaskRefusedError: class TaskRefusedError extends Error {},
 }))
@@ -31,6 +32,7 @@ vi.mock('database', () => ({
    MessagesRefresh: { request: mocks.request },
    LinkedInReplyService: {
       send: mocks.send,
+      uploadForm: mocks.uploadForm,
       get: mocks.reply,
    },
    REPLY_LIMITS: { maxChars: 4000 },
@@ -267,6 +269,71 @@ describe('unibox router', () => {
       })
       await expect(caller().reply({ id: 'r9' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
       expect(mocks.reply).toHaveBeenCalledWith('u1', 'r1')
+   })
+
+   it('should give the owner a signed form for one file, and say why when it is refused', async () => {
+      const UPLOAD = '0198f2a4-7c1e-7d3a-9b1e-5c2d8f0a1b34'
+
+      mocks.uploadForm.mockResolvedValueOnce({
+         url: 'https://storage.googleapis.com/b/',
+         fields: { key: 'k' },
+         name: 'cv.pdf',
+         kind: 'FILE',
+      })
+      mocks.uploadForm.mockRejectedValueOnce(new mocks.TaskRefusedError('This type of file cannot be sent.'))
+
+      await expect(
+         caller().uploadForm({
+            uploadId: UPLOAD,
+            name: 'cv.pdf',
+            bytes: 10,
+         })
+      ).resolves.toMatchObject({
+         name: 'cv.pdf',
+         kind: 'FILE',
+      })
+      expect(mocks.uploadForm).toHaveBeenCalledWith('u1', UPLOAD, 'cv.pdf', 10)
+      await expect(
+         caller().uploadForm({
+            uploadId: UPLOAD,
+            name: 'setup.exe',
+            bytes: 10,
+         })
+      ).rejects.toMatchObject({
+         code: 'PRECONDITION_FAILED',
+         message: 'This type of file cannot be sent.',
+      })
+   })
+
+   it('should refuse a form for an upload id that is not valid, an empty file or one larger than a reply may carry', async () => {
+      const UPLOAD = '0198f2a4-7c1e-7d3a-9b1e-5c2d8f0a1b34'
+
+      for (const input of [
+         {
+            uploadId: '../x',
+            name: 'cv.pdf',
+            bytes: 10,
+         },
+         {
+            uploadId: UPLOAD,
+            name: 'cv.pdf',
+            bytes: 0,
+         },
+         {
+            uploadId: UPLOAD,
+            name: 'cv.pdf',
+            bytes: 21 * 1024 * 1024,
+         },
+         {
+            uploadId: UPLOAD,
+            name: '',
+            bytes: 10,
+         },
+      ]) {
+         await expect(caller().uploadForm(input)).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+      }
+
+      expect(mocks.uploadForm).not.toHaveBeenCalled()
    })
 
    it('should give a short link to a kept file of the owner, and not found for a file that is not theirs or not kept', async () => {

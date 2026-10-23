@@ -63,7 +63,7 @@ export type UniboxConversation = {
    // When the owner closed it without replying; a message newer than this brings it back.
    doneAt?: number
    // The owner's reply, being sent (it can still be undone).
-   sending?: { text: string; attachments: Attachment[]; at: number }
+   sending?: { text: string; attachments: Attachment[]; at: number; progress?: number }
    // The owner's reply that did not go, kept so it can be sent again.
    failed?: { reason: string; text: string; attachments: Attachment[]; unsure?: boolean }
 }

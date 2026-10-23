@@ -1,61 +1,101 @@
+import { TRPCClientError } from '@trpc/client'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createUpload } from './upload'
 
 const UPLOAD = '0198f2a4-7c1e-7d3a-9b1e-5c2d8f0a1b34'
 const file = new File(['content'], 'My CV.pdf', { type: 'application/pdf' })
-
-const upload = (request: typeof fetch, token: string | null = 't1') =>
-   createUpload({
-      apiUrl: 'https://api.example.com',
-      token: async () => token ?? undefined,
-      request,
-   })
+const signed = {
+   url: 'https://storage.googleapis.com/bucket/',
+   fields: {
+      key: 'uploads/u/x/My CV.pdf',
+      'Content-Type': 'application/octet-stream',
+      policy: 'p',
+   },
+   name: 'My CV.pdf',
+}
 
 describe('createUpload', () => {
-   it('should post the file to brain with the token and its name encoded, and say it went', async () => {
-      const request = vi.fn(async () => new Response('{}', { status: 201 }))
+   it('should ask brain for a form with the name and size, then post the fields and then the file to the bucket', async () => {
+      const form = vi.fn(async () => signed)
+      const post = vi.fn(async (_url: string, _body: FormData) => 204)
 
-      await expect(upload(request as never)(UPLOAD, file)).resolves.toEqual({ ok: true })
+      await expect(createUpload({ form, post })(UPLOAD, file)).resolves.toEqual({ ok: true })
 
-      const [url, options] = request.mock.calls[0] as unknown as [string, RequestInit]
-
-      expect(url).toBe(`https://api.example.com/uploads/${UPLOAD}`)
-      expect(options.method).toBe('POST')
-      expect(options.body).toBe(file)
-      expect(options.headers).toEqual({
-         authorization: 'Bearer t1',
-         'content-type': 'application/octet-stream',
-         'x-file-name': 'My%20CV.pdf',
+      expect(form).toHaveBeenCalledWith({
+         uploadId: UPLOAD,
+         name: 'My CV.pdf',
+         bytes: 7,
       })
+
+      const [url, body] = post.mock.calls[0] as unknown as [string, FormData]
+
+      expect(url).toBe('https://storage.googleapis.com/bucket/')
+      // The file is the last part, after every field the form was signed with.
+      expect([...body.keys()]).toEqual(['key', 'Content-Type', 'policy', 'file'])
+      expect(body.get('key')).toBe('uploads/u/x/My CV.pdf')
+      expect(body.get('file')).toBeInstanceOf(File)
    })
 
-   it('should say to sign in again when there is no token, without calling brain', async () => {
-      const request = vi.fn()
+   it('should pass the progress of the post on', async () => {
+      const seen: number[] = []
+      const post = vi.fn(async (_url: string, _body: FormData, onProgress?: (percent: number) => void) => {
+         onProgress?.(40)
+         onProgress?.(100)
 
-      await expect(upload(request as never, null)(UPLOAD, file)).resolves.toMatchObject({ ok: false })
-      expect(request).not.toHaveBeenCalled()
+         return 204
+      })
+
+      await createUpload({ form: async () => signed, post })(UPLOAD, file, percent => seen.push(percent))
+
+      expect(seen).toEqual([40, 100])
    })
 
-   it('should show the sentence brain gave, and nothing else', async () => {
-      const refused = vi.fn(
-         async () =>
-            new Response(JSON.stringify({ error: 'The file is larger than a reply may carry.' }), { status: 413 })
-      )
-      const odd = vi.fn(async () => new Response('<html>boom with details</html>', { status: 500 }))
-      const down = vi.fn(async () => {
-         throw new Error('network down at 10.0.0.1')
+   it('should say the sentence brain gave when it refuses the form, and a plain one for any other failure', async () => {
+      const refused = new TRPCClientError('This type of file cannot be sent.', {
+         result: {
+            error: {
+               message: 'This type of file cannot be sent.',
+               code: -32600,
+               data: { code: 'PRECONDITION_FAILED' },
+            },
+         },
+      } as never)
+      const post = vi.fn()
+
+      await expect(
+         createUpload({
+            form: async () => {
+               throw refused
+            },
+            post,
+         })(UPLOAD, file)
+      ).resolves.toEqual({ ok: false, reason: 'This type of file cannot be sent.' })
+      await expect(
+         createUpload({
+            form: async () => {
+               throw new Error('boom at 10.0.0.1')
+            },
+            post,
+         })(UPLOAD, file)
+      ).resolves.toEqual({ ok: false, reason: 'The file could not be sent. Try again.' })
+      expect(post).not.toHaveBeenCalled()
+   })
+
+   it('should say a plain sentence, without the answer of the bucket, when the post is refused or the network fails', async () => {
+      const refused = createUpload({ form: async () => signed, post: async () => 403 })
+      const down = createUpload({
+         form: async () => signed,
+         post: async () => {
+            throw new Error('network down')
+         },
       })
 
-      await expect(upload(refused as never)(UPLOAD, file)).resolves.toEqual({
-         ok: false,
-         reason: 'The file is larger than a reply may carry.',
-      })
-      await expect(upload(odd as never)(UPLOAD, file)).resolves.toEqual({
+      await expect(refused(UPLOAD, file)).resolves.toEqual({
          ok: false,
          reason: 'The file could not be sent. Try again.',
       })
-      await expect(upload(down as never)(UPLOAD, file)).resolves.toEqual({
+      await expect(down(UPLOAD, file)).resolves.toEqual({
          ok: false,
          reason: 'The file could not be sent. Try again.',
       })

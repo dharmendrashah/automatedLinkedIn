@@ -14,6 +14,8 @@ export type Shared = {
    index: Index
    // Opens a kept file of a message; absent when the data keeps none.
    openFile?: (messageId: string, index: number) => void
+   // A short link to read a kept file of a message, to show a picture; absent when the data keeps none.
+   fileUrl?: (messageId: string, index: number) => Promise<string>
 }
 
 const SharedContext = createContext<Shared | undefined>(undefined)

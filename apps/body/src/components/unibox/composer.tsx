@@ -34,6 +34,7 @@ import { type Attachment, type AttachmentKind, type UniboxAccount, type UniboxCo
 import { AccountAvatar } from './account-avatar'
 import { ACCEPT, LIMITS, checkAttachment, formatBytes, kindOfFile, sendableKind } from './attachments'
 import { hueOf } from './colors'
+import { useObjectUrl } from './previews'
 import { useShared } from './shared'
 import { TEMPLATES, fillTemplate, firstName } from './templates'
 import { formatClock } from './time'
@@ -42,8 +43,13 @@ import { VoiceRecorder } from './voice-recorder'
 type Pending = {
    id: number
    attachment: Attachment
-   // 0 to 100: how much of the file went up (an imitation here; the real upload will report it).
-   progress: number
+}
+
+// A small picture of a file chosen on this device, when it is a picture.
+const Thumbnail = ({ attachment }: { attachment: Attachment }) => {
+   const url = useObjectUrl(attachment.kind === 'IMAGE' ? attachment.file : undefined)
+
+   return url ? <img src={url} alt="" className="size-6 shrink-0 rounded-sm object-cover" /> : null
 }
 
 type Props = {
@@ -102,7 +108,6 @@ export const Composer = ({
    const [templatesOpen, setTemplatesOpen] = useState(false)
    const picker = useRef<HTMLInputElement>(null)
    const nextId = useRef(1)
-   const uploading = pending.some(item => item.progress < 100)
    const blank = !draft.trim() && pending.length === 0
    const over = draft.length > LIMITS.TEXT
    const sending = conversation.sending !== undefined
@@ -114,20 +119,6 @@ export const Composer = ({
          : account.name
       : 'an unknown account'
    const disabled = blockedReason !== undefined || sending
-
-   // The imitation of an upload: a file fills in a moment, so what Send waits for can be seen.
-   useEffect(() => {
-      if (!uploading) {
-         return undefined
-      }
-
-      const timer = setInterval(
-         () => setPending(items => items.map(item => ({ ...item, progress: Math.min(100, item.progress + 25) }))),
-         160
-      )
-
-      return () => clearInterval(timer)
-   }, [uploading])
 
    useEffect(() => {
       if (problems.length === 0) {
@@ -152,7 +143,6 @@ export const Composer = ({
             accepted.push({
                id: nextId.current++,
                attachment,
-               progress: attachment.kind === 'LINK' ? 100 : 0,
             })
          } else {
             refused.push(`${attachment.name ?? 'The file'}: ${check.reason}`)
@@ -181,7 +171,7 @@ export const Composer = ({
    }
 
    const submit = () => {
-      if (disabled || blank || uploading || over) {
+      if (disabled || blank || over) {
          return
       }
 
@@ -295,11 +285,12 @@ export const Composer = ({
          ) : null}
          {pending.length > 0 ? (
             <ul className="flex flex-wrap gap-1.5" aria-label="Attachments">
-               {pending.map(({ id, attachment, progress }) => (
+               {pending.map(({ id, attachment }) => (
                   <li
                      key={id}
                      className="relative flex max-w-64 items-center gap-1.5 overflow-hidden rounded-md border bg-background px-2 py-1 text-xs"
                   >
+                     <Thumbnail attachment={attachment} />
                      <span className="truncate">{attachment.name}</span>
                      {attachment.bytes ? (
                         <span className="shrink-0 text-muted-foreground">{formatBytes(attachment.bytes)}</span>
@@ -312,13 +303,6 @@ export const Composer = ({
                      >
                         <X className="size-3.5" />
                      </button>
-                     {progress < 100 ? (
-                        <span
-                           aria-hidden
-                           className="absolute bottom-0 left-0 h-0.5 bg-primary transition-[width]"
-                           style={{ width: `${progress}%` }}
-                        />
-                     ) : null}
                   </li>
                ))}
             </ul>
@@ -446,8 +430,8 @@ export const Composer = ({
                   {draft.length.toLocaleString('en-US')} / {LIMITS.TEXT.toLocaleString('en-US')}
                </span>
             ) : null}
-            <Button size="sm" onClick={submit} disabled={disabled || blank || uploading || over} className="sm:ml-2">
-               <Send /> {uploading ? 'Uploading...' : 'Send'}
+            <Button size="sm" onClick={submit} disabled={disabled || blank || over} className="sm:ml-2">
+               <Send /> Send
             </Button>
          </div>
       </div>

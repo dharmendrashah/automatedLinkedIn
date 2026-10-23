@@ -250,15 +250,17 @@ gcloud auth application-default login --impersonate-service-account="$SIGNER_EMA
 Messages and their files are kept without end (`.plan/unibox-keep-messages-and-files.md`); the only deletion is when the owner
 removes a LinkedIn account, which deletes that account's folder. Three places in the bucket are involved:
 
-- `uploads/<user>/<upload>/`: a file the page uploaded to **brain** (`POST /uploads/:uploadId`, at most 20 MB) while its reply is
-  being sent. The spider worker downloads it from here. When the reply ends, brain **moves** it (it is never deleted).
+- `uploads/<user>/<upload>/`: a file the page posted straight to the bucket with a form **brain** signed for it
+  (`unibox.uploadForm`, from 1 byte to 20 MB, ten minutes; the bytes never pass through brain) while its reply is being sent.
+  Brain checks each file (size and first bytes) when the reply is sent, and deletes one that is not what its name says. The spider worker downloads it from here. When the reply ends, brain **moves** it (it is never deleted).
   Files uploaded and never sent (the tab was closed) stay here, so a one day lifecycle rule removes them.
 - `kept/<user>/<account>/sent/<upload>/`: the files of replies, moved here for good by brain.
 - `kept/<user>/<account>/received/<message>/`: the pictures of messages from other people, written by the spider worker when it
   reads the messages (a file already there is not downloaded again).
 
-Brain signs ten minute links to open a kept file of the owner's own, so brain's service account needs to write, read, list and
-delete under `uploads/` and `kept/` (this is the first time brain writes to the bucket). The spider worker already has
+Brain signs the upload forms and the ten minute links that open a kept file. A signed form carries the rights of the account that
+signed it, so brain's service account needs to create, read, list, move and delete under `uploads/` and `kept/` (this is the first
+time brain writes to the bucket). The spider worker already has
 `roles/storage.objectAdmin` on the bucket (see above), so it needs nothing new. These are the commands, not run as part of this
 change.
 
@@ -290,12 +292,25 @@ rolled back) and may have a soft delete window: noncurrent versions of deleted f
 text must say.
 Storage only grows; a rule that moves old `kept/` files to a colder class (not deleting them) can be added later.
 
-The browser sends a file to brain, and opens a kept file by a signed link in a new tab, so the bucket needs no new CORS rule. Brain
-needs `SPIDER_GCS_BUCKET` set (it already is for recordings); without it a file cannot be sent or opened.
+The browser posts the signed form straight to `storage.googleapis.com`, so the bucket needs a CORS rule that allows the POST from
+the app's address. A bucket has one CORS list, and setting it replaces what is there: this is the rule of Session recordings with
+`POST` added, so run this instead of that one (a kept file opens by a signed link in a new tab and needs nothing more). Brain needs
+`SPIDER_GCS_BUCKET` set (it already is for recordings); without it a file cannot be sent or opened.
+
+```sh
+export APP_ORIGIN=https://app.staging.elitale.com
+
+cat > /tmp/cors.json <<EOF
+[{"origin": ["$APP_ORIGIN"], "method": ["GET", "POST"], "responseHeader": ["Content-Type", "Range"], "maxAgeSeconds": 3600}]
+EOF
+gcloud storage buckets update "gs://$BUCKET" --cors-file=/tmp/cors.json
+```
 
 | Error | Cause |
 | --- | --- |
-| The page says a file could not be sent, brain logs `403` on `uploads/` | The grant above is missing or its condition does not match. |
+| The page says a file could not be sent, brain logs `403` or "does not have storage.objects.list" | The grant above is missing or its condition does not match. |
+| The page says a file could not be sent, and the browser console shows a CORS error on `storage.googleapis.com` | The bucket has no CORS rule that allows `POST` from the app's address. |
+| A reply is refused with "A file is not what its name says it is" | The file's first bytes did not match its extension; brain deleted it. Attach the real file. |
 | A reply with files ends as failed with "the files could not be read" | The spider worker could not download from `uploads/`; check its bucket role. |
 | A file of a sent reply does not open, brain logs `403` or `404` on `kept/` | The grant lacks `kept/`, or the reply's files were not moved yet (the sweep runs every minute; a failure is logged and retried). |
 | Removing a LinkedIn account fails | Brain could not delete `kept/<user>/<account>/`; the account stays so it can be tried again. Check the grant. |

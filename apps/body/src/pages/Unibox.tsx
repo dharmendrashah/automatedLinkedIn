@@ -9,7 +9,6 @@ import { cn } from '@/lib/utils'
 
 import { type Attachment, type UniboxAccount } from '../components/unibox/types'
 
-import { userManager } from '../auth/userManager'
 import { type AccountSet, parseSets, setMatching } from '../components/unibox/accountSets'
 import { type Address, parseAddress, toAddress } from '../components/unibox/address'
 import { withDevFile } from '../components/unibox/chooseSource'
@@ -38,7 +37,6 @@ import { UNDO_MS, useUnibox } from '../components/unibox/use-unibox'
 import { viewLabel } from '../components/unibox/views'
 import { ViewsList } from '../components/unibox/views-list'
 import { trpc } from '../trpc'
-import { createApiUrl } from '../trpc/config'
 
 const fileSource = createSampleSource({ loadReal: loadRealSample })
 const storage = typeof localStorage === 'undefined' ? undefined : localStorage
@@ -68,10 +66,12 @@ type BoardProps = {
    onRefresh: ((accountIds?: string[]) => void) | undefined
    // Opens a kept file of a message.
    onOpenFile: (messageId: string, index: number) => void
+   // A short link to read a kept file, to show a picture; absent when the data keeps none.
+   onFileUrl: ((messageId: string, index: number) => Promise<string>) | undefined
    api: Api
 }
 
-const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, api }: BoardProps) => {
+const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, api }: BoardProps) => {
    const { conversations, flying, dispatch, load, send, undo, retry } = api
    const { pathname, search } = useLocation()
    const navigate = useNavigate()
@@ -171,8 +171,9 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, api }: BoardP
          today,
          index,
          openFile: onOpenFile,
+         ...(onFileUrl && { fileUrl: onFileUrl }),
       }
-   }, [accounts, conversations, now, index, onOpenFile])
+   }, [accounts, conversations, now, index, onOpenFile, onFileUrl])
 
    const unreadByAccount = useMemo(() => {
       const map = new Map<string, number>()
@@ -689,10 +690,7 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, api }: BoardP
 export const Unibox = () => {
    const { client } = trpc.useUtils()
    const source = useMemo(() => {
-      const upload = createUpload({
-         apiUrl: createApiUrl(import.meta.env),
-         token: async () => (await userManager.getUser())?.access_token,
-      })
+      const upload = createUpload({ form: input => client.unibox.uploadForm.mutate(input) })
 
       return withDevFile(
          fileSource,
@@ -703,6 +701,12 @@ export const Unibox = () => {
    const onSaveError = useCallback(() => toast.error('A change could not be kept. Reload to see what is saved.'), [])
    const api = useUnibox(source, onSaveError)
    const { loaded, reload } = api
+   // Stable, so a picture asks for its link once and not again each time the page draws.
+   const fileUrl = useCallback(
+      (messageId: string, index: number) =>
+         source.fileLink ? source.fileLink(messageId, index) : Promise.reject(new Error('No file')),
+      [source]
+   )
 
    if (loaded.status === 'loading') {
       return (
@@ -731,12 +735,7 @@ export const Unibox = () => {
    }
 
    const openFile = (messageId: string, index: number) => {
-      if (!source.fileLink) {
-         return
-      }
-
-      source
-         .fileLink(messageId, index)
+      fileUrl(messageId, index)
          .then(url => window.open(url, '_blank', 'noopener'))
          .catch(() => toast.error('The file could not be opened. Try again in a moment.'))
    }
@@ -767,6 +766,7 @@ export const Unibox = () => {
          canSend={loaded.canSend}
          onRefresh={loaded.canRefresh ? refresh : undefined}
          onOpenFile={openFile}
+         onFileUrl={source.fileLink ? fileUrl : undefined}
          api={api}
       />
    )

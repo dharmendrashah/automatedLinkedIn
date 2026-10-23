@@ -1,6 +1,6 @@
-import { KeptFiles, UploadFiles } from 'core'
+import { KeptFiles, UploadFiles, UploadRefused } from 'core'
 
-import { kindOfName } from '@automatedLinkedIn/contracts'
+import { kindOfName, safeFileName } from '@automatedLinkedIn/contracts'
 
 import { REPLY_TASK } from './linkedInReply.hooks'
 import { PrismaService } from './prisma.service'
@@ -23,6 +23,19 @@ const STALE_SENTENCE = 'No answer came from the browser. Check the conversation 
 
 // Prisma's code for a unique index that a second row would break.
 const isUniqueViolation = (error: unknown) => (error as { code?: string } | null)?.code === 'P2002'
+
+// A refusal of the upload store is a sentence for the owner, the same as any other refusal to send.
+const refusal = async <T>(work: () => Promise<T>): Promise<T> => {
+   try {
+      return await work()
+   } catch (error) {
+      if (error instanceof UploadRefused) {
+         throw new TaskRefusedError(error.message)
+      }
+
+      throw error
+   }
+}
 
 // The owner's replies from the Unibox, each typed into the account's own LinkedIn page by the `linkedin-reply` task. Every call is
 // scoped to the owner. A reply is created once, with its run, and is never started again by brain.
@@ -100,10 +113,28 @@ export class LinkedInReplyService {
       return replyId ? { id: replyId } : null
    }
 
-   // The files of an upload as brain kept them: what the task is told is read from the bucket, never from the caller, and a type that may
-   // not be sent is refused again here.
+   // A signed form for the page to post one file of a reply straight to the bucket (.plan/unibox-presigned-uploads.md): only a type
+   // LinkedIn takes, within the limits, for one object of this owner. Throws TaskRefusedError with a sentence when it cannot be done.
+   public static async uploadForm(userId: string, uploadId: string, name: string, bytes: number) {
+      const safe = safeFileName(name)
+      const kind = kindOfName(safe)
+
+      if (!kind) {
+         throw new TaskRefusedError('This type of file cannot be sent.')
+      }
+
+      const form = await refusal(() => UploadFiles.form(userId, uploadId, safe, bytes))
+
+      return {
+         ...form,
+         kind,
+      }
+   }
+
+   // The files of an upload as brain checked them: what the task is told is read from the bucket, never from the caller, each file is
+   // looked at again (size and first bytes), and a type that may not be sent is refused again here.
    private static async filesOf(userId: string, uploadId: string) {
-      const stored = await UploadFiles.list(userId, uploadId)
+      const stored = await refusal(() => UploadFiles.verify(userId, uploadId))
 
       if (stored.length === 0) {
          throw new TaskRefusedError('The files were not found. Attach them again.')

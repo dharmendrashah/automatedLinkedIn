@@ -347,6 +347,36 @@ describe('createTrpcSource.send', () => {
       expect(mutate).toHaveBeenCalledWith({ conversationId: 'c1', text: '', uploadId: firstId })
    })
 
+   it('should report the progress of all the files together, by their sizes', async () => {
+      const upload = vi.fn(async (_id: string, _file: File, onProgress?: (percent: number) => void) => {
+         onProgress?.(50)
+         onProgress?.(100)
+
+         return { ok: true as const }
+      })
+      const { client } = fake({
+         send: { mutate: vi.fn().mockResolvedValue({ id: 'r1' }) },
+         reply: { query: replies({ state: 'SENT' }) },
+      })
+      const small = new File(['1'], 'small.png', { type: 'image/png' })
+      const large = new File(['123'], 'large.pdf', { type: 'application/pdf' })
+      const seen: number[] = []
+
+      await createTrpcSource(client, { wait, upload }).send(
+         {} as never,
+         '',
+         [
+            { kind: 'IMAGE', name: 'small.png', file: small },
+            { kind: 'FILE', name: 'large.pdf', file: large },
+         ],
+         'c1',
+         percent => seen.push(percent)
+      )
+
+      // 1 byte then 3: half of the first is 12.5 percent, all of it 25, then 25 + 37.5 and 100.
+      expect(seen).toEqual([13, 25, 63, 100])
+   })
+
    it('should send nothing, and say which file, when one cannot be uploaded', async () => {
       const upload = vi.fn(async () => ({ ok: false as const, reason: 'The file is larger than a reply may carry.' }))
       const mutate = vi.fn()
