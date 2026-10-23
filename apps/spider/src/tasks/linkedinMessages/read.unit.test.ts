@@ -31,12 +31,15 @@ type Page = {
    slowOpen?: number
    // Milliseconds each pause adds to the clock.
    pauseMs?: number
+   // How many looks at the page find no list yet, as through a slow proxy.
+   slowList?: number
 }
 
 // A messaging page that behaves like the real one: a list that shows a few rows and loads more when scrolled to its end, rows that
 // open a conversation by a click with no address of their own, and a conversation that loads older messages as it is scrolled up.
 const setup = (page: Page = {}) => {
    const { conversations = 8, messages = 12, signedOutAt, deaf = false, autoOpen = true, slowOpen = 0, pauseMs } = page
+   let waiting = page.slowList ?? 0
    let time = 0
    let loadedRows = Math.min(PAGE_ROWS, conversations)
    let top = 0
@@ -105,7 +108,15 @@ const setup = (page: Page = {}) => {
          controls: [],
          blocks: [],
       })),
-      pageHtml: vi.fn(async () => `<html><body>${rowsHtml()}${threadHtml()}</body></html>`),
+      pageHtml: vi.fn(async () => {
+         if (waiting > 0) {
+            waiting -= 1
+
+            return '<html><body></body></html>'
+         }
+
+         return `<html><body>${rowsHtml()}${threadHtml()}</body></html>`
+      }),
       clickLink: vi.fn(async (_href: string, _avoid: string) => undefined),
       back: vi.fn(async () => MESSAGING),
       hover: vi.fn(async (_x: number, _y: number) => undefined),
@@ -280,6 +291,31 @@ describe('readMessages', () => {
       await expect(read({ limit: 5 })).resolves.toMatchObject({
          outcome: 'DONE',
          conversations: 2,
+      })
+   })
+
+   it('should wait for a list that is still loading, not take it for an inbox that ended', async () => {
+      const { read } = setup({
+         conversations: 2,
+         messages: 3,
+         slowList: 8,
+      })
+
+      await expect(read({ limit: 5 })).resolves.toMatchObject({
+         outcome: 'DONE',
+         conversations: 2,
+      })
+   })
+
+   it('should stop waiting for a list that never comes, and read nothing', async () => {
+      const { read } = setup({
+         conversations: 2,
+         slowList: 1000,
+      })
+
+      await expect(read({ limit: 5 })).resolves.toMatchObject({
+         outcome: 'DONE',
+         conversations: 0,
       })
    })
 
