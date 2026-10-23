@@ -64,10 +64,10 @@ configMapGenerator:
   - name: idle-shutdown-config
     literals:
       # true | false
-      - SMART_SHUTDOWN_ENABLED=false
+      - SMART_SHUTDOWN_ENABLED=true
       # dry-run | enforce
       - SMART_SHUTDOWN_MODE=enforce
-      - IDLE_MINUTES=45
+      - IDLE_MINUTES=360
       - ACTIVITY_WINDOW_SECONDS=600
       - GCP_PROJECT=automate-linkedin-511215
       - GKE_CLUSTER=staging-asia
