@@ -270,11 +270,15 @@ export BUCKET=automate-linkedin-511215-spider
 export SIGNER_EMAIL="brain-recording-links@$PROJECT_ID.iam.gserviceaccount.com"
 
 # Not runs/ (read only, above), sessions/ (login cookies) or results/. Listing has no object name, so it is allowed by the
-# prefix it asks for.
+# prefix it asks for (uploads/ to check a reply's files, kept/ to delete an account's files). The condition has commas, which
+# `--condition` cannot take, so it goes in a file.
+cat > /tmp/uploads-condition.json <<EOF
+{"title": "uploads-and-kept-only", "expression": "resource.name.startsWith('projects/_/buckets/$BUCKET/objects/uploads/') || resource.name.startsWith('projects/_/buckets/$BUCKET/objects/kept/') || api.getAttribute('storage.googleapis.com/objectListPrefix', '').startsWith('uploads/') || api.getAttribute('storage.googleapis.com/objectListPrefix', '').startsWith('kept/')"}
+EOF
 gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" \
   --member="serviceAccount:$SIGNER_EMAIL" \
   --role="roles/storage.objectAdmin" \
-  --condition="title=uploads-and-kept-only,expression=resource.name.startsWith('projects/_/buckets/$BUCKET/objects/uploads/') || resource.name.startsWith('projects/_/buckets/$BUCKET/objects/kept/') || api.getAttribute('storage.googleapis.com/objectListPrefix', '').startsWith('uploads/')"
+  --condition-from-file=/tmp/uploads-condition.json
 
 # Only uploads/ is ever deleted by a rule (files never sent); kept/ has none, on purpose. Merge this with the rules already on the
 # bucket: `--lifecycle-file` replaces the whole configuration (see the check under Session recordings).

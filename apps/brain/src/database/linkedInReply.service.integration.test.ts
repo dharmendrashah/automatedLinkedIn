@@ -374,6 +374,24 @@ describe('LinkedInReplyService (database)', () => {
          )
       })
 
+      it("should say a plain sentence, and log the cause, when the bucket fails for a reason that is not the owner's", async () => {
+         const log = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+         vi.spyOn(UploadFiles, 'form').mockRejectedValueOnce(
+            new Error('brain@project.iam.gserviceaccount.com does not have storage.objects.list access to the bucket')
+         )
+         vi.spyOn(UploadFiles, 'verify').mockRejectedValueOnce(new Error('bucket outage'))
+
+         await expect(LinkedInReplyService.uploadForm(userId, UPLOAD, 'cv.pdf', 10)).rejects.toThrow(
+            'Files cannot be sent right now. Try again in a moment.'
+         )
+         await expect(LinkedInReplyService.send(userId, conversationId, 'Hi', UPLOAD)).rejects.toThrow(
+            'Files cannot be sent right now. Try again in a moment.'
+         )
+         expect(requested).toEqual([])
+         expect(log).toHaveBeenCalledWith(expect.stringContaining('storage.objects.list'))
+      })
+
       it('should refuse an upload with no files in it, and one with a type that cannot be sent, before anything starts', async () => {
          const verify = vi.spyOn(UploadFiles, 'verify')
 

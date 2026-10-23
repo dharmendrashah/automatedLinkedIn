@@ -24,7 +24,8 @@ const STALE_SENTENCE = 'No answer came from the browser. Check the conversation 
 // Prisma's code for a unique index that a second row would break.
 const isUniqueViolation = (error: unknown) => (error as { code?: string } | null)?.code === 'P2002'
 
-// A refusal of the upload store is a sentence for the owner, the same as any other refusal to send.
+// A refusal of the upload store is a sentence for the owner, the same as any other refusal to send. Any other failure of the bucket
+// (a missing permission, an outage) is logged here and never shown: its text names the bucket and the service account.
 const refusal = async <T>(work: () => Promise<T>): Promise<T> => {
    try {
       return await work()
@@ -33,7 +34,9 @@ const refusal = async <T>(work: () => Promise<T>): Promise<T> => {
          throw new TaskRefusedError(error.message)
       }
 
-      throw error
+      console.error(`Uploads: ${(error as Error).message}`)
+
+      throw new TaskRefusedError('Files cannot be sent right now. Try again in a moment.')
    }
 }
 
