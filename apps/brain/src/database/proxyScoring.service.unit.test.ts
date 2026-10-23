@@ -366,18 +366,24 @@ describe('ProxyScoringService', () => {
          mocks.findManyProxy.mockResolvedValue([
             {
                id: 'a',
+               linkedInAccountId: 'acc1',
+               linkedInAccount: { userId: 'u1' },
                status: 'ACTIVE',
                scoredAt: null,
                abuseError: null,
             },
             {
                id: 'b',
+               linkedInAccountId: 'acc1',
+               linkedInAccount: { userId: 'u1' },
                status: 'UNREACHABLE',
                scoredAt: new Date('2026-10-13T23:00:00Z'),
                abuseError: null,
             },
             {
                id: 'c',
+               linkedInAccountId: 'acc2',
+               linkedInAccount: { userId: 'u2' },
                status: 'ACTIVE',
                scoredAt: new Date('2026-10-14T08:00:00Z'),
                abuseError: 'abuse UNAVAILABLE',
@@ -402,18 +408,24 @@ describe('ProxyScoringService', () => {
          expect(due).toEqual([
             {
                id: 'a',
+               accountId: 'acc1',
+               userId: 'u1',
                status: 'ACTIVE',
                scoredAt: null,
                retest: true,
             },
             {
                id: 'b',
+               accountId: 'acc1',
+               userId: 'u1',
                status: 'UNREACHABLE',
                scoredAt: new Date('2026-10-13T23:00:00Z'),
                retest: true,
             },
             {
                id: 'c',
+               accountId: 'acc2',
+               userId: 'u2',
                status: 'ACTIVE',
                scoredAt: new Date('2026-10-14T08:00:00Z'),
                retest: false,

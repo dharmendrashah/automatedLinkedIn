@@ -6,6 +6,9 @@ import { defineJob } from './defineJob'
 // review (.plan/gtm-phase-3-blocks-triggers.md). A run that deleted nothing writes no log line.
 export const retention = defineJob({
    name: 'retention',
+   title: 'Data retention',
+   purpose:
+      "Deletes data that is past its time: old workflow runs and items, the spend record, and this monitor's own history.",
    everyMs: 6 * 60 * 60 * 1000,
    startAfterMs: 5 * 60 * 1000,
    timeoutMs: 30 * 60 * 1000,
@@ -13,6 +16,11 @@ export const retention = defineJob({
       const counts = await RetentionService.run()
       const changed = Object.entries(counts).filter(([, count]) => count > 0)
 
-      return changed.length > 0 ? { summary: changed.map(([what, count]) => `${count} ${what}`).join(', ') } : undefined
+      return changed.length > 0
+         ? {
+              summary: changed.map(([what, count]) => `${count} ${what}`).join(', '),
+              counts,
+           }
+         : undefined
    },
 })

@@ -1,6 +1,10 @@
+import { type JobRunInput } from 'database'
+
 import { type JobDefinition } from './defineJob'
 
 type Log = { info: (message: string) => void; error: (message: string) => void }
+
+type Report = Pick<JobRunInput, 'outcome' | 'summary' | 'counts' | 'items' | 'error'>
 
 export type JobState = {
    name: string
@@ -22,6 +26,8 @@ export class JobRunner {
 
    private readonly log: Log
 
+   private readonly record: ((run: JobRunInput) => void) | undefined
+
    private timer: NodeJS.Timeout | undefined
 
    private current: Promise<void> | undefined
@@ -38,9 +44,10 @@ export class JobRunner {
 
    private failureStreak = 0
 
-   public constructor(definition: JobDefinition, log: Log = console) {
+   public constructor(definition: JobDefinition, log: Log = console, record?: (run: JobRunInput) => void) {
       this.definition = definition
       this.log = log
+      this.record = record
    }
 
    public state(): JobState {
@@ -114,6 +121,9 @@ export class JobRunner {
       this.runs += 1
       this.lastStartedAt = new Date().toISOString()
 
+      const startedAt = new Date()
+      let report: Report
+
       try {
          const outcome = await run({ signal: controller.signal })
 
@@ -122,8 +132,20 @@ export class JobRunner {
          if (timedOut) {
             this.failureStreak += 1
             this.log.error(`worker job=${name} ran past its ${timeoutMs} ms limit`)
+            report = {
+               outcome: 'TIMED_OUT',
+               error: `ran past its ${timeoutMs} ms limit`,
+            }
          } else {
             this.failureStreak = 0
+            report = outcome
+               ? {
+                    outcome: 'WORKED',
+                    summary: outcome.summary,
+                    counts: outcome.counts,
+                    items: outcome.items,
+                 }
+               : { outcome: 'IDLE' }
 
             if (outcome?.summary) {
                this.log.info(`worker job=${name} ${outcome.summary}`)
@@ -133,9 +155,20 @@ export class JobRunner {
          this.lastOutcome = timedOut ? 'timed-out' : 'failed'
          this.failureStreak += 1
          this.log.error(`worker job=${name} failed${timedOut ? ' (timed out)' : ''}: ${reasonOf(error)}`)
+         report = {
+            outcome: timedOut ? 'TIMED_OUT' : 'FAILED',
+            error,
+         }
       } finally {
          clearTimeout(timer)
          this.lastFinishedAt = new Date().toISOString()
       }
+
+      this.record?.({
+         job: name,
+         startedAt,
+         finishedAt: new Date(),
+         ...report,
+      })
    }
 }

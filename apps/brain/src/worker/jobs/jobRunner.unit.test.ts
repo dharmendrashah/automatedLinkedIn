@@ -9,22 +9,27 @@ const setup = (overrides: Partial<JobDefinition> = {}) => {
       error: vi.fn(),
    }
    const run = vi.fn<JobDefinition['run']>().mockResolvedValue(undefined)
+   const record = vi.fn()
    const runner = new JobRunner(
       {
          name: 'scoring',
+         title: 'Scoring',
+         purpose: 'Scores things.',
          everyMs: 1000,
          startAfterMs: 100,
          timeoutMs: 500,
          run,
          ...overrides,
       },
-      log
+      log,
+      record
    )
 
    return {
       runner,
       run,
       log,
+      record,
    }
 }
 
@@ -165,5 +170,86 @@ describe('JobRunner', () => {
       await vi.advanceTimersByTimeAsync(5000)
 
       expect(run).not.toHaveBeenCalled()
+   })
+
+   it('should record every run, an idle one too, with what the job reported', async () => {
+      const { runner, run, record } = setup()
+      const items = [
+         {
+            accountId: 'a1',
+            action: 'messages-read',
+            result: 'ASKED' as const,
+         },
+      ]
+
+      run.mockResolvedValueOnce(undefined).mockResolvedValueOnce({
+         summary: '1 read',
+         counts: { reads: 1 },
+         items,
+      })
+      await runner.runNow()
+      await runner.runNow()
+
+      expect(record).toHaveBeenCalledTimes(2)
+      expect(record.mock.calls[0][0]).toMatchObject({
+         job: 'scoring',
+         outcome: 'IDLE',
+      })
+      expect(record.mock.calls[1][0]).toMatchObject({
+         outcome: 'WORKED',
+         summary: '1 read',
+         counts: { reads: 1 },
+         items,
+      })
+      expect(record.mock.calls[1][0].finishedAt.getTime()).toBeGreaterThanOrEqual(
+         record.mock.calls[1][0].startedAt.getTime()
+      )
+   })
+
+   it('should record a failure with its error, and a run past its limit as timed out', async () => {
+      const { runner, run, record } = setup()
+      const failure = new Error('AbuseIPDB said no')
+
+      run.mockRejectedValueOnce(failure)
+      await runner.runNow()
+
+      expect(record.mock.calls[0][0]).toMatchObject({
+         outcome: 'FAILED',
+         error: failure,
+      })
+
+      run.mockImplementationOnce(
+         ({ signal }) =>
+            new Promise<undefined>(resolve => {
+               signal.addEventListener('abort', () => resolve(undefined))
+            })
+      )
+
+      const finished = runner.runNow()
+
+      await vi.advanceTimersByTimeAsync(500)
+      await finished
+
+      expect(record.mock.calls[1][0]).toMatchObject({ outcome: 'TIMED_OUT' })
+   })
+
+   it('should not record a tick that was skipped because a run was going', async () => {
+      const { runner, run, record } = setup({ timeoutMs: 60_000 })
+      let finish: () => void = () => undefined
+
+      run.mockImplementationOnce(
+         () =>
+            new Promise<undefined>(resolve => {
+               finish = () => resolve(undefined)
+            })
+      )
+
+      const first = runner.runNow()
+
+      await runner.runNow()
+      finish()
+      await first
+
+      expect(record).toHaveBeenCalledTimes(1)
    })
 })

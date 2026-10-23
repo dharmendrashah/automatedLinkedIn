@@ -104,4 +104,41 @@ export class UserService {
    public static list() {
       return PrismaService.client.user.findMany({ orderBy: { createdAt: 'asc' } })
    }
+
+   public static isAdminEmail(email: string, adminEmail: string) {
+      return adminEmail !== '' && email.toLowerCase() === adminEmail.toLowerCase()
+   }
+
+   // Makes the user with this email the one platform owner and returns every other admin to USER, in one transaction (the
+   // unique index "User_single_admin" allows only one). Only a user linked to a login counts: authentik vouched for the email then.
+   // An empty address changes nothing.
+   public static async syncAdmin(adminEmail: string) {
+      if (adminEmail === '') {
+         return
+      }
+
+      const db = PrismaService.client
+      const sameEmail = {
+         equals: adminEmail,
+         mode: 'insensitive',
+      } as const
+
+      await db.$transaction([
+         db.user.updateMany({
+            where: {
+               role: 'ADMIN',
+               NOT: { email: sameEmail },
+            },
+            data: { role: 'USER' },
+         }),
+         db.user.updateMany({
+            where: {
+               email: sameEmail,
+               authentikId: { not: null },
+               role: 'USER',
+            },
+            data: { role: 'ADMIN' },
+         }),
+      ])
+   }
 }

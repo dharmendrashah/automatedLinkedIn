@@ -51,6 +51,11 @@ export class Environment {
             example: 'http://localhost:3000,http://localhost:5173',
             default: 'http://localhost:3000,http://localhost:5173',
          }),
+         ADMIN_EMAIL: string({
+            desc: 'Email of the one platform owner. The user with this verified email gets the ADMIN role (cron monitor, usage owner view). Empty: nobody is promoted',
+            example: 'owner@example.com',
+            default: '',
+         }),
          RABBITMQ_URL: url({
             desc: 'AMQP URL of the RabbitMQ broker, including the vhost in the path',
             example: 'amqp://user:password@rabbitmq:5672/automatedlinkedin',

@@ -6,6 +6,8 @@ import { defineJob } from './defineJob'
 // writes no log line.
 export const messageImport = defineJob({
    name: 'message-import',
+   title: 'Message import',
+   purpose: 'Stores the messages that a finished message read collected, so they show in the Unibox.',
    everyMs: 30_000,
    startAfterMs: 20_000,
    timeoutMs: 5 * 60 * 1000,
@@ -13,7 +15,14 @@ export const messageImport = defineJob({
       const { done, retried, failed } = await MessageImportService.importDue(signal)
 
       return done + retried + failed > 0
-         ? { summary: `${done} runs stored, ${retried} to try again, ${failed} given up` }
+         ? {
+              summary: `${done} runs stored, ${retried} to try again, ${failed} given up`,
+              counts: {
+                 stored: done,
+                 retried,
+                 failed,
+              },
+           }
          : undefined
    },
 })

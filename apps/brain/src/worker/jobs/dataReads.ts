@@ -6,6 +6,8 @@ import { defineJob } from './defineJob'
 // Moves the reads owners queued in a drawer one step each (start, look, retry, keep), so none waits on another.
 export const dataReads = defineJob({
    name: 'data-reads',
+   title: 'Drawer reads',
+   purpose: 'Moves the paid reads an owner asked for in a profile, company or post drawer, one step at a time.',
    everyMs: 5_000,
    startAfterMs: 10_000,
    timeoutMs: 5 * 60 * 1000,
@@ -22,6 +24,11 @@ export const dataReads = defineJob({
          }
       }
 
-      return ended > 0 ? { summary: `${ended} reads ended` } : undefined
+      return ended > 0
+         ? {
+              summary: `${ended} reads ended`,
+              counts: { ended },
+           }
+         : undefined
    },
 })

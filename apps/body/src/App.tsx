@@ -9,6 +9,7 @@ import { Callback } from './pages/Callback'
 import { Companies } from './pages/Companies'
 import { HealthStatus } from './pages/HealthStatus'
 import { Icps } from './pages/Icps'
+import { Jobs } from './pages/Jobs'
 import { Lists } from './pages/Lists'
 import { Login } from './pages/Login'
 import { Posts } from './pages/Posts'
@@ -71,6 +72,7 @@ const App = () => (
          <Route path="/proxies" element={<Proxies />} />
          <Route path="/sessions" element={<Sessions />} />
          <Route path="/healthstatus" element={<HealthStatus />} />
+         <Route path="/jobs" element={<Jobs />} />
          <Route path="/profile" element={<Profile />} />
       </Route>
    </Routes>

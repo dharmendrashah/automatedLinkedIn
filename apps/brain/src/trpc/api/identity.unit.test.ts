@@ -5,14 +5,24 @@ import { loadIdentity, provisionUser } from './identity'
 const mocks = vi.hoisted(() => ({
    fetchIdentity: vi.fn(),
    provisionAuthentikAccount: vi.fn(),
+   syncAdmin: vi.fn(),
+   findById: vi.fn(),
    AccountConflictError: class AccountConflictError extends Error {},
 }))
 
 vi.mock('auth', () => ({ AuthService: { fetchIdentity: mocks.fetchIdentity } }))
 
+vi.mock('env', () => ({ ADMIN_EMAIL: 'owner@elitale.com' }))
+
 vi.mock('database', () => ({
    AccountConflictError: mocks.AccountConflictError,
-   UserService: { provisionAuthentikAccount: mocks.provisionAuthentikAccount },
+   UserService: {
+      provisionAuthentikAccount: mocks.provisionAuthentikAccount,
+      syncAdmin: mocks.syncAdmin,
+      findById: mocks.findById,
+      isAdminEmail: (email: string, adminEmail: string) =>
+         adminEmail !== '' && email.toLowerCase() === adminEmail.toLowerCase(),
+   },
 }))
 
 const auth = {
@@ -68,6 +78,63 @@ describe('identity', () => {
             email: 'ada@elitale.com',
             emailVerified: false,
          })
+      })
+
+      it('should make the platform owner ADMIN when their email is verified, ignoring case', async () => {
+         const promoted = {
+            id: 'u1',
+            role: 'ADMIN',
+         }
+
+         mocks.fetchIdentity.mockResolvedValueOnce({
+            ...identity,
+            email: 'Owner@Elitale.com',
+            emailVerified: true,
+         })
+         mocks.provisionAuthentikAccount.mockResolvedValueOnce({
+            id: 'u1',
+            email: 'Owner@Elitale.com',
+            role: 'USER',
+         })
+         mocks.findById.mockResolvedValueOnce(promoted)
+
+         await expect(provisionUser(auth)).resolves.toBe(promoted)
+
+         expect(mocks.syncAdmin).toHaveBeenCalledWith('owner@elitale.com')
+      })
+
+      it('should not promote the owner address when authentik did not verify it', async () => {
+         const user = {
+            id: 'u1',
+            email: 'owner@elitale.com',
+            role: 'USER',
+         }
+
+         mocks.fetchIdentity.mockResolvedValueOnce({
+            ...identity,
+            email: 'owner@elitale.com',
+            emailVerified: false,
+         })
+         mocks.provisionAuthentikAccount.mockResolvedValueOnce(user)
+
+         await expect(provisionUser(auth)).resolves.toBe(user)
+
+         expect(mocks.syncAdmin).not.toHaveBeenCalled()
+      })
+
+      it('should not promote any other user', async () => {
+         mocks.fetchIdentity.mockResolvedValueOnce({
+            ...identity,
+            emailVerified: true,
+         })
+         mocks.provisionAuthentikAccount.mockResolvedValueOnce({
+            id: 'u2',
+            email: 'ada@elitale.com',
+         })
+
+         await provisionUser(auth)
+
+         expect(mocks.syncAdmin).not.toHaveBeenCalled()
       })
 
       it('should return no user when the account cannot get one', async () => {

@@ -23,6 +23,9 @@ export interface ScoreOutcome {
 
 export interface DueProxy {
    id: string
+   // The account that owns the proxy and its user, for the cron monitor.
+   accountId: string
+   userId: string
    status: ProxyServerStatus
    scoredAt: Date | null
    // False for a proxy that only needs its failed AbuseIPDB lookup repeated.
@@ -213,11 +216,15 @@ export class ProxyScoringService {
             id: true,
             status: true,
             scoredAt: true,
+            linkedInAccountId: true,
+            linkedInAccount: { select: { userId: true } },
          },
       })
 
-      return rows.map(({ id, status, scoredAt }) => ({
+      return rows.map(({ id, status, scoredAt, linkedInAccountId, linkedInAccount }) => ({
          id,
+         accountId: linkedInAccountId,
+         userId: linkedInAccount.userId,
          status,
          scoredAt,
          retest: scoredAt === null || scoredAt < today,

@@ -23,6 +23,8 @@ const NOW = new Date('2026-10-14T10:00:00Z')
 
 const due = (id: string, extra: Record<string, unknown> = {}) => ({
    id,
+   accountId: `acc-${id}`,
+   userId: 'u1',
    status: 'ACTIVE',
    scoredAt: null,
    retest: true,
@@ -48,7 +50,7 @@ describe('ProxyScoringJob', () => {
       it('should re-test and then score every due proxy it can claim', async () => {
          mocks.findDue.mockResolvedValue([due('a'), due('b')])
 
-         await expect(ProxyScoringJob.runDue(NOW, { retryDelayMs: 0 })).resolves.toEqual({
+         await expect(ProxyScoringJob.runDue(NOW, { retryDelayMs: 0 })).resolves.toMatchObject({
             scored: 2,
             failed: 0,
          })
@@ -70,7 +72,9 @@ describe('ProxyScoringJob', () => {
       it('should only repeat the lookup, not the test, for a proxy whose lookup failed earlier today', async () => {
          mocks.findDue.mockResolvedValue([due('a', { retest: false })])
 
-         await ProxyScoringJob.runDue(NOW, { retryDelayMs: 0 })
+         const { items } = await ProxyScoringJob.runDue(NOW, { retryDelayMs: 0 })
+
+         expect(items[0].reason).toBe('Repeated the reputation lookup that failed earlier')
 
          expect(mocks.retest).not.toHaveBeenCalled()
          expect(mocks.score).toHaveBeenCalledWith('a')
@@ -135,6 +139,22 @@ describe('ProxyScoringJob', () => {
          await expect(ProxyScoringJob.runDue(NOW, { retryDelayMs: 0 })).resolves.toEqual({
             scored: 1,
             failed: 1,
+            items: [
+               {
+                  userId: 'u1',
+                  accountId: 'acc-a',
+                  action: 'proxy-score',
+                  result: 'FAILED',
+                  reason: 'The test or the scoring failed; it is tried again on the next pass',
+               },
+               {
+                  userId: 'u1',
+                  accountId: 'acc-b',
+                  action: 'proxy-score',
+                  result: 'ASKED',
+                  reason: 'Tested again and scored',
+               },
+            ],
          })
          expect(mocks.score).toHaveBeenCalledWith('b')
       })
@@ -154,6 +174,7 @@ describe('ProxyScoringJob', () => {
          expect(second).toEqual({
             scored: 0,
             failed: 0,
+            items: [],
          })
          expect(mocks.findDue).toHaveBeenCalledTimes(1)
 
@@ -167,6 +188,7 @@ describe('ProxyScoringJob', () => {
          await expect(ProxyScoringJob.runDue(NOW, { retryDelayMs: 0 })).resolves.toEqual({
             scored: 0,
             failed: 0,
+            items: [],
          })
          expect(console.error).not.toHaveBeenCalled()
       })

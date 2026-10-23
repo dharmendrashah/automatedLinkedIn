@@ -1,6 +1,6 @@
 # Cron service: a second container for scheduled jobs, with every run recorded
 
-- Status: draft, on hold (2026-10-14: waiting for the owner, who is rethinking the scale and scope) <!-- draft | locked | in progress | done -->
+- Status: superseded by `.plan/cron-monitor.md` (2026-10-24: the separate service is the brain worker, built in `.plan/brain-worker.md`; a second cron container will not be built) <!-- draft | locked | in progress | done -->
 - Created: 2026-10-14
 - Locked by user: no <!-- change to "yes, <date>" only after the user confirms -->
 

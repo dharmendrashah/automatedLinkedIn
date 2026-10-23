@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createWorkerConfig } from './config'
 import { type ConsumerDefinition } from './consumers/defineConsumer'
 import { type JobDefinition } from './jobs/defineJob'
-import { WorkerRuntime } from './runtime'
+import { type RunRecorder } from './jobs/runRecorder'
+import { type RuntimeDependencies, WorkerRuntime } from './runtime'
 
 const consumer = {
    name: 'results',
@@ -16,6 +17,8 @@ const consumer = {
 
 const job: JobDefinition = {
    name: 'scoring',
+   title: 'Scoring',
+   purpose: 'Scores things.',
    everyMs: 1000,
    startAfterMs: 10,
    timeoutMs: 500,
@@ -32,7 +35,11 @@ const fakeChannel = () => ({
    close: vi.fn().mockResolvedValue(undefined),
 })
 
-const setup = (roles: string, databaseHealthy: () => Promise<boolean> = async () => true) => {
+const setup = (
+   roles: string,
+   databaseHealthy: () => Promise<boolean> = async () => true,
+   extra: Partial<RuntimeDependencies> = {}
+) => {
    const channel = fakeChannel()
    const log = {
       info: vi.fn(),
@@ -60,6 +67,7 @@ const setup = (roles: string, databaseHealthy: () => Promise<boolean> = async ()
          },
          log,
          databasePollMs: 10,
+         ...extra,
       }
    )
 
@@ -164,5 +172,48 @@ describe('WorkerRuntime', () => {
 
       expect(channel.cancel).toHaveBeenCalledWith('tag')
       expect(channel.close).toHaveBeenCalled()
+   })
+
+   it('should announce its jobs to the monitor and run the recorder from the start to the stop', async () => {
+      const recorder = {
+         add: vi.fn(),
+         start: vi.fn(),
+         stop: vi.fn().mockResolvedValue(undefined),
+      }
+      const announceJobs = vi.fn().mockResolvedValue(undefined)
+      const { runtime } = setup('jobs', undefined, {
+         recorder: recorder as unknown as RunRecorder,
+         announceJobs,
+      })
+
+      await runtime.start()
+
+      expect(announceJobs).toHaveBeenCalledWith([job])
+      expect(recorder.start).toHaveBeenCalled()
+
+      await runtime.stop()
+
+      expect(recorder.stop).toHaveBeenCalled()
+   })
+
+   it('should still run its jobs when the announcement fails, and say so', async () => {
+      const announceJobs = vi.fn().mockRejectedValue(new Error('no table'))
+      const { runtime, log } = setup('jobs', undefined, { announceJobs })
+
+      await runtime.start()
+
+      expect(log.error).toHaveBeenCalledWith(expect.stringContaining('could not announce its jobs: no table'))
+      await expect.poll(() => vi.mocked(job.run).mock.calls.length).toBe(1)
+      await runtime.stop()
+   })
+
+   it('should not announce anything without the jobs role', async () => {
+      const announceJobs = vi.fn()
+      const { runtime } = setup('consumers', undefined, { announceJobs })
+
+      await runtime.start()
+
+      expect(announceJobs).not.toHaveBeenCalled()
+      await runtime.stop()
    })
 })

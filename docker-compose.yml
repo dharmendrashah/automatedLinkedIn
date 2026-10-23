@@ -108,6 +108,7 @@ services:
       AUTHENTIK_CLIENT_ID: ${AUTHENTIK_CLIENT_ID:-automatedlinkedin}
       AUTHENTIK_INTERNAL_URL: http://authentik-server:9000
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       RABBITMQ_URL: *rabbitmq-url
       # NODE_ENV is production in the image, so the key has no built-in default there.
       # This is the public development key: never reuse it outside local development.
