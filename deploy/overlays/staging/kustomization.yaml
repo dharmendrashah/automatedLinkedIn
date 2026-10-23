@@ -63,7 +63,9 @@ configMapGenerator:
       - idle_shutdown.py=idle-shutdown/idle_shutdown.py
   - name: idle-shutdown-config
     literals:
-      - SMART_SHUTDOWN_ENABLED=true
+      # true | false
+      - SMART_SHUTDOWN_ENABLED=false
+      # dry-run | enforce
       - SMART_SHUTDOWN_MODE=enforce
       - IDLE_MINUTES=45
       - ACTIVITY_WINDOW_SECONDS=600
