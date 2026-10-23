@@ -52,6 +52,9 @@ const person = (name: string, profileUrl: string | undefined, imageUrl?: string)
 // Profile pictures the page draws, by the name in their alt text. Only LinkedIn's own image host is taken. A name with two different
 // pictures (two people with one name) gets none, so a person is never shown with another's face.
 const PHOTO_HOST = 'https://media.licdn.com/'
+// A picture sent in a message is served from the private image path of linkedin.com itself (seen on staging, 2026-10-24), and only
+// the account's own signed-in browser can download it.
+const MESSAGE_PICTURE_PREFIXES = [PHOTO_HOST, 'https://www.linkedin.com/dms/prv/image/']
 const PHOTOS =
    'img.presence-entity__image, img.msg-facepile-grid__img--person, img.msg-s-event-listitem__profile-picture'
 
@@ -80,7 +83,7 @@ export const parseOwner = (html: string): Person | undefined => {
 }
 
 // What a message holds besides its words: only what the page shows. A picture carries the address LinkedIn serves it from (its own
-// image host only), so the run can keep a copy; that address is a means to download and never leaves the spider.
+// image hosts only), so the run can keep a copy; that address is a means to download and never leaves the spider.
 export type ReadAttachment = Message['attachments'][number] & { url?: string }
 
 const attachmentsOf = (item: HTMLElement): ReadAttachment[] =>
@@ -93,7 +96,7 @@ const attachmentsOf = (item: HTMLElement): ReadAttachment[] =>
          return {
             kind: 'IMAGE' as const,
             ...(name && { name }),
-            ...(src?.startsWith(PHOTO_HOST) && { url: src }),
+            ...(src && MESSAGE_PICTURE_PREFIXES.some(prefix => src.startsWith(prefix)) && { url: src }),
          }
       })
 
