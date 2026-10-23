@@ -71,6 +71,14 @@ describe('send', () => {
       expect(of(undone).sending).toBeUndefined()
    })
 
+   it('should keep how much of the files is uploaded while it is sent, change nothing for the same percent, and ignore a reply not being sent', () => {
+      const half = reduce(sending, { type: 'PROGRESS', id: 'c1', percent: 50 })
+
+      expect(of(half).sending?.progress).toBe(50)
+      expect(reduce(half, { type: 'PROGRESS', id: 'c1', percent: 50 })).toBe(half)
+      expect(reduce(start, { type: 'PROGRESS', id: 'c1', percent: 50 })).toBe(start)
+   })
+
    it('should put it in the conversation as ours once sent, and read it, so the conversation is replied', () => {
       const sent = reduce(sending, { type: 'SENT', id: 'c1', now: 6000 })
       const last = of(sent).messages.at(-1)

@@ -1,9 +1,11 @@
 import { FileText, Image as ImageIcon, Link2, Mic, Video } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
 import { type Attachment, type UniboxMessage } from './types'
 
+import { useObjectUrl, useSeen } from './previews'
 import { RichText } from './rich-text'
 import { useShared } from './shared'
 import { formatFull } from './time'
@@ -60,10 +62,74 @@ type Props = {
    tokens: string[]
 }
 
+// An attachment of a message: a picture is shown as a picture (from the file chosen on this device, or from the kept file through a
+// short link asked for when it is about to be seen), anything else is a chip that opens the file when it is kept.
+export const AttachmentView = ({
+   attachment,
+   own = false,
+   messageId,
+   index,
+}: {
+   attachment: Attachment
+   own?: boolean
+   messageId: string
+   index: number
+}) => {
+   const { openFile, fileUrl } = useShared()
+   const holder = useRef<HTMLDivElement>(null)
+   const seen = useSeen(holder)
+   const local = useObjectUrl(attachment.kind === 'IMAGE' ? attachment.file : undefined)
+   const [keptUrl, setKeptUrl] = useState<string>()
+   const [broken, setBroken] = useState(false)
+   const wantsKept = attachment.kind === 'IMAGE' && attachment.kept === true && !attachment.file && fileUrl !== undefined
+
+   useEffect(() => {
+      if (!wantsKept || !seen || !fileUrl || keptUrl) {
+         return undefined
+      }
+
+      let live = true
+
+      fileUrl(messageId, index)
+         .then(url => live && setKeptUrl(url))
+         .catch(() => live && setBroken(true))
+
+      return () => {
+         live = false
+      }
+   }, [wantsKept, seen, fileUrl, keptUrl, messageId, index])
+
+   const src = local ?? keptUrl
+   const open = attachment.kept && openFile ? () => openFile(messageId, index) : undefined
+
+   return (
+      <div ref={holder} className="max-w-full">
+         {src && !broken ? (
+            <button
+               type="button"
+               onClick={open}
+               disabled={!open}
+               className={cn('block overflow-hidden rounded-md', open && 'cursor-pointer')}
+               title={attachment.name}
+            >
+               <img
+                  src={src}
+                  alt={attachment.name ?? 'Image'}
+                  loading="lazy"
+                  onError={() => setBroken(true)}
+                  className="max-h-56 max-w-full object-cover"
+               />
+            </button>
+         ) : (
+            <AttachmentChip attachment={attachment} own={own} onOpen={open} />
+         )}
+      </div>
+   )
+}
+
 // One message: its words as safe text, its attachments, and its time on hover. Ours are on the right in LinkedIn blue.
 export const MessageBubble = ({ message, tokens }: Props) => {
    const own = message.direction === 'ME'
-   const { openFile } = useShared()
 
    return (
       <div className={cn('flex w-full', own ? 'justify-end' : 'justify-start')}>
@@ -84,11 +150,12 @@ export const MessageBubble = ({ message, tokens }: Props) => {
             {message.attachments.length > 0 ? (
                <div className={cn('flex flex-wrap gap-1.5', message.text && 'mt-1.5')}>
                   {message.attachments.map((attachment, index) => (
-                     <AttachmentChip
+                     <AttachmentView
                         key={index}
                         attachment={attachment}
                         own={own}
-                        onOpen={attachment.kept && openFile ? () => openFile(message.id, index) : undefined}
+                        messageId={message.id}
+                        index={index}
                      />
                   ))}
                </div>

@@ -29,7 +29,9 @@ export type UniboxSource = {
       account: UniboxAccount,
       text: string,
       attachments: Attachment[],
-      conversationId: string
+      conversationId: string,
+      // How much of the files is uploaded, in percent, while they go.
+      onProgress?: (percent: number) => void
    ) => Promise<SendResult>
    // The whole conversation, for a source that lists only its latest messages (undefined when it already has it all).
    open: (id: string) => Promise<UniboxConversation | undefined>

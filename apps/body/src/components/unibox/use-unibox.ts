@@ -113,7 +113,7 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
 
          const result: SendResult = account
             ? await source
-                 .send(account, text, attachments, id)
+                 .send(account, text, attachments, id, percent => dispatch({ type: 'PROGRESS', id, percent }))
                  .catch(() => ({ ok: false as const, reason: 'The reply could not be sent. Try again.' }))
             : { ok: false as const, reason: 'The account of this conversation is not known.' }
 

@@ -7,6 +7,8 @@ export type Action =
    | { type: 'UNDONE'; ids: string[] }
    | { type: 'SEND'; id: string; text: string; attachments: Attachment[]; now: number }
    | { type: 'UNDO_SEND'; id: string }
+   // How much of the files of the reply is uploaded, in percent.
+   | { type: 'PROGRESS'; id: string; percent: number }
    | { type: 'SENT'; id: string; now: number }
    | { type: 'FAIL'; id: string; reason: string; unsure?: boolean }
    | { type: 'DISMISS_FAILED'; id: string }
@@ -77,6 +79,18 @@ export const reduce = (state: UniboxConversation[], action: Action): UniboxConve
       }
       case 'UNDO_SEND':
          return change(state, [action.id], c => (c.sending ? without(c, 'sending') : c))
+      case 'PROGRESS':
+         return change(state, [action.id], c =>
+            c.sending && c.sending.progress !== action.percent
+               ? {
+                    ...c,
+                    sending: {
+                       ...c.sending,
+                       progress: action.percent,
+                    },
+                 }
+               : c
+         )
       case 'SENT':
          return change(state, [action.id], c => {
             if (!c.sending) {

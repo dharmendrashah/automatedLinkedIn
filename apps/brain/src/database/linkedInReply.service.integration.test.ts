@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { KeptFiles, UploadFiles } from 'core'
+import { KeptFiles, UploadFiles, UploadRefused } from 'core'
 
 import { type TaskResult } from '@automatedLinkedIn/contracts'
 
@@ -289,7 +289,7 @@ describe('LinkedInReplyService (database)', () => {
       const UPLOAD = '0198f2a4-7c1e-7d3a-9b1e-5c2d8f0a1b34'
 
       it('should start the reply with the files brain kept for the upload, not what the caller says, and allow no words', async () => {
-         vi.spyOn(UploadFiles, 'list').mockResolvedValue([
+         vi.spyOn(UploadFiles, 'verify').mockResolvedValue([
             {
                name: 'photo.png',
                bytes: 5,
@@ -338,11 +338,47 @@ describe('LinkedInReplyService (database)', () => {
          })
       })
 
-      it('should refuse an upload with no files in it, and one with a type that cannot be sent, before anything starts', async () => {
-         const list = vi.spyOn(UploadFiles, 'list')
+      it('should refuse the reply, with the sentence of the store, when a file is not what its name says it is', async () => {
+         vi.spyOn(UploadFiles, 'verify').mockRejectedValue(
+            new UploadRefused(415, 'A file is not what its name says it is.')
+         )
 
-         list.mockResolvedValueOnce([])
-         list.mockResolvedValueOnce([
+         await expect(LinkedInReplyService.send(userId, conversationId, 'Hi', UPLOAD)).rejects.toThrow(
+            'A file is not what its name says it is.'
+         )
+         expect(requested).toEqual([])
+      })
+
+      it('should hand out a signed form for a file of a type LinkedIn takes, with a safe name, and refuse any other type', async () => {
+         const form = vi.spyOn(UploadFiles, 'form').mockResolvedValue({
+            url: 'https://storage.googleapis.com/b/',
+            fields: { key: 'k' },
+            name: 'cv.pdf',
+         })
+
+         await expect(LinkedInReplyService.uploadForm(userId, UPLOAD, '../../My CV.pdf', 10)).resolves.toEqual({
+            url: 'https://storage.googleapis.com/b/',
+            fields: { key: 'k' },
+            name: 'cv.pdf',
+            kind: 'FILE',
+         })
+         expect(form).toHaveBeenCalledWith(userId, UPLOAD, 'My CV.pdf', 10)
+         await expect(LinkedInReplyService.uploadForm(userId, UPLOAD, 'setup.exe', 10)).rejects.toBeInstanceOf(
+            TaskRefusedError
+         )
+
+         form.mockRejectedValueOnce(new UploadRefused(413, 'The file is larger than a reply may carry.'))
+
+         await expect(LinkedInReplyService.uploadForm(userId, UPLOAD, 'cv.pdf', 10)).rejects.toThrow(
+            'The file is larger than a reply may carry.'
+         )
+      })
+
+      it('should refuse an upload with no files in it, and one with a type that cannot be sent, before anything starts', async () => {
+         const verify = vi.spyOn(UploadFiles, 'verify')
+
+         verify.mockResolvedValueOnce([])
+         verify.mockResolvedValueOnce([
             {
                name: 'setup.exe',
                bytes: 5,

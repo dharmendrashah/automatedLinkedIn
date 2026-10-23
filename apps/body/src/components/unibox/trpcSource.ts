@@ -117,7 +117,7 @@ const refusalOf = (error: unknown) =>
       : 'The reply could not be sent. Try again.'
 
 // The Unibox on the owner's real messages, read from brain (.plan/unibox-backend.md) and answered through the account's own browser
-// (.plan/unibox-send.md). `upload` sends a file of a reply to brain; without it files cannot be sent. `wait` is only for tests.
+// (.plan/unibox-send.md). `upload` posts a file of a reply to the bucket; without it files cannot be sent. `wait` is only for tests.
 type Deps = {
    upload?: Upload
    wait?: (ms: number) => Promise<void>
@@ -155,7 +155,7 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
 
    fileLink: async (messageId, index) => (await client.unibox.fileLink.query({ messageId, index })).url,
 
-   send: async (_account, text, attachments, conversationId) => {
+   send: async (_account, text, attachments, conversationId, onProgress) => {
       // A link is only text on the page; there is nothing of it to upload.
       if (attachments.some(({ kind }) => kind === 'LINK')) {
          return {
@@ -165,6 +165,9 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
       }
 
       const uploadId = attachments.length > 0 ? crypto.randomUUID() : undefined
+      // Progress is of all the files together, by their sizes.
+      const total = attachments.reduce((sum, { file }) => sum + (file?.size ?? 0), 0)
+      let done = 0
 
       for (const attachment of attachments) {
          const label = attachment.name ?? 'A file'
@@ -176,7 +179,10 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
             }
          }
 
-         const uploaded = await upload(uploadId ?? '', attachment.file)
+         const { size } = attachment.file
+         const uploaded = await upload(uploadId ?? '', attachment.file, percent =>
+            onProgress?.(Math.round(((done + (size * percent) / 100) / total) * 100))
+         )
 
          if (!uploaded.ok) {
             return {
@@ -184,6 +190,8 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
                reason: `${label}: ${uploaded.reason}`,
             }
          }
+
+         done += size
       }
 
       const started = await client.unibox.send
