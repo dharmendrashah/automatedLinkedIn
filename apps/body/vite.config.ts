@@ -1,12 +1,28 @@
 import path from 'node:path'
+import { rmSync } from 'node:fs'
 
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { type Plugin, defineConfig } from 'vite'
+
+// `public/messages.json` is real people's messages that the owner drops in to try the Unibox. It is served by the dev server and must
+// never reach a build, whose files anyone who opens the site can read.
+const withoutMessagesFile = (): Plugin => {
+  let outDir = 'dist'
+
+  return {
+    name: 'without-messages-file',
+    apply: 'build',
+    configResolved: config => {
+      outDir = path.resolve(config.root, config.build.outDir)
+    },
+    closeBundle: () => rmSync(path.join(outDir, 'messages.json'), { force: true })
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), withoutMessagesFile()],
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, 'src'),

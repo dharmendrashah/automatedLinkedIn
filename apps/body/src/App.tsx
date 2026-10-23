@@ -1,6 +1,6 @@
 import { FailureCard } from '@/components/failure-card'
 import { Suspense, lazy } from 'react'
-import { Route, Routes } from 'react-router'
+import { Navigate, Route, Routes } from 'react-router'
 
 import { DashboardLayout } from './layouts/DashboardLayout'
 import { PublicLayout } from './layouts/PublicLayout'
@@ -8,7 +8,6 @@ import { Accounts } from './pages/Accounts'
 import { Callback } from './pages/Callback'
 import { Companies } from './pages/Companies'
 import { HealthStatus } from './pages/HealthStatus'
-import { Home } from './pages/Home'
 import { Icps } from './pages/Icps'
 import { Lists } from './pages/Lists'
 import { Login } from './pages/Login'
@@ -18,6 +17,7 @@ import { Profiles } from './pages/Profiles'
 import { Proxies } from './pages/Proxies'
 import { Sessions } from './pages/Sessions'
 import { Signup } from './pages/Signup'
+import { Unibox } from './pages/Unibox'
 import { Usage } from './pages/Usage'
 import { WorkflowNew } from './pages/WorkflowNew'
 import { Workflows } from './pages/Workflows'
@@ -30,7 +30,6 @@ const WorkflowPage = lazy(() => import('./pages/Workflow').then(({ WorkflowPage:
 const App = () => (
    <Routes>
       <Route element={<PublicLayout />}>
-         <Route path="/" element={<Home />} />
          <Route path="/login" element={<Login />} />
          <Route path="/signup" element={<Signup />} />
          <Route path="/callback" element={<Callback />} />
@@ -42,6 +41,7 @@ const App = () => (
          />
       </Route>
       <Route element={<DashboardLayout />}>
+         <Route path="/" element={<Navigate to="/dashboard" replace />} />
          <Route
             path="/dashboard"
             element={
@@ -50,6 +50,7 @@ const App = () => (
                </Suspense>
             }
          />
+         <Route path="/unibox/:conversationId?" element={<Unibox />} />
          <Route path="/accounts" element={<Accounts />} />
          <Route path="/profiles" element={<Profiles />} />
          <Route path="/companies" element={<Companies />} />

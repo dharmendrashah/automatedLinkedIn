@@ -16,6 +16,7 @@ import {
    Building2,
    ExternalLink,
    FileText,
+   Inbox,
    LayoutDashboard,
    ListChecks,
    Network,
@@ -36,6 +37,7 @@ import { toProfile } from '../auth/profile'
 
 const navMain: NavItem[] = [
    { title: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
+   { title: 'Unibox', to: '/unibox', icon: Inbox },
    { title: 'LinkedIn accounts', to: '/accounts', icon: Briefcase },
    { title: 'LinkedIn profiles', to: '/profiles', icon: Users },
    { title: 'LinkedIn companies', to: '/companies', icon: Building2 },
