@@ -14,6 +14,13 @@ export type UniboxData = {
 // `unsure`: the reply may have been sent (LinkedIn did not show whether), so sending it again asks the owner first.
 export type SendResult = { ok: true } | { ok: false; reason: string; unsure?: boolean }
 
+// What happens to a reply while it is sent, for the page to show: how much of the files is uploaded (percent), and brain having it
+// (its id), from which on it can be followed, also after a reload.
+export type SendEvents = {
+   progress?: (percent: number) => void
+   started?: (replyId: string) => void
+}
+
 export type RefreshResult = {
    started: number
    skipped: Array<{ accountId: string; reason: string }>
@@ -30,8 +37,7 @@ export type UniboxSource = {
       text: string,
       attachments: Attachment[],
       conversationId: string,
-      // How much of the files is uploaded, in percent, while they go.
-      onProgress?: (percent: number) => void
+      events?: SendEvents
    ) => Promise<SendResult>
    // The whole conversation, for a source that lists only its latest messages (undefined when it already has it all).
    open: (id: string) => Promise<UniboxConversation | undefined>
@@ -39,4 +45,8 @@ export type UniboxSource = {
    refresh: (accountIds?: string[]) => Promise<RefreshResult>
    // A short link to open the kept file of a message (its first, second... attachment); absent for a source that keeps none.
    fileLink?: (messageId: string, index: number) => Promise<string>
+   // Follows a reply brain has until it ends, as `send` does after it started it; for a reply that was on its way when the page loaded.
+   follow?: (replyId: string) => Promise<SendResult>
+   // Keeps that the owner dismissed a reply that did not go, so it is not shown after a reload.
+   dismissReply?: (replyId: string) => Promise<void>
 }

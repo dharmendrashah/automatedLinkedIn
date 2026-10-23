@@ -24,7 +24,8 @@ const STALE_SENTENCE = 'No answer came from the browser. Check the conversation 
 // Prisma's code for a unique index that a second row would break.
 const isUniqueViolation = (error: unknown) => (error as { code?: string } | null)?.code === 'P2002'
 
-// A refusal of the upload store is a sentence for the owner, the same as any other refusal to send.
+// A refusal of the upload store is a sentence for the owner, the same as any other refusal to send. Any other failure of the bucket
+// (a missing permission, an outage) is logged here and never shown: its text names the bucket and the service account.
 const refusal = async <T>(work: () => Promise<T>): Promise<T> => {
    try {
       return await work()
@@ -33,7 +34,9 @@ const refusal = async <T>(work: () => Promise<T>): Promise<T> => {
          throw new TaskRefusedError(error.message)
       }
 
-      throw error
+      console.error(`Uploads: ${(error as Error).message}`)
+
+      throw new TaskRefusedError('Files cannot be sent right now. Try again in a moment.')
    }
 }
 
@@ -170,6 +173,21 @@ export class LinkedInReplyService {
             sentAt: true,
          },
       })
+   }
+
+   // The owner dismisses a reply that did not go (or may not have), so the page stops showing it after a reload. A reply that is being
+   // sent or went cannot be dismissed. False for one that is not the owner's or cannot be.
+   public static async dismiss(userId: string, id: string) {
+      const { count } = await PrismaService.client.linkedInReply.updateMany({
+         where: {
+            id,
+            userId,
+            state: { in: ['FAILED', 'UNKNOWN'] },
+         },
+         data: { dismissedAt: new Date() },
+      })
+
+      return count > 0
    }
 
    // A reply still sending long after its task could have ended was lost with its run. It may have gone, so it is unsure, never

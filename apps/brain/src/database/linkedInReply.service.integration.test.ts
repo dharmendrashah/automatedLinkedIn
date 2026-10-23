@@ -152,6 +152,31 @@ describe('LinkedInReplyService (database)', () => {
       await expect(LinkedInReplyService.get(otherUserId, sent?.id ?? '')).resolves.toBeNull()
    })
 
+   it('should let the owner dismiss a reply that did not go, once, and never one that is being sent, went or is not theirs', async () => {
+      const row = (state: 'FAILED' | 'UNKNOWN' | 'SENDING' | 'SENT') => ({
+         userId,
+         accountId,
+         conversationId,
+         text: 'x',
+         state,
+         sessionId: randomUUID(),
+      })
+      const [failed, unsure, sending, sent] = await Promise.all(
+         (['FAILED', 'UNKNOWN', 'SENDING', 'SENT'] as const).map(state =>
+            PrismaService.client.linkedInReply.create({ data: row(state) })
+         )
+      )
+
+      await expect(LinkedInReplyService.dismiss(userId, failed?.id ?? '')).resolves.toBe(true)
+      await expect(LinkedInReplyService.dismiss(userId, unsure?.id ?? '')).resolves.toBe(true)
+      await expect(LinkedInReplyService.dismiss(userId, sending?.id ?? '')).resolves.toBe(false)
+      await expect(LinkedInReplyService.dismiss(userId, sent?.id ?? '')).resolves.toBe(false)
+      await expect(LinkedInReplyService.dismiss(otherUserId, failed?.id ?? '')).resolves.toBe(false)
+      await expect(
+         PrismaService.client.linkedInReply.findUniqueOrThrow({ where: { id: failed?.id ?? '' } })
+      ).resolves.toMatchObject({ dismissedAt: expect.any(Date) })
+   })
+
    it('should refuse a second reply while one is being sent from the account, by the database too', async () => {
       await LinkedInReplyService.send(userId, conversationId, 'One')
 
@@ -372,6 +397,24 @@ describe('LinkedInReplyService (database)', () => {
          await expect(LinkedInReplyService.uploadForm(userId, UPLOAD, 'cv.pdf', 10)).rejects.toThrow(
             'The file is larger than a reply may carry.'
          )
+      })
+
+      it("should say a plain sentence, and log the cause, when the bucket fails for a reason that is not the owner's", async () => {
+         const log = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+         vi.spyOn(UploadFiles, 'form').mockRejectedValueOnce(
+            new Error('brain@project.iam.gserviceaccount.com does not have storage.objects.list access to the bucket')
+         )
+         vi.spyOn(UploadFiles, 'verify').mockRejectedValueOnce(new Error('bucket outage'))
+
+         await expect(LinkedInReplyService.uploadForm(userId, UPLOAD, 'cv.pdf', 10)).rejects.toThrow(
+            'Files cannot be sent right now. Try again in a moment.'
+         )
+         await expect(LinkedInReplyService.send(userId, conversationId, 'Hi', UPLOAD)).rejects.toThrow(
+            'Files cannot be sent right now. Try again in a moment.'
+         )
+         expect(requested).toEqual([])
+         expect(log).toHaveBeenCalledWith(expect.stringContaining('storage.objects.list'))
       })
 
       it('should refuse an upload with no files in it, and one with a type that cannot be sent, before anything starts', async () => {

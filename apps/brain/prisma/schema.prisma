@@ -920,6 +920,8 @@ model LinkedInReply {
   filesKeptAt    DateTime?
   // Set when the message LinkedIn showed for this reply was stored and given these files.
   matchedAt      DateTime?
+  // Set when the owner dismissed a reply that did not go, so the page stops showing it after a reload.
+  dismissedAt    DateTime?
   state          LinkedInReplyState   @default(SENDING)
   // A fixed sentence the owner can read, set when the reply did not go.
   failure        String?

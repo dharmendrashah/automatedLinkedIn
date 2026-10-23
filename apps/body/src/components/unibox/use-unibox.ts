@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { type Attachment, type UniboxAccount, type UniboxConversation } from './types'
 
+import { waitForStored } from './afterSent'
 import { type SendResult, type UniboxSource } from './source'
 import { type Action, reduce } from './store'
 
@@ -28,12 +29,18 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
    })
 
    const opened = useRef(new Set<string>())
+   // The replies brain has that this page is following, by reply id, so one is followed once.
+   const following = useRef(new Set<string>())
 
    // The change is made at once on the page and kept with the data behind it.
    const dispatch = useCallback(
       (action: Action) => {
          setConversations(state => reduce(state, action))
 
+         const replyId =
+            action.type === 'DISMISS_FAILED'
+               ? latest.current.conversations.find(item => item.id === action.id)?.failed?.replyId
+               : undefined
          const saving =
             action.type === 'READ'
                ? source.mark(action.ids, { unread: false })
@@ -43,7 +50,9 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
                    ? source.mark(action.ids, { done: true })
                    : action.type === 'UNDONE'
                      ? source.mark(action.ids, { done: false })
-                     : undefined
+                     : replyId
+                       ? source.dismissReply?.(replyId)
+                       : undefined
 
          saving?.catch(onSaveError)
       },
@@ -72,6 +81,65 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
       [source]
    )
 
+   const stopFlying = useCallback((id: string) => {
+      setFlying(set => {
+         const next = new Set(set)
+
+         next.delete(id)
+
+         return next
+      })
+   }, [])
+
+   // How a reply ends: a sentence when it did not go, or, when LinkedIn took it, the wait for its message to be stored and shown.
+   const conclude = useCallback(
+      async (id: string, result: SendResult) => {
+         stopFlying(id)
+
+         if (!result.ok) {
+            dispatch({ type: 'FAIL', id, reason: result.reason, unsure: result.unsure })
+
+            return
+         }
+
+         const conversation = latest.current.conversations.find(item => item.id === id)
+         const before = conversation?.messageCount ?? conversation?.messages.length ?? 0
+
+         dispatch({ type: 'SENT', id })
+
+         const stored = await waitForStored(source, id, before)
+
+         if (stored) {
+            dispatch({ type: 'OPENED', id, conversation: stored })
+         }
+
+         dispatch({ type: 'FINISHED', id, now: Date.now(), stored: stored !== undefined })
+      },
+      [dispatch, source, stopFlying]
+   )
+
+   // A reply brain already has (it was on its way when the page loaded): followed until it ends, as one sent from here is.
+   const follow = useCallback(
+      async (id: string, replyId: string) => {
+         if (following.current.has(replyId) || !source.follow) {
+            return
+         }
+
+         following.current.add(replyId)
+         setFlying(set => new Set(set).add(id))
+
+         const result: SendResult = await source.follow(replyId).catch(() => ({
+            ok: false as const,
+            unsure: true,
+            reason: 'No answer came. Check the conversation on LinkedIn.',
+         }))
+
+         following.current.delete(replyId)
+         await conclude(id, result)
+      },
+      [conclude, source]
+   )
+
    const run = useCallback(() => {
       source
          .load()
@@ -85,9 +153,15 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
                canSend: data.canSend,
                canRefresh: data.canRefresh,
             })
+
+            for (const { id, sending } of data.conversations) {
+               if (sending?.replyId) {
+                  void follow(id, sending.replyId)
+               }
+            }
          })
          .catch(() => setLoaded({ status: 'error' }))
-   }, [source])
+   }, [source, follow])
 
    const reload = useCallback(() => {
       setLoaded({ status: 'loading' })
@@ -111,26 +185,27 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
 
          setFlying(set => new Set(set).add(id))
 
+         let startedId: string | undefined
          const result: SendResult = account
             ? await source
-                 .send(account, text, attachments, id, percent => dispatch({ type: 'PROGRESS', id, percent }))
+                 .send(account, text, attachments, id, {
+                    progress: percent => dispatch({ type: 'PROGRESS', id, percent }),
+                    started: replyId => {
+                       startedId = replyId
+                       following.current.add(replyId)
+                       dispatch({ type: 'STARTED', id, replyId, since: Date.now() })
+                    },
+                 })
                  .catch(() => ({ ok: false as const, reason: 'The reply could not be sent. Try again.' }))
             : { ok: false as const, reason: 'The account of this conversation is not known.' }
 
-         setFlying(set => {
-            const next = new Set(set)
+         if (startedId) {
+            following.current.delete(startedId)
+         }
 
-            next.delete(id)
-
-            return next
-         })
-         dispatch(
-            result.ok
-               ? { type: 'SENT', id, now: Date.now() }
-               : { type: 'FAIL', id, reason: result.reason, unsure: result.unsure }
-         )
+         await conclude(id, result)
       },
-      [dispatch, source]
+      [dispatch, source, conclude]
    )
 
    const send = useCallback(

@@ -9,7 +9,7 @@ import {
 } from './types'
 
 import { type RouterOutputs, type trpc } from '../../trpc/trpc'
-import { type UniboxData, type UniboxSource } from './source'
+import { type SendResult, type UniboxData, type UniboxSource } from './source'
 import { type Upload } from './upload'
 
 // The part of the tRPC client the Unibox uses, as the client of the app gives it (`trpc.useUtils().client`).
@@ -74,6 +74,43 @@ const messageOf = (message: WireMessage): UniboxMessage => ({
    attachments: message.attachments.map(attachmentOf),
 })
 
+// The sentence for a reply that did not go, from brain's when it wrote one.
+const failureOf = (state: 'FAILED' | 'UNKNOWN', failure: string | null | undefined) =>
+   failure ??
+   (state === 'UNKNOWN'
+      ? 'LinkedIn did not show whether the reply was sent. Check the conversation on LinkedIn.'
+      : 'LinkedIn did not send the reply.')
+
+// A reply brain has: on its way, or one that did not go. Its files are only names (the files themselves were never kept on this page),
+// so sending it again needs them attached again.
+const replyOf = (reply: NonNullable<WireConversation['reply']>): Pick<UniboxConversation, 'sending' | 'failed'> => {
+   const attachments = reply.files.map(attachmentOf)
+
+   if (reply.state === 'SENDING') {
+      const since = Date.parse(reply.startedAt)
+
+      return {
+         sending: {
+            text: reply.text,
+            attachments,
+            at: since,
+            since,
+            replyId: reply.id,
+         },
+      }
+   }
+
+   return {
+      failed: {
+         reason: failureOf(reply.state, reply.failure),
+         text: reply.text,
+         attachments,
+         replyId: reply.id,
+         ...(reply.state === 'UNKNOWN' && { unsure: true }),
+      },
+   }
+}
+
 const conversationOf = (conversation: WireConversation): UniboxConversation => {
    const [first] = conversation.participants
 
@@ -91,6 +128,7 @@ const conversationOf = (conversation: WireConversation): UniboxConversation => {
       ...(conversation.lastReplyAt && { lastReplyAt: localClock(conversation.lastReplyAt) }),
       // Closed by the owner with nothing after it: done as of its last message.
       ...(conversation.done && conversation.lastMessageAt && { doneAt: localClock(conversation.lastMessageAt) }),
+      ...(conversation.reply && replyOf(conversation.reply)),
    }
 }
 
@@ -99,11 +137,10 @@ const groups = (ids: string[]) =>
       ids.slice(index * MAX_IDS, (index + 1) * MAX_IDS)
    )
 
-// How a reply is followed: brain is asked every 2 seconds, up to 3 minutes (the task itself stops after 5).
+// How a reply is followed: brain is asked every 2 seconds, for as long as it can have the reply in flight (brain ends one that is
+// older than 15 minutes as unsure).
 const POLL_MS = 2000
-const POLL_TIMES = 90
-// A reply with files may take minutes to go up through the account's proxy: it is followed for up to 10 minutes.
-const FILES_POLL_TIMES = 300
+const POLL_TIMES = 460
 
 const sleep = (ms: number) =>
    new Promise<void>(resolve => {
@@ -123,7 +160,42 @@ type Deps = {
    wait?: (ms: number) => Promise<void>
 }
 
-export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }: Deps = {}): UniboxSource => ({
+export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }: Deps = {}): UniboxSource => {
+   // Asks brain where a reply is until it ends: SENT, or a sentence for one that did not go.
+   const follow = async (replyId: string): Promise<SendResult> => {
+      for (let polls = 0; polls < POLL_TIMES; polls += 1) {
+         await wait(POLL_MS)
+
+         const reply = await client.unibox.reply.query({ id: replyId }).catch(() => undefined)
+
+         if (reply?.state === 'SENT') {
+            return { ok: true }
+         }
+
+         if (reply?.state === 'FAILED') {
+            return {
+               ok: false,
+               reason: failureOf('FAILED', reply.failure),
+            }
+         }
+
+         if (reply?.state === 'UNKNOWN') {
+            return {
+               ok: false,
+               unsure: true,
+               reason: failureOf('UNKNOWN', reply.failure),
+            }
+         }
+      }
+
+      return {
+         ok: false,
+         unsure: true,
+         reason: 'No answer came in time. Check the conversation on LinkedIn.',
+      }
+   }
+
+   return {
    load: async (): Promise<UniboxData> => {
       const [accounts, conversations] = await Promise.all([
          client.unibox.accounts.query(),
@@ -155,7 +227,7 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
 
    fileLink: async (messageId, index) => (await client.unibox.fileLink.query({ messageId, index })).url,
 
-   send: async (_account, text, attachments, conversationId, onProgress) => {
+   send: async (_account, text, attachments, conversationId, events) => {
       // A link is only text on the page; there is nothing of it to upload.
       if (attachments.some(({ kind }) => kind === 'LINK')) {
          return {
@@ -181,7 +253,7 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
 
          const { size } = attachment.file
          const uploaded = await upload(uploadId ?? '', attachment.file, percent =>
-            onProgress?.(Math.round(((done + (size * percent) / 100) / total) * 100))
+            events?.progress?.(Math.round(((done + (size * percent) / 100) / total) * 100))
          )
 
          if (!uploaded.ok) {
@@ -205,39 +277,15 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
          }
       }
 
-      const times = attachments.length > 0 ? FILES_POLL_TIMES : POLL_TIMES
+      events?.started?.(started.id)
 
-      for (let polls = 0; polls < times; polls += 1) {
-         await wait(POLL_MS)
-
-         const reply = await client.unibox.reply.query({ id: started.id }).catch(() => undefined)
-
-         if (reply?.state === 'SENT') {
-            return { ok: true }
-         }
-
-         if (reply?.state === 'FAILED') {
-            return {
-               ok: false,
-               reason: reply.failure ?? 'LinkedIn did not send the reply.',
-            }
-         }
-
-         if (reply?.state === 'UNKNOWN') {
-            return {
-               ok: false,
-               unsure: true,
-               reason:
-                  reply.failure ??
-                  'LinkedIn did not show whether the reply was sent. Check the conversation on LinkedIn.',
-            }
-         }
-      }
-
-      return {
-         ok: false,
-         unsure: true,
-         reason: 'No answer came in time. Check the conversation on LinkedIn.',
-      }
+      return follow(started.id)
    },
-})
+
+   follow,
+
+   dismissReply: async replyId => {
+      await client.unibox.dismissReply.mutate({ id: replyId })
+   },
+   }
+}

@@ -129,6 +129,17 @@
    }
 }
 
+/* A bar with no real percent: a third of it slides across. */
+@keyframes indeterminate {
+   from {
+      transform: translateX(-100%);
+   }
+
+   to {
+      transform: translateX(300%);
+   }
+}
+
 /* The Unibox wears LinkedIn's colours. They are set on the page only, so the shadcn components inside it pick them up and the rest of
    the app keeps its own theme; the dark set follows the app's `dark` class. */
 .unibox,
