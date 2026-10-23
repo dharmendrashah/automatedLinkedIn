@@ -52,6 +52,9 @@ export const BUDGET_MS = 20 * 60 * 1000
 const MAX_FAILURES_IN_A_ROW = 3
 // How many times the list is looked at and scrolled before a row is given up.
 const ROW_TRIES = 30
+// How many times a list with no row at all is looked at before the inbox counts as empty: through a slow proxy the page can take
+// half a minute to draw its list (run 0d61545f, 2026-10-23).
+const EMPTY_TRIES = 20
 // How many times a conversation is scrolled up toward its first message, and the most messages kept of one.
 const MAX_THREAD_SCROLLS = 80
 const MAX_MESSAGES = 3000
@@ -120,6 +123,16 @@ export const readMessages = async (
          const row = rows[index]
 
          owner ??= parseOwner(html)
+
+         if (rows.length === 0) {
+            if (tries >= EMPTY_TRIES) {
+               return undefined
+            }
+
+            await reader.wait(PAUSES.list)
+
+            continue
+         }
 
          if (row?.hydrated && row.linkIndex !== undefined) {
             const before = await currentThread()
