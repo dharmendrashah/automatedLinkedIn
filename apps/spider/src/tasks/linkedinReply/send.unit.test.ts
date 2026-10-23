@@ -23,11 +23,22 @@ type Page = {
    appears?: 'now' | 'late' | 'never'
    // Whether the box is emptied by a send that did not show a message (a send that went and cannot be seen).
    clears?: boolean
+   // How many looks at the page find it still empty, as through a slow proxy.
+   slowPage?: number
+   // How many looks, once the words are typed, still find the send button disabled.
+   enableAfter?: number
+   // The send button is enabled but a click on it does not land (it is out of view or covered).
+   clickFails?: boolean
+   // How many scrolls it takes to bring the send button into view; a click before that finds nothing to press.
+   hidden?: number
 }
 
 const setup = (page: Page = {}) => {
    const { at = `${BASE}/messaging/thread/${THREAD}/`, title = 'Ada Lovelace', composer = true } = page
-   const { sendWorks = true, typingWorks = true, appears = 'now', clears = true } = page
+   const { sendWorks = true, typingWorks = true, appears = 'now', clears = true, clickFails = false } = page
+   let waiting = page.slowPage ?? 0
+   let scrolled = 0
+   let disabledReads = page.enableAfter ?? 0
    let focused = false
    let typed = ''
    let pressed = false
@@ -37,6 +48,18 @@ const setup = (page: Page = {}) => {
    const attached: Record<string, string> = {}
    const calls: string[] = []
    const html = () => {
+      if (waiting > 0) {
+         waiting -= 1
+
+         return '<html><body></body></html>'
+      }
+
+      const stillDisabled = typed !== '' && disabledReads > 0
+
+      if (stillDisabled) {
+         disabledReads -= 1
+      }
+
       if (pressed && appears === 'late') {
          looks += 1
          shown = looks >= 3
@@ -71,7 +94,7 @@ const setup = (page: Page = {}) => {
          ...(composer && {
             composer: {
                typed,
-               sendDisabled: typed === '' || !sendWorks,
+               sendDisabled: typed === '' || !sendWorks || stillDisabled,
             },
          }),
       })}</body></html>`
@@ -91,6 +114,12 @@ const setup = (page: Page = {}) => {
          blocks: [],
       })),
       scrollBy: vi.fn(async () => true),
+      scrollOver: vi.fn(async (selector: string) => {
+         calls.push(`scroll ${selector === COMPOSER ? 'composer' : 'other'}`)
+         scrolled += 1
+
+         return true
+      }),
       clickLink: vi.fn(async () => undefined),
       back: vi.fn(async () => at),
       press: vi.fn(async (key: string) => {
@@ -111,9 +140,13 @@ const setup = (page: Page = {}) => {
          }
 
          if (selector === SEND_BUTTON) {
+            if (scrolled < (page.hidden ?? 0)) {
+               return false
+            }
+
             calls.push('click send')
 
-            if (typed === '' || !sendWorks) {
+            if (typed === '' || !sendWorks || clickFails) {
                return false
             }
 
@@ -254,6 +287,48 @@ describe('sendReply', () => {
          why: 'SEND_DISABLED',
       })
       expect(calls).not.toContain('click send')
+      expect(calls).toContain('press Delete')
+   })
+
+   it('should wait for a page that is still drawing, not take it for one with no box', async () => {
+      const { send } = setup({ slowPage: 6 })
+
+      await expect(send()).resolves.toEqual({ outcome: 'SENT' })
+   })
+
+   it('should wait for a send button that comes alive a moment after the words are typed', async () => {
+      const { send } = setup({ enableAfter: 4 })
+
+      await expect(send()).resolves.toEqual({ outcome: 'SENT' })
+   })
+
+   it('should scroll the page a little over the box until the send button is in view, then press it once', async () => {
+      const { send, calls } = setup({ hidden: 2 })
+
+      await expect(send()).resolves.toEqual({ outcome: 'SENT' })
+      expect(calls.filter(call => call === 'scroll composer')).toHaveLength(2)
+      expect(calls.filter(call => call === 'click send')).toHaveLength(1)
+   })
+
+   it('should give up scrolling after a few tries when the send button never comes into view, and empty the box', async () => {
+      const { send, calls } = setup({ hidden: 99 })
+
+      await expect(send()).resolves.toEqual({
+         outcome: 'FAILED',
+         why: 'SEND_NOT_CLICKED',
+      })
+      expect(calls.filter(call => call === 'scroll composer')).toHaveLength(4)
+      expect(calls).not.toContain('click send')
+      expect(calls).toContain('press Delete')
+   })
+
+   it('should say the send button could not be clicked when it is enabled but the click does not land, and empty the box', async () => {
+      const { send, calls } = setup({ clickFails: true })
+
+      await expect(send()).resolves.toEqual({
+         outcome: 'FAILED',
+         why: 'SEND_NOT_CLICKED',
+      })
       expect(calls).toContain('press Delete')
    })
 

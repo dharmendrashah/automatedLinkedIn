@@ -46,6 +46,7 @@ export const answerFor = (result: ReplyResult): TaskOutcome => {
             message: {
                TYPING: 'The words could not be typed into the box, so nothing was sent.',
                SEND_DISABLED: 'The send button was not available, so nothing was sent.',
+               SEND_NOT_CLICKED: 'The send button could not be clicked, so nothing was sent.',
                NOT_SENT: 'LinkedIn did not send the reply.',
             }[result.why],
          }

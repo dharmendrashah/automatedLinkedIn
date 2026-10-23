@@ -24,7 +24,7 @@ export type ReplyInput = {
 // write. WRONG_THREAD: the page is on another conversation. SIGNED_OUT: LinkedIn asked for a sign-in.
 export type ReplyResult =
    | { outcome: 'SENT' | 'UNKNOWN' | 'NO_COMPOSER' | 'WRONG_THREAD' | 'SIGNED_OUT' }
-   | { outcome: 'FAILED'; why: 'TYPING' | 'SEND_DISABLED' | 'NOT_SENT' }
+   | { outcome: 'FAILED'; why: 'TYPING' | 'SEND_DISABLED' | 'SEND_NOT_CLICKED' | 'NOT_SENT' }
 
 type Deps = {
    random?: () => number
@@ -34,6 +34,14 @@ type Deps = {
 
 // How many times the page is looked at for the message after send was pressed.
 const LOOKS = 6
+// How many times the page is looked at for its conversation and box, and the box's send button for being enabled: through a slow
+// proxy the page can take half a minute to draw and come alive (runs 4f14fb23, 21fbcec3 and 896e63b8, 2026-10-23).
+const READY_LOOKS = 20
+const ENABLE_LOOKS = 8
+// How many times the page is scrolled a little to bring the send button into view (run 896e63b8: a notice at the top pushed the
+// box to the edge of the window and the button below it).
+const REVEAL_SCROLLS = 4
+const REVEAL_PIXELS = [150, 300] as const
 
 const PAUSES = {
    // The conversation loading after the page opened.
@@ -102,6 +110,56 @@ export const sendReply = async (
       }
    }
 
+   // The page as it is once the conversation has its name and its box; as it is after the last look when it never gets them.
+   const settled = async () => {
+      let html = await hands.html()
+
+      for (let look = 0; look < READY_LOOKS; look += 1) {
+         if (parseThread(html, today()).title !== '' && parseComposer(html).present) {
+            break
+         }
+
+         await reader.wait(PAUSES.look)
+         html = await hands.html()
+      }
+
+      return html
+   }
+
+   // Whether the send button comes alive once the words are typed (it is disabled until the page has taken them in).
+   const sendEnabled = async () => {
+      for (let look = 0; look < ENABLE_LOOKS; look += 1) {
+         if (parseComposer(await hands.html()).canSend) {
+            return true
+         }
+
+         await reader.wait(PAUSES.look)
+      }
+
+      return false
+   }
+
+   // Presses the send button; the page is scrolled a little first when the button is below the edge of the window.
+   const pressSend = async () => {
+      for (let scrolls = 0; scrolls <= REVEAL_SCROLLS; scrolls += 1) {
+         if (await hands.clickSelector(SEND_BUTTON)) {
+            return true
+         }
+
+         if (scrolls < REVEAL_SCROLLS) {
+            const pixels = reader.span(REVEAL_PIXELS)
+
+            if (!(await hands.scrollOver(COMPOSER, pixels))) {
+               await hands.scrollBy(pixels)
+            }
+
+            await reader.wait(PAUSES.look)
+         }
+      }
+
+      return false
+   }
+
    // After send was pressed: looks for the message, and says what it saw.
    const confirm = async (): Promise<ReplyResult> => {
       await reader.wait(PAUSES.sent)
@@ -143,7 +201,7 @@ export const sendReply = async (
       await reader.wait(PAUSES.open)
 
       const opened = THREAD_ID.exec(new URL(session.signedIn((await hands.inspect()).url)).pathname)?.[1]
-      const html = await hands.html()
+      const html = await settled()
       const { title } = parseThread(html, today())
 
       if (opened !== input.thread || (input.title !== '' && title !== input.title)) {
@@ -179,7 +237,8 @@ export const sendReply = async (
 
       await reader.wait(PAUSES.typed)
 
-      if (!parseComposer(await hands.html()).canSend) {
+      if (!(await sendEnabled())) {
+         log('The send button stayed disabled')
          await clearBox()
 
          return {
@@ -188,12 +247,13 @@ export const sendReply = async (
          }
       }
 
-      if (!(await hands.clickSelector(SEND_BUTTON))) {
+      if (!(await pressSend())) {
+         log('The send button could not be clicked')
          await clearBox()
 
          return {
             outcome: 'FAILED',
-            why: 'SEND_DISABLED',
+            why: 'SEND_NOT_CLICKED',
          }
       }
 
