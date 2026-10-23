@@ -25,6 +25,9 @@ spec:
     spec:
       # Longer than WORKER_SHUTDOWN_GRACE_MS, so work in progress finishes before the pod is killed.
       terminationGracePeriodSeconds: 45
+      # The same account as brain: it is bound to the service account that may read runs/ in the bucket, which the worker needs to
+      # store the messages of a finished run (.plan/unibox-backend.md). It also gets the read-only status Role of that account.
+      serviceAccountName: brain
       containers:
         - name: brain-worker
           # The same image as brain; only the command differs.

@@ -128,3 +128,79 @@
       @apply bg-background text-foreground antialiased;
    }
 }
+
+/* The Unibox wears LinkedIn's colours. They are set on the page only, so the shadcn components inside it pick them up and the rest of
+   the app keeps its own theme; the dark set follows the app's `dark` class. */
+.unibox,
+.unibox-active
+   :is(
+      [data-slot='popover-content'],
+      [data-slot='dialog-content'],
+      [data-slot='alert-dialog-content'],
+      [data-slot='dropdown-menu-content'],
+      [data-slot='hover-card-content'],
+      [data-slot='sheet-content']
+   ) {
+   --background: #f4f2ee;
+   --foreground: rgb(0 0 0 / 0.9);
+   --card: #ffffff;
+   --card-foreground: rgb(0 0 0 / 0.9);
+   --popover: #ffffff;
+   --popover-foreground: rgb(0 0 0 / 0.9);
+   --primary: #0a66c2;
+   --primary-foreground: #ffffff;
+   --secondary: #edf3f8;
+   --secondary-foreground: rgb(0 0 0 / 0.9);
+   --muted: #edf3f8;
+   --muted-foreground: #5f6368;
+   --accent: #e3edf7;
+   --accent-foreground: #004182;
+   --border: #e0dfdc;
+   --input: #b8b6b2;
+   --ring: #0a66c2;
+   --success: #057642;
+   --warning: #915907;
+   --info: #0a66c2;
+   --destructive: #cc1016;
+}
+
+.dark .unibox,
+.dark
+   .unibox-active
+   :is(
+      [data-slot='popover-content'],
+      [data-slot='dialog-content'],
+      [data-slot='alert-dialog-content'],
+      [data-slot='dropdown-menu-content'],
+      [data-slot='hover-card-content'],
+      [data-slot='sheet-content']
+   ) {
+   --background: #1b1f23;
+   --foreground: rgb(255 255 255 / 0.9);
+   --card: #1d2226;
+   --card-foreground: rgb(255 255 255 / 0.9);
+   --popover: #232a30;
+   --popover-foreground: rgb(255 255 255 / 0.9);
+   --primary: #71b7fb;
+   --primary-foreground: #0b1e30;
+   --secondary: #2b3239;
+   --secondary-foreground: rgb(255 255 255 / 0.9);
+   --muted: #2b3239;
+   --muted-foreground: #a5acb3;
+   --accent: #26323d;
+   --accent-foreground: #a8d4ff;
+   --border: #38434f;
+   --input: #56626d;
+   --ring: #71b7fb;
+   --success: #57c785;
+   --warning: #e7a33e;
+   --info: #71b7fb;
+   --destructive: #f2706f;
+}
+
+@media (prefers-reduced-motion: reduce) {
+   .unibox * {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+   }
+}

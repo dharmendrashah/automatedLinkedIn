@@ -34,3 +34,17 @@ export const POST_WINDOW: OverlaySpec = {
 // The pages a post and a profile open as.
 export const POST_PAGE = /\/(feed\/update|posts)\//
 export const PROFILE_PAGE = /^\/(in|company)\//
+
+// The messages: the list of conversations, and a conversation's own page.
+export const MESSAGING_PATH = '/messaging/'
+export const THREAD_ID = /^\/messaging\/thread\/([^/]+)/
+// What a person clicks to open a conversation of the list (a div, not a link), the rows whose pane scrolls the list, and the pane
+// of the open conversation, which loads older messages as it is scrolled up.
+export const INBOX_ROW = '.msg-conversation-listitem__link'
+export const INBOX_LIST = '.msg-conversation-listitem'
+export const THREAD_PANE = '.msg-s-message-list'
+// Where a reply is written in the open conversation, and the button that sends it (disabled until there is text); recorded 2026-10-22.
+export const COMPOSER = '.msg-form__contenteditable'
+export const SEND_BUTTON = 'button.msg-form__send-button'
+// The button after the beacon at the bottom of the list, for a page that does not load more by itself.
+export const LOAD_MORE = '[data-test-msg-cross-pillar-visible-beacon] + button'

@@ -15,6 +15,12 @@ describe('compactHtml', () => {
       expect(compactHtml('<div>\n\n   <p>  one  </p>\n   <p>two</p>\n</div>')).toBe('<div><p> one </p><p>two</p></div>')
    })
 
+   it('should drop the head, bootstrap data blocks and giant attribute values, so the body is not cut off', () => {
+      const html = `<html><head><meta content="${'x'.repeat(2_000_000)}"></head><body><code id="data">{"a":1}</code><div data-state="${'y'.repeat(2000)}"><p>Hi</p></div></body></html>`
+
+      expect(compactHtml(html)).toBe('<html><body><code/><div data-state="…"><p>Hi</p></div></body></html>')
+   })
+
    it('should cut a page that is still too large, so the run keeps the file', () => {
       expect(compactHtml(`<p>${'x'.repeat(2_000_000)}</p>`).length).toBeLessThanOrEqual(900_000)
    })

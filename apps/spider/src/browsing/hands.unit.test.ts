@@ -35,8 +35,26 @@ describe('handsOf', () => {
             'button'
          )
       ).resolves.toBe(false)
+      await expect(hands.clickNth('.row', 3, 'button')).resolves.toBe(false)
+      await expect(hands.scrollOver('.row', 300)).resolves.toBe(false)
+      await expect(hands.typeKeys('Hello')).resolves.toBe(false)
       await expect(hands.hover(1, 2)).resolves.toBeUndefined()
       await expect(hands.drift()).resolves.toBeUndefined()
+   })
+
+   it('should type through a browser that can, as itself, and say it did', async () => {
+      const seen: unknown[] = []
+      const browser = {
+         ...required(),
+         typeKeys(this: unknown, text: string) {
+            seen.push(this, text)
+
+            return Promise.resolve()
+         },
+      }
+
+      await expect(handsOf(browser as unknown as DetectionSession).typeKeys('Hi\nthere')).resolves.toBe(true)
+      expect(seen).toEqual([browser, 'Hi\nthere'])
    })
 
    it('should call the browser as itself, with the block as an option', async () => {

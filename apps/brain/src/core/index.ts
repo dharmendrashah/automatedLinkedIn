@@ -20,6 +20,7 @@ export {
 export { IpInfoError, IpInfoService, type ProxyExchange } from './ipInfo.service'
 export { type LinkKind, type LinkedInLink, TooManyLinksError, parseLinkedInUrl, parseLinkedInUrls } from './linkedInUrl'
 export { MessageBroker } from './messageBroker'
+export { MessageFiles } from './messageFiles'
 export { RecordingLinks } from './recordingLinks'
 export { expandShortPostLink, isShortPostLink } from './shortLink'
 export { TakeoverRateError, TakeoverRelay } from './takeoverRelay'

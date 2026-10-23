@@ -4,6 +4,8 @@ import { type TaskResult, type TaskTrigger } from '@automatedLinkedIn/contracts'
 
 import { linkedInBrowseHooks } from './linkedInBrowse.hooks'
 import { linkedInLoginHooks } from './linkedInLogin.hooks'
+import { MESSAGES_TASK, linkedInMessagesHooks } from './linkedInMessages.hooks'
+import { REPLY_TASK, linkedInReplyHooks } from './linkedInReply.hooks'
 
 // Where a task needs brain to do something of its own: refuse a request for a reason only brain knows, or change brain's own
 // data when the result arrives. Most tasks have no hook. One file lists them all, by task name.
@@ -35,4 +37,6 @@ export type TaskHooks = {
 export const TASK_HOOKS: Record<string, TaskHooks> = {
    'linkedin-login': linkedInLoginHooks,
    'linkedin-browse': linkedInBrowseHooks,
+   [MESSAGES_TASK]: linkedInMessagesHooks,
+   [REPLY_TASK]: linkedInReplyHooks,
 }

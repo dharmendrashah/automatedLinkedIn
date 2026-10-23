@@ -535,6 +535,19 @@ const execute = async (
          recorder?.attach(name, content, contentType)
       },
       pause,
+      markAttempt: async () => {
+         if (!deps.store.create) {
+            return true
+         }
+
+         return (
+            (await deps.store.create(
+               `${prefix}/attempt.json`,
+               JSON.stringify({ at: new Date(deps.now?.() ?? Date.now()).toISOString() }),
+               'application/json'
+            )) !== undefined
+         )
+      },
    }
 
    let outcome: TaskOutcome

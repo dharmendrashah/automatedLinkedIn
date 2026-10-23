@@ -2,6 +2,8 @@ import { dailyTime, timezoneOfCountry } from 'core'
 
 import { VISIT_TASK } from './linkedInAccount.service'
 import { LinkedInAccountValidationService } from './linkedInAccountValidation.service'
+import { MESSAGES_TASK } from './linkedInMessages.hooks'
+import { messagesInput } from './messagesRefresh'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
 import { TaskRefusedError } from './taskErrors'
@@ -9,11 +11,13 @@ import { TaskRefusedError } from './taskErrors'
 // One run never takes more accounts than this; the rest wait for the next pass.
 const MAX_PER_RUN = 100
 const DAY_MS = 24 * 60 * 60 * 1000
+// The messages are read this often (12 times a day), not once a day like the check and the visit.
+const MESSAGES_EVERY_MS = 2 * 60 * 60 * 1000
 // A good sign-in this recent (the owner's own check, say) counts as the day's check.
 const RECENT_SIGN_IN_MS = 12 * 60 * 60 * 1000
 
 type Due = Awaited<ReturnType<typeof findDue>>[number]
-type Field = 'nextCheckAt' | 'nextBrowseAt'
+type Field = 'nextCheckAt' | 'nextBrowseAt' | 'nextMessagesAt'
 
 const findDue = (now: Date) => {
    const due = (field: Field) => [{ [field]: null }, { [field]: { lte: now } }]
@@ -29,6 +33,10 @@ const findDue = (now: Date) => {
                status: 'ACTIVE',
                OR: due('nextBrowseAt'),
             },
+            {
+               status: 'ACTIVE',
+               OR: due('nextMessagesAt'),
+            },
          ],
       },
       select: {
@@ -37,6 +45,8 @@ const findDue = (now: Date) => {
          status: true,
          nextCheckAt: true,
          nextBrowseAt: true,
+         nextMessagesAt: true,
+         messagesReadAt: true,
          lastVerifiedAt: true,
          proxyServers: {
             where: { status: 'ACTIVE' },
@@ -84,8 +94,29 @@ const requestVisit = async ({ id, userId }: Due) => {
    }
 }
 
-// Once a day per account, each at its own random time (.plan/account-daily-check.md): the sign-in check, and a visit when
-// the account signed in fine within the last day. The brain worker calls `runDue` every few minutes; a check or visit that
+const requestMessages = async ({ id, userId, messagesReadAt }: Due) => {
+   try {
+      await TaskService.request({
+         userId,
+         task: MESSAGES_TASK,
+         accountId: id,
+         trigger: 'automatic',
+         input: messagesInput(messagesReadAt),
+      })
+
+      return true
+   } catch (error) {
+      if (!(error instanceof TaskRefusedError)) {
+         console.error(`Could not request the daily read of the messages of account ${id}: ${(error as Error).message}`)
+      }
+
+      return false
+   }
+}
+
+// Once a day per account, each at its own random time (.plan/account-daily-check.md): the sign-in check, and a visit when the
+// account signed in fine within the last day. The messages (.plan/unibox-backend.md) are read every 2 hours on the same terms
+// (.plan/unibox-read-every-2h.md). The brain worker calls `runDue` every few minutes; a check or visit that
 // cannot be queued now keeps its time and is tried on the next pass.
 export class AccountDailyJob {
    private static running = false
@@ -94,6 +125,7 @@ export class AccountDailyJob {
       const result = {
          checks: 0,
          visits: 0,
+         reads: 0,
       }
 
       if (AccountDailyJob.running) {
@@ -106,8 +138,8 @@ export class AccountDailyJob {
          for (const account of await findDue(now)) {
             const timezone = timezoneOf(account)
             const next = (today: boolean) => dailyTime(now, timezone, { today }, random)
-            // Sends one daily run when due; a first time is only drawn, for later today.
-            const daily = async (field: Field, send: () => Promise<boolean>) => {
+            // Sends one daily run when due; a first time is only drawn, for later today. `every` sets the next time without a draw.
+            const daily = async (field: Field, send: () => Promise<boolean>, every?: number) => {
                const at = account[field]
 
                if (!at) {
@@ -120,7 +152,7 @@ export class AccountDailyJob {
                   return false
                }
 
-               await move(account, field, next(false))
+               await move(account, field, every ? new Date(now.getTime() + every) : next(false))
 
                return true
             }
@@ -148,6 +180,16 @@ export class AccountDailyJob {
 
             if (visited && signedInToday) {
                result.visits += 1
+            }
+
+            const read = await daily(
+               'nextMessagesAt',
+               async () => !signedInToday || requestMessages(account),
+               MESSAGES_EVERY_MS
+            )
+
+            if (read && signedInToday) {
+               result.reads += 1
             }
          }
       } finally {

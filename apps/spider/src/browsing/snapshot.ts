@@ -1,10 +1,14 @@
 import { type DetectionSession } from '../scraping/driver'
 
-// The run keeps at most 1 MB per file, and a feed is several MB of scripts, styles and icons the markup does not need.
+// The run keeps at most 1 MB per file, and a page is several MB of scripts, styles, icons, bootstrap data in the head and in `<code>`
+// blocks, and huge attribute values, none of which the markup needs (a page's head alone filled the file once, and the body was lost).
 const MAX_CHARS = 900_000
 
 export const compactHtml = (html: string) =>
    html
+      .replace(/<head\b[\s\S]*?<\/head>/gi, '')
+      .replace(/<code\b[\s\S]*?<\/code>/gi, '<code/>')
+      .replace(/(\s[\w:-]+)="[^"]{1500,}"/g, '$1="…"')
       .replace(/<script\b[\s\S]*?<\/script>/gi, '')
       .replace(/<style\b[\s\S]*?<\/style>/gi, '')
       .replace(/<svg\b[\s\S]*?<\/svg>/gi, '<svg/>')

@@ -13,6 +13,9 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
    public readonly clickLink?: DetectionSession['clickLink']
    public readonly clickInside?: DetectionSession['clickInside']
    public readonly clickSelector?: DetectionSession['clickSelector']
+   public readonly clickNth?: DetectionSession['clickNth']
+   public readonly scrollOver?: DetectionSession['scrollOver']
+   public readonly typeKeys?: DetectionSession['typeKeys']
    public readonly back?: DetectionSession['back']
    public readonly hover?: DetectionSession['hover']
    public readonly drift?: DetectionSession['drift']
@@ -23,7 +26,19 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
    ) {
       super(detector, recorder)
 
-      const { probe, inspect, clickLink, clickInside, clickSelector, back, hover, drift } = detector
+      const {
+         probe,
+         inspect,
+         clickLink,
+         clickInside,
+         clickSelector,
+         clickNth,
+         scrollOver,
+         typeKeys,
+         back,
+         hover,
+         drift,
+      } = detector
 
       if (probe) {
          this.probe = () => probe.call(detector)
@@ -43,6 +58,18 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
 
       if (clickSelector) {
          this.clickSelector = selector => clickSelector.call(detector, selector)
+      }
+
+      if (clickNth) {
+         this.clickNth = (selector, index, avoid) => clickNth.call(detector, selector, index, avoid)
+      }
+
+      if (scrollOver) {
+         this.scrollOver = (selector, pixels) => scrollOver.call(detector, selector, pixels)
+      }
+
+      if (typeKeys) {
+         this.typeKeys = text => typeKeys.call(detector, text)
       }
 
       if (back) {
