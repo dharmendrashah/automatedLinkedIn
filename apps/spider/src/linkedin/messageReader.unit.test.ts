@@ -79,6 +79,15 @@ describe('parseThread', () => {
          kind: 'IMAGE',
          name: 'a.png',
       })
+      expect(picture('https://www.linkedin.com/dms/prv/image/v2/D4D06/messaging-image-720/B4Da?m=1&amp;t=x')).toEqual({
+         kind: 'IMAGE',
+         name: 'a.png',
+         url: 'https://www.linkedin.com/dms/prv/image/v2/D4D06/messaging-image-720/B4Da?m=1&t=x',
+      })
+      expect(picture('https://www.linkedin.com/in/ada/a.png')).toEqual({
+         kind: 'IMAGE',
+         name: 'a.png',
+      })
       expect(picture()).toEqual({
          kind: 'IMAGE',
          name: 'a.png',
