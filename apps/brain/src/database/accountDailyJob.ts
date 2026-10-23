@@ -2,6 +2,8 @@ import { dailyTime, timezoneOfCountry } from 'core'
 
 import { VISIT_TASK } from './linkedInAccount.service'
 import { LinkedInAccountValidationService } from './linkedInAccountValidation.service'
+import { MESSAGES_TASK } from './linkedInMessages.hooks'
+import { messagesInput } from './messagesRefresh'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
 import { TaskRefusedError } from './taskErrors'
@@ -13,7 +15,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const RECENT_SIGN_IN_MS = 12 * 60 * 60 * 1000
 
 type Due = Awaited<ReturnType<typeof findDue>>[number]
-type Field = 'nextCheckAt' | 'nextBrowseAt'
+type Field = 'nextCheckAt' | 'nextBrowseAt' | 'nextMessagesAt'
 
 const findDue = (now: Date) => {
    const due = (field: Field) => [{ [field]: null }, { [field]: { lte: now } }]
@@ -29,6 +31,10 @@ const findDue = (now: Date) => {
                status: 'ACTIVE',
                OR: due('nextBrowseAt'),
             },
+            {
+               status: 'ACTIVE',
+               OR: due('nextMessagesAt'),
+            },
          ],
       },
       select: {
@@ -37,6 +43,8 @@ const findDue = (now: Date) => {
          status: true,
          nextCheckAt: true,
          nextBrowseAt: true,
+         nextMessagesAt: true,
+         messagesReadAt: true,
          lastVerifiedAt: true,
          proxyServers: {
             where: { status: 'ACTIVE' },
@@ -84,8 +92,28 @@ const requestVisit = async ({ id, userId }: Due) => {
    }
 }
 
-// Once a day per account, each at its own random time (.plan/account-daily-check.md): the sign-in check, and a visit when
-// the account signed in fine within the last day. The brain worker calls `runDue` every few minutes; a check or visit that
+const requestMessages = async ({ id, userId, messagesReadAt }: Due) => {
+   try {
+      await TaskService.request({
+         userId,
+         task: MESSAGES_TASK,
+         accountId: id,
+         trigger: 'automatic',
+         input: messagesInput(messagesReadAt),
+      })
+
+      return true
+   } catch (error) {
+      if (!(error instanceof TaskRefusedError)) {
+         console.error(`Could not request the daily read of the messages of account ${id}: ${(error as Error).message}`)
+      }
+
+      return false
+   }
+}
+
+// Once a day per account, each at its own random time (.plan/account-daily-check.md): the sign-in check, and a visit and a
+// read of the messages (.plan/unibox-backend.md) when the account signed in fine within the last day. The brain worker calls `runDue` every few minutes; a check or visit that
 // cannot be queued now keeps its time and is tried on the next pass.
 export class AccountDailyJob {
    private static running = false
@@ -94,6 +122,7 @@ export class AccountDailyJob {
       const result = {
          checks: 0,
          visits: 0,
+         reads: 0,
       }
 
       if (AccountDailyJob.running) {
@@ -148,6 +177,12 @@ export class AccountDailyJob {
 
             if (visited && signedInToday) {
                result.visits += 1
+            }
+
+            const read = await daily('nextMessagesAt', async () => !signedInToday || requestMessages(account))
+
+            if (read && signedInToday) {
+               result.reads += 1
             }
          }
       } finally {

@@ -14,22 +14,23 @@ enum Role {
 }
 
 model User {
-  id          String   @id @default(uuid(7))
-  email       String   @unique
+  id          String    @id @default(uuid(7))
+  email       String    @unique
   name        String?
-  role        Role     @default(USER)
+  role        Role      @default(USER)
   // Subject (`sub`) of the authentik account linked to this user.
-  authentikId String?  @unique
+  authentikId String?   @unique
   // When the owner last left the leads inbox; people added after it are marked new.
   inboxSeenAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   linkedInAccounts  LinkedInAccount[]
   linkedInCompanies LinkedInCompany[]
   linkedInPosts     LinkedInPost[]
   linkedInProfiles  LinkedInProfile[]
   spiderSessions    SpiderSession[]
+  conversations     LinkedInConversation[]
   workflowLists     WorkflowList[]
   suppressions      Suppression[]
   personSnapshots   PersonSnapshot[]
@@ -254,36 +255,36 @@ model Workflow {
 
 // One execution. It keeps a copy of the graph it started with, so editing the workflow never changes it.
 model WorkflowRun {
-  id             String            @id @default(uuid(7))
-  workflowId     String
-  workflow       Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  userId         String
-  trigger        WorkflowTrigger
+  id              String            @id @default(uuid(7))
+  workflowId      String
+  workflow        Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  userId          String
+  trigger         WorkflowTrigger
   // Unique per start, so a repeated schedule tick or a double click cannot start the same run twice.
-  runKey         String            @unique
-  status         WorkflowRunStatus @default(RUNNING)
-  graph          Json
-  qualifyScore   Int
-  maybeScore     Int
-  maybeEnabled   Boolean
-  estimateMicros Int               @default(0)
-  costMicros     Int               @default(0)
-  qualified      Int               @default(0)
-  maybe          Int               @default(0)
-  discarded      Int               @default(0)
+  runKey          String            @unique
+  status          WorkflowRunStatus @default(RUNNING)
+  graph           Json
+  qualifyScore    Int
+  maybeScore      Int
+  maybeEnabled    Boolean
+  estimateMicros  Int               @default(0)
+  costMicros      Int               @default(0)
+  qualified       Int               @default(0)
+  maybe           Int               @default(0)
+  discarded       Int               @default(0)
   // Links sent by an API call, or the people a finished workflow passed on.
-  input          Json?
+  input           Json?
   // How many workflows started this one in a chain.
-  depth          Int               @default(0)
+  depth           Int               @default(0)
   // The run whose "Run another workflow" block started this one.
-  parentRunId    String?
+  parentRunId     String?
   // Set when the owner asked to stop: nothing new starts, and the run ends as STOPPED once paid jobs finished.
   stopRequestedAt DateTime?
-  message        String?
-  startedAt      DateTime          @default(now())
-  finishedAt     DateTime?
-  steps          WorkflowStepRun[]
-  items          WorkflowItem[]
+  message         String?
+  startedAt       DateTime          @default(now())
+  finishedAt      DateTime?
+  steps           WorkflowStepRun[]
+  items           WorkflowItem[]
 
   @@index([workflowId, startedAt])
   @@index([status])
@@ -522,11 +523,18 @@ model LinkedInAccount {
   // When the daily sign-in check and the daily visit run next: a random time each day (.plan/account-daily-check.md).
   nextCheckAt           DateTime?
   nextBrowseAt          DateTime?
+  // The daily automatic read of the account's messages, at a random time of its day (.plan/unibox-backend.md).
+  nextMessagesAt        DateTime?
+  // The name and picture LinkedIn showed for the account when its messages were last read; shown in the Unibox.
+  displayName           String?
+  imageUrl              String?
+  messagesReadAt        DateTime?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
   proxyServers   ProxyServer[]
   spiderSessions SpiderSession[]
+  conversations  LinkedInConversation[]
 
   @@unique([userId, email])
   @@index([userId])
@@ -721,6 +729,8 @@ model SpiderSession {
   retries           SpiderSession[]         @relation("SessionRetries")
   // Present only while the task waits to be published (.plan/task-outbox.md).
   dispatch          TaskDispatch?
+  // Present for a finished `linkedin-messages` run whose messages are stored (.plan/unibox-backend.md).
+  messageImport     MessageImport?
 
   @@index([userId, startedAt])
   @@index([linkedInAccountId, startedAt])
@@ -776,4 +786,104 @@ model TaskDefinition {
   seenAt   DateTime @default(now())
 
   @@id([task, version])
+}
+
+enum ConversationKind {
+  DIRECT
+  GROUP
+}
+
+enum MessageDirection {
+  // Sent from the LinkedIn account.
+  ME
+  // Sent by someone else in the conversation.
+  THEM
+}
+
+// A conversation of one LinkedIn account, as the spider read it (.plan/unibox-backend.md). Other people's words: kept only for the
+// owner of the account, deleted with the account. `readAt` and `doneAt` are the owner's own marks in the Unibox, not LinkedIn's.
+model LinkedInConversation {
+  id                String            @id @default(uuid(7))
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId         String
+  account           LinkedInAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // The id in the address of the conversation page on LinkedIn.
+  linkedInId        String
+  title             String
+  kind              ConversationKind
+  // The people other than the account: name, profileUrl and imageUrl as the page showed them.
+  participants      Json
+  // The profile link of the first participant, to find the same person in other accounts.
+  contactProfileUrl String?
+  // Unread in the Unibox: LinkedIn's mark when the spider opened the conversation, then the owner's own (`readAt` is when they cleared it).
+  unread            Boolean
+  // False when only part of the conversation was read: older messages are missing.
+  complete          Boolean
+  messageCount      Int               @default(0)
+  lastMessageAt     DateTime?
+  lastDirection     MessageDirection?
+  // Times of messages are the wall-clock LinkedIn showed (the account's own day), kept as if UTC: only their order and the time
+  // of day are true, never compare them with the real clock. The first of their messages after the last one of the account, and the account's last message.
+  waitingSince      DateTime?
+  lastReplyAt       DateTime?
+  readAt            DateTime?
+  doneAt            DateTime?
+  // The number of messages when the owner closed it without replying; it is done only while no message came after.
+  doneMessageCount  Int?
+  importedAt        DateTime          @default(now())
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  messages          LinkedInMessage[]
+
+  @@unique([accountId, linkedInId])
+  @@index([userId, lastMessageAt])
+  @@index([userId, contactProfileUrl])
+}
+
+model LinkedInMessage {
+  id               String               @id @default(uuid(7))
+  conversationId   String
+  conversation     LinkedInConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  // LinkedIn's own id of the message, or the stable one the reader made when the page showed none.
+  linkedInId       String
+  direction        MessageDirection
+  senderName       String
+  senderProfileUrl String?
+  // The wall-clock of LinkedIn, as if UTC (see LinkedInConversation); a message with none is placed a minute after the one before.
+  sentAt           DateTime?
+  // The time as LinkedIn showed it ("Jan 25, 2024 5:18 PM").
+  whenText         String
+  text             String
+  attachments      Json
+  // The order in the conversation, oldest first.
+  position         Int
+  createdAt        DateTime             @default(now())
+
+  @@unique([conversationId, linkedInId])
+  @@index([conversationId, position])
+}
+
+enum MessageImportStatus {
+  PENDING
+  DONE
+  FAILED
+}
+
+// A finished `linkedin-messages` run that waits to be stored (.plan/unibox-backend.md). Made in the transaction that finishes the
+// session; a worker job reads the run's files and stores them. It holds no message text.
+model MessageImport {
+  sessionId     String              @id
+  session       SpiderSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  status        MessageImportStatus @default(PENDING)
+  attempts      Int                 @default(0)
+  nextAttemptAt DateTime            @default(now())
+  // A lease, so two workers never take the same row.
+  claimedUntil  DateTime?
+  // A fixed sentence or an error class, never message content.
+  lastError     String?
+  createdAt     DateTime            @default(now())
+  importedAt    DateTime?
+
+  @@index([status, nextAttemptAt])
 }

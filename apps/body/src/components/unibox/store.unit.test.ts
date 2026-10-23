@@ -123,3 +123,23 @@ describe('send', () => {
       expect(reduce(start, { type: 'SENT', id: 'zzz', now: 1 })).toEqual(start)
    })
 })
+
+describe('opened', () => {
+   it('should put the whole conversation in place of the latest messages, and keep the owner marks and the other conversations', () => {
+      const latest = base({ messageCount: 3, unread: false, doneAt: 5, waitingSince: 90 })
+      const whole = base({
+         complete: true,
+         messageCount: 3,
+         messages: [
+            { id: 'm0', direction: 'ME', sender: 'Me', at: 50, when: '', text: 'First', attachments: [] },
+            { id: 'm1', direction: 'THEM', sender: 'Ada', at: 100, when: '', text: 'Hi', attachments: [] },
+            { id: 'm2', direction: 'THEM', sender: 'Ada', at: 110, when: '', text: 'Again', attachments: [] },
+         ],
+      })
+      const next = reduce([latest, other], { type: 'OPENED', id: 'c1', conversation: whole })
+
+      expect(of(next).messages.map(message => message.id)).toEqual(['m0', 'm1', 'm2'])
+      expect(of(next)).toMatchObject({ unread: false, doneAt: 5, waitingSince: 90, messageCount: 3 })
+      expect(of(next, 'c2')).toBe(other)
+   })
+})

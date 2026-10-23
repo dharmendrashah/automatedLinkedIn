@@ -11,6 +11,7 @@ import { type Attachment, type UniboxAccount } from '../components/unibox/types'
 
 import { type AccountSet, parseSets, setMatching } from '../components/unibox/accountSets'
 import { type Address, parseAddress, toAddress } from '../components/unibox/address'
+import { withDevFile } from '../components/unibox/chooseSource'
 import { Composer } from '../components/unibox/composer'
 import { ConversationList } from '../components/unibox/conversation-list'
 import { DetailsPanel } from '../components/unibox/details-panel'
@@ -30,11 +31,13 @@ import { firstName } from '../components/unibox/templates'
 import { Thread } from '../components/unibox/thread'
 import { agoOf, sameDay } from '../components/unibox/time'
 import { Toolbar } from '../components/unibox/toolbar'
+import { createTrpcSource } from '../components/unibox/trpcSource'
 import { UNDO_MS, useUnibox } from '../components/unibox/use-unibox'
 import { viewLabel } from '../components/unibox/views'
 import { ViewsList } from '../components/unibox/views-list'
+import { trpc } from '../trpc'
 
-const source = createSampleSource({ loadReal: loadRealSample })
+const fileSource = createSampleSource({ loadReal: loadRealSample })
 const storage = typeof localStorage === 'undefined' ? undefined : localStorage
 
 const parsePicked = (raw: unknown): ReadonlySet<string> | undefined => {
@@ -57,11 +60,14 @@ type Api = ReturnType<typeof useUnibox>
 type BoardProps = {
    accounts: UniboxAccount[]
    sample: boolean
+   canSend: boolean
+   // Asks for the messages to be read again; absent when the data has nothing to read.
+   onRefresh: ((accountIds?: string[]) => void) | undefined
    api: Api
 }
 
-const Board = ({ accounts, sample, api }: BoardProps) => {
-   const { conversations, flying, dispatch, send, undo, retry } = api
+const Board = ({ accounts, sample, canSend, onRefresh, api }: BoardProps) => {
+   const { conversations, flying, dispatch, load, send, undo, retry } = api
    const { pathname, search } = useLocation()
    const navigate = useNavigate()
    const address = useMemo(() => parseAddress(pathname, search), [pathname, search])
@@ -125,6 +131,17 @@ const Board = ({ accounts, sample, api }: BoardProps) => {
    const tokens = useMemo(() => tokensOf(deferredQuery), [deferredQuery])
    const active = conversationId ? index.byId.get(conversationId) : undefined
    const activeId = active?.conversation.id
+   // The list holds the latest messages only; the rest comes when the conversation is opened.
+   const activePartial =
+      active !== undefined &&
+      active.conversation.messageCount !== undefined &&
+      active.conversation.messages.length < active.conversation.messageCount
+
+   useEffect(() => {
+      if (activeId && activePartial) {
+         void load(activeId)
+      }
+   }, [activeId, activePartial, load])
 
    const shared = useMemo(() => {
       const names = new Map<string, number>()
@@ -443,11 +460,13 @@ const Board = ({ accounts, sample, api }: BoardProps) => {
    const answered = others.find(other => other.status === 'REPLIED' && lastReplyAt(other.conversation) !== undefined)
    const answeredAt = answered ? lastReplyAt(answered.conversation) : undefined
    const account = active?.account
-   const blockedReason = !account
-      ? 'The account of this conversation is not known.'
-      : account.state === 'ACTIVE'
-        ? undefined
-        : `This account is ${account.state === 'PAUSED' ? 'paused' : account.state === 'DISCONNECTED' ? 'disconnected' : 'restricted by LinkedIn'}, so nothing can be sent from it. Your draft is kept.`
+   const blockedReason = !canSend
+      ? 'Sending a reply from here is not available yet. Your draft is kept on this device.'
+      : !account
+        ? 'The account of this conversation is not known.'
+        : account.state === 'ACTIVE'
+          ? undefined
+          : `This account is ${account.state === 'PAUSED' ? 'paused' : account.state === 'DISCONNECTED' ? 'disconnected' : 'restricted by LinkedIn'}, so nothing can be sent from it. Your draft is kept.`
 
    const commands: PaletteItem[] = [
       ...(['ALL', 'NEEDS_REPLY', 'UNREAD', 'REPLIED'] as const).map(next => ({
@@ -547,6 +566,8 @@ const Board = ({ accounts, sample, api }: BoardProps) => {
                         view={view}
                         onClearView={() => go({ view: 'ALL' })}
                         onHelp={() => setHelpOpen(true)}
+                        onRefresh={onRefresh ? () => onRefresh(accountIds ? [...accountIds] : undefined) : undefined}
+                        onReload={api.reload}
                      />
                      <div className="border-b @6xl/main:hidden">
                         <ViewsList row counts={counts} active={view} onChange={next => go({ view: next })} />
@@ -573,6 +594,7 @@ const Board = ({ accounts, sample, api }: BoardProps) => {
                               onClearSearch={() => changeQuery('')}
                               onClearAccounts={() => setPicked(undefined)}
                               onAll={() => go({ view: 'ALL' })}
+                              onRefresh={onRefresh ? () => onRefresh(undefined) : undefined}
                            />
                         ) : (
                            <ConversationList
@@ -659,7 +681,13 @@ const Board = ({ accounts, sample, api }: BoardProps) => {
 }
 
 export const Unibox = () => {
-   const api = useUnibox(source)
+   const { client } = trpc.useUtils()
+   const source = useMemo(
+      () => withDevFile(fileSource, createTrpcSource(client), async () => (await loadRealSample()) !== undefined),
+      [client]
+   )
+   const onSaveError = useCallback(() => toast.error('A change could not be kept. Reload to see what is saved.'), [])
+   const api = useUnibox(source, onSaveError)
    const { loaded, reload } = api
 
    if (loaded.status === 'loading') {
@@ -688,5 +716,32 @@ export const Unibox = () => {
       )
    }
 
-   return <Board accounts={loaded.accounts} sample={loaded.sample} api={api} />
+   const refresh = (accountIds?: string[]) =>
+      source
+         .refresh(accountIds)
+         .then(({ started, skipped }) => {
+            if (started > 0) {
+               toast.success(`Reading ${started} ${started === 1 ? 'account' : 'accounts'}. It takes a few minutes.`, {
+                  action: {
+                     label: 'Reload',
+                     onClick: reload,
+                  },
+               })
+            }
+
+            if (skipped.length > 0) {
+               toast.warning(skipped.map(({ reason }) => reason).join(' '))
+            }
+         })
+         .catch(() => toast.error('The messages could not be read. Try again in a moment.'))
+
+   return (
+      <Board
+         accounts={loaded.accounts}
+         sample={loaded.sample}
+         canSend={loaded.canSend}
+         onRefresh={loaded.canRefresh ? refresh : undefined}
+         api={api}
+      />
+   )
 }

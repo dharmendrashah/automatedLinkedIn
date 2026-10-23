@@ -1,0 +1,20 @@
+import { type UniboxSource } from './source'
+
+// In development a messages file in public/ is shown as it is, so the page can be tried without a read; with no file, and
+// everywhere else, the owner's real messages are. The choice is made when the data loads, and what the owner does after goes to
+// the source that showed it.
+export const withDevFile = (file: UniboxSource, real: UniboxSource, hasFile: () => Promise<boolean>): UniboxSource => {
+   let active = real
+
+   return {
+      load: async () => {
+         active = (await hasFile().catch(() => false)) ? file : real
+
+         return active.load()
+      },
+      mark: (ids, change) => active.mark(ids, change),
+      open: id => active.open(id),
+      refresh: accountIds => active.refresh(accountIds),
+      send: (account, text, attachments) => active.send(account, text, attachments),
+   }
+}

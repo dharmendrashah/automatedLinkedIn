@@ -11,6 +11,8 @@ export type Action =
    | { type: 'FAIL'; id: string; reason: string }
    | { type: 'DISMISS_FAILED'; id: string }
    | { type: 'RECEIVE'; id: string; message: UniboxMessage }
+   // The whole conversation arrived, for a list that held only its latest messages.
+   | { type: 'OPENED'; id: string; conversation: UniboxConversation }
 
 // Changes the conversations named and gives the same list back when nothing changed, so the screen does not redraw for nothing.
 const change = (
@@ -112,6 +114,13 @@ export const reduce = (state: UniboxConversation[], action: Action): UniboxConve
          )
       case 'DISMISS_FAILED':
          return change(state, [action.id], c => (c.failed ? without(c, 'failed') : c))
+      case 'OPENED':
+         return change(state, [action.id], c => ({
+            ...c,
+            messages: action.conversation.messages,
+            complete: action.conversation.complete,
+            ...(action.conversation.messageCount !== undefined && { messageCount: action.conversation.messageCount }),
+         }))
       case 'RECEIVE':
          return change(state, [action.id], c => ({
             ...c,

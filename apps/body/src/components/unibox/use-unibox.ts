@@ -2,18 +2,21 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { type Attachment, type UniboxAccount, type UniboxConversation } from './types'
 
-import { type UniboxSource } from './sample/source'
+import { type UniboxSource } from './source'
 import { type Action, reduce } from './store'
 
 // How long a reply can still be taken back before it goes.
 export const UNDO_MS = 5000
 
 type Loaded =
-   { status: 'loading' } | { status: 'error' } | { status: 'ready'; accounts: UniboxAccount[]; sample: boolean }
+   | { status: 'loading' }
+   | { status: 'error' }
+   | { status: 'ready'; accounts: UniboxAccount[]; sample: boolean; canSend: boolean; canRefresh: boolean }
 
 // The conversations and what happens to them. A reply is held for UNDO_MS (so it can be undone), then sent through the source;
 // it ends as a message in the conversation, or as a failure that keeps its text and can be retried.
-export const useUnibox = (source: UniboxSource) => {
+// `onSaveError` is called when a mark (read, unread, done) could not be kept; the page then says so.
+export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
    const [loaded, setLoaded] = useState<Loaded>({ status: 'loading' })
    const [conversations, setConversations] = useState<UniboxConversation[]>([])
    // The replies past the point of undo: on their way.
@@ -24,17 +27,63 @@ export const useUnibox = (source: UniboxSource) => {
       accounts: [],
    })
 
-   const dispatch = useCallback((action: Action) => setConversations(state => reduce(state, action)), [])
+   const opened = useRef(new Set<string>())
+
+   // The change is made at once on the page and kept with the data behind it.
+   const dispatch = useCallback(
+      (action: Action) => {
+         setConversations(state => reduce(state, action))
+
+         const saving =
+            action.type === 'READ'
+               ? source.mark(action.ids, { unread: false })
+               : action.type === 'UNREAD'
+                 ? source.mark(action.ids, { unread: true })
+                 : action.type === 'DONE'
+                   ? source.mark(action.ids, { done: true })
+                   : action.type === 'UNDONE'
+                     ? source.mark(action.ids, { done: false })
+                     : undefined
+
+         saving?.catch(onSaveError)
+      },
+      [source, onSaveError]
+   )
+
+   // A list holds only the latest messages of a conversation; the whole of it is fetched once, when it is opened.
+   const load = useCallback(
+      async (id: string) => {
+         if (opened.current.has(id)) {
+            return
+         }
+
+         opened.current.add(id)
+
+         try {
+            const conversation = await source.open(id)
+
+            if (conversation) {
+               setConversations(state => reduce(state, { type: 'OPENED', id, conversation }))
+            }
+         } catch {
+            opened.current.delete(id)
+         }
+      },
+      [source]
+   )
 
    const run = useCallback(() => {
       source
          .load()
          .then(data => {
+            opened.current.clear()
             setConversations(data.conversations)
             setLoaded({
                status: 'ready',
                accounts: data.accounts,
                sample: data.sample,
+               canSend: data.canSend,
+               canRefresh: data.canRefresh,
             })
          })
          .catch(() => setLoaded({ status: 'error' }))
@@ -135,6 +184,7 @@ export const useUnibox = (source: UniboxSource) => {
       conversations,
       flying,
       dispatch,
+      load,
       reload,
       send,
       undo,

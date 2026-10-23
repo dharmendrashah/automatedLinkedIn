@@ -82,6 +82,21 @@ describe('lastReplyAt and waitingSince', () => {
       expect(waitingSince(conversation([message('1', 'THEM', 100), message('2', 'THEM', 150)]))).toBe(100)
       expect(waitingSince(conversation([message('1', 'THEM', 100), message('2', 'ME', 150)]))).toBeUndefined()
    })
+
+   it('should use what the server says when only the latest messages are held', () => {
+      const latest = conversation([message('3', 'THEM', 300), message('4', 'THEM', 400)], {
+         messageCount: 9,
+         waitingSince: 50,
+         lastReplyAt: 20,
+      })
+
+      expect(waitingSince(latest)).toBe(50)
+      expect(lastReplyAt(latest)).toBe(20)
+      // Once the whole conversation is held, its messages decide again.
+      expect(waitingSince({ ...latest, messageCount: 2 })).toBe(300)
+      // A reply sent from the page is in the held messages and wins over the old date.
+      expect(lastReplyAt({ ...latest, messages: [...latest.messages, message('5', 'ME', 500)] })).toBe(500)
+   })
 })
 
 describe('previewOf', () => {

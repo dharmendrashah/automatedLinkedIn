@@ -13,6 +13,7 @@ export const EmptyList = ({
    onClearSearch,
    onClearAccounts,
    onAll,
+   onRefresh,
 }: {
    view: View
    query: string
@@ -21,6 +22,7 @@ export const EmptyList = ({
    onClearSearch: () => void
    onClearAccounts: () => void
    onAll: () => void
+   onRefresh: (() => void) | undefined
 }) => {
    if (total === 0) {
       return (
@@ -30,6 +32,11 @@ export const EmptyList = ({
             <p className="max-w-xs text-sm text-muted-foreground">
                When your accounts get messages, or you write first, they are listed here, all in one place.
             </p>
+            {onRefresh ? (
+               <Button size="sm" onClick={onRefresh}>
+                  Read the messages now
+               </Button>
+            ) : null}
          </div>
       )
    }

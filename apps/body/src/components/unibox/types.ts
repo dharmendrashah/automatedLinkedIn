@@ -51,6 +51,11 @@ export type UniboxConversation = {
    // False when only part of the conversation was read: older messages are missing.
    complete: boolean
    messages: UniboxMessage[]
+   // How many messages the conversation has, when `messages` holds only the latest ones (the list); the rest load when it opens.
+   messageCount?: number
+   // What the whole conversation says, kept by the server for when `messages` is only the latest few.
+   waitingSince?: number
+   lastReplyAt?: number
    // When the owner closed it without replying; a message newer than this brings it back.
    doneAt?: number
    // The owner's reply, being sent (it can still be undone).

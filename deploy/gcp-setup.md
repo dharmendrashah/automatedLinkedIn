@@ -201,6 +201,11 @@ gcloud iam service-accounts add-iam-policy-binding "$SIGNER_EMAIL" \
   --member="serviceAccount:$PROJECT_ID.svc.id.goog[automatedlinkedin/brain]"
 ```
 
+The brain worker uses the same account (`serviceAccountName: brain` in `deploy/base/brain-worker.deployment.yaml`) to read the
+`messages.json` files of finished `linkedin-messages` runs and store them for the Unibox (`.plan/unibox-backend.md`). That is the
+`objectViewer` role on `runs/` granted above, so no new cloud permission is needed; only the worker must run as the `brain`
+Kubernetes ServiceAccount, which the manifest now does.
+
 The browser fetches the JSON files (`timeline.json`, `network.json`, `logs.json`, and `detection.json` of a browser test) with
 `fetch`, so the bucket needs CORS
 for the app's address. The video and screenshots load as plain `<video>` and `<img>` and need nothing:

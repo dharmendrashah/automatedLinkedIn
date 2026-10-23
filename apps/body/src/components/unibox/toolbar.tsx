@@ -22,7 +22,18 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Check, CircleHelp, ListFilter, MailCheck, MoreHorizontal, Search, Users, X } from 'lucide-react'
+import {
+   Check,
+   CircleHelp,
+   ListFilter,
+   MailCheck,
+   MoreHorizontal,
+   RefreshCw,
+   RotateCw,
+   Search,
+   Users,
+   X,
+} from 'lucide-react'
 import { type ComponentProps, type RefObject, useState } from 'react'
 
 import { type Sort, type View } from './types'
@@ -49,6 +60,9 @@ type Props = {
    view: View
    onClearView: () => void
    onHelp: () => void
+   // Read the messages again from LinkedIn, for the accounts shown; absent when there is nothing to read.
+   onRefresh: (() => void) | undefined
+   onReload: () => void
 }
 
 // Search, the accounts shown, how the list is ordered, and the actions that apply to the whole list. What is filtered is always said,
@@ -72,6 +86,8 @@ export const Toolbar = ({
    view,
    onClearView,
    onHelp,
+   onRefresh,
+   onReload,
 }: Props) => {
    const [confirm, setConfirm] = useState(false)
    const filteredAccounts = picker.selection !== undefined
@@ -147,6 +163,14 @@ export const Toolbar = ({
                <DropdownMenuContent align="end">
                   <DropdownMenuItem disabled={unreadCount === 0} onSelect={() => setConfirm(true)}>
                      <MailCheck /> Mark all read
+                  </DropdownMenuItem>
+                  {onRefresh ? (
+                     <DropdownMenuItem onSelect={onRefresh}>
+                        <RefreshCw /> Read the messages again
+                     </DropdownMenuItem>
+                  ) : null}
+                  <DropdownMenuItem onSelect={onReload}>
+                     <RotateCw /> Reload the list
                   </DropdownMenuItem>
                   <DropdownMenuItem onSelect={onHelp}>
                      <CircleHelp /> Keyboard shortcuts

@@ -25,9 +25,13 @@ export const statusOf = (conversation: UniboxConversation): ConversationStatus =
    return conversation.doneAt !== undefined && conversation.doneAt >= last.at ? 'DONE' : 'NEEDS_REPLY'
 }
 
+// Only the latest messages are held, and the server says the rest.
+const partial = ({ messages, messageCount }: UniboxConversation) =>
+   messageCount !== undefined && messages.length < messageCount
+
 // When the newest message we sent went, or undefined when we never replied.
 export const lastReplyAt = (conversation: UniboxConversation) =>
-   conversation.messages.findLast(message => message.direction === 'ME')?.at
+   conversation.messages.findLast(message => message.direction === 'ME')?.at ?? conversation.lastReplyAt
 
 // Since when they have waited for an answer: the first of their messages after our last one.
 export const waitingSince = (conversation: UniboxConversation) => {
@@ -35,6 +39,11 @@ export const waitingSince = (conversation: UniboxConversation) => {
 
    if (messages.at(-1)?.direction !== 'THEM') {
       return undefined
+   }
+
+   // The latest few may all be theirs while they have waited longer: the server knows since when.
+   if (partial(conversation) && conversation.waitingSince !== undefined) {
+      return conversation.waitingSince
    }
 
    let since = messages.length - 1

@@ -1,24 +1,7 @@
-import { type Attachment, type UniboxAccount, type UniboxConversation } from '../types'
-
+import { type UniboxSource } from '../source'
 import { sampleAccounts } from './accounts'
 import { type MessagesFileShape, accountOfFile, conversationsFromFile } from './fromContract'
 import { inventedConversations } from './seed'
-
-export type UniboxData = {
-   accounts: UniboxAccount[]
-   conversations: UniboxConversation[]
-   // True while the messages are examples: the page says so, and nothing is really sent.
-   sample: boolean
-}
-
-export type SendResult = { ok: true } | { ok: false; reason: string }
-
-// Where the Unibox gets its data and sends a reply. The page knows only this, so a source that reads brain over tRPC takes the
-// place of the sample one without a change to any screen.
-export type UniboxSource = {
-   load: () => Promise<UniboxData>
-   send: (account: UniboxAccount, text: string, attachments: Attachment[]) => Promise<SendResult>
-}
 
 type Deps = {
    now?: () => number
@@ -54,6 +37,8 @@ export const createSampleSource = ({
             accounts: [account],
             conversations: conversationsFromFile(file, account),
             sample: true,
+            canSend: true,
+            canRefresh: false,
          }
       }
 
@@ -63,8 +48,14 @@ export const createSampleSource = ({
          accounts,
          conversations: inventedConversations(accounts, now(), size),
          sample: true,
+         canSend: true,
+         canRefresh: false,
       }
    },
+   // The sample keeps nothing: a mark lives in the page until it is reloaded.
+   mark: async () => undefined,
+   open: async () => undefined,
+   refresh: async () => ({ started: 0, skipped: [] }),
    send: async (account, text) => {
       await wait(700 + Math.random() * 700)
 

@@ -36,6 +36,10 @@ export {
    LinkedInCompanyService,
 } from './linkedInCompany.service'
 export { type LinkedInPostListQuery, LinkedInPostService } from './linkedInPost.service'
+export { MAX_IDS, LIST_LIMIT, type ConversationView, LinkedInConversationService } from './linkedInConversation.service'
+export { MESSAGES_TASK } from './linkedInMessages.hooks'
+export { MessageImportService } from './messageImport.service'
+export { MessagesRefresh, type RefreshResult } from './messagesRefresh'
 export {
    type LinkedInProfileChanges,
    type LinkedInProfileListQuery,
