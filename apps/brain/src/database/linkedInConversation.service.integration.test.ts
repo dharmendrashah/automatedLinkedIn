@@ -440,6 +440,59 @@ describe('LinkedInConversationService (database)', () => {
       ).toBe(2)
    })
 
+   it('should settle a reply that was not sure when a read stores its message, and leave the others as they are', async () => {
+      const read = () =>
+         file({
+            id: '2-settle',
+            title: 'Settle',
+            messages: [message('t1', 'THEM', '14:00', 'Can you come?'), message('t2', 'ME', '14:05', 'On my way')],
+         })
+
+      await LinkedInConversationService.store(owner, read())
+
+      const conversation = await PrismaService.client.linkedInConversation.findFirstOrThrow({
+         where: {
+            accountId,
+            linkedInId: '2-settle',
+         },
+         select: { id: true },
+      })
+      const hour = 3_600_000
+      const reply = (text: string, createdAt: Date, extra: Record<string, unknown> = {}) => ({
+         userId,
+         accountId,
+         conversationId: conversation.id,
+         text,
+         state: 'UNKNOWN' as const,
+         sessionId: randomUUID(),
+         createdAt,
+         ...extra,
+      })
+      const stateOf = async (sessionId: string) =>
+         (await PrismaService.client.linkedInReply.findUniqueOrThrow({ where: { sessionId } })).state
+      const found = reply('On  my way', new Date(Date.now() - hour))
+      const otherWords = reply('Never typed', new Date(Date.now() - hour))
+      const dismissed = reply('On my way', new Date(Date.now() - hour), { dismissedAt: new Date() })
+      const later = reply('On my way', new Date(Date.now() + hour))
+      const old = reply('On my way', new Date(Date.now() - 8 * 24 * hour))
+
+      await PrismaService.client.linkedInReply.createMany({ data: [found, otherWords, dismissed, later, old] })
+      // Any read of the conversation settles, also one that finds nothing new.
+      await LinkedInConversationService.store(owner, read())
+
+      expect(await stateOf(found.sessionId)).toBe('SENT')
+      expect(await stateOf(otherWords.sessionId)).toBe('UNKNOWN')
+      expect(await stateOf(dismissed.sessionId)).toBe('UNKNOWN')
+      expect(await stateOf(later.sessionId)).toBe('UNKNOWN')
+      expect(await stateOf(old.sessionId)).toBe('UNKNOWN')
+
+      const where = { sessionId: found.sessionId }
+      const settled = await PrismaService.client.linkedInReply.findUniqueOrThrow({ where })
+
+      expect(settled.sentAt).not.toBeNull()
+      expect(settled.failure).toBeNull()
+   })
+
    it('should link the kept file of a message to its owner only, and never a file that was not kept', async () => {
       const link = vi.spyOn(KeptFiles, 'link').mockResolvedValue('https://signed.example/file')
       const find = (linkedInId: string) =>

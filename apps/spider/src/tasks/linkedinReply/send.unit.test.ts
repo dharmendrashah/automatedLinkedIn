@@ -41,6 +41,10 @@ type Page = {
    alreadyThere?: boolean
    // The conversation holds a picture someone sent, which the reader finds with the address LinkedIn serves it from.
    picture?: boolean
+   // The status LinkedIn answers the send request with, once send is pressed; none when the page never makes the request.
+   answer?: number
+   // How many looks at the page, after send, cannot read it (the page is moving).
+   unreadable?: number
 }
 
 const setup = (page: Page = {}) => {
@@ -58,11 +62,18 @@ const setup = (page: Page = {}) => {
    let typed = ''
    let pressed = false
    let looks = 0
+   let unreadable = page.unreadable ?? 0
    let shown = false
    const sentTexts: string[] = []
    const attached: Record<string, string> = {}
    const calls: string[] = []
    const html = () => {
+      if (pressed && unreadable > 0) {
+         unreadable -= 1
+
+         throw new Error('The page is moving')
+      }
+
       if (waiting > 0) {
          waiting -= 1
 
@@ -147,6 +158,10 @@ const setup = (page: Page = {}) => {
    }
    const browser = {
       pageHtml: vi.fn(async () => html()),
+      watchAnswers: vi.fn((_method: string, _parts: string[]) => ({
+         statuses: () => (pressed && page.answer !== undefined ? [page.answer] : []),
+         stop: vi.fn(),
+      })),
       inspect: vi.fn(async () => ({
          url: at,
          title: '',
@@ -578,6 +593,77 @@ describe('sendReply', () => {
       })
       expect(calls.filter(call => call === 'click send')).toHaveLength(1)
       expect(calls).toContain('press Delete')
+   })
+
+   it('should say it was sent when LinkedIn accepted the send request, even though the page never showed the message', async () => {
+      const { send, browser, context } = setup({
+         appears: 'never',
+         clears: true,
+         answer: 200,
+      })
+
+      await expect(send()).resolves.toEqual({ outcome: 'SENT' })
+      expect(browser.watchAnswers).toHaveBeenCalledWith('POST', [
+         'voyagerMessagingDashMessengerMessages',
+         'action=createMessage',
+      ])
+      expect(context.log).toHaveBeenCalledWith('LinkedIn accepted the message; the page did not show it')
+   })
+
+   it('should say it was sent when LinkedIn accepted the request and the page could not be read at all after send', async () => {
+      const { send, attached } = setup({
+         appears: 'never',
+         answer: 200,
+         unreadable: 99,
+      })
+
+      await expect(send()).resolves.toEqual({ outcome: 'SENT' })
+      // Nothing could be read, so nothing is handed over; the next read of the conversation finds the message.
+      expect(Object.keys(attached)).toEqual([])
+   })
+
+   it('should say it did not go when LinkedIn refused the send request, and empty the box', async () => {
+      const { send, calls } = setup({
+         appears: 'never',
+         clears: false,
+         answer: 422,
+      })
+
+      await expect(send()).resolves.toEqual({
+         outcome: 'FAILED',
+         why: 'NOT_SENT',
+      })
+      expect(calls).toContain('press Delete')
+   })
+
+   it('should stay unsure when LinkedIn answered the send request with a server error', async () => {
+      const { send } = setup({
+         appears: 'never',
+         clears: true,
+         answer: 503,
+      })
+
+      await expect(send()).resolves.toEqual({ outcome: 'UNKNOWN' })
+   })
+
+   it('should prefer what the page shows to a late or odd answer, and say sent when it shows', async () => {
+      const { send } = setup({ answer: 500 })
+
+      await expect(send()).resolves.toEqual({ outcome: 'SENT' })
+   })
+
+   it('should keep looking when a look cannot read the page, and say sent when a later look finds the message', async () => {
+      const { send } = setup({ unreadable: 3 })
+
+      await expect(send()).resolves.toEqual({ outcome: 'SENT' })
+   })
+
+   it('should stop listening for the answer when it is done', async () => {
+      const { send, browser } = setup()
+
+      await send()
+
+      expect(browser.watchAnswers.mock.results[0]?.value.stop).toHaveBeenCalledTimes(1)
    })
 
    it('should say it is unsure when the box was emptied and the message cannot be seen, and still hand over what the page shows', async () => {

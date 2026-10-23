@@ -7,10 +7,9 @@ import { type MessagesFile, keptPrefix, sentKey } from '@automatedLinkedIn/contr
 import { summaryOf, timelineOf } from './conversationImport'
 import { type ConversationReply, latestReplies } from './conversationReply'
 import { PrismaService } from './prisma.service'
+import { settleUnsureReplies, words } from './replySettle'
 
 type Tx = Prisma.TransactionClient
-
-const words = (text: string) => text.replace(/\s+/g, ' ').trim()
 
 const hasKey = (attachments: unknown) =>
    Array.isArray(attachments) &&
@@ -432,6 +431,10 @@ export class LinkedInConversationService {
                   data: { matchedAt: new Date() },
                })
             }
+
+            // A reply that was not sure to have gone is settled by the message that now stands for it, also when an earlier read
+            // stored that message.
+            await settleUnsureReplies(tx, row.id)
 
             const all = await tx.linkedInMessage.findMany({
                where: { conversationId: row.id },

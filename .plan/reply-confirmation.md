@@ -1,6 +1,6 @@
 # Reply confirmation: a reply that was sent must be reported as sent
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: done <!-- draft | locked | in progress | done -->
 - Created: 2026-10-24
 - Locked by user: yes, 2026-10-24 (all four proposals accepted; shipped in two changes: first the cause fix, then the rest)
 
@@ -62,10 +62,10 @@ Open questions: none.
 
 - [x] 1. Test first: a reply in a conversation with a received picture that has an address answers `SENT` (it answered `UNKNOWN`, reproduced); the contract test for every attachment shape (`messageReader.contract.unit.test.ts`).
 - [x] 2. `toContractMessages` (an allow list of the contract's own fields) used by the reply task's hand-over; the hand-over runs after the decision and a failure there is only a warning (`handOverSafely`). The read needs no change: `keepPictures` already gives the contract's shape.
-- [ ] 3. `confirm()`: looks that survive a failed read, 10 looks.
-- [ ] 4. Driver call for the send request's status, forwarded by `RecordedDetectionSession`; `SENT` on 2xx, `FAILED` on 4xx; tests with a fake driver and a real-browser test against the stand-in.
-- [ ] 5. Brain: settle `UNKNOWN` replies in `store`; read request after `UNKNOWN`; unit and integration tests (one message one reply, dismissed untouched, same words twice).
-- [ ] 6. Verify, including a real reply on staging in the conversation that failed, and `MEMORY.md`; set this plan to done.
+- [x] 3. `confirm()`: a look that cannot read the page is a lost look (10 looks, was 6).
+- [x] 4. Driver call `watchAnswers` (statuses only, forwarded by `RecordedDetectionSession`, empty in a browser without it), listening from just before the press; 2xx is `SENT`, only 4xx is `FAILED` (box emptied on a best effort), anything else `UNKNOWN`; tests with a fake driver and in real Camoufox.
+- [x] 5. Brain: `settleUnsureReplies` (`replySettle.ts`) at every store of a conversation; the hook makes the account's next read due now after an `UNKNOWN`; unit and integration tests.
+- [x] 6. Verify, `MEMORY.md`, this plan done. A reply on live staging was not run (see Outcome).
 
 ## Edge cases and risks
 
@@ -86,4 +86,10 @@ Open questions: none.
 
 ## Outcome
 
-Filled in when done.
+Shipped in two changes, 2026-10-24. First (PR #86): the cause (`toContractMessages`, the hand-over after the decision and guarded). Second: the hardened confirmation (10 looks that survive a failed read; LinkedIn's answer to the send request through the new driver call `watchAnswers`: 2xx `SENT`, 4xx `FAILED`, anything else `UNKNOWN`), unsure replies settled by a later read (`settleUnsureReplies`, last 7 days, one message one reply, dismissed ones left, also for a message an earlier read stored), and the next read of the account made due at once after an `UNKNOWN` (the hook sets `nextMessagesAt`, so the `account-daily` job sends it within about ten minutes under its usual rules). The Unibox card of an unsure reply says it is checked again and goes away when the message is found.
+
+Deviations: the "read after `UNKNOWN`" is the account's next daily-job read made due, not a task requested from the hook (a hook runs inside the finishing transaction and cannot start a task); the read of the messages needed no change (`keepPictures` already gives the contract's shape). The reply-sweep (a reply ended as unsure after 10 minutes) does not ask for a read; the next 2 hour read settles it.
+
+Verified: `pnpm lint`, `pnpm ts:check`, `pnpm test:unit:run`, `pnpm build`, brain integration tests (settling against Postgres), and the answer watch in real Camoufox (`hands.e2e.test.ts`). Not run: a reply on live staging/LinkedIn. To check after the deploy: reply in the conversation of session `87852d9b`; the session should end `Sent`, and the old `UNKNOWN` reply of that session settles after the next read (staging was asleep when checked).
+
+Follow-ups: settle replies ended by the sweep sooner; a send request that LinkedIn renames would leave the page as the only signal (the log then has no `LinkedIn accepted the message` line).

@@ -141,6 +141,12 @@ export interface SessionControl {
 // One site's IndexedDB as Playwright takes and restores it. Its typings leave it out; nothing here reads inside it.
 export type IndexedDbState = unknown[]
 
+// What a task hears of how the page's requests are answered (statuses only).
+export type AnswerWatch = {
+   statuses: () => number[]
+   stop: () => void
+}
+
 export type StorageState = {
    cookies: SessionCookie[]
    origins: Array<{
@@ -187,6 +193,9 @@ export interface DetectionSession extends LoginSession {
    // Downloads a file the page points to through the browser's own network (its proxy, cookies and language), as the page loads a
    // picture. Undefined when the answer is not a success, is a redirect, or is larger than `maxBytes`.
    fetchFile?: (url: string, maxBytes: number) => Promise<{ body: Buffer; contentType: string } | undefined>
+   // Starts to listen for how the page's requests are answered: from now on, `statuses()` holds the status of every answer to a
+   // `method` request whose address holds all of `parts`. Only the status, never what was sent or answered. `stop()` ends it.
+   watchAnswers?: (method: string, parts: string[]) => AnswerWatch
    // One step back in the browser's history, and where it ended.
    back?: () => Promise<string>
    // Rests the pointer at a point of the window, or moves it a little, as a hand does while reading.

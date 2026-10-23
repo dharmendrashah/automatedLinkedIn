@@ -42,6 +42,11 @@ const PAGES: Record<string, string> = {
 </body></html>`,
    '/profile/ada': `<!doctype html><html><body><p id="followed"></p><script>document.getElementById('followed').textContent = 'followed:' + (sessionStorage.getItem('followed') || 'no')</script></body></html>`,
    '/covered': '<!doctype html><html><body>covered page</body></html>',
+   '/answers': `<!doctype html><html><body>
+<button id="ok" onclick="fetch('/api/messages?action=createMessage&status=200', { method: 'POST' })">ok</button>
+<button id="refused" onclick="fetch('/api/messages?action=createMessage&status=422', { method: 'POST' })">refused</button>
+<button id="other" onclick="fetch('/api/presence?status=200', { method: 'POST' }); fetch('/api/messages?action=createMessage&status=201')">other</button>
+</body></html>`,
 }
 
 let server: Server
@@ -66,6 +71,13 @@ beforeAll(async () => {
       if (request.url === '/files/missing') {
          response.writeHead(404)
          response.end()
+
+         return
+      }
+
+      if (request.url?.startsWith('/api/')) {
+         response.writeHead(Number(new URL(request.url, 'http://x').searchParams.get('status') ?? 200))
+         response.end('{}')
 
          return
       }
@@ -240,6 +252,35 @@ describe('what a hand does on the page', () => {
          await expect(session.fetchFile?.(`${origin}/files/pic.png`, 4)).resolves.toBeUndefined()
          await expect(session.fetchFile?.(`${origin}/files/missing`, 100)).resolves.toBeUndefined()
          await expect(session.fetchFile?.(`${origin}/files/moved`, 100)).resolves.toBeUndefined()
+      })
+   })
+
+   it('should hear only the answers to the requests asked about, from the moment it was started, and stop when told', async () => {
+      await withSession(async session => {
+         await session.goto(`${origin}/answers`)
+
+         const watch = session.watchAnswers?.('POST', ['/api/messages', 'action=createMessage'])
+         const waitFor = async (count: number) => {
+            for (let looks = 0; looks < 50 && (watch?.statuses().length ?? 0) < count; looks += 1) {
+               await new Promise(resolve => setTimeout(resolve, 100))
+            }
+         }
+
+         await session.clickSelector?.('#ok')
+         await waitFor(1)
+         await session.clickSelector?.('#refused')
+         await waitFor(2)
+         // Another kind of request, and another address, are not what was asked about.
+         await session.clickSelector?.('#other')
+         await new Promise(resolve => setTimeout(resolve, 500))
+
+         expect(watch?.statuses()).toEqual([200, 422])
+
+         watch?.stop()
+         await session.clickSelector?.('#ok')
+         await new Promise(resolve => setTimeout(resolve, 500))
+
+         expect(watch?.statuses()).toEqual([200, 422])
       })
    })
 

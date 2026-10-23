@@ -256,6 +256,12 @@ export const Thread = ({
                            {conversation.failed.unsure ? 'The reply may have been sent.' : 'The reply did not go.'}
                         </p>
                         <p className="text-xs">{conversation.failed.reason}</p>
+                        {conversation.failed.unsure ? (
+                           <p className="text-xs">
+                              It is checked again at the next read of this conversation, within about ten minutes, and this
+                              goes away when the message is found.
+                           </p>
+                        ) : null}
                         <p className="mt-1 truncate text-xs opacity-80">
                            Your reply is kept: {conversation.failed.text || 'an attachment'}
                         </p>

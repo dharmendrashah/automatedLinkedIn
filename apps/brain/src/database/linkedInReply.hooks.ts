@@ -67,5 +67,17 @@ export const linkedInReplyHooks: TaskHooks = {
             skipDuplicates: true,
          })
       }
+
+      // An unsure reply is settled by the next read of the account, which finds its message if it went: ask for that read now, which
+      // the daily job sends within minutes under its own rules, instead of at the next time it had drawn.
+      if (state === 'UNKNOWN') {
+         await tx.linkedInAccount.updateMany({
+            where: {
+               id: session.linkedInAccountId,
+               status: 'ACTIVE',
+            },
+            data: { nextMessagesAt: new Date() },
+         })
+      }
    },
 }

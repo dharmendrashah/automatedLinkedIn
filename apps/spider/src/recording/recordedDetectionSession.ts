@@ -18,6 +18,7 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
    public readonly typeKeys?: DetectionSession['typeKeys']
    public readonly attachFiles?: DetectionSession['attachFiles']
    public readonly fetchFile?: DetectionSession['fetchFile']
+   public readonly watchAnswers?: DetectionSession['watchAnswers']
    public readonly back?: DetectionSession['back']
    public readonly hover?: DetectionSession['hover']
    public readonly drift?: DetectionSession['drift']
@@ -39,6 +40,7 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
          typeKeys,
          attachFiles,
          fetchFile,
+         watchAnswers,
          back,
          hover,
          drift,
@@ -82,6 +84,10 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
 
       if (fetchFile) {
          this.fetchFile = (url, maxBytes) => fetchFile.call(detector, url, maxBytes)
+      }
+
+      if (watchAnswers) {
+         this.watchAnswers = (method, parts) => watchAnswers.call(detector, method, parts)
       }
 
       if (back) {

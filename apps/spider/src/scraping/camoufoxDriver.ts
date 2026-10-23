@@ -1,7 +1,7 @@
 import { Camoufox } from 'camoufox'
 import { FingerprintGenerator } from 'fingerprint-generator'
 
-import { type BrowserContext, type Page, type Route } from 'playwright-core'
+import { type BrowserContext, type Page, type Response, type Route } from 'playwright-core'
 
 import { type ExtractedRecord, type SessionCookie } from '../types'
 
@@ -559,6 +559,28 @@ class CamoufoxSession implements DetectionSession {
       await input.setInputFiles(paths)
 
       return true
+   }
+
+   // How the page's requests of one kind are answered from now on, for a task that must know whether an action was taken (LinkedIn
+   // answering the send request). Only statuses are kept.
+   public watchAnswers(method: string, parts: string[]) {
+      const seen: number[] = []
+      const listener = (response: Response) => {
+         const url = response.url()
+
+         if (response.request().method() === method && parts.every(part => url.includes(part))) {
+            seen.push(response.status())
+         }
+      }
+
+      this.page.on('response', listener)
+
+      return {
+         statuses: () => [...seen],
+         stop: () => {
+            this.page.off('response', listener)
+         },
+      }
    }
 
    public async fetchFile(url: string, maxBytes: number) {

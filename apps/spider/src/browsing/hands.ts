@@ -1,4 +1,4 @@
-import { type DetectionSession, type InspectedElement, type PageInspection } from '../scraping/driver'
+import { type AnswerWatch, type DetectionSession, type InspectedElement, type PageInspection } from '../scraping/driver'
 
 // What a task needs from a browser to move about a page like a person. The driver offers these one by one and a fake may leave
 // some out; here they are checked once, so the rest of the code never asks whether a capability exists.
@@ -21,6 +21,8 @@ export type Hands = {
    attachFiles: (selector: string, paths: string[]) => Promise<boolean>
    // Downloads a file the page points to through the browser; undefined when it cannot, or the file is too large or not a success.
    fetchFile: (url: string, maxBytes: number) => Promise<{ body: Buffer; contentType: string } | undefined>
+   // Listens for the statuses the page's requests are answered with, from now on; hears nothing in a browser that cannot.
+   watchAnswers: (method: string, parts: string[]) => AnswerWatch
    // The markup of the page as it is now.
    html: () => Promise<string>
    back: () => Promise<string>
@@ -36,7 +38,18 @@ export const handsOf = (browser: DetectionSession): Hands => {
       throw new Error('This browser cannot browse by clicking.')
    }
 
-   const { clickInside, clickSelector, clickNth, scrollOver, typeKeys, attachFiles, fetchFile, hover, drift } = browser
+   const {
+      clickInside,
+      clickSelector,
+      clickNth,
+      scrollOver,
+      typeKeys,
+      attachFiles,
+      fetchFile,
+      watchAnswers,
+      hover,
+      drift,
+   } = browser
 
    return {
       inspect: block => inspect.call(browser, block ? { block } : undefined),
@@ -57,6 +70,11 @@ export const handsOf = (browser: DetectionSession): Hands => {
       },
       attachFiles: async (selector, paths) => (await attachFiles?.call(browser, selector, paths)) === true,
       fetchFile: async (url, maxBytes) => fetchFile?.call(browser, url, maxBytes),
+      watchAnswers: (method, parts) =>
+         watchAnswers?.call(browser, method, parts) ?? {
+            statuses: () => [],
+            stop: () => undefined,
+         },
       html: () => browser.pageHtml(),
       back: () => back.call(browser),
       hover: async (x, y) => hover?.call(browser, x, y),
