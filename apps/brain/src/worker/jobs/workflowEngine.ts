@@ -9,6 +9,8 @@ import { defineJob } from './defineJob'
 // Moves every running workflow forward (.plan/gtm-phase-2-engine-canvas.md). A quiet tick writes no log line.
 export const workflowEngine = defineJob({
    name: 'workflow-engine',
+   title: 'Workflow engine',
+   purpose: 'Moves every running workflow forward one step at a time.',
    everyMs: 5_000,
    startAfterMs: 10_000,
    timeoutMs: 20 * 60 * 1000,
@@ -27,13 +29,21 @@ export const workflowEngine = defineJob({
          }
       }
 
-      return moved > 0 ? { summary: `${moved} runs moved forward` } : undefined
+      return moved > 0
+         ? {
+              summary: `${moved} runs moved forward`,
+              counts: { moved },
+           }
+         : undefined
    },
 })
 
 // Keeps the wallet balance fresh for the admin view and the floor check of new runs.
 export const dataWallet = defineJob({
    name: 'data-wallet',
+   title: 'Data wallet balance',
+   purpose:
+      'Keeps the balance of the shared data wallet fresh, for the admin view and the check before a workflow starts.',
    everyMs: 10 * 60 * 1000,
    startAfterMs: 20_000,
    timeoutMs: 60_000,

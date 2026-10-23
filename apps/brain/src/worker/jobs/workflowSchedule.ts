@@ -8,6 +8,8 @@ import { defineJob } from './defineJob'
 // tick start it once. A start that is refused (a run still going, no posts, the wallet low) is skipped, not retried.
 export const workflowSchedule = defineJob({
    name: 'workflow-schedule',
+   title: 'Scheduled workflows',
+   purpose: 'Starts each scheduled workflow when its time has come.',
    everyMs: 60_000,
    startAfterMs: 30_000,
    timeoutMs: 5 * 60 * 1000,
@@ -40,6 +42,14 @@ export const workflowSchedule = defineJob({
          }
       }
 
-      return started > 0 || skipped > 0 ? { summary: `${started} started, ${skipped} skipped` } : undefined
+      return started > 0 || skipped > 0
+         ? {
+              summary: `${started} started, ${skipped} skipped`,
+              counts: {
+                 started,
+                 skipped,
+              },
+           }
+         : undefined
    },
 })

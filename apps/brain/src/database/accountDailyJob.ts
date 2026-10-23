@@ -1,5 +1,6 @@
 import { dailyTime, timezoneOfCountry } from 'core'
 
+import { type JobItemInput } from './jobRun.service'
 import { VISIT_TASK } from './linkedInAccount.service'
 import { LinkedInAccountValidationService } from './linkedInAccountValidation.service'
 import { MESSAGES_TASK } from './linkedInMessages.hooks'
@@ -18,6 +19,19 @@ const RECENT_SIGN_IN_MS = 12 * 60 * 60 * 1000
 
 type Due = Awaited<ReturnType<typeof findDue>>[number]
 type Field = 'nextCheckAt' | 'nextBrowseAt' | 'nextMessagesAt'
+// Asked for: the task is queued. Let go: the time moves on without a task, for a fixed reason. Retry: it could not be queued now,
+// so the time stays and the next pass tries again.
+type Attempt =
+   | {
+        kind: 'asked'
+        sessionId?: string
+     }
+   | {
+        kind: 'letGo' | 'retry'
+        reason: string
+     }
+
+const NOT_QUEUED = 'Could not be queued now, tried again on the next pass'
 
 const findDue = (now: Date) => {
    const due = (field: Field) => [{ [field]: null }, { [field]: { lte: now } }]
@@ -75,28 +89,34 @@ const move = (account: Due, field: Field, to: Date) =>
       data: { [field]: to },
    })
 
-const requestVisit = async ({ id, userId }: Due) => {
+const requestVisit = async ({ id, userId }: Due): Promise<Attempt> => {
    try {
-      await TaskService.request({
+      const { id: sessionId } = await TaskService.request({
          userId,
          task: VISIT_TASK,
          accountId: id,
          trigger: 'automatic',
       })
 
-      return true
+      return {
+         kind: 'asked',
+         sessionId,
+      }
    } catch (error) {
       if (!(error instanceof TaskRefusedError)) {
          console.error(`Could not request the daily visit of account ${id}: ${(error as Error).message}`)
       }
 
-      return false
+      return {
+         kind: 'retry',
+         reason: error instanceof TaskRefusedError ? error.message : NOT_QUEUED,
+      }
    }
 }
 
-const requestMessages = async ({ id, userId, messagesReadAt }: Due) => {
+const requestMessages = async ({ id, userId, messagesReadAt }: Due): Promise<Attempt> => {
    try {
-      await TaskService.request({
+      const { id: sessionId } = await TaskService.request({
          userId,
          task: MESSAGES_TASK,
          accountId: id,
@@ -104,13 +124,19 @@ const requestMessages = async ({ id, userId, messagesReadAt }: Due) => {
          input: messagesInput(messagesReadAt),
       })
 
-      return true
+      return {
+         kind: 'asked',
+         sessionId,
+      }
    } catch (error) {
       if (!(error instanceof TaskRefusedError)) {
          console.error(`Could not request the daily read of the messages of account ${id}: ${(error as Error).message}`)
       }
 
-      return false
+      return {
+         kind: 'retry',
+         reason: error instanceof TaskRefusedError ? error.message : NOT_QUEUED,
+      }
    }
 }
 
@@ -123,9 +149,12 @@ export class AccountDailyJob {
 
    public static async runDue(now: Date = new Date(), random: () => number = Math.random) {
       const result = {
+         accounts: 0,
          checks: 0,
          visits: 0,
          reads: 0,
+         drawn: 0,
+         items: [] as JobItemInput[],
       }
 
       if (AccountDailyJob.running) {
@@ -135,37 +164,84 @@ export class AccountDailyJob {
       AccountDailyJob.running = true
 
       try {
-         for (const account of await findDue(now)) {
+         const due = await findDue(now)
+
+         result.accounts = due.length
+
+         for (const account of due) {
             const timezone = timezoneOf(account)
             const next = (today: boolean) => dailyTime(now, timezone, { today }, random)
             // Sends one daily run when due; a first time is only drawn, for later today. `every` sets the next time without a draw.
-            const daily = async (field: Field, send: () => Promise<boolean>, every?: number) => {
+            // Returns whether a task was asked for. Every account that was due leaves an item, asked or why not.
+            const daily = async (field: Field, action: string, send: () => Promise<Attempt>, every?: number) => {
                const at = account[field]
 
                if (!at) {
                   await move(account, field, next(true))
+                  result.drawn += 1
 
                   return false
                }
 
-               if (at > now || !(await send())) {
+               if (at > now) {
                   return false
                }
 
+               const attempt = await send()
+               const item = {
+                  userId: account.userId,
+                  accountId: account.id,
+                  action,
+               }
+
+               if (attempt.kind === 'retry') {
+                  result.items.push({
+                     ...item,
+                     result: 'SKIPPED',
+                     reason: attempt.reason,
+                  })
+
+                  return false
+               }
+
+               result.items.push(
+                  attempt.kind === 'asked'
+                     ? {
+                          ...item,
+                          result: 'ASKED',
+                          sessionId: attempt.sessionId,
+                       }
+                     : {
+                          ...item,
+                          result: 'SKIPPED',
+                          reason: attempt.reason,
+                       }
+               )
                await move(account, field, every ? new Date(now.getTime() + every) : next(false))
 
-               return true
+               return attempt.kind === 'asked'
             }
 
             const signedInWithin = (ms: number) =>
                account.lastVerifiedAt !== null && now.getTime() - account.lastVerifiedAt.getTime() <= ms
             const recent = signedInWithin(RECENT_SIGN_IN_MS)
-            const checked = await daily(
-               'nextCheckAt',
-               async () => recent || LinkedInAccountValidationService.request(account.id)
-            )
+            const checked = await daily('nextCheckAt', 'sign-in-check', async (): Promise<Attempt> => {
+               if (recent) {
+                  return {
+                     kind: 'letGo',
+                     reason: 'Signed in successfully in the last 12 hours, which counts as the check',
+                  }
+               }
 
-            if (checked && !recent) {
+               return (await LinkedInAccountValidationService.request(account.id))
+                  ? { kind: 'asked' }
+                  : {
+                       kind: 'retry',
+                       reason: NOT_QUEUED,
+                    }
+            })
+
+            if (checked) {
                result.checks += 1
             }
 
@@ -174,21 +250,28 @@ export class AccountDailyJob {
             }
 
             const signedInToday = signedInWithin(DAY_MS)
+            // Without a good sign-in in the last day the visit and the read of the day are let go; the sign-in check decides first.
+            const notSignedIn: Attempt = {
+               kind: 'letGo',
+               reason: 'Not signed in successfully in the last day',
+            }
 
-            // Without a good sign-in in the last day the visit of the day is let go; the sign-in check decides first.
-            const visited = await daily('nextBrowseAt', async () => !signedInToday || requestVisit(account))
+            const visited = await daily('nextBrowseAt', 'visit', async () =>
+               signedInToday ? requestVisit(account) : notSignedIn
+            )
 
-            if (visited && signedInToday) {
+            if (visited) {
                result.visits += 1
             }
 
             const read = await daily(
                'nextMessagesAt',
-               async () => !signedInToday || requestMessages(account),
+               'messages-read',
+               async () => (signedInToday ? requestMessages(account) : notSignedIn),
                MESSAGES_EVERY_MS
             )
 
-            if (read && signedInToday) {
+            if (read) {
                result.reads += 1
             }
          }

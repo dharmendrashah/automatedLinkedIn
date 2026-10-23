@@ -9,11 +9,15 @@ const user = {
    findMany: vi.fn(),
    updateMany: vi.fn(),
 }
+const transaction = vi.fn((operations: unknown[]) => Promise.all(operations))
 
 vi.mock('./prisma.service', () => ({
    PrismaService: {
       get client() {
-         return { user }
+         return {
+            user,
+            $transaction: transaction,
+         }
       },
    },
 }))
@@ -61,6 +65,53 @@ describe('UserService', () => {
       await UserService.findByAuthentikId('sub-1')
 
       expect(user.findUnique).toHaveBeenCalledWith({ where: { authentikId: 'sub-1' } })
+   })
+
+   describe('platform owner', () => {
+      it('should match the owner email ignoring case, and nobody when none is set', () => {
+         expect(UserService.isAdminEmail('Owner@Elitale.com', 'owner@elitale.com')).toBe(true)
+         expect(UserService.isAdminEmail('ada@elitale.com', 'owner@elitale.com')).toBe(false)
+         expect(UserService.isAdminEmail('', '')).toBe(false)
+      })
+
+      it('should demote every other admin, then promote the linked user with that email, in one transaction', async () => {
+         await UserService.syncAdmin('owner@elitale.com')
+
+         const sameEmail = {
+            equals: 'owner@elitale.com',
+            mode: 'insensitive',
+         }
+
+         expect(transaction).toHaveBeenCalledTimes(1)
+         expect(user.updateMany.mock.calls).toEqual([
+            [
+               {
+                  where: {
+                     role: 'ADMIN',
+                     NOT: { email: sameEmail },
+                  },
+                  data: { role: 'USER' },
+               },
+            ],
+            [
+               {
+                  where: {
+                     email: sameEmail,
+                     authentikId: { not: null },
+                     role: 'USER',
+                  },
+                  data: { role: 'ADMIN' },
+               },
+            ],
+         ])
+      })
+
+      it('should change nothing when no owner email is set', async () => {
+         await UserService.syncAdmin('')
+
+         expect(transaction).not.toHaveBeenCalled()
+         expect(user.updateMany).not.toHaveBeenCalled()
+      })
    })
 
    describe('linkAuthentikAccount', () => {

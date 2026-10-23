@@ -1,5 +1,7 @@
 import { TRPCError } from '@trpc/server'
 
+import { ADMIN_EMAIL } from 'env'
+
 import { AuthService, type AuthenticatedRequest } from 'auth'
 
 import { AccountConflictError, UserService } from 'database'
@@ -17,12 +19,21 @@ export const provisionUser = async (auth: AuthenticatedRequest) => {
    const identity = await loadIdentity(auth)
 
    try {
-      return await UserService.provisionAuthentikAccount({
+      const user = await UserService.provisionAuthentikAccount({
          id: identity.id,
          name: identity.name,
          email: identity.email,
          emailVerified: identity.emailVerified,
       })
+
+      // The platform owner becomes ADMIN, only on a verified email.
+      if (user && identity.emailVerified && UserService.isAdminEmail(user.email, ADMIN_EMAIL)) {
+         await UserService.syncAdmin(ADMIN_EMAIL)
+
+         return await UserService.findById(user.id)
+      }
+
+      return user
    } catch (error) {
       if (error instanceof AccountConflictError) {
          throw new TRPCError({

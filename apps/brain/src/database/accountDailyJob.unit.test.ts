@@ -80,7 +80,7 @@ describe('AccountDailyJob', () => {
    it('should ask for the sign-in check and the visit that are due, then draw tomorrow in the account timezone', async () => {
       mocks.findMany.mockResolvedValue([account()])
 
-      await expect(run()).resolves.toEqual({
+      await expect(run()).resolves.toMatchObject({
          checks: 1,
          visits: 1,
          reads: 0,
@@ -133,7 +133,7 @@ describe('AccountDailyJob', () => {
    it('should check, but not visit, an account whose last check failed', async () => {
       mocks.findMany.mockResolvedValue([account({ status: 'ERROR' })])
 
-      await expect(run()).resolves.toEqual({
+      await expect(run()).resolves.toMatchObject({
          checks: 1,
          visits: 0,
          reads: 0,
@@ -146,13 +146,82 @@ describe('AccountDailyJob', () => {
       mocks.requestCheck.mockResolvedValue(false)
       mocks.requestTask.mockRejectedValue(new TaskRefusedError('A LinkedIn task is already running.'))
 
-      await expect(run()).resolves.toEqual({
+      await expect(run()).resolves.toMatchObject({
          checks: 0,
          visits: 0,
          reads: 0,
       })
       expect(mocks.updateMany).not.toHaveBeenCalled()
       expect(console.error).not.toHaveBeenCalled()
+   })
+
+   it('should list every account it was due for: asked with the session, or left with the reason', async () => {
+      mocks.findMany.mockResolvedValue([
+         account({
+            id: 'asked',
+            nextCheckAt: LATER,
+            nextBrowseAt: LATER,
+            nextMessagesAt: EARLIER,
+         }),
+         account({
+            id: 'signed-out',
+            nextCheckAt: LATER,
+            nextBrowseAt: LATER,
+            nextMessagesAt: EARLIER,
+            lastVerifiedAt: new Date('2026-10-17T09:00:00Z'),
+         }),
+         account({
+            id: 'busy',
+            nextCheckAt: LATER,
+            nextBrowseAt: LATER,
+            nextMessagesAt: EARLIER,
+         }),
+      ])
+      mocks.requestTask
+         .mockResolvedValueOnce({ id: 's-asked' })
+         .mockRejectedValueOnce(new TaskRefusedError('A LinkedIn task is already running.'))
+
+      const { items, accounts, reads } = await run()
+
+      expect(accounts).toBe(3)
+      expect(reads).toBe(1)
+      expect(items).toEqual([
+         {
+            userId: 'u1',
+            accountId: 'asked',
+            action: 'messages-read',
+            result: 'ASKED',
+            sessionId: 's-asked',
+         },
+         {
+            userId: 'u1',
+            accountId: 'signed-out',
+            action: 'messages-read',
+            result: 'SKIPPED',
+            reason: 'Not signed in successfully in the last day',
+         },
+         {
+            userId: 'u1',
+            accountId: 'busy',
+            action: 'messages-read',
+            result: 'SKIPPED',
+            reason: 'A LinkedIn task is already running.',
+         },
+      ])
+   })
+
+   it('should say the check was let go when a recent sign-in counted for it', async () => {
+      mocks.findMany.mockResolvedValue([account({ lastVerifiedAt: new Date('2026-10-19T09:30:00Z') })])
+
+      const { items } = await run()
+
+      expect(items).toContainEqual({
+         userId: 'u1',
+         accountId: 'acc1',
+         action: 'sign-in-check',
+         result: 'SKIPPED',
+         reason: 'Signed in successfully in the last 12 hours, which counts as the check',
+      })
    })
 
    it('should say nothing while the worker does not know the visit yet', async () => {

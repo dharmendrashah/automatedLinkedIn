@@ -22,6 +22,7 @@ import {
    Network,
    Send,
    Target,
+   Timer,
    UserCircle,
    Users,
    Video,
@@ -34,6 +35,7 @@ import { Link } from 'react-router'
 
 import { authConfig } from '../auth/authConfig'
 import { toProfile } from '../auth/profile'
+import { trpc } from '../trpc'
 
 const navMain: NavItem[] = [
    { title: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
@@ -52,10 +54,22 @@ const navMain: NavItem[] = [
    { title: 'Profile', to: '/profile', icon: UserCircle },
 ]
 
+// Only the platform owner sees it; the page and the API refuse everyone else as well.
+const cronMonitor: NavItem = {
+   title: 'Cron monitor',
+   to: '/jobs',
+   icon: Timer,
+}
+
 const navSecondary: ExternalNavLink[] = [{ title: 'Manage account', href: authConfig.accountUrl, icon: ExternalLink }]
 
 export const AppSidebar = (props: ComponentProps<typeof Sidebar>) => {
    const { user } = useAuth()
+   const me = trpc.me.useQuery(undefined, {
+      retry: false,
+      staleTime: 5 * 60 * 1000,
+   })
+   const items = me.data?.user?.role === 'ADMIN' ? [...navMain.slice(0, -1), cronMonitor, ...navMain.slice(-1)] : navMain
 
    return (
       <Sidebar collapsible="offcanvas" {...props}>
@@ -72,7 +86,7 @@ export const AppSidebar = (props: ComponentProps<typeof Sidebar>) => {
             </SidebarMenu>
          </SidebarHeader>
          <SidebarContent>
-            <NavMain items={navMain} />
+            <NavMain items={items} />
             <NavSecondary items={navSecondary} className="mt-auto" />
          </SidebarContent>
          <SidebarFooter>{user ? <NavUser profile={toProfile(user.profile)} /> : null}</SidebarFooter>

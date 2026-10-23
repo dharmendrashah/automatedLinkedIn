@@ -9,6 +9,7 @@ import { type ConsumerDefinition } from './consumers/defineConsumer'
 import { createHealthReader, listenHealth } from './health/workerHealth'
 import { type JobDefinition } from './jobs/defineJob'
 import { JobRunner } from './jobs/jobRunner'
+import { type RunRecorder } from './jobs/runRecorder'
 
 type Log = { info: (message: string) => void; error: (message: string) => void }
 
@@ -20,6 +21,9 @@ export type RuntimeDependencies = {
    isBrokerHealthy: () => Promise<boolean>
    taskDispatch: () => Promise<{ waiting: number; oldestSeconds: number }>
    build: { commit: string; builtAt: string }
+   // Saves every finished run of a job for the cron monitor, and tells it what the jobs are. Both are optional so a test can leave them out.
+   recorder?: RunRecorder
+   announceJobs?: (jobs: JobDefinition[]) => Promise<void>
    log?: Log
    // How often to ask again while the database is not there yet.
    databasePollMs?: number
@@ -58,7 +62,9 @@ export class WorkerRuntime {
            )
          : []
       this.jobs = config.roles.has('jobs')
-         ? dependencies.jobs.map(definition => new JobRunner(definition, this.log))
+         ? dependencies.jobs.map(
+              definition => new JobRunner(definition, this.log, run => dependencies.recorder?.add(run))
+           )
          : []
    }
 
@@ -87,6 +93,11 @@ export class WorkerRuntime {
 
       await Promise.all(this.consumers.map(runner => runner.start()))
 
+      if (this.jobs.length > 0) {
+         await this.announce()
+         dependencies.recorder?.start()
+      }
+
       for (const job of this.jobs) {
          job.start()
       }
@@ -109,6 +120,9 @@ export class WorkerRuntime {
          ...this.jobs.map(runner => runner.stop(shutdownGraceMs)),
       ])
 
+      // After the jobs have ended, so their last runs are saved too.
+      await this.dependencies.recorder?.stop()
+
       const { server } = this
 
       if (server) {
@@ -116,6 +130,17 @@ export class WorkerRuntime {
             server.close(() => resolve())
             server.closeAllConnections()
          })
+      }
+   }
+
+   // Tells the cron monitor what the jobs are. The jobs run without it, so a failure is only logged.
+   private async announce() {
+      try {
+         await this.dependencies.announceJobs?.(this.dependencies.jobs)
+      } catch (error) {
+         this.log.error(
+            `The brain worker could not announce its jobs: ${error instanceof Error ? error.message : 'unknown error'}`
+         )
       }
    }
 

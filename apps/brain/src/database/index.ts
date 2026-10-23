@@ -56,6 +56,14 @@ export {
 } from './proxyServer.service'
 export { ProxyScoringJob } from './proxyScoringJob'
 export { AccountDailyJob } from './accountDailyJob'
+export { JobMonitorService } from './jobMonitor.service'
+export {
+   type JobDefinitionInput,
+   type JobItemInput,
+   type JobRunInput,
+   type JobRunOutcome,
+   JobRunService,
+} from './jobRun.service'
 export { retryRefusal } from './sessionRetry'
 export {
    SpiderRecordingUnavailableError,

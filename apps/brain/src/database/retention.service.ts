@@ -1,5 +1,6 @@
 import { Prisma } from 'generated/prisma/client'
 
+import { JobRunService } from './jobRun.service'
 import { PrismaService } from './prisma.service'
 
 // Deletes personal data and old records on time (.plan/gtm-phase-3-blocks-triggers.md). Every step is safe to repeat
@@ -89,6 +90,8 @@ export class RetentionService {
             SELECT 1 FROM "LinkedInPost" p
             WHERE p."userId" = s."userId" AND p."slug" = s."slug" AND p."archivedAt" IS NULL
          ))`
+      // The cron monitor's history of job runs (.plan/cron-monitor.md).
+      const jobRuns = await JobRunService.cleanup(now)
 
       return {
          items: items.count,
@@ -101,6 +104,7 @@ export class RetentionService {
          reads: reads.count,
          snapshots,
          pages,
+         jobRuns,
       }
    }
 }

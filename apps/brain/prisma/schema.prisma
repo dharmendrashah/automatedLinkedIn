@@ -891,6 +891,70 @@ model MessageImport {
   @@index([status, nextAttemptAt])
 }
 
+enum JobRunOutcome {
+  // Did something.
+  WORKED
+  // Ran and found nothing due.
+  IDLE
+  FAILED
+  TIMED_OUT
+}
+
+enum JobItemResult {
+  ASKED
+  SKIPPED
+  FAILED
+}
+
+// What the brain worker announced about each scheduled job at start (.plan/cron-monitor.md), so the admin page knows every
+// job, also one that has not run yet.
+model JobDefinition {
+  name      String   @id
+  title     String
+  purpose   String
+  everyMs   Int
+  timeoutMs Int
+  seenAt    DateTime @default(now())
+}
+
+// One run of a scheduled job of the brain worker, idle ones too, kept 30 days. No text of any message and no secret.
+model JobRun {
+  id         String          @id
+  job        String
+  startedAt  DateTime
+  finishedAt DateTime
+  durationMs Int
+  outcome    JobRunOutcome
+  summary    String?
+  counts     Json?
+  // The class and a short message with credentials masked; never a stack.
+  error      String?
+  instance   String
+  build      String
+  items      JobRunItem[]
+
+  @@index([job, startedAt])
+  @@index([startedAt])
+}
+
+// What a run handled: one user's account and what was done or why it was left. Ids only, no foreign keys, so the history
+// outlives a deleted account.
+model JobRunItem {
+  id        String        @id @default(uuid(7))
+  runId     String
+  run       JobRun        @relation(fields: [runId], references: [id], onDelete: Cascade)
+  userId    String?
+  accountId String?
+  action    String
+  result    JobItemResult
+  // A fixed sentence.
+  reason    String?
+  // The task session the run started.
+  sessionId String?
+
+  @@index([runId])
+}
+
 enum LinkedInReplyState {
   SENDING
   SENT

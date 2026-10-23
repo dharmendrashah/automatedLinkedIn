@@ -6,12 +6,14 @@ const mocks = vi.hoisted(() => ({
    runDue: vi.fn(),
    dispatchDue: vi.fn(),
    retention: vi.fn(),
+   accountDue: vi.fn(),
 }))
 
 vi.mock('database', () => ({
    ProxyScoringJob: { runDue: mocks.runDue },
    TaskDispatchService: { dispatchDue: mocks.dispatchDue },
    RetentionService: { run: mocks.retention },
+   AccountDailyJob: { runDue: mocks.accountDue },
 }))
 
 vi.mock('env', () => ({
@@ -21,6 +23,7 @@ vi.mock('env', () => ({
 
 const [proxyScoring, taskDispatch] = JOBS
 const retention = JOBS.find(({ name }) => name === 'retention')
+const accountDaily = JOBS.find(({ name }) => name === 'account-daily')
 const context = { signal: new AbortController().signal }
 
 describe('worker jobs', () => {
@@ -42,7 +45,13 @@ describe('worker jobs', () => {
          failed: 1,
       })
 
-      await expect(proxyScoring.run(context)).resolves.toEqual({ summary: '3 scored, 1 failed' })
+      await expect(proxyScoring.run(context)).resolves.toEqual({
+         summary: '3 scored, 1 failed',
+         counts: {
+            scored: 3,
+            failed: 1,
+         },
+      })
    })
 
    it('should report nothing when nothing was due, so a quiet hour writes no log line', async () => {
@@ -81,7 +90,13 @@ describe('worker jobs', () => {
          gaveUp: 1,
       })
 
-      await expect(taskDispatch.run(context)).resolves.toEqual({ summary: '2 published, 1 given up' })
+      await expect(taskDispatch.run(context)).resolves.toEqual({
+         summary: '2 published, 1 given up',
+         counts: {
+            published: 2,
+            gaveUp: 1,
+         },
+      })
    })
 
    it('should report nothing for an empty table or for retries only, so a broker outage is not a log line a run', async () => {
@@ -105,7 +120,65 @@ describe('worker jobs', () => {
          runs: 0,
       })
 
-      await expect(retention?.run(context)).resolves.toEqual({ summary: '5 items, 2 marked' })
+      await expect(retention?.run(context)).resolves.toMatchObject({ summary: '5 items, 2 marked' })
       await expect(retention?.run(context)).resolves.toBeUndefined()
+   })
+
+   it('should give every job a title and a purpose for the cron monitor', () => {
+      for (const job of JOBS) {
+         expect(job.title.length).toBeGreaterThan(0)
+         expect(job.purpose.length).toBeGreaterThan(0)
+      }
+   })
+
+   it('should hand the accounts of the daily job to the monitor, and log only what was asked for', async () => {
+      const item = {
+         userId: 'u1',
+         accountId: 'a1',
+         action: 'messages-read',
+         result: 'SKIPPED' as const,
+         reason: 'Not signed in successfully in the last day',
+      }
+
+      mocks.accountDue.mockResolvedValueOnce({
+         accounts: 2,
+         checks: 0,
+         visits: 0,
+         reads: 1,
+         drawn: 0,
+         items: [item],
+      })
+      mocks.accountDue.mockResolvedValueOnce({
+         accounts: 1,
+         checks: 0,
+         visits: 0,
+         reads: 0,
+         drawn: 1,
+         items: [item],
+      })
+      mocks.accountDue.mockResolvedValueOnce({
+         accounts: 0,
+         checks: 0,
+         visits: 0,
+         reads: 0,
+         drawn: 0,
+         items: [],
+      })
+
+      await expect(accountDaily?.run(context)).resolves.toMatchObject({
+         summary: '0 sign-in checks, 0 visits, 1 message reads asked for',
+         counts: {
+            accountsDue: 2,
+            reads: 1,
+            skipped: 1,
+         },
+         items: [item],
+      })
+
+      const quiet = await accountDaily?.run(context)
+
+      expect(quiet).toMatchObject({ items: [item] })
+      expect(quiet).not.toHaveProperty('summary')
+      await expect(accountDaily?.run(context)).resolves.toBeUndefined()
    })
 })
