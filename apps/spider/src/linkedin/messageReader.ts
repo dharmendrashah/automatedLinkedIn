@@ -102,6 +102,19 @@ const attachmentsOf = (item: HTMLElement): ReadAttachment[] =>
 
 export type ReadMessage = Omit<Message, 'attachments'> & { attachments: ReadAttachment[] }
 
+// The messages as the contract has them. A picture's download address is a means for the run and never leaves the spider, and the
+// contract is strict, so only the fields it knows are given on.
+export const toContractMessages = (messages: ReadMessage[]): Message[] =>
+   messages.map(message => ({
+      ...message,
+      attachments: message.attachments.map(({ kind, name, key, bytes }) => ({
+         kind,
+         ...(name !== undefined && { name }),
+         ...(key !== undefined && { key }),
+         ...(bytes !== undefined && { bytes }),
+      })),
+   }))
+
 export const parseThread = (html: string, today: Date) => {
    const root = parse(html)
    const photos = photosIn(root)

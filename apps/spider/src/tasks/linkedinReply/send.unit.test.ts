@@ -39,6 +39,8 @@ type Page = {
    canFetch?: boolean
    // A message of ours with the same words is already the newest of the page.
    alreadyThere?: boolean
+   // The conversation holds a picture someone sent, which the reader finds with the address LinkedIn serves it from.
+   picture?: boolean
 }
 
 const setup = (page: Page = {}) => {
@@ -96,6 +98,19 @@ const setup = (page: Page = {}) => {
                day: 'Today',
                text: 'Can we meet?',
             },
+            ...(page.picture
+               ? [
+                    {
+                       id: 'p',
+                       from: 'THEM' as const,
+                       name: 'Ada Lovelace',
+                       profile: `${BASE}/in/ada/`,
+                       time: '9:02 AM',
+                       image: 'plan.png',
+                       imageSrc: `${BASE}/dms/prv/image/v2/D4D06/messaging-image-720/B4Da?m=1&t=x`,
+                    },
+                 ]
+               : []),
             ...(alreadyThere
                ? [
                     {
@@ -271,6 +286,32 @@ const setup = (page: Page = {}) => {
 }
 
 describe('sendReply', () => {
+   it('should say it was sent, and hand over the page without the address of a picture, in a conversation that holds a picture', async () => {
+      const { send, attached } = setup({ picture: true })
+
+      await expect(send()).resolves.toEqual({ outcome: 'SENT' })
+
+      const file = messagesFileSchema.parse(JSON.parse(attached['messages.json'] ?? 'null'))
+      const [picture] = file.conversations[0]?.messages.flatMap(message => message.attachments) ?? []
+
+      expect(picture).toEqual({
+         kind: 'IMAGE',
+         name: 'plan.png',
+      })
+      expect(JSON.stringify(file)).not.toContain('dms/prv/image')
+   })
+
+   it('should say it was sent even when the page cannot be handed over after the message showed', async () => {
+      const { send, context } = setup()
+
+      context.attach.mockImplementation(() => {
+         throw new Error('refused')
+      })
+
+      await expect(send()).resolves.toEqual({ outcome: 'SENT' })
+      expect(context.warn).toHaveBeenCalledWith('The page could not be handed over.')
+   })
+
    it('should type the words, press send once, and say it was sent when the message shows as the newest of the account', async () => {
       const { send, calls, sentTexts, attached, context } = setup()
 

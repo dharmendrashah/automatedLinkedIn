@@ -4,7 +4,14 @@ import { describeError } from '../../browsing/errors'
 import { handsOf } from '../../browsing/hands'
 import { createReader } from '../../browsing/reader'
 import { COMPOSER, FILE_INPUT, IMAGE_INPUT, MESSAGING_PATH, SEND_BUTTON, THREAD_ID } from '../../linkedin/markup'
-import { composerHtml, newestIsOurs, parseComposer, parseOwner, parseThread } from '../../linkedin/messageReader'
+import {
+   composerHtml,
+   newestIsOurs,
+   parseComposer,
+   parseOwner,
+   parseThread,
+   toContractMessages,
+} from '../../linkedin/messageReader'
 import { PACE } from '../../linkedin/pace'
 import { SignedOut, createSession } from '../../linkedin/session'
 import { type TaskContext } from '../defineTask'
@@ -110,7 +117,7 @@ export const sendReply = async (
          unread: false,
          lastActivity: '',
          complete: false,
-         messages,
+         messages: toContractMessages(messages),
       }
       const parts: MessagesFile[] = partsOf([conversation], new Date(now()).toISOString()).map(part => ({
          ...part,
@@ -119,6 +126,16 @@ export const sendReply = async (
 
       for (const part of parts) {
          attach(fileName(part.part), JSON.stringify(messagesFileSchema.parse(part), null, 1), 'application/json')
+      }
+   }
+
+   // The verdict never depends on this: the message was looked for and decided on before, so a page that cannot be handed over
+   // costs the importer the new message (the next read finds it), never a reply that went.
+   const handOverSafely = (html: string) => {
+      try {
+         handOver(html)
+      } catch {
+         warn('The page could not be handed over.')
       }
    }
 
@@ -203,7 +220,7 @@ export const sendReply = async (
          html = await hands.html()
 
          if (newestIsOurs(parseThread(html, today()).messages, input.text, before)) {
-            handOver(html)
+            handOverSafely(html)
 
             return { outcome: 'SENT' }
          }
@@ -221,7 +238,7 @@ export const sendReply = async (
          }
       }
 
-      handOver(html)
+      handOverSafely(html)
 
       return { outcome: 'UNKNOWN' }
    }
