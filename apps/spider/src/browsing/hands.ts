@@ -11,6 +11,12 @@ export type Hands = {
    // Clicks a link that was listed at this place, for one the page answers without changing its address.
    clickInside: (box: InspectedElement['box'], avoid: string) => Promise<boolean>
    clickSelector: (selector: string) => Promise<boolean>
+   // Clicks the Nth element (from 0, in page order) of a selector, for a row that is not a link; false when it is not in view.
+   clickNth: (selector: string, index: number, avoid: string) => Promise<boolean>
+   // Wheels over the first element of a selector that shows, so the pane that holds it scrolls; says whether the pane moved.
+   scrollOver: (selector: string, pixels: number) => Promise<boolean>
+   // The markup of the page as it is now.
+   html: () => Promise<string>
    back: () => Promise<string>
    hover: (x: number, y: number) => Promise<void>
    drift: () => Promise<void>
@@ -24,7 +30,7 @@ export const handsOf = (browser: DetectionSession): Hands => {
       throw new Error('This browser cannot browse by clicking.')
    }
 
-   const { clickInside, clickSelector, hover, drift } = browser
+   const { clickInside, clickSelector, clickNth, scrollOver, hover, drift } = browser
 
    return {
       inspect: block => inspect.call(browser, block ? { block } : undefined),
@@ -32,6 +38,9 @@ export const handsOf = (browser: DetectionSession): Hands => {
       clickLink: (href, avoid) => clickLink.call(browser, href, avoid),
       clickInside: async (box, avoid) => (await clickInside?.call(browser, box, avoid)) === true,
       clickSelector: async selector => (await clickSelector?.call(browser, selector)) === true,
+      clickNth: async (selector, index, avoid) => (await clickNth?.call(browser, selector, index, avoid)) === true,
+      scrollOver: async (selector, pixels) => (await scrollOver?.call(browser, selector, pixels)) === true,
+      html: () => browser.pageHtml(),
       back: () => back.call(browser),
       hover: async (x, y) => hover?.call(browser, x, y),
       drift: async () => drift?.call(browser),

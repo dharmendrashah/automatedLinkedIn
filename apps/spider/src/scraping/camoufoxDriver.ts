@@ -395,15 +395,17 @@ class CamoufoxSession implements DetectionSession {
    private spot(find: {
       selector: string
       href?: string
+      // Only the element at this place (from 0) among those that match, in page order, instead of any of them.
+      nth?: number
       box?: { x: number; y: number; width: number; height: number }
       avoid: string
    }) {
-      return this.page.evaluate(({ selector, href, box, avoid }) => {
+      return this.page.evaluate(({ selector, href, nth, box, avoid }) => {
          const view = {
             width: window.innerWidth,
             height: window.innerHeight,
          }
-         const elements = Array.from(document.querySelectorAll(selector))
+         const matches = Array.from(document.querySelectorAll(selector))
             .filter(element => href === undefined || (element instanceof HTMLAnchorElement && element.href === href))
             .filter(element => {
                if (!box) {
@@ -420,7 +422,7 @@ class CamoufoxSession implements DetectionSession {
                   Math.abs(at.height - box.height) <= 8
                )
             })
-            .sort(() => Math.random() - 0.5)
+         const elements = nth === undefined ? matches.sort(() => Math.random() - 0.5) : matches.slice(nth, nth + 1)
 
          for (const element of elements) {
             const rect = element.getBoundingClientRect()
@@ -512,6 +514,123 @@ class CamoufoxSession implements DetectionSession {
       await this.pressAt(spot)
 
       return true
+   }
+
+   // Clicks the Nth element (from 0, in page order) of `selector`, where it is on top and nothing matching `avoid` is under the
+   // pointer, for a row of a list that is not a link. False when it is not in view (the list is scrolled to it first) or there
+   // is no such element.
+   public async clickNth(selector: string, index: number, avoid: string) {
+      const spot = await this.spot({
+         selector,
+         nth: index,
+         avoid,
+      })
+
+      if (!spot) {
+         return false
+      }
+
+      await this.pressAt(spot)
+
+      return true
+   }
+
+   // What a wheel over a point moves: the nearest part of the page that scrolls, which is the window or a pane of its own, and how
+   // far it is scrolled and whether it has room to go on in the given direction.
+   private paneAt(find: { x: number; y: number; by: number }) {
+      return this.page.evaluate(({ x, y, by }) => {
+         let pane: Element | null = document.elementFromPoint(x, y)
+
+         while (
+            pane &&
+            !(
+               pane.scrollHeight > pane.clientHeight + 1 &&
+               /(auto|scroll|overlay)/.test(getComputedStyle(pane).overflowY)
+            )
+         ) {
+            pane = pane.parentElement
+         }
+
+         const top = pane ? pane.scrollTop : window.scrollY
+         const room = pane
+            ? by > 0
+               ? pane.scrollTop + pane.clientHeight < pane.scrollHeight - 2
+               : pane.scrollTop > 0
+            : by > 0
+              ? window.scrollY + window.innerHeight < document.documentElement.scrollHeight - 2
+              : window.scrollY > 0
+
+         return {
+            top: Math.round(top),
+            room,
+         }
+      }, find)
+   }
+
+   // The wheel over the first element of `selector` that shows, so it is the pane that holds that element which scrolls, not the
+   // page in general (a list and the conversation beside it scroll on their own). Says whether the pane moved.
+   public async scrollOver(selector: string, pixels: number) {
+      const point = await this.page.evaluate(sel => {
+         for (const element of document.querySelectorAll(sel)) {
+            const rect = element.getBoundingClientRect()
+            const left = Math.max(rect.left, 0)
+            const right = Math.min(rect.right, window.innerWidth)
+            const top = Math.max(rect.top, 0)
+            const bottom = Math.min(rect.bottom, window.innerHeight)
+
+            if (right - left < 4 || bottom - top < 4) {
+               continue
+            }
+
+            const x = left + (right - left) * (0.3 + Math.random() * 0.4)
+            const y = top + (bottom - top) * (0.3 + Math.random() * 0.4)
+            const on = document.elementFromPoint(x, y)
+
+            if (on && (on === element || element.contains(on) || on.contains(element))) {
+               return {
+                  x: Math.round(x),
+                  y: Math.round(y),
+               }
+            }
+         }
+
+         return undefined
+      }, selector)
+
+      if (!point) {
+         return false
+      }
+
+      const before = await this.paneAt({
+         ...point,
+         by: pixels,
+      })
+
+      await this.moveTo(point.x, point.y)
+      await this.page.mouse.wheel(0, pixels)
+      await wait(SCROLL_SETTLE_MS)
+
+      let after = await this.paneAt({
+         ...point,
+         by: pixels,
+      })
+
+      for (let tries = 0; tries < SCROLL_POLLS; tries += 1) {
+         await wait(SCROLL_POLL_MS)
+
+         const next = await this.paneAt({
+            ...point,
+            by: pixels,
+         })
+
+         if (next.top === after.top) {
+            break
+         }
+
+         after = next
+      }
+
+      return after.top !== before.top
    }
 
    public async clickSelector(selector: string) {

@@ -1,0 +1,305 @@
+import { describe, expect, it } from 'vitest'
+
+import { parseInbox, parseOwner, parseThread } from './messageReader'
+import { inboxMarkup, threadMarkup } from './messagingFixture'
+
+// Thursday, 22 October 2026.
+const today = new Date(Date.UTC(2026, 9, 22, 12, 0, 0))
+const ADA = 'https://www.linkedin.com/in/ada/'
+const ME = 'https://www.linkedin.com/in/me/'
+
+describe('parseThread', () => {
+   const html = threadMarkup({
+      title: 'Ada Lovelace',
+      profile: ADA,
+      messages: [
+         {
+            id: '2-m1',
+            from: 'THEM',
+            name: 'Ada Lovelace',
+            profile: ADA,
+            time: '5:18 PM',
+            day: 'Jan 25, 2024',
+            text: 'Hello Tripti,<br>quick &amp; short question',
+         },
+         {
+            id: '2-m2',
+            from: 'THEM',
+            text: 'Second of the group',
+         },
+         {
+            id: '2-m3',
+            from: 'ME',
+            name: 'Tripti Verma',
+            profile: ME,
+            time: '9:01 AM',
+            day: 'Today',
+            text: 'Thanks',
+         },
+         {
+            id: '2-m4',
+            from: 'THEM',
+            name: 'Ada Lovelace',
+            profile: ADA,
+            time: '9:10 AM',
+            image: 'plan.png',
+         },
+      ],
+   })
+
+   it("should give a person the profile picture the page draws for that name, from LinkedIn's image host only", () => {
+      const photo = (name: string, src: string) => `<img class="presence-entity__image" alt="${name}" src="${src}">`
+      const withPhotos = (...images: string[]) => parseThread(`${html}${images.join('')}`, today)
+
+      const found = withPhotos(photo('Ada Lovelace', 'https://media.licdn.com/dms/image/ada'))
+
+      expect(found.participants[0]).toMatchObject({ imageUrl: 'https://media.licdn.com/dms/image/ada' })
+      expect(found.messages[0]?.sender.imageUrl).toBe('https://media.licdn.com/dms/image/ada')
+      expect(withPhotos(photo('Ada Lovelace', 'https://elsewhere.test/ada.png')).participants[0]).not.toHaveProperty(
+         'imageUrl'
+      )
+      expect(
+         withPhotos(
+            photo('Ada Lovelace', 'https://media.licdn.com/dms/image/one'),
+            photo('Ada Lovelace', 'https://media.licdn.com/dms/image/two')
+         ).participants[0]
+      ).not.toHaveProperty('imageUrl')
+   })
+
+   it('should read each message with its id, sender, direction, day, time and text', () => {
+      const { messages } = parseThread(html, today)
+
+      expect(messages.map(message => message.id)).toEqual([
+         'urn:li:msg_message:(urn:li:fsd_profile:me,2-m1)',
+         'urn:li:msg_message:(urn:li:fsd_profile:me,2-m2)',
+         'urn:li:msg_message:(urn:li:fsd_profile:me,2-m3)',
+         'urn:li:msg_message:(urn:li:fsd_profile:me,2-m4)',
+      ])
+      expect(messages[0]).toMatchObject({
+         sender: {
+            name: 'Ada Lovelace',
+            profileUrl: ADA,
+         },
+         direction: 'THEM',
+         date: '2024-01-25',
+         time: '17:18',
+         when: 'Jan 25, 2024 5:18 PM',
+         text: 'Hello Tripti,\nquick & short question',
+      })
+      expect(messages[2]).toMatchObject({
+         sender: {
+            name: 'Tripti Verma',
+            profileUrl: ME,
+         },
+         direction: 'ME',
+         date: '2026-10-22',
+         time: '09:01',
+      })
+   })
+
+   it('should give a message of a group the sender and the day of the group, and no time of its own', () => {
+      const [, second] = parseThread(html, today).messages
+
+      expect(second).toMatchObject({
+         sender: {
+            name: 'Ada Lovelace',
+            profileUrl: ADA,
+         },
+         direction: 'THEM',
+         date: '2024-01-25',
+         when: 'Jan 25, 2024',
+         text: 'Second of the group',
+      })
+      expect(second).not.toHaveProperty('time')
+   })
+
+   it('should note an image of a message that has no text, as a placeholder and never as the image', () => {
+      const [, , , image] = parseThread(html, today).messages
+
+      expect(image).toMatchObject({
+         text: '',
+         attachments: [
+            {
+               kind: 'IMAGE',
+               name: 'plan.png',
+            },
+         ],
+      })
+   })
+
+   it('should name the conversation and who is in it, and say it is direct when one person writes', () => {
+      expect(parseThread(html, today)).toMatchObject({
+         title: 'Ada Lovelace',
+         kind: 'DIRECT',
+         participants: [
+            {
+               name: 'Ada Lovelace',
+               profileUrl: ADA,
+            },
+         ],
+      })
+   })
+
+   it('should say it is a group when several people write, or the header has no profile', () => {
+      const several = threadMarkup({
+         title: 'Team',
+         messages: [
+            {
+               id: '2-a',
+               from: 'THEM',
+               name: 'Ada',
+               time: '1:00 PM',
+               day: 'Mon',
+               text: 'one',
+            },
+            {
+               id: '2-b',
+               from: 'THEM',
+               name: 'Grace',
+               time: '1:05 PM',
+               text: 'two',
+            },
+         ],
+      })
+      const { kind, participants } = parseThread(several, today)
+
+      expect(kind).toBe('GROUP')
+      expect(participants.map(person => person.name)).toEqual(['Ada', 'Grace'])
+   })
+
+   it('should read a thread with no message, and a page with no thread at all', () => {
+      expect(
+         parseThread(
+            threadMarkup({
+               title: 'Empty',
+               profile: ADA,
+               messages: [],
+            }),
+            today
+         ).messages
+      ).toEqual([])
+      expect(parseThread('<html><body><p>nothing</p></body></html>', today)).toMatchObject({
+         title: '',
+         messages: [],
+      })
+   })
+
+   it('should keep the text as shown when the day cannot be understood', () => {
+      const html2 = threadMarkup({
+         title: 'Ada',
+         profile: ADA,
+         messages: [
+            {
+               id: '2-x',
+               from: 'THEM',
+               name: 'Ada',
+               time: '5:18 PM',
+               day: '25. Januar 2024',
+               text: 'Hallo',
+            },
+         ],
+      })
+      const [only] = parseThread(html2, today).messages
+
+      expect(only).toMatchObject({
+         when: '25. Januar 2024 5:18 PM',
+         time: '17:18',
+      })
+      expect(only).not.toHaveProperty('date')
+   })
+})
+
+describe('parseOwner', () => {
+   it('should read the name and picture of the account from the top bar, and nothing from a page without it', () => {
+      const bar = (src: string) => `<nav><img class="global-nav__me-photo" alt=" Tripti Verma " src="${src}"></nav>`
+
+      expect(parseOwner(bar('https://media.licdn.com/dms/image/me'))).toEqual({
+         name: 'Tripti Verma',
+         imageUrl: 'https://media.licdn.com/dms/image/me',
+      })
+      expect(parseOwner(bar('https://elsewhere.test/me.png'))).toEqual({ name: 'Tripti Verma' })
+      expect(parseOwner('<nav></nav>')).toBeUndefined()
+   })
+})
+
+describe('parseInbox', () => {
+   const html = inboxMarkup(
+      [
+         {
+            title: 'Ada Lovelace',
+            when: 'Jan 16',
+            snippet: 'Ada: see you',
+            unread: true,
+         },
+         {
+            title: 'Grace Hopper, Alan Turing',
+            when: 'Mon',
+            snippet: 'Alan: ok',
+         },
+      ],
+      true
+   )
+
+   it('should list the rows in order with who, when, the last words and whether they are unread', () => {
+      expect(parseInbox(html).rows).toEqual([
+         {
+            title: 'Ada Lovelace',
+            when: 'Jan 16',
+            snippet: 'Ada: see you',
+            unread: true,
+            hydrated: true,
+            linkIndex: 0,
+         },
+         {
+            title: 'Grace Hopper, Alan Turing',
+            when: 'Mon',
+            snippet: 'Alan: ok',
+            unread: false,
+            hydrated: true,
+            linkIndex: 1,
+         },
+      ])
+   })
+
+   it('should tell a row that is drawn from one the page keeps empty, and number the drawn ones for clicking', () => {
+      const { rows } = parseInbox(
+         inboxMarkup([
+            {
+               title: 'A',
+               when: 'Jan 1',
+               snippet: 'a',
+               placeholder: true,
+            },
+            {
+               title: 'B',
+               when: 'Jan 2',
+               snippet: 'b',
+            },
+            {
+               title: 'C',
+               when: 'Jan 3',
+               snippet: 'c',
+               placeholder: true,
+            },
+            {
+               title: 'D',
+               when: 'Jan 4',
+               snippet: 'd',
+            },
+         ])
+      )
+
+      expect(rows.map(({ hydrated, linkIndex }) => [hydrated, linkIndex])).toEqual([
+         [false, undefined],
+         [true, 0],
+         [false, undefined],
+         [true, 1],
+      ])
+   })
+
+   it('should say whether the page may hold more conversations than it shows', () => {
+      expect(parseInbox(html).more).toBe(true)
+      expect(parseInbox(inboxMarkup([])).more).toBe(false)
+      expect(parseInbox(inboxMarkup([])).rows).toEqual([])
+   })
+})

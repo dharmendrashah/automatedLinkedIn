@@ -4,13 +4,14 @@ import { createReader } from '../../browsing/reader'
 import { createKeep } from '../../browsing/snapshot'
 import { runTargets } from '../../browsing/targets'
 import { POST_BLOCK, POST_WINDOW } from '../../linkedin/markup'
+import { PACE } from '../../linkedin/pace'
 import { SignedOut, createSession } from '../../linkedin/session'
 import { type TaskContext } from '../defineTask'
 import { createFinder } from './finder'
 import { createRoutes } from './routes'
 import { WalkState } from './state'
 import { createVisits } from './visits'
-import { BUDGET_MS, PACE, STAYS, planWalk } from './walk'
+import { BUDGET_MS, STAYS, planWalk } from './walk'
 
 type Context = Pick<TaskContext, 'browser' | 'visit' | 'pause' | 'log' | 'warn' | 'attach' | 'screenshot'>
 

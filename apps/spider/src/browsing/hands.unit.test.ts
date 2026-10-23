@@ -35,6 +35,8 @@ describe('handsOf', () => {
             'button'
          )
       ).resolves.toBe(false)
+      await expect(hands.clickNth('.row', 3, 'button')).resolves.toBe(false)
+      await expect(hands.scrollOver('.row', 300)).resolves.toBe(false)
       await expect(hands.hover(1, 2)).resolves.toBeUndefined()
       await expect(hands.drift()).resolves.toBeUndefined()
    })

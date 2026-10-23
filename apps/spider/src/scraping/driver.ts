@@ -172,6 +172,12 @@ export interface DetectionSession extends LoginSession {
    clickInside?: (box: InspectedElement['box'], avoid: string) => Promise<boolean>
    // Clicks the first element of `selector` that is in view and not covered, and says whether it did.
    clickSelector?: (selector: string) => Promise<boolean>
+   // Clicks the Nth element (from 0, in page order) of `selector`, where it is on top and nothing that matches `avoid` is under the
+   // pointer, for a row of a list that is not a link. False when it is not in view or there is no such element.
+   clickNth?: (selector: string, index: number, avoid: string) => Promise<boolean>
+   // Wheels over the first element of `selector` that shows, so the pane that holds it scrolls (a list and the conversation beside it
+   // scroll on their own). Says whether the pane moved.
+   scrollOver?: (selector: string, pixels: number) => Promise<boolean>
    // One step back in the browser's history, and where it ended.
    back?: () => Promise<string>
    // Rests the pointer at a point of the window, or moves it a little, as a hand does while reading.
