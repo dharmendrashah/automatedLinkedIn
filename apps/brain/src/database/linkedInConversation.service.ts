@@ -1,10 +1,76 @@
+import { KeptFiles } from 'core'
+
 import { type Prisma } from 'generated/prisma/client'
 
-import { type MessagesFile } from '@automatedLinkedIn/contracts'
+import { type MessagesFile, keptPrefix, sentKey } from '@automatedLinkedIn/contracts'
 
 import { summaryOf, timelineOf } from './conversationImport'
 import { PrismaService } from './prisma.service'
 
+type Tx = Prisma.TransactionClient
+
+const words = (text: string) => text.replace(/\s+/g, ' ').trim()
+
+const hasKey = (attachments: unknown) =>
+   Array.isArray(attachments) &&
+   (attachments as unknown[]).some(item => typeof (item as { key?: unknown } | null)?.key === 'string')
+
+// The files of a reply as the message that went with it shows them, with the place they are kept.
+const filesOfReply = (owner: { userId: string; accountId: string }, uploadId: string, stored: unknown) =>
+   Array.isArray(stored)
+      ? (stored as unknown[]).flatMap(item => {
+           const { name, kind, bytes } = (item ?? {}) as { name?: unknown; kind?: unknown; bytes?: unknown }
+
+           return typeof name === 'string' && typeof kind === 'string'
+              ? [
+                   {
+                      kind,
+                      name,
+                      ...(typeof bytes === 'number' && { bytes }),
+                      key: sentKey(owner.userId, owner.accountId, uploadId, name),
+                   },
+                ]
+              : []
+        })
+      : []
+
+// The messages of the account that LinkedIn now shows are matched to the replies that sent them: the earliest reply with files, not
+// matched yet, that has the same words. The message then shows the reply's own files, which are the true ones. Resolves to the replies used.
+const giveReplyFiles = async (
+   tx: Tx,
+   owner: { userId: string; accountId: string },
+   conversationId: string,
+   fresh: Array<{ direction: string; text: string; attachments: Prisma.InputJsonArray }>
+) => {
+   const replies = await tx.linkedInReply.findMany({
+      where: {
+         conversationId,
+         uploadId: { not: null },
+         matchedAt: null,
+         state: { in: ['SENT', 'UNKNOWN'] },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+         id: true,
+         text: true,
+         uploadId: true,
+         attachments: true,
+      },
+   })
+   const used: string[] = []
+
+   for (const message of fresh) {
+      const at = message.direction === 'ME' ? replies.findIndex(reply => words(reply.text) === words(message.text)) : -1
+      const [reply] = at < 0 ? [] : replies.splice(at, 1)
+
+      if (reply) {
+         message.attachments = filesOfReply(owner, reply.uploadId ?? '', reply.attachments) as Prisma.InputJsonArray
+         used.push(reply.id)
+      }
+   }
+
+   return used
+}
 // The page loads this many of the owner's newest conversations, each with its latest messages; the whole conversation loads when
 // it is opened (.plan/unibox-backend.md, Q4).
 export const LIST_LIMIT = 3000
@@ -61,13 +127,21 @@ const messageOut = (message: MessageRow) => ({
    text: message.text,
    attachments: Array.isArray(message.attachments)
       ? (message.attachments as unknown[]).flatMap(item => {
-           const { kind, name } = (item ?? {}) as { kind?: unknown; name?: unknown }
+           const { kind, name, bytes, key } = (item ?? {}) as {
+              kind?: unknown
+              name?: unknown
+              bytes?: unknown
+              key?: unknown
+           }
 
            return typeof kind === 'string'
               ? [
                    {
                       kind,
                       ...(typeof name === 'string' && { name }),
+                      ...(typeof bytes === 'number' && { bytes }),
+                      // The key itself never leaves brain; the page asks for a link to open the file.
+                      ...(typeof key === 'string' && { kept: true }),
                    },
                 ]
               : []
@@ -174,6 +248,24 @@ export class LinkedInConversationService {
       }
    }
 
+   // A short link to read one kept file of a message of the owner's, or null when the message is not theirs, has no such attachment
+   // or the file was not kept.
+   public static async fileLink(userId: string, messageId: string, index: number) {
+      const message = await PrismaService.client.linkedInMessage.findFirst({
+         where: {
+            id: messageId,
+            conversation: { userId },
+         },
+         select: { attachments: true },
+      })
+      const { key, name } = ((Array.isArray(message?.attachments) ? message.attachments[index] : null) ?? {}) as {
+         key?: unknown
+         name?: unknown
+      }
+
+      return typeof key === 'string' ? KeptFiles.link(userId, key, typeof name === 'string' ? name : 'file') : null
+   }
+
    // The owner's own mark. It changes nothing on LinkedIn.
    public static async setUnread(userId: string, ids: string[], unread: boolean) {
       const { count } = await PrismaService.client.linkedInConversation.updateMany({
@@ -219,6 +311,18 @@ export class LinkedInConversationService {
    // are, so storing the same file again changes nothing. `userId` and `accountId` come from the session, never from the file.
    public static async store(owner: { userId: string; accountId: string }, file: MessagesFile) {
       const base = new Date(file.captured_at)
+      // A file the spider kept counts only inside the folder of this owner and account; any other key is dropped.
+      const folder = keptPrefix(owner.userId, owner.accountId)
+      const own = ({
+         key,
+         ...attachment
+      }: MessagesFile['conversations'][number]['messages'][number]['attachments'][number]) =>
+         key !== undefined && key.startsWith(folder) && !key.includes('..')
+            ? {
+                 ...attachment,
+                 key,
+              }
+            : attachment
       let conversations = 0
       let messages = 0
 
@@ -261,13 +365,16 @@ export class LinkedInConversationService {
                      complete: true,
                   },
                }))
-            const known = new Set(
+            const known = new Map(
                (
                   await tx.linkedInMessage.findMany({
                      where: { conversationId: row.id },
-                     select: { linkedInId: true },
+                     select: {
+                        linkedInId: true,
+                        attachments: true,
+                     },
                   })
-               ).map(({ linkedInId }) => linkedInId)
+               ).map(({ linkedInId, attachments }) => [linkedInId, attachments])
             )
             const times = timelineOf(conversation.messages, base)
             const fresh = conversation.messages.flatMap((message, position) =>
@@ -283,16 +390,42 @@ export class LinkedInConversationService {
                           sentAt: times[position] ?? base,
                           whenText: message.when,
                           text: message.text,
-                          attachments: message.attachments as Prisma.InputJsonArray,
+                          attachments: message.attachments.map(own) as Prisma.InputJsonArray,
                           position,
                        },
                     ]
             )
+            const matched = fresh.some(message => message.direction === 'ME')
+               ? await giveReplyFiles(tx, owner, row.id, fresh)
+               : []
 
             await tx.linkedInMessage.createMany({
                data: fresh,
                skipDuplicates: true,
             })
+
+            // A picture kept by a later read than the one that stored its message: the message gets its place, once.
+            for (const message of conversation.messages) {
+               const incoming = message.attachments.map(own)
+               const stored = known.get(message.id)
+
+               if (stored !== undefined && !hasKey(stored) && hasKey(incoming)) {
+                  await tx.linkedInMessage.updateMany({
+                     where: {
+                        conversationId: row.id,
+                        linkedInId: message.id,
+                     },
+                     data: { attachments: incoming as Prisma.InputJsonArray },
+                  })
+               }
+            }
+
+            if (matched.length > 0) {
+               await tx.linkedInReply.updateMany({
+                  where: { id: { in: matched } },
+                  data: { matchedAt: new Date() },
+               })
+            }
 
             const all = await tx.linkedInMessage.findMany({
                where: { conversationId: row.id },

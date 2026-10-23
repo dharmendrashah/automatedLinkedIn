@@ -9,6 +9,7 @@ import { CORS_ORIGINS } from 'env'
 import { initializeTrpc } from 'trpc/api/router'
 
 import { Health } from './health'
+import { Uploads } from './uploads'
 import { WorkflowApi } from './workflowApi'
 
 export class Middlewares {
@@ -18,7 +19,7 @@ export class Middlewares {
             origin: CORS_ORIGINS.split(',')
                .map(origin => origin.trim())
                .filter(Boolean),
-            allowedHeaders: ['authorization', 'content-type'],
+            allowedHeaders: ['authorization', 'content-type', 'x-file-name'],
          }) as RequestHandler
       )
 
@@ -27,6 +28,8 @@ export class Middlewares {
       Health.config(app)
 
       WorkflowApi.config(app)
+
+      Uploads.config(app)
 
       initializeTrpc(app)
    }

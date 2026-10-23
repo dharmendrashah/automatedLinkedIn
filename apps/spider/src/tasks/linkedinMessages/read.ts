@@ -18,9 +18,10 @@ import { parseInbox, parseOwner, parseThread } from '../../linkedin/messageReade
 import { PACE } from '../../linkedin/pace'
 import { SignedOut, createSession } from '../../linkedin/session'
 import { type TaskContext } from '../defineTask'
+import { PICTURES_PER_RUN, keepPictures } from './keepPictures'
 import { fileName, partsOf } from './messagesFile'
 
-type Context = Pick<TaskContext, 'browser' | 'visit' | 'pause' | 'log' | 'warn' | 'attach' | 'screenshot'>
+type Context = Pick<TaskContext, 'browser' | 'visit' | 'pause' | 'log' | 'warn' | 'attach' | 'screenshot' | 'kept'>
 
 export type MessagesInput = {
    // How many conversations of the list to read, newest activity first.
@@ -106,6 +107,7 @@ export const readMessages = async (
    const keep = createKeep(context, input.snapshots)
    const conversations: Conversation[] = []
    const seen = new Set<string>()
+   const pictures = { left: PICTURES_PER_RUN }
    let owner: MessagesFile['account']
    let ended = false
 
@@ -240,6 +242,16 @@ export const readMessages = async (
       await keep('thread')
 
       const { thread, complete } = await readThread()
+      // The page is still on the conversation, so the addresses of its pictures are fresh.
+      const messages = await keepPictures(
+         thread.messages,
+         {
+            kept: context.kept,
+            fetchFile: hands.fetchFile,
+            warn,
+         },
+         pictures
+      )
 
       conversations.push({
          id,
@@ -249,7 +261,7 @@ export const readMessages = async (
          unread: row.unread,
          lastActivity: row.when,
          complete,
-         messages: thread.messages,
+         messages,
       })
       log(`Read ${thread.messages.length} messages`)
 

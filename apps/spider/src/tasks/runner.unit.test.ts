@@ -733,6 +733,60 @@ describe('a task that needs an account', () => {
       expect(lease.release).toHaveBeenCalledTimes(1)
    })
 
+   it('should let the task keep the files of messages under the folder of the owner and the account of the run, and give none to a run without an account', async () => {
+      const files = {
+         exists: vi.fn(async () => false),
+         save: vi.fn(async () => undefined),
+      }
+      let key = ''
+      let hasKept = false
+      const seen: Array<boolean> = []
+      const task = accountTask({
+         run: async context => {
+            seen.push(context.kept !== undefined)
+            key = context.kept?.keyOf('urn:msg:1', 0, 'plan.png') ?? ''
+            hasKept = (await context.kept?.has(key)) ?? true
+            await context.kept?.save(key, Buffer.from('x'), 'image/png')
+
+            return {
+               status: 'SUCCEEDED',
+               verdict: 'GOOD',
+               message: 'ok',
+            }
+         },
+      })
+
+      await setup({
+         task,
+         overrides: { files },
+      }).run(accountCommand)
+
+      expect(key).toMatch(/^kept\/user-1\/acc1\/received\/[0-9a-f]{32}\/0-plan\.png$/)
+      expect(hasKept).toBe(false)
+      expect(files.exists).toHaveBeenCalledWith(key)
+      expect(files.save).toHaveBeenCalledWith(key, Buffer.from('x'), 'image/png')
+
+      const plain = demo({
+         run: async context => {
+            seen.push(context.kept !== undefined)
+
+            return {
+               status: 'SUCCEEDED',
+               verdict: 'GOOD',
+               message: 'ok',
+            }
+         },
+      })
+
+      await setup({
+         task: plain,
+         overrides: { files },
+      }).run()
+      await setup({ task: accountTask({ run: plain.run }) }).run(accountCommand)
+
+      expect(seen).toEqual([true, false, false])
+   })
+
    describe('the device of the account', () => {
       const device: DeviceIdentity = {
          version: 1,

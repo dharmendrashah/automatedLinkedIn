@@ -1,3 +1,4 @@
+import { copyFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { type ProxyConfig, RUNNER_VERDICTS, type TaskResult, runPrefix } from '@automatedLinkedIn/contracts'
@@ -191,6 +192,11 @@ export const runTasks = async ({ proxy, databaseUrl, encryptionKey, outputRoot }
                }),
             publishResult: async found => {
                result = found
+            },
+            // Files for a reply are read from .devtools-uploads/<upload id>/<name> of this folder instead of the bucket.
+            uploads: {
+               download: (key, path) =>
+                  copyFile(join(process.cwd(), '.devtools-uploads', key.replace(/^uploads\/[^/]+\//, '')), path),
             },
             workerBuild: 'devtools',
          }

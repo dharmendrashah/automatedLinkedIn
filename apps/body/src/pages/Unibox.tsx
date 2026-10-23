@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 
 import { type Attachment, type UniboxAccount } from '../components/unibox/types'
 
+import { userManager } from '../auth/userManager'
 import { type AccountSet, parseSets, setMatching } from '../components/unibox/accountSets'
 import { type Address, parseAddress, toAddress } from '../components/unibox/address'
 import { withDevFile } from '../components/unibox/chooseSource'
@@ -32,10 +33,12 @@ import { Thread } from '../components/unibox/thread'
 import { agoOf, sameDay } from '../components/unibox/time'
 import { Toolbar } from '../components/unibox/toolbar'
 import { createTrpcSource } from '../components/unibox/trpcSource'
+import { createUpload } from '../components/unibox/upload'
 import { UNDO_MS, useUnibox } from '../components/unibox/use-unibox'
 import { viewLabel } from '../components/unibox/views'
 import { ViewsList } from '../components/unibox/views-list'
 import { trpc } from '../trpc'
+import { createApiUrl } from '../trpc/config'
 
 const fileSource = createSampleSource({ loadReal: loadRealSample })
 const storage = typeof localStorage === 'undefined' ? undefined : localStorage
@@ -63,10 +66,12 @@ type BoardProps = {
    canSend: boolean
    // Asks for the messages to be read again; absent when the data has nothing to read.
    onRefresh: ((accountIds?: string[]) => void) | undefined
+   // Opens a kept file of a message.
+   onOpenFile: (messageId: string, index: number) => void
    api: Api
 }
 
-const Board = ({ accounts, sample, canSend, onRefresh, api }: BoardProps) => {
+const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, api }: BoardProps) => {
    const { conversations, flying, dispatch, load, send, undo, retry } = api
    const { pathname, search } = useLocation()
    const navigate = useNavigate()
@@ -165,8 +170,9 @@ const Board = ({ accounts, sample, canSend, onRefresh, api }: BoardProps) => {
          ambiguousNames: new Set([...names].filter(([, count]) => count > 1).map(([name]) => name)),
          today,
          index,
+         openFile: onOpenFile,
       }
-   }, [accounts, conversations, now, index])
+   }, [accounts, conversations, now, index, onOpenFile])
 
    const unreadByAccount = useMemo(() => {
       const map = new Map<string, number>()
@@ -682,10 +688,18 @@ const Board = ({ accounts, sample, canSend, onRefresh, api }: BoardProps) => {
 
 export const Unibox = () => {
    const { client } = trpc.useUtils()
-   const source = useMemo(
-      () => withDevFile(fileSource, createTrpcSource(client), async () => (await loadRealSample()) !== undefined),
-      [client]
-   )
+   const source = useMemo(() => {
+      const upload = createUpload({
+         apiUrl: createApiUrl(import.meta.env),
+         token: async () => (await userManager.getUser())?.access_token,
+      })
+
+      return withDevFile(
+         fileSource,
+         createTrpcSource(client, { upload }),
+         async () => (await loadRealSample()) !== undefined
+      )
+   }, [client])
    const onSaveError = useCallback(() => toast.error('A change could not be kept. Reload to see what is saved.'), [])
    const api = useUnibox(source, onSaveError)
    const { loaded, reload } = api
@@ -716,6 +730,17 @@ export const Unibox = () => {
       )
    }
 
+   const openFile = (messageId: string, index: number) => {
+      if (!source.fileLink) {
+         return
+      }
+
+      source
+         .fileLink(messageId, index)
+         .then(url => window.open(url, '_blank', 'noopener'))
+         .catch(() => toast.error('The file could not be opened. Try again in a moment.'))
+   }
+
    const refresh = (accountIds?: string[]) =>
       source
          .refresh(accountIds)
@@ -741,6 +766,7 @@ export const Unibox = () => {
          sample={loaded.sample}
          canSend={loaded.canSend}
          onRefresh={loaded.canRefresh ? refresh : undefined}
+         onOpenFile={openFile}
          api={api}
       />
    )

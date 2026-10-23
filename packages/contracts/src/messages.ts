@@ -14,8 +14,12 @@ const personSchema = z.strictObject({
 
 const attachmentSchema = z.strictObject({
    kind: z.enum(['IMAGE', 'FILE', 'LINK', 'OTHER']),
-   // Only what the page shows as the name. Nothing is downloaded.
+   // What the page shows as the name.
    name: z.string().max(300).optional(),
+   // Where the spider kept the file in the bucket (`receivedKey`), with its size; absent when it was not downloaded. Brain keeps
+   // a key only if it lies in the folder of the account's own owner.
+   key: z.string().max(600).optional(),
+   bytes: z.number().int().min(0).optional(),
 })
 
 export const messageSchema = z.strictObject({

@@ -245,6 +245,61 @@ gcloud auth application-default login --impersonate-service-account="$SIGNER_EMA
 | The video plays but the steps, network and logs tabs say the file could not be loaded | The bucket has no CORS rule for the app's address. |
 | The Video tab says the recording is not set up | `SPIDER_GCS_BUCKET` is empty in brain. |
 
+## Files of messages, kept for good (not done yet)
+
+Messages and their files are kept without end (`.plan/unibox-keep-messages-and-files.md`); the only deletion is when the owner
+removes a LinkedIn account, which deletes that account's folder. Three places in the bucket are involved:
+
+- `uploads/<user>/<upload>/`: a file the page uploaded to **brain** (`POST /uploads/:uploadId`, at most 20 MB) while its reply is
+  being sent. The spider worker downloads it from here. When the reply ends, brain **moves** it (it is never deleted).
+  Files uploaded and never sent (the tab was closed) stay here, so a one day lifecycle rule removes them.
+- `kept/<user>/<account>/sent/<upload>/`: the files of replies, moved here for good by brain.
+- `kept/<user>/<account>/received/<message>/`: the pictures of messages from other people, written by the spider worker when it
+  reads the messages (a file already there is not downloaded again).
+
+Brain signs ten minute links to open a kept file of the owner's own, so brain's service account needs to write, read, list and
+delete under `uploads/` and `kept/` (this is the first time brain writes to the bucket). The spider worker already has
+`roles/storage.objectAdmin` on the bucket (see above), so it needs nothing new. These are the commands, not run as part of this
+change.
+
+```sh
+export PROJECT_ID=automate-linkedin-511215
+export BUCKET=automate-linkedin-511215-spider
+export SIGNER_EMAIL="brain-recording-links@$PROJECT_ID.iam.gserviceaccount.com"
+
+# Not runs/ (read only, above), sessions/ (login cookies) or results/. Listing has no object name, so it is allowed by the
+# prefix it asks for.
+gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" \
+  --member="serviceAccount:$SIGNER_EMAIL" \
+  --role="roles/storage.objectAdmin" \
+  --condition="title=uploads-and-kept-only,expression=resource.name.startsWith('projects/_/buckets/$BUCKET/objects/uploads/') || resource.name.startsWith('projects/_/buckets/$BUCKET/objects/kept/') || api.getAttribute('storage.googleapis.com/objectListPrefix', '').startsWith('uploads/')"
+
+# Only uploads/ is ever deleted by a rule (files never sent); kept/ has none, on purpose. Merge this with the rules already on the
+# bucket: `--lifecycle-file` replaces the whole configuration (see the check under Session recordings).
+cat > /tmp/lifecycle.json <<EOF
+{"rule": [
+  {"action": {"type": "Delete"}, "condition": {"age": 7, "matchesPrefix": ["runs/", "recordings/"]}},
+  {"action": {"type": "Delete"}, "condition": {"age": 1, "matchesPrefix": ["uploads/"]}}
+]}
+EOF
+gcloud storage buckets update "gs://$BUCKET" --lifecycle-file=/tmp/lifecycle.json
+```
+
+Removing an account deletes the live objects of its folder. The spider bucket keeps object versions (so a bad session write can be
+rolled back) and may have a soft delete window: noncurrent versions of deleted files linger until those expire, which the privacy
+text must say.
+Storage only grows; a rule that moves old `kept/` files to a colder class (not deleting them) can be added later.
+
+The browser sends a file to brain, and opens a kept file by a signed link in a new tab, so the bucket needs no new CORS rule. Brain
+needs `SPIDER_GCS_BUCKET` set (it already is for recordings); without it a file cannot be sent or opened.
+
+| Error | Cause |
+| --- | --- |
+| The page says a file could not be sent, brain logs `403` on `uploads/` | The grant above is missing or its condition does not match. |
+| A reply with files ends as failed with "the files could not be read" | The spider worker could not download from `uploads/`; check its bucket role. |
+| A file of a sent reply does not open, brain logs `403` or `404` on `kept/` | The grant lacks `kept/`, or the reply's files were not moved yet (the sweep runs every minute; a failure is logged and retried). |
+| Removing a LinkedIn account fails | Brain could not delete `kept/<user>/<account>/`; the account stays so it can be tried again. Check the grant. |
+
 ## Browser tests (staging prerequisites, not applied)
 
 A proxy's browser test (`.plan/spider-browser-test.md`) opens two public bot detection pages through the proxy and records

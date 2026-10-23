@@ -16,6 +16,8 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
    public readonly clickNth?: DetectionSession['clickNth']
    public readonly scrollOver?: DetectionSession['scrollOver']
    public readonly typeKeys?: DetectionSession['typeKeys']
+   public readonly attachFiles?: DetectionSession['attachFiles']
+   public readonly fetchFile?: DetectionSession['fetchFile']
    public readonly back?: DetectionSession['back']
    public readonly hover?: DetectionSession['hover']
    public readonly drift?: DetectionSession['drift']
@@ -35,6 +37,8 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
          clickNth,
          scrollOver,
          typeKeys,
+         attachFiles,
+         fetchFile,
          back,
          hover,
          drift,
@@ -70,6 +74,14 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
 
       if (typeKeys) {
          this.typeKeys = text => typeKeys.call(detector, text)
+      }
+
+      if (attachFiles) {
+         this.attachFiles = (selector, paths) => attachFiles.call(detector, selector, paths)
+      }
+
+      if (fetchFile) {
+         this.fetchFile = (url, maxBytes) => fetchFile.call(detector, url, maxBytes)
       }
 
       if (back) {

@@ -549,6 +549,40 @@ class CamoufoxSession implements DetectionSession {
       }
    }
 
+   public async attachFiles(selector: string, paths: string[]) {
+      const input = this.page.locator(selector).first()
+
+      if ((await input.count()) === 0) {
+         return false
+      }
+
+      await input.setInputFiles(paths)
+
+      return true
+   }
+
+   public async fetchFile(url: string, maxBytes: number) {
+      // A redirect is not followed: the address was chosen by the page reader, and where it leads is not known.
+      const response = await this.page.context().request.get(url, {
+         timeout: 60_000,
+         maxRedirects: 0,
+         failOnStatusCode: false,
+      })
+
+      if (!response.ok() || Number(response.headers()['content-length'] ?? 0) > maxBytes) {
+         return undefined
+      }
+
+      const body = await response.body()
+
+      return body.length > maxBytes
+         ? undefined
+         : {
+              body,
+              contentType: (response.headers()['content-type'] ?? '').split(';')[0]?.trim().toLowerCase() ?? '',
+           }
+   }
+
    // What a wheel over a point moves: the nearest part of the page that scrolls, which is the window or a pane of its own, and how
    // far it is scrolled and whether it has room to go on in the given direction.
    private paneAt(find: { x: number; y: number; by: number }) {

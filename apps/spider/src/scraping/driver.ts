@@ -181,6 +181,12 @@ export interface DetectionSession extends LoginSession {
    // Types into whatever has the focus, key by key at a person's pace; a line break is Shift+Enter, which makes a new line where a bare
    // Enter would send.
    typeKeys?: (text: string) => Promise<void>
+   // Gives files (by path on this machine) to the first file input of `selector`, which may be hidden, as a person's choice in the
+   // file dialog does. False when there is no such input.
+   attachFiles?: (selector: string, paths: string[]) => Promise<boolean>
+   // Downloads a file the page points to through the browser's own network (its proxy, cookies and language), as the page loads a
+   // picture. Undefined when the answer is not a success, is a redirect, or is larger than `maxBytes`.
+   fetchFile?: (url: string, maxBytes: number) => Promise<{ body: Buffer; contentType: string } | undefined>
    // One step back in the browser's history, and where it ended.
    back?: () => Promise<string>
    // Rests the pointer at a point of the window, or moves it a little, as a hand does while reading.

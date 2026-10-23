@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
    initializeTrpc: vi.fn(),
    configHealth: vi.fn(),
    configWorkflowApi: vi.fn(),
+   configUploads: vi.fn(),
    env: { CORS_ORIGINS: ' http://localhost:3000 ,http://localhost:5173,, ' },
 }))
 
@@ -18,6 +19,8 @@ vi.mock('cookie-parser', () => ({ default: mocks.cookieParser }))
 vi.mock('trpc/api/router', () => ({ initializeTrpc: mocks.initializeTrpc }))
 
 vi.mock('./health', () => ({ Health: { config: mocks.configHealth } }))
+
+vi.mock('./uploads', () => ({ Uploads: { config: mocks.configUploads } }))
 
 vi.mock('./workflowApi', () => ({ WorkflowApi: { config: mocks.configWorkflowApi } }))
 
@@ -35,17 +38,18 @@ describe('Middlewares', () => {
 
       expect(mocks.cors).toHaveBeenCalledWith({
          origin: ['http://localhost:3000', 'http://localhost:5173'],
-         allowedHeaders: ['authorization', 'content-type'],
+         allowedHeaders: ['authorization', 'content-type', 'x-file-name'],
       })
    })
 
-   it('should register the health routes and the workflow API', () => {
+   it('should register the health routes, the workflow API and the uploads', () => {
       const app = { use: vi.fn() }
 
       Middlewares.config(app as never)
 
       expect(mocks.configHealth).toHaveBeenCalledWith(app)
       expect(mocks.configWorkflowApi).toHaveBeenCalledWith(app)
+      expect(mocks.configUploads).toHaveBeenCalledWith(app)
    })
 
    it('should register cors before the api', () => {

@@ -157,6 +157,11 @@ const main = async () => {
                   robots: new RobotsGuard(SPIDER_ROBOTS_USER_AGENT),
                   limiter,
                   store,
+                  uploads: { download: (key, path) => store.download(key, path) },
+                  files: {
+                     exists: key => store.exists(key),
+                     save: (key, body, contentType) => store.putBytes(key, body, contentType),
+                  },
                   accountLock,
                   signal: stop.signal,
                   identities: new IdentityStore(store, createDeviceIdentity),

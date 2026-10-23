@@ -79,25 +79,32 @@ export const parseOwner = (html: string): Person | undefined => {
    return name ? person(name, undefined, src?.startsWith(PHOTO_HOST) ? src : undefined) : undefined
 }
 
-// What a message holds besides its words. Only what the page shows: nothing is downloaded, and the picture itself is never kept.
-const attachmentsOf = (item: HTMLElement): Message['attachments'] =>
+// What a message holds besides its words: only what the page shows. A picture carries the address LinkedIn serves it from (its own
+// image host only), so the run can keep a copy; that address is a means to download and never leaves the spider.
+export type ReadAttachment = Message['attachments'][number] & { url?: string }
+
+const attachmentsOf = (item: HTMLElement): ReadAttachment[] =>
    (item.querySelector(BUBBLE)?.querySelectorAll('img') ?? [])
       .filter(image => !image.closest(BODY))
       .map(image => {
          const name = image.getAttribute('alt') ?? image.getAttribute('title')
+         const src = image.getAttribute('src')
 
          return {
             kind: 'IMAGE' as const,
             ...(name && { name }),
+            ...(src?.startsWith(PHOTO_HOST) && { url: src }),
          }
       })
+
+export type ReadMessage = Omit<Message, 'attachments'> & { attachments: ReadAttachment[] }
 
 export const parseThread = (html: string, today: Date) => {
    const root = parse(html)
    const photos = photosIn(root)
    const title = shown(root.querySelector('.msg-entity-lockup__entity-title'))
    const headerProfile = root.querySelector('a.msg-thread__link-to-profile')?.getAttribute('href')
-   const messages: Message[] = []
+   const messages: ReadMessage[] = []
    const others = new Map<string, Person>()
    let day = ''
    let sender: Person | undefined
@@ -178,11 +185,23 @@ export const parseComposer = (html: string) => {
 }
 
 // Whether the newest message of a conversation is ours and holds these words, compared the way the page's text is cleaned.
-export const newestIsOurs = (messages: Message[], text: string) => {
+export const newestIsOurs = (messages: Message[], text: string, before?: { id: string | undefined; count: number }) => {
    const last = messages.at(-1)
 
-   return last?.direction === 'ME' && clean(last.text) === clean(text)
+   if (last?.direction !== 'ME') {
+      return false
+   }
+
+   // The newest message of the page before the send is not the one just sent, even when it holds the same words.
+   if (before && last.id === before.id && messages.length <= before.count) {
+      return false
+   }
+
+   return text === '' || clean(last.text) === clean(text)
 }
+
+// The markup of the place to write, with whatever is attached to it (empty when the page has none), to tell when it stops changing.
+export const composerHtml = (html: string) => parse(html).querySelector('form.msg-form')?.outerHTML ?? ''
 
 // The conversations the list shows, in page order, and whether the page may hold more than it shows (the beacon it keeps at the
 // bottom of the list while it can load more).

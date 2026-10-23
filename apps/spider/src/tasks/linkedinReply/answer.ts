@@ -45,6 +45,9 @@ export const answerFor = (result: ReplyResult): TaskOutcome => {
             verdict: 'FAILED',
             message: {
                TYPING: 'The words could not be typed into the box, so nothing was sent.',
+               NO_FILES: 'The files could not be fetched, so nothing was sent.',
+               ATTACH: 'LinkedIn offered no place to attach the files, so nothing was sent.',
+               UPLOAD: 'The files did not finish uploading in LinkedIn, so nothing was sent.',
                SEND_DISABLED: 'The send button was not available, so nothing was sent.',
                SEND_NOT_CLICKED: 'The send button could not be clicked, so nothing was sent.',
                NOT_SENT: 'LinkedIn did not send the reply.',

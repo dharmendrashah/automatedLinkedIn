@@ -12,6 +12,8 @@ export type FixtureMessage = {
    day?: string
    text?: string
    image?: string
+   // Where the picture comes from, when it has an address.
+   imageSrc?: string
 }
 
 export type FixtureThread = {
@@ -22,6 +24,8 @@ export type FixtureThread = {
    composer?: {
       typed?: string
       sendDisabled?: boolean
+      // Markup inside the box's form besides the text, such as what is attached and how far it is uploaded.
+      extra?: string
    }
 }
 
@@ -34,13 +38,13 @@ export type FixtureRow = {
    placeholder?: boolean
 }
 
-const message = ({ id, from, name, profile, time, day, text, image }: FixtureMessage) =>
+const message = ({ id, from, name, profile, time, day, text, image, imageSrc }: FixtureMessage) =>
    `<li class="msg-s-message-list__event">${day ? `<time class="msg-s-message-list__time-heading"> ${day} </time>` : ''}
 <div class="msg-s-event-listitem ${from === 'THEM' ? 'msg-s-event-listitem--other' : ''}" data-event-urn="urn:li:msg_message:(urn:li:fsd_profile:me,${id})" data-view-name="message-list-item">
 ${profile ? `<a href="${profile}" class="msg-s-event-listitem__link"><img class="msg-s-event-listitem__profile-picture" alt="${name ?? ''}"></a>` : ''}
 ${name ? `<div class="msg-s-message-group__meta"><a href="${profile ?? '#'}"><span class="msg-s-message-group__profile-link msg-s-message-group__name"> ${name} </span></a><time class="msg-s-message-group__timestamp"> ${time ?? ''} </time></div>` : ''}
 <div class="msg-s-event-listitem__message-bubble"><div class="msg-s-event-listitem__actions-container"><button aria-label="Reply to this message">Reply</button></div>
-${image ? `<img class="msg-s-event-message__image" alt="${image}">` : ''}
+${image ? `<img class="msg-s-event-message__image"${imageSrc ? ` src="${imageSrc}"` : ''} alt="${image}">` : ''}
 ${text === undefined ? '' : `<div class="msg-s-event-with-indicator"><div class="msg-s-event__content"><p class="msg-s-event-listitem__body"><!---->${text}<!----></p></div></div>`}
 </div></div></li>`
 
@@ -48,7 +52,7 @@ const composerMarkup = (composer: FixtureThread['composer']) =>
    composer
       ? `<form class="msg-form msg-form--thread-footer-feature"><div class="msg-form__contenteditable t-14 notranslate" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Write a message…">${
            composer.typed ? `<p>${composer.typed}</p>` : '<p><br></p>'
-        }</div><footer class="msg-form__footer"><button class="msg-form__send-button artdeco-button artdeco-button--1"${
+        }</div>${composer.extra ?? ''}<footer class="msg-form__footer"><button class="msg-form__send-button artdeco-button artdeco-button--1"${
            composer.sendDisabled === false ? '' : ' disabled=""'
         } type="submit">Send</button></footer></form>`
       : ''

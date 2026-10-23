@@ -35,4 +35,6 @@ export type UniboxSource = {
    open: (id: string) => Promise<UniboxConversation | undefined>
    // Asks for the messages to be read again.
    refresh: (accountIds?: string[]) => Promise<RefreshResult>
+   // A short link to open the kept file of a message (its first, second... attachment); absent for a source that keeps none.
+   fileLink?: (messageId: string, index: number) => Promise<string>
 }

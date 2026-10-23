@@ -2,7 +2,7 @@ import { LinkedInReplyService } from 'database'
 
 import { defineJob } from './defineJob'
 
-// Ends the replies whose run was lost as unsure (.plan/unibox-send.md). A table with nothing to do writes no log line.
+// Ends the replies whose run was lost as unsure and moves the files of replies that ended to their permanent place (.plan/unibox-send.md, .plan/unibox-keep-messages-and-files.md). A table with nothing to do writes no log line.
 export const replySweep = defineJob({
    name: 'reply-sweep',
    everyMs: 60_000,
@@ -10,7 +10,10 @@ export const replySweep = defineJob({
    timeoutMs: 30_000,
    run: async () => {
       const ended = await LinkedInReplyService.endStale()
+      const kept = await LinkedInReplyService.keepFiles()
 
-      return ended > 0 ? { summary: `${ended} replies ended as unsure` } : undefined
+      return ended + kept > 0
+         ? { summary: `${ended} replies ended as unsure, the files of ${kept} replies kept` }
+         : undefined
    },
 })

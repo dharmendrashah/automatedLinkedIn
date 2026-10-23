@@ -12,6 +12,8 @@ export type Shared = {
    ambiguousNames: ReadonlySet<string>
    today: ReadonlyMap<string, number>
    index: Index
+   // Opens a kept file of a message; absent when the data keeps none.
+   openFile?: (messageId: string, index: number) => void
 }
 
 const SharedContext = createContext<Shared | undefined>(undefined)

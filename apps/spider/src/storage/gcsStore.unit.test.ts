@@ -5,6 +5,7 @@ import { ObjectNotFoundError, lockKey, resultKey, sessionKey } from './store'
 
 const mocks = vi.hoisted(() => ({
    save: vi.fn(),
+   exists: vi.fn(),
    download: vi.fn(),
    getMetadata: vi.fn(),
    remove: vi.fn(),
@@ -36,6 +37,7 @@ describe('GcsStore', () => {
       fileMetadata = {}
       mocks.file.mockImplementation(() => ({
          save: mocks.save,
+         exists: mocks.exists,
          download: mocks.download,
          getMetadata: mocks.getMetadata,
          delete: mocks.remove,
@@ -92,6 +94,32 @@ describe('GcsStore', () => {
       mocks.download.mockResolvedValue([Buffer.from('hello')])
 
       await expect(new GcsStore('my-bucket').get('sessions/a.json')).resolves.toBe('hello')
+   })
+
+   it('should write the bytes of a file, and say whether an object is there', async () => {
+      mocks.save.mockResolvedValue(undefined)
+      mocks.exists.mockResolvedValueOnce([true])
+      mocks.exists.mockResolvedValueOnce([false])
+
+      const store = new GcsStore('my-bucket')
+
+      await store.putBytes('kept/u/a/received/x/0-a.png', Buffer.from('12345'), 'image/png')
+
+      expect(mocks.save).toHaveBeenCalledWith(Buffer.from('12345'), {
+         contentType: 'image/png',
+         resumable: false,
+      })
+      await expect(store.exists('kept/u/a/received/x/0-a.png')).resolves.toBe(true)
+      await expect(store.exists('kept/u/a/received/x/1-b.png')).resolves.toBe(false)
+   })
+
+   it('should download an object to a path on this machine', async () => {
+      mocks.download.mockResolvedValue([Buffer.from('')])
+
+      await new GcsStore('my-bucket').download('uploads/u/1/a.pdf', '/tmp/x/a.pdf')
+
+      expect(mocks.file).toHaveBeenCalledWith('uploads/u/1/a.pdf')
+      expect(mocks.download).toHaveBeenCalledWith({ destination: '/tmp/x/a.pdf' })
    })
 
    it('should report a missing object as ObjectNotFoundError', async () => {

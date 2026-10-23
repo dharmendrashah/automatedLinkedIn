@@ -5,6 +5,7 @@ import { type TaskReport } from '@automatedLinkedIn/contracts'
 import { StepFailed } from '../browsing/errors'
 import { type DetectionSession } from '../scraping/driver'
 import { type Credentials } from './credentials'
+import { type Fetched } from './uploads'
 
 // How a task shows in the web app, for one of its own verdict codes.
 export type VerdictLabel = {
@@ -60,6 +61,17 @@ export interface TaskContext {
    // to false when the same command is delivered again after the step may already have been taken. Asked just before the step.
    // Where nothing is kept between deliveries (the local devtools) it is always true.
    markAttempt: () => Promise<boolean>
+   // The files of an upload brain made for this run's user, on this machine until `remove` is called; absent where files cannot be
+   // fetched (the paths are built from the user of the run, never from the input).
+   uploads?: { fetch: (uploadId: string, names: string[]) => Promise<Fetched> }
+   // Keeps the files of messages for good, in the folder of the owner and account of this run (they are deleted only with the
+   // account). The place of a received file is the same on every read, so one already kept is not downloaded again. Absent where
+   // nothing can be kept (the local devtools) or for a run with no account.
+   kept?: {
+      keyOf: (messageId: string, index: number, name: string) => string
+      has: (key: string) => Promise<boolean>
+      save: (key: string, body: Buffer, contentType: string) => Promise<void>
+   }
 }
 
 export type TaskDefinition<Input = unknown> = {

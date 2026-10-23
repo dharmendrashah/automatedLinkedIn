@@ -1,4 +1,4 @@
-import { CryptoService } from 'core'
+import { CryptoService, KeptFiles } from 'core'
 
 import { type Prisma } from 'generated/prisma/client'
 
@@ -299,7 +299,11 @@ export class LinkedInAccountService {
       })
    }
 
+   // Removing an account is the one time its conversations and kept files are deleted (.plan/unibox-keep-messages-and-files.md). The
+   // files go first, so that a failure leaves the account in place to try again and never leaves files behind.
    public static async deleteForUser(userId: string, id: string) {
+      await KeptFiles.removeAccount(userId, id)
+
       const { count } = await PrismaService.client.linkedInAccount.deleteMany({
          where: {
             id,

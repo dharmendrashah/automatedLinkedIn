@@ -38,6 +38,8 @@ describe('handsOf', () => {
       await expect(hands.clickNth('.row', 3, 'button')).resolves.toBe(false)
       await expect(hands.scrollOver('.row', 300)).resolves.toBe(false)
       await expect(hands.typeKeys('Hello')).resolves.toBe(false)
+      await expect(hands.attachFiles('input', ['/tmp/a.pdf'])).resolves.toBe(false)
+      await expect(hands.fetchFile('https://media.licdn.com/a', 10)).resolves.toBeUndefined()
       await expect(hands.hover(1, 2)).resolves.toBeUndefined()
       await expect(hands.drift()).resolves.toBeUndefined()
    })

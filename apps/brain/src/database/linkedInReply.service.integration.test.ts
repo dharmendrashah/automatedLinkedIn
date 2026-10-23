@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { KeptFiles, UploadFiles } from 'core'
+
 import { type TaskResult } from '@automatedLinkedIn/contracts'
 
 import { linkedInReplyHooks } from './linkedInReply.hooks'
@@ -281,5 +283,111 @@ describe('LinkedInReplyService (database)', () => {
       await finish(sessionId, 'TIMED_OUT')
 
       await expect(LinkedInReplyService.get(userId, sent?.id ?? '')).resolves.toMatchObject({ state: 'SENT' })
+   })
+
+   describe('with files', () => {
+      const UPLOAD = '0198f2a4-7c1e-7d3a-9b1e-5c2d8f0a1b34'
+
+      it('should start the reply with the files brain kept for the upload, not what the caller says, and allow no words', async () => {
+         vi.spyOn(UploadFiles, 'list').mockResolvedValue([
+            {
+               name: 'photo.png',
+               bytes: 5,
+            },
+            {
+               name: 'cv.pdf',
+               bytes: 9,
+            },
+         ])
+
+         const sent = await LinkedInReplyService.send(userId, conversationId, '', UPLOAD)
+         const row = await PrismaService.client.linkedInReply.findUniqueOrThrow({ where: { id: sent?.id ?? '' } })
+
+         expect(requested[0]?.input).toEqual({
+            thread: '2-ada',
+            title: 'Ada Lovelace',
+            text: '',
+            uploadId: UPLOAD,
+            files: [
+               {
+                  name: 'photo.png',
+                  kind: 'IMAGE',
+               },
+               {
+                  name: 'cv.pdf',
+                  kind: 'FILE',
+               },
+            ],
+         })
+         expect(row).toMatchObject({
+            text: '',
+            uploadId: UPLOAD,
+            filesKeptAt: null,
+            attachments: [
+               {
+                  name: 'photo.png',
+                  kind: 'IMAGE',
+                  bytes: 5,
+               },
+               {
+                  name: 'cv.pdf',
+                  kind: 'FILE',
+                  bytes: 9,
+               },
+            ],
+         })
+      })
+
+      it('should refuse an upload with no files in it, and one with a type that cannot be sent, before anything starts', async () => {
+         const list = vi.spyOn(UploadFiles, 'list')
+
+         list.mockResolvedValueOnce([])
+         list.mockResolvedValueOnce([
+            {
+               name: 'setup.exe',
+               bytes: 5,
+            },
+         ])
+
+         await expect(LinkedInReplyService.send(userId, conversationId, 'Hi', UPLOAD)).rejects.toBeInstanceOf(
+            TaskRefusedError
+         )
+         await expect(LinkedInReplyService.send(userId, conversationId, 'Hi', UPLOAD)).rejects.toBeInstanceOf(
+            TaskRefusedError
+         )
+         expect(requested).toEqual([])
+      })
+
+      it('should move the files of a reply that ended once, keep none deleted, leave the ones still being sent, and try again after a failure', async () => {
+         const moveUpload = vi.spyOn(KeptFiles, 'moveUpload').mockResolvedValue(1)
+         const row = (state: 'SENT' | 'SENDING', uploadId: string) => ({
+            userId,
+            accountId,
+            conversationId,
+            text: 'x',
+            state,
+            uploadId,
+            sessionId: randomUUID(),
+         })
+         const ended = randomUUID()
+         const going = randomUUID()
+
+         await PrismaService.client.linkedInReply.createMany({ data: [row('SENT', ended), row('SENDING', going)] })
+
+         await expect(LinkedInReplyService.keepFiles()).resolves.toBe(1)
+         await expect(LinkedInReplyService.keepFiles()).resolves.toBe(0)
+         expect(moveUpload).toHaveBeenCalledTimes(1)
+         expect(moveUpload).toHaveBeenCalledWith(userId, accountId, ended)
+
+         await PrismaService.client.linkedInReply.updateMany({
+            where: { uploadId: ended },
+            data: { filesKeptAt: null },
+         })
+         moveUpload.mockRejectedValueOnce(new Error('bucket down'))
+         vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+         await expect(LinkedInReplyService.keepFiles()).resolves.toBe(0)
+         await expect(LinkedInReplyService.keepFiles()).resolves.toBe(1)
+      })
    })
 })

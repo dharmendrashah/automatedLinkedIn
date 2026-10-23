@@ -4,6 +4,7 @@ import {
    TASK_CONTRACT_VERSION,
    type TaskCommand,
    type TaskResult,
+   receivedKey,
    runPrefix,
    taskResultSchema,
 } from '@automatedLinkedIn/contracts'
@@ -27,6 +28,7 @@ import { ObjectNotFoundError, type ObjectStore } from '../storage/store'
 import { type Handover } from '../takeover/waitForOwner'
 import { type Credentials } from './credentials'
 import { type TaskContext, type TaskDefinition, type TaskOutcome, VisitError } from './defineTask'
+import { type Download, fetchUploads } from './uploads'
 
 const MAX_ARTIFACTS = 300
 
@@ -64,6 +66,13 @@ export type RunnerDeps = {
    handover?: (taskId: string, control: SessionControl) => Promise<Handover>
    // Resolves to nothing when the run is not to be kept; the task still runs.
    startRecording: (request: RecordingRequest) => Promise<Recorder | undefined>
+   // Where the files of an upload are read from; absent where a task cannot be given files (the devtools bring their own).
+   uploads?: { download: Download }
+   // Where the files of messages are kept for good; absent where nothing can be kept (the devtools).
+   files?: {
+      exists: (key: string) => Promise<boolean>
+      save: (key: string, body: Buffer, contentType: string) => Promise<void>
+   }
    publishResult: (result: TaskResult) => Promise<void>
    // The git sha of this worker, so a run can be reproduced.
    workerBuild: string
@@ -521,6 +530,9 @@ const execute = async (
       }
    }
 
+   const download = deps.uploads?.download
+   const fetchFiles =
+      download && ((uploadId: string, names: string[]) => fetchUploads(download, command.user_id, uploadId, names))
    const context: TaskContext = {
       browser,
       ...(account && { account }),
@@ -548,6 +560,15 @@ const execute = async (
             )) !== undefined
          )
       },
+      ...(fetchFiles && { uploads: { fetch: fetchFiles } }),
+      ...(deps.files &&
+         account && {
+            kept: {
+               keyOf: (messageId, index, name) => receivedKey(command.user_id, account.id, messageId, index, name),
+               has: deps.files.exists,
+               save: deps.files.save,
+            },
+         }),
    }
 
    let outcome: TaskOutcome

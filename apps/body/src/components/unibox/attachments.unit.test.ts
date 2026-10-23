@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { LIMITS, checkAttachment, formatBytes, kindOfFile } from './attachments'
+import { ACCEPT, LIMITS, checkAttachment, formatBytes, kindOfFile, sendableKind } from './attachments'
 
 const MB = 1024 * 1024
 
@@ -18,18 +18,46 @@ describe('kindOfFile', () => {
    })
 })
 
-describe('checkAttachment', () => {
-   it('should accept a file within the limit of its kind', () => {
-      expect(checkAttachment('IMAGE', 2 * MB, 0)).toEqual({ ok: true })
+describe('sendableKind', () => {
+   it('should say the kind of a file LinkedIn takes by its name, and nothing for another type', () => {
+      expect(sendableKind('Photo.JPG')).toBe('IMAGE')
+      expect(sendableKind('clip.mp4')).toBe('VIDEO')
+      expect(sendableKind('note.m4a')).toBe('AUDIO')
+      expect(sendableKind('Report.pdf')).toBe('FILE')
+      expect(sendableKind('archive.zip')).toBeUndefined()
+      expect(sendableKind('noextension')).toBeUndefined()
    })
 
-   it('should say plainly why a file is refused: too large, empty, or too many', () => {
-      expect(checkAttachment('IMAGE', LIMITS.IMAGE + 1, 0)).toEqual({
+   it('should tell a picker only the extensions of its kind', () => {
+      expect(ACCEPT.IMAGE).toBe('.png,.jpg,.jpeg,.gif,.webp')
+      expect(ACCEPT.VIDEO).toBe('.mp4,.mov')
+      expect(ACCEPT.AUDIO).toBe('.mp3,.m4a,.wav')
+      expect(ACCEPT.FILE).toContain('.pdf')
+   })
+})
+
+describe('checkAttachment', () => {
+   it('should accept a file of an allowed type within the limit, whatever its kind', () => {
+      expect(checkAttachment('IMAGE', 2 * MB, 0, 'a.png')).toEqual({ ok: true })
+      expect(checkAttachment('VIDEO', LIMITS.FILE_BYTES, 0, 'a.mp4')).toEqual({ ok: true })
+      expect(checkAttachment('LINK', 10, 0)).toEqual({ ok: true })
+   })
+
+   it('should keep one limit of 20 MB for every kind', () => {
+      expect(LIMITS.FILE_BYTES).toBe(20 * MB)
+      expect(checkAttachment('VIDEO', LIMITS.FILE_BYTES + 1, 0, 'a.mp4')).toEqual({
          ok: false,
-         reason: `An image can be up to ${formatBytes(LIMITS.IMAGE)}.`,
+         reason: `A file can be up to ${formatBytes(LIMITS.FILE_BYTES)}.`,
       })
-      expect(checkAttachment('FILE', 0, 0)).toEqual({ ok: false, reason: 'The file is empty.' })
-      expect(checkAttachment('FILE', 10, LIMITS.COUNT)).toEqual({
+   })
+
+   it('should say plainly why a file is refused: a type that cannot be sent, empty, or too many', () => {
+      expect(checkAttachment('FILE', 10, 0, 'setup.exe')).toMatchObject({
+         ok: false,
+         reason: expect.stringContaining('This type of file cannot be sent'),
+      })
+      expect(checkAttachment('FILE', 0, 0, 'a.pdf')).toEqual({ ok: false, reason: 'The file is empty.' })
+      expect(checkAttachment('FILE', 10, LIMITS.COUNT, 'a.pdf')).toEqual({
          ok: false,
          reason: `A message can carry up to ${LIMITS.COUNT} attachments.`,
       })

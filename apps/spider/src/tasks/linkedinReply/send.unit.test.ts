@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { messagesFileSchema } from '@automatedLinkedIn/contracts'
 
-import { COMPOSER, SEND_BUTTON } from '../../linkedin/markup'
+import { COMPOSER, FILE_INPUT, IMAGE_INPUT, SEND_BUTTON } from '../../linkedin/markup'
 import { threadMarkup } from '../../linkedin/messagingFixture'
 import { sendReply } from './send'
 
@@ -31,13 +31,26 @@ type Page = {
    clickFails?: boolean
    // How many scrolls it takes to bring the send button into view; a click before that finds nothing to press.
    hidden?: number
+   // How many looks at the box, once files are attached, still find it changing (an upload going on); 'never' keeps it changing.
+   uploadLooks?: number | 'never'
+   // The page takes the files, and the task is able to fetch them.
+   attachWorks?: boolean
+   fetchFails?: boolean
+   canFetch?: boolean
+   // A message of ours with the same words is already the newest of the page.
+   alreadyThere?: boolean
 }
 
 const setup = (page: Page = {}) => {
    const { at = `${BASE}/messaging/thread/${THREAD}/`, title = 'Ada Lovelace', composer = true } = page
    const { sendWorks = true, typingWorks = true, appears = 'now', clears = true, clickFails = false } = page
+   const { attachWorks = true, fetchFails = false, canFetch = true, alreadyThere = false } = page
+   const removed = vi.fn(async () => undefined)
    let waiting = page.slowPage ?? 0
    let scrolled = 0
+   let hasFiles = false
+   let uploading = page.uploadLooks ?? 0
+   let changes = 0
    let disabledReads = page.enableAfter ?? 0
    let focused = false
    let typed = ''
@@ -65,6 +78,11 @@ const setup = (page: Page = {}) => {
          shown = looks >= 3
       }
 
+      if (hasFiles && (uploading === 'never' || uploading > 0)) {
+         changes += 1
+         uploading = uploading === 'never' ? uploading : uploading - 1
+      }
+
       return `<html><body>${threadMarkup({
          title,
          profile: `${BASE}/in/ada/`,
@@ -78,6 +96,18 @@ const setup = (page: Page = {}) => {
                day: 'Today',
                text: 'Can we meet?',
             },
+            ...(alreadyThere
+               ? [
+                    {
+                       id: 'z',
+                       from: 'ME' as const,
+                       name: 'Tripti Verma',
+                       profile: `${BASE}/in/me/`,
+                       time: '8:55 AM',
+                       text: TEXT,
+                    },
+                 ]
+               : []),
             ...(shown
                ? [
                     {
@@ -94,7 +124,8 @@ const setup = (page: Page = {}) => {
          ...(composer && {
             composer: {
                typed,
-               sendDisabled: typed === '' || !sendWorks || stillDisabled,
+               sendDisabled: (typed === '' && !hasFiles) || !sendWorks || stillDisabled,
+               ...(hasFiles && { extra: `<div class="chip" data-n="${changes}">file</div>` }),
             },
          }),
       })}</body></html>`
@@ -146,12 +177,13 @@ const setup = (page: Page = {}) => {
 
             calls.push('click send')
 
-            if (typed === '' || !sendWorks || clickFails) {
+            if ((typed === '' && !hasFiles) || !sendWorks || clickFails) {
                return false
             }
 
             pressed = true
             sentTexts.push(typed)
+            hasFiles = false
 
             if (appears === 'now') {
                shown = true
@@ -173,8 +205,28 @@ const setup = (page: Page = {}) => {
             typed += text
          }
       }),
+      attachFiles: vi.fn(async (selector: string, paths: string[]) => {
+         calls.push(
+            `attach ${selector === IMAGE_INPUT ? 'images' : selector === FILE_INPUT ? 'files' : 'other'} ${paths.length}`
+         )
+         hasFiles = attachWorks
+
+         return attachWorks
+      }),
       exists: vi.fn(async () => false),
       click: vi.fn(async () => at),
+   }
+   const uploads = {
+      fetch: vi.fn(async (_uploadId: string, names: string[]) => {
+         if (fetchFails) {
+            throw new Error('gone')
+         }
+
+         return {
+            paths: names.map(name => `/tmp/up/${name}`),
+            remove: removed,
+         }
+      }),
    }
    const context = {
       browser,
@@ -187,6 +239,7 @@ const setup = (page: Page = {}) => {
       }),
       screenshot: vi.fn(async () => undefined),
       markAttempt: vi.fn(async () => true),
+      ...(canFetch && { uploads }),
    }
 
    return {
@@ -195,7 +248,9 @@ const setup = (page: Page = {}) => {
       calls,
       sentTexts,
       attached,
-      send: (input: { thread?: string; text?: string; title?: string } = {}) =>
+      uploads,
+      removed,
+      send: (input: Partial<Parameters<typeof sendReply>[2]> = {}) =>
          sendReply(
             context as never,
             BASE,
@@ -203,6 +258,7 @@ const setup = (page: Page = {}) => {
                thread: THREAD,
                text: TEXT,
                title: 'Ada Lovelace',
+               files: [],
                ...input,
             },
             {
@@ -233,6 +289,143 @@ describe('sendReply', () => {
       })
       expect(file.conversations[0]?.messages.at(-1)).toMatchObject({ direction: 'ME' })
       expect(file.account).toBeUndefined()
+   })
+
+   const FILES = [
+      {
+         name: 'photo.png',
+         kind: 'IMAGE' as const,
+      },
+      {
+         name: 'cv.pdf',
+         kind: 'FILE' as const,
+      },
+   ]
+   const UPLOAD = '0198f2a4-7c1e-7d3a-9b1e-5c2d8f0a1b34'
+
+   it('should attach images and other files first, wait for them to upload, type the words, and send them together', async () => {
+      const { send, calls, uploads } = setup({ uploadLooks: 4 })
+
+      await expect(
+         send({
+            files: FILES,
+            uploadId: UPLOAD,
+         })
+      ).resolves.toEqual({ outcome: 'SENT' })
+
+      expect(uploads.fetch).toHaveBeenCalledWith(UPLOAD, ['photo.png', 'cv.pdf'])
+      expect(calls).toEqual([
+         'click composer',
+         'attach images 1',
+         'attach files 1',
+         'click composer',
+         'type',
+         'click send',
+      ])
+   })
+
+   it('should send files alone, with no words typed, when there are no words', async () => {
+      const { send, calls } = setup()
+
+      await expect(
+         send({
+            text: '',
+            files: FILES.slice(1),
+            uploadId: UPLOAD,
+         })
+      ).resolves.toEqual({ outcome: 'SENT' })
+      expect(calls).not.toContain('type')
+      expect(calls).toContain('attach files 1')
+      expect(calls).toContain('click send')
+   })
+
+   it('should remove the fetched files whatever happened', async () => {
+      const sent = setup()
+      const failed = setup({ uploadLooks: 'never' })
+
+      await sent.send({
+         files: FILES,
+         uploadId: UPLOAD,
+      })
+      await failed.send({
+         files: FILES,
+         uploadId: UPLOAD,
+      })
+
+      expect(sent.removed).toHaveBeenCalledTimes(1)
+      expect(failed.removed).toHaveBeenCalledTimes(1)
+   })
+
+   it('should say the files did not finish uploading, press nothing, and empty the box, when the box never stops changing', async () => {
+      const { send, calls } = setup({ uploadLooks: 'never' })
+
+      await expect(
+         send({
+            files: FILES,
+            uploadId: UPLOAD,
+         })
+      ).resolves.toEqual({
+         outcome: 'FAILED',
+         why: 'UPLOAD',
+      })
+      expect(calls).not.toContain('click send')
+      expect(calls).not.toContain('type')
+      expect(calls).toContain('press Delete')
+   })
+
+   it('should say there is no place to attach files when the page does not take them', async () => {
+      const { send, calls } = setup({ attachWorks: false })
+
+      await expect(
+         send({
+            files: FILES,
+            uploadId: UPLOAD,
+         })
+      ).resolves.toEqual({
+         outcome: 'FAILED',
+         why: 'ATTACH',
+      })
+      expect(calls).not.toContain('type')
+   })
+
+   it('should say the files could not be fetched when they cannot, without typing anything', async () => {
+      const gone = setup({ fetchFails: true })
+      const unsupported = setup({ canFetch: false })
+      const unknown = setup()
+
+      await expect(
+         gone.send({
+            files: FILES,
+            uploadId: UPLOAD,
+         })
+      ).resolves.toEqual({
+         outcome: 'FAILED',
+         why: 'NO_FILES',
+      })
+      await expect(
+         unsupported.send({
+            files: FILES,
+            uploadId: UPLOAD,
+         })
+      ).resolves.toEqual({
+         outcome: 'FAILED',
+         why: 'NO_FILES',
+      })
+      await expect(unknown.send({ files: FILES })).resolves.toEqual({
+         outcome: 'FAILED',
+         why: 'NO_FILES',
+      })
+      expect(gone.calls).not.toContain('type')
+      expect(unsupported.calls).not.toContain('type')
+   })
+
+   it('should not take a message of ours that was already the newest with the same words for the one just sent', async () => {
+      const { send } = setup({
+         alreadyThere: true,
+         appears: 'never',
+      })
+
+      await expect(send()).resolves.toEqual({ outcome: 'UNKNOWN' })
    })
 
    it('should look again for a message that shows a moment late', async () => {

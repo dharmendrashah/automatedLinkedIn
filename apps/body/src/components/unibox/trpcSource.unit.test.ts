@@ -167,6 +167,41 @@ describe('createTrpcSource.load', () => {
 })
 
 describe('createTrpcSource actions', () => {
+   it('should know which attachments have a kept file, with their sizes, and ask brain for a link to open one', async () => {
+      const query = vi.fn().mockResolvedValue({ url: 'https://signed.example/file' })
+      const kept = conversation({
+         messages: [
+            {
+               id: 'm1',
+               direction: 'ME' as const,
+               sender: 'You',
+               sentAt: '2026-10-22T09:20:00.000Z',
+               when: '',
+               text: '',
+               attachments: [{ kind: 'FILE', name: 'cv.pdf', bytes: 9, kept: true }, { kind: 'IMAGE' }],
+            },
+         ],
+      })
+      const { client } = fake({
+         conversations: { query: vi.fn().mockResolvedValue([kept]) },
+         fileLink: { query },
+      })
+      const source = createTrpcSource(client)
+      const { conversations } = await source.load()
+
+      expect(conversations[0]?.messages[0]?.attachments).toEqual([
+         {
+            kind: 'FILE',
+            name: 'cv.pdf',
+            bytes: 9,
+            kept: true,
+         },
+         { kind: 'IMAGE' },
+      ])
+      await expect(source.fileLink?.('m1', 0)).resolves.toBe('https://signed.example/file')
+      expect(query).toHaveBeenCalledWith({ messageId: 'm1', index: 0 })
+   })
+
    it('should open a conversation with all its messages', async () => {
       const { client } = fake()
       const opened = await createTrpcSource(client).open('c1')
@@ -226,7 +261,7 @@ describe('createTrpcSource.send', () => {
    const send = (over: Record<string, unknown>, text = 'Tomorrow works.') => {
       const { client } = fake(over)
 
-      return createTrpcSource(client, wait).send({} as never, text, [], 'c1')
+      return createTrpcSource(client, { wait }).send({} as never, text, [], 'c1')
    }
 
    it('should ask brain to send the text of the conversation, follow the reply until it went, and say it was sent', async () => {
@@ -283,13 +318,84 @@ describe('createTrpcSource.send', () => {
       })
    })
 
-   it('should send nothing while attachments are on the reply', async () => {
+   const PDF = new File(['content'], 'cv.pdf', { type: 'application/pdf' })
+   const PNG = new File(['content'], 'photo.png', { type: 'image/png' })
+
+   it('should upload each file under one upload id, then ask brain to send with that id, and follow the reply', async () => {
+      const upload = vi.fn(async () => ({ ok: true as const }))
+      const mutate = vi.fn().mockResolvedValue({ id: 'r1' })
+      const query = replies({ state: 'SENT' })
+      const { client } = fake({ send: { mutate }, reply: { query } })
+
+      await expect(
+         createTrpcSource(client, { wait, upload }).send(
+            {} as never,
+            '',
+            [
+               { kind: 'FILE', name: 'cv.pdf', file: PDF },
+               { kind: 'IMAGE', name: 'photo.png', file: PNG },
+            ],
+            'c1'
+         )
+      ).resolves.toEqual({ ok: true })
+
+      const [[firstId, first], [secondId, second]] = upload.mock.calls as unknown as Array<[string, File]>
+
+      expect(first).toBe(PDF)
+      expect(second).toBe(PNG)
+      expect(firstId).toBe(secondId)
+      expect(mutate).toHaveBeenCalledWith({ conversationId: 'c1', text: '', uploadId: firstId })
+   })
+
+   it('should send nothing, and say which file, when one cannot be uploaded', async () => {
+      const upload = vi.fn(async () => ({ ok: false as const, reason: 'The file is larger than a reply may carry.' }))
       const mutate = vi.fn()
       const { client } = fake({ send: { mutate } })
 
       await expect(
-         createTrpcSource(client, wait).send({} as never, 'Hi', [{ kind: 'FILE', name: 'a.pdf' }], 'c1')
-      ).resolves.toMatchObject({ ok: false, reason: expect.stringContaining('Attachments cannot be sent') })
+         createTrpcSource(client, { wait, upload }).send(
+            {} as never,
+            'Hi',
+            [{ kind: 'FILE', name: 'cv.pdf', file: PDF }],
+            'c1'
+         )
+      ).resolves.toEqual({ ok: false, reason: 'cv.pdf: The file is larger than a reply may carry.' })
       expect(mutate).not.toHaveBeenCalled()
+   })
+
+   it('should say a file is gone when it has none to upload or there is no way to upload, and refuse a link', async () => {
+      const mutate = vi.fn()
+      const { client } = fake({ send: { mutate } })
+      const withUpload = createTrpcSource(client, { wait, upload: vi.fn() })
+
+      await expect(withUpload.send({} as never, 'Hi', [{ kind: 'FILE', name: 'cv.pdf' }], 'c1')).resolves.toMatchObject(
+         {
+            ok: false,
+            reason: expect.stringContaining('no longer here'),
+         }
+      )
+      await expect(
+         createTrpcSource(client, { wait }).send({} as never, 'Hi', [{ kind: 'FILE', name: 'cv.pdf', file: PDF }], 'c1')
+      ).resolves.toMatchObject({ ok: false, reason: expect.stringContaining('no longer here') })
+      await expect(
+         withUpload.send({} as never, 'Hi', [{ kind: 'LINK', name: 'https://example.com' }], 'c1')
+      ).resolves.toMatchObject({ ok: false, reason: expect.stringContaining('link') })
+      expect(mutate).not.toHaveBeenCalled()
+   })
+
+   it('should follow a reply with files for much longer than one of words only', async () => {
+      const upload = vi.fn(async () => ({ ok: true as const }))
+      const never = vi.fn().mockResolvedValue({ id: 'r1', state: 'SENDING' })
+      const { client } = fake({ send: { mutate: vi.fn().mockResolvedValue({ id: 'r1' }) }, reply: { query: never } })
+
+      await expect(
+         createTrpcSource(client, { wait, upload }).send(
+            {} as never,
+            'Hi',
+            [{ kind: 'FILE', name: 'cv.pdf', file: PDF }],
+            'c1'
+         )
+      ).resolves.toMatchObject({ ok: false, unsure: true })
+      expect(never).toHaveBeenCalledTimes(300)
    })
 })

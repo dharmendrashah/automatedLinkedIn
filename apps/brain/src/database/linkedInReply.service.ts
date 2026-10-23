@@ -1,3 +1,7 @@
+import { KeptFiles, UploadFiles } from 'core'
+
+import { kindOfName } from '@automatedLinkedIn/contracts'
+
 import { REPLY_TASK } from './linkedInReply.hooks'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
@@ -10,8 +14,8 @@ export const REPLY_LIMITS = {
    gapMs: 30_000,
    // The most characters of a reply: the command that carries it may not pass 8 KB as JSON (the task limits it the same).
    maxChars: 4000,
-   // The task's own limit is 5 minutes; a reply still sending after this long was lost with its run.
-   staleMs: 10 * 60 * 1000,
+   // The task's own limit is 10 minutes (files upload through a proxy); a reply still sending after this long was lost with its run.
+   staleMs: 15 * 60 * 1000,
 } as const
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -25,7 +29,7 @@ const isUniqueViolation = (error: unknown) => (error as { code?: string } | null
 export class LinkedInReplyService {
    // Starts the reply and resolves to its id; null when the conversation is not the owner's. Throws TaskRefusedError with a
    // sentence when it cannot be sent now (the limits, an account that is busy or not signed in).
-   public static async send(userId: string, conversationId: string, text: string) {
+   public static async send(userId: string, conversationId: string, text: string, uploadId?: string) {
       const conversation = await PrismaService.client.linkedInConversation.findFirst({
          where: {
             id: conversationId,
@@ -46,6 +50,8 @@ export class LinkedInReplyService {
 
       await this.checkLimits(accountId)
 
+      const files = uploadId ? await this.filesOf(userId, uploadId) : []
+
       let replyId: string | undefined
 
       try {
@@ -58,6 +64,13 @@ export class LinkedInReplyService {
                thread: linkedInId,
                title,
                text: text.trim(),
+               ...(uploadId && {
+                  uploadId,
+                  files: files.map(({ name, kind }) => ({
+                     name,
+                     kind,
+                  })),
+               }),
             },
             onStart: async (sessionId, tx) => {
                const reply = await tx.linkedInReply.create({
@@ -66,6 +79,8 @@ export class LinkedInReplyService {
                      accountId,
                      conversationId,
                      text: text.trim(),
+                     attachments: files,
+                     ...(uploadId && { uploadId }),
                      sessionId,
                   },
                   select: { id: true },
@@ -83,6 +98,30 @@ export class LinkedInReplyService {
       }
 
       return replyId ? { id: replyId } : null
+   }
+
+   // The files of an upload as brain kept them: what the task is told is read from the bucket, never from the caller, and a type that may
+   // not be sent is refused again here.
+   private static async filesOf(userId: string, uploadId: string) {
+      const stored = await UploadFiles.list(userId, uploadId)
+
+      if (stored.length === 0) {
+         throw new TaskRefusedError('The files were not found. Attach them again.')
+      }
+
+      return stored.map(({ name, bytes }) => {
+         const kind = kindOfName(name)
+
+         if (!kind) {
+            throw new TaskRefusedError('A file is of a type that cannot be sent.')
+         }
+
+         return {
+            name,
+            kind,
+            bytes,
+         }
+      })
    }
 
    // What the page polls: the state of one reply of the owner.
@@ -117,6 +156,42 @@ export class LinkedInReplyService {
       })
 
       return count
+   }
+
+   // Moves the files of replies that have ended (sent, failed or unsure) to their permanent place; they are never deleted
+   // (.plan/unibox-keep-messages-and-files.md). A reply whose files could not be moved is tried again on the next pass. Resolves to
+   // how many replies were handled.
+   public static async keepFiles() {
+      const done = await PrismaService.client.linkedInReply.findMany({
+         where: {
+            uploadId: { not: null },
+            filesKeptAt: null,
+            state: { not: 'SENDING' },
+         },
+         select: {
+            id: true,
+            userId: true,
+            accountId: true,
+            uploadId: true,
+         },
+         take: 20,
+      })
+      let kept = 0
+
+      for (const { id, userId, accountId, uploadId } of done) {
+         try {
+            await KeptFiles.moveUpload(userId, accountId, uploadId ?? '')
+            await PrismaService.client.linkedInReply.update({
+               where: { id },
+               data: { filesKeptAt: new Date() },
+            })
+            kept += 1
+         } catch (error) {
+            console.error(`Could not keep the files of reply ${id}: ${(error as Error).name}`)
+         }
+      }
+
+      return kept
    }
 
    // Replies that went or may have gone count; ones that did not go do not.

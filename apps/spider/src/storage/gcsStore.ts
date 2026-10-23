@@ -24,6 +24,20 @@ export class GcsStore implements ObjectStore {
       })
    }
 
+   // A file of a message, as bytes, and whether one is already there.
+   public async putBytes(key: string, body: Buffer, contentType: string) {
+      await this.bucket.file(key).save(body, {
+         contentType,
+         resumable: false,
+      })
+   }
+
+   public async exists(key: string) {
+      const [found] = await this.bucket.file(key).exists()
+
+      return found
+   }
+
    // For an object too large to hold in memory, such as a browser profile. A missing object fails the stream with code 404.
    public readStream(key: string): Readable {
       return this.bucket.file(key).createReadStream()
@@ -43,6 +57,11 @@ export class GcsStore implements ObjectStore {
          contentType,
          resumable: false,
       })
+   }
+
+   // A stored file to a path on this machine, without holding it in memory.
+   public async download(key: string, localPath: string) {
+      await this.bucket.file(key).download({ destination: localPath })
    }
 
    // A read that needs nothing but the permission the worker already has, for the health check.

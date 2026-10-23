@@ -910,7 +910,16 @@ model LinkedInReply {
   account        LinkedInAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
   conversationId String
   conversation   LinkedInConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  // May be empty when the reply is files only.
   text           String
+  // The files that go with it (name, kind, bytes). They wait under uploads/ until the reply ends, then are moved for good to
+  // kept/<user>/<account>/sent/<upload>/ and never deleted (.plan/unibox-keep-messages-and-files.md).
+  attachments    Json                 @default("[]")
+  uploadId       String?
+  // Set once the files were moved to their permanent place.
+  filesKeptAt    DateTime?
+  // Set when the message LinkedIn showed for this reply was stored and given these files.
+  matchedAt      DateTime?
   state          LinkedInReplyState   @default(SENDING)
   // A fixed sentence the owner can read, set when the reply did not go.
   failure        String?
