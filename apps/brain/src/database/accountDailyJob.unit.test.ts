@@ -42,6 +42,7 @@ const NOW = new Date('2026-10-19T10:00:00Z')
 const EARLIER = new Date('2026-10-19T09:00:00Z')
 const LATER = new Date('2026-10-20T09:00:00Z')
 const TOMORROW_8_IN_INDIA = new Date('2026-10-20T02:30:00Z')
+const IN_2_HOURS = new Date('2026-10-19T12:00:00Z')
 
 const account = (extra: Record<string, unknown> = {}) => ({
    id: 'acc1',
@@ -163,7 +164,7 @@ describe('AccountDailyJob', () => {
       expect(console.error).not.toHaveBeenCalled()
    })
 
-   it('should ask for a full first read of the messages, and a short one on the later days', async () => {
+   it('should ask for a full first read of the messages, and a short one on the later reads, the next in 2 hours', async () => {
       mocks.findMany.mockResolvedValue([
          account({
             nextMessagesAt: EARLIER,
@@ -179,7 +180,7 @@ describe('AccountDailyJob', () => {
          trigger: 'automatic',
          input: { limit: 50 },
       })
-      expect(movedTo('nextMessagesAt')).toEqual([TOMORROW_8_IN_INDIA])
+      expect(movedTo('nextMessagesAt')).toEqual([IN_2_HOURS])
 
       mocks.requestTask.mockClear()
       mocks.findMany.mockResolvedValue([account({ nextMessagesAt: EARLIER })])
@@ -193,7 +194,7 @@ describe('AccountDailyJob', () => {
       )
    })
 
-   it('should let the read of the day go when there was no good sign-in in the last day, and keep its time when it cannot be queued', async () => {
+   it('should let a read go when there was no good sign-in in the last day, and keep its time when it cannot be queued', async () => {
       mocks.findMany.mockResolvedValue([
          account({
             nextMessagesAt: EARLIER,
@@ -203,7 +204,7 @@ describe('AccountDailyJob', () => {
 
       await expect(run()).resolves.toMatchObject({ reads: 0 })
       expect(mocks.requestTask).not.toHaveBeenCalledWith(expect.objectContaining({ task: 'linkedin-messages' }))
-      expect(movedTo('nextMessagesAt')).toEqual([TOMORROW_8_IN_INDIA])
+      expect(movedTo('nextMessagesAt')).toEqual([IN_2_HOURS])
 
       mocks.updateMany.mockClear()
       mocks.findMany.mockResolvedValue([account({ nextMessagesAt: EARLIER })])

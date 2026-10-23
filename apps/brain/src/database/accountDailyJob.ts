@@ -11,6 +11,8 @@ import { TaskRefusedError } from './taskErrors'
 // One run never takes more accounts than this; the rest wait for the next pass.
 const MAX_PER_RUN = 100
 const DAY_MS = 24 * 60 * 60 * 1000
+// The messages are read this often (12 times a day), not once a day like the check and the visit.
+const MESSAGES_EVERY_MS = 2 * 60 * 60 * 1000
 // A good sign-in this recent (the owner's own check, say) counts as the day's check.
 const RECENT_SIGN_IN_MS = 12 * 60 * 60 * 1000
 
@@ -112,8 +114,9 @@ const requestMessages = async ({ id, userId, messagesReadAt }: Due) => {
    }
 }
 
-// Once a day per account, each at its own random time (.plan/account-daily-check.md): the sign-in check, and a visit and a
-// read of the messages (.plan/unibox-backend.md) when the account signed in fine within the last day. The brain worker calls `runDue` every few minutes; a check or visit that
+// Once a day per account, each at its own random time (.plan/account-daily-check.md): the sign-in check, and a visit when the
+// account signed in fine within the last day. The messages (.plan/unibox-backend.md) are read every 2 hours on the same terms
+// (.plan/unibox-read-every-2h.md). The brain worker calls `runDue` every few minutes; a check or visit that
 // cannot be queued now keeps its time and is tried on the next pass.
 export class AccountDailyJob {
    private static running = false
@@ -135,8 +138,8 @@ export class AccountDailyJob {
          for (const account of await findDue(now)) {
             const timezone = timezoneOf(account)
             const next = (today: boolean) => dailyTime(now, timezone, { today }, random)
-            // Sends one daily run when due; a first time is only drawn, for later today.
-            const daily = async (field: Field, send: () => Promise<boolean>) => {
+            // Sends one daily run when due; a first time is only drawn, for later today. `every` sets the next time without a draw.
+            const daily = async (field: Field, send: () => Promise<boolean>, every?: number) => {
                const at = account[field]
 
                if (!at) {
@@ -149,7 +152,7 @@ export class AccountDailyJob {
                   return false
                }
 
-               await move(account, field, next(false))
+               await move(account, field, every ? new Date(now.getTime() + every) : next(false))
 
                return true
             }
@@ -179,7 +182,11 @@ export class AccountDailyJob {
                result.visits += 1
             }
 
-            const read = await daily('nextMessagesAt', async () => !signedInToday || requestMessages(account))
+            const read = await daily(
+               'nextMessagesAt',
+               async () => !signedInToday || requestMessages(account),
+               MESSAGES_EVERY_MS
+            )
 
             if (read && signedInToday) {
                result.reads += 1
