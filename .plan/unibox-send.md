@@ -106,4 +106,4 @@ Shipped: the spider task `linkedin-reply`, the `typeKeys` driver call and `markA
 
 Deviations: verdict `NO_COMPOSER` (the runner owns `NOT_ALLOWED`); no `reply_id` in the task input; text limit 4,000 characters; refused instead of queued when the gap or the daily limit applies; no reload after `SENT`.
 
-Not verified: no reply has been sent on real LinkedIn. The composer and send-button selectors come from one recording (2026-10-22). Follow-up: the owner sends one test reply to their own test conversation and checks the run recording; attachments in replies.
+Live: on 2026-10-23 the owner ran the task from the spider devtools on a real account and it sent a reply (`SENT`); an earlier run failed because `typeKeys` was not forwarded by the recording wrapper (fixed). Not verified live: the app's Send button through brain and the worker, the `LinkedInReply` row and its limits, the import of the sent message back into the Unibox, and the unsure and failure paths. Follow-up: one test reply from the Unibox itself; attachments in replies.
