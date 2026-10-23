@@ -10,10 +10,13 @@ import {
    TaskRefusedError,
 } from 'database'
 
+import { UPLOAD_ID } from '@automatedLinkedIn/contracts'
+
 import { ownerProcedure, router } from 'trpc'
 
 import { present } from '../owned'
 
+const WORDS_OR_FILES = { message: 'A reply needs words or files.' }
 const id = z.string().min(1).max(100)
 const ids = z.array(id).min(1).max(MAX_IDS)
 
@@ -33,6 +36,22 @@ export const unibox = router({
       .query(async ({ ctx, input }) =>
          present(await LinkedInConversationService.get(ctx.user.id, input.id), 'Conversation not found')
       ),
+
+   // A short link to open a file kept with a message (the first, second... attachment of it). The files stay for good; a link works
+   // for ten minutes. A message or a file that is not the owner's answers like a missing one.
+   fileLink: ownerProcedure
+      .input(
+         z.object({
+            messageId: id,
+            index: z.number().int().min(0).max(49),
+         })
+      )
+      .query(async ({ ctx, input }) => ({
+         url: present(
+            await LinkedInConversationService.fileLink(ctx.user.id, input.messageId, input.index),
+            'File not found'
+         ),
+      })),
 
    setUnread: ownerProcedure
       .input(
@@ -81,15 +100,19 @@ export const unibox = router({
    // The text is never logged. Refused with a sentence when the limits or the account do not allow it now.
    send: ownerProcedure
       .input(
-         z.object({
-            conversationId: id,
-            text: z.string().trim().min(1).max(REPLY_LIMITS.maxChars),
-         })
+         z
+            .object({
+               conversationId: id,
+               text: z.string().trim().max(REPLY_LIMITS.maxChars),
+               // The files of the reply, kept by brain since the page uploaded them (.plan/unibox-send-attachments.md).
+               uploadId: z.string().regex(UPLOAD_ID).optional(),
+            })
+            .refine(({ text, uploadId }) => text !== '' || uploadId !== undefined, WORDS_OR_FILES)
       )
       .mutation(async ({ ctx, input }) => {
          try {
             return present(
-               await LinkedInReplyService.send(ctx.user.id, input.conversationId, input.text),
+               await LinkedInReplyService.send(ctx.user.id, input.conversationId, input.text, input.uploadId),
                'Conversation not found'
             )
          } catch (error) {

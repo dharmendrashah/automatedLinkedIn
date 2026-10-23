@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
    deleteMany: vi.fn(),
    seal: vi.fn(),
    open: vi.fn(),
+   removeFiles: vi.fn(),
 }))
 
 vi.mock('core', () => ({
@@ -22,6 +23,7 @@ vi.mock('core', () => ({
       seal: mocks.seal,
       open: mocks.open,
    },
+   KeptFiles: { removeAccount: mocks.removeFiles },
 }))
 
 vi.mock('./prisma.service', () => ({
@@ -522,6 +524,24 @@ describe('LinkedInAccountService', () => {
          mocks.deleteMany.mockResolvedValueOnce({ count: 0 })
 
          await expect(LinkedInAccountService.deleteForUser('u1', 'a1')).resolves.toBe(false)
+      })
+
+      it('should delete the kept files of the account first, and keep the account when they cannot be deleted', async () => {
+         mocks.removeFiles.mockResolvedValueOnce(undefined)
+         mocks.deleteMany.mockResolvedValueOnce({ count: 1 })
+
+         await LinkedInAccountService.deleteForUser('u1', 'a1')
+
+         expect(mocks.removeFiles).toHaveBeenCalledWith('u1', 'a1')
+         expect(mocks.removeFiles.mock.invocationCallOrder[0]).toBeLessThan(
+            mocks.deleteMany.mock.invocationCallOrder[0] ?? 0
+         )
+
+         mocks.deleteMany.mockClear()
+         mocks.removeFiles.mockRejectedValueOnce(new Error('bucket down'))
+
+         await expect(LinkedInAccountService.deleteForUser('u1', 'a1')).rejects.toThrow('bucket down')
+         expect(mocks.deleteMany).not.toHaveBeenCalled()
       })
    })
 })

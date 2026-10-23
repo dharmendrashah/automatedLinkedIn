@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { newestIsOurs, parseComposer, parseInbox, parseOwner, parseThread } from './messageReader'
+import { composerHtml, newestIsOurs, parseComposer, parseInbox, parseOwner, parseThread } from './messageReader'
 import { inboxMarkup, threadMarkup } from './messagingFixture'
 
 // Thursday, 22 October 2026.
@@ -43,8 +43,46 @@ describe('parseThread', () => {
             profile: ADA,
             time: '9:10 AM',
             image: 'plan.png',
+            imageSrc: 'https://media.licdn.com/dms/image/plan?e=1&amp;t=x',
          },
       ],
+   })
+
+   it('should give the address of a picture of a message when LinkedIn serves it, and none for another host or no address', () => {
+      const picture = (imageSrc?: string) =>
+         parseThread(
+            threadMarkup({
+               title: 'Ada',
+               profile: ADA,
+               messages: [
+                  {
+                     id: '2-p',
+                     from: 'THEM',
+                     name: 'Ada',
+                     profile: ADA,
+                     time: '9:10 AM',
+                     day: 'Today',
+                     image: 'a.png',
+                     imageSrc,
+                  },
+               ],
+            }),
+            today
+         ).messages[0]?.attachments[0]
+
+      expect(picture('https://media.licdn.com/dms/image/plan?e=1&amp;t=x')).toEqual({
+         kind: 'IMAGE',
+         name: 'a.png',
+         url: 'https://media.licdn.com/dms/image/plan?e=1&t=x',
+      })
+      expect(picture('https://elsewhere.test/a.png')).toEqual({
+         kind: 'IMAGE',
+         name: 'a.png',
+      })
+      expect(picture()).toEqual({
+         kind: 'IMAGE',
+         name: 'a.png',
+      })
    })
 
    it("should give a person the profile picture the page draws for that name, from LinkedIn's image host only", () => {
@@ -295,6 +333,66 @@ describe('newestIsOurs', () => {
       expect(newestIsOurs(messages, 'Sure')).toBe(false)
       expect(newestIsOurs(messages.slice(0, 1), 'Hi')).toBe(false)
       expect(newestIsOurs([], 'Hi')).toBe(false)
+   })
+
+   const [first, newest] = messages.map(({ id }) => id)
+
+   it('should take any words of a new message of ours when none are asked for (a message of files only)', () => {
+      expect(
+         newestIsOurs(messages, '', {
+            id: first,
+            count: 1,
+         })
+      ).toBe(true)
+      expect(
+         newestIsOurs(messages.slice(0, 1), '', {
+            id: first,
+            count: 0,
+         })
+      ).toBe(false)
+   })
+
+   it('should not take the message that was already the newest before the send, even with the same words', () => {
+      expect(
+         newestIsOurs(messages, 'Sure,\ntomorrow works', {
+            id: newest,
+            count: 2,
+         })
+      ).toBe(false)
+      expect(
+         newestIsOurs(messages, 'Sure,\ntomorrow works', {
+            id: first,
+            count: 1,
+         })
+      ).toBe(true)
+      // The same id with one more message above it means a new message got the same made-up id.
+      expect(
+         newestIsOurs(messages, 'Sure,\ntomorrow works', {
+            id: newest,
+            count: 1,
+         })
+      ).toBe(true)
+   })
+})
+
+describe('composerHtml', () => {
+   it('should give the form of the box with what is attached to it, and nothing on a page without one', () => {
+      const page = (extra: string) =>
+         threadMarkup({
+            title: 'Ada Lovelace',
+            profile: ADA,
+            messages: [],
+            composer: {
+               typed: 'Hi',
+               extra,
+            },
+         })
+
+      expect(composerHtml(page('<div class="chip">a.pdf 40%</div>'))).toContain('a.pdf 40%')
+      expect(composerHtml(page('<div class="chip">a.pdf 90%</div>'))).not.toBe(
+         composerHtml(page('<div class="chip">a.pdf 40%</div>'))
+      )
+      expect(composerHtml('<html><body></body></html>')).toBe('')
    })
 })
 

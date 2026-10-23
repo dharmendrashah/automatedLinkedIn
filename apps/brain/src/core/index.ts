@@ -4,6 +4,7 @@ export { toCsv } from './csv'
 export { dailyTime, timezoneOfCountry } from './dailyTime'
 export { CSV_MAX_ROWS, itemsCsv } from './itemCsv'
 export { HttpServer } from './httpServer'
+export { KeptFiles } from './keptFiles'
 export { extractLiAt } from '@automatedLinkedIn/contracts'
 export {
    ICP_WEIGHTS,
@@ -21,6 +22,7 @@ export { IpInfoError, IpInfoService, type ProxyExchange } from './ipInfo.service
 export { type LinkKind, type LinkedInLink, TooManyLinksError, parseLinkedInUrl, parseLinkedInUrls } from './linkedInUrl'
 export { MessageBroker } from './messageBroker'
 export { MessageFiles } from './messageFiles'
+export { type StoredFile, UploadFiles, UploadRefused } from './uploadFiles'
 export { RecordingLinks } from './recordingLinks'
 export { expandShortPostLink, isShortPostLink } from './shortLink'
 export { TakeoverRateError, TakeoverRelay } from './takeoverRelay'

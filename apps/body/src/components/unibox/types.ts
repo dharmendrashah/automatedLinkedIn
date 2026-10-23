@@ -21,6 +21,10 @@ export type Attachment = {
    kind: AttachmentKind
    name?: string
    bytes?: number
+   // True when the platform keeps the file, so it can be opened (a link is asked for when it is).
+   kept?: boolean
+   // The file itself, kept until the reply is sent so it can be uploaded; a reply that is only shown (from LinkedIn) has none.
+   file?: File
 }
 
 export type Person = {

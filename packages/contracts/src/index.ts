@@ -1,3 +1,4 @@
+export * from './attachments'
 export * from './liAt'
 export * from './messages'
 export * from './schemas'

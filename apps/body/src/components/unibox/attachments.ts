@@ -2,17 +2,60 @@ import { type AttachmentKind } from './types'
 
 const MB = 1024 * 1024
 
-// What a reply may carry. These numbers are guesses, not LinkedIn's (unverified: .plan/unibox.md), and only the interface uses them.
+// What a reply may carry (.plan/unibox-send-attachments.md). Brain enforces the same numbers and the same types on what it receives
+// (`packages/contracts/src/attachments.ts`); this copy is only for refusing early, so the two lists must be kept alike.
 export const LIMITS = {
-   IMAGE: 10 * MB,
-   VIDEO: 200 * MB,
-   AUDIO: 20 * MB,
-   FILE: 20 * MB,
+   // The largest file, of any kind.
+   FILE_BYTES: 20 * MB,
    // How many attachments one message may carry.
    COUNT: 10,
    // The longest reply, in characters: what brain and the spider accept (the command that carries it is limited to 8 KB).
    TEXT: 4000,
 } as const
+
+// The types LinkedIn's composer takes, by extension; the audio types are an experiment LinkedIn may refuse.
+const TYPES: Record<string, Exclude<AttachmentKind, 'LINK'>> = {
+   png: 'IMAGE',
+   jpg: 'IMAGE',
+   jpeg: 'IMAGE',
+   gif: 'IMAGE',
+   webp: 'IMAGE',
+   mp4: 'VIDEO',
+   mov: 'VIDEO',
+   mp3: 'AUDIO',
+   m4a: 'AUDIO',
+   wav: 'AUDIO',
+   ai: 'FILE',
+   psd: 'FILE',
+   pdf: 'FILE',
+   doc: 'FILE',
+   docx: 'FILE',
+   ppt: 'FILE',
+   pptx: 'FILE',
+   pps: 'FILE',
+   ppsx: 'FILE',
+   xls: 'FILE',
+   xlsx: 'FILE',
+   txt: 'FILE',
+   eml: 'FILE',
+}
+
+const ACCEPT_BY_KIND = (kind: Exclude<AttachmentKind, 'LINK'>) =>
+   Object.entries(TYPES)
+      .filter(([, found]) => found === kind)
+      .map(([extension]) => `.${extension}`)
+      .join(',')
+
+// What a picker is told to show for each kind.
+export const ACCEPT = {
+   IMAGE: ACCEPT_BY_KIND('IMAGE'),
+   VIDEO: ACCEPT_BY_KIND('VIDEO'),
+   AUDIO: ACCEPT_BY_KIND('AUDIO'),
+   FILE: ACCEPT_BY_KIND('FILE'),
+}
+
+// The kind of a file by its name, or undefined when its type may not be sent.
+export const sendableKind = (name: string) => TYPES[/\.([A-Za-z0-9]{1,8})$/.exec(name)?.[1]?.toLowerCase() ?? '']
 
 export const formatBytes = (bytes: number) => {
    if (bytes < 1024) {
@@ -43,14 +86,10 @@ export const kindOfFile = ({ type }: { type: string; name: string }): Attachment
    return 'FILE'
 }
 
-const NAMES: Record<'IMAGE' | 'VIDEO' | 'AUDIO' | 'FILE', string> = {
-   IMAGE: 'An image',
-   VIDEO: 'A video',
-   AUDIO: 'An audio file',
-   FILE: 'A file',
-}
+const TYPES_SENTENCE =
+   'LinkedIn takes images (PNG, JPG, GIF, WebP), documents (PDF, Word, PowerPoint, Excel, TXT, EML, AI, PSD), videos (MP4, MOV) and, as an experiment, audio (MP3, M4A, WAV).'
 
-export const checkAttachment = (kind: AttachmentKind, bytes: number, alreadyThere: number) => {
+export const checkAttachment = (kind: AttachmentKind, bytes: number, alreadyThere: number, name?: string) => {
    if (alreadyThere >= LIMITS.COUNT) {
       return {
          ok: false as const,
@@ -65,12 +104,17 @@ export const checkAttachment = (kind: AttachmentKind, bytes: number, alreadyTher
       }
    }
 
-   const key = kind === 'LINK' ? 'FILE' : kind
-
-   if (bytes > LIMITS[key]) {
+   if (kind !== 'LINK' && name !== undefined && !sendableKind(name)) {
       return {
          ok: false as const,
-         reason: `${NAMES[key]} can be up to ${formatBytes(LIMITS[key])}.`,
+         reason: `This type of file cannot be sent. ${TYPES_SENTENCE}`,
+      }
+   }
+
+   if (bytes > LIMITS.FILE_BYTES) {
+      return {
+         ok: false as const,
+         reason: `A file can be up to ${formatBytes(LIMITS.FILE_BYTES)}.`,
       }
    }
 

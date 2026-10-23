@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+
+import { KeptFiles } from 'core'
 
 import { LinkedInAccountConflictError, LinkedInAccountService } from './linkedInAccount.service'
 import { PrismaService } from './prisma.service'
@@ -10,7 +12,13 @@ const otherEmail = `${randomUUID()}@elitale.com`
 const linkedIn = 'ada@work.com'
 
 describe('LinkedInAccountService (database)', () => {
+   // The test environment may have a real bucket; removing an account must not reach it from here.
+   beforeAll(() => {
+      vi.spyOn(KeptFiles, 'removeAccount').mockResolvedValue(undefined)
+   })
+
    afterAll(async () => {
+      vi.restoreAllMocks()
       // Deleting the users cascades to their LinkedIn accounts.
       await PrismaService.client.user.deleteMany({ where: { email: { in: [email, otherEmail] } } })
 

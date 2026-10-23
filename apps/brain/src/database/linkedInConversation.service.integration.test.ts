@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+
+import { KeptFiles } from 'core'
 
 import { type MessagesFile } from '@automatedLinkedIn/contracts'
 
@@ -223,6 +225,255 @@ describe('LinkedInConversationService (database)', () => {
       await expect(LinkedInConversationService.get(otherUserId, id as string)).resolves.toBeNull()
       await expect(LinkedInConversationService.setUnread(otherUserId, [id as string], false)).resolves.toBe(0)
       await expect(LinkedInConversationService.setDone(otherUserId, [id as string], true)).resolves.toBe(0)
+   })
+
+   it('should keep the key of a received file only when it lies in the folder of the account, and drop any other', async () => {
+      const prefix = `kept/${userId}/${accountId}/received/`
+      const withFiles = (
+         id: string,
+         attachments: MessagesFile['conversations'][number]['messages'][number]['attachments']
+      ) =>
+         file({
+            id: `2-${id}`,
+            title: id,
+            messages: [
+               {
+                  ...message(`f-${id}`, 'THEM', '12:00', ''),
+                  attachments,
+               },
+            ],
+         })
+
+      await LinkedInConversationService.store(
+         owner,
+         withFiles('files', [
+            {
+               kind: 'IMAGE',
+               name: 'ok.png',
+               key: `${prefix}aaa/0-ok.png`,
+               bytes: 5,
+            },
+            {
+               kind: 'IMAGE',
+               name: 'other-owner.png',
+               key: `kept/${otherUserId}/${accountId}/received/aaa/0-x.png`,
+               bytes: 5,
+            },
+            {
+               kind: 'IMAGE',
+               name: 'escape.png',
+               key: `${prefix}../../${otherUserId}/x.png`,
+               bytes: 5,
+            },
+         ])
+      )
+
+      const row = (await LinkedInConversationService.list(userId)).find(item => item.title === 'files')
+      const [first] = row?.messages ?? []
+      const stored = await PrismaService.client.linkedInMessage.findFirstOrThrow({
+         where: { linkedInId: 'f-files' },
+         select: { attachments: true },
+      })
+
+      expect(first?.attachments.map(({ name }) => name)).toEqual(['ok.png', 'other-owner.png', 'escape.png'])
+      expect(stored.attachments).toEqual([
+         {
+            kind: 'IMAGE',
+            name: 'ok.png',
+            key: `${prefix}aaa/0-ok.png`,
+            bytes: 5,
+         },
+         {
+            kind: 'IMAGE',
+            name: 'other-owner.png',
+            bytes: 5,
+         },
+         {
+            kind: 'IMAGE',
+            name: 'escape.png',
+            bytes: 5,
+         },
+      ])
+   })
+
+   it('should give a message already stored the key of its picture when a later read kept it, and then never change it', async () => {
+      const prefix = `kept/${userId}/${accountId}/received/`
+      const read = (attachment: object) =>
+         file({
+            id: '2-late',
+            title: 'late',
+            messages: [
+               {
+                  ...message('late-1', 'THEM', '13:00', ''),
+                  attachments: [attachment],
+               },
+            ] as never,
+         })
+      const stored = async () =>
+         (
+            await PrismaService.client.linkedInMessage.findFirstOrThrow({
+               where: { linkedInId: 'late-1' },
+               select: { attachments: true },
+            })
+         ).attachments
+
+      await LinkedInConversationService.store(
+         owner,
+         read({
+            kind: 'IMAGE',
+            name: 'a.png',
+         })
+      )
+
+      expect(await stored()).toEqual([
+         {
+            kind: 'IMAGE',
+            name: 'a.png',
+         },
+      ])
+
+      await LinkedInConversationService.store(
+         owner,
+         read({
+            kind: 'IMAGE',
+            name: 'a.png',
+            key: `${prefix}one/0-a.png`,
+            bytes: 5,
+         })
+      )
+
+      expect(await stored()).toEqual([
+         {
+            kind: 'IMAGE',
+            name: 'a.png',
+            key: `${prefix}one/0-a.png`,
+            bytes: 5,
+         },
+      ])
+
+      await LinkedInConversationService.store(
+         owner,
+         read({
+            kind: 'IMAGE',
+            name: 'a.png',
+            key: `${prefix}two/0-a.png`,
+            bytes: 9,
+         })
+      )
+
+      expect((await stored()) as Array<{ key?: string }>).toMatchObject([{ key: `${prefix}one/0-a.png` }])
+   })
+
+   it('should give the message we sent the files of the reply that sent it, once, and the earliest unmatched reply first', async () => {
+      const [conversation] = await PrismaService.client.linkedInConversation.findMany({
+         where: {
+            accountId,
+            linkedInId: '2-ada',
+         },
+         select: { id: true },
+      })
+      const reply = (uploadId: string, text: string, name: string, createdAt: string) => ({
+         userId,
+         accountId,
+         conversationId: conversation?.id ?? '',
+         text,
+         state: 'SENT' as const,
+         uploadId,
+         sessionId: randomUUID(),
+         createdAt: new Date(createdAt),
+         attachments: [
+            {
+               name,
+               kind: 'FILE',
+               bytes: 9,
+            },
+         ],
+      })
+      const first = randomUUID()
+      const second = randomUUID()
+
+      await PrismaService.client.linkedInReply.createMany({
+         data: [
+            reply(first, 'The  proposal', 'cv.pdf', '2026-10-22T10:00:00Z'),
+            reply(second, 'The proposal', 'offer.pdf', '2026-10-22T10:05:00Z'),
+         ],
+      })
+
+      const [ada] = file().conversations
+      const sent = (id: string) => message(id, 'ME', '10:30', ' The proposal ')
+      const messages = [...(ada?.messages ?? []), sent('s1'), sent('s2'), message('s3', 'ME', '10:40', 'Other words')]
+
+      await LinkedInConversationService.store(owner, file({ messages }))
+
+      const attachmentsOf = async (linkedInId: string) =>
+         (
+            await PrismaService.client.linkedInMessage.findFirstOrThrow({
+               where: { linkedInId },
+               select: { attachments: true },
+            })
+         ).attachments
+
+      expect(await attachmentsOf('s1')).toEqual([
+         {
+            kind: 'FILE',
+            name: 'cv.pdf',
+            bytes: 9,
+            key: `kept/${userId}/${accountId}/sent/${first}/cv.pdf`,
+         },
+      ])
+      expect(await attachmentsOf('s2')).toEqual([
+         {
+            kind: 'FILE',
+            name: 'offer.pdf',
+            bytes: 9,
+            key: `kept/${userId}/${accountId}/sent/${second}/offer.pdf`,
+         },
+      ])
+      expect(await attachmentsOf('s3')).toEqual([])
+      expect(
+         await PrismaService.client.linkedInReply.count({
+            where: {
+               userId,
+               matchedAt: { not: null },
+            },
+         })
+      ).toBe(2)
+   })
+
+   it('should link the kept file of a message to its owner only, and never a file that was not kept', async () => {
+      const link = vi.spyOn(KeptFiles, 'link').mockResolvedValue('https://signed.example/file')
+      const find = (linkedInId: string) =>
+         PrismaService.client.linkedInMessage.findFirstOrThrow({
+            where: { linkedInId },
+            select: { id: true },
+         })
+      const kept = await find('s1')
+      const bare = await find('s3')
+
+      await expect(LinkedInConversationService.fileLink(userId, kept.id, 0)).resolves.toBe(
+         'https://signed.example/file'
+      )
+      expect(link).toHaveBeenCalledWith(userId, expect.stringMatching(/^kept\/.+\/sent\/.+\/cv\.pdf$/), 'cv.pdf')
+
+      await expect(LinkedInConversationService.fileLink(otherUserId, kept.id, 0)).resolves.toBeNull()
+      await expect(LinkedInConversationService.fileLink(userId, kept.id, 3)).resolves.toBeNull()
+      await expect(LinkedInConversationService.fileLink(userId, bare.id, 0)).resolves.toBeNull()
+      expect(link).toHaveBeenCalledTimes(1)
+
+      const { conversationId } = await PrismaService.client.linkedInMessage.findUniqueOrThrow({
+         where: { id: kept.id },
+         select: { conversationId: true },
+      })
+      const opened = await LinkedInConversationService.get(userId, conversationId)
+
+      expect(opened?.messages.find(item => item.id === kept.id)?.attachments).toEqual([
+         {
+            kind: 'FILE',
+            name: 'cv.pdf',
+            bytes: 9,
+            kept: true,
+         },
+      ])
    })
 
    it('should delete the conversations with the account', async () => {

@@ -17,6 +17,10 @@ export type Hands = {
    scrollOver: (selector: string, pixels: number) => Promise<boolean>
    // Types into what has the focus (after a click on a box), at a person's pace; false when the browser cannot.
    typeKeys: (text: string) => Promise<boolean>
+   // Gives files to the first file input of a selector (it may be hidden); false when the browser cannot or there is no such input.
+   attachFiles: (selector: string, paths: string[]) => Promise<boolean>
+   // Downloads a file the page points to through the browser; undefined when it cannot, or the file is too large or not a success.
+   fetchFile: (url: string, maxBytes: number) => Promise<{ body: Buffer; contentType: string } | undefined>
    // The markup of the page as it is now.
    html: () => Promise<string>
    back: () => Promise<string>
@@ -32,7 +36,7 @@ export const handsOf = (browser: DetectionSession): Hands => {
       throw new Error('This browser cannot browse by clicking.')
    }
 
-   const { clickInside, clickSelector, clickNth, scrollOver, typeKeys, hover, drift } = browser
+   const { clickInside, clickSelector, clickNth, scrollOver, typeKeys, attachFiles, fetchFile, hover, drift } = browser
 
    return {
       inspect: block => inspect.call(browser, block ? { block } : undefined),
@@ -51,6 +55,8 @@ export const handsOf = (browser: DetectionSession): Hands => {
 
          return true
       },
+      attachFiles: async (selector, paths) => (await attachFiles?.call(browser, selector, paths)) === true,
+      fetchFile: async (url, maxBytes) => fetchFile?.call(browser, url, maxBytes),
       html: () => browser.pageHtml(),
       back: () => back.call(browser),
       hover: async (x, y) => hover?.call(browser, x, y),

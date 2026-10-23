@@ -33,12 +33,15 @@ type Page = {
    pauseMs?: number
    // How many looks at the page find no list yet, as through a slow proxy.
    slowList?: number
+   // The first message of every conversation holds a picture, and the run can keep files.
+   pictures?: boolean
 }
 
 // A messaging page that behaves like the real one: a list that shows a few rows and loads more when scrolled to its end, rows that
 // open a conversation by a click with no address of their own, and a conversation that loads older messages as it is scrolled up.
 const setup = (page: Page = {}) => {
    const { conversations = 8, messages = 12, signedOutAt, deaf = false, autoOpen = true, slowOpen = 0, pauseMs } = page
+   const saved: Array<{ key: string; bytes: number }> = []
    let waiting = page.slowList ?? 0
    let time = 0
    let loadedRows = Math.min(PAGE_ROWS, conversations)
@@ -76,6 +79,11 @@ const setup = (page: Page = {}) => {
                  time: '5:18 PM',
                  day: index === 0 ? 'Jan 25, 2024' : undefined,
                  text: `secret words ${opened}/${index}`,
+                 ...(page.pictures &&
+                    index === 0 && {
+                       image: 'plan.png',
+                       imageSrc: 'https://media.licdn.com/dms/image/plan',
+                    }),
               })).slice(messages - loaded),
            })
    const urlOf = (index: number | undefined) => {
@@ -167,6 +175,12 @@ const setup = (page: Page = {}) => {
       exists: vi.fn(async () => false),
       click: vi.fn(async () => MESSAGING),
       clearCookies: vi.fn(async () => undefined),
+      ...(page.pictures && {
+         fetchFile: vi.fn(async (_url: string, _maxBytes: number) => ({
+            body: Buffer.from('12345'),
+            contentType: 'image/png',
+         })),
+      }),
    }
    const context = {
       browser,
@@ -187,12 +201,25 @@ const setup = (page: Page = {}) => {
          attached[name] = content
       }),
       screenshot: vi.fn(async () => undefined),
+      ...(page.pictures && {
+         kept: {
+            keyOf: (messageId: string, index: number, name: string) => `kept/${messageId}/${index}-${name}`,
+            has: async (key: string) => saved.some(file => file.key === key),
+            save: async (key: string, body: Buffer) => {
+               saved.push({
+                  key,
+                  bytes: body.length,
+               })
+            },
+         },
+      }),
    }
 
    return {
       context,
       browser,
       attached,
+      saved,
       file: () => JSON.parse(attached['messages.json'] ?? 'null') as MessagesFile,
       read: (input: { limit?: number; skip?: number; snapshots?: boolean } = {}) =>
          readMessages(
@@ -249,6 +276,36 @@ describe('readMessages', () => {
          direction: 'ME',
          sender: { name: 'Tripti Verma' },
       })
+   })
+
+   it('should keep the pictures of messages for good while the conversation is open, once, and hand over the place and never the address', async () => {
+      const { read, file, saved, browser, attached } = setup({
+         pictures: true,
+         messages: 3,
+      })
+
+      await read({ limit: 2 })
+
+      const [first] = messagesFileSchema.parse(file()).conversations
+      const [message] = first?.messages ?? []
+
+      expect(message?.attachments).toEqual([
+         {
+            kind: 'IMAGE',
+            name: 'plan.png',
+            key: 'kept/urn:li:msg_message:(urn:li:fsd_profile:me,2-c0-m0)/0-plan.png',
+            bytes: 5,
+         },
+      ])
+      expect(saved).toHaveLength(2)
+      expect(browser.fetchFile).toHaveBeenCalledTimes(2)
+      expect(JSON.stringify(attached)).not.toContain('media.licdn.com')
+
+      // A second read finds them kept and downloads nothing more.
+      await read({ limit: 2 })
+
+      expect(browser.fetchFile).toHaveBeenCalledTimes(2)
+      expect(saved).toHaveLength(2)
    })
 
    it('should scroll the list to rows below the window and let it load more conversations', async () => {

@@ -1,22 +1,27 @@
-import { type Conversation, type MessagesFile, messagesFileSchema } from '@automatedLinkedIn/contracts'
+import { type Conversation, type MessagesFile, type ReplyFile, messagesFileSchema } from '@automatedLinkedIn/contracts'
 
 import { describeError } from '../../browsing/errors'
 import { handsOf } from '../../browsing/hands'
 import { createReader } from '../../browsing/reader'
-import { COMPOSER, MESSAGING_PATH, SEND_BUTTON, THREAD_ID } from '../../linkedin/markup'
-import { newestIsOurs, parseComposer, parseOwner, parseThread } from '../../linkedin/messageReader'
+import { COMPOSER, FILE_INPUT, IMAGE_INPUT, MESSAGING_PATH, SEND_BUTTON, THREAD_ID } from '../../linkedin/markup'
+import { composerHtml, newestIsOurs, parseComposer, parseOwner, parseThread } from '../../linkedin/messageReader'
 import { PACE } from '../../linkedin/pace'
 import { SignedOut, createSession } from '../../linkedin/session'
 import { type TaskContext } from '../defineTask'
 import { fileName, partsOf } from '../linkedinMessages/messagesFile'
+import { type Fetched } from '../uploads'
 
-type Context = Pick<TaskContext, 'browser' | 'visit' | 'pause' | 'log' | 'warn' | 'attach' | 'markAttempt'>
+type Context = Pick<TaskContext, 'browser' | 'visit' | 'pause' | 'log' | 'warn' | 'attach' | 'markAttempt' | 'uploads'>
 
 export type ReplyInput = {
    // The id of the conversation in the address of its page, and its name as the page shows it (empty: not checked).
    thread: string
    title: string
+   // May be empty when there are files.
    text: string
+   // The files to attach, by the names they have in the upload.
+   files: ReplyFile[]
+   uploadId?: string
 }
 
 // SENT: the message shows as the newest of the account. UNKNOWN: send was pressed and the page does not show it, so it may
@@ -24,7 +29,10 @@ export type ReplyInput = {
 // write. WRONG_THREAD: the page is on another conversation. SIGNED_OUT: LinkedIn asked for a sign-in.
 export type ReplyResult =
    | { outcome: 'SENT' | 'UNKNOWN' | 'NO_COMPOSER' | 'WRONG_THREAD' | 'SIGNED_OUT' }
-   | { outcome: 'FAILED'; why: 'TYPING' | 'SEND_DISABLED' | 'SEND_NOT_CLICKED' | 'NOT_SENT' }
+   | {
+        outcome: 'FAILED'
+        why: 'TYPING' | 'NO_FILES' | 'ATTACH' | 'UPLOAD' | 'SEND_DISABLED' | 'SEND_NOT_CLICKED' | 'NOT_SENT'
+     }
 
 type Deps = {
    random?: () => number
@@ -38,6 +46,10 @@ const LOOKS = 6
 // proxy the page can take half a minute to draw and come alive (runs 4f14fb23, 21fbcec3 and 896e63b8, 2026-10-23).
 const READY_LOOKS = 20
 const ENABLE_LOOKS = 8
+// How many times the box is looked at while files upload (about three minutes), and how many looks in a row it must be unchanged
+// before the upload counts as done: the markup of an upload that is going on keeps changing (recorded: not yet; unverified).
+const UPLOAD_LOOKS = 120
+const STABLE_LOOKS = 3
 // How many times the page is scrolled a little to bring the send button into view (run 896e63b8: a notice at the top pushed the
 // box to the edge of the window and the button below it).
 const REVEAL_SCROLLS = 4
@@ -160,6 +172,27 @@ export const sendReply = async (
       return false
    }
 
+   // Whether the box stops changing after files were given to it, which is when they have uploaded.
+   const uploaded = async () => {
+      let last = ''
+      let stable = 0
+
+      for (let look = 0; look < UPLOAD_LOOKS; look += 1) {
+         const now = composerHtml(await hands.html())
+
+         stable = now === last ? stable + 1 : 0
+         last = now
+
+         if (stable >= STABLE_LOOKS) {
+            return true
+         }
+
+         await reader.wait(PAUSES.look)
+      }
+
+      return false
+   }
+
    // After send was pressed: looks for the message, and says what it saw.
    const confirm = async (): Promise<ReplyResult> => {
       await reader.wait(PAUSES.sent)
@@ -169,7 +202,7 @@ export const sendReply = async (
       for (let look = 0; look < LOOKS; look += 1) {
          html = await hands.html()
 
-         if (newestIsOurs(parseThread(html, today()).messages, input.text)) {
+         if (newestIsOurs(parseThread(html, today()).messages, input.text, before)) {
             handOver(html)
 
             return { outcome: 'SENT' }
@@ -193,7 +226,70 @@ export const sendReply = async (
       return { outcome: 'UNKNOWN' }
    }
 
+   let fetched: Fetched | undefined
+
+   // Gives the files of the upload to the page, images to the images' input and the rest to the other, and waits for them to upload;
+   // says why when it cannot.
+   const attachFiles = async (): Promise<ReplyResult | undefined> => {
+      if (!context.uploads || !input.uploadId) {
+         log('The files cannot be fetched here')
+
+         return {
+            outcome: 'FAILED',
+            why: 'NO_FILES',
+         }
+      }
+
+      try {
+         fetched = await context.uploads.fetch(
+            input.uploadId,
+            input.files.map(({ name }) => name)
+         )
+      } catch (error) {
+         warn(describeError(error, 'The files could not be fetched'))
+
+         return {
+            outcome: 'FAILED',
+            why: 'NO_FILES',
+         }
+      }
+
+      const paths = (images: boolean) =>
+         fetched?.paths.filter((_, index) => (input.files[index]?.kind === 'IMAGE') === images) ?? []
+      const [pictures, others] = [paths(true), paths(false)]
+
+      if (
+         (pictures.length > 0 && !(await hands.attachFiles(IMAGE_INPUT, pictures))) ||
+         (others.length > 0 && !(await hands.attachFiles(FILE_INPUT, others)))
+      ) {
+         log('The page offers no place to attach files')
+
+         return {
+            outcome: 'FAILED',
+            why: 'ATTACH',
+         }
+      }
+
+      log(`Attached ${input.files.length} files`)
+
+      if (!(await uploaded())) {
+         log('The files did not finish uploading')
+         await clearBox()
+
+         return {
+            outcome: 'FAILED',
+            why: 'UPLOAD',
+         }
+      }
+
+      return undefined
+   }
+
    let pressed = false
+   let before: { id: string | undefined; count: number } = {
+      id: undefined,
+      count: 0,
+   }
 
    try {
       await session.acceptConsent(await session.open(`${baseUrl}${MESSAGING_PATH}thread/${input.thread}/`))
@@ -202,7 +298,12 @@ export const sendReply = async (
 
       const opened = THREAD_ID.exec(new URL(session.signedIn((await hands.inspect()).url)).pathname)?.[1]
       const html = await settled()
-      const { title } = parseThread(html, today())
+      const { title, messages } = parseThread(html, today())
+
+      before = {
+         id: messages.at(-1)?.id,
+         count: messages.length,
+      }
 
       if (opened !== input.thread || (input.title !== '' && title !== input.title)) {
          log('The page is on another conversation')
@@ -226,7 +327,21 @@ export const sendReply = async (
       await hands.clickSelector(COMPOSER)
       await reader.wait(PAUSES.click)
 
-      if (!(await hands.typeKeys(input.text)) || parseComposer(await hands.html()).typed === '') {
+      if (input.files.length > 0) {
+         const failed = await attachFiles()
+
+         if (failed) {
+            return failed
+         }
+
+         await hands.clickSelector(COMPOSER)
+         await reader.wait(PAUSES.click)
+      }
+
+      if (
+         input.text !== '' &&
+         (!(await hands.typeKeys(input.text)) || parseComposer(await hands.html()).typed === '')
+      ) {
          await clearBox()
 
          return {
@@ -274,5 +389,7 @@ export const sendReply = async (
       }
 
       throw error
+   } finally {
+      await fetched?.remove().catch(() => undefined)
    }
 }

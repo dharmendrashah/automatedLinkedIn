@@ -46,5 +46,8 @@ export const THREAD_PANE = '.msg-s-message-list'
 // Where a reply is written in the open conversation, and the button that sends it (disabled until there is text); recorded 2026-10-22.
 export const COMPOSER = '.msg-form__contenteditable'
 export const SEND_BUTTON = 'button.msg-form__send-button'
+// The two hidden file inputs of the composer (recorded 2026-10-22): one takes images only, the other documents, video and images.
+export const IMAGE_INPUT = 'input.msg-form__attachment-upload-input[accept="image/*"]'
+export const FILE_INPUT = 'input.msg-form__attachment-upload-input[accept*=".pdf"]'
 // The button after the beacon at the bottom of the list, for a page that does not load more by itself.
 export const LOAD_MORE = '[data-test-msg-cross-pillar-visible-beacon] + button'

@@ -46,6 +46,44 @@ describe('messagesFileSchema', () => {
       expect(messagesFileSchema.parse(file)).toEqual(file)
    })
 
+   it('should accept the place and size of a file the spider kept, and refuse a negative size', () => {
+      const [conversation] = file.conversations
+      const [message] = conversation!.messages
+      const withFile = (attachment: object) => ({
+         ...file,
+         conversations: [
+            {
+               ...conversation,
+               messages: [
+                  {
+                     ...message,
+                     attachments: [attachment],
+                  },
+               ],
+            },
+         ],
+      })
+
+      expect(
+         messagesFileSchema.safeParse(
+            withFile({
+               kind: 'IMAGE',
+               name: 'photo.png',
+               key: 'kept/u/a/received/x/0-photo.png',
+               bytes: 5,
+            })
+         ).success
+      ).toBe(true)
+      expect(
+         messagesFileSchema.safeParse(
+            withFile({
+               kind: 'IMAGE',
+               bytes: -1,
+            })
+         ).success
+      ).toBe(false)
+   })
+
    it('should keep a message without a day or a time, as when LinkedIn shows none', () => {
       const [conversation] = file.conversations
       const message = {

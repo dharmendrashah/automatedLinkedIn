@@ -1,5 +1,8 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { type Server, createServer } from 'node:http'
 import { type AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { CamoufoxDriver } from './camoufoxDriver'
@@ -33,6 +36,10 @@ const PAGES: Record<string, string> = {
 <div id="box" contenteditable="true" role="textbox" style="position:absolute;left:100px;top:100px;width:400px;height:120px;border:1px solid #999"
   onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); document.title = 'sent' }"></div>
 </body></html>`,
+   '/upload': `<!doctype html><html><body>
+<input id="hidden" class="picker" type="file" accept="image/*" multiple style="display:none"
+  onchange="document.title = Array.from(this.files).map(file => file.name + ':' + file.size).join(',')">
+</body></html>`,
    '/profile/ada': `<!doctype html><html><body><p id="followed"></p><script>document.getElementById('followed').textContent = 'followed:' + (sessionStorage.getItem('followed') || 'no')</script></body></html>`,
    '/covered': '<!doctype html><html><body>covered page</body></html>',
 }
@@ -42,6 +49,27 @@ let origin: string
 
 beforeAll(async () => {
    server = createServer((request, response) => {
+      if (request.url === '/files/pic.png') {
+         response.writeHead(200, { 'content-type': 'image/png; charset=binary' })
+         response.end(Buffer.from('12345'))
+
+         return
+      }
+
+      if (request.url === '/files/moved') {
+         response.writeHead(302, { location: '/files/pic.png' })
+         response.end()
+
+         return
+      }
+
+      if (request.url === '/files/missing') {
+         response.writeHead(404)
+         response.end()
+
+         return
+      }
+
       const html = PAGES[request.url ?? ''] ?? PAGES['/hands']
 
       response.writeHead(200, { 'content-type': 'text/html' })
@@ -176,6 +204,42 @@ describe('what a hand does on the page', () => {
          expect(html).toContain('one two')
          expect(html).toContain('three')
          expect((await session.inspect?.())?.title).not.toBe('sent')
+      })
+   })
+
+   it('should give files to a hidden file input, and say there is none when the selector matches nothing', async () => {
+      const folder = await mkdtemp(join(tmpdir(), 'attach-'))
+      const first = join(folder, 'one.png')
+      const second = join(folder, 'two.pdf')
+
+      await writeFile(first, Buffer.from('12345'))
+      await writeFile(second, Buffer.from('1234567890'))
+
+      try {
+         await withSession(async session => {
+            await session.goto(`${origin}/upload`)
+
+            expect(await session.attachFiles?.('input.picker', [first, second])).toBe(true)
+            expect((await session.inspect?.())?.title).toBe('one.png:5,two.pdf:10')
+            expect(await session.attachFiles?.('input.nothing', [first])).toBe(false)
+         })
+      } finally {
+         await rm(folder, {
+            recursive: true,
+            force: true,
+         })
+      }
+   })
+
+   it('should download a file the page points to, and give up on a missing one, a redirect or one that is too large', async () => {
+      await withSession(async session => {
+         await expect(session.fetchFile?.(`${origin}/files/pic.png`, 100)).resolves.toEqual({
+            body: Buffer.from('12345'),
+            contentType: 'image/png',
+         })
+         await expect(session.fetchFile?.(`${origin}/files/pic.png`, 4)).resolves.toBeUndefined()
+         await expect(session.fetchFile?.(`${origin}/files/missing`, 100)).resolves.toBeUndefined()
+         await expect(session.fetchFile?.(`${origin}/files/moved`, 100)).resolves.toBeUndefined()
       })
    })
 

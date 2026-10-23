@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { type Attachment, type UniboxMessage } from './types'
 
 import { RichText } from './rich-text'
+import { useShared } from './shared'
 import { formatFull } from './time'
 
 const ICONS = {
@@ -23,20 +24,34 @@ const LABELS: Record<Attachment['kind'], string> = {
    LINK: 'Link',
 }
 
-// An attachment as the page can show it: what it is and its name. The spider keeps no copy of a file, so there is nothing to open.
-export const AttachmentChip = ({ attachment, own = false }: { attachment: Attachment; own?: boolean }) => {
+// An attachment as the page shows it: what it is and its name, and a button that opens the file when the platform keeps it.
+export const AttachmentChip = ({
+   attachment,
+   own = false,
+   onOpen,
+}: {
+   attachment: Attachment
+   own?: boolean
+   onOpen?: () => void
+}) => {
    const Icon = ICONS[attachment.kind]
-
-   return (
-      <span
-         className={cn(
-            'inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-xs',
-            own ? 'border-primary-foreground/30 bg-primary-foreground/10' : 'bg-muted'
-         )}
-      >
+   const style = cn(
+      'inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-xs',
+      own ? 'border-primary-foreground/30 bg-primary-foreground/10' : 'bg-muted'
+   )
+   const content = (
+      <>
          <Icon className="size-3.5 shrink-0" aria-hidden />
          <span className="truncate">{attachment.name ?? LABELS[attachment.kind]}</span>
-      </span>
+      </>
+   )
+
+   return onOpen ? (
+      <button type="button" onClick={onOpen} className={cn(style, 'cursor-pointer hover:underline')} title="Open">
+         {content}
+      </button>
+   ) : (
+      <span className={style}>{content}</span>
    )
 }
 
@@ -48,6 +63,7 @@ type Props = {
 // One message: its words as safe text, its attachments, and its time on hover. Ours are on the right in LinkedIn blue.
 export const MessageBubble = ({ message, tokens }: Props) => {
    const own = message.direction === 'ME'
+   const { openFile } = useShared()
 
    return (
       <div className={cn('flex w-full', own ? 'justify-end' : 'justify-start')}>
@@ -68,7 +84,12 @@ export const MessageBubble = ({ message, tokens }: Props) => {
             {message.attachments.length > 0 ? (
                <div className={cn('flex flex-wrap gap-1.5', message.text && 'mt-1.5')}>
                   {message.attachments.map((attachment, index) => (
-                     <AttachmentChip key={index} attachment={attachment} own={own} />
+                     <AttachmentChip
+                        key={index}
+                        attachment={attachment}
+                        own={own}
+                        onOpen={attachment.kept && openFile ? () => openFile(message.id, index) : undefined}
+                     />
                   ))}
                </div>
             ) : null}

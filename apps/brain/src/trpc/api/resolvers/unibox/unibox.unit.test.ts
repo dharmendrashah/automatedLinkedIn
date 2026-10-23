@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
    get: vi.fn(),
    setUnread: vi.fn(),
    setDone: vi.fn(),
+   fileLink: vi.fn(),
    request: vi.fn(),
    send: vi.fn(),
    reply: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock('database', () => ({
       get: mocks.get,
       setUnread: mocks.setUnread,
       setDone: mocks.setDone,
+      fileLink: mocks.fileLink,
    },
    MessagesRefresh: { request: mocks.request },
    LinkedInReplyService: {
@@ -180,7 +182,37 @@ describe('unibox router', () => {
             text: '  Tomorrow works.  ',
          })
       ).resolves.toEqual({ id: 'r1' })
-      expect(mocks.send).toHaveBeenCalledWith('u1', 'c1', 'Tomorrow works.')
+      expect(mocks.send).toHaveBeenCalledWith('u1', 'c1', 'Tomorrow works.', undefined)
+   })
+
+   it('should send files with no words, and pass the upload on', async () => {
+      mocks.send.mockResolvedValue({ id: 'r2' })
+
+      await expect(
+         caller().send({
+            conversationId: 'c1',
+            text: '',
+            uploadId: '0198f2a4-7c1e-7d3a-9b1e-5c2d8f0a1b34',
+         })
+      ).resolves.toEqual({ id: 'r2' })
+      expect(mocks.send).toHaveBeenCalledWith('u1', 'c1', '', '0198f2a4-7c1e-7d3a-9b1e-5c2d8f0a1b34')
+   })
+
+   it('should refuse an upload id that is not valid, and a reply with neither words nor files', async () => {
+      await expect(
+         caller().send({
+            conversationId: 'c1',
+            text: 'Hi',
+            uploadId: '../x',
+         })
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+      await expect(
+         caller().send({
+            conversationId: 'c1',
+            text: '',
+         })
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+      expect(mocks.send).not.toHaveBeenCalled()
    })
 
    it('should refuse an empty or too long reply before anything starts', async () => {
@@ -235,5 +267,30 @@ describe('unibox router', () => {
       })
       await expect(caller().reply({ id: 'r9' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
       expect(mocks.reply).toHaveBeenCalledWith('u1', 'r1')
+   })
+
+   it('should give a short link to a kept file of the owner, and not found for a file that is not theirs or not kept', async () => {
+      mocks.fileLink.mockResolvedValueOnce('https://signed.example/file')
+      mocks.fileLink.mockResolvedValueOnce(null)
+
+      await expect(
+         caller().fileLink({
+            messageId: 'm1',
+            index: 1,
+         })
+      ).resolves.toEqual({ url: 'https://signed.example/file' })
+      await expect(
+         caller().fileLink({
+            messageId: 'm9',
+            index: 0,
+         })
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      expect(mocks.fileLink).toHaveBeenCalledWith('u1', 'm1', 1)
+      await expect(
+         caller().fileLink({
+            messageId: 'm1',
+            index: -1,
+         })
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
    })
 })

@@ -26,6 +26,7 @@ __pycache__/
 
 # Local-only devtools recordings (apps/spider/src/devtools), never shared or committed.
 apps/spider/.devtools-recordings/
+apps/spider/.devtools-uploads/
 
 # Real messages kept for trying the Unibox in development (never committed or built).
 apps/body/public/messages.json

@@ -32,7 +32,7 @@ import { cn } from '@/lib/utils'
 import { type Attachment, type AttachmentKind, type UniboxAccount, type UniboxConversation } from './types'
 
 import { AccountAvatar } from './account-avatar'
-import { LIMITS, checkAttachment, formatBytes, kindOfFile } from './attachments'
+import { ACCEPT, LIMITS, checkAttachment, formatBytes, kindOfFile, sendableKind } from './attachments'
 import { hueOf } from './colors'
 import { useShared } from './shared'
 import { TEMPLATES, fillTemplate, firstName } from './templates'
@@ -60,10 +60,10 @@ type Props = {
 }
 
 const PICKS: { kind: Exclude<AttachmentKind, 'LINK'>; label: string; accept: string; icon: typeof ImageIcon }[] = [
-   { kind: 'IMAGE', label: 'Image', accept: 'image/*', icon: ImageIcon },
-   { kind: 'VIDEO', label: 'Video', accept: 'video/*', icon: Video },
-   { kind: 'AUDIO', label: 'Audio file', accept: 'audio/*', icon: Mic },
-   { kind: 'FILE', label: 'Any file', accept: '', icon: FileText },
+   { kind: 'IMAGE', label: 'Image', accept: ACCEPT.IMAGE, icon: ImageIcon },
+   { kind: 'VIDEO', label: 'Video', accept: ACCEPT.VIDEO, icon: Video },
+   { kind: 'AUDIO', label: 'Audio file (LinkedIn may refuse it)', accept: ACCEPT.AUDIO, icon: Mic },
+   { kind: 'FILE', label: 'Document', accept: ACCEPT.FILE, icon: FileText },
 ]
 
 const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent)
@@ -145,7 +145,7 @@ export const Composer = ({
       const refused = [...skipped]
 
       for (const attachment of attachments) {
-         const check = checkAttachment(attachment.kind, attachment.bytes ?? 1, count)
+         const check = checkAttachment(attachment.kind, attachment.bytes ?? 1, count, attachment.name)
 
          if (check.ok) {
             count += 1
@@ -164,7 +164,14 @@ export const Composer = ({
    }
 
    const addFiles = (files: File[]) =>
-      add(files.map(file => ({ kind: kindOfFile(file), name: file.name, bytes: file.size })))
+      add(
+         files.map(file => ({
+            kind: sendableKind(file.name) ?? kindOfFile(file),
+            name: file.name,
+            bytes: file.size,
+            file,
+         }))
+      )
 
    const pick = (accept: string) => {
       if (picker.current) {
@@ -280,7 +287,9 @@ export const Composer = ({
                onCancel={() => setRecording(false)}
                onDone={seconds => {
                   setRecording(false)
-                  add([{ kind: 'AUDIO', name: `Voice note ${formatClock(seconds)}`, bytes: seconds * 16_000 }])
+                  setProblems([
+                     `A voice note of ${formatClock(seconds)} cannot be sent from here: LinkedIn takes voice messages only in its own app. Attach an audio file instead.`,
+                  ])
                }}
             />
          ) : null}

@@ -1,9 +1,14 @@
 import { z } from 'zod'
 
+import { MAX_ATTACHMENTS, UPLOAD_ID, replyFileSchema } from '@automatedLinkedIn/contracts'
+
 import { describeError } from '../../browsing/errors'
 import { defineTask } from '../defineTask'
 import { answerFor } from './answer'
 import { sendReply } from './send'
+
+const WORDS_OR_FILES = { message: 'A reply needs words or files.' }
+const UPLOAD_FOR_FILES = { message: 'Files need the upload they are kept in.' }
 
 export const TASK_NAME = 'linkedin-reply'
 
@@ -22,18 +27,32 @@ export const createLinkedinReply = ({ baseUrl }: Options) =>
       version: 1,
       title: 'LinkedIn reply',
       description:
-         "Opens a conversation of the account, types a reply in its box at a person's pace and presses send, then checks the message shows. Text only.",
-      input: z.strictObject({
-         thread: z
-            .string()
-            .regex(/^[\w=.%-]{1,200}$/)
-            .describe('The id of the conversation, as in the address of its page.'),
-         title: z
-            .string()
-            .max(300)
-            .describe('The name of the conversation as the page shows it; typed nowhere if the page shows another.'),
-         text: z.string().trim().min(1).max(MAX_REPLY_CHARS).describe('The reply.'),
-      }),
+         "Opens a conversation of the account, types a reply in its box at a person's pace and presses send, then checks the message shows. It can attach images, documents and videos first (audio is an experiment).",
+      input: z
+         .strictObject({
+            thread: z
+               .string()
+               .regex(/^[\w=.%-]{1,200}$/)
+               .describe('The id of the conversation, as in the address of its page.'),
+            title: z
+               .string()
+               .max(300)
+               .describe('The name of the conversation as the page shows it; typed nowhere if the page shows another.'),
+            text: z
+               .string()
+               .trim()
+               .max(MAX_REPLY_CHARS)
+               .default('')
+               .describe('The reply; may be empty when there are files.'),
+            files: z
+               .array(replyFileSchema)
+               .max(MAX_ATTACHMENTS)
+               .default([])
+               .describe('The files to attach, by the names they have in the upload.'),
+            uploadId: z.string().regex(UPLOAD_ID).optional().describe('Where brain keeps the files.'),
+         })
+         .refine(({ text, files }) => text !== '' || files.length > 0, WORDS_OR_FILES)
+         .refine(({ files, uploadId }) => files.length === 0 || uploadId !== undefined, UPLOAD_FOR_FILES),
       needs: {
          proxy: 'required',
          account: true,
@@ -73,7 +92,8 @@ export const createLinkedinReply = ({ baseUrl }: Options) =>
          cooldownMs: 0,
          oneAtATime: 'account',
       },
-      limits: { timeoutMs: 5 * 60 * 1000 },
+      // Files upload through the proxy: the page can take minutes to take them in.
+      limits: { timeoutMs: 10 * 60 * 1000 },
       // The run is kept so a reply that cannot be told as sent or not can be looked at.
       recording: { always: true },
       run: async (context, input) => {
