@@ -14,6 +14,7 @@ import {
 } from '../../linkedin/messageReader'
 import { PACE } from '../../linkedin/pace'
 import { SignedOut, createSession } from '../../linkedin/session'
+import { type AnswerWatch } from '../../scraping/driver'
 import { type TaskContext } from '../defineTask'
 import { fileName, partsOf } from '../linkedinMessages/messagesFile'
 import { type Fetched } from '../uploads'
@@ -47,8 +48,14 @@ type Deps = {
    today?: () => Date
 }
 
-// How many times the page is looked at for the message after send was pressed.
-const LOOKS = 6
+// How many times the page is looked at for the message after send was pressed; a look that cannot read the page counts, and the
+// next one is tried (a page that is moving cannot always be read).
+const LOOKS = 10
+// The request the page makes to send a message, which LinkedIn answers whether or not the page draws the message in time (run
+// 87852d9b, 2026-10-23: createMessage answered 200, and the message showed in the video).
+const SEND_REQUEST = ['voyagerMessagingDashMessengerMessages', 'action=createMessage']
+const accepted = (status: number) => status >= 200 && status < 300
+const refused = (status: number) => status >= 400 && status < 500
 // How many times the page is looked at for its conversation and box, and the box's send button for being enabled: through a slow
 // proxy the page can take half a minute to draw and come alive (runs 4f14fb23, 21fbcec3 and 896e63b8, 2026-10-23).
 const READY_LOOKS = 20
@@ -210,27 +217,45 @@ export const sendReply = async (
       return false
    }
 
-   // After send was pressed: looks for the message, and says what it saw.
-   const confirm = async (): Promise<ReplyResult> => {
+   // After send was pressed: looks for the message, and says what it saw. The page decides first; when it never shows the message,
+   // LinkedIn's own answer to the send request does (accepted: it went; refused: it did not; anything else: not known).
+   const confirm = async (answers: AnswerWatch): Promise<ReplyResult> => {
       await reader.wait(PAUSES.sent)
 
       let html = ''
 
       for (let look = 0; look < LOOKS; look += 1) {
-         html = await hands.html()
+         try {
+            html = await hands.html()
 
-         if (newestIsOurs(parseThread(html, today()).messages, input.text, before)) {
-            handOverSafely(html)
+            if (newestIsOurs(parseThread(html, today()).messages, input.text, before)) {
+               handOverSafely(html)
 
-            return { outcome: 'SENT' }
+               return { outcome: 'SENT' }
+            }
+         } catch {
+            // A look that cannot read the page is a look lost, not the end of the confirmation.
          }
 
          await reader.wait(PAUSES.look)
       }
 
-      // The words still in the box mean send did nothing; an empty box and no message means it may have gone.
-      if (parseComposer(html).typed !== '') {
-         await clearBox()
+      const statuses = answers.statuses()
+
+      if (statuses.some(accepted)) {
+         log('LinkedIn accepted the message; the page did not show it')
+
+         if (html !== '') {
+            handOverSafely(html)
+         }
+
+         return { outcome: 'SENT' }
+      }
+
+      // The box is tidied on a best effort: it must not change what is known about the send.
+      if (statuses.length > 0 && statuses.every(refused)) {
+         log('LinkedIn refused the message')
+         await clearBox().catch(() => undefined)
 
          return {
             outcome: 'FAILED',
@@ -238,7 +263,19 @@ export const sendReply = async (
          }
       }
 
-      handOverSafely(html)
+      // The words still in the box mean send did nothing; an empty box and no message means it may have gone.
+      if (html !== '' && parseComposer(html).typed !== '') {
+         await clearBox().catch(() => undefined)
+
+         return {
+            outcome: 'FAILED',
+            why: 'NOT_SENT',
+         }
+      }
+
+      if (html !== '') {
+         handOverSafely(html)
+      }
 
       return { outcome: 'UNKNOWN' }
    }
@@ -303,6 +340,7 @@ export const sendReply = async (
    }
 
    let pressed = false
+   let answers: AnswerWatch | undefined
    let before: { id: string | undefined; count: number } = {
       id: undefined,
       count: 0,
@@ -379,6 +417,11 @@ export const sendReply = async (
          }
       }
 
+      // Listening starts before the press, so the answer to the send request is not missed.
+      const watch = hands.watchAnswers('POST', SEND_REQUEST)
+
+      answers = watch
+
       if (!(await pressSend())) {
          log('The send button could not be clicked')
          await clearBox()
@@ -392,7 +435,7 @@ export const sendReply = async (
       pressed = true
       log('Pressed send')
 
-      return await confirm()
+      return await confirm(watch)
    } catch (error) {
       if (error instanceof SignedOut) {
          return { outcome: 'SIGNED_OUT' }
@@ -407,6 +450,7 @@ export const sendReply = async (
 
       throw error
    } finally {
+      answers?.stop()
       await fetched?.remove().catch(() => undefined)
    }
 }

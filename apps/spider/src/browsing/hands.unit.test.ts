@@ -40,6 +40,8 @@ describe('handsOf', () => {
       await expect(hands.typeKeys('Hello')).resolves.toBe(false)
       await expect(hands.attachFiles('input', ['/tmp/a.pdf'])).resolves.toBe(false)
       await expect(hands.fetchFile('https://media.licdn.com/a', 10)).resolves.toBeUndefined()
+      expect(hands.watchAnswers('POST', ['send']).statuses()).toEqual([])
+      expect(() => hands.watchAnswers('POST', ['send']).stop()).not.toThrow()
       await expect(hands.hover(1, 2)).resolves.toBeUndefined()
       await expect(hands.drift()).resolves.toBeUndefined()
    })

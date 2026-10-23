@@ -64,4 +64,46 @@ describe('linkedin-reply hooks', () => {
          })
       )
    })
+
+   describe('asking for a read after an unsure reply', () => {
+      const run = async (verdict: string) => {
+         const accountUpdate = vi.fn()
+
+         await linkedInReplyHooks.onResult?.(
+            {
+               id: 's1',
+               userId: 'u1',
+               linkedInAccountId: 'acc1',
+            },
+            {
+               verdict,
+               message: 'x',
+            } as TaskResult,
+            {
+               linkedInReply: { updateMany: vi.fn() },
+               linkedInAccount: { updateMany: accountUpdate },
+               messageImport: { createMany: vi.fn() },
+            } as unknown as Prisma.TransactionClient
+         )
+
+         return accountUpdate
+      }
+
+      it('should make the next read of the account due now when the reply is not sure, so it can be settled within minutes', async () => {
+         const update = await run('UNKNOWN')
+
+         expect(update).toHaveBeenCalledWith({
+            where: {
+               id: 'acc1',
+               status: 'ACTIVE',
+            },
+            data: { nextMessagesAt: expect.any(Date) },
+         })
+      })
+
+      it('should leave the reading times alone for a reply that went or did not go', async () => {
+         expect(await run('SENT')).not.toHaveBeenCalled()
+         expect(await run('FAILED')).not.toHaveBeenCalled()
+      })
+   })
 })

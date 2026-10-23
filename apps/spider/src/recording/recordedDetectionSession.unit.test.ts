@@ -48,4 +48,18 @@ describe('RecordedDetectionSession', () => {
       expect(fetchFile).toHaveBeenCalledWith('https://media.licdn.com/a', 10)
       expect(plain.fetchFile).toBeUndefined()
    })
+
+   it('should let a task hear how the page is answered when the browser can, and not offer it when the browser cannot', () => {
+      const watch = {
+         statuses: () => [200],
+         stop: vi.fn(),
+      }
+      const watchAnswers = vi.fn((_method: string, _parts: string[]) => watch)
+      const watching = new RecordedDetectionSession({ watchAnswers } as unknown as DetectionSession, recorder)
+      const plain = new RecordedDetectionSession({} as unknown as DetectionSession, recorder)
+
+      expect(watching.watchAnswers?.('POST', ['createMessage'])).toBe(watch)
+      expect(watchAnswers).toHaveBeenCalledWith('POST', ['createMessage'])
+      expect(plain.watchAnswers).toBeUndefined()
+   })
 })
