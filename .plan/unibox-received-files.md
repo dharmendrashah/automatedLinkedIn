@@ -1,6 +1,6 @@
 # Unibox: keep and show every kind of file in received messages (videos, audio, documents, not only pictures)
 
-- Status: draft <!-- draft | locked | in progress | done -->
+- Status: draft, on hold (2026-10-24: the owner will add other files later; for now only received pictures are kept, see `fix/message-picture-address`) <!-- draft | locked | in progress | done -->
 - Created: 2026-10-24
 - Locked by user: no <!-- change to "yes, <date>" only after the user confirms -->
 
