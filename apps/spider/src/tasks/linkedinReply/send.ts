@@ -74,7 +74,7 @@ export const sendReply = async (
 
    // Empties the box of what was typed, so no draft is left on the account's page; it is no help when it cannot.
    const clearBox = async () => {
-      await hands.press('Control+A')
+      await hands.press('ControlOrMeta+A')
       await hands.press('Delete')
    }
 
