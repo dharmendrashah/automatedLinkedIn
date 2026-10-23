@@ -10,7 +10,7 @@ import { ArrowLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
 import { trpc } from '../../trpc'
-import { ITEM_RESULT, OUTCOME, STORED, actionLabel, countsText, summariseItems, whenText } from './describe'
+import { ITEM_RESULT, OUTCOME, STORED, actionLabel, countsText, itemResultLabel, summariseItems, whenText } from './describe'
 import { ToneBadge } from './tone-badge'
 import { type Job } from './types'
 
@@ -85,7 +85,7 @@ const RunDetailView = ({ id, onBack }: { id: string; onBack: () => void }) => {
                                     <TableCell className="text-xs">{actionLabel(item.action)}</TableCell>
                                     <TableCell>
                                        <ToneBadge tone={ITEM_RESULT[item.result].tone}>
-                                          {ITEM_RESULT[item.result].label}
+                                          {itemResultLabel(item.action, item.result)}
                                        </ToneBadge>
                                     </TableCell>
                                     <TableCell className="text-muted-foreground text-xs">

@@ -6,6 +6,7 @@ import {
    gapText,
    hourState,
    hourTitle,
+   itemResultLabel,
    summariseItems,
    whenText,
    workerBanner,
@@ -116,6 +117,31 @@ describe('summariseItems', () => {
 })
 
 describe('labels', () => {
+   it('should say scored, not asked for, when a proxy was scored', () => {
+      expect(itemResultLabel('proxy-score', 'ASKED')).toBe('Scored')
+      expect(itemResultLabel('messages-read', 'ASKED')).toBe('Asked for')
+      expect(itemResultLabel('proxy-score', 'FAILED')).toBe('Failed')
+      expect(
+         summariseItems([
+            {
+               id: '1',
+               action: 'proxy-score',
+               result: 'ASKED',
+               reason: null,
+               user: null,
+               account: null,
+               session: null,
+            },
+         ])
+      ).toEqual([
+         {
+            action: 'proxy-score',
+            label: 'Proxy score',
+            text: '1 scored, 0 left',
+         },
+      ])
+   })
+
    it('should name the known actions and keep an unknown one as it is', () => {
       expect(actionLabel('sign-in-check')).toBe('Sign-in check')
       expect(actionLabel('something-new')).toBe('something-new')

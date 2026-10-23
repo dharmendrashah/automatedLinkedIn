@@ -13,7 +13,7 @@ export const proxyScoring = defineJob({
    startAfterMs: 60_000,
    timeoutMs: 30 * 60 * 1000,
    run: async () => {
-      const { scored, failed } = await ProxyScoringJob.runDue()
+      const { scored, failed, items } = await ProxyScoringJob.runDue()
 
       return scored > 0 || failed > 0
          ? {
@@ -22,6 +22,7 @@ export const proxyScoring = defineJob({
                  scored,
                  failed,
               },
+              items,
            }
          : undefined
    },

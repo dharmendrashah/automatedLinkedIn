@@ -1,3 +1,4 @@
+import { type JobItemInput } from './jobRun.service'
 import { ProxyScoringService } from './proxyScoring.service'
 import { ProxyServerService } from './proxyServer.service'
 
@@ -23,6 +24,7 @@ export class ProxyScoringJob {
       const result = {
          scored: 0,
          failed: 0,
+         items: [] as JobItemInput[],
       }
 
       if (ProxyScoringJob.running || now.getTime() < ProxyScoringJob.pausedUntil) {
@@ -51,6 +53,15 @@ export class ProxyScoringJob {
                const outcome = await ProxyScoringService.score(proxy.id)
 
                result.scored += 1
+               result.items.push({
+                  userId: proxy.userId,
+                  accountId: proxy.accountId,
+                  action: 'proxy-score',
+                  result: 'ASKED',
+                  reason: proxy.retest
+                     ? 'Tested again and scored'
+                     : 'Repeated the reputation lookup that failed earlier',
+               })
 
                if (outcome.stop) {
                   ProxyScoringJob.pausedUntil =
@@ -63,6 +74,13 @@ export class ProxyScoringJob {
                }
             } catch (error) {
                result.failed += 1
+               result.items.push({
+                  userId: proxy.userId,
+                  accountId: proxy.accountId,
+                  action: 'proxy-score',
+                  result: 'FAILED',
+                  reason: 'The test or the scoring failed; it is tried again on the next pass',
+               })
                console.error(`Could not score proxy ${proxy.id}: ${(error as Error).message}`)
             }
          }

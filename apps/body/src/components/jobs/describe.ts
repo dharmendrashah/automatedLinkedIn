@@ -65,9 +65,21 @@ const ACTIONS: Record<string, string> = {
    'messages-read': 'Message read',
    visit: 'Daily visit',
    'sign-in-check': 'Sign-in check',
+   'proxy-score': 'Proxy score',
+}
+
+// What a job did for an account, when "asked for" is not the right word (a score is done here, not asked for).
+const DONE_WORDS: Record<string, { label: string; count: string }> = {
+   'proxy-score': {
+      label: 'Scored',
+      count: 'scored',
+   },
 }
 
 export const actionLabel = (action: string) => ACTIONS[action] ?? action
+
+export const itemResultLabel = (action: string, result: RunDetail['items'][number]['result']) =>
+   result === 'ASKED' ? (DONE_WORDS[action]?.label ?? ITEM_RESULT.ASKED.label) : ITEM_RESULT[result].label
 
 const plural = (count: number, one: string) => `${count} ${one}${count === 1 ? '' : 's'}`
 
@@ -184,7 +196,13 @@ export const summariseItems = (items: RunDetail['items']) => {
    return [...byAction].map(([action, { asked, left, failed }]) => ({
       action,
       label: actionLabel(action),
-      text: [`${asked} asked for`, `${left} left`, failed > 0 ? `${failed} failed` : null].filter(Boolean).join(', '),
+      text: [
+         `${asked} ${DONE_WORDS[action]?.count ?? 'asked for'}`,
+         `${left} left`,
+         failed > 0 ? `${failed} failed` : null,
+      ]
+         .filter(Boolean)
+         .join(', '),
    }))
 }
 

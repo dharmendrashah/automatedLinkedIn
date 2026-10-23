@@ -136,10 +136,10 @@ Shipped 2026-10-24: `/jobs` (admin only) with the job cards, run drawer with ite
 Deviations from the plan:
 
 - A `JobDefinition` table was added (the worker announces its jobs) because the API cannot import the worker's registry; `JobStatus` was dropped as planned after the owner chose to record every run.
-- `proxy-scoring` reports counts only, no per-proxy items (its service does not return which proxies it scored).
+- `proxy-scoring` reports one item per proxy it scored or failed (added after the first version, which had counts only): the account and user that own the proxy, `Scored` or `Failed`, and a fixed reason (tested again, or only the reputation lookup repeated). No error text and no proxy address are stored.
 - An empty `ADMIN_EMAIL` changes nothing (it does not demote an existing admin), so a missing setting cannot lock the owner out.
 - The run list links no session: `/sessions` is owner-scoped, so a link to another user's session would not open. The item shows the session's verdict, whether its messages were stored and how long it took.
 
 Verified: `pnpm lint`, `pnpm ts:check`, `pnpm test:unit:run`, `pnpm build`, brain integration tests (28 files) against the local test database, and the compiled brain worker (jobs role) run against it: idle runs of the fast jobs and of `account-daily` and `proxy-scoring` were recorded, all ten jobs announced, and a SIGTERM flushed and exited cleanly. Not run: the page in a browser behind sign-in, and a run that handled real accounts.
 
-Follow-ups: set `ADMIN_EMAIL` in the `STAGING_CONFIG_ENV` GitHub secret before the next staging deploy (not done here); alerts; the RabbitMQ consumers on the page; per-proxy items for `proxy-scoring`.
+Follow-ups: set `ADMIN_EMAIL` in the `STAGING_CONFIG_ENV` GitHub secret before the next staging deploy (not done here); alerts; the RabbitMQ consumers on the page.

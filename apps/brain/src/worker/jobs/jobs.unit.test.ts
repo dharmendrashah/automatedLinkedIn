@@ -25,6 +25,13 @@ const [proxyScoring, taskDispatch] = JOBS
 const retention = JOBS.find(({ name }) => name === 'retention')
 const accountDaily = JOBS.find(({ name }) => name === 'account-daily')
 const context = { signal: new AbortController().signal }
+const item = {
+   userId: 'u1',
+   accountId: 'a1',
+   action: 'proxy-score',
+   result: 'ASKED' as const,
+   reason: 'Tested again and scored',
+}
 
 describe('worker jobs', () => {
    beforeEach(() => {
@@ -43,6 +50,7 @@ describe('worker jobs', () => {
       mocks.runDue.mockResolvedValue({
          scored: 3,
          failed: 1,
+         items: [item],
       })
 
       await expect(proxyScoring.run(context)).resolves.toEqual({
@@ -51,6 +59,7 @@ describe('worker jobs', () => {
             scored: 3,
             failed: 1,
          },
+         items: [item],
       })
    })
 
