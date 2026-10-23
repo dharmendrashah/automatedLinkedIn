@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { PageTitle } from '@/components/page-title'
 import { ThemeProvider } from 'next-themes'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -14,6 +15,7 @@ createRoot(document.getElementById('root')!).render(
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
          <TooltipProvider>
             <BrowserRouter>
+               <PageTitle />
                <OidcProvider>
                   <TrpcProvider>
                      <App />

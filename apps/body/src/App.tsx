@@ -18,7 +18,6 @@ import { Profiles } from './pages/Profiles'
 import { Proxies } from './pages/Proxies'
 import { Sessions } from './pages/Sessions'
 import { Signup } from './pages/Signup'
-import { Unibox } from './pages/Unibox'
 import { Usage } from './pages/Usage'
 import { WorkflowNew } from './pages/WorkflowNew'
 import { Workflows } from './pages/Workflows'
@@ -27,6 +26,8 @@ import { Workflows } from './pages/Workflows'
 const Dashboard = lazy(() => import('./pages/Dashboard').then(({ Dashboard: page }) => ({ default: page })))
 // The canvas carries React Flow, the next heaviest.
 const WorkflowPage = lazy(() => import('./pages/Workflow').then(({ WorkflowPage: page }) => ({ default: page })))
+// The inbox carries the virtual list and the composer, and is only opened by some of the visits.
+const Unibox = lazy(() => import('./pages/Unibox').then(({ Unibox: page }) => ({ default: page })))
 
 const App = () => (
    <Routes>
@@ -51,7 +52,14 @@ const App = () => (
                </Suspense>
             }
          />
-         <Route path="/unibox/:conversationId?" element={<Unibox />} />
+         <Route
+            path="/unibox/:conversationId?"
+            element={
+               <Suspense fallback={null}>
+                  <Unibox />
+               </Suspense>
+            }
+         />
          <Route path="/accounts" element={<Accounts />} />
          <Route path="/profiles" element={<Profiles />} />
          <Route path="/companies" element={<Companies />} />

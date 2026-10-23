@@ -19,6 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { readableError } from '@/lib/trpc-error'
+import { useDocumentTitle } from '@/lib/page-title'
 import { FlaskConical, Loader2, Play, Square } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
@@ -43,6 +44,8 @@ export const WorkflowPage = () => {
    const [stopping, setStopping] = useState(false)
 
    const workflow = trpc.workflow.get.useQuery({ id }, { retry: false })
+   // The tab and a bookmark carry the workflow's own name, which the owner chose.
+   useDocumentTitle(workflow.data?.name)
    const catalog = trpc.workflow.catalog.useQuery()
    const icps = trpc.icp.list.useQuery()
    const workflows = trpc.workflow.list.useQuery()
