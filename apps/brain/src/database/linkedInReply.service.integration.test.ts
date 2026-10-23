@@ -10,7 +10,7 @@ import { LinkedInReplyService, REPLY_LIMITS } from './linkedInReply.service'
 import { PrismaService } from './prisma.service'
 import { SpiderSessionService } from './spiderSession.service'
 import { TaskService } from './task.service'
-import { TaskRefusedError } from './taskErrors'
+import { TaskBusyError, TaskRefusedError, TaskUnavailableError } from './taskErrors'
 import { UserService } from './user.service'
 
 // Needs PostgreSQL. The task itself is not started: `TaskService.request` is replaced by a stand-in that saves what the service
@@ -33,6 +33,8 @@ const account = (id: string) =>
          secret: 'x',
          secretIv: 'x',
          secretTag: 'x',
+         // Replying needs an account that is signed in.
+         status: 'ACTIVE',
       },
    })
 
@@ -70,7 +72,7 @@ const sessionOf = async (id: string | undefined) => {
    const where = { id: id ?? '' }
    const reply = await PrismaService.client.linkedInReply.findUniqueOrThrow({ where })
 
-   return reply.sessionId
+   return reply.sessionId ?? ''
 }
 
 const startRun = (id: string) =>
@@ -177,11 +179,14 @@ describe('LinkedInReplyService (database)', () => {
       ).resolves.toMatchObject({ dismissedAt: expect.any(Date) })
    })
 
-   it('should refuse a second reply while one is being sent from the account, by the database too', async () => {
+   it('should queue a second reply while one is being sent from the account, and still never allow two sending, by the database too', async () => {
       await LinkedInReplyService.send(userId, conversationId, 'One')
 
-      await expect(LinkedInReplyService.send(userId, conversationId, 'Two')).rejects.toBeInstanceOf(TaskRefusedError)
-      // Past the service's own check, the unique index still stops it.
+      const second = await LinkedInReplyService.send(userId, conversationId, 'Two')
+
+      await expect(LinkedInReplyService.get(userId, second?.id ?? '')).resolves.toMatchObject({ state: 'QUEUED' })
+      expect(requested).toHaveLength(1)
+      // Past the service's own check, the unique index still stops a second one sending.
       await expect(
          PrismaService.client.linkedInReply.create({
             data: {
@@ -195,19 +200,167 @@ describe('LinkedInReplyService (database)', () => {
       ).rejects.toMatchObject({ code: 'P2002' })
    })
 
-   it('should make the owner wait the quiet time between two replies, and let the next one through after it', async () => {
+   it('should hold the next reply for the quiet time after the one before, then start it', async () => {
       const first = await LinkedInReplyService.send(userId, conversationId, 'One')
 
       await finish(await sessionOf(first?.id), 'SENT')
 
-      await expect(LinkedInReplyService.send(userId, conversationId, 'Two')).rejects.toThrow(/Wait \d+ seconds/)
+      const second = await LinkedInReplyService.send(userId, conversationId, 'Two')
+
+      await expect(LinkedInReplyService.get(userId, second?.id ?? '')).resolves.toMatchObject({ state: 'QUEUED' })
+      await expect(LinkedInReplyService.dispatchWaiting()).resolves.toEqual({
+         started: 0,
+         expired: 0,
+      })
 
       await PrismaService.client.linkedInReply.updateMany({
          where: { userId },
-         data: { createdAt: new Date(Date.now() - REPLY_LIMITS.gapMs - 1000) },
+         data: { startedAt: new Date(Date.now() - REPLY_LIMITS.gapMs - 1000) },
       })
 
-      await expect(LinkedInReplyService.send(userId, conversationId, 'Two')).resolves.not.toBeNull()
+      await expect(LinkedInReplyService.dispatchWaiting()).resolves.toEqual({
+         started: 1,
+         expired: 0,
+      })
+      await expect(LinkedInReplyService.get(userId, second?.id ?? '')).resolves.toMatchObject({ state: 'SENDING' })
+      expect(requested).toHaveLength(2)
+      expect(requested[1]?.input).toMatchObject({ text: 'Two' })
+   })
+
+   describe('the queue', () => {
+      const startedFor = (id: string | undefined) =>
+         PrismaService.client.linkedInReply.findUniqueOrThrow({ where: { id: id ?? '' } })
+
+      it('should send the replies of an account one at a time, first asked first sent', async () => {
+         const first = await LinkedInReplyService.send(userId, conversationId, 'One')
+         const second = await LinkedInReplyService.send(userId, conversationId, 'Two')
+         const third = await LinkedInReplyService.send(userId, conversationId, 'Three')
+
+         expect(requested.map(({ input }) => input.text)).toEqual(['One'])
+
+         await finish(await sessionOf(first?.id), 'SENT')
+         await PrismaService.client.linkedInReply.updateMany({
+            where: { userId },
+            data: { startedAt: new Date(Date.now() - REPLY_LIMITS.gapMs - 1000) },
+         })
+         await LinkedInReplyService.dispatchWaiting()
+
+         expect(requested.map(({ input }) => input.text)).toEqual(['One', 'Two'])
+         expect((await startedFor(second?.id)).state).toBe('SENDING')
+         expect((await startedFor(third?.id)).state).toBe('QUEUED')
+
+         // Nothing more while the second is sending.
+         await expect(LinkedInReplyService.dispatchWaiting()).resolves.toMatchObject({ started: 0 })
+      })
+
+      it('should not make the replies of another account wait', async () => {
+         const other = await account(userId)
+         const otherConversation = await conversation(userId, other.id, '2-other')
+
+         await LinkedInReplyService.send(userId, conversationId, 'One')
+
+         const parallel = await LinkedInReplyService.send(userId, otherConversation.id, 'Elsewhere')
+
+         expect((await startedFor(parallel?.id)).state).toBe('SENDING')
+         expect(requested).toHaveLength(2)
+      })
+
+      it('should refuse a reply when too many are already waiting on the account', async () => {
+         await LinkedInReplyService.send(userId, conversationId, 'Going')
+
+         for (let index = 0; index < REPLY_LIMITS.queued; index += 1) {
+            await LinkedInReplyService.send(userId, conversationId, `Waiting ${index}`)
+         }
+
+         await expect(LinkedInReplyService.send(userId, conversationId, 'One too many')).rejects.toThrow(
+            /already waiting/
+         )
+      })
+
+      it('should refuse at once when the account is not signed in, and save nothing', async () => {
+         await PrismaService.client.linkedInAccount.update({
+            where: { id: accountId },
+            data: { status: 'NEEDS_REAUTH' },
+         })
+
+         try {
+            await expect(LinkedInReplyService.send(userId, conversationId, 'Hi')).rejects.toThrow(/signed in/)
+            await expect(PrismaService.client.linkedInReply.count({ where: { userId } })).resolves.toBe(0)
+         } finally {
+            await PrismaService.client.linkedInAccount.update({
+               where: { id: accountId },
+               data: { status: 'ACTIVE' },
+            })
+         }
+      })
+
+      it('should keep a reply queued while the task is still running or not announced, and fail one the task refuses for good', async () => {
+         const request = vi.mocked(TaskService.request)
+
+         request.mockRejectedValueOnce(new TaskBusyError('A linkedin reply is already running.'))
+
+         const busy = await LinkedInReplyService.send(userId, conversationId, 'Busy')
+
+         expect((await startedFor(busy?.id)).state).toBe('QUEUED')
+
+         request.mockRejectedValueOnce(new TaskUnavailableError())
+         await LinkedInReplyService.dispatchWaiting()
+
+         expect((await startedFor(busy?.id)).state).toBe('QUEUED')
+
+         request.mockRejectedValueOnce(new TaskRefusedError('Test the proxy first: this task needs a working proxy.'))
+         await LinkedInReplyService.dispatchWaiting()
+
+         await expect(startedFor(busy?.id)).resolves.toMatchObject({
+            state: 'FAILED',
+            failure: 'Test the proxy first: this task needs a working proxy.',
+            sessionId: null,
+         })
+      })
+
+      it('should end a reply that waited too long as failed, with nothing sent', async () => {
+         await LinkedInReplyService.send(userId, conversationId, 'Going')
+
+         const waiting = await LinkedInReplyService.send(userId, conversationId, 'Waiting')
+
+         await PrismaService.client.linkedInReply.update({
+            where: { id: waiting?.id ?? '' },
+            data: { createdAt: new Date(Date.now() - REPLY_LIMITS.queuedMs - 1000) },
+         })
+
+         await expect(LinkedInReplyService.dispatchWaiting()).resolves.toMatchObject({ expired: 1 })
+         await expect(startedFor(waiting?.id)).resolves.toMatchObject({
+            state: 'FAILED',
+            failure: 'It could not start in time. Nothing was sent.',
+         })
+      })
+
+      it('should not let two processes start the same reply', async () => {
+         const first = await LinkedInReplyService.send(userId, conversationId, 'One')
+
+         await finish(await sessionOf(first?.id), 'SENT')
+         await LinkedInReplyService.send(userId, conversationId, 'Two')
+         await PrismaService.client.linkedInReply.updateMany({
+            where: { userId },
+            data: { startedAt: new Date(Date.now() - REPLY_LIMITS.gapMs - 1000) },
+         })
+
+         const results = await Promise.all([
+            LinkedInReplyService.dispatchNext(accountId),
+            LinkedInReplyService.dispatchNext(accountId),
+         ])
+
+         expect(results.filter(Boolean)).toHaveLength(1)
+         // The stand-in for the task is not transactional, so what counts is the reply: one run, one sending.
+         await expect(
+            PrismaService.client.linkedInReply.count({
+               where: {
+                  userId,
+                  state: 'SENDING',
+               },
+            })
+         ).resolves.toBe(1)
+      })
    })
 
    it('should stop at the replies of the day, counting the ones that may have gone and not the ones that did not', async () => {
@@ -439,7 +592,7 @@ describe('LinkedInReplyService (database)', () => {
 
       it('should move the files of a reply that ended once, keep none deleted, leave the ones still being sent, and try again after a failure', async () => {
          const moveUpload = vi.spyOn(KeptFiles, 'moveUpload').mockResolvedValue(1)
-         const row = (state: 'SENT' | 'SENDING', uploadId: string) => ({
+         const row = (state: 'SENT' | 'SENDING' | 'QUEUED', uploadId: string) => ({
             userId,
             accountId,
             conversationId,
@@ -450,8 +603,11 @@ describe('LinkedInReplyService (database)', () => {
          })
          const ended = randomUUID()
          const going = randomUUID()
+         const waiting = randomUUID()
 
-         await PrismaService.client.linkedInReply.createMany({ data: [row('SENT', ended), row('SENDING', going)] })
+         const data = [row('SENT', ended), row('SENDING', going), row('QUEUED', waiting)]
+
+         await PrismaService.client.linkedInReply.createMany({ data })
 
          await expect(LinkedInReplyService.keepFiles()).resolves.toBe(1)
          await expect(LinkedInReplyService.keepFiles()).resolves.toBe(0)

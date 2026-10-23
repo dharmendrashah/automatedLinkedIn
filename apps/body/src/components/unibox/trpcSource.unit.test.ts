@@ -446,10 +446,11 @@ describe('createTrpcSource.send', () => {
                   conversation({ reply: { ...reply, state: 'SENDING' } }),
                   conversation({ id: 'c2', reply: { ...reply, state: 'UNKNOWN' } }),
                   conversation({ id: 'c3', reply: { ...reply, state: 'FAILED', failure: 'Nope.' } }),
+                  conversation({ id: 'c4', reply: { ...reply, state: 'QUEUED' } }),
                ]),
          },
       })
-      const [sending, unknown, failed] = (await createTrpcSource(client).load()).conversations
+      const [sending, unknown, failed, queued] = (await createTrpcSource(client).load()).conversations
 
       expect(sending?.sending).toEqual({
          text: 'Tomorrow works.',
@@ -459,6 +460,9 @@ describe('createTrpcSource.send', () => {
          replyId: 'r1',
       })
       expect(sending).not.toHaveProperty('failed')
+      // A reply waiting its turn behind another is on its way too: the page keeps following it.
+      expect(queued?.sending).toMatchObject({ replyId: 'r1', text: 'Tomorrow works.' })
+      expect(queued).not.toHaveProperty('failed')
       expect(unknown?.failed).toMatchObject({ unsure: true, replyId: 'r1', text: 'Tomorrow works.' })
       expect(failed?.failed).toMatchObject({ reason: 'Nope.', replyId: 'r1' })
       expect(failed?.failed).not.toHaveProperty('unsure')

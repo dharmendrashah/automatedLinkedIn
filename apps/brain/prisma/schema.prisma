@@ -956,6 +956,8 @@ model JobRunItem {
 }
 
 enum LinkedInReplyState {
+  // Asked for and waiting its turn: the account is sending another reply (.plan/reply-queue.md).
+  QUEUED
   SENDING
   SENT
   FAILED
@@ -989,12 +991,15 @@ model LinkedInReply {
   state          LinkedInReplyState   @default(SENDING)
   // A fixed sentence the owner can read, set when the reply did not go.
   failure        String?
-  // The spider run that types it; the run may be deleted before the reply.
-  sessionId      String               @unique
+  // The spider run that types it; the run may be deleted before the reply. Empty while the reply is queued.
+  sessionId      String?              @unique
   createdAt      DateTime             @default(now())
+  // When its run was asked for; the quiet time between two replies of an account counts from it.
+  startedAt      DateTime?
   sentAt         DateTime?
 
   @@index([accountId, createdAt])
+  @@index([accountId, startedAt])
   @@index([conversationId, createdAt])
   @@index([state, createdAt])
 }

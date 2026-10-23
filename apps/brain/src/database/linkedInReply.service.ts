@@ -5,21 +5,29 @@ import { kindOfName, safeFileName } from '@automatedLinkedIn/contracts'
 import { REPLY_TASK } from './linkedInReply.hooks'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
-import { TaskRefusedError } from './taskErrors'
+import { TaskBusyError, TaskRefusedError, TaskUnavailableError } from './taskErrors'
 
 // Unverified against LinkedIn's own limits; kept in one place (.plan/unibox-send.md, Q2).
 export const REPLY_LIMITS = {
-   // Replies one account sends in 24 hours, and the quiet time between two.
+   // Replies one account sends in 24 hours, and the quiet time between the starts of two.
    perDay: 40,
    gapMs: 30_000,
+   // The most replies that may wait their turn on one account (.plan/reply-queue.md).
+   queued: 5,
    // The most characters of a reply: the command that carries it may not pass 8 KB as JSON (the task limits it the same).
    maxChars: 4000,
    // The task's own limit is 10 minutes (files upload through a proxy); a reply still sending after this long was lost with its run.
    staleMs: 15 * 60 * 1000,
+   // A queued reply that has not started by then ends as failed: nothing was typed.
+   queuedMs: 15 * 60 * 1000,
 } as const
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const STALE_SENTENCE = 'No answer came from the browser. Check the conversation on LinkedIn.'
+const NOT_STARTED_SENTENCE = 'It could not start in time. Nothing was sent.'
+
+// Another process took the reply first: it stays as that process left it.
+class ReplyTaken extends Error {}
 
 // Prisma's code for a unique index that a second row would break.
 const isUniqueViolation = (error: unknown) => (error as { code?: string } | null)?.code === 'P2002'
@@ -62,58 +70,200 @@ export class LinkedInReplyService {
          return null
       }
 
-      const { accountId, linkedInId, title } = conversation
+      const { accountId } = conversation
+
+      const account = await PrismaService.client.linkedInAccount.findUnique({
+         where: { id: accountId },
+         select: { status: true },
+      })
+
+      if (account?.status !== 'ACTIVE') {
+         throw new TaskRefusedError('Replying needs an account that is signed in. Run Test login first.')
+      }
 
       await this.checkLimits(accountId)
 
       const files = uploadId ? await this.filesOf(userId, uploadId) : []
+      const reply = await PrismaService.client.linkedInReply.create({
+         data: {
+            userId,
+            accountId,
+            conversationId,
+            text: text.trim(),
+            attachments: files,
+            state: 'QUEUED',
+            ...(uploadId && { uploadId }),
+         },
+         select: { id: true },
+      })
 
-      let replyId: string | undefined
+      // When the account is free this starts it now; otherwise the reply-send job does when its turn comes. A failure here is the
+      // job's to retry, never the owner's to see: the reply is saved.
+      await this.dispatchNext(accountId).catch((error: unknown) => {
+         console.error(`Could not start the queued replies of account ${accountId}: ${(error as Error).message}`)
+      })
+
+      return { id: reply.id }
+   }
+
+   // Starts the oldest queued reply of the account when nothing blocks it: no reply is sending, and the last one started more than
+   // the quiet time ago. Resolves to whether a reply was started. A reply whose run cannot be asked for yet (the task is still running
+   // or not announced) stays queued; one that can never start ends as failed with the sentence of the refusal.
+   public static async dispatchNext(accountId: string, now = Date.now()) {
+      const db = PrismaService.client
+      const busy = await db.linkedInReply.findFirst({
+         where: {
+            accountId,
+            OR: [{ state: 'SENDING' }, { startedAt: { gte: new Date(now - REPLY_LIMITS.gapMs) } }],
+         },
+         select: { id: true },
+      })
+
+      if (busy) {
+         return false
+      }
+
+      const next = await db.linkedInReply.findFirst({
+         where: {
+            accountId,
+            state: 'QUEUED',
+         },
+         orderBy: { createdAt: 'asc' },
+         select: {
+            id: true,
+            userId: true,
+            text: true,
+            attachments: true,
+            uploadId: true,
+            conversation: {
+               select: {
+                  linkedInId: true,
+                  title: true,
+               },
+            },
+         },
+      })
+
+      if (!next) {
+         return false
+      }
+
+      const files = this.namedFiles(next.attachments)
 
       try {
          await TaskService.request({
-            userId,
+            userId: next.userId,
             task: REPLY_TASK,
             accountId,
             trigger: 'manual',
             input: {
-               thread: linkedInId,
-               title,
-               text: text.trim(),
-               ...(uploadId && {
-                  uploadId,
-                  files: files.map(({ name, kind }) => ({
-                     name,
-                     kind,
-                  })),
+               thread: next.conversation.linkedInId,
+               title: next.conversation.title,
+               text: next.text,
+               ...(next.uploadId && {
+                  uploadId: next.uploadId,
+                  files,
                }),
             },
             onStart: async (sessionId, tx) => {
-               const reply = await tx.linkedInReply.create({
-                  data: {
-                     userId,
-                     accountId,
-                     conversationId,
-                     text: text.trim(),
-                     attachments: files,
-                     ...(uploadId && { uploadId }),
-                     sessionId,
+               const { count } = await tx.linkedInReply.updateMany({
+                  where: {
+                     id: next.id,
+                     state: 'QUEUED',
                   },
-                  select: { id: true },
+                  data: {
+                     state: 'SENDING',
+                     sessionId,
+                     startedAt: new Date(),
+                  },
                })
 
-               replyId = reply.id
+               if (count === 0) {
+                  throw new ReplyTaken()
+               }
             },
          })
+
+         return true
       } catch (error) {
-         if (isUniqueViolation(error)) {
-            throw new TaskRefusedError('A reply is already being sent from this account.')
+         // Someone else took it, or the account is busy: it keeps its place.
+         if (
+            error instanceof ReplyTaken ||
+            isUniqueViolation(error) ||
+            error instanceof TaskBusyError ||
+            error instanceof TaskUnavailableError
+         ) {
+            return false
+         }
+
+         if (error instanceof TaskRefusedError) {
+            await db.linkedInReply.updateMany({
+               where: {
+                  id: next.id,
+                  state: 'QUEUED',
+               },
+               data: {
+                  state: 'FAILED',
+                  failure: error.message,
+               },
+            })
+
+            return false
          }
 
          throw error
       }
+   }
 
-      return replyId ? { id: replyId } : null
+   // What the reply-send job does: gives every account with a queued reply its turn, and ends the replies that waited too long.
+   public static async dispatchWaiting(now = Date.now()) {
+      const db = PrismaService.client
+      const expired = await db.linkedInReply.updateMany({
+         where: {
+            state: 'QUEUED',
+            createdAt: { lt: new Date(now - REPLY_LIMITS.queuedMs) },
+         },
+         data: {
+            state: 'FAILED',
+            failure: NOT_STARTED_SENTENCE,
+         },
+      })
+      const waiting = await db.linkedInReply.findMany({
+         where: { state: 'QUEUED' },
+         distinct: ['accountId'],
+         select: { accountId: true },
+         take: 100,
+      })
+      let started = 0
+
+      for (const { accountId } of waiting) {
+         if (await this.dispatchNext(accountId, now)) {
+            started += 1
+         }
+      }
+
+      return {
+         started,
+         expired: expired.count,
+      }
+   }
+
+   // The name and kind of each file of a reply, as the task is told them.
+   private static namedFiles(stored: unknown) {
+      return Array.isArray(stored)
+         ? (stored as unknown[]).flatMap(item => {
+              const { name, kind } = (item ?? {}) as { name?: unknown; kind?: unknown }
+
+              return typeof name === 'string' && typeof kind === 'string'
+                 ? [
+                      {
+                         name,
+                         kind,
+                      },
+                   ]
+                 : []
+           })
+         : []
    }
 
    // A signed form for the page to post one file of a reply straight to the bucket (.plan/unibox-presigned-uploads.md): only a type
@@ -215,7 +365,7 @@ export class LinkedInReplyService {
          where: {
             uploadId: { not: null },
             filesKeptAt: null,
-            state: { not: 'SENDING' },
+            state: { notIn: ['SENDING', 'QUEUED'] },
          },
          select: {
             id: true,
@@ -243,31 +393,34 @@ export class LinkedInReplyService {
       return kept
    }
 
-   // Replies that went or may have gone count; ones that did not go do not.
+   // Replies that went or may have gone count, and the ones waiting their turn; ones that did not go do not. The quiet time between two
+   // replies is not a refusal: the queue keeps it (`dispatchNext`).
    private static async checkLimits(accountId: string, now = Date.now()) {
-      const recent = await PrismaService.client.linkedInReply.findMany({
+      const recent = await PrismaService.client.linkedInReply.count({
          where: {
             accountId,
-            state: { in: ['SENDING', 'SENT', 'UNKNOWN'] },
+            state: { in: ['QUEUED', 'SENDING', 'SENT', 'UNKNOWN'] },
             createdAt: { gte: new Date(now - DAY_MS) },
          },
-         select: { createdAt: true },
-         orderBy: { createdAt: 'desc' },
-         take: REPLY_LIMITS.perDay,
       })
 
-      if (recent.length >= REPLY_LIMITS.perDay) {
+      if (recent >= REPLY_LIMITS.perDay) {
          throw new TaskRefusedError(
             `This account has sent ${REPLY_LIMITS.perDay} replies in 24 hours. Try again later.`
          )
       }
 
-      const [newest] = recent
+      const waiting = await PrismaService.client.linkedInReply.count({
+         where: {
+            accountId,
+            state: 'QUEUED',
+         },
+      })
 
-      if (newest && now - newest.createdAt.getTime() < REPLY_LIMITS.gapMs) {
-         const seconds = Math.ceil((REPLY_LIMITS.gapMs - (now - newest.createdAt.getTime())) / 1000)
-
-         throw new TaskRefusedError(`Wait ${seconds} seconds before the next reply from this account.`)
+      if (waiting >= REPLY_LIMITS.queued) {
+         throw new TaskRefusedError(
+            `${REPLY_LIMITS.queued} replies are already waiting to be sent from this account. Wait for them to go.`
+         )
       }
    }
 }

@@ -49,7 +49,7 @@ type Extra = {
 
 const reply = (
    conversationId: string,
-   state: 'SENDING' | 'SENT' | 'FAILED' | 'UNKNOWN',
+   state: 'QUEUED' | 'SENDING' | 'SENT' | 'FAILED' | 'UNKNOWN',
    hoursAgo: number,
    extra: Extra = {}
 ) =>
@@ -109,6 +109,17 @@ describe('latestReplies (database)', () => {
          ],
          startedAt: sending.createdAt,
          failure: null,
+      })
+   })
+
+   it('should say a reply is waiting its turn', async () => {
+      const { id } = await conversation(userId, accountId)
+      const waiting = await reply(id, 'QUEUED', 0.1)
+
+      expect((await latestReplies(userId)).get(id)).toMatchObject({
+         id: waiting.id,
+         state: 'QUEUED',
+         text: 'QUEUED 0.1',
       })
    })
 

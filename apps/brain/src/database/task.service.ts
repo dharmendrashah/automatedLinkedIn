@@ -17,6 +17,7 @@ import { readCatalog } from './taskCatalog'
 import { buildTaskCommand } from './taskCommand'
 import { TaskDispatchService } from './taskDispatch.service'
 import {
+   TaskBusyError,
    TaskNeedsProxyError,
    TaskOwnershipError,
    TaskRecentError,
@@ -266,7 +267,7 @@ export class TaskService {
       const age = Date.now() - last.startedAt.getTime()
 
       if (last.status === 'IN_PROGRESS' && age < STALE_AFTER_MS) {
-         throw new TaskRefusedError(`A ${definition.title.toLowerCase()} is already running.`)
+         throw new TaskBusyError(`A ${definition.title.toLowerCase()} is already running.`)
       }
 
       // Only a run that went through holds the next one back, and the owner may confirm and run anyway.

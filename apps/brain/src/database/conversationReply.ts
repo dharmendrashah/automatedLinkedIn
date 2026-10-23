@@ -3,11 +3,11 @@ import { PrismaService } from './prisma.service'
 // How far back a reply that did not go is still shown to the owner (.plan/unibox-sending-after-reload.md).
 const WINDOW_MS = 24 * 60 * 60 * 1000
 
-// What the page shows of the reply of a conversation: one being sent, or one that did not go (or may not have) and was not
+// What the page shows of the reply of a conversation: one waiting or being sent, or one that did not go (or may not have) and was not
 // dismissed. `files` are only what was asked to go (names and sizes), never the files themselves.
 export type ConversationReply = {
    id: string
-   state: 'SENDING' | 'FAILED' | 'UNKNOWN'
+   state: 'QUEUED' | 'SENDING' | 'FAILED' | 'UNKNOWN'
    text: string
    files: Array<{ name: string; kind: string; bytes?: number }>
    startedAt: Date
@@ -55,7 +55,7 @@ export const latestReplies = async (userId: string) => {
    const replies = new Map<string, ConversationReply>()
 
    for (const row of rows) {
-      if (row.state === 'SENT' || (row.state !== 'SENDING' && row.dismissedAt !== null)) {
+      if (row.state === 'SENT' || (row.state !== 'SENDING' && row.state !== 'QUEUED' && row.dismissedAt !== null)) {
          continue
       }
 

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
    dispatchDue: vi.fn(),
    retention: vi.fn(),
    accountDue: vi.fn(),
+   dispatchWaiting: vi.fn(),
 }))
 
 vi.mock('database', () => ({
@@ -14,6 +15,7 @@ vi.mock('database', () => ({
    TaskDispatchService: { dispatchDue: mocks.dispatchDue },
    RetentionService: { run: mocks.retention },
    AccountDailyJob: { runDue: mocks.accountDue },
+   LinkedInReplyService: { dispatchWaiting: mocks.dispatchWaiting },
 }))
 
 vi.mock('env', () => ({
@@ -24,6 +26,7 @@ vi.mock('env', () => ({
 const [proxyScoring, taskDispatch] = JOBS
 const retention = JOBS.find(({ name }) => name === 'retention')
 const accountDaily = JOBS.find(({ name }) => name === 'account-daily')
+const replySend = JOBS.find(({ name }) => name === 'reply-send')
 const context = { signal: new AbortController().signal }
 const item = {
    userId: 'u1',
@@ -189,5 +192,30 @@ describe('worker jobs', () => {
       expect(quiet).toMatchObject({ items: [item] })
       expect(quiet).not.toHaveProperty('summary')
       await expect(accountDaily?.run(context)).resolves.toBeUndefined()
+   })
+
+   it('should run the reply queue every 10 seconds, and report only when a reply started or expired', async () => {
+      expect(replySend).toMatchObject({
+         name: 'reply-send',
+         everyMs: 10_000,
+      })
+
+      mocks.dispatchWaiting.mockResolvedValueOnce({
+         started: 1,
+         expired: 0,
+      })
+      mocks.dispatchWaiting.mockResolvedValueOnce({
+         started: 0,
+         expired: 0,
+      })
+
+      await expect(replySend?.run(context)).resolves.toEqual({
+         summary: '1 queued replies started, 0 could not start in time',
+         counts: {
+            started: 1,
+            expired: 0,
+         },
+      })
+      await expect(replySend?.run(context)).resolves.toBeUndefined()
    })
 })
