@@ -8,7 +8,7 @@ export type Action =
    | { type: 'SEND'; id: string; text: string; attachments: Attachment[]; now: number }
    | { type: 'UNDO_SEND'; id: string }
    | { type: 'SENT'; id: string; now: number }
-   | { type: 'FAIL'; id: string; reason: string }
+   | { type: 'FAIL'; id: string; reason: string; unsure?: boolean }
    | { type: 'DISMISS_FAILED'; id: string }
    | { type: 'RECEIVE'; id: string; message: UniboxMessage }
    // The whole conversation arrived, for a list that held only its latest messages.
@@ -108,6 +108,7 @@ export const reduce = (state: UniboxConversation[], action: Action): UniboxConve
                        reason: action.reason,
                        text: c.sending.text,
                        attachments: c.sending.attachments,
+                       ...(action.unsure && { unsure: true }),
                     },
                  }
                : c

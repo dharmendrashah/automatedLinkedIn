@@ -535,6 +535,20 @@ class CamoufoxSession implements DetectionSession {
       return true
    }
 
+   public async typeKeys(text: string) {
+      const lines = text.replace(/\r\n?/g, '\n').split('\n')
+
+      for (const [index, line] of lines.entries()) {
+         if (index > 0) {
+            await this.page.keyboard.press('Shift+Enter')
+         }
+
+         if (line) {
+            await this.page.keyboard.type(line, { delay: 45 + Math.floor(Math.random() * 70) })
+         }
+      }
+   }
+
    // What a wheel over a point moves: the nearest part of the page that scrolls, which is the window or a pane of its own, and how
    // far it is scrolled and whether it has room to go on in the given direction.
    private paneAt(find: { x: number; y: number; by: number }) {

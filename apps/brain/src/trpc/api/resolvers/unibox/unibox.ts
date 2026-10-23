@@ -1,7 +1,14 @@
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
-import { LinkedInConversationService, MAX_IDS, MessagesRefresh } from 'database'
+import {
+   LinkedInConversationService,
+   LinkedInReplyService,
+   MAX_IDS,
+   MessagesRefresh,
+   REPLY_LIMITS,
+   TaskRefusedError,
+} from 'database'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -69,4 +76,38 @@ export const unibox = router({
 
          return result
       }),
+
+   // Types the reply into the account's own LinkedIn page, as the owner would, and answers at once with the reply to follow.
+   // The text is never logged. Refused with a sentence when the limits or the account do not allow it now.
+   send: ownerProcedure
+      .input(
+         z.object({
+            conversationId: id,
+            text: z.string().trim().min(1).max(REPLY_LIMITS.maxChars),
+         })
+      )
+      .mutation(async ({ ctx, input }) => {
+         try {
+            return present(
+               await LinkedInReplyService.send(ctx.user.id, input.conversationId, input.text),
+               'Conversation not found'
+            )
+         } catch (error) {
+            if (error instanceof TaskRefusedError) {
+               throw new TRPCError({
+                  code: 'PRECONDITION_FAILED',
+                  message: error.message,
+               })
+            }
+
+            throw error
+         }
+      }),
+
+   // Where a reply is: SENDING, SENT, FAILED or UNKNOWN (it may have gone), with a sentence when it did not.
+   reply: ownerProcedure
+      .input(z.object({ id }))
+      .query(async ({ ctx, input }) =>
+         present(await LinkedInReplyService.get(ctx.user.id, input.id), 'Reply not found')
+      ),
 })

@@ -29,6 +29,10 @@ const PAGES: Record<string, string> = {
 <div id="thread" style="position:absolute;left:400px;top:0;width:300px;height:300px;overflow:auto"><div style="height:1500px">thread</div></div>
 <script>document.getElementById('thread').scrollTop = 1200</script>
 </body></html>`,
+   '/composer': `<!doctype html><html><body style="margin:0">
+<div id="box" contenteditable="true" role="textbox" style="position:absolute;left:100px;top:100px;width:400px;height:120px;border:1px solid #999"
+  onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); document.title = 'sent' }"></div>
+</body></html>`,
    '/profile/ada': `<!doctype html><html><body><p id="followed"></p><script>document.getElementById('followed').textContent = 'followed:' + (sessionStorage.getItem('followed') || 'no')</script></body></html>`,
    '/covered': '<!doctype html><html><body>covered page</body></html>',
 }
@@ -156,6 +160,22 @@ describe('what a hand does on the page', () => {
 
          expect(moved).toBe(false)
          expect(await session.scrollOver?.('#nothing', -400)).toBe(false)
+      })
+   })
+
+   it('should type into the box that was clicked, a line break as a new line and never as a send', async () => {
+      await withSession(async session => {
+         await session.goto(`${origin}/composer`)
+
+         expect(await session.clickSelector?.('#box')).toBe(true)
+
+         await session.typeKeys?.('one two\nthree')
+
+         const html = await session.pageHtml()
+
+         expect(html).toContain('one two')
+         expect(html).toContain('three')
+         expect((await session.inspect?.())?.title).not.toBe('sent')
       })
    })
 

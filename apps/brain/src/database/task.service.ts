@@ -51,6 +51,8 @@ type RequestOptions = {
    changed?: boolean
    // The owner was told it ran a moment ago and wants it anyway.
    confirmed?: boolean
+   // Saved in the same transaction as the session, so the caller's own row and the run exist together or not at all.
+   onStart?: (sessionId: string, tx: Prisma.TransactionClient) => Promise<void>
 }
 
 type Scope = 'proxy' | 'account' | 'none'
@@ -210,6 +212,7 @@ export class TaskService {
             tx
          )
          await tx.taskDispatch.create({ data: { sessionId: id } })
+         await options.onStart?.(id, tx)
       })
 
       await SpiderSessionService.deleteExpired()

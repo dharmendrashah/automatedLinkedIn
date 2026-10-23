@@ -28,6 +28,6 @@ describe('parseDrafts', () => {
    })
 
    it('should cut a draft that is longer than a reply can be', () => {
-      expect(parseDrafts({ a: 'x'.repeat(9000) }).a).toHaveLength(8000)
+      expect(parseDrafts({ a: 'x'.repeat(5000) }).a).toHaveLength(4000)
    })
 })

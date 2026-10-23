@@ -2,7 +2,7 @@ import { type HTMLElement, type Node, parse } from 'node-html-parser'
 
 import { type Message } from '@automatedLinkedIn/contracts'
 
-import { INBOX_ROW } from './markup'
+import { COMPOSER, INBOX_ROW, SEND_BUTTON } from './markup'
 import { parseClock, parseDay } from './when'
 
 type Person = Message['sender']
@@ -161,6 +161,27 @@ export const parseThread = (html: string, today: Date) => {
       participants,
       messages,
    }
+}
+
+// The place to write in the open conversation: whether there is one, what is typed in it, and whether its send button can be
+// pressed (it is disabled while the box is empty).
+export const parseComposer = (html: string) => {
+   const root = parse(html)
+   const box = root.querySelector(COMPOSER)
+   const send = root.querySelector(SEND_BUTTON)
+
+   return {
+      present: box !== null && send !== null,
+      typed: shown(box),
+      canSend: send !== null && !send.hasAttribute('disabled'),
+   }
+}
+
+// Whether the newest message of a conversation is ours and holds these words, compared the way the page's text is cleaned.
+export const newestIsOurs = (messages: Message[], text: string) => {
+   const last = messages.at(-1)
+
+   return last?.direction === 'ME' && clean(last.text) === clean(text)
 }
 
 // The conversations the list shows, in page order, and whether the page may hold more than it shows (the beacon it keeps at the

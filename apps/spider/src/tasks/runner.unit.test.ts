@@ -931,6 +931,57 @@ describe('a task that needs an account', () => {
    describe('a command delivered twice', () => {
       const doneKey = `${runPrefix(command)}/done.json`
 
+      it('should say a step may be taken the first time only, and write its marker in the run own folder', async () => {
+         const asked: boolean[] = []
+         const { run, store } = setup({
+            task: demo({
+               run: async context => {
+                  asked.push(await context.markAttempt())
+                  asked.push(await context.markAttempt())
+
+                  return {
+                     status: 'SUCCEEDED',
+                     verdict: 'GOOD',
+                     message: 'Done.',
+                  }
+               },
+            }),
+         })
+
+         await run()
+
+         expect(asked).toEqual([true, false])
+         expect(store.objects.has(`${PREFIX}/attempt.json`)).toBe(true)
+      })
+
+      it('should say false for a step a delivery before this one already reached, and true where nothing is kept', async () => {
+         const asked: boolean[] = []
+         const task = demo({
+            run: async context => {
+               asked.push(await context.markAttempt())
+
+               return {
+                  status: 'SUCCEEDED',
+                  verdict: 'GOOD',
+                  message: 'Done.',
+               }
+            },
+         })
+         const first = setup({ task })
+
+         first.store.objects.set(`${PREFIX}/attempt.json`, '{}')
+         await first.run()
+
+         const second = setup({
+            task,
+            overrides: { store: { put: vi.fn(async () => undefined) } },
+         })
+
+         await second.run()
+
+         expect(asked).toEqual([false, true])
+      })
+
       it('should write a marker after the result was published, so a second delivery is recognised', async () => {
          const { run, deps, store } = setup()
 

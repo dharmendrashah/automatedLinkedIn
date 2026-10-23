@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { type Attachment, type UniboxAccount, type UniboxConversation } from './types'
 
-import { type UniboxSource } from './source'
+import { type SendResult, type UniboxSource } from './source'
 import { type Action, reduce } from './store'
 
 // How long a reply can still be taken back before it goes.
@@ -111,9 +111,9 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
 
          setFlying(set => new Set(set).add(id))
 
-         const result = account
+         const result: SendResult = account
             ? await source
-                 .send(account, text, attachments)
+                 .send(account, text, attachments, id)
                  .catch(() => ({ ok: false as const, reason: 'The reply could not be sent. Try again.' }))
             : { ok: false as const, reason: 'The account of this conversation is not known.' }
 
@@ -124,7 +124,11 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
 
             return next
          })
-         dispatch(result.ok ? { type: 'SENT', id, now: Date.now() } : { type: 'FAIL', id, reason: result.reason })
+         dispatch(
+            result.ok
+               ? { type: 'SENT', id, now: Date.now() }
+               : { type: 'FAIL', id, reason: result.reason, unsure: result.unsure }
+         )
       },
       [dispatch, source]
    )

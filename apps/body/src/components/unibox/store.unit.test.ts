@@ -99,6 +99,13 @@ describe('send', () => {
       expect(statusOf(of(reduce(failed, { type: 'DISMISS_FAILED', id: 'c1' })))).toBe('NEEDS_REPLY')
    })
 
+   it('should remember that a reply may have been sent, so sending it again can ask first', () => {
+      const unsure = reduce(sending, { type: 'FAIL', id: 'c1', reason: 'LinkedIn did not show it.', unsure: true })
+
+      expect(of(unsure).failed).toMatchObject({ unsure: true })
+      expect(of(reduce(sending, { type: 'FAIL', id: 'c1', reason: 'No.' })).failed?.unsure).toBeUndefined()
+   })
+
    it('should send once when asked twice, and refuse an empty reply', () => {
       const twice = reduce(sending, { type: 'SEND', id: 'c1', text: 'again', attachments: [], now: 1100 })
 

@@ -15,6 +15,6 @@ export const withDevFile = (file: UniboxSource, real: UniboxSource, hasFile: () 
       mark: (ids, change) => active.mark(ids, change),
       open: id => active.open(id),
       refresh: accountIds => active.refresh(accountIds),
-      send: (account, text, attachments) => active.send(account, text, attachments),
+      send: (account, text, attachments, conversationId) => active.send(account, text, attachments, conversationId),
    }
 }

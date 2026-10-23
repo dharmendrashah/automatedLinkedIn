@@ -1,3 +1,14 @@
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+   AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
    ArrowDown,
@@ -251,15 +262,40 @@ export const Thread = ({
                   >
                      <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
                      <div className="min-w-0 flex-1">
-                        <p className="font-medium">The reply did not go.</p>
+                        <p className="font-medium">
+                           {conversation.failed.unsure ? 'The reply may have been sent.' : 'The reply did not go.'}
+                        </p>
                         <p className="text-xs">{conversation.failed.reason}</p>
                         <p className="mt-1 truncate text-xs opacity-80">
                            Your reply is kept: {conversation.failed.text || 'an attachment'}
                         </p>
                         <div className="mt-2 flex gap-2">
-                           <Button variant="outline" size="xs" onClick={onRetry}>
-                              Retry
-                           </Button>
+                           {conversation.failed.unsure ? (
+                              <AlertDialog>
+                                 <AlertDialogTrigger asChild>
+                                    <Button variant="outline" size="xs">
+                                       Send again
+                                    </Button>
+                                 </AlertDialogTrigger>
+                                 <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                       <AlertDialogTitle>It may have been sent</AlertDialogTitle>
+                                       <AlertDialogDescription>
+                                          Check on LinkedIn first. Sending again could put the same message in the
+                                          conversation twice.
+                                       </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                       <AlertDialogCancel>Do not send</AlertDialogCancel>
+                                       <AlertDialogAction onClick={onRetry}>Send again</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                 </AlertDialogContent>
+                              </AlertDialog>
+                           ) : (
+                              <Button variant="outline" size="xs" onClick={onRetry}>
+                                 Retry
+                              </Button>
+                           )}
                            <Button variant="ghost" size="xs" onClick={onDismissFailed}>
                               Dismiss
                            </Button>

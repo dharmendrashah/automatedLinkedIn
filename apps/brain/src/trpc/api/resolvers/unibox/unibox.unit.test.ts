@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
    setUnread: vi.fn(),
    setDone: vi.fn(),
    request: vi.fn(),
+   send: vi.fn(),
+   reply: vi.fn(),
+   TaskRefusedError: class TaskRefusedError extends Error {},
 }))
 
 vi.mock('database', () => ({
@@ -24,6 +27,12 @@ vi.mock('database', () => ({
       setDone: mocks.setDone,
    },
    MessagesRefresh: { request: mocks.request },
+   LinkedInReplyService: {
+      send: mocks.send,
+      get: mocks.reply,
+   },
+   REPLY_LIMITS: { maxChars: 4000 },
+   TaskRefusedError: mocks.TaskRefusedError,
 }))
 
 vi.mock('env', () => ({
@@ -160,5 +169,71 @@ describe('unibox router', () => {
       })
       expect(mocks.request).toHaveBeenCalledWith('u1', ['a1', 'a2'])
       await expect(caller().refresh({})).rejects.toMatchObject({ code: 'NOT_FOUND' })
+   })
+
+   it('should send a trimmed reply for the owner and answer with its id', async () => {
+      mocks.send.mockResolvedValue({ id: 'r1' })
+
+      await expect(
+         caller().send({
+            conversationId: 'c1',
+            text: '  Tomorrow works.  ',
+         })
+      ).resolves.toEqual({ id: 'r1' })
+      expect(mocks.send).toHaveBeenCalledWith('u1', 'c1', 'Tomorrow works.')
+   })
+
+   it('should refuse an empty or too long reply before anything starts', async () => {
+      await expect(
+         caller().send({
+            conversationId: 'c1',
+            text: '   ',
+         })
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+      await expect(
+         caller().send({
+            conversationId: 'c1',
+            text: 'x'.repeat(4001),
+         })
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+      expect(mocks.send).not.toHaveBeenCalled()
+   })
+
+   it('should say not found for a conversation that is not the owner, and the reason for a reply that is not allowed now', async () => {
+      mocks.send.mockResolvedValueOnce(null)
+      mocks.send.mockRejectedValueOnce(
+         new mocks.TaskRefusedError('Wait 20 seconds before the next reply from this account.')
+      )
+
+      await expect(
+         caller().send({
+            conversationId: 'c9',
+            text: 'Hi',
+         })
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      await expect(
+         caller().send({
+            conversationId: 'c1',
+            text: 'Hi',
+         })
+      ).rejects.toMatchObject({
+         code: 'PRECONDITION_FAILED',
+         message: 'Wait 20 seconds before the next reply from this account.',
+      })
+   })
+
+   it('should answer where a reply of the owner is, and not found for another one', async () => {
+      mocks.reply.mockResolvedValueOnce({
+         id: 'r1',
+         state: 'SENT',
+      })
+      mocks.reply.mockResolvedValueOnce(null)
+
+      await expect(caller().reply({ id: 'r1' })).resolves.toEqual({
+         id: 'r1',
+         state: 'SENT',
+      })
+      await expect(caller().reply({ id: 'r9' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      expect(mocks.reply).toHaveBeenCalledWith('u1', 'r1')
    })
 })

@@ -77,22 +77,26 @@ describe('createSampleSource.send', () => {
    const account = { id: 'a', name: 'A', handle: 'a@x.test', headline: '', state: 'ACTIVE' as const }
 
    it('should say a reply went', async () => {
-      await expect(source.send(account, 'Thanks', [])).resolves.toEqual({ ok: true })
+      await expect(source.send(account, 'Thanks', [], 'c1')).resolves.toEqual({ ok: true })
    })
 
    it('should fail on purpose when the text holds /fail, so the failed state can be seen', async () => {
-      await expect(source.send(account, 'please /fail now', [])).resolves.toEqual({
+      await expect(source.send(account, 'please /fail now', [], 'c1')).resolves.toEqual({
          ok: false,
          reason: 'The sample reply failed on purpose: its text holds /fail.',
       })
    })
 
    it('should not send from an account that is not signed in, and say why', async () => {
-      await expect(source.send({ ...account, state: 'PAUSED' }, 'x', [])).resolves.toEqual({
+      await expect(source.send({ ...account, state: 'PAUSED' }, 'x', [], 'c1')).resolves.toEqual({
          ok: false,
          reason: 'This account is paused, so nothing can be sent from it.',
       })
-      await expect(source.send({ ...account, state: 'DISCONNECTED' }, 'x', [])).resolves.toMatchObject({ ok: false })
-      await expect(source.send({ ...account, state: 'RESTRICTED' }, 'x', [])).resolves.toMatchObject({ ok: false })
+      await expect(source.send({ ...account, state: 'DISCONNECTED' }, 'x', [], 'c1')).resolves.toMatchObject({
+         ok: false,
+      })
+      await expect(source.send({ ...account, state: 'RESTRICTED' }, 'x', [], 'c1')).resolves.toMatchObject({
+         ok: false,
+      })
    })
 })

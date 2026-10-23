@@ -31,6 +31,7 @@ model User {
   linkedInProfiles  LinkedInProfile[]
   spiderSessions    SpiderSession[]
   conversations     LinkedInConversation[]
+  replies           LinkedInReply[]
   workflowLists     WorkflowList[]
   suppressions      Suppression[]
   personSnapshots   PersonSnapshot[]
@@ -535,6 +536,7 @@ model LinkedInAccount {
   proxyServers   ProxyServer[]
   spiderSessions SpiderSession[]
   conversations  LinkedInConversation[]
+  replies        LinkedInReply[]
 
   @@unique([userId, email])
   @@index([userId])
@@ -835,6 +837,7 @@ model LinkedInConversation {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   messages          LinkedInMessage[]
+  replies           LinkedInReply[]
 
   @@unique([accountId, linkedInId])
   @@index([userId, lastMessageAt])
@@ -886,4 +889,37 @@ model MessageImport {
   importedAt    DateTime?
 
   @@index([status, nextAttemptAt])
+}
+
+enum LinkedInReplyState {
+  SENDING
+  SENT
+  FAILED
+  UNKNOWN
+}
+
+// A reply the owner wrote in the Unibox, typed into the account's own LinkedIn page by the `linkedin-reply` task
+// (.plan/unibox-send.md). The text is the owner's own words, kept for the owner and deleted with the account. `UNKNOWN` means
+// send was pressed and the page did not show the message, so it may have gone. A partial unique index (see the migration) allows
+// one `SENDING` reply per account.
+model LinkedInReply {
+  id             String               @id @default(uuid(7))
+  userId         String
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        LinkedInAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   LinkedInConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  text           String
+  state          LinkedInReplyState   @default(SENDING)
+  // A fixed sentence the owner can read, set when the reply did not go.
+  failure        String?
+  // The spider run that types it; the run may be deleted before the reply.
+  sessionId      String               @unique
+  createdAt      DateTime             @default(now())
+  sentAt         DateTime?
+
+  @@index([accountId, createdAt])
+  @@index([conversationId, createdAt])
+  @@index([state, createdAt])
 }

@@ -178,6 +178,9 @@ export interface DetectionSession extends LoginSession {
    // Wheels over the first element of `selector` that shows, so the pane that holds it scrolls (a list and the conversation beside it
    // scroll on their own). Says whether the pane moved.
    scrollOver?: (selector: string, pixels: number) => Promise<boolean>
+   // Types into whatever has the focus, key by key at a person's pace; a line break is Shift+Enter, which makes a new line where a bare
+   // Enter would send.
+   typeKeys?: (text: string) => Promise<void>
    // One step back in the browser's history, and where it ended.
    back?: () => Promise<string>
    // Rests the pointer at a point of the window, or moves it a little, as a hand does while reading.

@@ -15,6 +15,8 @@ export type Hands = {
    clickNth: (selector: string, index: number, avoid: string) => Promise<boolean>
    // Wheels over the first element of a selector that shows, so the pane that holds it scrolls; says whether the pane moved.
    scrollOver: (selector: string, pixels: number) => Promise<boolean>
+   // Types into what has the focus (after a click on a box), at a person's pace; false when the browser cannot.
+   typeKeys: (text: string) => Promise<boolean>
    // The markup of the page as it is now.
    html: () => Promise<string>
    back: () => Promise<string>
@@ -30,7 +32,7 @@ export const handsOf = (browser: DetectionSession): Hands => {
       throw new Error('This browser cannot browse by clicking.')
    }
 
-   const { clickInside, clickSelector, clickNth, scrollOver, hover, drift } = browser
+   const { clickInside, clickSelector, clickNth, scrollOver, typeKeys, hover, drift } = browser
 
    return {
       inspect: block => inspect.call(browser, block ? { block } : undefined),
@@ -40,6 +42,15 @@ export const handsOf = (browser: DetectionSession): Hands => {
       clickSelector: async selector => (await clickSelector?.call(browser, selector)) === true,
       clickNth: async (selector, index, avoid) => (await clickNth?.call(browser, selector, index, avoid)) === true,
       scrollOver: async (selector, pixels) => (await scrollOver?.call(browser, selector, pixels)) === true,
+      typeKeys: async text => {
+         if (!typeKeys) {
+            return false
+         }
+
+         await typeKeys.call(browser, text)
+
+         return true
+      },
       html: () => browser.pageHtml(),
       back: () => back.call(browser),
       hover: async (x, y) => hover?.call(browser, x, y),

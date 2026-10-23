@@ -1,3 +1,5 @@
+import { TRPCClientError } from '@trpc/client'
+
 import {
    type AccountState,
    type Attachment,
@@ -94,9 +96,24 @@ const groups = (ids: string[]) =>
       ids.slice(index * MAX_IDS, (index + 1) * MAX_IDS)
    )
 
-// The Unibox on the owner's real messages, read from brain (.plan/unibox-backend.md). Sending is not built yet: the page keeps the
-// draft and says so.
-export const createTrpcSource = (client: UniboxClient): UniboxSource => ({
+// How a reply is followed: brain is asked every 2 seconds, up to 3 minutes (the task itself stops after 5).
+const POLL_MS = 2000
+const POLL_TIMES = 90
+
+const sleep = (ms: number) =>
+   new Promise<void>(resolve => {
+      setTimeout(resolve, ms)
+   })
+
+// The sentence of a refusal brain wrote for the owner; anything else is not shown.
+const refusalOf = (error: unknown) =>
+   error instanceof TRPCClientError && ['PRECONDITION_FAILED', 'NOT_FOUND'].includes(error.data?.code ?? '')
+      ? error.message
+      : 'The reply could not be sent. Try again.'
+
+// The Unibox on the owner's real messages, read from brain (.plan/unibox-backend.md) and answered through the account's own browser
+// (.plan/unibox-send.md). `wait` is only for tests.
+export const createTrpcSource = (client: UniboxClient, wait: (ms: number) => Promise<void> = sleep): UniboxSource => ({
    load: async (): Promise<UniboxData> => {
       const [accounts, conversations] = await Promise.all([
          client.unibox.accounts.query(),
@@ -107,7 +124,7 @@ export const createTrpcSource = (client: UniboxClient): UniboxSource => ({
          accounts: accounts.map(accountOf),
          conversations: conversations.map(conversationOf),
          sample: false,
-         canSend: false,
+         canSend: true,
          canRefresh: true,
       }
    },
@@ -126,8 +143,56 @@ export const createTrpcSource = (client: UniboxClient): UniboxSource => ({
 
    refresh: accountIds => client.unibox.refresh.mutate(accountIds ? { accountIds } : {}),
 
-   send: async () => ({
-      ok: false,
-      reason: 'Sending a reply from here is not available yet.',
-   }),
+   send: async (_account, text, attachments, conversationId) => {
+      if (attachments.length > 0) {
+         return {
+            ok: false,
+            reason: 'Attachments cannot be sent yet. Remove them to send the text.',
+         }
+      }
+
+      const started = await client.unibox.send
+         .mutate({ conversationId, text })
+         .catch((error: unknown) => refusalOf(error))
+
+      if (typeof started === 'string') {
+         return {
+            ok: false,
+            reason: started,
+         }
+      }
+
+      for (let polls = 0; polls < POLL_TIMES; polls += 1) {
+         await wait(POLL_MS)
+
+         const reply = await client.unibox.reply.query({ id: started.id }).catch(() => undefined)
+
+         if (reply?.state === 'SENT') {
+            return { ok: true }
+         }
+
+         if (reply?.state === 'FAILED') {
+            return {
+               ok: false,
+               reason: reply.failure ?? 'LinkedIn did not send the reply.',
+            }
+         }
+
+         if (reply?.state === 'UNKNOWN') {
+            return {
+               ok: false,
+               unsure: true,
+               reason:
+                  reply.failure ??
+                  'LinkedIn did not show whether the reply was sent. Check the conversation on LinkedIn.',
+            }
+         }
+      }
+
+      return {
+         ok: false,
+         unsure: true,
+         reason: 'No answer came in time. Check the conversation on LinkedIn.',
+      }
+   },
 })

@@ -11,7 +11,8 @@ export type UniboxData = {
    canRefresh: boolean
 }
 
-export type SendResult = { ok: true } | { ok: false; reason: string }
+// `unsure`: the reply may have been sent (LinkedIn did not show whether), so sending it again asks the owner first.
+export type SendResult = { ok: true } | { ok: false; reason: string; unsure?: boolean }
 
 export type RefreshResult = {
    started: number
@@ -24,7 +25,12 @@ export type UniboxSource = {
    load: () => Promise<UniboxData>
    // The owner's own marks, kept with the data. Nothing is changed on LinkedIn.
    mark: (ids: string[], change: { unread: boolean } | { done: boolean }) => Promise<void>
-   send: (account: UniboxAccount, text: string, attachments: Attachment[]) => Promise<SendResult>
+   send: (
+      account: UniboxAccount,
+      text: string,
+      attachments: Attachment[],
+      conversationId: string
+   ) => Promise<SendResult>
    // The whole conversation, for a source that lists only its latest messages (undefined when it already has it all).
    open: (id: string) => Promise<UniboxConversation | undefined>
    // Asks for the messages to be read again.

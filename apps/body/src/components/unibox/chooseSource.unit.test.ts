@@ -49,7 +49,7 @@ describe('withDevFile', () => {
 
       await chosen.load()
       await chosen.refresh(['a1'])
-      await chosen.send({} as never, 'Hi', [])
+      await chosen.send({} as never, 'Hi', [], 'c1')
 
       expect(real.refresh).toHaveBeenCalledWith(['a1'])
       expect(real.send).toHaveBeenCalled()

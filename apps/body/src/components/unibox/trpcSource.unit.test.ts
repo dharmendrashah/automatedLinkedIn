@@ -1,3 +1,4 @@
+import { TRPCClientError } from '@trpc/client'
 import { describe, expect, it, vi } from 'vitest'
 
 import { type UniboxClient, createTrpcSource, localClock } from './trpcSource'
@@ -94,7 +95,7 @@ describe('createTrpcSource.load', () => {
             imageUrl: 'https://media.licdn.com/me',
          },
       ])
-      expect(data).toMatchObject({ sample: false, canSend: false, canRefresh: true })
+      expect(data).toMatchObject({ sample: false, canSend: true, canRefresh: true })
    })
 
    it('should name an account by its login before it was ever read, and say what each state of an account means for sending', async () => {
@@ -198,7 +199,7 @@ describe('createTrpcSource actions', () => {
       expect(calls.setUnread.mock.calls.map(([{ ids: group }]) => group.length)).toEqual([500, 500, 200])
    })
 
-   it('should ask for the messages to be read again, and say plainly that replies are not sent yet', async () => {
+   it('should ask for the messages to be read again', async () => {
       const { client, calls } = fake()
       const source = createTrpcSource(client)
 
@@ -208,9 +209,87 @@ describe('createTrpcSource actions', () => {
       await source.refresh()
 
       expect(calls.refresh).toHaveBeenLastCalledWith({})
-      await expect(source.send({} as never, 'Hi', [])).resolves.toEqual({
+   })
+})
+
+describe('createTrpcSource.send', () => {
+   const wait = vi.fn(async () => undefined)
+   const replies = (...states: Array<{ state: string; failure?: string | null }>) => {
+      const query = vi.fn()
+
+      for (const state of states) {
+         query.mockResolvedValueOnce({ id: 'r1', ...state })
+      }
+
+      return query
+   }
+   const send = (over: Record<string, unknown>, text = 'Tomorrow works.') => {
+      const { client } = fake(over)
+
+      return createTrpcSource(client, wait).send({} as never, text, [], 'c1')
+   }
+
+   it('should ask brain to send the text of the conversation, follow the reply until it went, and say it was sent', async () => {
+      const mutate = vi.fn().mockResolvedValue({ id: 'r1' })
+      const query = replies({ state: 'SENDING' }, { state: 'SENDING' }, { state: 'SENT' })
+
+      await expect(send({ send: { mutate }, reply: { query } })).resolves.toEqual({ ok: true })
+
+      expect(mutate).toHaveBeenCalledWith({ conversationId: 'c1', text: 'Tomorrow works.' })
+      expect(query).toHaveBeenCalledTimes(3)
+      expect(query).toHaveBeenCalledWith({ id: 'r1' })
+   })
+
+   it('should say a reply that did not go as it is, with the sentence of brain', async () => {
+      const query = replies({ state: 'FAILED', failure: 'LinkedIn did not send the reply.' })
+
+      await expect(
+         send({ send: { mutate: vi.fn().mockResolvedValue({ id: 'r1' }) }, reply: { query } })
+      ).resolves.toEqual({
          ok: false,
-         reason: expect.stringContaining('not available yet'),
+         reason: 'LinkedIn did not send the reply.',
       })
+   })
+
+   it('should mark a reply that may have gone as unsure, and so one that was never answered', async () => {
+      const mutate = vi.fn().mockResolvedValue({ id: 'r1' })
+      const unknown = replies({ state: 'UNKNOWN', failure: 'LinkedIn did not show whether the reply was sent.' })
+      const never = vi.fn().mockResolvedValue({ id: 'r1', state: 'SENDING' })
+
+      await expect(send({ send: { mutate }, reply: { query: unknown } })).resolves.toEqual({
+         ok: false,
+         unsure: true,
+         reason: 'LinkedIn did not show whether the reply was sent.',
+      })
+      await expect(send({ send: { mutate }, reply: { query: never } })).resolves.toMatchObject({
+         ok: false,
+         unsure: true,
+      })
+      expect(never).toHaveBeenCalledTimes(90)
+   })
+
+   it('should show the sentence of a refusal of brain, and nothing of any other error', async () => {
+      const refused = new TRPCClientError('Wait 20 seconds before the next reply from this account.', {
+         result: { error: { message: 'x', code: -32003, data: { code: 'PRECONDITION_FAILED' } } },
+      })
+
+      await expect(send({ send: { mutate: vi.fn().mockRejectedValue(refused) } })).resolves.toEqual({
+         ok: false,
+         reason: 'Wait 20 seconds before the next reply from this account.',
+      })
+      await expect(send({ send: { mutate: vi.fn().mockRejectedValue(new Error('boom: secret')) } })).resolves.toEqual({
+         ok: false,
+         reason: 'The reply could not be sent. Try again.',
+      })
+   })
+
+   it('should send nothing while attachments are on the reply', async () => {
+      const mutate = vi.fn()
+      const { client } = fake({ send: { mutate } })
+
+      await expect(
+         createTrpcSource(client, wait).send({} as never, 'Hi', [{ kind: 'FILE', name: 'a.pdf' }], 'c1')
+      ).resolves.toMatchObject({ ok: false, reason: expect.stringContaining('Attachments cannot be sent') })
+      expect(mutate).not.toHaveBeenCalled()
    })
 })

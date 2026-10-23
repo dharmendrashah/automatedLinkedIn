@@ -18,6 +18,11 @@ export type FixtureThread = {
    title: string
    profile?: string
    messages: FixtureMessage[]
+   // The place to write a reply, as the page draws it; none when left out.
+   composer?: {
+      typed?: string
+      sendDisabled?: boolean
+   }
 }
 
 export type FixtureRow = {
@@ -39,13 +44,22 @@ ${image ? `<img class="msg-s-event-message__image" alt="${image}">` : ''}
 ${text === undefined ? '' : `<div class="msg-s-event-with-indicator"><div class="msg-s-event__content"><p class="msg-s-event-listitem__body"><!---->${text}<!----></p></div></div>`}
 </div></div></li>`
 
-export const threadMarkup = ({ title, profile, messages }: FixtureThread) =>
+const composerMarkup = (composer: FixtureThread['composer']) =>
+   composer
+      ? `<form class="msg-form msg-form--thread-footer-feature"><div class="msg-form__contenteditable t-14 notranslate" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Write a message…">${
+           composer.typed ? `<p>${composer.typed}</p>` : '<p><br></p>'
+        }</div><footer class="msg-form__footer"><button class="msg-form__send-button artdeco-button artdeco-button--1"${
+           composer.sendDisabled === false ? '' : ' disabled=""'
+        } type="submit">Send</button></footer></form>`
+      : ''
+
+export const threadMarkup = ({ title, profile, messages, composer }: FixtureThread) =>
    `<div class="msg-thread"><div class="msg-title-bar">${
       profile ? `<a class="msg-thread__link-to-profile" href="${profile}">` : '<div>'
    }<h2 class="msg-entity-lockup__entity-title"> ${title} </h2>${profile ? '</a>' : '</div>'}</div>
 <div class="msg-s-message-list msg-s-message-list--scroll-buffer"><ul class="msg-s-message-list-content"><li class="msg-s-message-list__top-of-list"></li>${messages
       .map(message)
-      .join('')}</ul></div></div>`
+      .join('')}</ul></div>${composerMarkup(composer)}</div>`
 
 const row = ({ title, when, snippet, unread, placeholder }: FixtureRow) =>
    placeholder

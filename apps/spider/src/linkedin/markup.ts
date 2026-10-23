@@ -43,5 +43,8 @@ export const THREAD_ID = /^\/messaging\/thread\/([^/]+)/
 export const INBOX_ROW = '.msg-conversation-listitem__link'
 export const INBOX_LIST = '.msg-conversation-listitem'
 export const THREAD_PANE = '.msg-s-message-list'
+// Where a reply is written in the open conversation, and the button that sends it (disabled until there is text); recorded 2026-10-22.
+export const COMPOSER = '.msg-form__contenteditable'
+export const SEND_BUTTON = 'button.msg-form__send-button'
 // The button after the beacon at the bottom of the list, for a page that does not load more by itself.
 export const LOAD_MORE = '[data-test-msg-cross-pillar-visible-beacon] + button'

@@ -61,7 +61,7 @@ export type UniboxConversation = {
    // The owner's reply, being sent (it can still be undone).
    sending?: { text: string; attachments: Attachment[]; at: number }
    // The owner's reply that did not go, kept so it can be sent again.
-   failed?: { reason: string; text: string; attachments: Attachment[] }
+   failed?: { reason: string; text: string; attachments: Attachment[]; unsure?: boolean }
 }
 
 export type ConversationStatus = 'REPLYING' | 'FAILED' | 'DONE' | 'NEEDS_REPLY' | 'REPLIED' | 'NONE'

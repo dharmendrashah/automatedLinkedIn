@@ -10,8 +10,8 @@ export const LIMITS = {
    FILE: 20 * MB,
    // How many attachments one message may carry.
    COUNT: 10,
-   // The longest reply, in characters (unverified).
-   TEXT: 8000,
+   // The longest reply, in characters: what brain and the spider accept (the command that carries it is limited to 8 KB).
+   TEXT: 4000,
 } as const
 
 export const formatBytes = (bytes: number) => {

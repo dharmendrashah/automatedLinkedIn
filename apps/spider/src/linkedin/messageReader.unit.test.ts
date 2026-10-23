@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseInbox, parseOwner, parseThread } from './messageReader'
+import { newestIsOurs, parseComposer, parseInbox, parseOwner, parseThread } from './messageReader'
 import { inboxMarkup, threadMarkup } from './messagingFixture'
 
 // Thursday, 22 October 2026.
@@ -219,6 +219,82 @@ describe('parseOwner', () => {
       })
       expect(parseOwner(bar('https://elsewhere.test/me.png'))).toEqual({ name: 'Tripti Verma' })
       expect(parseOwner('<nav></nav>')).toBeUndefined()
+   })
+})
+
+describe('parseComposer', () => {
+   const thread = (composer?: { typed?: string; sendDisabled?: boolean }) =>
+      threadMarkup({
+         title: 'Ada Lovelace',
+         profile: ADA,
+         messages: [],
+         ...(composer && { composer }),
+      })
+
+   it('should find the place to write, what is typed in it and whether it can be sent', () => {
+      expect(parseComposer(thread({}))).toEqual({
+         present: true,
+         typed: '',
+         canSend: false,
+      })
+      expect(
+         parseComposer(
+            thread({
+               typed: 'Hello &amp; thanks',
+               sendDisabled: false,
+            })
+         )
+      ).toEqual({
+         present: true,
+         typed: 'Hello & thanks',
+         canSend: true,
+      })
+   })
+
+   it('should say there is none on a page without one', () => {
+      expect(parseComposer(thread())).toEqual({
+         present: false,
+         typed: '',
+         canSend: false,
+      })
+      expect(parseComposer('<html><body></body></html>').present).toBe(false)
+   })
+})
+
+describe('newestIsOurs', () => {
+   const html = threadMarkup({
+      title: 'Ada Lovelace',
+      profile: ADA,
+      messages: [
+         {
+            id: 'a',
+            from: 'THEM',
+            name: 'Ada Lovelace',
+            profile: ADA,
+            time: '9:00 AM',
+            day: 'Today',
+            text: 'Hi',
+         },
+         {
+            id: 'b',
+            from: 'ME',
+            name: 'Tripti Verma',
+            profile: ME,
+            time: '9:05 AM',
+            text: 'Sure,<br>tomorrow works',
+         },
+      ],
+   })
+   const { messages } = parseThread(html, today)
+
+   it('should say yes when the newest message is ours and holds the words, whatever the spacing', () => {
+      expect(newestIsOurs(messages, 'Sure,\ntomorrow  works')).toBe(true)
+   })
+
+   it('should say no for other words, for a message that is theirs, and for a conversation with none', () => {
+      expect(newestIsOurs(messages, 'Sure')).toBe(false)
+      expect(newestIsOurs(messages.slice(0, 1), 'Hi')).toBe(false)
+      expect(newestIsOurs([], 'Hi')).toBe(false)
    })
 })
 
