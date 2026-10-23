@@ -3,6 +3,7 @@ import { accountDaily } from './accountDaily'
 import { dataReads } from './dataReads'
 import { messageImport } from './messageImport'
 import { proxyScoring } from './proxyScoring'
+import { replySend } from './replySend'
 import { replySweep } from './replySweep'
 import { retention } from './retention'
 import { taskDispatch } from './taskDispatch'
@@ -20,5 +21,6 @@ export const JOBS = unique('job', [
    retention,
    accountDaily,
    messageImport,
+   replySend,
    replySweep,
 ])

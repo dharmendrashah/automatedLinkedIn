@@ -81,12 +81,12 @@ const failureOf = (state: 'FAILED' | 'UNKNOWN', failure: string | null | undefin
       ? 'LinkedIn did not show whether the reply was sent. Check the conversation on LinkedIn.'
       : 'LinkedIn did not send the reply.')
 
-// A reply brain has: on its way, or one that did not go. Its files are only names (the files themselves were never kept on this page),
-// so sending it again needs them attached again.
+// A reply brain has: on its way (sending, or waiting its turn behind another reply of the account), or one that did not go. Its files are
+// only names (the files themselves were never kept on this page), so sending it again needs them attached again.
 const replyOf = (reply: NonNullable<WireConversation['reply']>): Pick<UniboxConversation, 'sending' | 'failed'> => {
    const attachments = reply.files.map(attachmentOf)
 
-   if (reply.state === 'SENDING') {
+   if (reply.state === 'SENDING' || reply.state === 'QUEUED') {
       const since = Date.parse(reply.startedAt)
 
       return {

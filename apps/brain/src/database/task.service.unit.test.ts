@@ -5,6 +5,7 @@ import { type TaskCatalogEntry } from '@automatedLinkedIn/contracts'
 import { ProxyServerOwnershipError } from './proxyServer.service'
 import { TaskService } from './task.service'
 import {
+   TaskBusyError,
    TaskNeedsProxyError,
    TaskOwnershipError,
    TaskRecentError,
@@ -362,6 +363,7 @@ describe('TaskService', () => {
          })
 
          await expect(ask()).rejects.toThrow('already running')
+         await expect(ask()).rejects.toBeInstanceOf(TaskBusyError)
          expect(mocks.findSession).toHaveBeenCalledWith(
             expect.objectContaining({
                where: {
