@@ -63,15 +63,27 @@ const makeDocument = () => {
          }
       },
    }
+   // A second icon tag, as the page has (an .ico for the browsers that do not take the svg).
+   const second = {
+      href: '/favicon.ico',
+      getAttribute: (name: string) => (name === 'href' ? second.href : null),
+      setAttribute: (name: string, value: string) => {
+         if (name === 'href') {
+            second.href = value
+         }
+      },
+   }
    const listeners = new Map<string, Set<() => void>>()
 
    return {
       link,
+      second,
       listeners,
       title: 'App',
       hidden: false,
       hasFocus: () => true,
       querySelector: () => link,
+      querySelectorAll: () => [link, second],
       addEventListener: vi.fn((type: string, listener: () => void) => {
          listeners.set(type, (listeners.get(type) ?? new Set()).add(listener))
       }),
@@ -262,6 +274,36 @@ describe('takeover alert', () => {
          expect(doc.link.href).toBe('/favicon.svg')
          expect(doc.title).toBe('App')
          expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('should swap every icon of the page and put each one back', async () => {
+         const doc = makeDocument()
+
+         vi.stubGlobal('document', doc)
+
+         const alert = await load()
+         const stop = alert.startFlicker()
+
+         expect([doc.link.href, doc.second.href]).toEqual(['/favicon-alert.svg', '/favicon-alert.svg'])
+
+         stop()
+
+         expect([doc.link.href, doc.second.href]).toEqual(['/favicon.svg', '/favicon.ico'])
+      })
+
+      it('should put back the title of the page the app is on now, not the one it saw when the blinking began', async () => {
+         const doc = makeDocument()
+
+         vi.stubGlobal('document', doc)
+
+         const alert = await load()
+         const { setPageTitle } = await import('../../lib/page-title')
+         const stop = alert.startFlicker()
+
+         setPageTitle('Unibox')
+         stop()
+
+         expect(doc.title).toBe('Unibox · automatedLinkedIn')
       })
 
       it('should not blink when the system asks for reduced motion', async () => {

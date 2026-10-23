@@ -1,18 +1,9 @@
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
+import { titleFor } from '@/lib/page-title'
 import { useLocation } from 'react-router'
 
 import { TakeoverBell } from './takeover/takeover-bell'
-
-const titles: Record<string, string> = {
-   '/dashboard': 'Dashboard',
-   '/unibox': 'Unibox',
-   '/accounts': 'LinkedIn accounts',
-   '/profiles': 'LinkedIn profiles',
-   '/companies': 'LinkedIn companies',
-   '/posts': 'LinkedIn posts',
-   '/profile': 'Profile',
-}
 
 export const SiteHeader = () => {
    const { pathname } = useLocation()
@@ -22,9 +13,7 @@ export const SiteHeader = () => {
          <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
-            <h1 className="text-base font-medium">
-               {titles[pathname] ?? (pathname.startsWith('/unibox/') ? 'Unibox' : '')}
-            </h1>
+            <h1 className="text-base font-medium">{titleFor(pathname) ?? ''}</h1>
             <TakeoverBell />
          </div>
       </header>

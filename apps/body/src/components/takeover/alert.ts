@@ -1,3 +1,5 @@
+import { getPageTitle } from '../../lib/page-title'
+
 const ALERT_ICON = '/favicon-alert.svg'
 const ALERT_TITLE = '(!) LinkedIn needs you'
 const SOUND_KEY = 'takeover-alert-sound'
@@ -127,20 +129,24 @@ export const playBoop = () => {
    return true
 }
 
-// Swaps the icon of the tab and the title while a run waits, and puts both back. With reduced motion asked for, they are
-// changed once and do not blink.
+// Swaps the icons of the tab and the title while a run waits, and puts both back: the icons as they were, the title as the app has it
+// then (the page may have changed meanwhile). With reduced motion asked for, they are changed once and do not blink.
 export const startFlicker = () => {
-   const link = document.querySelector('link[rel~="icon"]')
-   const icon = link?.getAttribute('href') ?? undefined
+   const links = [...document.querySelectorAll('link[rel~="icon"]')]
+   const icons = links.map(link => link.getAttribute('href'))
    const title = document.title
    const calm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
    const show = (on: boolean) => {
-      if (icon !== undefined) {
-         link?.setAttribute('href', on ? ALERT_ICON : icon)
-      }
+      links.forEach((link, index) => {
+         const icon = icons[index]
 
-      document.title = on ? ALERT_TITLE : title
+         if (icon !== null && icon !== undefined) {
+            link.setAttribute('href', on ? ALERT_ICON : icon)
+         }
+      })
+
+      document.title = on ? ALERT_TITLE : (getPageTitle() ?? title)
    }
 
    let on = true
