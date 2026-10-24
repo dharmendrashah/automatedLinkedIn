@@ -89,6 +89,8 @@ export { TASK_HOOKS } from './taskHooks'
 export { TaskDispatchService } from './taskDispatch.service'
 export { TaskService } from './task.service'
 export {
+   AccountNotReadyError,
+   TaskBusyError,
    TaskNeedsProxyError,
    TaskOwnershipError,
    TaskRecentError,

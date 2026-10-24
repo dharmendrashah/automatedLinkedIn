@@ -161,8 +161,17 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
    }
 
    let inputsRead: WorkflowItemData[] = []
+   // The first take of a step is remembered, for the time limits of blocks that wait.
+   const started = {
+      ...step,
+      startedAt: step.startedAt ?? new Date(),
+   }
 
    try {
+      if (!step.startedAt) {
+         await WorkflowRunService.markStarted(step.id, started.startedAt)
+      }
+
       const read = await readInputs(run, graph, node, step)
 
       inputsRead = read
@@ -176,7 +185,7 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
          run,
          graph,
          node,
-         step,
+         step: started,
          at,
          inputs,
          preview: run.trigger === 'PREVIEW',

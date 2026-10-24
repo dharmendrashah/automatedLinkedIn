@@ -263,6 +263,25 @@ export class WorkflowRunService {
       })
    }
 
+   // What a step that is still waiting says about itself, shown in the run's Note column; null clears it.
+   public static setNote(stepId: string, message: string | null) {
+      return PrismaService.client.workflowStepRun.update({
+         where: { id: stepId },
+         data: { message },
+      })
+   }
+
+   // The first time a worker took the step; later takes leave it as it is.
+   public static markStarted(stepId: string, at: Date) {
+      return PrismaService.client.workflowStepRun.updateMany({
+         where: {
+            id: stepId,
+            startedAt: null,
+         },
+         data: { startedAt: at },
+      })
+   }
+
    // The step is not started before this time (a Wait, or the pause before a retry).
    public static setWaitUntil(stepId: string, waitUntil: Date) {
       return PrismaService.client.workflowStepRun.update({

@@ -1,4 +1,4 @@
-import { TaskRefusedError } from './taskErrors'
+import { AccountNotReadyError } from './taskErrors'
 import { type TaskHooks } from './taskHooks'
 
 export const VIEW_PROFILE_TASK = 'linkedin-view-profile'
@@ -14,7 +14,7 @@ export const linkedInVisitHooks: TaskHooks = {
       })
 
       if (account?.status !== 'ACTIVE') {
-         throw new TaskRefusedError('Viewing a page needs an account that is signed in. Run Test login first.')
+         throw new AccountNotReadyError('Viewing a page needs an account that is signed in. Run Test login first.')
       }
    },
 
