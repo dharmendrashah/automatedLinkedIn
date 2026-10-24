@@ -92,6 +92,7 @@ const projectSchema = z.strictObject({
    dates: shortText.optional(),
    description: longText.optional(),
    skills: z.array(shortText).max(50),
+   // The line as the page writes it, in its language ("Associated with Sampleworks").
    associatedWith: shortText.optional(),
 })
 
@@ -139,6 +140,31 @@ export const accountProfileSchema = z.strictObject({
       })
       .optional(),
    about: longText.optional(),
+   // The contact info overlay. Private to the account on LinkedIn; it stays in the file and never reaches a log or a report.
+   contact: z
+      .strictObject({
+         emails: z.array(shortText).max(10),
+         phones: z
+            .array(
+               z.strictObject({
+                  value: shortText,
+                  // "Mobile".
+                  type: z.string().max(40).optional(),
+               })
+            )
+            .max(10),
+         // Every other row (instant messengers, websites, birthday, address) as the page shows it, label included, in its language.
+         other: z
+            .array(
+               z.strictObject({
+                  label: z.string().max(100),
+                  value: shortText,
+                  type: z.string().max(40).optional(),
+               })
+            )
+            .max(20),
+      })
+      .optional(),
    topSkills: z.array(shortText).max(10),
    services: z.array(shortText).max(50),
    // Private to the account on LinkedIn.

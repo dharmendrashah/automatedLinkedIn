@@ -26,11 +26,16 @@ export type Keeper = {
 
 // Keeps what the page is made of (its markup, every link and control with its place, a picture) with the run, to study how
 // the real pages are built. It holds other members' public text, so it is only done when the owner asks for it.
-export const snapshotPage = async ({ browser, attach, screenshot, warn }: Keeper, name: string, block?: string) => {
+export const snapshotPage = async (
+   { browser, attach, screenshot, warn }: Keeper,
+   name: string,
+   block?: string,
+   withInspection = true
+) => {
    try {
       attach(`${name}.html`, compactHtml(await browser.pageHtml()), 'text/html')
 
-      const inspection = await browser.inspect?.(block ? { block } : undefined)
+      const inspection = withInspection ? await browser.inspect?.(block ? { block } : undefined) : undefined
 
       if (inspection) {
          attach(`${name}.inspect.json`, JSON.stringify(inspection, null, 1), 'application/json')
@@ -46,14 +51,15 @@ export const snapshotPage = async ({ browser, attach, screenshot, warn }: Keeper
    }
 }
 
-// Keeps each name once, and only when the owner asked for it.
-export const createKeep = (keeper: Keeper, enabled: boolean, block?: string) => {
+// Keeps each name once, and only when the owner asked for it. A run keeps at most 20 files, so a task that keeps many pages can
+// leave out the inspection of each (`withInspection` false) and keep only its markup and picture.
+export const createKeep = (keeper: Keeper, enabled: boolean, block?: string, withInspection = true) => {
    const kept = new Set<string>()
 
    return async (name: string) => {
       if (enabled && !kept.has(name)) {
          kept.add(name)
-         await snapshotPage(keeper, name, block)
+         await snapshotPage(keeper, name, block, withInspection)
       }
    }
 }

@@ -61,6 +61,27 @@ describe('handsOf', () => {
       expect(seen).toEqual([browser, 'Hi\nthere'])
    })
 
+   it('should hand the flag that brings an element into view on to the browser, with the rest of the click', async () => {
+      const seen: unknown[][] = []
+      const browser = {
+         ...required(),
+         clickNth: vi.fn(async (...args: unknown[]) => {
+            seen.push(args)
+
+            return true
+         }),
+      }
+      const hands = handsOf(browser as unknown as DetectionSession)
+
+      await expect(hands.clickNth('.row', 3, 'button', true)).resolves.toBe(true)
+      await hands.clickNth('.row', 4, 'button')
+
+      expect(seen).toEqual([
+         ['.row', 3, 'button', true],
+         ['.row', 4, 'button', undefined],
+      ])
+   })
+
    it('should call the browser as itself, with the block as an option', async () => {
       const seen: unknown[] = []
       const browser = {

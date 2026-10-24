@@ -11,8 +11,9 @@ export type Hands = {
    // Clicks a link that was listed at this place, for one the page answers without changing its address.
    clickInside: (box: InspectedElement['box'], avoid: string) => Promise<boolean>
    clickSelector: (selector: string) => Promise<boolean>
-   // Clicks the Nth element (from 0, in page order) of a selector, for a row that is not a link; false when it is not in view.
-   clickNth: (selector: string, index: number, avoid: string) => Promise<boolean>
+   // Clicks the Nth element (from 0, in page order) of a selector, for a row that is not a link; false when it is not in view, unless
+   // `bringIntoView` scrolls it there first.
+   clickNth: (selector: string, index: number, avoid: string, bringIntoView?: boolean) => Promise<boolean>
    // Wheels over the first element of a selector that shows, so the pane that holds it scrolls; says whether the pane moved.
    scrollOver: (selector: string, pixels: number) => Promise<boolean>
    // Types into what has the focus (after a click on a box), at a person's pace; false when the browser cannot.
@@ -57,7 +58,8 @@ export const handsOf = (browser: DetectionSession): Hands => {
       clickLink: (href, avoid) => clickLink.call(browser, href, avoid),
       clickInside: async (box, avoid) => (await clickInside?.call(browser, box, avoid)) === true,
       clickSelector: async selector => (await clickSelector?.call(browser, selector)) === true,
-      clickNth: async (selector, index, avoid) => (await clickNth?.call(browser, selector, index, avoid)) === true,
+      clickNth: async (selector, index, avoid, bringIntoView) =>
+         (await clickNth?.call(browser, selector, index, avoid, bringIntoView)) === true,
       scrollOver: async (selector, pixels) => (await scrollOver?.call(browser, selector, pixels)) === true,
       typeKeys: async text => {
          if (!typeKeys) {

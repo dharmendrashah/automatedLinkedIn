@@ -35,6 +35,35 @@ export const AboutCard = ({ about, topSkills }: Pick<AccountProfile, 'about' | '
       </Section>
    ) : null
 
+// The contact info the account sees on its own page: emails and phones, then every other row with the label as LinkedIn wrote it.
+export const ContactCard = ({ contact }: Pick<AccountProfile, 'contact'>) => {
+   const rows: Array<{ label: string; value: string; type?: string }> = contact
+      ? [
+           ...contact.emails.map(value => ({ label: 'Email', value })),
+           ...contact.phones.map(({ value, type }) => ({ label: 'Phone', value, type })),
+           ...contact.other,
+        ]
+      : []
+
+   return rows.length > 0 ? (
+      <Section title="Contact info">
+         <dl className="grid gap-2 text-sm sm:grid-cols-[8rem_minmax(0,1fr)]">
+            {rows.map(({ label, value, type }) => (
+               <div key={`${label}-${value}`} className="contents">
+                  <dt className="text-muted-foreground" dir="auto">
+                     {label}
+                  </dt>
+                  <dd className="break-words" dir="auto">
+                     {value}
+                     {type ? <span className="text-muted-foreground"> ({type})</span> : null}
+                  </dd>
+               </div>
+            ))}
+         </dl>
+      </Section>
+   ) : null
+}
+
 export const ServicesCard = ({ services }: Pick<AccountProfile, 'services'>) =>
    services.length > 0 ? (
       <Section title="Services">

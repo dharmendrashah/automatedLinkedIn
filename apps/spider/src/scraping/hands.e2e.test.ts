@@ -182,6 +182,16 @@ describe('what a hand does on the page', () => {
       })
    })
 
+   it('should bring the Nth element into view first when asked to, so a row below the fold can be clicked', async () => {
+      await withSession(async session => {
+         await session.goto(`${origin}/panes`)
+
+         expect(await session.clickNth?.('.row', 12, 'button', true)).toBe(true)
+         expect((await session.inspect?.())?.title).toBe('row 12')
+         expect(await session.clickNth?.('.row', 99, 'button', true)).toBe(false)
+      })
+   })
+
    it('should scroll the pane under the pointer and say whether it moved', async () => {
       await withSession(async session => {
          await session.goto(`${origin}/panes`)

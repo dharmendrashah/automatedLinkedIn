@@ -21,6 +21,21 @@ export const fullProfile = (now: Date): AccountProfile => ({
    },
    about: 'Product leader with seven years of experience guiding cross-functional teams from first idea to launch. I like clear goals, small steps and honest numbers.\n\nI have run discovery, planning and delivery for B2B software, set up the habits that keep teams aligned, and coached people into their first lead roles. Outside work I write about how teams decide what not to build.',
    topSkills: ['Product Strategy', 'Team Leadership'],
+   contact: {
+      emails: ['sample.person@example.com'],
+      phones: [
+         {
+            value: '+00 000 000 0000',
+            type: 'Mobile',
+         },
+      ],
+      other: [
+         {
+            label: 'Birthday',
+            value: 'August 22',
+         },
+      ],
+   },
    services: ['Product Discovery', 'Roadmapping', 'Team Coaching', 'Workshop Facilitation', 'Metrics Design'],
    analytics: {
       profileViews: 39,
@@ -133,7 +148,7 @@ export const fullProfile = (now: Date): AccountProfile => ({
             description:
                'A set of templates for planning quarters. I wrote most of them and keep them up to date with what teams tell me.',
             skills: ['Planning', 'Templates', '+7 skills'],
-            associatedWith: 'Sampleworks',
+            associatedWith: 'Associated with Sampleworks',
          },
          {
             name: 'decision-log',

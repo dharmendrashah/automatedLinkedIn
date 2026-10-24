@@ -95,9 +95,7 @@ const ProjectEntry = ({ project }: { project: Project }) => (
       {project.dates ? <p className="text-muted-foreground text-xs">{project.dates}</p> : null}
       {project.description ? <ExpandableText text={project.description} lines={3} /> : null}
       <Skills skills={project.skills} />
-      {project.associatedWith ? (
-         <p className="text-muted-foreground text-xs">Associated with {project.associatedWith}</p>
-      ) : null}
+      {project.associatedWith ? <p className="text-muted-foreground text-xs">{project.associatedWith}</p> : null}
    </div>
 )
 
