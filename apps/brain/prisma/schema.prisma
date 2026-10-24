@@ -33,6 +33,7 @@ model User {
   conversations     LinkedInConversation[]
   replies           LinkedInReply[]
   accountProfiles   LinkedInAccountProfile[]
+  profileVisits     LinkedInProfileVisit[]
   workflowLists     WorkflowList[]
   suppressions      Suppression[]
   personSnapshots   PersonSnapshot[]
@@ -483,8 +484,42 @@ model LinkedInProfile {
   createdAt  DateTime              @default(now())
   updatedAt  DateTime              @updatedAt
 
+  visits LinkedInProfileVisit[]
+
   @@unique([userId, slug])
   @@index([userId, archivedAt, createdAt])
+}
+
+enum ProfileVisitStatus {
+  // Asked for; the run is going or its answer has not come yet.
+  ASKED
+  DONE
+  // The address did not lead to a profile that could be viewed.
+  NOT_AVAILABLE
+  FAILED
+}
+
+// One visit of one of the owner's accounts to someone's profile (.plan/visit-profile-task.md): the record the daily cap and the
+// "never twice in 30 days" rule are counted from. It keeps the public address slug the owner asked for and nothing of the profile.
+model LinkedInProfileVisit {
+  id         String             @id @default(uuid(7))
+  userId     String
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId  String
+  account    LinkedInAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // The saved profile it was asked from; null for a pasted link, or once the saved profile is deleted.
+  profileId  String?
+  profile    LinkedInProfile?   @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  slug       String
+  // The run; no relation, because the run's row is deleted after 30 days and the record must outlive it.
+  sessionId  String             @unique
+  status     ProfileVisitStatus @default(ASKED)
+  createdAt  DateTime           @default(now())
+  finishedAt DateTime?
+
+  @@index([accountId, createdAt])
+  @@index([accountId, slug])
+  @@index([profileId])
 }
 
 enum LinkedInAccountStatus {
@@ -550,6 +585,7 @@ model LinkedInAccount {
   conversations  LinkedInConversation[]
   replies        LinkedInReply[]
   profile        LinkedInAccountProfile?
+  profileVisits  LinkedInProfileVisit[]
 
   @@unique([userId, email])
   @@index([userId])

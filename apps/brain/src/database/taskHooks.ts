@@ -7,6 +7,7 @@ import { linkedInLoginHooks } from './linkedInLogin.hooks'
 import { MESSAGES_TASK, linkedInMessagesHooks } from './linkedInMessages.hooks'
 import { PROFILE_TASK, linkedInProfileHooks } from './linkedInProfile.hooks'
 import { REPLY_TASK, linkedInReplyHooks } from './linkedInReply.hooks'
+import { VIEW_PROFILE_TASK, linkedInViewProfileHooks } from './linkedInViewProfile.hooks'
 
 // Where a task needs brain to do something of its own: refuse a request for a reason only brain knows, or change brain's own
 // data when the result arrives. Most tasks have no hook. One file lists them all, by task name.
@@ -40,5 +41,6 @@ export const TASK_HOOKS: Record<string, TaskHooks> = {
    'linkedin-browse': linkedInBrowseHooks,
    [MESSAGES_TASK]: linkedInMessagesHooks,
    [PROFILE_TASK]: linkedInProfileHooks,
+   [VIEW_PROFILE_TASK]: linkedInViewProfileHooks,
    [REPLY_TASK]: linkedInReplyHooks,
 }
