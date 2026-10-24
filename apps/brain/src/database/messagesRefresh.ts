@@ -3,28 +3,75 @@ import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
 import { TaskRefusedError, TaskUnavailableError } from './taskErrors'
 
-// The first read of an account takes what the task allows; later ones only need what is new at the top of the list.
-const FIRST_READ = 50
-const LATER_READ = 20
+// The first read goes through the whole inbox in batches of this many places; a later one asks for this many at most, and
+// stops at the first rows it knows (.plan/messages-first-sync-and-new-only.md).
+const BATCH = 50
+// How many known rows are handed to the spider, and how many in a row end the walk of a later read.
+const KNOWN = 100
+const STOP_AFTER_KNOWN = 3
+// Once a day the newest conversations are read whatever their rows say, to find a change the rows did not show.
+const SWEEP = 20
+const SWEEP_EVERY_MS = 24 * 60 * 60 * 1000
+// The version of the messages task that takes `known` and `stopAfterKnown`; an older spider refuses them.
+const ROW_READ_VERSION = 3
 
 export type MessagesAccount = {
-   messagesReadAt: Date | null
+   id: string
+   messagesBackfilledAt: Date | null
    messagesResumeSkip: number | null
-   messagesResumeUntil: number | null
+   messagesSweptAt: Date | null
 }
 
-// A batch that was only partly read goes on after what was read, to where it ends (.plan/messages-resume.md).
-export const messagesInput = ({ messagesReadAt, messagesResumeSkip, messagesResumeUntil }: MessagesAccount) => {
-   if (messagesResumeSkip !== null && messagesResumeUntil !== null && messagesResumeUntil > messagesResumeSkip) {
-      return {
-         skip: messagesResumeSkip,
-         limit: messagesResumeUntil - messagesResumeSkip,
-      }
+const spiderReadsRows = async () =>
+   ((await TaskService.catalog()).find(({ task }) => task === MESSAGES_TASK)?.version ?? 0) >= ROW_READ_VERSION
+
+// What brain has of the account's newest conversations, by the hash of their rows.
+const knownRows = async (accountId: string) => {
+   const rows = await PrismaService.client.linkedInConversation.findMany({
+      where: {
+         accountId,
+         rowHash: { not: null },
+      },
+      orderBy: {
+         lastMessageAt: {
+            sort: 'desc',
+            nulls: 'last',
+         },
+      },
+      take: KNOWN,
+      select: { rowHash: true },
+   })
+
+   return rows.flatMap(({ rowHash }) => (rowHash ? [rowHash] : []))
+}
+
+// A sweep is due once a day for an account whose first read is done and that has nothing pending.
+export const sweepDue = (account: MessagesAccount, now: Date) =>
+   account.messagesBackfilledAt !== null &&
+   account.messagesResumeSkip === null &&
+   (account.messagesSweptAt === null || now.getTime() - account.messagesSweptAt.getTime() >= SWEEP_EVERY_MS)
+
+// The first read (no `messagesBackfilledAt` yet) goes on from the place it reached, through the whole inbox, leaving the rows brain
+// has alone. Later reads start at the top and stop at the first rows they know; one left unfinished goes on from where it stopped.
+export const messagesInput = async (account: MessagesAccount, { sweep = false }: { sweep?: boolean } = {}) => {
+   const first = account.messagesBackfilledAt === null
+
+   if (!(await spiderReadsRows())) {
+      return { limit: first ? BATCH : SWEEP }
    }
 
-   const limit = messagesReadAt === null ? FIRST_READ : LATER_READ
+   if (sweep) {
+      return { limit: SWEEP }
+   }
 
-   return { limit }
+   const skip = account.messagesResumeSkip ?? 0
+
+   return {
+      ...(skip > 0 && { skip }),
+      limit: BATCH,
+      known: await knownRows(account.id),
+      ...(!first && { stopAfterKnown: STOP_AFTER_KNOWN }),
+   }
 }
 
 export type RefreshResult = {
@@ -44,9 +91,9 @@ export class MessagesRefresh {
          },
          select: {
             id: true,
-            messagesReadAt: true,
+            messagesBackfilledAt: true,
             messagesResumeSkip: true,
-            messagesResumeUntil: true,
+            messagesSweptAt: true,
          },
          orderBy: { createdAt: 'asc' },
       })
@@ -55,14 +102,16 @@ export class MessagesRefresh {
          skipped: [],
       }
 
-      for (const { id, ...account } of accounts) {
+      for (const account of accounts) {
+         const { id } = account
+
          try {
             await TaskService.request({
                userId,
                task: MESSAGES_TASK,
                accountId: id,
                trigger: 'manual',
-               input: messagesInput(account),
+               input: await messagesInput(account),
             })
             result.started += 1
          } catch (error) {

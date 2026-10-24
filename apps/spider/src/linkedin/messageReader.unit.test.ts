@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { composerHtml, newestIsOurs, parseComposer, parseInbox, parseOwner, parseThread } from './messageReader'
+import {
+   composerHtml,
+   newestIsOurs,
+   parseComposer,
+   parseInbox,
+   parseOwner,
+   parseThread,
+   rowHash,
+} from './messageReader'
 import { inboxMarkup, threadMarkup } from './messagingFixture'
 
 // Thursday, 22 October 2026.
@@ -402,6 +410,35 @@ describe('composerHtml', () => {
          composerHtml(page('<div class="chip">a.pdf 40%</div>'))
       )
       expect(composerHtml('<html><body></body></html>')).toBe('')
+   })
+})
+
+describe('rowHash', () => {
+   it('should be 8 hex characters that depend on the title and the last words only, not on case', () => {
+      const row = {
+         title: 'Person 1',
+         snippet: 'last words',
+      }
+
+      expect(rowHash(row)).toMatch(/^[0-9a-f]{8}$/)
+      expect(
+         rowHash({
+            ...row,
+            title: 'PERSON 1',
+         })
+      ).toBe(rowHash(row))
+      expect(
+         rowHash({
+            ...row,
+            snippet: 'other words',
+         })
+      ).not.toBe(rowHash(row))
+      expect(
+         rowHash({
+            ...row,
+            title: 'Person 2',
+         })
+      ).not.toBe(rowHash(row))
    })
 })
 

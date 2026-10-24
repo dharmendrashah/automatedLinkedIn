@@ -530,8 +530,12 @@ model LinkedInAccount {
   displayName           String?
   imageUrl              String?
   messagesReadAt        DateTime?
-  // A batch of conversations that was only partly read: where the next read goes on and where the batch ends; both null when
-  // nothing is pending (.plan/messages-resume.md).
+  // When the whole inbox had been read once; null while that first read is still going (.plan/messages-first-sync-and-new-only.md).
+  messagesBackfilledAt  DateTime?
+  // The last time the newest conversations were read whatever their rows said, to find a change the rows did not show.
+  messagesSweptAt       DateTime?
+  // Where the next read goes on after a batch that did not finish (the first read, or a read of many changes); null when nothing
+  // is pending (.plan/messages-resume.md). `messagesResumeUntil` is not used any more: the read says itself when it is finished.
   messagesResumeSkip    Int?
   messagesResumeUntil   Int?
   createdAt             DateTime              @default(now())
@@ -822,6 +826,9 @@ model LinkedInConversation {
   participants      Json
   // The profile link of the first participant, to find the same person in other accounts.
   contactProfileUrl String?
+  // What its row in the list was known by when it was last read (`rowHash` of the spider); the next read leaves a row with the same
+  // value alone.
+  rowHash           String?
   // Unread in the Unibox: LinkedIn's mark when the spider opened the conversation, then the owner's own (`readAt` is when they cleared it).
   unread            Boolean
   // False when only part of the conversation was read: older messages are missing.

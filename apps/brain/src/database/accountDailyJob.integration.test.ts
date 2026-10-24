@@ -17,7 +17,17 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('./linkedInAccountValidation.service', () => ({ LinkedInAccountValidationService: mocks.validation }))
-vi.mock('./task.service', () => ({ TaskService: { request: mocks.requestTask } }))
+vi.mock('./task.service', () => ({
+   TaskService: {
+      request: mocks.requestTask,
+      catalog: async () => [
+         {
+            task: 'linkedin-messages',
+            version: 3,
+         },
+      ],
+   },
+}))
 
 const email = `${randomUUID()}@elitale.com`
 const NOW = new Date('2026-10-19T10:00:00Z')

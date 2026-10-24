@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { ROW_HASH_PATTERN } from '@automatedLinkedIn/contracts'
+
 import { describeError } from '../../browsing/errors'
 import { defineTask } from '../defineTask'
 import { answerFor } from './answer'
@@ -16,7 +18,7 @@ type Options = {
 export const createLinkedinMessages = ({ baseUrl }: Options) =>
    defineTask({
       name: TASK_NAME,
-      version: 2,
+      version: 3,
       title: 'LinkedIn messages',
       description:
          'Opens the conversations of the account, newest first, and reads every message with its sender into a file of the run. Opening a conversation marks it read.',
@@ -41,6 +43,18 @@ export const createLinkedinMessages = ({ baseUrl }: Options) =>
             .boolean()
             .default(false)
             .describe('Keep the messages pages with the run, to study how they are built.'),
+         known: z
+            .array(z.string().regex(ROW_HASH_PATTERN))
+            .max(100)
+            .default([])
+            .describe('Rows of the list the platform already has (by hash): left alone unless unread.'),
+         stopAfterKnown: z
+            .number()
+            .int()
+            .min(1)
+            .max(20)
+            .optional()
+            .describe('Stop after this many rows in a row that were left alone, as everything below is older.'),
       }),
       needs: {
          proxy: 'required',

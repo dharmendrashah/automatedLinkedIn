@@ -352,6 +352,8 @@ export class LinkedInConversationService {
                kind: conversation.kind,
                participants: conversation.participants as Prisma.InputJsonArray,
                contactProfileUrl: first?.profileUrl ?? null,
+               // Left as it was when the file has none (a file of an older spider).
+               rowHash: conversation.rowHash,
                complete: (existing?.complete ?? false) || conversation.complete,
             }
             const row =
