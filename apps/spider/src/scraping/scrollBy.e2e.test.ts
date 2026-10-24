@@ -17,6 +17,9 @@ const PAGES: Record<string, string> = {
    ),
    // A page that cancels every wheel turn, so only a scroll made by the page itself moves it.
    '/swallow': page('<script>addEventListener("wheel", e => e.preventDefault(), { passive: false })</script>', ''),
+   // A page that does not scroll as a whole: it is as tall as the window and a container inside it scrolls (LinkedIn's profile pages,
+   // recorded 2026-10-24, where the window never moved and the whole page was taken for one screen).
+   '/inner': `<!doctype html><html><head><style>html,body{height:100%;margin:0;overflow:hidden}</style></head><body><div id="app" style="height:100%;overflow-y:auto"><div style="height:5000px"></div></div></body></html>`,
 }
 
 let server: Server
@@ -59,5 +62,30 @@ describe('CamoufoxSession.scrollBy', () => {
 
    it('should move the page by script when the page cancels every wheel turn', async () => {
       expect(await scrolledAfter('/swallow', 600)).toBeGreaterThan(100)
+   })
+
+   it('should say there is more page below until the container that scrolls has come to its end', async () => {
+      const driver = new CamoufoxDriver({
+         actionTimeoutMs: 10_000,
+         isAllowedNavigation: () => true,
+      })
+      const session = await driver.open()
+
+      try {
+         await session.goto(`${origin}/inner`)
+
+         let steps = 0
+
+         while (steps < 20 && (await session.scrollBy(800))) {
+            steps += 1
+         }
+
+         // It said "more" while there was more, and stopped saying it at the end, before the 20 steps this loop allows itself.
+         expect(steps).toBeGreaterThanOrEqual(4)
+         expect(steps).toBeLessThan(20)
+         expect((await session.inspect?.())?.scrollY).toBeGreaterThan(3500)
+      } finally {
+         await session.close()
+      }
    })
 })
