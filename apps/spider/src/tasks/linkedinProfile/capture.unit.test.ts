@@ -52,7 +52,7 @@ const setup = ({
          scrollY: y,
       })),
       clickLink: vi.fn(async () => undefined),
-      clickNth: vi.fn(async (selector: string, nth: number, _avoid: string) => {
+      clickNth: vi.fn(async (selector: string, nth: number, _avoid: string, _bringIntoView?: boolean) => {
          positions.push(y)
 
          if (missed && current.endsWith('details/interests/')) {
@@ -171,8 +171,8 @@ describe('captureProfile', () => {
 
       await capture()
 
-      // Two scrolls that move and two that do not, for each of the eleven pages, and one back up before each of the two tries at a chip.
-      expect(browser.scrollBy).toHaveBeenCalledTimes(4 * (DETAIL_PAGES.length + 1) + 2)
+      // Two scrolls that move and two that do not, for each of the eleven pages.
+      expect(browser.scrollBy).toHaveBeenCalledTimes(4 * (DETAIL_PAGES.length + 1))
    })
 
    it('should scroll a long list up and down until it stops growing, so the parts that load as its end comes into view are kept', async () => {
@@ -227,12 +227,12 @@ describe('captureProfile', () => {
       expect(attached).not.toHaveProperty(['detail-interests-4.html'])
    })
 
-   it('should scroll back to the top of the page before each try at a chip, where the chips are, after the page was scrolled to its end', async () => {
-      const { capture, positions } = setup({ tabs: 2 })
+   it('should click each chip with the page asked to bring it into view', async () => {
+      const { capture, browser } = setup({ tabs: 2 })
 
       await capture()
 
-      expect(positions).toEqual([0, 0, 0, 0])
+      expect(browser.clickNth.mock.calls.every(([, , , bringIntoView]) => bringIntoView === true)).toBe(true)
    })
 
    it('should try a chip once more, and keep a picture of the miss, when the first click finds nothing in reach', async () => {

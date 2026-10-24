@@ -18,13 +18,12 @@ export type PageDeps = {
 const MAX_SCROLLS = 25
 const STILL_LOOKS = 2
 const SCROLL = [500, 900] as const
-const SCROLL_UP = [1500, 2500] as const
 // The small step up that brings the end of a long list back into view.
 const JIGGLE = [700, 1100] as const
 // Rounds of up and down at most, how many in a row may bring nothing before the list is taken as complete, and how often the page is
 // looked at (one scroll pause apart) for the part that loads.
 const MAX_MORE_ROUNDS = 6
-const MAX_STALLED_ROUNDS = 2
+const MAX_STALLED_ROUNDS = 3
 const MORE_LOOKS = 4
 // A list comes in parts of about 20 (recorded 2026-10-24), so one of fewer items than this is complete and is not asked for more.
 const PART_MIN_ITEMS = 10
@@ -122,18 +121,6 @@ export const createPages = (
       }
    }
 
-   // Scrolls back up with the wheel, in bigger steps, until the page is at its top.
-   const scrollToTop = async () => {
-      for (let step = 0; step < MAX_SCROLLS; step += 1) {
-         await hands.scrollBy(-reader.span(SCROLL_UP))
-         await reader.wait(PAUSES.scroll)
-
-         if (!((await hands.inspect()).scrollY > 0)) {
-            return
-         }
-      }
-   }
-
    return {
       reader,
       session,
@@ -170,17 +157,15 @@ export const createPages = (
       },
       open: (address: string) => session.open(address),
       // Opens each other chip of the Interests page by its block, one after the other, until a click finds no more. The chips are at the
-      // top of the page, which is out of sight once the page was scrolled to its end, so the wheel takes the page back up to them first
-      // (the Home key did nothing in the fourth capture). A click that finds the chip out of reach is tried once more, and a picture of
-      // the page is kept with each miss, because a run once stopped at the second chip for no visible reason.
+      // top of the page, which is out of sight once its list was scrolled to the end, so the click brings the chip into view itself
+      // (the Home key did nothing, and scrolling up by the wheel missed a chip in the sixth reading). A click that finds the chip out of
+      // reach is tried once more, and a picture of the page is kept with each miss.
       eachInterestTab: async (visitTab: (tab: number) => Promise<void>) => {
          for (let tab = 1; tab <= MAX_INTEREST_TABS; tab += 1) {
             let clicked = false
 
             for (let attempt = 0; attempt < CHIP_TRIES && !clicked; attempt += 1) {
-               await scrollToTop()
-               await reader.wait(PAUSES.scroll)
-               clicked = await hands.clickNth(INTEREST_TAB, tab, CHIP_AVOID)
+               clicked = await hands.clickNth(INTEREST_TAB, tab, CHIP_AVOID, true)
 
                if (!clicked) {
                   const png = await browser.screenshot?.()

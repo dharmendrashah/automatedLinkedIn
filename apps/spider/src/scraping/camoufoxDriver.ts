@@ -517,9 +517,24 @@ class CamoufoxSession implements DetectionSession {
    }
 
    // Clicks the Nth element (from 0, in page order) of `selector`, where it is on top and nothing matching `avoid` is under the
-   // pointer, for a row of a list that is not a link. False when it is not in view (the list is scrolled to it first) or there
-   // is no such element.
-   public async clickNth(selector: string, index: number, avoid: string) {
+   // pointer, for a row of a list that is not a link. False when it is not in view or there is no such element. With `bringIntoView`
+   // the element is first put in the middle of its scroller, which is for a control that sits far from where the page was left.
+   public async clickNth(selector: string, index: number, avoid: string, bringIntoView = false) {
+      if (bringIntoView) {
+         await this.page.evaluate(
+            ({ selector: target, nth }) => {
+               document.querySelectorAll(target)[nth]?.scrollIntoView({
+                  block: 'center',
+                  behavior: 'instant',
+               })
+            },
+            {
+               selector,
+               nth: index,
+            }
+         )
+      }
+
       const spot = await this.spot({
          selector,
          nth: index,

@@ -67,7 +67,8 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
       }
 
       if (clickNth) {
-         this.clickNth = (selector, index, avoid) => clickNth.call(detector, selector, index, avoid)
+         this.clickNth = (selector, index, avoid, bringIntoView) =>
+            clickNth.call(detector, selector, index, avoid, bringIntoView)
       }
 
       if (scrollOver) {
