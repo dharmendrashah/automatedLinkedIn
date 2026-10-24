@@ -2,6 +2,9 @@ import { z } from 'zod'
 
 export const MESSAGES_CONTRACT_VERSION = 1
 
+// The report item of a messages run that holds the place to go on from; the spider writes it and brain reads it.
+export const MESSAGES_NEXT_SKIP_LABEL = 'To read the next ones, set skip to'
+
 const personSchema = z.strictObject({
    name: z.string().min(1).max(300),
    profileUrl: z.string().max(500).optional(),

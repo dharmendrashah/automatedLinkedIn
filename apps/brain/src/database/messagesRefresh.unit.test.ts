@@ -12,9 +12,52 @@ vi.mock('./prisma.service', () => ({ PrismaService: { client: { linkedInAccount:
 vi.mock('./task.service', () => ({ TaskService: { request: mocks.request } }))
 
 describe('messagesInput', () => {
+   const account = {
+      messagesReadAt: null,
+      messagesResumeSkip: null,
+      messagesResumeUntil: null,
+   }
+
    it('should read as much as the task allows the first time, and the newest conversations after', () => {
-      expect(messagesInput(null)).toEqual({ limit: 50 })
-      expect(messagesInput(new Date())).toEqual({ limit: 20 })
+      expect(messagesInput(account)).toEqual({ limit: 50 })
+      expect(
+         messagesInput({
+            ...account,
+            messagesReadAt: new Date(),
+         })
+      ).toEqual({ limit: 20 })
+   })
+
+   it('should go on after what was read, to where the batch ends, when part of it is pending', () => {
+      expect(
+         messagesInput({
+            messagesReadAt: new Date(),
+            messagesResumeSkip: 14,
+            messagesResumeUntil: 50,
+         })
+      ).toEqual({
+         skip: 14,
+         limit: 36,
+      })
+   })
+
+   it('should ignore a pending batch that has nothing left or is half written', () => {
+      const read = new Date()
+
+      expect(
+         messagesInput({
+            messagesReadAt: read,
+            messagesResumeSkip: 50,
+            messagesResumeUntil: 50,
+         })
+      ).toEqual({ limit: 20 })
+      expect(
+         messagesInput({
+            messagesReadAt: read,
+            messagesResumeSkip: 14,
+            messagesResumeUntil: null,
+         })
+      ).toEqual({ limit: 20 })
    })
 })
 

@@ -1,3 +1,5 @@
+import { MESSAGES_NEXT_SKIP_LABEL } from '@automatedLinkedIn/contracts'
+
 import { type TaskOutcome } from '../defineTask'
 import { type MessagesRead } from './read'
 
@@ -24,7 +26,8 @@ export const answerFor = ({ outcome, conversations, messages }: MessagesRead, sk
    return {
       status: 'SUCCEEDED',
       verdict: outcome,
-      message: outcome === 'DONE' ? 'Read the messages.' : 'Read part of the messages; run again to go on.',
+      message:
+         outcome === 'DONE' ? 'Read the messages.' : 'Read part of the messages; the rest is read in the next run.',
       commitSession: true,
       report: {
          headline: `Read ${plural(conversations, 'conversation')} and ${plural(messages, 'message')}.`,
@@ -41,7 +44,7 @@ export const answerFor = ({ outcome, conversations, messages }: MessagesRead, sk
                      value: String(messages),
                   },
                   {
-                     label: 'To read the next ones, set skip to',
+                     label: MESSAGES_NEXT_SKIP_LABEL,
                      value: String(skip + conversations),
                   },
                ],

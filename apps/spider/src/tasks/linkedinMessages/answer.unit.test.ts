@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { MESSAGES_NEXT_SKIP_LABEL } from '@automatedLinkedIn/contracts'
+
 import { answerFor } from './answer'
 
 describe('answerFor', () => {
@@ -38,7 +40,7 @@ describe('answerFor', () => {
          commitSession: true,
       })
       expect(answer.report?.sections[0]?.items).toContainEqual({
-         label: 'To read the next ones, set skip to',
+         label: MESSAGES_NEXT_SKIP_LABEL,
          value: '50',
       })
    })

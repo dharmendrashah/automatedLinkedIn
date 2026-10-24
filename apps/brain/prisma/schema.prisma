@@ -530,6 +530,10 @@ model LinkedInAccount {
   displayName           String?
   imageUrl              String?
   messagesReadAt        DateTime?
+  // A batch of conversations that was only partly read: where the next read goes on and where the batch ends; both null when
+  // nothing is pending (.plan/messages-resume.md).
+  messagesResumeSkip    Int?
+  messagesResumeUntil   Int?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 

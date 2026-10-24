@@ -53,6 +53,8 @@ const account = (extra: Record<string, unknown> = {}) => ({
    // Not due, so the tests of the check and the visit stay about those.
    nextMessagesAt: LATER,
    messagesReadAt: EARLIER,
+   messagesResumeSkip: null,
+   messagesResumeUntil: null,
    lastVerifiedAt: new Date('2026-10-18T20:00:00Z'),
    proxyServers: [
       {
@@ -261,6 +263,29 @@ describe('AccountDailyJob', () => {
             input: { limit: 20 },
          })
       )
+   })
+
+   it('should go on with a partly read batch: skip what was read and ask for the rest', async () => {
+      mocks.findMany.mockResolvedValue([
+         account({
+            nextMessagesAt: EARLIER,
+            messagesResumeSkip: 14,
+            messagesResumeUntil: 50,
+         }),
+      ])
+
+      await run()
+
+      expect(mocks.requestTask).toHaveBeenCalledWith({
+         userId: 'u1',
+         task: 'linkedin-messages',
+         accountId: 'acc1',
+         trigger: 'automatic',
+         input: {
+            skip: 14,
+            limit: 36,
+         },
+      })
    })
 
    it('should let a read go when there was no good sign-in in the last day, and keep its time when it cannot be queued', async () => {

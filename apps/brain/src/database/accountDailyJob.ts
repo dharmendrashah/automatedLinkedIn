@@ -61,6 +61,8 @@ const findDue = (now: Date) => {
          nextBrowseAt: true,
          nextMessagesAt: true,
          messagesReadAt: true,
+         messagesResumeSkip: true,
+         messagesResumeUntil: true,
          lastVerifiedAt: true,
          proxyServers: {
             where: { status: 'ACTIVE' },
@@ -114,14 +116,24 @@ const requestVisit = async ({ id, userId }: Due): Promise<Attempt> => {
    }
 }
 
-const requestMessages = async ({ id, userId, messagesReadAt }: Due): Promise<Attempt> => {
+const requestMessages = async ({
+   id,
+   userId,
+   messagesReadAt,
+   messagesResumeSkip,
+   messagesResumeUntil,
+}: Due): Promise<Attempt> => {
    try {
       const { id: sessionId } = await TaskService.request({
          userId,
          task: MESSAGES_TASK,
          accountId: id,
          trigger: 'automatic',
-         input: messagesInput(messagesReadAt),
+         input: messagesInput({
+            messagesReadAt,
+            messagesResumeSkip,
+            messagesResumeUntil,
+         }),
       })
 
       return {

@@ -7,7 +7,21 @@ import { TaskRefusedError, TaskUnavailableError } from './taskErrors'
 const FIRST_READ = 50
 const LATER_READ = 20
 
-export const messagesInput = (messagesReadAt: Date | null) => {
+export type MessagesAccount = {
+   messagesReadAt: Date | null
+   messagesResumeSkip: number | null
+   messagesResumeUntil: number | null
+}
+
+// A batch that was only partly read goes on after what was read, to where it ends (.plan/messages-resume.md).
+export const messagesInput = ({ messagesReadAt, messagesResumeSkip, messagesResumeUntil }: MessagesAccount) => {
+   if (messagesResumeSkip !== null && messagesResumeUntil !== null && messagesResumeUntil > messagesResumeSkip) {
+      return {
+         skip: messagesResumeSkip,
+         limit: messagesResumeUntil - messagesResumeSkip,
+      }
+   }
+
    const limit = messagesReadAt === null ? FIRST_READ : LATER_READ
 
    return { limit }
@@ -31,6 +45,8 @@ export class MessagesRefresh {
          select: {
             id: true,
             messagesReadAt: true,
+            messagesResumeSkip: true,
+            messagesResumeUntil: true,
          },
          orderBy: { createdAt: 'asc' },
       })
@@ -39,14 +55,14 @@ export class MessagesRefresh {
          skipped: [],
       }
 
-      for (const { id, messagesReadAt } of accounts) {
+      for (const { id, ...account } of accounts) {
          try {
             await TaskService.request({
                userId,
                task: MESSAGES_TASK,
                accountId: id,
                trigger: 'manual',
-               input: messagesInput(messagesReadAt),
+               input: messagesInput(account),
             })
             result.started += 1
          } catch (error) {
