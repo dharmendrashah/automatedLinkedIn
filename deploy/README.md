@@ -22,7 +22,7 @@ surface on your laptop instead of in the cloud.
 | Workload | Image | Notes |
 | --- | --- | --- |
 | `brain` | `-brain` | API. Init container `-brain-migrate` runs `db:migrate:deploy` first. |
-| `brain-worker` | `-brain` (same image, command `node dist/src/worker/main.js`) | Applies the spider's answers from RabbitMQ and runs the scheduled jobs. `GET /health` on 3004. Keep one replica with `WORKER_ROLES=consumers,jobs`; to scale, add a second Deployment with `WORKER_ROLES=consumers`. Failed messages wait in `<queue>.dead`; replay with `pnpm --filter @automatedLinkedIn/brain worker:replay <consumer>`. |
+| `brain-worker` | `-brain` (same image, command `node dist/src/worker/main.js`) | Applies the spider's answers from RabbitMQ and runs the scheduled jobs. Init container `-brain-migrate` too, so it never starts on an unmigrated schema (brain runs it at the same time; Prisma's lock makes that safe). `GET /health` on 3004. Keep one replica with `WORKER_ROLES=consumers,jobs`; to scale, add a second Deployment with `WORKER_ROLES=consumers`. Failed messages wait in `<queue>.dead`; replay with `pnpm --filter @automatedLinkedIn/brain worker:replay <consumer>`. |
 | `body` | `-body` | SPA on nginx. Environment specific: `VITE_*` is baked at build time. |
 | `authentik-server` | `ghcr.io/goauthentik/server:2026.8.3` | Identity provider. |
 | `authentik-worker` | same | Applies the blueprint from `infra/authentik/blueprints/`. |

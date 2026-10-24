@@ -28,6 +28,21 @@ spec:
       # The same account as brain: it is bound to the service account that may read runs/ in the bucket, which the worker needs to
       # store the messages of a finished run (.plan/unibox-backend.md). It also gets the read-only status Role of that account.
       serviceAccountName: brain
+      # The worker and brain roll out together, so without this the worker's new code can ask for a column or table that brain's
+      # init container has not added yet. `migrate deploy` is idempotent and Prisma takes a database lock, so both may run at once.
+      initContainers:
+        - name: migrate
+          image: automatedlinkedin-brain-migrate
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: app-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 768Mi
       containers:
         - name: brain-worker
           # The same image as brain; only the command differs.

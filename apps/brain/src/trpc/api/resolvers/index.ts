@@ -1,3 +1,4 @@
+export { accountProfile } from './accountProfile/accountProfile'
 export { icp } from './icp/icp'
 export { jobs } from './jobs/jobs'
 export { label } from './label/label'

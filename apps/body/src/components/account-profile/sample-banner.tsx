@@ -9,17 +9,14 @@ type Props = {
    onChange: (kind: SampleKind) => void
 }
 
-// Until the profile can be read from LinkedIn, the page shows an invented one. It says so, and lets the reviewer try the three
-// situations: a full profile, a new account and a profile never read.
+// A reviewer can ask for an invented profile with `?sample=` in the address, to try the three situations: a full profile, a new
+// account and a profile never read. It says so, so it is never taken for the real one.
 export const SampleBanner = ({ kind, onChange }: Props) => (
    <Alert>
       <FlaskConical />
       <AlertTitle>Preview with sample data</AlertTitle>
       <AlertDescription>
-         <p>
-            This profile is invented, not the one on LinkedIn. The real profile of this account shows here once reading
-            it is built.
-         </p>
+         <p>This profile is invented, not the one on LinkedIn. Remove ?sample= from the address to see the real one.</p>
          <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Sample to show">
             {SAMPLE_KINDS.map(option => (
                <Button
