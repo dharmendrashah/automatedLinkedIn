@@ -293,6 +293,16 @@ export const summaryOf = (block: Block, config: GraphNode['config'], icpName?: s
       return RUN_WAITS[show(values.wait)] ?? block.summary
    }
 
+   if (block.type === 'account.select') {
+      const accounts = listOf(values.accounts).length
+
+      return accounts === 0
+         ? 'Pick the accounts to use'
+         : accounts === 1
+           ? 'Uses 1 account'
+           : `Takes turns across ${accounts} accounts`
+   }
+
    if ('howMany' in values) {
       const unit = UNITS[block.type] ?? ''
       const amount = values.all === true ? `All ${unit}`.trim() : `Up to ${show(values.howMany)} ${unit}`.trim()

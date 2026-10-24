@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { PageVisitService } from './pageVisit.service'
+import { PageVisitRefusedError, PageVisitService } from './pageVisit.service'
 import { TaskRefusedError } from './taskErrors'
 
 const mocks = vi.hoisted(() => ({
@@ -273,5 +273,52 @@ describe('PageVisitService.request', () => {
       mocks.findVisit.mockResolvedValue({ id: 'v1' })
 
       await expect(PageVisitService.request('u1', 'acc1', { profileId: 'p1' })).rejects.toBeInstanceOf(TaskRefusedError)
+   })
+
+   it('should name what each refusal is about, so a caller can tell a person to skip from an account to wait for', async () => {
+      const reasonOf = async (ask: Promise<unknown>) => {
+         const error: unknown = await ask.catch((caught: unknown) => caught)
+
+         return error instanceof PageVisitRefusedError ? error.reason : undefined
+      }
+
+      mocks.findVisit.mockResolvedValue({ id: 'v1' })
+      await expect(reasonOf(PageVisitService.request('u1', 'acc1', { profileId: 'p1' }))).resolves.toBe('REPEAT')
+
+      mocks.findVisit.mockResolvedValue(null)
+      mocks.countVisits.mockResolvedValue(15)
+      await expect(reasonOf(PageVisitService.request('u1', 'acc1', { profileId: 'p1' }))).resolves.toBe('CAP')
+
+      mocks.countVisits.mockResolvedValue(0)
+      mocks.findOwnProfile.mockResolvedValue({ data: { profileUrl: 'https://www.linkedin.com/in/ada-lovelace/' } })
+      await expect(reasonOf(PageVisitService.request('u1', 'acc1', { profileId: 'p1' }))).resolves.toBe('OWN')
+
+      await expect(
+         reasonOf(
+            PageVisitService.request('u1', 'acc1', {
+               kind: 'PROFILE',
+               link: 'https://example.com/x',
+            })
+         )
+      ).resolves.toBe('LINK')
+   })
+
+   it('should save the run and block that asked for a visit, and nothing of them for a visit asked by hand', async () => {
+      await PageVisitService.request('u1', 'acc1', { profileId: 'p1' }, undefined, {
+         runId: 'r1',
+         nodeId: 'n1',
+      })
+      await PageVisitService.request('u1', 'acc1', { profileId: 'p1' })
+
+      const [[withRun], [byHand]] = mocks.request.mock.calls
+
+      await withRun.onStart('s1', { linkedInPageVisit: { create: mocks.createVisit } })
+      await byHand.onStart('s2', { linkedInPageVisit: { create: mocks.createVisit } })
+
+      expect(mocks.createVisit.mock.calls[0]?.[0].data).toMatchObject({
+         runId: 'r1',
+         nodeId: 'n1',
+      })
+      expect(mocks.createVisit.mock.calls[1]?.[0].data).not.toHaveProperty('runId')
    })
 })

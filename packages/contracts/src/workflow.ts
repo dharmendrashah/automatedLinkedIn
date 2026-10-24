@@ -55,6 +55,8 @@ export type Field = (
    | { key: string; label: string; kind: 'parent' }
    // Another workflow of the same owner.
    | { key: string; label: string; kind: 'workflow' }
+   // One or more of the owner's LinkedIn accounts.
+   | { key: string; label: string; kind: 'accounts' }
 ) & { hint?: string; advanced?: boolean; showWhen?: { key: string; atLeast: number } }
 
 const optionsOf = (pairs: [string, string][]): Option[] =>
@@ -175,6 +177,12 @@ const GIVE_UP_AFTER = optionsOf([
    ['720', '12 hours'],
    ['1440', '24 hours'],
 ])
+
+// Blocks that act on LinkedIn with the owner's accounts.
+export const VISIT_BLOCKS = new Set<BlockType>(['account.visitProfile', 'account.visitCompany'])
+
+// The most accounts one "Select accounts" block holds.
+export const MAX_POOL = 20
 
 // Blocks that keep what they did not pass on for an Else after them.
 export const ELSE_SOURCES = new Set<BlockType>(['logic.if', 'logic.runWorkflow'])
@@ -467,6 +475,9 @@ export const BLOCK_TYPES = [
    'logic.else',
    'logic.runWorkflow',
    'logic.forEach',
+   'account.select',
+   'account.visitProfile',
+   'account.visitCompany',
    'output.list',
    'output.markPosts',
    'output.csv',
@@ -476,7 +487,7 @@ export const BLOCK_TYPES = [
 export type BlockType = (typeof BLOCK_TYPES)[number]
 
 type BlockSpec = {
-   group: 'Triggers' | 'Inputs' | 'Collect' | 'Process' | 'Logic' | 'Output'
+   group: 'Triggers' | 'Inputs' | 'Collect' | 'Process' | 'Logic' | 'Account Actions' | 'Output'
    label: string
    summary: string
    // What a block costs, in words, such as "about $0.002 per person". Free blocks have none.
@@ -1758,6 +1769,49 @@ const BLOCKS = {
          },
       ],
    },
+   'account.select': {
+      group: 'Account Actions',
+      label: 'Select accounts',
+      summary:
+         'Picks the accounts that take turns doing the LinkedIn actions after it. Passes everything on unchanged.',
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         accounts: z
+            .array(z.string().min(1).max(100))
+            .min(1)
+            .max(MAX_POOL)
+            .refine(ids => new Set(ids).size === ids.length, 'must not repeat an account'),
+      }),
+      fields: [
+         {
+            key: 'accounts',
+            label: 'Accounts',
+            kind: 'accounts',
+            hint: `Up to ${MAX_POOL}. Each visit goes to the account that went longest without one; each keeps its own limits.`,
+         },
+      ],
+   },
+   'account.visitProfile': {
+      group: 'Account Actions',
+      label: 'Visit profile',
+      summary:
+         'Opens each person’s profile with one of the chosen accounts, waits a few seconds and scrolls down. Passes on the people viewed.',
+      input: 'profile',
+      output: 'profile',
+      config: empty,
+      fields: [],
+   },
+   'account.visitCompany': {
+      group: 'Account Actions',
+      label: 'Visit company',
+      summary:
+         'Opens each company page with one of the chosen accounts, waits a few seconds and scrolls down. Passes on the companies viewed.',
+      input: 'company',
+      output: 'company',
+      config: empty,
+      fields: [],
+   },
    'output.csv': {
       group: 'Output',
       label: 'Export to CSV',
@@ -1895,6 +1949,28 @@ const isTrigger = (type: BlockType) => BLOCKS[type].input === null
 const parentsOf = (graph: Graph, id: string) => graph.edges.filter(edge => edge.to === id).map(edge => edge.from)
 
 export const edgeKey = ({ from, to }: { from: string; to: string }) => `${from}>${to}`
+
+// The nearest block of a type before a block, going back along the lines; null when there is none.
+export const nodeBefore = (graph: Graph, id: string, type: BlockType) => {
+   const queue = parentsOf(graph, id)
+   const seen = new Set<string>()
+
+   while (queue.length > 0) {
+      const next = queue.shift() ?? ''
+      const node = graph.nodes.find(candidate => candidate.id === next)
+
+      if (node?.type === type) {
+         return node
+      }
+
+      if (!seen.has(next)) {
+         seen.add(next)
+         queue.push(...parentsOf(graph, next))
+      }
+   }
+
+   return null
+}
 
 // Lines that go back to a block already on the way (depth-first from the blocks with nothing before them).
 export const backEdges = (graph: Graph) => {
@@ -2052,6 +2128,7 @@ const edgeNotes = (graph: Graph, byId: Map<string, GraphNode>): GraphError[] =>
          gives === needs ||
          needs === 'start' ||
          target.type === 'process.merge' ||
+         target.type === 'account.select' ||
          target.type === 'logic.runWorkflow'
       ) {
          return []
@@ -2111,6 +2188,22 @@ export const validateGraph = (graph: Graph): GraphError[] => {
          !parentsOf(graph, node.id).some(id => ELSE_SOURCES.has(byId.get(id)?.type ?? 'logic.else'))
       ) {
          note('Else passes on nothing unless an If or "Run another workflow" comes right before it.', node.id)
+      }
+
+      if (VISIT_BLOCKS.has(node.type) && !nodeBefore(graph, node.id, 'account.select')) {
+         problems.push({
+            nodeId: node.id,
+            level: 'error',
+            message: `${BLOCKS[node.type].label} needs "Select accounts" before it.`,
+         })
+      }
+
+      if (node.type === 'account.select') {
+         const after = downstreamOf(graph.edges, node.id)
+
+         if (!graph.nodes.some(other => VISIT_BLOCKS.has(other.type) && other.id !== node.id && after.has(other.id))) {
+            note('No LinkedIn action comes after this block, so the accounts are not used.', node.id)
+         }
       }
    }
 

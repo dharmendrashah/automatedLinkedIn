@@ -9,6 +9,7 @@ import { ChevronRight, CircleAlert, Trash2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
+import { AccountsPick } from './accounts-pick'
 import { BlockOutput } from './block-output'
 import { INPUT_KINDS, isInputType } from './input-kinds'
 import { InputMatches } from './input-matches'
@@ -60,6 +61,10 @@ const flowOf = (block: Block) => {
 
    if (block.type === 'logic.runWorkflow') {
       return 'Takes anything, gives what it got or the people the other workflow saved'
+   }
+
+   if (block.type === 'account.select') {
+      return 'Takes anything, passes it on unchanged'
    }
 
    const takes = block.input && KINDS[block.input] ? `Takes ${KINDS[block.input]}` : 'Starts on its own'
@@ -133,6 +138,12 @@ export const BlockSettings = ({ node, workflowId, problems, icps, workflows, par
       if (item.kind === 'search') {
          return (
             <SearchPick id={id} options={item.options} max={item.max} value={Array.isArray(value) ? value : []} onChange={next => onChange(item.key, next)} />
+         )
+      }
+
+      if (item.kind === 'accounts') {
+         return (
+            <AccountsPick id={id} value={Array.isArray(value) ? value : []} onChange={next => onChange(item.key, next)} />
          )
       }
 

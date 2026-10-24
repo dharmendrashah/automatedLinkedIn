@@ -1,6 +1,7 @@
 import {
    Briefcase,
    Building,
+   Building2,
    CheckCheck,
    CirclePlay,
    Clock,
@@ -9,6 +10,7 @@ import {
    FileSearch,
    Funnel,
    GitBranch,
+   Eye,
    Globe,
    Hand,
    Heart,
@@ -27,6 +29,7 @@ import {
    Target,
    ThumbsUp,
    UserRound,
+   UserCog,
    UserSearch,
    Users,
    Webhook,
@@ -66,6 +69,9 @@ export const BLOCK_ICONS: Record<Block['type'], LucideIcon> = {
    'logic.else': GitBranch,
    'logic.forEach': Repeat,
    'logic.runWorkflow': CirclePlay,
+   'account.select': UserCog,
+   'account.visitProfile': Eye,
+   'account.visitCompany': Building2,
    'output.csv': FileDown,
    'output.sendApi': Send,
 }
@@ -95,6 +101,11 @@ export const GROUPS: { group: Block['group']; emoji: string; tile: string }[] = 
       group: 'Logic',
       emoji: '🔀',
       tile: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
+   },
+   {
+      group: 'Account Actions',
+      emoji: '🧭',
+      tile: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
    },
    {
       group: 'Output',

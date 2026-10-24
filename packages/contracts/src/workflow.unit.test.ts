@@ -16,6 +16,7 @@ import {
    inputTake,
    nextScheduledRun,
    nextScheduledRuns,
+   nodeBefore,
    previewGraph,
    scheduleOf,
    scheduleSchema,
@@ -553,5 +554,85 @@ describe('templates', () => {
          costMicros: 50 * 4_000,
       })
       expect(JSON.stringify(templates).toLowerCase()).not.toMatch(/mindcase|apify/)
+   })
+})
+
+describe('Account Actions', () => {
+   const node = (id: string, type: BlockType, config: NodeConfig = {}) => ({
+      id,
+      type,
+      config,
+      position: {
+         x: 0,
+         y: 0,
+      },
+   })
+   const chain = (...nodes: Graph['nodes']): Graph => ({
+      nodes,
+      edges: nodes.slice(1).map((next, index) => ({
+         from: nodes[index]?.id ?? '',
+         to: next.id,
+      })),
+   })
+
+   it('should group the account block and both visit blocks under "Account Actions"', () => {
+      const groups = catalog()
+         .filter(({ group }) => group === 'Account Actions')
+         .map(({ type }) => type)
+
+      expect(groups).toEqual(['account.select', 'account.visitProfile', 'account.visitCompany'])
+   })
+
+   it('should need one to twenty different accounts', () => {
+      const parse = (accounts: string[]) => blockOf('account.select').config.safeParse({ accounts }).success
+
+      expect(parse(['a1'])).toBe(true)
+      expect(parse([])).toBe(false)
+      expect(parse(['a1', 'a1'])).toBe(false)
+      expect(parse(Array.from({ length: 21 }, (_, index) => `a${index}`))).toBe(false)
+   })
+
+   it('should find the nearest account block before a block, and none when there is not one', () => {
+      const graph = chain(
+         node('start', 'trigger.manual'),
+         node('far', 'account.select', { accounts: ['a1'] }),
+         node('near', 'account.select', { accounts: ['a2'] }),
+         node('go', 'account.visitProfile')
+      )
+
+      expect(nodeBefore(graph, 'go', 'account.select')?.id).toBe('near')
+      expect(nodeBefore(graph, 'near', 'account.select')?.id).toBe('far')
+      expect(nodeBefore(graph, 'start', 'account.select')).toBeNull()
+   })
+
+   it('should stop a visit block that has no account block before it, and only note an unused account block', () => {
+      const lonely = chain(node('start', 'trigger.manual'), node('go', 'account.visitCompany'))
+      const unused = chain(node('people', 'input.profiles'), node('pool', 'account.select', { accounts: ['a1'] }))
+      const good = chain(
+         node('people', 'input.profiles'),
+         node('pool', 'account.select', { accounts: ['a1'] }),
+         node('go', 'account.visitProfile')
+      )
+
+      expect(errorsOf(validateGraph(lonely)).map(({ nodeId }) => nodeId)).toEqual(['go'])
+      expect(errorsOf(validateGraph(unused))).toEqual([])
+      expect(validateGraph(unused).some(({ nodeId }) => nodeId === 'pool')).toBe(true)
+      expect(validateGraph(good).filter(({ nodeId }) => nodeId === 'pool' || nodeId === 'go')).toEqual([])
+   })
+
+   it('should cost nothing and pass on what reaches the blocks', () => {
+      const graph = chain(
+         node('profiles', 'input.profiles', { links: ['https://www.linkedin.com/in/ada'] }),
+         node('pool', 'account.select', { accounts: ['a1'] }),
+         node('go', 'account.visitProfile')
+      )
+      const estimate = estimateGraph(graph, {
+         posts: 0,
+         profiles: 7,
+         companies: 0,
+      })
+
+      expect(estimate.totalMicros).toBe(0)
+      expect(estimate.nodes.go?.items).toBe(estimate.nodes.profiles?.items)
    })
 })

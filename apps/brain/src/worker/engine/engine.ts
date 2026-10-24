@@ -28,7 +28,7 @@ const PASSED = new Set(['DONE', 'PARTIAL'])
 const FINISHED = new Set(['DONE', 'PARTIAL', 'FAILED'])
 const SCORING_STEPS = new Set(['score.icp', 'collect.profile'])
 // Blocks that take items of every kind as they are.
-const RAW_INPUTS = new Set(['process.merge', 'logic.runWorkflow'])
+const RAW_INPUTS = new Set(['process.merge', 'logic.runWorkflow', 'account.select'])
 
 const PLAIN_FAILURE = 'Something went wrong in this step. The platform owner has been told.'
 const NOT_CONFIGURED = 'Collecting data is not available right now. The platform owner has been told.'

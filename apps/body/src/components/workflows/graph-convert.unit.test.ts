@@ -197,3 +197,13 @@ describe('graph-convert', () => {
       expect(types(choicesFor(withTrigger, null, 'SCORE'))).toEqual(['score.icp'])
    })
 })
+
+describe('Account Actions blocks', () => {
+   const select = block('account.select', 'profile', 'profile')
+
+   it('should say how many accounts take turns, and ask for accounts when none is picked', () => {
+      expect(summaryOf(select, { accounts: ['a1', 'a2', 'a3'] })).toBe('Takes turns across 3 accounts')
+      expect(summaryOf(select, { accounts: ['a1'] })).toBe('Uses 1 account')
+      expect(summaryOf(select, {})).toBe('Pick the accounts to use')
+   })
+})

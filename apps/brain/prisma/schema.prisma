@@ -526,10 +526,14 @@ model LinkedInPageVisit {
   slug       String
   // The run; no relation, because the run's row is deleted after 30 days and the record must outlive it.
   sessionId  String           @unique
+  // The workflow run and block that asked for it (.plan/select-accounts-block.md); null for a visit asked by hand. No relation, like the session.
+  runId      String?
+  nodeId     String?
   status     PageVisitStatus  @default(ASKED)
   createdAt  DateTime         @default(now())
   finishedAt DateTime?
 
+  @@index([runId, nodeId])
   @@index([accountId, createdAt])
   @@index([accountId, slug])
   @@index([profileId])

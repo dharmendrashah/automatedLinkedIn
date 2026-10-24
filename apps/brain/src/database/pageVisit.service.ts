@@ -12,8 +12,19 @@ export const VISITS_PER_DAY = 15
 export const REPEAT_DAYS = 30
 const DAY_MS = 24 * 60 * 60 * 1000
 
+// Why a visit was refused: the page was viewed lately (REPEAT), the account is at its daily limit (CAP), it is the account's own
+// profile (OWN), or the link is not one of the kind asked for (LINK).
+export type PageVisitRefusal = 'REPEAT' | 'CAP' | 'OWN' | 'LINK'
+
 // A refusal the owner can read; the router says it like any other refused task.
-export class PageVisitRefusedError extends TaskRefusedError {}
+export class PageVisitRefusedError extends TaskRefusedError {
+   public readonly reason: PageVisitRefusal
+
+   public constructor(message: string, reason: PageVisitRefusal) {
+      super(message)
+      this.reason = reason
+   }
+}
 
 type Kind = 'PROFILE' | 'COMPANY'
 
@@ -85,7 +96,7 @@ const resolve = async (userId: string, target: PageVisitTarget) => {
    const link = parseLinkedInUrl(target.link, kind === 'PROFILE' ? 'profile' : 'company')
 
    if (!link) {
-      throw new PageVisitRefusedError(`That is not a link to a LinkedIn ${NOUN[kind]}.`)
+      throw new PageVisitRefusedError(`That is not a link to a LinkedIn ${NOUN[kind]}.`, 'LINK')
    }
 
    const saved =
@@ -119,7 +130,9 @@ export class PageVisitService {
       userId: string,
       accountId: string,
       target: PageVisitTarget,
-      confirmed?: boolean
+      confirmed?: boolean,
+      // The workflow run and block that ask for it, kept on the visit.
+      from?: { runId: string; nodeId: string }
    ): Promise<{ id: string } | null> {
       const who = await resolve(userId, target)
 
@@ -141,7 +154,7 @@ export class PageVisitService {
       }
 
       if (kind === 'PROFILE' && (await ownSlug(accountId)) === slug) {
-         throw new PageVisitRefusedError('That is the profile of this account itself.')
+         throw new PageVisitRefusedError('That is the profile of this account itself.', 'OWN')
       }
 
       const now = Date.now()
@@ -158,7 +171,8 @@ export class PageVisitService {
 
       if (repeat) {
          throw new PageVisitRefusedError(
-            `This account already viewed that ${NOUN[kind]} in the last ${REPEAT_DAYS} days.`
+            `This account already viewed that ${NOUN[kind]} in the last ${REPEAT_DAYS} days.`,
+            'REPEAT'
          )
       }
 
@@ -171,7 +185,8 @@ export class PageVisitService {
 
       if (today >= VISITS_PER_DAY) {
          throw new PageVisitRefusedError(
-            `This account has reached its limit of ${VISITS_PER_DAY} page views in 24 hours.`
+            `This account has reached its limit of ${VISITS_PER_DAY} page views in 24 hours.`,
+            'CAP'
          )
       }
 
@@ -191,6 +206,7 @@ export class PageVisitService {
                   companyId: kind === 'COMPANY' ? savedId : null,
                   slug,
                   sessionId,
+                  ...from,
                },
             })
          },
