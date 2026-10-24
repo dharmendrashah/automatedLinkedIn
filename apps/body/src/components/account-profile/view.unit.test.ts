@@ -16,6 +16,11 @@ describe('viewOf', () => {
       expect(viewOf(state({ phase: 'READY' }), false, true)).toBe('LOADING')
    })
 
+   it('should say error, instead of waiting for ever, when the state could not be had', () => {
+      expect(viewOf(undefined, false, false, true)).toBe('ERROR')
+      expect(viewOf(state(), false, false, true)).toBe('EMPTY')
+   })
+
    it('should show the profile whenever there is one, even while a new read goes on or the last one failed', () => {
       expect(viewOf(state({ phase: 'READY' }), true, false)).toBe('PROFILE')
       expect(viewOf(state({ phase: 'READING' }), true, false)).toBe('PROFILE')

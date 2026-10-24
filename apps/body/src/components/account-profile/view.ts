@@ -1,5 +1,5 @@
 // What the account's profile page shows, from the state the server gives and whether a profile is at hand. Pure, so it can be tested.
-export type ProfileView = 'LOADING' | 'READING' | 'FAILED' | 'EMPTY' | 'PROFILE'
+export type ProfileView = 'LOADING' | 'READING' | 'FAILED' | 'EMPTY' | 'PROFILE' | 'ERROR'
 
 export type ProfileStateLike = {
    phase: 'NEVER' | 'READING' | 'READY' | 'FAILED'
@@ -8,12 +8,21 @@ export type ProfileStateLike = {
    lastRun: { ok: boolean; message: string | null; finishedAt: string | null } | null
 }
 
-export const viewOf = (state: ProfileStateLike | undefined, hasProfile: boolean, profileLoading: boolean): ProfileView => {
+export const viewOf = (
+   state: ProfileStateLike | undefined,
+   hasProfile: boolean,
+   profileLoading: boolean,
+   stateFailed = false
+): ProfileView => {
    if (hasProfile) {
       return 'PROFILE'
    }
 
-   if (!state || (state.phase === 'READY' && profileLoading)) {
+   if (!state) {
+      return stateFailed ? 'ERROR' : 'LOADING'
+   }
+
+   if (state.phase === 'READY' && profileLoading) {
       return 'LOADING'
    }
 

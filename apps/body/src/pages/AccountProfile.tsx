@@ -14,6 +14,7 @@ import { ConfirmRunDialog } from '@/components/accounts/confirm-run-dialog'
 import { LOGIN_TASK } from '@/components/accounts/login-test'
 import { VISIT_TASK } from '@/components/accounts/visit'
 import { FailureCard } from '@/components/failure-card'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useQuery } from '@tanstack/react-query'
@@ -51,7 +52,6 @@ export const AccountProfile = () => {
       { accountId: id },
       {
          enabled: !sample,
-         retry: false,
          refetchInterval: query => (query.state.data?.phase === 'READING' ? READING_POLL_MS : false),
       }
    )
@@ -115,7 +115,7 @@ export const AccountProfile = () => {
          : profile
            ? 'PROFILE'
            : 'EMPTY'
-      : viewOf(state.data, Boolean(profile), stored.isPending && stored.fetchStatus !== 'idle')
+      : viewOf(state.data, Boolean(profile), stored.isPending && stored.fetchStatus !== 'idle', state.isError)
    const reading = state.data?.phase === 'READING' || read.isPending
    const failedNote =
       !sample && view === 'PROFILE' && state.data?.lastRun?.ok === false
@@ -188,10 +188,17 @@ export const AccountProfile = () => {
                   <p className="text-muted-foreground text-sm" role={view === 'READING' ? 'status' : undefined}>
                      {view === 'READING'
                         ? 'Reading the profile. This takes about 5 minutes, and this page updates when it is done.'
-                        : state.data
-                          ? noticeOf(state.data)
-                          : 'The profile of this account has not been read yet.'}
+                        : view === 'ERROR'
+                          ? 'The profile could not be loaded. Check that the server is running, then try again.'
+                          : state.data
+                            ? noticeOf(state.data)
+                            : 'The profile of this account has not been read yet.'}
                   </p>
+                  {view === 'ERROR' ? (
+                     <Button className="w-fit" variant="outline" size="sm" onClick={() => void state.refetch()}>
+                        Try again
+                     </Button>
+                  ) : null}
                </CardContent>
             </Card>
          ) : null}
