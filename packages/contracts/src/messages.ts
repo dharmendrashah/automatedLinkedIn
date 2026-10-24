@@ -2,6 +2,17 @@ import { z } from 'zod'
 
 export const MESSAGES_CONTRACT_VERSION = 1
 
+// The report item of a messages run that holds the place to go on from; the spider writes it and brain reads it.
+export const MESSAGES_NEXT_SKIP_LABEL = 'To read the next ones, set skip to'
+
+// The report item that says whether the walk reached the end of the list or the first conversation it already knew (value `Yes`),
+// so there is nothing left to go on with; `No` when it stopped before (.plan/messages-first-sync-and-new-only.md).
+export const MESSAGES_FINISHED_LABEL = 'Everything the list holds was gone through'
+
+// What a row of the list is known by without opening it: 8 hex characters of its title and last words. The spider makes it, brain
+// keeps it per conversation and hands it back in `known`, so the same page always gives the same value.
+export const ROW_HASH_PATTERN = /^[0-9a-f]{8}$/
+
 const personSchema = z.strictObject({
    name: z.string().min(1).max(300),
    profileUrl: z.string().max(500).optional(),
@@ -51,6 +62,8 @@ export const conversationSchema = z.strictObject({
    unread: z.boolean(),
    // The date text of its row in the list, as shown ("Jan 16").
    lastActivity: z.string().max(100),
+   // The hash of its row in the list as it was before the conversation was opened.
+   rowHash: z.string().regex(ROW_HASH_PATTERN).optional(),
    // Whether the first message of the conversation was reached; false when reading stopped before.
    complete: z.boolean(),
    messages: z.array(messageSchema),

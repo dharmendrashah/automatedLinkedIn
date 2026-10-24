@@ -4,7 +4,7 @@ import { type JobItemInput } from './jobRun.service'
 import { VISIT_TASK } from './linkedInAccount.service'
 import { LinkedInAccountValidationService } from './linkedInAccountValidation.service'
 import { MESSAGES_TASK } from './linkedInMessages.hooks'
-import { messagesInput } from './messagesRefresh'
+import { messagesInput, sweepDue } from './messagesRefresh'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
 import { TaskRefusedError } from './taskErrors'
@@ -14,6 +14,8 @@ const MAX_PER_RUN = 100
 const DAY_MS = 24 * 60 * 60 * 1000
 // The messages are read this often (12 times a day), not once a day like the check and the visit.
 const MESSAGES_EVERY_MS = 2 * 60 * 60 * 1000
+// The first read of an account goes through the inbox in batches, at most this many a day (.plan/messages-first-sync-and-new-only.md).
+const MAX_FIRST_READS_A_DAY = 5
 // A good sign-in this recent (the owner's own check, say) counts as the day's check.
 const RECENT_SIGN_IN_MS = 12 * 60 * 60 * 1000
 
@@ -61,6 +63,9 @@ const findDue = (now: Date) => {
          nextBrowseAt: true,
          nextMessagesAt: true,
          messagesReadAt: true,
+         messagesBackfilledAt: true,
+         messagesSweptAt: true,
+         messagesResumeSkip: true,
          lastVerifiedAt: true,
          proxyServers: {
             where: { status: 'ACTIVE' },
@@ -114,15 +119,43 @@ const requestVisit = async ({ id, userId }: Due): Promise<Attempt> => {
    }
 }
 
-const requestMessages = async ({ id, userId, messagesReadAt }: Due): Promise<Attempt> => {
+const requestMessages = async (account: Due, now: Date): Promise<Attempt> => {
+   const { id, userId } = account
+
    try {
+      if (account.messagesBackfilledAt === null) {
+         const batches = await PrismaService.client.spiderSession.count({
+            where: {
+               linkedInAccountId: id,
+               task: MESSAGES_TASK,
+               trigger: 'automatic',
+               startedAt: { gte: new Date(now.getTime() - DAY_MS) },
+            },
+         })
+
+         if (batches >= MAX_FIRST_READS_A_DAY) {
+            return {
+               kind: 'letGo',
+               reason: 'The first read of the messages has done its batches for today and goes on later',
+            }
+         }
+      }
+
+      const sweep = sweepDue(account, now)
       const { id: sessionId } = await TaskService.request({
          userId,
          task: MESSAGES_TASK,
          accountId: id,
          trigger: 'automatic',
-         input: messagesInput(messagesReadAt),
+         input: await messagesInput(account, { sweep }),
       })
+
+      if (sweep) {
+         await PrismaService.client.linkedInAccount.update({
+            where: { id },
+            data: { messagesSweptAt: now },
+         })
+      }
 
       return {
          kind: 'asked',
@@ -267,7 +300,7 @@ export class AccountDailyJob {
             const read = await daily(
                'nextMessagesAt',
                'messages-read',
-               async () => (signedInToday ? requestMessages(account) : notSignedIn),
+               async () => (signedInToday ? requestMessages(account, now) : notSignedIn),
                MESSAGES_EVERY_MS
             )
 

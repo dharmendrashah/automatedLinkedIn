@@ -3,12 +3,19 @@ import { describe, expect, it, vi } from 'vitest'
 import { type MessagesFile, messagesFileSchema } from '@automatedLinkedIn/contracts'
 
 import { INBOX_LIST, INBOX_ROW, THREAD_PANE } from '../../linkedin/markup'
+import { rowHash } from '../../linkedin/messageReader'
 import { inboxMarkup, threadMarkup } from '../../linkedin/messagingFixture'
-import { BUDGET_MS, readMessages } from './read'
+import { BUDGET_MS, type MessagesInput, readMessages } from './read'
 
 const BASE = 'https://www.linkedin.com'
 const MESSAGING = `${BASE}/messaging/`
 const threadUrl = (index: number) => `${BASE}/messaging/thread/thread-${index}/`
+// The hash of the row the page shows at this place (see `setup`).
+const hashOf = (index: number) =>
+   rowHash({
+      title: `Person ${index}`,
+      snippet: `last words ${index}`,
+   })
 // A row at a time shows up to this many of the list, as in a window of a real page.
 const VISIBLE = 6
 // How many rows a scroll of the list brings, and how many conversations the page adds when the list is scrolled to its end.
@@ -29,6 +36,9 @@ type Page = {
    autoOpen?: boolean
    // How many looks at the address still show the conversation before, after a row was clicked: a conversation slow to open.
    slowOpen?: number
+   // How many clicks on the row at each place do nothing before one opens it: 1 is a click that was missed, a large number a row
+   // that never opens.
+   quiet?: Record<number, number>
    // Milliseconds each pause adds to the clock.
    pauseMs?: number
    // How many looks at the page find no list yet, as through a slow proxy.
@@ -42,6 +52,7 @@ type Page = {
 const setup = (page: Page = {}) => {
    const { conversations = 8, messages = 12, signedOutAt, deaf = false, autoOpen = true, slowOpen = 0, pauseMs } = page
    const saved: Array<{ key: string; bytes: number }> = []
+   const quiet = { ...page.quiet }
    let waiting = page.slowList ?? 0
    let time = 0
    let loadedRows = Math.min(PAGE_ROWS, conversations)
@@ -139,6 +150,14 @@ const setup = (page: Page = {}) => {
             return false
          }
 
+         const left = quiet[index] ?? 0
+
+         if (left > 0) {
+            quiet[index] = left - 1
+
+            return true
+         }
+
          before = opened
          delay = slowOpen
          opened = index
@@ -221,13 +240,14 @@ const setup = (page: Page = {}) => {
       attached,
       saved,
       file: () => JSON.parse(attached['messages.json'] ?? 'null') as MessagesFile,
-      read: (input: { limit?: number; skip?: number; snapshots?: boolean } = {}) =>
+      read: (input: Partial<MessagesInput> = {}) =>
          readMessages(
             context as never,
             BASE,
             {
                limit: 50,
                skip: 0,
+               known: [],
                snapshots: false,
                ...input,
             },
@@ -248,6 +268,9 @@ describe('readMessages', () => {
          outcome: 'DONE',
          conversations: 3,
          messages: 36,
+         next: 3,
+         unchanged: 0,
+         finished: false,
       })
 
       const { conversations } = messagesFileSchema.parse(file())
@@ -331,15 +354,141 @@ describe('readMessages', () => {
       expect(file().conversations.map(conversation => conversation.id)).toEqual(['thread-0', 'thread-1', 'thread-2'])
    })
 
+   it('should leave known rows alone, open the others and the unread ones, and go on past them', async () => {
+      const { read, file, browser } = setup()
+
+      // Row 1 is unread in the page, so it is opened although it is known.
+      const result = await read({
+         limit: 5,
+         known: [0, 1, 2, 3].map(hashOf),
+      })
+
+      expect(result).toMatchObject({
+         outcome: 'DONE',
+         conversations: 2,
+         unchanged: 3,
+         next: 5,
+         finished: false,
+      })
+      expect(file().conversations.map(conversation => conversation.id)).toEqual(['thread-1', 'thread-4'])
+      expect(file().conversations[0]?.rowHash).toBe(hashOf(1))
+      expect(browser.clickNth).toHaveBeenCalledTimes(2)
+   })
+
+   it('should stop after the rows in a row it knew, and say it is finished', async () => {
+      const { read, file } = setup()
+
+      await expect(
+         read({
+            limit: 8,
+            known: [0, 2, 3, 4, 5].map(hashOf),
+            stopAfterKnown: 2,
+         })
+      ).resolves.toMatchObject({
+         outcome: 'DONE',
+         conversations: 1,
+         unchanged: 3,
+         next: 4,
+         finished: true,
+      })
+
+      expect(file().conversations.map(conversation => conversation.id)).toEqual(['thread-1'])
+   })
+
+   it('should answer nothing new, with no file, when every row is known', async () => {
+      const { read, attached } = setup()
+
+      await expect(
+         read({
+            limit: 8,
+            known: [0].map(hashOf),
+            stopAfterKnown: 1,
+         })
+      ).resolves.toMatchObject({
+         outcome: 'DONE',
+         conversations: 0,
+         unchanged: 1,
+         finished: true,
+      })
+
+      expect(attached).toEqual({})
+   })
+
+   it('should say it is finished when it was asked past the end of the list, and not when the page showed no list', async () => {
+      const past = setup({ conversations: 3 })
+
+      await expect(
+         past.read({
+            skip: 5,
+            limit: 3,
+         })
+      ).resolves.toMatchObject({
+         conversations: 0,
+         finished: true,
+         next: 5,
+      })
+
+      const blank = setup({
+         conversations: 3,
+         slowList: 1000,
+      })
+
+      await expect(blank.read({ limit: 3 })).resolves.toMatchObject({
+         conversations: 0,
+         finished: false,
+      })
+   })
+
    it('should start after the rows to skip', async () => {
       const { read, file } = setup()
 
-      await read({
+      const result = await read({
          skip: 2,
          limit: 2,
       })
 
       expect(file().conversations.map(conversation => conversation.id)).toEqual(['thread-2', 'thread-3'])
+      expect(result.next).toBe(4)
+   })
+
+   it('should try a conversation that did not open once more, and read it', async () => {
+      const { read, file } = setup({ quiet: { 1: 1 } })
+
+      await expect(read({ limit: 3 })).resolves.toMatchObject({
+         outcome: 'DONE',
+         conversations: 3,
+         next: 3,
+      })
+
+      expect(file().conversations.map(conversation => conversation.id)).toEqual(['thread-0', 'thread-1', 'thread-2'])
+   })
+
+   it('should say part was read when one conversation never opens, and go on after the last one read', async () => {
+      const { read, file } = setup({ quiet: { 1: 99 } })
+
+      await expect(read({ limit: 4 })).resolves.toMatchObject({
+         outcome: 'PARTIAL',
+         conversations: 3,
+         next: 4,
+      })
+
+      expect(file().conversations.map(conversation => conversation.id)).toEqual(['thread-0', 'thread-2', 'thread-3'])
+   })
+
+   it('should go on from the last conversation read when several in a row will not open', async () => {
+      const { read } = setup({
+         quiet: {
+            1: 99,
+            2: 99,
+            3: 99,
+         },
+      })
+
+      await expect(read({ limit: 6 })).resolves.toMatchObject({
+         outcome: 'PARTIAL',
+         conversations: 1,
+         next: 1,
+      })
    })
 
    it('should be done with fewer when the inbox has fewer conversations than asked', async () => {
@@ -385,6 +534,7 @@ describe('readMessages', () => {
       expect(result.outcome).toBe('PARTIAL')
       expect(result.conversations).toBeGreaterThan(0)
       expect(result.conversations).toBeLessThan(10)
+      expect(result.next).toBe(result.conversations)
       expect(file().conversations).toHaveLength(result.conversations)
    })
 
@@ -395,6 +545,9 @@ describe('readMessages', () => {
          outcome: 'SIGNED_OUT',
          conversations: 1,
          messages: 12,
+         next: 1,
+         unchanged: 0,
+         finished: false,
       })
 
       expect(file().conversations.map(conversation => conversation.id)).toEqual(['thread-0'])
@@ -410,6 +563,9 @@ describe('readMessages', () => {
          outcome: 'PARTIAL',
          conversations: 0,
          messages: 0,
+         next: 0,
+         unchanged: 0,
+         finished: false,
       })
 
       expect(attached).toEqual({})

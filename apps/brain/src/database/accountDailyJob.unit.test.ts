@@ -9,6 +9,10 @@ const mocks = vi.hoisted(() => {
    return {
       findMany: vi.fn(),
       updateMany: vi.fn(),
+      updateAccount: vi.fn(),
+      countSessions: vi.fn(),
+      findConversations: vi.fn(),
+      catalog: vi.fn(),
       requestCheck,
       requestTask: vi.fn(),
       validation: { request: requestCheck },
@@ -21,12 +25,20 @@ vi.mock('./prisma.service', () => ({
          linkedInAccount: {
             findMany: mocks.findMany,
             updateMany: mocks.updateMany,
+            update: mocks.updateAccount,
          },
+         spiderSession: { count: mocks.countSessions },
+         linkedInConversation: { findMany: mocks.findConversations },
       },
    },
 }))
 vi.mock('./linkedInAccountValidation.service', () => ({ LinkedInAccountValidationService: mocks.validation }))
-vi.mock('./task.service', () => ({ TaskService: { request: mocks.requestTask } }))
+vi.mock('./task.service', () => ({
+   TaskService: {
+      request: mocks.requestTask,
+      catalog: mocks.catalog,
+   },
+}))
 // The real time helpers without the rest of `core`, whose modules read the environment (DATABASE_URL) when they load.
 vi.mock('core', async () => {
    const { dailyTime, timezoneOfCountry } = await import('../core/dailyTime')
@@ -52,7 +64,10 @@ const account = (extra: Record<string, unknown> = {}) => ({
    nextBrowseAt: EARLIER,
    // Not due, so the tests of the check and the visit stay about those.
    nextMessagesAt: LATER,
-   messagesReadAt: EARLIER,
+   // The first read is done and a sweep was made a moment ago, so the tests of the other jobs stay about those.
+   messagesBackfilledAt: EARLIER,
+   messagesSweptAt: NOW,
+   messagesResumeSkip: null,
    lastVerifiedAt: new Date('2026-10-18T20:00:00Z'),
    proxyServers: [
       {
@@ -65,6 +80,14 @@ const account = (extra: Record<string, unknown> = {}) => ({
 })
 
 const run = () => AccountDailyJob.runDue(NOW, () => 0)
+// What the worker announced for the messages task: a version that takes the rows brain knows, or an older one.
+const announce = (version: number) =>
+   mocks.catalog.mockResolvedValue([
+      {
+         task: 'linkedin-messages',
+         version,
+      },
+   ])
 const movedTo = (field: 'nextCheckAt' | 'nextBrowseAt' | 'nextMessagesAt') =>
    mocks.updateMany.mock.calls.filter(([{ data }]) => field in data).map(([{ data }]) => data[field])
 
@@ -73,6 +96,10 @@ describe('AccountDailyJob', () => {
       vi.resetAllMocks()
       vi.spyOn(console, 'error').mockImplementation(() => undefined)
       mocks.updateMany.mockResolvedValue({ count: 1 })
+      mocks.updateAccount.mockResolvedValue({})
+      mocks.countSessions.mockResolvedValue(0)
+      mocks.findConversations.mockResolvedValue([{ rowHash: 'aaaaaaaa' }])
+      announce(3)
       mocks.requestCheck.mockResolvedValue(true)
       mocks.requestTask.mockResolvedValue({ id: 's1' })
    })
@@ -233,11 +260,11 @@ describe('AccountDailyJob', () => {
       expect(console.error).not.toHaveBeenCalled()
    })
 
-   it('should ask for a full first read of the messages, and a short one on the later reads, the next in 2 hours', async () => {
+   it('should walk the whole inbox in batches the first time, and stop at the rows it knows on the later reads, the next in 2 hours', async () => {
       mocks.findMany.mockResolvedValue([
          account({
             nextMessagesAt: EARLIER,
-            messagesReadAt: null,
+            messagesBackfilledAt: null,
          }),
       ])
 
@@ -247,7 +274,10 @@ describe('AccountDailyJob', () => {
          task: 'linkedin-messages',
          accountId: 'acc1',
          trigger: 'automatic',
-         input: { limit: 50 },
+         input: {
+            limit: 50,
+            known: ['aaaaaaaa'],
+         },
       })
       expect(movedTo('nextMessagesAt')).toEqual([IN_2_HOURS])
 
@@ -258,9 +288,123 @@ describe('AccountDailyJob', () => {
       expect(mocks.requestTask).toHaveBeenCalledWith(
          expect.objectContaining({
             task: 'linkedin-messages',
-            input: { limit: 20 },
+            input: {
+               limit: 50,
+               known: ['aaaaaaaa'],
+               stopAfterKnown: 3,
+            },
          })
       )
+   })
+
+   it('should send the input an older spider knows while the worker has not announced the new version', async () => {
+      announce(2)
+      mocks.findMany.mockResolvedValue([
+         account({
+            nextMessagesAt: EARLIER,
+            messagesBackfilledAt: null,
+         }),
+      ])
+
+      await run()
+
+      expect(mocks.requestTask).toHaveBeenCalledWith(expect.objectContaining({ input: { limit: 50 } }))
+   })
+
+   it('should go on from the place a read stopped at, in the first read and in a later one', async () => {
+      mocks.findMany.mockResolvedValue([
+         account({
+            nextMessagesAt: EARLIER,
+            messagesResumeSkip: 14,
+         }),
+      ])
+
+      await run()
+
+      expect(mocks.requestTask).toHaveBeenCalledWith({
+         userId: 'u1',
+         task: 'linkedin-messages',
+         accountId: 'acc1',
+         trigger: 'automatic',
+         input: {
+            skip: 14,
+            limit: 50,
+            known: ['aaaaaaaa'],
+            stopAfterKnown: 3,
+         },
+      })
+   })
+
+   it('should do at most five batches of the first read in a day, and let the sixth go until later', async () => {
+      mocks.findMany.mockResolvedValue([
+         account({
+            nextMessagesAt: EARLIER,
+            messagesBackfilledAt: null,
+         }),
+      ])
+      mocks.countSessions.mockResolvedValue(4)
+
+      await expect(run()).resolves.toMatchObject({ reads: 1 })
+      expect(mocks.countSessions.mock.calls[0]?.[0]).toMatchObject({
+         where: {
+            linkedInAccountId: 'acc1',
+            task: 'linkedin-messages',
+            trigger: 'automatic',
+         },
+      })
+
+      mocks.requestTask.mockClear()
+      mocks.countSessions.mockResolvedValue(5)
+
+      const { reads, items } = await run()
+
+      expect(reads).toBe(0)
+      expect(mocks.requestTask).not.toHaveBeenCalledWith(expect.objectContaining({ task: 'linkedin-messages' }))
+      expect(items).toContainEqual(
+         expect.objectContaining({
+            result: 'SKIPPED',
+            reason: 'The first read of the messages has done its batches for today and goes on later',
+         })
+      )
+   })
+
+   it('should not count sessions for an account whose first read is done', async () => {
+      mocks.findMany.mockResolvedValue([account({ nextMessagesAt: EARLIER })])
+
+      await run()
+
+      expect(mocks.countSessions).not.toHaveBeenCalled()
+   })
+
+   it('should sweep the newest 20 once a day, whatever their rows say, and write down that it did', async () => {
+      mocks.findMany.mockResolvedValue([
+         account({
+            nextMessagesAt: EARLIER,
+            messagesSweptAt: new Date('2026-10-18T09:00:00Z'),
+         }),
+      ])
+
+      await run()
+
+      expect(mocks.requestTask).toHaveBeenCalledWith(expect.objectContaining({ input: { limit: 20 } }))
+      expect(mocks.updateAccount).toHaveBeenCalledWith({
+         where: { id: 'acc1' },
+         data: { messagesSweptAt: NOW },
+      })
+   })
+
+   it('should not write down a sweep that could not be queued', async () => {
+      mocks.findMany.mockResolvedValue([
+         account({
+            nextMessagesAt: EARLIER,
+            messagesSweptAt: new Date('2026-10-18T09:00:00Z'),
+         }),
+      ])
+      mocks.requestTask.mockRejectedValue(new TaskRefusedError('A LinkedIn task is already running.'))
+
+      await run()
+
+      expect(mocks.updateAccount).not.toHaveBeenCalled()
    })
 
    it('should let a read go when there was no good sign-in in the last day, and keep its time when it cannot be queued', async () => {

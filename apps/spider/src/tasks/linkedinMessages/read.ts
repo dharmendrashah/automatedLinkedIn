@@ -14,7 +14,7 @@ import {
    THREAD_ID,
    THREAD_PANE,
 } from '../../linkedin/markup'
-import { parseInbox, parseOwner, parseThread } from '../../linkedin/messageReader'
+import { parseInbox, parseOwner, parseThread, rowHash } from '../../linkedin/messageReader'
 import { PACE } from '../../linkedin/pace'
 import { SignedOut, createSession } from '../../linkedin/session'
 import { type TaskContext } from '../defineTask'
@@ -28,16 +28,26 @@ export type MessagesInput = {
    limit: number
    // How many of the top of the list to leave out, to go on where an earlier run stopped.
    skip: number
+   // The rows brain already has, by `rowHash`: such a row is left alone unless it is unread.
+   known: string[]
+   // Stop after this many rows in a row that were left alone: the list is newest first, so what is below did not change either.
+   stopAfterKnown?: number
    // Keep the pages with the run, to study how they are built.
    snapshots: boolean
 }
 
 // DONE: everything asked for was read, or the list ended. PARTIAL: it stopped before (time, or conversations that would not open).
 // SIGNED_OUT: LinkedIn asked for a sign-in.
+// `next` is the place in the list after the last row gone through (read, or left alone as known), so one that failed in between is
+// not counted as read nor makes the run skip ahead. `unchanged` is how many rows were left alone. `finished` is true when the walk
+// reached the end of the list or the first rows it knew (`stopAfterKnown`): there is nothing to go on with.
 export type MessagesRead = {
    outcome: 'DONE' | 'PARTIAL' | 'SIGNED_OUT'
    conversations: number
    messages: number
+   next: number
+   unchanged: number
+   finished: boolean
 }
 
 type Deps = {
@@ -107,9 +117,18 @@ export const readMessages = async (
    const keep = createKeep(context, input.snapshots)
    const conversations: Conversation[] = []
    const seen = new Set<string>()
+   const known = new Set(input.known)
    const pictures = { left: PICTURES_PER_RUN }
    let owner: MessagesFile['account']
    let ended = false
+   let next = input.skip
+   // Rows left alone, and how many in a row; whether the list was seen at all (an empty page is not an inbox that ended).
+   let unchanged = 0
+   let unchangedInARow = 0
+   let sawRows = false
+   let finished = false
+   // Whether the row just gone through was not opened, so there is nothing to pace.
+   let idle = false
 
    // The id of the conversation the page is on, or undefined when it is on the list alone.
    const currentThread = async () =>
@@ -136,13 +155,24 @@ export const readMessages = async (
             continue
          }
 
+         sawRows = true
+
          if (row?.hydrated && row.linkIndex !== undefined) {
+            // A row brain already has, with nothing unread in it, is not opened: opening marks it read for the sender to see.
+            if (!row.unread && known.has(rowHash(row))) {
+               return {
+                  row,
+                  unchanged: true as const,
+               }
+            }
+
             const before = await currentThread()
 
             if (await hands.clickNth(INBOX_ROW, row.linkIndex, NEVER_CLICK)) {
                return {
                   row,
                   before,
+                  unchanged: false as const,
                }
             }
          }
@@ -222,9 +252,28 @@ export const readMessages = async (
 
       if (!opened) {
          ended = true
+         idle = true
+         finished = sawRows
 
          return false
       }
+
+      if (opened.unchanged) {
+         unchanged += 1
+         unchangedInARow += 1
+         next = index + 1
+         idle = true
+
+         if (input.stopAfterKnown !== undefined && unchangedInARow >= input.stopAfterKnown) {
+            ended = true
+            finished = true
+         }
+
+         return true
+      }
+
+      unchangedInARow = 0
+      idle = false
 
       const { row, before } = opened
       const id = await openedThread(before)
@@ -260,12 +309,36 @@ export const readMessages = async (
          participants: thread.participants,
          unread: row.unread,
          lastActivity: row.when,
+         rowHash: rowHash(row),
          complete,
          messages,
       })
       log(`Read ${thread.messages.length} messages`)
+      next = index + 1
 
       return true
+   }
+
+   const reopenList = async () => {
+      await session.open(`${baseUrl}${MESSAGING_PATH}`)
+      await reader.wait(PAUSES.open)
+   }
+
+   // A click that did nothing is tried once more from a fresh list, as a person would; on staging about one conversation in four
+   // did not open the first time (run 56c66a47, 2026-10-24).
+   const readOrRetry = async (index: number) => {
+      try {
+         return await readConversation(index)
+      } catch (error) {
+         if (!(error instanceof StepFailed)) {
+            throw error
+         }
+
+         log('Trying the conversation again')
+         await reopenList()
+
+         return readConversation(index)
+      }
    }
 
    // What was read is handed over whatever happened after it, so a run that stops half way still gives the owner its half.
@@ -284,6 +357,9 @@ export const readMessages = async (
       outcome,
       conversations: conversations.length,
       messages: total(),
+      next,
+      unchanged,
+      finished,
    })
 
    try {
@@ -295,12 +371,9 @@ export const readMessages = async (
       const targets = Array.from({ length: input.limit }, (_, offset) => input.skip + offset)
       const done = await runTargets({
          targets,
-         step: readConversation,
-         recover: async () => {
-            await session.open(`${baseUrl}${MESSAGING_PATH}`)
-            await reader.wait(PAUSES.open)
-         },
-         between: () => reader.wait(PAUSES.between),
+         step: readOrRetry,
+         recover: reopenList,
+         between: () => (idle ? Promise.resolve() : reader.wait(PAUSES.between)),
          elapsed: reader.elapsed,
          budgetMs: BUDGET_MS,
          maxFailuresInARow: MAX_FAILURES_IN_A_ROW,

@@ -1,20 +1,177 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { MessagesRefresh, messagesInput } from './messagesRefresh'
+import { MessagesRefresh, messagesInput, sweepDue } from './messagesRefresh'
 import { TaskRefusedError, TaskUnavailableError } from './taskErrors'
 
 const mocks = vi.hoisted(() => ({
    findMany: vi.fn(),
+   findConversations: vi.fn(),
    request: vi.fn(),
+   catalog: vi.fn(),
 }))
 
-vi.mock('./prisma.service', () => ({ PrismaService: { client: { linkedInAccount: { findMany: mocks.findMany } } } }))
-vi.mock('./task.service', () => ({ TaskService: { request: mocks.request } }))
+vi.mock('./prisma.service', () => ({
+   PrismaService: {
+      client: {
+         linkedInAccount: { findMany: mocks.findMany },
+         linkedInConversation: { findMany: mocks.findConversations },
+      },
+   },
+}))
+vi.mock('./task.service', () => ({
+   TaskService: {
+      request: mocks.request,
+      catalog: mocks.catalog,
+   },
+}))
+
+const account = {
+   id: 'a1',
+   messagesBackfilledAt: null,
+   messagesResumeSkip: null,
+   messagesSweptAt: null,
+}
+const DONE = new Date('2026-10-20T10:00:00Z')
+
+// What the worker announced: the version of the messages task.
+const announce = (version: number) =>
+   mocks.catalog.mockResolvedValue([
+      {
+         task: 'linkedin-messages',
+         version,
+      },
+   ])
 
 describe('messagesInput', () => {
-   it('should read as much as the task allows the first time, and the newest conversations after', () => {
-      expect(messagesInput(null)).toEqual({ limit: 50 })
-      expect(messagesInput(new Date())).toEqual({ limit: 20 })
+   beforeEach(() => {
+      vi.resetAllMocks()
+      announce(3)
+      mocks.findConversations.mockResolvedValue([{ rowHash: 'aaaaaaaa' }, { rowHash: null }, { rowHash: 'bbbbbbbb' }])
+   })
+
+   it('should walk the whole inbox in batches the first time, leaving the rows brain has alone', async () => {
+      await expect(messagesInput(account)).resolves.toEqual({
+         limit: 50,
+         known: ['aaaaaaaa', 'bbbbbbbb'],
+      })
+      await expect(
+         messagesInput({
+            ...account,
+            messagesResumeSkip: 100,
+         })
+      ).resolves.toEqual({
+         skip: 100,
+         limit: 50,
+         known: ['aaaaaaaa', 'bbbbbbbb'],
+      })
+   })
+
+   it('should ask for the newest 100 rows of the account that have a hash', async () => {
+      await messagesInput(account)
+
+      expect(mocks.findConversations.mock.calls[0]?.[0]).toMatchObject({
+         where: {
+            accountId: 'a1',
+            rowHash: { not: null },
+         },
+         take: 100,
+      })
+   })
+
+   it('should stop at the first rows it knows once the first read is done, and go on from the place that was saved', async () => {
+      const done = {
+         ...account,
+         messagesBackfilledAt: DONE,
+      }
+
+      await expect(messagesInput(done)).resolves.toEqual({
+         limit: 50,
+         known: ['aaaaaaaa', 'bbbbbbbb'],
+         stopAfterKnown: 3,
+      })
+      await expect(
+         messagesInput({
+            ...done,
+            messagesResumeSkip: 50,
+         })
+      ).resolves.toEqual({
+         skip: 50,
+         limit: 50,
+         known: ['aaaaaaaa', 'bbbbbbbb'],
+         stopAfterKnown: 3,
+      })
+   })
+
+   it('should read the newest 20 whatever their rows say when it is a sweep', async () => {
+      await expect(
+         messagesInput(
+            {
+               ...account,
+               messagesBackfilledAt: DONE,
+            },
+            { sweep: true }
+         )
+      ).resolves.toEqual({ limit: 20 })
+      expect(mocks.findConversations).not.toHaveBeenCalled()
+   })
+
+   it('should send an older spider the input it knows, without asking the database', async () => {
+      announce(2)
+
+      await expect(messagesInput(account)).resolves.toEqual({ limit: 50 })
+      await expect(
+         messagesInput({
+            ...account,
+            messagesBackfilledAt: DONE,
+         })
+      ).resolves.toEqual({ limit: 20 })
+      expect(mocks.findConversations).not.toHaveBeenCalled()
+   })
+
+   it('should send the older input too when the task was not announced', async () => {
+      mocks.catalog.mockResolvedValue([])
+
+      await expect(messagesInput(account)).resolves.toEqual({ limit: 50 })
+   })
+})
+
+describe('sweepDue', () => {
+   const now = new Date('2026-10-24T10:00:00Z')
+   const done = {
+      ...account,
+      messagesBackfilledAt: DONE,
+   }
+
+   it('should be due once a day after the first read, and never before it or while something is pending', () => {
+      expect(sweepDue(account, now)).toBe(false)
+      expect(sweepDue(done, now)).toBe(true)
+      expect(
+         sweepDue(
+            {
+               ...done,
+               messagesSweptAt: new Date('2026-10-24T00:00:01Z'),
+            },
+            now
+         )
+      ).toBe(false)
+      expect(
+         sweepDue(
+            {
+               ...done,
+               messagesSweptAt: new Date('2026-10-23T10:00:00Z'),
+            },
+            now
+         )
+      ).toBe(true)
+      expect(
+         sweepDue(
+            {
+               ...done,
+               messagesResumeSkip: 50,
+            },
+            now
+         )
+      ).toBe(false)
    })
 })
 
@@ -22,18 +179,17 @@ describe('MessagesRefresh.request', () => {
    beforeEach(() => {
       vi.resetAllMocks()
       vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      announce(2)
       mocks.request.mockResolvedValue({ id: 's' })
    })
 
    it('should start a read for each account of the owner, only those named when some are', async () => {
       mocks.findMany.mockResolvedValue([
+         account,
          {
-            id: 'a1',
-            messagesReadAt: null,
-         },
-         {
+            ...account,
             id: 'a2',
-            messagesReadAt: new Date(),
+            messagesBackfilledAt: DONE,
          },
       ])
 
@@ -71,21 +227,18 @@ describe('MessagesRefresh.request', () => {
 
    it('should leave out an account that cannot start, with the reason, and go on with the others', async () => {
       mocks.findMany.mockResolvedValue([
+         account,
          {
-            id: 'a1',
-            messagesReadAt: null,
-         },
-         {
+            ...account,
             id: 'a2',
-            messagesReadAt: null,
          },
          {
+            ...account,
             id: 'a3',
-            messagesReadAt: null,
          },
          {
+            ...account,
             id: 'a4',
-            messagesReadAt: null,
          },
       ])
       mocks.request

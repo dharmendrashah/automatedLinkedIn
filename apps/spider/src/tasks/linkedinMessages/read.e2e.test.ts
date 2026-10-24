@@ -160,6 +160,7 @@ describe('readMessages in a real browser, against a stand-in for the messages', 
             {
                limit: 7,
                skip: 0,
+               known: [],
                snapshots: false,
             },
             {

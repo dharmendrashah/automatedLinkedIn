@@ -1,4 +1,5 @@
 import { type HTMLElement, type Node, parse } from 'node-html-parser'
+import { createHash } from 'node:crypto'
 
 import { type Message } from '@automatedLinkedIn/contracts'
 
@@ -218,6 +219,11 @@ export const newestIsOurs = (messages: Message[], text: string, before?: { id: s
 
 // The markup of the place to write, with whatever is attached to it (empty when the page has none), to tell when it stops changing.
 export const composerHtml = (html: string) => parse(html).querySelector('form.msg-form')?.outerHTML ?? ''
+
+// What a row of the list is known by without opening it: its title and its last words, not its time, which changes with the clock
+// for a conversation that did not change. Two identical last words from one person give the same value (.plan/messages-first-sync-and-new-only.md).
+export const rowHash = ({ title, snippet }: { title: string; snippet: string }) =>
+   createHash('sha256').update(`${title.toLowerCase()}\n${snippet.toLowerCase()}`).digest('hex').slice(0, 8)
 
 // The conversations the list shows, in page order, and whether the page may hold more than it shows (the beacon it keeps at the
 // bottom of the list while it can load more).

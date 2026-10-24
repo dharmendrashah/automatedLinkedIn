@@ -118,6 +118,20 @@ describe('LinkedInConversationService (database)', () => {
       expect(row?.participants).toEqual([ADA])
    })
 
+   it('should keep the hash of the row a file brings, and keep it when a later file has none', async () => {
+      const stored = () =>
+         PrismaService.client.linkedInConversation.findFirstOrThrow({
+            where: { accountId },
+            select: { rowHash: true },
+         })
+
+      await LinkedInConversationService.store(owner, file({ rowHash: 'abcdef01' }))
+      await expect(stored()).resolves.toEqual({ rowHash: 'abcdef01' })
+
+      await LinkedInConversationService.store(owner, file())
+      await expect(stored()).resolves.toEqual({ rowHash: 'abcdef01' })
+   })
+
    it('should say what the list needs: the latest messages, since when they wait and the last reply', async () => {
       const [row] = await LinkedInConversationService.list(userId)
 
