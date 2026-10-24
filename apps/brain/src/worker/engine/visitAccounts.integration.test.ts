@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { CryptoService } from 'core'
 import { fakeDataClient } from 'core/fakeDataClient'
 
-import { PrismaService, TaskService, UserService, WalletService, WorkflowService } from 'database'
+import { PrismaService, TaskService, TaskUnavailableError, UserService, WalletService, WorkflowService } from 'database'
 
 import { type Graph, type GraphNode } from '@automatedLinkedIn/contracts'
 
@@ -81,6 +81,8 @@ const start = async (graph: Graph) => {
 
    return (await WorkflowService.startRun(userId, workflow.id, 'MANUAL', `visit-${randomUUID()}`))?.id ?? ''
 }
+
+const statusOf = async (runId: string) => (await WorkflowService.run(userId, runId))?.status
 
 const visitsOf = (runId: string) =>
    PrismaService.client.linkedInPageVisit.findMany({
@@ -202,6 +204,66 @@ describe('select accounts and visit blocks (database)', () => {
 
       expect(await at('yes')).toEqual(['fay'])
       expect(await at('no')).toEqual(['gus'])
+   })
+
+   it('should say why it waits when the browser worker has not announced the action, then ask once it has', async () => {
+      const spy = vi.spyOn(TaskService, 'request')
+      const working = spy.getMockImplementation()
+
+      spy.mockRejectedValue(new TaskUnavailableError())
+
+      const runId = await start(graphOf(accounts, [profile('hal')]))
+
+      await advanceRun(runId, deps())
+
+      const step = () =>
+         PrismaService.client.workflowStepRun.findFirstOrThrow({
+            where: {
+               runId,
+               nodeId: 'visit',
+            },
+         })
+
+      expect(await step()).toMatchObject({ status: 'WAITING' })
+      expect((await step()).message).toContain('the browser worker has not announced this action yet')
+      expect((await step()).startedAt).not.toBeNull()
+      expect(await visitsOf(runId)).toEqual([])
+      expect(await statusOf(runId)).toBe('RUNNING')
+
+      if (working) {
+         spy.mockImplementation(working)
+      }
+
+      await advanceRun(runId, deps())
+
+      expect((await visitsOf(runId)).map(({ slug }) => slug)).toEqual(['hal'])
+      expect((await step()).message).toBeNull()
+   })
+
+   it('should end with the reason after ten minutes when no account can take the visit and waiting will not help', async () => {
+      const spy = vi.spyOn(TaskService, 'request')
+      const working = spy.getMockImplementation()
+
+      spy.mockRejectedValue(new TaskUnavailableError())
+
+      const runId = await start(graphOf(accounts, [profile('ivy')]))
+
+      await advanceRun(runId, deps())
+      await PrismaService.client.workflowStepRun.updateMany({
+         where: {
+            runId,
+            nodeId: 'visit',
+         },
+         data: { startedAt: new Date(Date.now() - 11 * 60_000) },
+      })
+      await advanceRun(runId, deps())
+
+      expect(await statusOf(runId)).toBe('FAILED')
+      expect((await WorkflowService.run(userId, runId))?.message).toContain('Visits stopped')
+
+      if (working) {
+         spy.mockImplementation(working)
+      }
    })
 
    it('should not visit anyone a chosen account viewed in the last 30 days, in another run', async () => {

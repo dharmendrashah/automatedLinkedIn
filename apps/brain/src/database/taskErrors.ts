@@ -26,5 +26,8 @@ export class TaskRecentError extends TaskRefusedError {}
 // An automatic request that does not apply right now. Not a failure, so it is never logged.
 export class TaskSkippedError extends TaskRefusedError {}
 
+// The account cannot take the task yet: it is not signed in. Test login and the sign-in check fix it, waiting does not.
+export class AccountNotReadyError extends TaskRefusedError {}
+
 // The same task is still running for this scope. Waiting solves it, so a caller that can wait does.
 export class TaskBusyError extends TaskRefusedError {}

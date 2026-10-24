@@ -315,6 +315,8 @@ model WorkflowStepRun {
   waitUntil  DateTime?
   // How many times a Retry has run this step again.
   tries      Int                @default(0)
+  // When a worker first took the step; the time limits of a waiting step count from here (.plan/visit-block-waiting-reasons.md).
+  startedAt  DateTime?
   finishedAt DateTime?
   calls      WorkflowStepCall[]
 

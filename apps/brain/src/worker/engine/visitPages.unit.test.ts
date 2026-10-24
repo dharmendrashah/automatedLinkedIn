@@ -9,6 +9,11 @@ import { selectAccounts, visitCompany, visitProfile } from './visitPages'
 
 const mocks = vi.hoisted(() => {
    class TaskRefusedError extends Error {}
+   class TaskUnavailableError extends TaskRefusedError {}
+   class TaskNeedsProxyError extends TaskRefusedError {}
+   class AccountNotReadyError extends TaskRefusedError {}
+   class TaskBusyError extends TaskRefusedError {}
+   class TaskRecentError extends TaskRefusedError {}
    class PageVisitRefusedError extends TaskRefusedError {
       public readonly reason: string
 
@@ -20,7 +25,13 @@ const mocks = vi.hoisted(() => {
 
    return {
       TaskRefusedError,
+      TaskUnavailableError,
+      TaskNeedsProxyError,
+      AccountNotReadyError,
+      TaskBusyError,
+      TaskRecentError,
       PageVisitRefusedError,
+      setNote: vi.fn(),
       accounts: vi.fn(),
       lastVisits: vi.fn(),
       viewedBy: vi.fn(),
@@ -44,6 +55,11 @@ vi.mock('database', async () => ({
    idleFirst: (await vi.importActual<{ idleFirst: unknown }>('database/visitPool')).idleFirst,
    PageVisitRefusedError: mocks.PageVisitRefusedError,
    TaskRefusedError: mocks.TaskRefusedError,
+   TaskUnavailableError: mocks.TaskUnavailableError,
+   TaskNeedsProxyError: mocks.TaskNeedsProxyError,
+   AccountNotReadyError: mocks.AccountNotReadyError,
+   TaskBusyError: mocks.TaskBusyError,
+   TaskRecentError: mocks.TaskRecentError,
    PageVisitService: { request: mocks.request },
    VisitPoolService: {
       accounts: mocks.accounts,
@@ -52,7 +68,10 @@ vi.mock('database', async () => ({
       ofStep: mocks.ofStep,
    },
    WorkflowListService: { seenAmong: mocks.seenAmong },
-   WorkflowRunService: { replaceItems: mocks.replaceItems },
+   WorkflowRunService: {
+      replaceItems: mocks.replaceItems,
+      setNote: mocks.setNote,
+   },
    IcpService: {},
    WalletService: {},
    floorMicros: () => 0,
@@ -439,6 +458,108 @@ describe('visit blocks', () => {
          await expect(visitProfile(context('go', [ada], { graph: withRetry(60) }))).rejects.toBeInstanceOf(Waiting)
 
          expect(mocks.request).not.toHaveBeenCalled()
+      })
+   })
+
+   describe('when no account can take a visit', () => {
+      const MINUTE_MS = 60_000
+      const started = (minutes: number, message?: string) =>
+         ({
+            step: {
+               id: 's1',
+               startedAt: new Date(Date.now() - minutes * MINUTE_MS),
+               message,
+            },
+         }) as unknown as Partial<Context>
+
+      it('should say why it waits, once, and log it', async () => {
+         mocks.request.mockRejectedValue(new mocks.TaskUnavailableError('This task is not available.'))
+
+         const first = context('go', [ada], started(1))
+
+         await expect(visitProfile(first)).rejects.toBeInstanceOf(Waiting)
+
+         const [[, note]] = mocks.setNote.mock.calls
+
+         expect(note).toContain('Waiting to visit 1 of 1')
+         expect(note).toContain('the browser worker has not announced this action yet')
+         expect(first.deps.log.info).toHaveBeenCalledWith(expect.stringContaining('has not announced'))
+
+         mocks.setNote.mockClear()
+         await expect(visitProfile(context('go', [ada], started(1, note)))).rejects.toBeInstanceOf(Waiting)
+         expect(mocks.setNote).not.toHaveBeenCalled()
+      })
+
+      it('should end with the reason after 10 minutes when every account is blocked, not before', async () => {
+         mocks.request.mockRejectedValue(new mocks.TaskUnavailableError('This task is not available.'))
+
+         await expect(visitProfile(context('go', [ada], started(9)))).rejects.toBeInstanceOf(Waiting)
+
+         const error: unknown = await visitProfile(context('go', [ada], started(11))).catch((caught: unknown) => caught)
+
+         expect(error).toBeInstanceOf(StepError)
+         expect((error as Error).message).toContain('has not announced')
+      })
+
+      it('should keep waiting past 10 minutes for a reason that clears by itself', async () => {
+         mocks.request.mockRejectedValue(new mocks.TaskBusyError('A visit is already running.'))
+
+         await expect(visitProfile(context('go', [ada], started(60)))).rejects.toBeInstanceOf(Waiting)
+         expect(mocks.setNote.mock.calls[0]?.[1]).toContain('an account is busy with another visit')
+      })
+
+      it('should keep waiting when only some accounts are blocked', async () => {
+         mocks.request
+            .mockRejectedValueOnce(new mocks.AccountNotReadyError('Not signed in.'))
+            .mockRejectedValueOnce(new mocks.TaskRecentError('Wait 2 minute(s).'))
+            .mockRejectedValueOnce(new mocks.TaskNeedsProxyError('No proxy.'))
+
+         await expect(visitProfile(context('go', [ada], started(60)))).rejects.toBeInstanceOf(Waiting)
+      })
+
+      it('should say so when no chosen account is signed in but a visit was asked before', async () => {
+         mocks.accounts.mockResolvedValue([
+            {
+               id: 'a1',
+               status: 'NEEDS_REAUTH',
+            },
+         ])
+         mocks.ofStep.mockResolvedValue([
+            {
+               slug: 'bob',
+               accountId: 'a1',
+               status: 'DONE',
+            },
+         ])
+
+         await expect(visitProfile(context('go', [ada], started(1)))).rejects.toBeInstanceOf(Waiting)
+         expect(mocks.setNote.mock.calls[0]?.[1]).toContain('an account is not signed in')
+      })
+
+      it('should clear the note once a visit is asked', async () => {
+         await expect(
+            visitProfile(context('go', [ada], started(1, 'Waiting to visit 1 of 1: an account is busy.')))
+         ).rejects.toBeInstanceOf(Waiting)
+
+         expect(mocks.setNote).toHaveBeenCalledWith('s1', null)
+      })
+
+      it('should count its time limits from its own start, not from the start of the run', async () => {
+         await expect(
+            visitProfile(
+               context('go', [ada], {
+                  run: {
+                     id: 'r1',
+                     userId: 'u1',
+                     startedAt: new Date(Date.now() - 9 * HOUR_MS),
+                     stopRequestedAt: null,
+                  },
+                  ...started(1),
+               } as Partial<Context>)
+            )
+         ).rejects.toBeInstanceOf(Waiting)
+
+         expect(mocks.request).toHaveBeenCalled()
       })
    })
 })

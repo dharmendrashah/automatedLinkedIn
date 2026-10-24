@@ -3,9 +3,9 @@ import { type WorkflowItemData } from 'core'
 import {
    PageVisitRefusedError,
    PageVisitService,
-   TaskRefusedError,
    VisitPoolService,
    WorkflowListService,
+   WorkflowRunService,
    idleFirst,
 } from 'database'
 
@@ -22,6 +22,7 @@ import {
    peopleOf,
    wordsIn,
 } from './context'
+import { type Refusal, refusalOf } from './visitRefusal'
 
 // "Select accounts" and the two visit blocks (.plan/select-accounts-block.md). A visit block hands each person or company to
 // the chosen account that went longest without a visit, as accounts become free, and waits until every visit ended.
@@ -30,8 +31,10 @@ import {
 type Kind = 'PROFILE' | 'COMPANY'
 
 const HOUR_MS = 60 * 60 * 1000
-// A visit block gives up after this long (from the run's start) and leaves the rest for the next run.
+// A visit block gives up after this long (from its own start) and leaves the rest for the next run.
 const TIME_LIMIT_MS = 8 * HOUR_MS
+// When no account can take a visit for a reason that waiting does not fix, the block ends after this long.
+const BLOCKED_LIMIT_MS = 10 * 60_000
 
 const NOUNS: Record<Kind, string> = {
    PROFILE: 'people',
@@ -124,17 +127,27 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
            )
          : new Set<string>(),
    ])
-   const expired = Date.now() - run.startedAt.getTime() > TIME_LIMIT_MS
+   // The step's own start; a step taken before it was saved counts from the run's start.
+   const sinceMs = Date.now() - (ctx.step.startedAt ?? run.startedAt).getTime()
+   const expired = sinceMs > TIME_LIMIT_MS
    const open = pending.filter(({ slug }) => !suppressed.has(slug) && !viewed.has(slug))
    const ask = !stopped && !expired
    const unavailable = new Set<string>()
    const last = ask ? await VisitPoolService.lastVisits(usable) : new Map<string, Date>()
    const skipped = new Set<string>()
    const noOther = new Set<string>()
+   const refused = new Map<string, Refusal>()
    let asked = 0
    let waiting = 0
 
-   for (const item of ask ? open : []) {
+   // No chosen account is signed in now: nothing can be asked, and that is a reason to say, not a failure of each person.
+   const noneSignedIn = ask && usable.length === 0 && open.length > 0
+
+   if (noneSignedIn) {
+      waiting = open.length
+   }
+
+   for (const item of ask && !noneSignedIn ? open : []) {
       const state = stateOf(item.slug)
       const candidates = usable.filter(id => retry !== null || !state.failedOn.has(id))
       let outcome: 'asked' | 'wait' | 'skip' = 'skip'
@@ -192,10 +205,13 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
                break
             }
 
-            if (!(error instanceof TaskRefusedError)) {
+            const refusal = refusalOf(error)
+
+            if (!refusal) {
                throw error
             }
 
+            refused.set(id, refusal)
             unavailable.add(id)
             outcome = 'wait'
          }
@@ -217,6 +233,37 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
    const visited = items.filter(({ slug }) => stateOf(slug).done)
 
    if (ask && (inFlight > 0 || asked > 0 || waiting > 0)) {
+      const why = [
+         ...new Set(
+            noneSignedIn
+               ? ['an account is not signed in']
+               : [...refused.values()]
+                    .map(({ text }) => text)
+                    .concat(refused.size === 0 ? ['waiting before the next try'] : [])
+         ),
+      ].join('; ')
+      const note = waiting > 0 ? `Waiting to visit ${waiting} of ${items.length}: ${why}.` : null
+
+      // Said once, and again only when it changes, so a long wait neither fills the log nor hides what is wrong.
+      if (note !== (ctx.step.message ?? null)) {
+         await WorkflowRunService.setNote(ctx.step.id, note)
+
+         if (note) {
+            deps.log.info(`workflow run=${run.id} step=${node.id} ${note}`)
+         }
+      }
+
+      // Every account is blocked for a reason waiting does not fix: end with it instead of waiting for hours.
+      const blocked =
+         waiting > 0 &&
+         asked === 0 &&
+         inFlight === 0 &&
+         (noneSignedIn || (refused.size > 0 && usable.every(id => refused.get(id)?.kind === 'blocked')))
+
+      if (blocked && sinceMs > BLOCKED_LIMIT_MS) {
+         throw new StepError(`Visits stopped: ${why}.`)
+      }
+
       throw new Waiting()
    }
 
