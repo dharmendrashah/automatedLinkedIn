@@ -49,10 +49,10 @@ describe('the sample profiles', () => {
 })
 
 describe('sampleKindOf', () => {
-   it('should pick the kind named in the address, and the full profile otherwise', () => {
+   it('should pick the kind named in the address, and no sample otherwise', () => {
       expect(sampleKindOf('sparse')).toBe('sparse')
       expect(sampleKindOf('empty')).toBe('empty')
-      expect(sampleKindOf('other')).toBe('full')
-      expect(sampleKindOf(null)).toBe('full')
+      expect(sampleKindOf('other')).toBeNull()
+      expect(sampleKindOf(null)).toBeNull()
    })
 })

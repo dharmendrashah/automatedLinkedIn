@@ -15,12 +15,27 @@ type Props = {
    hasWorkingProxy: boolean | undefined
    testing: boolean
    visiting: boolean
+   // Why the profile cannot be read now (the server's sentence), or undefined when it can; and whether a read is going on.
+   readBlocker: string | undefined
+   reading: boolean
    onTestLogin: () => void
    onVisit: () => void
+   onRead: () => void
 }
 
 // What the app knows and can do about the account itself, under the profile's own details.
-export const AccountStrip = ({ account, readAt, hasWorkingProxy, testing, visiting, onTestLogin, onVisit }: Props) => (
+export const AccountStrip = ({
+   account,
+   readAt,
+   hasWorkingProxy,
+   testing,
+   visiting,
+   readBlocker,
+   reading,
+   onTestLogin,
+   onVisit,
+   onRead,
+}: Props) => (
    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
       <span className="font-medium">{account.email}</span>
       <StatusBadge status={account.status} message={account.statusMessage} />
@@ -44,9 +59,9 @@ export const AccountStrip = ({ account, readAt, hasWorkingProxy, testing, visiti
          <TestButton
             label="Read profile"
             icon={<FileText />}
-            blocker="Reading the profile is not available yet."
-            busy={false}
-            onClick={() => undefined}
+            blocker={reading ? undefined : readBlocker}
+            busy={reading}
+            onClick={onRead}
          />
       </div>
    </div>

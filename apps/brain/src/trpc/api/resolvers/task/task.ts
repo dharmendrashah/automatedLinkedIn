@@ -1,11 +1,12 @@
-import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
-import { ProxyServerOwnershipError, TaskOwnershipError, TaskRecentError, TaskRefusedError, TaskService } from 'database'
+import { TaskService } from 'database'
 
 import { RUNNER_VERDICTS, TASK_NAME_PATTERN } from '@automatedLinkedIn/contracts'
 
 import { ownerProcedure, router } from 'trpc'
+
+import { asTrpcError } from '../asTrpcError'
 
 const MAX_INPUT_BYTES = 8 * 1024
 
@@ -21,37 +22,6 @@ const runInput = z.object({
    // The owner saw that it ran a moment ago and wants it again anyway.
    confirmed: z.boolean().optional(),
 })
-
-// What is safe to say to the browser. Anything unexpected is logged here and reported without its details.
-const asTrpcError = (error: unknown) => {
-   if (error instanceof ProxyServerOwnershipError || error instanceof TaskOwnershipError) {
-      return new TRPCError({
-         code: 'NOT_FOUND',
-         message: error.message,
-      })
-   }
-
-   if (error instanceof TaskRecentError) {
-      return new TRPCError({
-         code: 'CONFLICT',
-         message: error.message,
-      })
-   }
-
-   if (error instanceof TaskRefusedError) {
-      return new TRPCError({
-         code: 'PRECONDITION_FAILED',
-         message: error.message,
-      })
-   }
-
-   console.error(`Tasks: ${(error as Error).message}`)
-
-   return new TRPCError({
-      code: 'INTERNAL_SERVER_ERROR',
-      message: 'Something went wrong. Try again in a moment.',
-   })
-}
 
 // Every task goes through these two procedures; a new task needs nothing here. Everything is scoped to ctx.user.id.
 export const task = router({

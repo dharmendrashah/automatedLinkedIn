@@ -18,7 +18,7 @@ type Options = {
 export const createLinkedinProfile = ({ baseUrl }: Options) =>
    defineTask({
       name: TASK_NAME,
-      version: 2,
+      version: 3,
       title: 'LinkedIn profile',
       description:
          'Opens the account’s own profile and the pages behind its Show all links, scrolls each one, and reads the profile into a file of the run: header, about, experience, education, skills, interests, posts, comments and suggestions. Nothing is changed.',
@@ -56,7 +56,8 @@ export const createLinkedinProfile = ({ baseUrl }: Options) =>
          },
       },
       policy: {
-         cooldownMs: 0,
+         // The page's Read profile button asks again after this; the owner can still confirm and read at once.
+         cooldownMs: 30 * 60 * 1000,
          oneAtATime: 'account',
       },
       // The run begins no new page after 10 minutes (see capture.ts and read.ts); the rest is room for the one in progress.

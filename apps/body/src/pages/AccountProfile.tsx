@@ -9,6 +9,8 @@ import { SampleBanner } from '@/components/account-profile/sample-banner'
 import { AnalyticsCard, SuggestionsCard } from '@/components/account-profile/side-cards'
 import { LanguagesCard, SkillsCard } from '@/components/account-profile/skills-cards'
 import { loadProfile, sampleKindOf } from '@/components/account-profile/source'
+import { noticeOf, viewOf } from '@/components/account-profile/view'
+import { ConfirmRunDialog } from '@/components/accounts/confirm-run-dialog'
 import { LOGIN_TASK } from '@/components/accounts/login-test'
 import { VISIT_TASK } from '@/components/accounts/visit'
 import { FailureCard } from '@/components/failure-card'
@@ -16,6 +18,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 
 import { cn } from '@/lib/utils'
@@ -30,24 +33,74 @@ const ProfileSkeleton = () => (
    </div>
 )
 
-// The profile of one LinkedIn account as its own page shows it. Until the profile can be read, it is a sample (see source.ts).
+// How often the state is asked for while a read goes on (a read takes about 5 minutes).
+const READING_POLL_MS = 5000
+
+// The profile of one LinkedIn account as its own page shows it, from the database. The first visit of an account that was never
+// read asks brain to read it, and the Read profile button asks for a new read (.plan/account-profile-backend.md). `?sample=` shows
+// an invented profile instead, to look at the page.
 export const AccountProfile = () => {
    const { id = '' } = useParams()
    const [search, setSearch] = useSearchParams()
    const kind = sampleKindOf(search.get('sample'))
+   const sample = kind !== null
    const utils = trpc.useUtils()
    const account = trpc.linkedInAccount.get.useQuery({ id }, { retry: false })
    const proxies = trpc.proxyServer.list.useQuery(undefined, { retry: false })
-   const loaded = useQuery({
+   const state = trpc.accountProfile.state.useQuery(
+      { accountId: id },
+      {
+         enabled: !sample,
+         retry: false,
+         refetchInterval: query => (query.state.data?.phase === 'READING' ? READING_POLL_MS : false),
+      }
+   )
+   const stored = trpc.accountProfile.get.useQuery(
+      {
+         accountId: id,
+         version: state.data?.capturedAt,
+      },
+      {
+         enabled: !sample && Boolean(state.data?.capturedAt),
+         retry: false,
+      }
+   )
+   const sampled = useQuery({
       queryKey: ['account-profile', id, kind],
-      queryFn: () => loadProfile(kind),
+      queryFn: () => loadProfile(kind ?? 'full'),
+      enabled: sample,
    })
+   const refresh = () => {
+      void utils.accountProfile.state.invalidate({ accountId: id })
+      void utils.session.list.invalidate()
+   }
    const runTask = trpc.task.run.useMutation({
       onSuccess: () => {
          void utils.linkedInAccount.get.invalidate({ id })
-         void utils.session.list.invalidate()
+         refresh()
       },
    })
+   // The first visit of an account that was never read: brain starts the read when it can, once, and says why when it cannot.
+   const open = trpc.accountProfile.open.useMutation({ onSuccess: refresh })
+   // The server holds a read that follows a good one too soon; the owner can confirm and read anyway.
+   const [recent, setRecent] = useState<string | null>(null)
+   const read = trpc.accountProfile.read.useMutation({
+      onSuccess: refresh,
+      onError: error => {
+         if (error.data?.code === 'CONFLICT') {
+            setRecent(error.message)
+         }
+      },
+   })
+   const { firstVisit, blocker } = state.data ?? {}
+   const { mutate: openProfile, isIdle: canOpen } = open
+   const startFirstRead = !sample && Boolean(firstVisit) && !blocker && canOpen
+
+   useEffect(() => {
+      if (startFirstRead) {
+         openProfile({ accountId: id })
+      }
+   }, [startFirstRead, openProfile, id])
 
    const hasWorkingProxy = proxies.data
       ? proxies.data.some(
@@ -55,7 +108,19 @@ export const AccountProfile = () => {
         )
       : undefined
    const pending = (task: string) => runTask.isPending && runTask.variables?.task === task
-   const profile = loaded.data?.profile
+   const profile = sample ? sampled.data?.profile : (stored.data?.profile ?? undefined)
+   const view = sample
+      ? sampled.isPending
+         ? 'LOADING'
+         : profile
+           ? 'PROFILE'
+           : 'EMPTY'
+      : viewOf(state.data, Boolean(profile), stored.isPending && stored.fetchStatus !== 'idle')
+   const reading = state.data?.phase === 'READING' || read.isPending
+   const failedNote =
+      !sample && view === 'PROFILE' && state.data?.lastRun?.ok === false
+         ? `The last read did not give a new profile${state.data.lastRun.message ? `: ${state.data.lastRun.message}` : '.'}`
+         : null
    // A new account has nothing for the right rail, so the main column takes the whole width.
    const hasRail = Boolean(
       profile && (profile.analytics || profile.peopleYouMayKnow.length > 0 || profile.youMightLike.length > 0)
@@ -77,12 +142,15 @@ export const AccountProfile = () => {
    const strip = account.data ? (
       <AccountStrip
          account={account.data}
-         readAt={profile?.captured_at ?? null}
+         readAt={state.data?.capturedAt ?? profile?.captured_at ?? null}
          hasWorkingProxy={hasWorkingProxy}
          testing={pending(LOGIN_TASK)}
          visiting={pending(VISIT_TASK)}
+         readBlocker={sample ? 'This is sample data. Remove ?sample= from the address.' : (state.data?.blocker ?? undefined)}
+         reading={reading}
          onTestLogin={() => runTask.mutate({ task: LOGIN_TASK, accountId: id })}
          onVisit={() => runTask.mutate({ task: VISIT_TASK, accountId: id })}
+         onRead={() => read.mutate({ accountId: id })}
       />
    ) : null
 
@@ -96,10 +164,11 @@ export const AccountProfile = () => {
             LinkedIn accounts
          </Link>
 
-         <SampleBanner kind={kind} onChange={next => setSearch({ sample: next }, { replace: true })} />
+         {kind ? <SampleBanner kind={kind} onChange={next => setSearch({ sample: next }, { replace: true })} /> : null}
 
          {account.error ? <p className="text-destructive text-sm">{account.error.message}</p> : null}
          {runTask.error ? <p className="text-destructive text-sm">{runTask.error.message}</p> : null}
+         {read.error && !recent ? <p className="text-destructive text-sm">{read.error.message}</p> : null}
          {runTask.data ? (
             <p className="text-sm" role="status">
                Started.{' '}
@@ -110,18 +179,29 @@ export const AccountProfile = () => {
             </p>
          ) : null}
 
-         {loaded.isPending || account.isPending ? <ProfileSkeleton /> : null}
+         {view === 'LOADING' || account.isPending ? <ProfileSkeleton /> : null}
 
-         {!loaded.isPending && !profile && account.data ? (
+         {view !== 'LOADING' && view !== 'PROFILE' && account.data ? (
             <Card>
                <CardContent className="grid gap-3">
                   {strip}
-                  <p className="text-muted-foreground text-sm">
-                     The profile of this account has not been read yet. It shows here once reading it is built.
+                  <p className="text-muted-foreground text-sm" role={view === 'READING' ? 'status' : undefined}>
+                     {view === 'READING'
+                        ? 'Reading the profile. This takes about 5 minutes, and this page updates when it is done.'
+                        : state.data
+                          ? noticeOf(state.data)
+                          : 'The profile of this account has not been read yet.'}
                   </p>
                </CardContent>
             </Card>
          ) : null}
+
+         {view === 'PROFILE' && reading ? (
+            <p className="text-muted-foreground text-sm" role="status">
+               Reading the profile again. This takes about 5 minutes; what is shown is the last read.
+            </p>
+         ) : null}
+         {failedNote ? <p className="text-destructive text-sm">{failedNote}</p> : null}
 
          {profile ? (
             <div
@@ -154,6 +234,18 @@ export const AccountProfile = () => {
                ) : null}
             </div>
          ) : null}
+
+         <ConfirmRunDialog
+            message={recent}
+            onCancel={() => setRecent(null)}
+            onConfirm={() => {
+               read.mutate({
+                  accountId: id,
+                  confirmed: true,
+               })
+               setRecent(null)
+            }}
+         />
       </div>
    )
 }

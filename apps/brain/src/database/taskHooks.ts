@@ -5,6 +5,7 @@ import { type TaskResult, type TaskTrigger } from '@automatedLinkedIn/contracts'
 import { linkedInBrowseHooks } from './linkedInBrowse.hooks'
 import { linkedInLoginHooks } from './linkedInLogin.hooks'
 import { MESSAGES_TASK, linkedInMessagesHooks } from './linkedInMessages.hooks'
+import { PROFILE_TASK, linkedInProfileHooks } from './linkedInProfile.hooks'
 import { REPLY_TASK, linkedInReplyHooks } from './linkedInReply.hooks'
 
 // Where a task needs brain to do something of its own: refuse a request for a reason only brain knows, or change brain's own
@@ -38,5 +39,6 @@ export const TASK_HOOKS: Record<string, TaskHooks> = {
    'linkedin-login': linkedInLoginHooks,
    'linkedin-browse': linkedInBrowseHooks,
    [MESSAGES_TASK]: linkedInMessagesHooks,
+   [PROFILE_TASK]: linkedInProfileHooks,
    [REPLY_TASK]: linkedInReplyHooks,
 }
