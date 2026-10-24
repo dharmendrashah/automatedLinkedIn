@@ -7,6 +7,9 @@ import { useListState } from '@/components/links/use-list-state'
 import { AddProfilesDialog } from '@/components/profiles/add-profiles-dialog'
 import { EditProfileDialog } from '@/components/profiles/edit-profile-dialog'
 import { ProfilesTable } from '@/components/profiles/profiles-table'
+import { ViewProfileDialog } from '@/components/profiles/view-profile-dialog'
+import { Button } from '@/components/ui/button'
+import { Eye } from 'lucide-react'
 import { useState } from 'react'
 
 import { type Profile } from '@/components/profiles/types'
@@ -21,6 +24,8 @@ export const Profiles = () => {
    const state = useListState()
    const selection = useSelection()
    const [toEdit, setToEdit] = useState<Profile | null>(null)
+   // The profile an account is asked to view; `null` inside means a pasted link.
+   const [viewing, setViewing] = useState<{ profile: Profile | null } | null>(null)
    const drawer = useDetailDrawer()
 
    const list = trpc.linkedInProfile.list.useQuery(state.query, {
@@ -57,7 +62,13 @@ export const Profiles = () => {
                   The people you want to reach. Paste their links to add them.
                </p>
             </div>
-            <AddProfilesDialog />
+            <div className="flex flex-wrap items-center gap-2">
+               <Button variant="outline" onClick={() => setViewing({ profile: null })}>
+                  <Eye />
+                  View a profile
+               </Button>
+               <AddProfilesDialog />
+            </div>
          </div>
 
          <ListToolbar
@@ -78,6 +89,7 @@ export const Profiles = () => {
             error={list.error?.message}
             busyId={busyId}
             onEdit={setToEdit}
+            onView={profile => setViewing({ profile })}
             onArchive={profile => archive.mutate({ id: profile.id })}
             onRestore={profile => restore.mutate({ id: profile.id })}
             onTag={state.addTag}
@@ -89,6 +101,13 @@ export const Profiles = () => {
          <Pager total={list.data?.total ?? 0} page={state.page} onPage={state.setPage} noun={['profile', 'profiles']} />
 
          <EditProfileDialog profile={toEdit} onClose={() => setToEdit(null)} />
+         {viewing ? (
+            <ViewProfileDialog
+               key={viewing.profile?.id ?? 'link'}
+               profile={viewing.profile}
+               onClose={() => setViewing(null)}
+            />
+         ) : null}
          <DetailDrawers kind="person" order={list.data?.items.map(({ slug }) => slug) ?? []} />
       </div>
    )

@@ -1,11 +1,11 @@
 import { parse } from 'node-html-parser'
 
-import { handsOf } from '../../browsing/hands'
-import { createReader } from '../../browsing/reader'
-import { PACE } from '../../linkedin/pace'
-import { parseTopCard } from '../../linkedin/profileReader'
-import { createSession } from '../../linkedin/session'
-import { type TaskContext } from '../defineTask'
+import { handsOf } from '../browsing/hands'
+import { createReader } from '../browsing/reader'
+import { type TaskContext } from '../tasks/defineTask'
+import { PACE } from './pace'
+import { parseTopCard } from './profileReader'
+import { createSession } from './session'
 
 export type PageContext = Pick<TaskContext, 'browser' | 'visit' | 'pause' | 'log' | 'warn' | 'attach' | 'screenshot'>
 

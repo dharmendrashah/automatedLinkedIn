@@ -1,8 +1,8 @@
 import { StepFailed, describeError } from '../../browsing/errors'
 import { createKeep } from '../../browsing/snapshot'
 import { runTargets } from '../../browsing/targets'
+import { type PageContext, type PageDeps, createPages, listLimit } from '../../linkedin/pages'
 import { SignedOut } from '../../linkedin/session'
-import { type PageContext, type PageDeps, createPages, listLimit } from './pages'
 
 // The pages behind the profile's "Show all" links, by the address they have under the profile's own address. The names are the
 // names of the kept files. Nothing here is clicked: each page is opened by its address, as a person could type it.

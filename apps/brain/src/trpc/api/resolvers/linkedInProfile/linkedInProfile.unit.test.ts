@@ -5,16 +5,33 @@ import { router } from 'trpc'
 import { type Context } from '../../context'
 import { linkedInProfile } from './linkedInProfile'
 
-const mocks = vi.hoisted(() => ({
-   addMany: vi.fn(),
-   list: vi.fn(),
-   getForUser: vi.fn(),
-   updateForUser: vi.fn(),
-   archiveForUser: vi.fn(),
-   restoreForUser: vi.fn(),
-}))
+const mocks = vi.hoisted(() => {
+   class ProxyServerOwnershipError extends Error {}
+   class TaskOwnershipError extends Error {}
+   class TaskRefusedError extends Error {}
+   class TaskRecentError extends TaskRefusedError {}
+
+   return {
+      ProxyServerOwnershipError,
+      TaskOwnershipError,
+      TaskRefusedError,
+      TaskRecentError,
+      addMany: vi.fn(),
+      list: vi.fn(),
+      getForUser: vi.fn(),
+      updateForUser: vi.fn(),
+      archiveForUser: vi.fn(),
+      restoreForUser: vi.fn(),
+      requestVisit: vi.fn(),
+   }
+})
 
 vi.mock('database', () => ({
+   ProxyServerOwnershipError: mocks.ProxyServerOwnershipError,
+   TaskOwnershipError: mocks.TaskOwnershipError,
+   TaskRefusedError: mocks.TaskRefusedError,
+   TaskRecentError: mocks.TaskRecentError,
+   ProfileVisitService: { request: mocks.requestVisit },
    LinkedInProfileService: {
       addMany: mocks.addMany,
       list: mocks.list,
@@ -151,6 +168,73 @@ describe('linkedInProfile resolvers', () => {
          mocks.getForUser.mockResolvedValueOnce(null)
 
          await expect(caller(authed()).get({ id: 'p9' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      })
+   })
+
+   describe('visit', () => {
+      beforeEach(() => vi.spyOn(console, 'error').mockImplementation(() => undefined))
+
+      it('should ask for a visit of a saved profile or a pasted link, as the owner and with the account named', async () => {
+         mocks.requestVisit.mockResolvedValue({ id: 's1' })
+
+         await expect(
+            caller(authed()).visit({
+               accountId: 'acc1',
+               profileId: 'p1',
+            })
+         ).resolves.toEqual({ id: 's1' })
+         await caller(authed()).visit({
+            accountId: 'acc1',
+            link: 'linkedin.com/in/ada',
+            confirmed: true,
+         })
+
+         expect(mocks.requestVisit).toHaveBeenNthCalledWith(1, 'u1', 'acc1', { profileId: 'p1' }, undefined)
+         expect(mocks.requestVisit).toHaveBeenNthCalledWith(2, 'u1', 'acc1', { link: 'linkedin.com/in/ada' }, true)
+      })
+
+      it('should need exactly one of a saved profile and a link', async () => {
+         await expect(caller(authed()).visit({ accountId: 'acc1' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+         await expect(
+            caller(authed()).visit({
+               accountId: 'acc1',
+               profileId: 'p1',
+               link: 'linkedin.com/in/ada',
+            })
+         ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+         expect(mocks.requestVisit).not.toHaveBeenCalled()
+      })
+
+      it('should answer NOT_FOUND for a profile or an account that is not the owner’s', async () => {
+         mocks.requestVisit.mockResolvedValue(null)
+
+         await expect(
+            caller(authed()).visit({
+               accountId: 'acc1',
+               profileId: 'p1',
+            })
+         ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      })
+
+      it('should say a refusal and a recent visit the way every task does', async () => {
+         mocks.requestVisit.mockRejectedValueOnce(new mocks.TaskRefusedError('This account reached its limit.'))
+         mocks.requestVisit.mockRejectedValueOnce(new mocks.TaskRecentError('Wait 2 minute(s).'))
+
+         await expect(
+            caller(authed()).visit({
+               accountId: 'acc1',
+               profileId: 'p1',
+            })
+         ).rejects.toMatchObject({
+            code: 'PRECONDITION_FAILED',
+            message: 'This account reached its limit.',
+         })
+         await expect(
+            caller(authed()).visit({
+               accountId: 'acc1',
+               profileId: 'p1',
+            })
+         ).rejects.toMatchObject({ code: 'CONFLICT' })
       })
    })
 

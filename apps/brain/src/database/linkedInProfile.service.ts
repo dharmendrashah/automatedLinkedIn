@@ -43,6 +43,17 @@ const profileSelect = {
    archivedAt: true,
    createdAt: true,
    updatedAt: true,
+   // The latest visit an account of the owner made to this person that was asked for or went through (.plan/visit-profile-task.md).
+   visits: {
+      where: { status: { in: ['ASKED', 'DONE'] } },
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+      select: {
+         createdAt: true,
+         status: true,
+         account: { select: { email: true } },
+      },
+   },
 } satisfies Prisma.LinkedInProfileSelect
 
 const SEARCHED_FIELDS = ['fullName', 'headline', 'company', 'slug'] as const

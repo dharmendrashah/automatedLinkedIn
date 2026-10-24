@@ -5,6 +5,7 @@ import { Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 import { type Profile } from './types'
+import { visitedText } from './visit-form'
 
 import { LabelCell } from '../labels/label-cell'
 import { LinkStatusBadge } from '../links/link-status-badge'
@@ -25,6 +26,7 @@ type Props = {
    error: string | undefined
    busyId: string | undefined
    onEdit: (profile: Profile) => void
+   onView: (profile: Profile) => void
    onArchive: (profile: Profile) => void
    onRestore: (profile: Profile) => void
    onTag: (tag: string) => void
@@ -39,6 +41,7 @@ export const ProfilesTable = ({
    error,
    busyId,
    onEdit,
+   onView,
    onArchive,
    onRestore,
    onTag,
@@ -55,7 +58,7 @@ export const ProfilesTable = ({
                <TableHead>Status</TableHead>
                <TableHead>Labels</TableHead>
                <TableHead>Added</TableHead>
-               <TableHead className="w-24" />
+               <TableHead className="w-32" />
             </TableRow>
          </TableHeader>
          <TableBody>
@@ -79,6 +82,9 @@ export const ProfilesTable = ({
                         {profile.fullName ?? profile.slug}
                      </button>
                      {details(profile) ? <p className="text-muted-foreground text-xs">{details(profile)}</p> : null}
+                     {visitedText(profile.visits[0]) ? (
+                        <p className="text-muted-foreground text-xs">{visitedText(profile.visits[0])}</p>
+                     ) : null}
                   </TableCell>
                   <TableCell>
                      <span className="flex flex-wrap items-center gap-1">
@@ -102,6 +108,7 @@ export const ProfilesTable = ({
                         archived={Boolean(profile.archivedAt)}
                         busy={busyId === profile.id}
                         onEdit={() => onEdit(profile)}
+                        onView={() => onView(profile)}
                         onArchive={() => onArchive(profile)}
                         onRestore={() => onRestore(profile)}
                      />

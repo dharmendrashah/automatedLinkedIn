@@ -173,9 +173,9 @@ describe('the account profile (database)', () => {
       await finishedRun('DONE')
       await ProfileImportService.importDue(undefined, async () => file('Older', '2026-10-24T09:00:00Z'))
 
-      await expect(AccountProfileService.get(userId, accountId)).resolves.toMatchObject({
-         profile: { name: 'Sample Person' },
-      })
+      const kept = await AccountProfileService.get(userId, accountId)
+
+      expect(kept.profile?.name).toBe('Sample Person')
 
       await finishedRun('DONE')
       await ProfileImportService.importDue(undefined, async () => file('Newer', '2026-10-24T12:00:00Z'))
