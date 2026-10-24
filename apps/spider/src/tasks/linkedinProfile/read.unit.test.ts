@@ -372,6 +372,20 @@ describe('readProfile', () => {
       expect(context.warn).toHaveBeenCalledWith('The page did not open.')
    })
 
+   it('should open the pages under the profile’s own address, read from the page, when LinkedIn leaves /in/me/ as it is', async () => {
+      const { read, opened } = setup({
+         lands: `${BASE}/in/me/`,
+         pages: {
+            ...PAGES,
+            [`${BASE}/in/me/`]: main,
+         },
+      })
+
+      await expect(read()).resolves.toMatchObject({ outcome: 'DONE' })
+
+      expect(opened).toEqual([`${BASE}/in/me/`, ...DETAIL_PAGES.map(({ path }) => `${ME}${path}`)])
+   })
+
    it('should say the profile did not open, and hand over nothing, when the address leads to another page', async () => {
       const { read, attached, opened } = setup({ lands: `${BASE}/feed/` })
 

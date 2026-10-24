@@ -1,6 +1,7 @@
 import { handsOf } from '../../browsing/hands'
 import { createReader } from '../../browsing/reader'
 import { PACE } from '../../linkedin/pace'
+import { parseTopCard } from '../../linkedin/profileReader'
 import { createSession } from '../../linkedin/session'
 import { type TaskContext } from '../defineTask'
 
@@ -21,6 +22,8 @@ export const PAUSES = {
 } as const
 // The account's own profile, after LinkedIn sent `/in/me/` on to its address.
 const PROFILE_PATH = /^\/in\/([^/]+)\/?$/
+// How often the top card is looked for while the address is still `/in/me/`.
+const ADDRESS_LOOKS = 5
 // The Interests page has a chip for each kind it holds: a radio block that holds a checkbox and its label (recorded 2026-10-24), and
 // only the first is shown; the others are opened by a click on their block, which changes nothing on the profile. At most this many
 // after the first.
@@ -72,12 +75,31 @@ export const createPages = (
       elapsed: reader.elapsed,
       between: () => reader.wait(PAUSES.between),
       html: () => hands.html(),
-      // The address of the account's own profile (`.../in/<name>/`), or undefined when `/in/me/` did not lead to a profile.
+      // The address of the account's own profile (`.../in/<name>/`), or undefined when `/in/me/` did not lead to a profile. LinkedIn may
+      // keep `/in/me/` in the address bar for a while, and under it the Interests and the activity pages send the browser back to the
+      // profile (the fourth capture, 2026-10-24), so the address is then read from the link of the top card's photo.
       openOwn: async () => {
          await session.acceptConsent(await session.open(`${baseUrl}/in/me/`))
 
          const here = new URL(session.signedIn((await hands.inspect()).url))
          const owner = PROFILE_PATH.exec(here.pathname)?.[1]
+
+         if (owner !== 'me') {
+            return owner ? `${here.origin}/in/${owner}/` : undefined
+         }
+
+         for (let look = 0; look < ADDRESS_LOOKS; look += 1) {
+            const own = parseTopCard(await hands.html())?.profileUrl
+            const name = own && URL.canParse(own) ? PROFILE_PATH.exec(new URL(own).pathname)?.[1] : undefined
+
+            if (name) {
+               return `${here.origin}/in/${name}/`
+            }
+
+            await reader.wait(PAUSES.scroll)
+         }
+
+         return `${here.origin}/in/me/`
 
          return owner ? `${here.origin}/in/${owner}/` : undefined
       },
