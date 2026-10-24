@@ -7,15 +7,28 @@ import {
    type Graph,
    type GraphNode,
    type ItemKind,
+   TAKES_ANYTHING,
    backEdges,
    blockOf,
    convertsTo,
    edgeKey,
+   isHandled,
    loopRoundsOf,
    repeatRegions,
+   retriesOf,
 } from '@automatedLinkedIn/contracts'
 
-import { type EngineDeps, Paused, type Run, type Step, StepError, WALLET_LOW, Waiting, configOf } from './context'
+import {
+   type EngineDeps,
+   Paused,
+   type Run,
+   SERVICE_BUSY,
+   type Step,
+   StepError,
+   WALLET_LOW,
+   Waiting,
+   configOf,
+} from './context'
 import { EXECUTORS } from './executors'
 
 // Runs workflow graphs step by step, keeping every step's output in the database so a stopped worker resumes where it
@@ -28,7 +41,7 @@ const PASSED = new Set(['DONE', 'PARTIAL'])
 const FINISHED = new Set(['DONE', 'PARTIAL', 'FAILED'])
 const SCORING_STEPS = new Set(['score.icp', 'collect.profile'])
 // Blocks that take items of every kind as they are.
-const RAW_INPUTS = new Set(['process.merge', 'logic.runWorkflow'])
+const RAW_INPUTS = TAKES_ANYTHING
 
 const PLAIN_FAILURE = 'Something went wrong in this step. The platform owner has been told.'
 const NOT_CONFIGURED = 'Collecting data is not available right now. The platform owner has been told.'
@@ -112,6 +125,21 @@ const sortInputs = (items: WorkflowItemData[], needs: ItemKind | null) => {
    }
 }
 
+// A block with a Retry right after it gets another try instead of ending (.plan/logic-wait-result-retry.md).
+const retried = async (graph: Graph, node: GraphNode, step: Step, needsReopened: boolean): Promise<boolean> => {
+   const retry = retriesOf(graph, node.id)
+
+   if (retry === null) {
+      return false
+   }
+
+   return WorkflowRunService.retryStep(step.id, {
+      max: retry.times,
+      waitSeconds: retry.waitSeconds,
+      needsReopened,
+   })
+}
+
 const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Promise<'waiting' | 'ended'> => {
    const node = graph.nodes.find(({ id }) => id === step.nodeId)
 
@@ -132,8 +160,12 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
       round: step.round,
    }
 
+   let inputsRead: WorkflowItemData[] = []
+
    try {
       const read = await readInputs(run, graph, node, step)
+
+      inputsRead = read
       const { inputs, passThrough } = RAW_INPUTS.has(node.type)
          ? {
               inputs: read,
@@ -150,6 +182,11 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
          preview: run.trigger === 'PREVIEW',
          deps,
       })
+
+      // Some requests failed: a Retry after the block sends them again before anything after it sees the result.
+      if (result.status === 'PARTIAL' && result.message === SERVICE_BUSY && (await retried(graph, node, step, true))) {
+         return 'ended'
+      }
 
       if (passThrough.length > 0) {
          await WorkflowRunService.seedItems(at, passThrough)
@@ -171,6 +208,22 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
       deps.log.error(
          `workflow run=${run.id} step=${step.nodeId} failed: ${error instanceof Error ? error.message : 'unknown error'}`
       )
+
+      if (await retried(graph, node, step, false)) {
+         return 'ended'
+      }
+
+      // What reached the block is kept for the Task result or Retry that looks at it.
+      if (isHandled(graph, node.id)) {
+         await WorkflowRunService.replaceItems(
+            {
+               ...at,
+               nodeId: `${node.id}~failed`,
+            },
+            inputsRead
+         )
+      }
+
       await WorkflowRunService.finishStep(step.id, {
          status: 'FAILED',
          itemsIn: 0,
@@ -237,11 +290,16 @@ const nextRound = async (run: Run, graph: Graph, round: number) => {
 // Everyone the run's "Add to list" blocks got, once.
 const listedPeople = (run: Run) => WorkflowRunService.listedPeople(run.id)
 
-const finish = async (run: Run, deps: EngineDeps) => {
+// A failed step that a Task result or a Retry looks at does not end the run: the run goes on and ends with gaps.
+const unhandledFailure = (run: Run, graph: Graph) =>
+   run.steps.find(({ status, nodeId }) => status === 'FAILED' && !isHandled(graph, nodeId))
+
+const finish = async (run: Run, graph: Graph, deps: EngineDeps) => {
    // A stopped run winds down like any other: paid jobs finish and are kept, nothing new is paid for.
    const stopped = run.stopRequestedAt !== null
-   const failed = run.steps.find(({ status }) => status === 'FAILED')
-   const partial = run.steps.some(({ status }) => status === 'PARTIAL')
+   const handled = run.steps.find(({ status, nodeId }) => status === 'FAILED' && isHandled(graph, nodeId))
+   const failed = unhandledFailure(run, graph)
+   const partial = handled !== undefined || run.steps.some(({ status }) => status === 'PARTIAL')
    const discarded = run.steps
       .filter(({ type }) => SCORING_STEPS.has(type))
       .reduce((sum, { itemsIn, itemsOut }) => sum + Math.max(0, itemsIn - itemsOut), 0)
@@ -255,7 +313,7 @@ const finish = async (run: Run, deps: EngineDeps) => {
    const { count } = await WorkflowRunService.finishRun(run.id, {
       status: stopped ? 'STOPPED' : failed ? 'FAILED' : partial ? 'PARTIAL' : 'SUCCEEDED',
       discarded,
-      message: stopped ? undefined : (failed?.message ?? undefined),
+      message: stopped ? undefined : (failed?.message ?? handled?.message ?? undefined),
    })
 
    // Only the worker that ended the run starts the workflows listening to it, and never after a preview, a failure or
@@ -287,8 +345,8 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
       const byKey = new Map(run.steps.map(step => [keyOf(step.nodeId, step.round), step]))
       const nodeOf = new Map(graph.nodes.map(node => [node.id, node]))
 
-      if (run.steps.some(({ status }) => status === 'FAILED')) {
-         await finish(run, deps)
+      if (unhandledFailure(run, graph)) {
+         await finish(run, graph, deps)
 
          return true
       }
@@ -303,7 +361,7 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
             continue
          }
 
-         await finish(run, deps)
+         await finish(run, graph, deps)
 
          return true
       }
@@ -316,12 +374,18 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
             .every(({ from }) => {
                const parent = byKey.get(keyOf(from, round))
 
-               return !parent || PASSED.has(parent.status)
+               return (
+                  !parent ||
+                  PASSED.has(parent.status) ||
+                  (parent.status === 'FAILED' && isHandled(graph, parent.nodeId))
+               )
             })
 
          return (
             (step.status === 'WAITING' || step.status === 'RUNNING') &&
             !waiting.has(step.id) &&
+            // A Wait, or the pause before a retry, holds the step back.
+            (!step.waitUntil || step.waitUntil <= new Date()) &&
             parentsPassed &&
             // Posts are marked done only after everything else has finished.
             (step.type !== 'output.markPosts' ||

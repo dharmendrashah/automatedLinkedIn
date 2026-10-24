@@ -9,6 +9,7 @@ import { ChevronRight, CircleAlert, Trash2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
+import { AccountsPick } from './accounts-pick'
 import { BlockOutput } from './block-output'
 import { INPUT_KINDS, isInputType } from './input-kinds'
 import { InputMatches } from './input-matches'
@@ -60,6 +61,14 @@ const flowOf = (block: Block) => {
 
    if (block.type === 'logic.runWorkflow') {
       return 'Takes anything, gives what it got or the people the other workflow saved'
+   }
+
+   if (block.type === 'account.select' || block.type === 'logic.wait' || block.type === 'logic.retry') {
+      return 'Takes anything, passes it on unchanged'
+   }
+
+   if (block.type === 'logic.taskResult') {
+      return 'Takes anything, gives what worked; an Else after it gets the rest'
    }
 
    const takes = block.input && KINDS[block.input] ? `Takes ${KINDS[block.input]}` : 'Starts on its own'
@@ -133,6 +142,12 @@ export const BlockSettings = ({ node, workflowId, problems, icps, workflows, par
       if (item.kind === 'search') {
          return (
             <SearchPick id={id} options={item.options} max={item.max} value={Array.isArray(value) ? value : []} onChange={next => onChange(item.key, next)} />
+         )
+      }
+
+      if (item.kind === 'accounts') {
+         return (
+            <AccountsPick id={id} value={Array.isArray(value) ? value : []} onChange={next => onChange(item.key, next)} />
          )
       }
 
@@ -228,9 +243,14 @@ export const BlockSettings = ({ node, workflowId, problems, icps, workflows, par
       )
    const shown = (item: Field) => {
       const needed = item.showWhen
-      const list = needed ? values[needed.key] : undefined
 
-      return !needed || (Array.isArray(list) && list.length >= needed.atLeast)
+      if (!needed) {
+         return true
+      }
+
+      const current = values[needed.key]
+
+      return 'is' in needed ? current === needed.is : Array.isArray(current) && current.length >= needed.atLeast
    }
    const main = block.fields.filter(item => !item.advanced && shown(item))
    const more = block.fields.filter(item => item.advanced && shown(item))

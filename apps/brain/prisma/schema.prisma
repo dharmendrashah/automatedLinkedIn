@@ -33,7 +33,7 @@ model User {
   conversations     LinkedInConversation[]
   replies           LinkedInReply[]
   accountProfiles   LinkedInAccountProfile[]
-  profileVisits     LinkedInProfileVisit[]
+  profileVisits     LinkedInPageVisit[]
   workflowLists     WorkflowList[]
   suppressions      Suppression[]
   personSnapshots   PersonSnapshot[]
@@ -311,6 +311,10 @@ model WorkflowStepRun {
   claimedAt  DateTime?
   // The run a "Run another workflow" step started.
   childRunId String?
+  // The step does not start before this time: set by Wait, and by Retry for the pause before a new try (.plan/logic-wait-result-retry.md).
+  waitUntil  DateTime?
+  // How many times a Retry has run this step again.
+  tries      Int                @default(0)
   finishedAt DateTime?
   calls      WorkflowStepCall[]
 
@@ -454,6 +458,8 @@ model LinkedInCompany {
   createdAt  DateTime              @default(now())
   updatedAt  DateTime              @updatedAt
 
+  visits LinkedInPageVisit[]
+
   @@unique([userId, slug])
   @@index([userId, archivedAt, createdAt])
 }
@@ -484,42 +490,59 @@ model LinkedInProfile {
   createdAt  DateTime              @default(now())
   updatedAt  DateTime              @updatedAt
 
-  visits LinkedInProfileVisit[]
+  visits LinkedInPageVisit[]
 
   @@unique([userId, slug])
   @@index([userId, archivedAt, createdAt])
 }
 
-enum ProfileVisitStatus {
+enum PageVisitStatus {
   // Asked for; the run is going or its answer has not come yet.
   ASKED
   DONE
-  // The address did not lead to a profile that could be viewed.
+  // The address did not lead to a page that could be viewed.
   NOT_AVAILABLE
   FAILED
+
+  @@map("ProfileVisitStatus")
 }
 
-// One visit of one of the owner's accounts to someone's profile (.plan/visit-profile-task.md): the record the daily cap and the
-// "never twice in 30 days" rule are counted from. It keeps the public address slug the owner asked for and nothing of the profile.
-model LinkedInProfileVisit {
-  id         String             @id @default(uuid(7))
+enum PageVisitKind {
+  PROFILE
+  COMPANY
+}
+
+// One visit of one of the owner's accounts to a profile or a company page (.plan/visit-profile-task.md, .plan/visit-company-task.md):
+// the record the daily cap and the "never twice in 30 days" rule are counted from. It keeps the public address slug the owner asked
+// for and nothing of the page. The table kept its first name, `LinkedInProfileVisit`.
+model LinkedInPageVisit {
+  id         String           @id @default(uuid(7))
   userId     String
-  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   accountId  String
-  account    LinkedInAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  // The saved profile it was asked from; null for a pasted link, or once the saved profile is deleted.
+  account    LinkedInAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  kind       PageVisitKind    @default(PROFILE)
+  // The saved profile or company it was asked from; null for a pasted link, or once the saved one is deleted.
   profileId  String?
-  profile    LinkedInProfile?   @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  profile    LinkedInProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  companyId  String?
+  company    LinkedInCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   slug       String
   // The run; no relation, because the run's row is deleted after 30 days and the record must outlive it.
-  sessionId  String             @unique
-  status     ProfileVisitStatus @default(ASKED)
-  createdAt  DateTime           @default(now())
+  sessionId  String           @unique
+  // The workflow run and block that asked for it (.plan/select-accounts-block.md); null for a visit asked by hand. No relation, like the session.
+  runId      String?
+  nodeId     String?
+  status     PageVisitStatus  @default(ASKED)
+  createdAt  DateTime         @default(now())
   finishedAt DateTime?
 
+  @@index([runId, nodeId])
   @@index([accountId, createdAt])
   @@index([accountId, slug])
   @@index([profileId])
+  @@index([companyId])
+  @@map("LinkedInProfileVisit")
 }
 
 enum LinkedInAccountStatus {
@@ -585,7 +608,7 @@ model LinkedInAccount {
   conversations  LinkedInConversation[]
   replies        LinkedInReply[]
   profile        LinkedInAccountProfile?
-  profileVisits  LinkedInProfileVisit[]
+  profileVisits  LinkedInPageVisit[]
 
   @@unique([userId, email])
   @@index([userId])

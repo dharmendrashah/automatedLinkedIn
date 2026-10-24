@@ -5,6 +5,7 @@ import { createLinkedinLogin } from './linkedinLogin'
 import { createLinkedinMessages } from './linkedinMessages'
 import { createLinkedinProfile } from './linkedinProfile'
 import { createLinkedinReply } from './linkedinReply'
+import { createLinkedinViewCompany } from './linkedinViewCompany'
 import { createLinkedinViewProfile } from './linkedinViewProfile'
 
 // What the tasks that need settings are built from. The worker fills it from its environment.
@@ -21,4 +22,5 @@ export const buildTasks = (config: TaskConfig): TaskDefinition[] => [
    createLinkedinProfile({ baseUrl: config.linkedin.baseUrl }),
    createLinkedinReply({ baseUrl: config.linkedin.baseUrl }),
    createLinkedinViewProfile({ baseUrl: config.linkedin.baseUrl }),
+   createLinkedinViewCompany({ baseUrl: config.linkedin.baseUrl }),
 ]

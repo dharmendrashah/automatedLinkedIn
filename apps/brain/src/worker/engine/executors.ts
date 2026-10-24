@@ -72,9 +72,11 @@ import {
    thresholdsOf,
    wordsIn,
 } from './context'
+import { retry, taskResult, wait } from './logicBlocks'
 import { runWorkflow } from './runWorkflow'
 import { sendPages } from './sendApi'
 import { applyProfiles, conditionsOf, filterPeople, matches, scorePeople } from './steps'
+import { selectAccounts, visitCompany, visitProfile } from './visitPages'
 
 const DONE: StepResult = {
    status: 'DONE',
@@ -833,6 +835,12 @@ export const EXECUTORS: Record<GraphNode['type'], (ctx: Context) => Promise<Step
    'logic.else': elseBlock,
    'logic.forEach': forEach,
    'logic.runWorkflow': runWorkflow,
+   'logic.wait': wait,
+   'logic.taskResult': taskResult,
+   'logic.retry': retry,
+   'account.select': selectAccounts,
+   'account.visitProfile': visitProfile,
+   'account.visitCompany': visitCompany,
    'output.list': addToList,
    'output.markPosts': markPosts,
    'output.csv': exportCsv,
