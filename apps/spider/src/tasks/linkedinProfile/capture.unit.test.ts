@@ -15,9 +15,11 @@ type Page = {
    scrolls?: number
    // Milliseconds each pause adds to the clock.
    pauseMs?: number
+   // How many chips besides the first the Interests page has.
+   tabs?: number
 }
 
-const setup = ({ lands = PROFILE, refuse = [], scrolls = 2, pauseMs }: Page = {}) => {
+const setup = ({ lands = PROFILE, refuse = [], scrolls = 2, pauseMs, tabs = 0 }: Page = {}) => {
    const opened: string[] = []
    const attached: Record<string, string> = {}
    let current = BASE
@@ -26,6 +28,15 @@ const setup = ({ lands = PROFILE, refuse = [], scrolls = 2, pauseMs }: Page = {}
    const browser = {
       inspect: vi.fn(async () => ({ url: current })),
       clickLink: vi.fn(async () => undefined),
+      clickNth: vi.fn(async (selector: string, nth: number, _avoid: string) => {
+         if (!selector.includes('checkbox') || !current.endsWith('details/interests/') || nth > tabs) {
+            return false
+         }
+
+         left = scrolls
+
+         return true
+      }),
       back: vi.fn(async () => current),
       scrollBy: vi.fn(async () => {
          if (left > 0) {
@@ -121,6 +132,33 @@ describe('captureProfile', () => {
 
       expect(browser.clickLink).not.toHaveBeenCalled()
       expect(browser.click).not.toHaveBeenCalled()
+      expect(browser.clickNth).toHaveBeenCalledTimes(1)
+   })
+
+   it('should open each other chip of the Interests page by its label, and keep a page for each, as far as there are chips', async () => {
+      const { capture, attached, browser } = setup({ tabs: 2 })
+
+      await capture()
+
+      expect(browser.clickNth.mock.calls.map(([selector, nth]) => [selector, nth])).toEqual([
+         ['input[type="checkbox"] + label', 1],
+         ['input[type="checkbox"] + label', 2],
+         ['input[type="checkbox"] + label', 3],
+      ])
+      expect(Object.keys(attached)).toEqual(
+         expect.arrayContaining(['detail-interests.html', 'detail-interests-2.html', 'detail-interests-3.html'])
+      )
+      expect(attached).not.toHaveProperty(['detail-interests-4.html'])
+   })
+
+   it('should keep at most four more pages of chips, and stay under the 20 files of a run', async () => {
+      const { capture, attached } = setup({ tabs: 9 })
+
+      await capture()
+
+      expect(attached).toHaveProperty(['detail-interests-5.html'])
+      expect(attached).not.toHaveProperty(['detail-interests-6.html'])
+      expect(Object.keys(attached).length).toBeLessThanOrEqual(20)
    })
 
    it('should say the profile did not open when the address of the account leads somewhere else, and keep that page', async () => {

@@ -53,7 +53,8 @@ The nine questions were answered "all defaults are fine"; the defaults are the o
 
 - [x] 1. Lock this plan (answer the questions).
 - [x] 2a. Capture-only task registered (`snapshots` pages of the profile and its detail pages) with unit tests (built 2026-10-24: `tasks/linkedinProfile/`, task `linkedin-profile` v1; the profile keeps its markup, links and controls and a picture, each of the ten detail pages its markup and a picture, because a run keeps at most 20 files).
-- [ ] 2b. You run it locally and share the recording; findings into `MEMORY.md`. Waiting on this.
+- [x] 2b. First capture run by the owner (2026-10-24, 11 pages, 171 s, one account with a sparse profile). Findings below and in `MEMORY.md`.
+- [ ] 2c. Second capture on a profile that has recommendations (received and given), projects, languages, skills with endorsements, services, open to work, posts with pictures, and the Top voices, Newsletters and Schools chips of Interests; the capture now also opens every other Interests chip (up to four more pages). Waiting on this: the markup of those sections has not been seen, so no reader for them is written yet.
 - [ ] 3. Selectors in `markup.ts` and `profileReader.ts` readers, test-first, with synthetic fixtures made like the real markup; a test for each section and for a profile with sections missing.
 - [ ] 4. `read.ts` (the walk: pages, scrolling, "Show all", budget, failures, never-click set), `profileFile.ts` (assemble and validate with `accountProfileSchema`), `answer.ts` (verdicts, report with counts only), `index.ts`; unit tests with a stateful fake page.
 - [ ] 5. A real-browser test against a stand-in profile page (main page, lazy lists, detail pages, a missing section, a sign-in redirect).
@@ -81,6 +82,14 @@ The nine questions were answered "all defaults are fine"; the defaults are the o
 - Readers tested on synthetic fixtures made like the real pages, one per section plus a sparse profile and a non-English one; a test that no name or word of the profile reaches the log, a warning or the report.
 - A real-browser test against a stand-in profile page.
 - A local run with `dev:record` on a real account: read `profile.json` against the live page and the log. Not possible from here; it needs your account and proxy.
+
+## Capture findings (first run, 2026-10-24)
+
+- The page is LinkedIn's server-driven app: class names are generated and short-lived (`l4j…`), so selectors are `data-view-name`, `data-testid`, `componentkey` prefixes, `aria-label` and `href` patterns. The page was in English.
+- Seen on the profile page: the top card (`profile-top-card`: cover `img[alt]`, `profile-top-card-member-photo`, name in an `h2`, `profile-top-card-verified-badge`, pronouns and headline as text, a link to `/overlay/contact-info/` after the location, `profile-top-card-view-all-connections` with "N connections"; no follower count there), `profile-card-about` (`expandable-text-box`), `profile-card-insights` (links `insights-wvmp`, `insights-content-impressions`, `insights-search-appearances`; each shown twice in the markup, once per layout), `profile-card-recent-activity` (the followers link `/feed/followers/`), `profile-card-experience` (items `entity-collection-item-*`), `profile-card-pymk-recommendation-*` and `profile-card-company-recommendation`. Education, skills and the rest were not drawn on the profile page: they are read from their detail pages.
+- Seen on detail pages (`section[aria-label="Primary content"]`): experience (same items as the profile page), education (`profile_EducationDetailsSection_*`, lines school, degree, dates), skills (groups with the experience each belongs to), interests (chips are `input[type=checkbox] + label`, items in `data-testid="lazy-column"`), recent activity posts and comments (header with followers, tabs, feed posts). Every detail page also carries ad and "who your viewers also viewed" blocks to leave out.
+- `/in/me/` stayed `/in/me/` and `/in/me/details/...` opened fine, so the base address needs no redirect.
+- Not seen populated (the account has none): recommendations, projects, languages, services, open to work, top voices, newsletters, schools, posts with pictures.
 
 ## Outcome
 

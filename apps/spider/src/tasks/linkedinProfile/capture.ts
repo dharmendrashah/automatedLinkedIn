@@ -3,6 +3,7 @@ import { handsOf } from '../../browsing/hands'
 import { createReader } from '../../browsing/reader'
 import { createKeep } from '../../browsing/snapshot'
 import { runTargets } from '../../browsing/targets'
+import { NEVER_CLICK } from '../../linkedin/markup'
 import { PACE } from '../../linkedin/pace'
 import { SignedOut, createSession } from '../../linkedin/session'
 import { type TaskContext } from '../defineTask'
@@ -80,6 +81,10 @@ const PAUSES = {
    scroll: [700, 1600],
    between: [4000, 9000],
 } as const
+// The Interests page has a chip for each kind it holds (a checkbox and its label, recorded 2026-10-24), and only the first is shown;
+// the others are opened by a click on their label, which changes nothing on the profile. At most this many after the first.
+const INTEREST_TAB = 'input[type="checkbox"] + label'
+const MAX_INTEREST_TABS = 4
 // The account's own profile, after LinkedIn sent `/in/me/` on to its address.
 const PROFILE_PATH = /^\/in\/([^/]+)\/?$/
 
@@ -128,6 +133,18 @@ export const captureProfile = async (context: Context, baseUrl: string, deps: De
 
    const missed = (done: number) => DETAIL_PAGES.length - done
 
+   // The other chips of the Interests page, one page kept for each, until a click finds no more.
+   const keepInterestTabs = async () => {
+      for (let tab = 1; tab <= MAX_INTEREST_TABS; tab += 1) {
+         if (!(await hands.clickNth(INTEREST_TAB, tab, NEVER_CLICK))) {
+            return
+         }
+
+         await reader.wait(PAUSES.scroll)
+         await keepPage(`detail-interests-${tab + 1}`)
+      }
+   }
+
    try {
       await session.acceptConsent(await session.open(`${baseUrl}/in/me/`))
 
@@ -155,6 +172,10 @@ export const captureProfile = async (context: Context, baseUrl: string, deps: De
             await session.open(`${profile}${path}`)
             await keepPage(`detail-${name}`)
             log(`Kept the page of ${name}`)
+
+            if (name === 'interests') {
+               await keepInterestTabs()
+            }
 
             return true
          },
