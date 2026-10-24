@@ -1,6 +1,5 @@
 import { handsOf } from '../../browsing/hands'
 import { createReader } from '../../browsing/reader'
-import { NEVER_CLICK } from '../../linkedin/markup'
 import { PACE } from '../../linkedin/pace'
 import { createSession } from '../../linkedin/session'
 import { type TaskContext } from '../defineTask'
@@ -25,6 +24,9 @@ const PROFILE_PATH = /^\/in\/([^/]+)\/?$/
 // The Interests page has a chip for each kind it holds (a checkbox and its label, recorded 2026-10-24), and only the first is shown;
 // the others are opened by a click on their label, which changes nothing on the profile. At most this many after the first.
 const INTEREST_TAB = 'input[type="checkbox"] + label'
+// A chip is a label over a checkbox, so the usual "never click an input" would refuse it (the second capture clicked none): only real
+// buttons and menus are avoided here.
+const CHIP_AVOID = 'button, [role="button"], [role="menuitem"], [data-view-name="edge-creation-follow-action"]'
 const MAX_INTEREST_TABS = 4
 
 // What the two tasks that walk the profile (the capture and the reading) do the same way: open the account's own profile, open a page
@@ -82,7 +84,7 @@ export const createPages = (
       // Opens each other chip of the Interests page by its label, one after the other, until a click finds no more.
       eachInterestTab: async (visitTab: (tab: number) => Promise<void>) => {
          for (let tab = 1; tab <= MAX_INTEREST_TABS; tab += 1) {
-            if (!(await hands.clickNth(INTEREST_TAB, tab, NEVER_CLICK))) {
+            if (!(await hands.clickNth(INTEREST_TAB, tab, CHIP_AVOID))) {
                return
             }
 
