@@ -116,6 +116,7 @@ describe('graph-convert', () => {
                costMicros: 0,
                message: null,
                childRunId: null,
+               tries: 0,
                child: null,
                progress: null,
             },
@@ -160,6 +161,7 @@ describe('graph-convert', () => {
          costMicros: 10,
          message: null,
          childRunId: null,
+         tries: 0,
          child: null,
          id: 'step-each',
          progress: null,
@@ -205,5 +207,18 @@ describe('Account Actions blocks', () => {
       expect(summaryOf(select, { accounts: ['a1', 'a2', 'a3'] })).toBe('Takes turns across 3 accounts')
       expect(summaryOf(select, { accounts: ['a1'] })).toBe('Uses 1 account')
       expect(summaryOf(select, {})).toBe('Pick the accounts to use')
+   })
+})
+
+describe('Logic blocks', () => {
+   const wait = block('logic.wait', 'profile', 'profile')
+   const retry = block('logic.retry', 'profile', 'profile')
+
+   it('should say how long a Wait waits, and what a Retry does', () => {
+      expect(summaryOf(wait, { mode: 'exact', seconds: 30 })).toBe('Waits 30 seconds')
+      expect(summaryOf(wait, { mode: 'exact', seconds: 1 })).toBe('Waits 1 second')
+      expect(summaryOf(wait, { mode: 'between', minSeconds: 20, maxSeconds: 60 })).toBe('Waits 20 to 60 seconds')
+      expect(summaryOf(retry, { times: 3, waitSeconds: 0 })).toBe('Tries up to 3 more times')
+      expect(summaryOf(retry, { times: 1, waitSeconds: 30 })).toBe('Tries once more, after 30 seconds')
    })
 })

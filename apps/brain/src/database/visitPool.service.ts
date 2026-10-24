@@ -63,6 +63,7 @@ export class VisitPoolService {
             slug: true,
             accountId: true,
             status: true,
+            createdAt: true,
          },
       })
    }

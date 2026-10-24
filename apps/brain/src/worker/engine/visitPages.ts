@@ -9,7 +9,7 @@ import {
    idleFirst,
 } from 'database'
 
-import { nodeBefore } from '@automatedLinkedIn/contracts'
+import { nodeBefore, retriesOf } from '@automatedLinkedIn/contracts'
 
 import {
    type Context,
@@ -54,13 +54,22 @@ export const selectAccounts = async (ctx: Context): Promise<StepResult> => {
 
 type Row = Awaited<ReturnType<typeof VisitPoolService.ofStep>>[number]
 
+// A person gets this many visits before a failure is final; a Retry right after the block adds its own tries.
+const BUILT_IN_TRIES = 2
+
 // Where one person or company stands for this block, from the visits it already asked for.
-const standing = (rows: Row[]) => ({
-   done: rows.some(({ status }) => status === 'DONE'),
-   unavailable: rows.some(({ status }) => status === 'NOT_AVAILABLE'),
-   asked: rows.some(({ status }) => status === 'ASKED'),
-   failedOn: new Set(rows.filter(({ status }) => status === 'FAILED').map(({ accountId }) => accountId)),
-})
+const standing = (rows: Row[]) => {
+   const failed = rows.filter(({ status }) => status === 'FAILED')
+
+   return {
+      done: rows.some(({ status }) => status === 'DONE'),
+      unavailable: rows.some(({ status }) => status === 'NOT_AVAILABLE'),
+      asked: rows.some(({ status }) => status === 'ASKED'),
+      failures: failed.length,
+      lastFailedAt: Math.max(0, ...failed.map(({ createdAt }) => createdAt?.getTime() ?? 0)),
+      failedOn: new Set(failed.map(({ accountId }) => accountId)),
+   }
+}
 
 const count = (n: number, text: string) => (n > 0 ? [`${n} ${text}`] : [])
 
@@ -72,6 +81,8 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
    }
 
    const { run, node, deps } = ctx
+   const retry = retriesOf(ctx.graph, node.id)
+   const tries = BUILT_IN_TRIES + (retry?.times ?? 0)
    const items = bySlug<WorkflowItemData>(kind === 'PROFILE' ? peopleOf(ctx.inputs) : companiesOf(ctx.inputs))
 
    if (ctx.preview) {
@@ -95,7 +106,7 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
    const pending = items.filter(({ slug }) => {
       const state = stateOf(slug)
 
-      return !state.done && !state.unavailable && !state.asked && state.failedOn.size < 2
+      return !state.done && !state.unavailable && !state.asked && state.failures < tries
    })
    const slugs = pending.map(({ slug }) => slug)
    const [suppressed, viewed] = await Promise.all([
@@ -124,7 +135,8 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
    let waiting = 0
 
    for (const item of ask ? open : []) {
-      const candidates = usable.filter(id => !stateOf(item.slug).failedOn.has(id))
+      const state = stateOf(item.slug)
+      const candidates = usable.filter(id => retry !== null || !state.failedOn.has(id))
       let outcome: 'asked' | 'wait' | 'skip' = 'skip'
 
       if (candidates.length === 0) {
@@ -132,7 +144,23 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
          continue
       }
 
-      for (const id of idleFirst(candidates, last)) {
+      // The pause before a try that a Retry sets.
+      if (state.failures > 0 && state.lastFailedAt + (retry?.waitSeconds ?? 0) * 1000 > Date.now()) {
+         waiting += 1
+         continue
+      }
+
+      // An account that has not failed this one goes first.
+      const fresh = candidates.filter(id => !state.failedOn.has(id))
+      const order = [
+         ...idleFirst(fresh, last),
+         ...idleFirst(
+            candidates.filter(id => state.failedOn.has(id)),
+            last
+         ),
+      ]
+
+      for (const id of order) {
          if (unavailable.has(id)) {
             outcome = 'wait'
             continue
@@ -193,7 +221,7 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
    }
 
    const notAvailable = items.filter(({ slug }) => stateOf(slug).unavailable).length
-   const failed = items.filter(({ slug }) => stateOf(slug).failedOn.size >= 2).length + noOther.size
+   const failed = items.filter(({ slug }) => stateOf(slug).failures >= tries).length + noOther.size
    const left = ask ? 0 : inFlight + open.length
    const reasons = [
       ...count(items.filter(({ slug }) => suppressed.has(slug)).length, 'on your do-not-contact list'),
@@ -210,8 +238,15 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
       reasons.length > 0 ? `: ${reasons.join(', ')}` : ''
    }.`
 
+   // Everyone the block handled goes on, viewed or not, for a Task result to split (.plan/logic-wait-result-retry.md).
+   const handled = items.filter(({ slug }) => {
+      const state = stateOf(slug)
+
+      return state.done || state.unavailable || state.failures >= tries || noOther.has(slug)
+   })
+
    return {
-      ...(await keepItems(ctx, visited, items.length)),
+      ...(await keepItems(ctx, handled, items.length)),
       status: notAvailable + failed + left > 0 ? 'PARTIAL' : 'DONE',
       message,
    }

@@ -14,15 +14,18 @@ import {
    flagshipGraph,
    inputPickOf,
    inputTake,
+   isHandled,
    nextScheduledRun,
    nextScheduledRuns,
    nodeBefore,
    previewGraph,
+   retriesOf,
    scheduleOf,
    scheduleSchema,
    templateCatalog,
    templateGraph,
    validateGraph,
+   workingBlockBefore,
 } from './workflow'
 
 const flagship = flagshipGraph({
@@ -274,7 +277,7 @@ describe('validateGraph', () => {
       }
 
       expect(validateGraph(graph).map(({ message }) => message)).toEqual([
-         'Else passes on nothing unless an If or "Run another workflow" comes right before it.',
+         'Else passes on nothing unless an If, Task result, Retry or "Run another workflow" comes right before it.',
          'Nothing keeps the results: add "Add to list", "Export to CSV" or "Send via API".',
       ])
    })
@@ -634,5 +637,171 @@ describe('Account Actions', () => {
 
       expect(estimate.totalMicros).toBe(0)
       expect(estimate.nodes.go?.items).toBe(estimate.nodes.profiles?.items)
+   })
+})
+
+describe('Wait, Task result and Retry', () => {
+   const node = (id: string, type: BlockType, config: NodeConfig = {}) => ({
+      id,
+      type,
+      config,
+      position: {
+         x: 0,
+         y: 0,
+      },
+   })
+   const chain = (...nodes: Graph['nodes']): Graph => ({
+      nodes,
+      edges: nodes.slice(1).map((next, index) => ({
+         from: nodes[index]?.id ?? '',
+         to: next.id,
+      })),
+   })
+
+   it('should sit in the Logic group and take any items', () => {
+      const logic = catalog().filter(({ type }) => ['logic.wait', 'logic.taskResult', 'logic.retry'].includes(type))
+
+      expect(logic.map(({ type, group }) => [type, group])).toEqual([
+         ['logic.wait', 'Logic'],
+         ['logic.taskResult', 'Logic'],
+         ['logic.retry', 'Logic'],
+      ])
+   })
+
+   it('should take a fixed wait or a range, from 1 second to 1 hour, with the low end not above the high end', () => {
+      const parse = (config: NodeConfig) => blockOf('logic.wait').config.safeParse(config).success
+
+      expect(parse({})).toBe(true)
+      expect(
+         parse({
+            mode: 'exact',
+            seconds: 3600,
+         })
+      ).toBe(true)
+      expect(
+         parse({
+            mode: 'exact',
+            seconds: 0,
+         })
+      ).toBe(false)
+      expect(
+         parse({
+            mode: 'exact',
+            seconds: 3601,
+         })
+      ).toBe(false)
+      expect(
+         parse({
+            mode: 'between',
+            minSeconds: 20,
+            maxSeconds: 60,
+         })
+      ).toBe(true)
+      expect(
+         parse({
+            mode: 'between',
+            minSeconds: 61,
+            maxSeconds: 60,
+         })
+      ).toBe(false)
+      expect(parse({ mode: 'sometimes' })).toBe(false)
+   })
+
+   it('should take 1 to 5 more tries and a pause of 0 to 1 hour', () => {
+      const parse = (config: NodeConfig) => blockOf('logic.retry').config.safeParse(config).success
+
+      expect(
+         parse({
+            times: 1,
+            waitSeconds: 0,
+         })
+      ).toBe(true)
+      expect(
+         parse({
+            times: 5,
+            waitSeconds: 3600,
+         })
+      ).toBe(true)
+      expect(parse({ times: 0 })).toBe(false)
+      expect(parse({ times: 6 })).toBe(false)
+      expect(parse({ waitSeconds: 3601 })).toBe(false)
+   })
+
+   it('should find the nearest block that does work, through the blocks that only pass things on, for any block type', () => {
+      const graph = chain(
+         node('find', 'collect.commenters'),
+         node('retry', 'logic.retry'),
+         node('pause', 'logic.wait'),
+         node('result', 'logic.taskResult')
+      )
+
+      expect(workingBlockBefore(graph, 'result')?.id).toBe('find')
+      expect(workingBlockBefore(graph, 'retry')?.id).toBe('find')
+      expect(workingBlockBefore(graph, 'find')).toBeNull()
+   })
+
+   it('should say which blocks have a Retry or a Task result looking at them, and what the retry asks for', () => {
+      const graph = chain(
+         node('find', 'collect.commenters'),
+         node('retry', 'logic.retry', {
+            times: 3,
+            waitSeconds: 10,
+         })
+      )
+      const watched = chain(node('find', 'collect.commenters'), node('result', 'logic.taskResult'))
+
+      expect(retriesOf(graph, 'find')).toEqual({
+         times: 3,
+         waitSeconds: 10,
+      })
+      expect(retriesOf(watched, 'find')).toBeNull()
+      expect(isHandled(graph, 'find')).toBe(true)
+      expect(isHandled(watched, 'find')).toBe(true)
+      expect(isHandled(chain(node('find', 'collect.commenters'), node('list', 'output.list')), 'find')).toBe(false)
+   })
+
+   it('should stop a Task result or a Retry with no block before them, and a Retry that is not right after its block', () => {
+      const alone = chain(node('result', 'logic.taskResult'))
+      const apart = chain(node('find', 'collect.commenters'), node('pause', 'logic.wait'), node('retry', 'logic.retry'))
+      const good = chain(
+         node('find', 'collect.commenters'),
+         node('retry', 'logic.retry'),
+         node('result', 'logic.taskResult')
+      )
+
+      expect(errorsOf(validateGraph(alone)).map(({ nodeId }) => nodeId)).toEqual(['result'])
+      expect(errorsOf(validateGraph(apart)).map(({ message }) => message)).toEqual([
+         'Retry goes right after the block it repeats.',
+      ])
+      expect(errorsOf(validateGraph(good))).toEqual([])
+   })
+
+   it('should let an Else follow a Task result or a Retry', () => {
+      const graph = chain(
+         node('find', 'collect.commenters'),
+         node('result', 'logic.taskResult'),
+         node('else', 'logic.else')
+      )
+
+      expect(validateGraph(graph).some(({ nodeId }) => nodeId === 'else')).toBe(false)
+   })
+
+   it('should note when a visit block feeds a block that keeps results with no Task result between', () => {
+      const keep = chain(
+         node('people', 'input.profiles'),
+         node('pool', 'account.select', { accounts: ['a1'] }),
+         node('go', 'account.visitProfile'),
+         node('list', 'output.list')
+      )
+      const split = chain(
+         node('people', 'input.profiles'),
+         node('pool', 'account.select', { accounts: ['a1'] }),
+         node('go', 'account.visitProfile'),
+         node('result', 'logic.taskResult'),
+         node('list', 'output.list')
+      )
+
+      expect(validateGraph(keep).some(({ nodeId }) => nodeId === 'list')).toBe(true)
+      expect(validateGraph(split).some(({ nodeId }) => nodeId === 'list')).toBe(false)
    })
 })

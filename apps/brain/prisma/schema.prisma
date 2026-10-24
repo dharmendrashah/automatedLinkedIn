@@ -311,6 +311,10 @@ model WorkflowStepRun {
   claimedAt  DateTime?
   // The run a "Run another workflow" step started.
   childRunId String?
+  // The step does not start before this time: set by Wait, and by Retry for the pause before a new try (.plan/logic-wait-result-retry.md).
+  waitUntil  DateTime?
+  // How many times a Retry has run this step again.
+  tries      Int                @default(0)
   finishedAt DateTime?
   calls      WorkflowStepCall[]
 

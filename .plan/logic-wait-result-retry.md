@@ -1,8 +1,8 @@
 # Logic blocks: Wait, Task result (yes or no) and Retry, for every block
 
-- Status: locked <!-- draft | locked | in progress | done -->
+- Status: built, waiting for the live run <!-- draft | locked | in progress | done -->
 - Created: 2026-10-25
-- Locked by user: yes, 2026-10-25 (answers below; plan only, not built yet)
+- Locked by user: yes, 2026-10-25 (answers below)
 
 ## Goal
 
@@ -92,12 +92,12 @@ Answered by the owner on 2026-10-25 (defaults accepted, except as marked):
 ## Approach
 
 - [x] 1. Lock this plan.
-- [ ] 2. Contracts, tests first: three catalog entries and configs (`min` not above `max`), `workingBlockBefore`, `retriesOf(graph, nodeId)`, `ELSE_SOURCES`, `validateGraph` (Task result and Retry need a working block before them, Retry directly after it, the keep-results note), estimate default and a note on Retry's cost.
-- [ ] 3. Migration `add_step_wait_and_tries` (create-only, folder name sorts last, read the SQL, apply to both local databases); `WorkflowRunService`: save `waitUntil`, reset a step for a retry (reopen only the failed calls that cost nothing), keep a failed step's inputs under `<id>~failed`.
-- [ ] 4. Engine, tests first: a `FAILED` step nobody looks at still ends the run; a handled one does not; a step with a future `waitUntil` does not start; a block that ends `FAILED` or `PARTIAL` with failed requests is reset up to `times` times, then ends as it ended; finished requests are never sent again.
-- [ ] 5. Wait executor (fixed, between, saved time kept, preview skips, stop ends it); `Task result` and `Retry` executors (step level); visit blocks: pass on everyone handled, per-person results, per-person limit raised by Retry; unit tests for each rule.
-- [ ] 6. Integration tests with Postgres through the engine: (a) a data block whose requests fail once then succeed, with `Retry`; (b) one that keeps failing, with `Task result` and an `Else`; (c) a `FAILED` step with a `Task result` after it and the run ending "done with gaps"; (d) `Wait` between blocks; (e) a visit block with one account failing, `Retry` and `Task result`; nothing asked or paid twice after a restart.
-- [ ] 7. Body: icons, summaries, flow text, mode-dependent fields, "Try 2 of 4" in the run view; helpers tested first.
+- [x] 2. Contracts, tests first: three catalog entries and configs (`min` not above `max`), `workingBlockBefore`, `retriesOf(graph, nodeId)`, `ELSE_SOURCES`, `validateGraph` (Task result and Retry need a working block before them, Retry directly after it, the keep-results note), estimate default and a note on Retry's cost.
+- [x] 3. Migration `add_step_wait_and_tries` (create-only, folder name sorts last, read the SQL, apply to both local databases); `WorkflowRunService`: save `waitUntil`, reset a step for a retry (reopen only the failed calls that cost nothing), keep a failed step's inputs under `<id>~failed`.
+- [x] 4. Engine, tests first: a `FAILED` step nobody looks at still ends the run; a handled one does not; a step with a future `waitUntil` does not start; a block that ends `FAILED` or `PARTIAL` with failed requests is reset up to `times` times, then ends as it ended; finished requests are never sent again.
+- [x] 5. Wait executor (fixed, between, saved time kept, preview skips, stop ends it); `Task result` and `Retry` executors (step level); visit blocks: pass on everyone handled, per-person results, per-person limit raised by Retry; unit tests for each rule.
+- [x] 6. Integration tests with Postgres through the engine: (a) a data block whose requests fail once then succeed, with `Retry`; (b) one that keeps failing, with `Task result` and an `Else`; (c) a `FAILED` step with a `Task result` after it and the run ending "done with gaps"; (d) `Wait` between blocks; (e) a visit block with one account failing, `Retry` and `Task result`; nothing asked or paid twice after a restart.
+- [x] 7. Body: icons, summaries, flow text, mode-dependent fields, "Try 2 of 4" in the run view; helpers tested first.
 - [ ] 8. `pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build`, all warnings fixed, brain integration tests; `MEMORY.md`; plan done. One live run waits for your go-ahead.
 
 ## Edge cases and risks
@@ -122,4 +122,10 @@ Answered by the owner on 2026-10-25 (defaults accepted, except as marked):
 
 ## Outcome
 
-Filled in when done.
+Built on `feat/select-accounts-block` (steps 1 to 7 done; step 8 waits for a live run with your go-ahead). Shipped: contracts blocks `logic.wait`, `logic.taskResult`, `logic.retry` (group Logic) with `workingBlockBefore`, `retriesOf`, `isHandled`, `TAKES_ANYTHING`, `PASSES_ON`, a `showWhen` form with `is`, and graph checks (Task result and Retry need a block before them; Retry goes right after its block; a note when a visit block feeds a block that keeps results without a Task result); migration `add_step_wait_and_tries` (`waitUntil`, `tries` on `WorkflowStepRun`); `WorkflowRunService.setWaitUntil` and `retryStep` (reopens only failed requests that cost nothing); engine: a failed step that a Task result or Retry looks at no longer ends the run (its inputs are kept under `<id>~failed`, the run ends "done with gaps"), a step is not started before its `waitUntil`, and a block that fails, or ends with failed requests, is reset up to the Retry's number of times; executors in `worker/engine/logicBlocks.ts`; the visit blocks pass on everyone handled and take their per-person tries (2 built in, plus the Retry's) and the pause from the Retry after them; body icons, card summaries, mode-dependent fields for Wait, "(try N)" in the run view.
+
+Compatibility with every block: Task result and Retry look at the nearest block before them that is not Wait, Task result, Retry or Else, so a block added later works with them with no change; `TAKES_ANYTHING` and `ELSE_SOURCES` are the two sets a new logic-style block joins.
+
+Deviations: the Wait message does not say how long it waited (a step has no start time); Retry on a block that ends with failed requests only retries when at least one failed request can be reopened (one that cost nothing), otherwise it ends as it ended; one Retry try for a data block is a full new round of the data client's own retries (1, 2, 5, 15, 30 minutes), so a retry of a busy data service can take long.
+
+Checks: lint, `ts:check`, unit tests (contracts 180, body 578, brain 1,226, spider 1,022), build, brain integration (167, including six runs through the engine: a failure nobody looks at still fails the run, a Task result with an Else, Retry up to its number, a retry pause, a data block whose failed request is sent again and then works, and a Wait). Not run: a live run; how long a retry cycle takes against the real data service.

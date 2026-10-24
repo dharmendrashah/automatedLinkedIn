@@ -57,7 +57,12 @@ export type Field = (
    | { key: string; label: string; kind: 'workflow' }
    // One or more of the owner's LinkedIn accounts.
    | { key: string; label: string; kind: 'accounts' }
-) & { hint?: string; advanced?: boolean; showWhen?: { key: string; atLeast: number } }
+) & {
+   hint?: string
+   advanced?: boolean
+   // Shown once a list setting has at least that many values, or once a choice setting is on a value.
+   showWhen?: { key: string; atLeast: number } | { key: string; is: string }
+}
 
 const optionsOf = (pairs: [string, string][]): Option[] =>
    pairs.map(([value, label]) => ({
@@ -185,7 +190,30 @@ export const VISIT_BLOCKS = new Set<BlockType>(['account.visitProfile', 'account
 export const MAX_POOL = 20
 
 // Blocks that keep what they did not pass on for an Else after them.
-export const ELSE_SOURCES = new Set<BlockType>(['logic.if', 'logic.runWorkflow'])
+export const ELSE_SOURCES = new Set<BlockType>(['logic.if', 'logic.runWorkflow', 'logic.taskResult', 'logic.retry'])
+
+// Blocks that take items of every kind as they are, so any line into them is fine.
+export const TAKES_ANYTHING = new Set<BlockType>([
+   'process.merge',
+   'logic.runWorkflow',
+   'account.select',
+   'logic.wait',
+   'logic.taskResult',
+   'logic.retry',
+])
+
+// Blocks that do no work of their own: they wait, judge or repeat. Every other block, including blocks added later, is a
+// "working block" that Task result and Retry can look at.
+const PASSES_ON = new Set<BlockType>(['logic.wait', 'logic.taskResult', 'logic.retry', 'logic.else'])
+
+const WAIT_MODES = optionsOf([
+   ['exact', 'Exactly'],
+   ['between', 'Between'],
+])
+
+// The longest wait, or pause between tries, in seconds.
+export const MAX_WAIT_SECONDS = 3_600
+export const MAX_RETRIES = 5
 const YEARS = optionsOf([
    ['1', 'Under 1 year'],
    ['2', '1 to 2 years'],
@@ -474,6 +502,9 @@ export const BLOCK_TYPES = [
    'logic.if',
    'logic.else',
    'logic.runWorkflow',
+   'logic.wait',
+   'logic.taskResult',
+   'logic.retry',
    'logic.forEach',
    'account.select',
    'account.visitProfile',
@@ -1752,6 +1783,106 @@ const BLOCKS = {
          },
       ],
    },
+   'logic.wait': {
+      group: 'Logic',
+      label: 'Wait',
+      summary: 'Holds the run for a few seconds, then passes everything on. Accurate to about 5 seconds.',
+      input: 'profile',
+      output: 'profile',
+      config: z
+         .object({
+            mode: oneOf(WAIT_MODES, 'exact'),
+            seconds: z.number().int().min(1).max(MAX_WAIT_SECONDS).default(30),
+            minSeconds: z.number().int().min(1).max(MAX_WAIT_SECONDS).default(20),
+            maxSeconds: z.number().int().min(1).max(MAX_WAIT_SECONDS).default(60),
+         })
+         .refine(
+            config => config.mode !== 'between' || config.minSeconds <= config.maxSeconds,
+            'the low end must not be above the high end'
+         ),
+      fields: [
+         {
+            key: 'mode',
+            label: 'Wait',
+            kind: 'select',
+            options: WAIT_MODES,
+         },
+         {
+            key: 'seconds',
+            label: 'Seconds',
+            kind: 'int',
+            min: 1,
+            max: MAX_WAIT_SECONDS,
+            showWhen: {
+               key: 'mode',
+               is: 'exact',
+            },
+         },
+         {
+            key: 'minSeconds',
+            label: 'At least (seconds)',
+            kind: 'int',
+            min: 1,
+            max: MAX_WAIT_SECONDS,
+            showWhen: {
+               key: 'mode',
+               is: 'between',
+            },
+         },
+         {
+            key: 'maxSeconds',
+            label: 'At most (seconds)',
+            kind: 'int',
+            min: 1,
+            max: MAX_WAIT_SECONDS,
+            hint: 'A number in this range is picked once for each run.',
+            showWhen: {
+               key: 'mode',
+               is: 'between',
+            },
+         },
+      ],
+   },
+   'logic.taskResult': {
+      group: 'Logic',
+      label: 'Task result',
+      summary:
+         'Yes when the block before it worked, no when it failed. Yes goes on; connect an Else after it for the no. Visit blocks are split person by person.',
+      input: 'profile',
+      output: 'profile',
+      config: empty,
+      fields: [],
+   },
+   'logic.retry': {
+      group: 'Logic',
+      label: 'Retry',
+      summary:
+         'Runs the block right before it again when it failed, up to the number of times you set. It fixes busy services, not wrong settings.',
+      costHint: 'a retry can cost more than the estimate',
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         times: z.number().int().min(1).max(MAX_RETRIES).default(2),
+         waitSeconds: z.number().int().min(0).max(MAX_WAIT_SECONDS).default(0),
+      }),
+      fields: [
+         {
+            key: 'times',
+            label: 'Tries after the first',
+            kind: 'int',
+            min: 1,
+            max: MAX_RETRIES,
+         },
+         {
+            key: 'waitSeconds',
+            label: 'Wait before each try (seconds)',
+            kind: 'int',
+            min: 0,
+            max: MAX_WAIT_SECONDS,
+            hint: '0 tries again at once.',
+         },
+      ],
+   },
    'logic.forEach': {
       group: 'Logic',
       label: 'For each',
@@ -1950,8 +2081,8 @@ const parentsOf = (graph: Graph, id: string) => graph.edges.filter(edge => edge.
 
 export const edgeKey = ({ from, to }: { from: string; to: string }) => `${from}>${to}`
 
-// The nearest block of a type before a block, going back along the lines; null when there is none.
-export const nodeBefore = (graph: Graph, id: string, type: BlockType) => {
+// The nearest block before a block that fits, going back along the lines; null when there is none.
+const firstBefore = (graph: Graph, id: string, fits: (node: GraphNode) => boolean) => {
    const queue = parentsOf(graph, id)
    const seen = new Set<string>()
 
@@ -1959,7 +2090,7 @@ export const nodeBefore = (graph: Graph, id: string, type: BlockType) => {
       const next = queue.shift() ?? ''
       const node = graph.nodes.find(candidate => candidate.id === next)
 
-      if (node?.type === type) {
+      if (node && fits(node)) {
          return node
       }
 
@@ -1971,6 +2102,35 @@ export const nodeBefore = (graph: Graph, id: string, type: BlockType) => {
 
    return null
 }
+
+// The nearest block of a type before a block; null when there is none.
+export const nodeBefore = (graph: Graph, id: string, type: BlockType) =>
+   firstBefore(graph, id, node => node.type === type)
+
+// The nearest block that does work before a block, through Wait, Task result, Retry and Else: the block a Task result or a
+// Retry looks at.
+export const workingBlockBefore = (graph: Graph, id: string) =>
+   firstBefore(graph, id, node => !PASSES_ON.has(node.type))
+
+// What the Retry right after a block asks for, or null when no Retry follows it.
+export const retriesOf = (graph: Graph, id: string) => {
+   const retry = graph.nodes.find(
+      node => node.type === 'logic.retry' && graph.edges.some(edge => edge.from === id && edge.to === node.id)
+   )
+   const settings = retry ? BLOCKS['logic.retry'].config.safeParse(retry.config).data : undefined
+
+   return settings
+      ? {
+           times: Number(settings.times),
+           waitSeconds: Number(settings.waitSeconds),
+        }
+      : null
+}
+
+// True when a Retry or a Task result looks at the block, so its failure does not end the run.
+export const isHandled = (graph: Graph, id: string) =>
+   retriesOf(graph, id) !== null ||
+   graph.nodes.some(node => node.type === 'logic.taskResult' && workingBlockBefore(graph, node.id)?.id === id)
 
 // Lines that go back to a block already on the way (depth-first from the blocks with nothing before them).
 export const backEdges = (graph: Graph) => {
@@ -2123,14 +2283,7 @@ const edgeNotes = (graph: Graph, byId: Map<string, GraphNode>): GraphError[] =>
          ]
       }
 
-      if (
-         gives === null ||
-         gives === needs ||
-         needs === 'start' ||
-         target.type === 'process.merge' ||
-         target.type === 'account.select' ||
-         target.type === 'logic.runWorkflow'
-      ) {
+      if (gives === null || gives === needs || needs === 'start' || TAKES_ANYTHING.has(target.type)) {
          return []
       }
 
@@ -2146,6 +2299,32 @@ const edgeNotes = (graph: Graph, byId: Map<string, GraphNode>): GraphError[] =>
    })
 
 const OUTPUTS = new Set<BlockType>(['output.list', 'output.csv', 'output.sendApi', 'output.markPosts'])
+
+// The blocks that keep results and are reached from a block without a Task result on the way.
+const keptWithoutSplit = (graph: Graph, id: string) => {
+   const found: GraphNode[] = []
+   const seen = new Set([id])
+   const queue = [id]
+
+   while (queue.length > 0) {
+      const from = queue.shift() ?? ''
+
+      for (const { to } of graph.edges.filter(edge => edge.from === from)) {
+         const node = graph.nodes.find(candidate => candidate.id === to)
+
+         if (node && !seen.has(to) && node.type !== 'logic.taskResult') {
+            seen.add(to)
+            queue.push(to)
+
+            if (OUTPUTS.has(node.type)) {
+               found.push(node)
+            }
+         }
+      }
+   }
+
+   return found
+}
 
 // Only an error stops a run. Notes explain what will happen with a free-form graph.
 export const validateGraph = (graph: Graph): GraphError[] => {
@@ -2187,7 +2366,34 @@ export const validateGraph = (graph: Graph): GraphError[] => {
          node.type === 'logic.else' &&
          !parentsOf(graph, node.id).some(id => ELSE_SOURCES.has(byId.get(id)?.type ?? 'logic.else'))
       ) {
-         note('Else passes on nothing unless an If or "Run another workflow" comes right before it.', node.id)
+         note(
+            'Else passes on nothing unless an If, Task result, Retry or "Run another workflow" comes right before it.',
+            node.id
+         )
+      }
+
+      if ((node.type === 'logic.taskResult' || node.type === 'logic.retry') && !workingBlockBefore(graph, node.id)) {
+         problems.push({
+            nodeId: node.id,
+            level: 'error',
+            message: `${BLOCKS[node.type].label} needs a block before it to look at.`,
+         })
+      }
+
+      if (
+         node.type === 'logic.retry' &&
+         workingBlockBefore(graph, node.id) &&
+         !parentsOf(graph, node.id).some(id => {
+            const parent = byId.get(id)
+
+            return parent && !PASSES_ON.has(parent.type)
+         })
+      ) {
+         problems.push({
+            nodeId: node.id,
+            level: 'error',
+            message: 'Retry goes right after the block it repeats.',
+         })
       }
 
       if (VISIT_BLOCKS.has(node.type) && !nodeBefore(graph, node.id, 'account.select')) {
@@ -2204,6 +2410,15 @@ export const validateGraph = (graph: Graph): GraphError[] => {
          if (!graph.nodes.some(other => VISIT_BLOCKS.has(other.type) && other.id !== node.id && after.has(other.id))) {
             note('No LinkedIn action comes after this block, so the accounts are not used.', node.id)
          }
+      }
+   }
+
+   for (const visit of graph.nodes.filter(node => VISIT_BLOCKS.has(node.type))) {
+      for (const kept of keptWithoutSplit(graph, visit.id)) {
+         note(
+            `${BLOCKS[kept.type].label} gets everyone ${BLOCKS[visit.type].label} handled, visited or not. Add Task result to keep only those visited.`,
+            kept.id
+         )
       }
    }
 

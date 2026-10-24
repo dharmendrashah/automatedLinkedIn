@@ -110,7 +110,7 @@ describe('select accounts and visit blocks (database)', () => {
       await PrismaService.disconnect()
    })
 
-   it('should give three people to three accounts in turn, wait for the visits, then hand on the people viewed', async () => {
+   it('should give three people to three accounts in turn, wait for the visits, then hand on everyone it handled', async () => {
       const runId = await start(graphOf(accounts, [profile('ada'), profile('bob'), profile('cy')]))
 
       await advanceRun(runId, deps())
@@ -147,9 +147,61 @@ describe('select accounts and visit blocks (database)', () => {
          orderBy: { slug: 'asc' },
       })
 
-      expect(items.map(({ slug }) => slug)).toEqual(['ada', 'bob'])
+      expect(items.map(({ slug }) => slug)).toEqual(['ada', 'bob', 'cy'])
       expect(await visitsOf(runId)).toHaveLength(3)
       expect((await WorkflowService.run(userId, runId))?.status).toBe('PARTIAL')
+   })
+
+   it('should let a Task result split the people viewed from the rest, and keep the rest for an Else', async () => {
+      const runId = await start({
+         nodes: [
+            node('people', 'input.profiles', { links: [profile('fay'), profile('gus')] }),
+            node('select', 'account.select', { accounts }),
+            node('visit', 'account.visitProfile'),
+            node('result', 'logic.taskResult'),
+            node('yes', 'output.csv'),
+            node('else', 'logic.else'),
+            node('no', 'output.csv'),
+         ],
+         edges: [
+            line('people', 'select'),
+            line('select', 'visit'),
+            line('visit', 'result'),
+            line('result', 'yes'),
+            line('result', 'else'),
+            line('else', 'no'),
+         ],
+      })
+
+      await advanceRun(runId, deps())
+      await PrismaService.client.linkedInPageVisit.updateMany({
+         where: {
+            runId,
+            slug: 'fay',
+         },
+         data: { status: 'DONE' },
+      })
+      await PrismaService.client.linkedInPageVisit.updateMany({
+         where: {
+            runId,
+            slug: 'gus',
+         },
+         data: { status: 'NOT_AVAILABLE' },
+      })
+      await advanceRun(runId, deps())
+
+      const at = async (nodeId: string) =>
+         (
+            await PrismaService.client.workflowItem.findMany({
+               where: {
+                  runId,
+                  nodeId,
+               },
+            })
+         ).map(({ slug }) => slug)
+
+      expect(await at('yes')).toEqual(['fay'])
+      expect(await at('no')).toEqual(['gus'])
    })
 
    it('should not visit anyone a chosen account viewed in the last 30 days, in another run', async () => {

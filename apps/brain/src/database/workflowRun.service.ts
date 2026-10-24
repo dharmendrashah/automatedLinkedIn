@@ -12,6 +12,9 @@ export const STALE_CLAIM_MS = 15 * 60 * 1000
 
 const monthOf = (date: Date) => date.toISOString().slice(0, 7)
 
+// Ends the transaction of `retryStep` without changing anything.
+class NoRetry extends Error {}
+
 const json = (item: WorkflowItemData): Prisma.InputJsonValue => item
 
 export type CallOutcome = {
@@ -258,6 +261,71 @@ export class WorkflowRunService {
          where: { id: stepId },
          data: { childRunId },
       })
+   }
+
+   // The step is not started before this time (a Wait, or the pause before a retry).
+   public static setWaitUntil(stepId: string, waitUntil: Date) {
+      return PrismaService.client.workflowStepRun.update({
+         where: { id: stepId },
+         data: { waitUntil },
+      })
+   }
+
+   // Gives a step another try (.plan/logic-wait-result-retry.md): its requests that failed without a charge are opened again,
+   // the ones that went through stay done, and the step goes back to waiting, after the pause when there is one. False when it
+   // has no tries left or, with `needsReopened`, when no request could be opened again. A charged request is never opened again.
+   public static async retryStep(
+      stepId: string,
+      retry: { max: number; waitSeconds: number; needsReopened: boolean }
+   ): Promise<boolean> {
+      try {
+         return await PrismaService.client.$transaction(async tx => {
+            const { count } = await tx.workflowStepRun.updateMany({
+               where: {
+                  id: stepId,
+                  tries: { lt: retry.max },
+               },
+               data: {
+                  status: 'WAITING',
+                  claimedAt: null,
+                  finishedAt: null,
+                  message: null,
+                  tries: { increment: 1 },
+                  waitUntil: retry.waitSeconds > 0 ? new Date(Date.now() + retry.waitSeconds * 1000) : null,
+               },
+            })
+            const reopened = await tx.workflowStepCall.updateMany({
+               where: {
+                  stepRunId: stepId,
+                  status: 'FAILED',
+                  costMicros: 0,
+                  finishedAt: { not: null },
+               },
+               data: {
+                  status: 'STARTED',
+                  finishedAt: null,
+                  error: null,
+                  jobId: null,
+                  sentAt: null,
+                  retryAt: null,
+                  attempts: 0,
+                  rows: 0,
+               },
+            })
+
+            if (count === 0 || (retry.needsReopened && reopened.count === 0)) {
+               throw new NoRetry()
+            }
+
+            return true
+         })
+      } catch (error) {
+         if (error instanceof NoRetry) {
+            return false
+         }
+
+         throw error
+      }
    }
 
    // Where a run started by a "Run another workflow" block stands. null when it was deleted.

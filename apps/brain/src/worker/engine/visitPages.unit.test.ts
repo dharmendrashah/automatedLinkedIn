@@ -207,7 +207,7 @@ describe('visit blocks', () => {
       expect(mocks.request.mock.calls.map(call => call[1])).toEqual(['a1', 'a2'])
    })
 
-   it('should wait while a visit is going, and hand out the people viewed once all ended', async () => {
+   it('should wait while a visit is going, and hand out everyone it handled once all ended', async () => {
       mocks.ofStep.mockResolvedValue([
          {
             slug: 'ada',
@@ -238,11 +238,11 @@ describe('visit blocks', () => {
 
       const result = await visitProfile(context('go', [ada, bob]))
 
-      expect(kept().map(({ slug }) => slug)).toEqual(['ada'])
+      expect(kept().map(({ slug }) => slug)).toEqual(['ada', 'bob'])
       expect(result).toMatchObject({
          status: 'PARTIAL',
          itemsIn: 2,
-         itemsOut: 1,
+         itemsOut: 2,
       })
       expect(result.message).toContain('Viewed 1 of 2')
       expect(result.message).toContain('1 not available')
@@ -353,6 +353,92 @@ describe('visit blocks', () => {
          status: 'DONE',
          itemsIn: 2,
          itemsOut: 2,
+      })
+   })
+
+   describe('with a Retry right after it', () => {
+      const withRetry = (waitSeconds: number): Graph => ({
+         nodes: [
+            ...graph.nodes,
+            node('again', 'logic.retry', {
+               times: 2,
+               waitSeconds,
+            }),
+         ],
+         edges: [
+            ...graph.edges,
+            {
+               from: 'go',
+               to: 'again',
+            },
+         ],
+      })
+
+      it('should give each person more tries, on the same account when it is the only one', async () => {
+         mocks.accounts.mockResolvedValue(active('a1'))
+         mocks.ofStep.mockResolvedValue([
+            {
+               slug: 'ada',
+               accountId: 'a1',
+               status: 'FAILED',
+               createdAt: new Date(0),
+            },
+            {
+               slug: 'ada',
+               accountId: 'a1',
+               status: 'FAILED',
+               createdAt: new Date(0),
+            },
+         ])
+
+         await expect(visitProfile(context('go', [ada], { graph: withRetry(0) }))).rejects.toBeInstanceOf(Waiting)
+         expect(mocks.request.mock.calls.map(call => call[1])).toEqual(['a1'])
+
+         mocks.request.mockClear()
+         mocks.ofStep.mockResolvedValue(
+            Array.from({ length: 4 }, () => ({
+               slug: 'ada',
+               accountId: 'a1',
+               status: 'FAILED',
+               createdAt: new Date(0),
+            }))
+         )
+
+         const result = await visitProfile(context('go', [ada], { graph: withRetry(0) }))
+
+         expect(mocks.request).not.toHaveBeenCalled()
+         expect(kept().map(({ slug }) => slug)).toEqual(['ada'])
+         expect(result.message).toContain('1 failed')
+      })
+
+      it('should keep an account that has not failed the person first', async () => {
+         mocks.ofStep.mockResolvedValue([
+            {
+               slug: 'ada',
+               accountId: 'a1',
+               status: 'FAILED',
+               createdAt: new Date(0),
+            },
+         ])
+
+         await expect(visitProfile(context('go', [ada], { graph: withRetry(0) }))).rejects.toBeInstanceOf(Waiting)
+
+         expect(mocks.request.mock.calls.map(call => call[1])).toEqual(['a2'])
+      })
+
+      it('should wait the pause the Retry sets before trying a failed visit again', async () => {
+         mocks.ofStep.mockResolvedValue([
+            {
+               slug: 'ada',
+               accountId: 'a1',
+               status: 'FAILED',
+               createdAt: new Date(),
+            },
+         ])
+
+         await expect(visitProfile(context('go', [ada], { graph: withRetry(60) }))).rejects.toBeInstanceOf(Waiting)
+
+         expect(mocks.request).not.toHaveBeenCalled()
       })
    })
 })
