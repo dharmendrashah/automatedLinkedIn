@@ -91,6 +91,9 @@ export type FixtureInterest = {
    name: string
    kind?: 'company' | 'group' | 'school' | 'newsletter' | 'person'
    followers: string
+   // For a person: the degree ("2nd") and the headline, shown between the name and the followers.
+   degree?: string
+   headline?: string
 }
 
 const KIND_PATH = {
@@ -101,18 +104,29 @@ const KIND_PATH = {
    person: 'in',
 } as const
 
-// One chip's page: the chips (a checkbox and its label), then the items of the selected chip.
+// A company, group, school or newsletter: its name twice (the accessible name, then the name), then how many follow it.
+const pageItem = (name: string, followers: string) =>
+   `<div><p><span><span>${name}, Company</span><span>${name}</span></span></p></div><p>${followers}</p>`
+
+// A member: the name as a link with the degree after it, then the headline, then the followers (recorded 2026-10-24).
+const memberItem = (name: string, slug: string, followers: string, degree = '2nd', headline = 'Writer at Examples') =>
+   `<div><p><span><a href="https://www.linkedin.com/in/${slug}/">${name}<span aria-label="Top Voice" role="img"></span></a></span></p><p>· ${degree}</p></div><p>${headline}</p><p>${followers}</p>`
+
+// One chip's page: the chips (each a radio holding a checkbox and its label), then the items of the selected chip.
 export const interestsPage = (chips: string[], items: FixtureInterest[]) =>
-   `<section aria-label="Primary content"><p>Interests</p><div>${chips
+   `<section aria-label="Primary content"><p>Interests</p>${chips
       .map(
          (chip, index) =>
-            `<div><div><input id="chip-${index}" type="checkbox"${index === 0 ? ' checked=""' : ''}><label for="chip-${index}">${chip}</label></div></div>`
+            `<div role="radio"><input id="chip-${index}" type="checkbox"${index === 0 ? ' checked=""' : ''}><label for="chip-${index}">${chip}</label></div>`
       )
-      .join('')}</div><div data-testid="lazy-column">${items
-      .map(
-         ({ name, kind = 'company', followers }, index) =>
-            `<div><a href="https://www.linkedin.com/${KIND_PATH[kind]}/${name.toLowerCase().replace(/\W+/g, '-')}/"><div><figure><img alt="" src="${PIC}/logo/${index}"></figure><div><div><div><p><span><span>${name}, Company</span><span>${name}</span></span></p></div></div><p>${followers}</p></div></div></a><div><button aria-label="Following, click to unfollow ${name}">Following</button></div><hr role="presentation"></div>`
-      )
+      .join('')}<div data-testid="lazy-column">${items
+      .map(({ name, kind = 'company', followers, degree, headline }, index) => {
+         const slug = name.toLowerCase().replace(/\W+/g, '-')
+         const text =
+            kind === 'person' ? memberItem(name, slug, followers, degree, headline) : pageItem(name, followers)
+
+         return `<div><a href="https://www.linkedin.com/${KIND_PATH[kind]}/${slug}/"><div><figure><img alt="" src="${PIC}/logo/${index}"></figure><div>${text}</div></div></a><div><button aria-label="Following, click to unfollow ${name}">Following</button></div><hr role="presentation"></div>`
+      })
       .join('')}</div></section>`
 
 export type FixturePerson = { name: string; degree: string; headline: string; slug: string }
@@ -142,14 +156,59 @@ export const pagesYouMightLikeMarkup = (pages: FixturePage[]) =>
       )
       .join('')}</section></div>`
 
-export type FixturePost = { text: string; headline?: string; age: string; author?: string }
+export type FixturePost = {
+   // Raw markup, so a test can put links inside it.
+   text: string
+   // Left out for a company, which has none.
+   headline?: string | null
+   age: string
+   author?: string
+   // The line after the name: "• You" for the account's own post, "• 2nd" for someone else's; none for a company.
+   degree?: string | null
+   // The account reposted it: the original author is `author`.
+   repost?: boolean
+   // The numbers on the buttons; none shows as an empty (zero-width) text.
+   reactions?: number
+   comments?: number
+   reposts?: number
+   impressions?: number
+   image?: string
+}
+
+const ZERO = '\u200b'
+
+// A post of the activity page (recorded 2026-10-24): the header (a row for who reposted it, a row for who wrote it), the text, the
+// picture if any, the row of buttons, then, for the account's own posts, the impressions with the link to their analytics.
+const postItem = ({
+   text,
+   headline = 'Founder at Sampleworks',
+   age,
+   author = 'Sample Person',
+   degree = '• You',
+   repost,
+   reactions,
+   comments,
+   reposts,
+   impressions,
+   image,
+}: FixturePost) =>
+   `<div role="listitem"><div componentkey="post"><h2><span>Feed post</span></h2>${
+      repost
+         ? `<div><div><a href="${ME}/"><figure><img src="${PIC}/profile-displayphoto-shrink_100_100/reposter"></figure></a></div><div><p><span>reposted this</span><a aria-label="View Sample Person’s profile" href="${ME}/"><strong><span>Sample Person</span></strong></a></p></div></div><hr role="presentation">`
+         : ''
+   }<div><div><a href="${ME}/"><figure><img alt="View ${author}’s profile" src="${PIC}/profile-displayphoto-shrink_100_100/me"></figure></a></div><div><div><a href="${ME}/"><div><div><p><span>${author}</span></p>${degree ? `<p><span>${degree}</span></p>` : ''}</div></div></a></div>${headline ? `<div><p><span>${headline}</span></p></div>` : ''}<div><p><span>${age}</span></p></div></div></div><button aria-label="Open control menu for post"><span></span></button><p><span data-testid="expandable-text-box">${text}</span></p>${
+      image
+         ? `<div><a href="${ME}/recent-activity/all/"><figure><img alt="View image" src="${image}"></figure></a></div>`
+         : ''
+   }<div><a href="${ME}/recent-activity/all/"><div aria-label="Switch to different account"><figure><img src="${PIC}/profile-displayphoto-shrink_100_100/me"></figure></div></a><div><div><div><div><button aria-label="Reaction button state: no reaction"><span><span>${reactions ?? ZERO}</span></span></button></div><button aria-label="Open reactions menu"><span></span></button></div><button aria-label="Comment"><span><span>${comments ?? ZERO}</span></span></button><button aria-label="Repost"><span><span>${reposts ?? ZERO}</span></span></button><a aria-label="Send" href="${ME}/recent-activity/all/"><span>${ZERO}</span></a></div></div></div></div>${
+      impressions === undefined
+         ? ''
+         : `<div><div><p>${impressions} impressions</p><div><a href="https://www.linkedin.com/analytics/post-summary/urn:li:activity:1/"><p><span>View analytics</span></p></a></div></div></div>`
+   }</div>`
 
 export const postsPage = (kind: 'All' | 'Comments', posts: FixturePost[]) =>
    `<section aria-label="Primary content"><div role="list" data-testid="ProfileRecentActivity${kind}-sample-person">${posts
-      .map(
-         ({ text, headline = 'Founder at Sampleworks', age, author = 'Sample Person' }) =>
-            `<div role="listitem"><div><h2><span>Feed post</span></h2><div><a href="${ME}/"><figure><img alt="View ${author}’s profile" src="${PIC}/profile-displayphoto-shrink_100_100/me"></figure></a></div><div><a href="${ME}/"><div><div><p><span>${author}</span></p><p><span> • You</span></p></div></div></a><p><span>${headline}</span></p><p><span>${age}</span></p></div><p><span data-testid="expandable-text-box">${text}</span></p></div></div>`
-      )
+      .map(postItem)
       .join('')}</div></section>`
 
 // A comment item: the post that was commented on (its author, headline, age and text), then the account's own comment.
@@ -160,6 +219,74 @@ export const commentsPage = (comments: Array<{ post: string; comment: string; ag
             `<div role="listitem"><div><h2><span>Feed post</span></h2><p>Sample Personcommented</p><p>Other Person</p><p>• 1st</p><p>Writer at Examples</p><p>2yr</p><p><span data-testid="expandable-text-box">${post}</span></p><div><p>Sample Person You</p><p>Founder at Sampleworks</p><p>${age}</p><p><span data-testid="expandable-text-box">${comment}</span></p></div></div></div>`
       )
       .join('')}</div></section>`
+
+export type FixtureProject = {
+   name: string
+   dates?: string
+   description?: string
+   skills?: string
+   // The line as the page writes it, in its language ("Associated with Sampleworks").
+   associated?: string
+}
+
+// The projects page (recorded 2026-10-24): each project is a block with a link to its edit form that holds the name and the dates,
+// then its text, the link to its skills, and the company it belongs to as a logo and a line.
+export const projectsPage = (projects: FixtureProject[]) =>
+   `<section aria-label="Primary content"><div data-testid="lazy-column"><div><button aria-label="Navigate back"><span></span></button><p>Projects</p><a aria-label="Add a new project" href="${ME}/edit/forms/project/new/"><span></span></a></div>${projects
+      .map(
+         ({ name, dates, description, skills, associated }, index) =>
+            `<div componentkey="project-${index}"><a href="${ME}/details/projects/edit/forms/${index}/"><div aria-label="Edit project ${name}"><p><span data-testid="expandable-text-box">${name}</span></p>${dates ? `<p>${dates}</p>` : ''}</div></a>${
+               description
+                  ? `<p><span data-testid="expandable-text-box">${description}<button data-testid="expandable-text-button">…<span>more</span></button></span></p>`
+                  : ''
+            }${skills ? `<p><a href="${ME}/overlay/${index}/skill-associations-details/">${skills}</a></p>` : ''}${
+               associated
+                  ? `<div><figure><img src="${PIC}/company-logo_100_100/p${index}"></figure><div><p>${associated}</p></div></div>`
+                  : ''
+            }<a aria-label="Edit project ${name}" href="${ME}/details/projects/edit/forms/${index}/"></a></div>`
+      )
+      .join('')}</div></section>`
+
+// The languages page: a row holds the language and its level as paragraphs, and, next to them, the link to its edit form.
+export const languagesPage = (languages: Array<{ name: string; level?: string }>) =>
+   `<section aria-label="Primary content"><div data-testid="lazy-column"><div><p>Languages</p><a aria-label="Add new language" href="${ME}/details/languages/edit/forms/new/"><span></span></a></div><div>${languages
+      .map(
+         ({ name, level }, index) =>
+            `<div><div><div><p>${name}</p>${level ? `<p>${level}</p>` : ''}</div></div><div><a aria-label="Edit language" href="${ME}/details/languages/edit/forms/${index}/"><span></span></a></div></div>`
+      )
+      .join('<hr role="presentation">')}</div></div></section>`
+
+export type FixtureRecommendation = {
+   name: string
+   slug: string
+   // Left out when the page shows no degree (someone out of the network).
+   degree?: string | null
+   headline?: string
+   relationship?: string
+   text: string
+}
+
+// The page of recommendations, received or given: each card is a link with the picture, the name, the degree, the headline and the
+// line that tells how the two know each other, then the text of the recommendation.
+export const recommendationsPage = (cards: FixtureRecommendation[]) =>
+   `<section aria-label="Primary content"><div data-testid="lazy-column"><div><p>Recommendations</p></div><div>${cards
+      .map(
+         ({ name, slug, degree = '1st', headline, relationship, text }) =>
+            `<div><div><a href="https://www.linkedin.com/in/${slug}/"><div><figure><img alt="" src="${PIC}/profile-displayphoto-shrink_100_100/${slug}"></figure><div><div><div><p><span><a href="https://www.linkedin.com/in/${slug}/">${name}<span aria-label="Verified" role="img"></span></a></span></p>${degree ? `<p>\u00b7 ${degree}</p>` : ''}</div>${headline ? `<p>${headline}</p>` : ''}${relationship ? `<p>${relationship}</p>` : ''}</div></div></div></a><button aria-label="Edit"><span></span></button></div><div>${text ? `<p><span data-testid="expandable-text-box">${text}</span></p>` : ''}</div></div>`
+      )
+      .join('<hr role="presentation">')}</div></div></section>`
+
+export const servicesMarkup = (services: string[]) =>
+   `<div data-view-name="profile-card-services"><section><div><h2>Services</h2><a data-view-name="services-edit-button" aria-label="Edit services" href="${ME}/opportunities/services/edit"><span></span></a></div><div>${services
+      .map(service => `<p>${service}</p>`)
+      .join(
+         ''
+      )}</div><hr role="presentation"><a data-view-name="services-see-all-services-button" href="https://www.linkedin.com/services/page/1/"><span><span>Show all</span></span></a></section></div>`
+
+// The box the account sees at the top of its own page: the first line says it is open to work and for whom, the second what for, in
+// a list of boxes that also holds the offers to hire and to volunteer.
+export const openToWorkMarkup = (audience: string, titles: string) =>
+   `<section data-testid="carousel"><ul data-testid="carousel-children-container"><li data-testid="carousel-child-container"><div><a href="${ME}/"><div><div><p><span><strong>Open to work \u00b7 ${audience}</strong></span></p></div><div><p><span>${titles}</span></p></div><div><p><span>Show details</span></p></div></div></a><button data-view-name="profile-edit-open-to" aria-label="Edit"><span></span></button></div></li><li data-testid="carousel-child-container"><div><a href="${ME}/opportunities/hiring-opportunities/onboarding/"><div><p><strong>Share that you\u2019re hiring</strong>and attract candidates.</p><div><p><span>Get started</span></p></div></div></a></div></li></ul></section>`
 
 // The profile page as drawn: the top card and the cards below it, each as the page marks it.
 export const profilePage = (...cards: string[]) =>

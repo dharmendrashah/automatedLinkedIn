@@ -36,7 +36,7 @@ describe('answerForRead', () => {
             value: '0',
          },
       ])
-      expect(answer.report?.sections[1]?.items[0]?.value).toContain('Recommendations')
+      expect(answer.report?.sections[1]?.items[0]?.value).toContain('Top skills')
    })
 
    it('should say how many sections were left out when some did not fit, and call the run part read', () => {

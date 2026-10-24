@@ -1,4 +1,4 @@
-import { type HTMLElement, parse } from 'node-html-parser'
+import { HTMLElement, parse } from 'node-html-parser'
 
 import { type AccountProfile, type ProfileEntity } from '@automatedLinkedIn/contracts'
 
@@ -12,6 +12,14 @@ type Education = AccountProfile['education'][number]
 type Skill = AccountProfile['skills']['items'][number]
 type Post = NonNullable<AccountProfile['activity']>['posts'][number]
 type Interests = AccountProfile['interests']
+type Project = AccountProfile['projects']['items'][number]
+type Language = AccountProfile['languages']['items'][number]
+type Recommendation = AccountProfile['recommendations']['received']['items'][number]
+
+const TEXT_BOX = '[data-testid="expandable-text-box"]'
+// Marks that wrap a link's text while the text is put together, so a space can be added around it.
+const LINK_START = '\u0001'
+const LINK_END = '\u0002'
 
 // Between the two halves of a line such as "Company · Full-time" or "May 2017 - Present · 9 yrs 6 mos".
 const SEPARATOR = ' · '
@@ -57,7 +65,8 @@ const leadingCount = (text: string) => {
    return digits ? Number(digits) : undefined
 }
 
-// A text with its line breaks, without the "…more" button the page puts inside it.
+// A text with its line breaks, without the "…more" button the page puts inside it. A mention, a hashtag or a company is a link between
+// empty elements and the page draws the space around it in its style, so a space is added where a word meets a link.
 const bodyOf = (box: HTMLElement | null | undefined) => {
    if (!box) {
       return undefined
@@ -66,12 +75,16 @@ const bodyOf = (box: HTMLElement | null | undefined) => {
    const copy = parse(box.outerHTML)
 
    copy.querySelectorAll('[data-testid="expandable-text-button"]').forEach(button => button.remove())
+   copy.querySelectorAll('a').forEach(link => link.replaceWith(`${LINK_START}${link.textContent}${LINK_END}`))
 
    return some(
       copy.structuredText
          .split('\n')
          .map(line => line.trim())
          .join('\n')
+         .replace(new RegExp(`([^\\s(])${LINK_START}`, 'g'), '$1 ')
+         .replace(new RegExp(`${LINK_END}(?=[\\p{L}\\p{N}])`, 'gu'), ' ')
+         .replace(new RegExp(`[${LINK_START}${LINK_END}]`, 'g'), '')
          .replace(/\n{3,}/g, '\n\n')
          .trim()
    )
@@ -165,12 +178,19 @@ export const parseAnalytics = (html: string): AccountProfile['analytics'] => {
 export const parseFollowers = (html: string) =>
    leadingCount(textOf(parse(html).querySelector('a[href$="/feed/followers/"]')))
 
+// The skills a job or a project names, as the link to them reads ("Roadmapping, Research and +1 skill"): the ones it spells out.
+const skillsOf = (item: HTMLElement) =>
+   textOf(item.querySelector('a[href*="skill-associations"]'))
+      .replace(/\s+\S+\s+\+\d+\s.*$/, '')
+      .split(', ')
+      .map(clean)
+      .filter(Boolean)
+
 const jobOf = (item: HTMLElement): Experience | undefined => {
    const lines = linesOf(
       item,
       paragraph =>
-         paragraph.querySelector('[data-testid="expandable-text-box"]') != null ||
-         paragraph.closest('a[href*="skill-associations"]') != null
+         paragraph.querySelector(TEXT_BOX) != null || paragraph.closest('a[href*="skill-associations"]') != null
    )
    const [title, place, when, where] = lines
 
@@ -182,11 +202,6 @@ const jobOf = (item: HTMLElement): Experience | undefined => {
    const [dates, duration] = parts(when)
    const [location, workMode] = parts(where)
    const companyLink = item.querySelector('a[href*="/company/"]')
-   const skills = textOf(item.querySelector('a[href*="skill-associations"]'))
-      .replace(/\s+\S+\s+\+\d+\s.*$/, '')
-      .split(', ')
-      .map(clean)
-      .filter(Boolean)
 
    return {
       title,
@@ -198,8 +213,8 @@ const jobOf = (item: HTMLElement): Experience | undefined => {
       duration: some(duration),
       location: some(location),
       workMode: some(workMode),
-      description: bodyOf(item.querySelector('[data-testid="expandable-text-box"]')),
-      skills,
+      description: bodyOf(item.querySelector(TEXT_BOX)),
+      skills: skillsOf(item),
    }
 }
 
@@ -262,8 +277,7 @@ const kindOf = (href: string | undefined): keyof Interests | undefined => {
 }
 
 const entityOf = (link: HTMLElement): ProfileEntity | undefined => {
-   const paragraphs = link.querySelectorAll('p')
-   const [named, followers] = paragraphs
+   const [named, ...others] = link.querySelectorAll('p')
    // "TeamXP, Company" is the accessible name, then the name itself, in two spans of the first paragraph.
    const spans = named?.querySelectorAll('span') ?? []
    const name = textOf(spans.at(-1)) || textOf(named)
@@ -272,11 +286,18 @@ const entityOf = (link: HTMLElement): ProfileEntity | undefined => {
       return undefined
    }
 
+   // After the name: a member's degree ("· 2nd"), then the headline, and last how many follow; a page has only the followers.
+   const lines = others.map(textOf).filter(Boolean)
+   const degree = lines[0]?.startsWith('·') ? lines.shift() : undefined
+   const followers = lines.pop()
+
    return {
       name,
+      subtitle: some(lines[0]),
+      degree: some(degree?.replace(/^·\s*/, '')),
       imageUrl: pictureOf(link.querySelector('img')),
       url: addressOf(link.getAttribute('href')),
-      followers: some(textOf(followers)),
+      followers: some(followers),
    }
 }
 
@@ -357,32 +378,85 @@ export const parseSuggestions = (html: string) => {
 
 const ACTIVITY_ITEM = '[data-testid^="ProfileRecentActivity"] [role="listitem"]'
 
-// The posts of the activity page: each is a list item of the list marked `ProfileRecentActivity...`. Its paragraphs are the author,
-// how the account is related to them ("• You"), their headline and the age, then the text.
+const elementsOf = (parent: HTMLElement) =>
+   parent.childNodes.filter((node): node is HTMLElement => node instanceof HTMLElement)
+
+// The line after a name that tells how the account is related to the author ("• You", "• 2nd").
+const isDegree = (line: string | undefined) => line !== undefined && /^[•·]/.test(line)
+
+// The row of buttons under a post is the block with the Comment and the Repost button as its own children; the reaction button and the
+// one that opens the reactions are nested deeper, so the four are, in the order of the page: reaction, reactions menu, comment, repost.
+const countsOf = (item: HTMLElement) => {
+   const bar = item
+      .querySelectorAll('div')
+      .find(div => elementsOf(div).filter(child => child.tagName === 'BUTTON').length >= 2)
+   const buttons = bar?.querySelectorAll('button') ?? []
+
+   return {
+      reactions: leadingCount(textOf(buttons[0])),
+      comments: leadingCount(textOf(buttons[2])),
+      reposts: leadingCount(textOf(buttons[3])),
+   }
+}
+
+// How many times an own post was seen is the line before the link to its analytics.
+const impressionsOf = (item: HTMLElement) =>
+   leadingCount(
+      textOf(item.querySelector('a[href*="/analytics/post-summary/"]')?.parentNode?.parentNode?.querySelector('p'))
+   )
+
+// A post of the activity page. Above its text, in order: a row for who reposted it (their name in bold, inside the line), then a row
+// for who wrote it, whose lines are the name, the degree ("• You"), the headline and the age; a company has no degree and no headline.
+// A post with no text is read for its author only, because without the text there is no telling where the header ends.
+const postOf = (item: HTMLElement): Post | undefined => {
+   const box = item.querySelector(TEXT_BOX)
+   const text = box?.closest('p') ?? undefined
+   const container = text?.parentNode
+   const above = container && text ? container.childNodes.slice(0, container.childNodes.indexOf(text)) : []
+   const rows = above.filter((node): node is HTMLElement => node instanceof HTMLElement)
+   const paragraphs = text
+      ? rows.flatMap(row => (row.tagName === 'P' ? [row] : row.querySelectorAll('p')))
+      : item.querySelectorAll('p')
+   const reposted = paragraphs[0]?.querySelector('a[href*="/in/"] strong') != null
+   const lines = paragraphs.map(textOf).filter(Boolean)
+
+   if (reposted) {
+      lines.shift()
+   }
+
+   const [author, ...rest] = lines
+
+   if (!author) {
+      return undefined
+   }
+
+   if (isDegree(rest[0])) {
+      rest.shift()
+   }
+
+   const when = text ? (rest.pop() ?? '') : ''
+
+   return {
+      kind: reposted ? 'REPOST' : 'POST',
+      author,
+      authorHeadline: text ? some(rest[0]) : undefined,
+      authorImageUrl: pictureOf(rows.flatMap(row => row.querySelectorAll('img')).at(-1)),
+      when,
+      text: (bodyOf(box) ?? '').slice(0, 3000),
+      imageUrl: pictureOf(text?.nextElementSibling?.querySelector('a > figure > img')),
+      ...countsOf(item),
+      impressions: impressionsOf(item),
+   }
+}
+
+// The posts of the activity page: each is a list item of the list marked `ProfileRecentActivity...`; a post of the account or one it
+// reposted (written by someone else, a person or a company), up to the limit.
 export const parsePosts = (html: string, limit: number): Post[] =>
    parse(html)
       .querySelectorAll(ACTIVITY_ITEM)
+      .map(postOf)
+      .filter((post): post is Post => post !== undefined)
       .slice(0, limit)
-      .flatMap(item => {
-         const author = textOf(item.querySelector('a[href*="/in/"] p span'))
-         const lines = linesOf(
-            item,
-            paragraph => paragraph.querySelector('[data-testid="expandable-text-box"]') != null
-         )
-
-         return author
-            ? [
-                 {
-                    kind: 'POST' as const,
-                    author,
-                    authorHeadline: some(lines[2]),
-                    authorImageUrl: pictureOf(item.querySelector('figure img')),
-                    when: lines[3] ?? '',
-                    text: (bodyOf(item.querySelector('[data-testid="expandable-text-box"]')) ?? '').slice(0, 3000),
-                 },
-              ]
-            : []
-      })
 
 // The comments page lists the posts the account commented on, each with the account's own comment as the last text of the item,
 // the comment's age in the paragraph before it. The comment is shown as written by the account (`author`).
@@ -409,3 +483,111 @@ export const parseComments = (html: string, limit: number, author: string): Post
               ]
             : []
       })
+
+// The line that follows a company's logo in a project: the picture is in a figure, and the line is a paragraph in the block next to it.
+const lineAfterLogo = (item: HTMLElement) => {
+   const next = (item.querySelector('figure') ?? item.querySelector('img'))?.nextElementSibling
+
+   return next?.tagName === 'P' ? next : next?.querySelector('p')
+}
+
+// The projects page: each project is a block with a link to its edit form that holds the name and the dates in two paragraphs; the
+// same link at the end of the block has no text and the Add button leads to another address. The text and the skills follow the link,
+// and the company a project belongs to is a logo followed by one line, which is kept as the page writes it (in its language).
+export const parseProjects = (html: string): Project[] =>
+   parse(html)
+      .querySelectorAll('a[href*="/details/projects/edit/forms/"]')
+      .filter(link => link.querySelector('p') != null)
+      .flatMap(link => {
+         const [name, dates] = linesOf(link)
+         const item = link.parentNode
+         const company = item ? lineAfterLogo(item) : undefined
+
+         return name && item
+            ? [
+                 {
+                    name,
+                    dates: some(dates),
+                    description: bodyOf(item.querySelectorAll(TEXT_BOX).find(box => box.closest('a') == null)),
+                    skills: skillsOf(item),
+                    associatedWith: company?.tagName === 'P' ? some(textOf(company)) : undefined,
+                 },
+              ]
+            : []
+      })
+
+// The languages page: a row holds the language and its level as two paragraphs, and, next to them, the link to its edit form.
+export const parseLanguages = (html: string): Language[] =>
+   parse(html)
+      .querySelectorAll('a[href*="/details/languages/edit/forms/"]')
+      .filter(link => !link.getAttribute('href')?.endsWith('/new/'))
+      .flatMap(link => {
+         const row = link.parentNode?.parentNode
+         const [name, proficiency] = row ? linesOf(row) : []
+
+         return name
+            ? [
+                 {
+                    name,
+                    proficiency: some(proficiency),
+                 },
+              ]
+            : []
+      })
+
+// A card of the recommendations page (received or given) is a link with the picture, then the lines: the name, the degree, the headline
+// and how the two know each other. The text is in the nearest block around the card that has one; a card without a text must not take
+// the text of the next card, so a block that holds more than one card is not it.
+export const parseRecommendations = (html: string): Recommendation[] => {
+   const isCard = (link: HTMLElement) => link.querySelector('figure') != null
+   const cardsIn = (block: HTMLElement) => block.querySelectorAll('a[href*="/in/"]').filter(isCard)
+
+   return cardsIn(parse(html).querySelector('[data-testid="lazy-column"]') ?? parse('')).flatMap(card => {
+      const [name, ...lines] = linesOf(card)
+      let block: HTMLElement | null = card.parentNode
+
+      while (block && block.querySelector(TEXT_BOX) == null) {
+         block = block.parentNode
+      }
+
+      const degree = isDegree(lines[0]) ? lines.shift() : undefined
+      const own = block && cardsIn(block).length === 1 ? bodyOf(block.querySelector(TEXT_BOX)) : undefined
+
+      return name
+         ? [
+              {
+                 name,
+                 degree: some(degree?.replace(/^[•·]\s*/, '')),
+                 headline: some(lines[0]),
+                 imageUrl: pictureOf(card.querySelector('img')),
+                 url: addressOf(card.getAttribute('href')),
+                 relationship: some(lines[1]),
+                 text: (own ?? '').slice(0, 20_000),
+              },
+           ]
+         : []
+   })
+}
+
+// The services card of the profile page lists them one per paragraph; its "Show all" link has none.
+export const parseServices = (html: string): string[] => {
+   const card = parse(html).querySelector('[data-view-name="profile-card-services"]')
+
+   return card ? linesOf(card).slice(0, 50) : []
+}
+
+// The box the account sees at the top of its own page when it is open to work: the first line says for whom, in bold, the second what
+// for. It is found by its edit button, which the offers to hire and to volunteer beside it do not have.
+export const parseOpenToWork = (html: string): AccountProfile['openToWork'] => {
+   const box = parse(html).querySelector('[data-view-name="profile-edit-open-to"]')?.closest('li')
+   const line = textOf(box?.querySelector('strong'))
+
+   if (!box || !line) {
+      return undefined
+   }
+
+   return {
+      audience: parts(line)[1] ?? line,
+      titles: (linesOf(box)[1] ?? '').split(', ').map(clean).filter(Boolean),
+   }
+}

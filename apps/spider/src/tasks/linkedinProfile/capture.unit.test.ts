@@ -29,7 +29,7 @@ const setup = ({ lands = PROFILE, refuse = [], scrolls = 2, pauseMs, tabs = 0 }:
       inspect: vi.fn(async () => ({ url: current })),
       clickLink: vi.fn(async () => undefined),
       clickNth: vi.fn(async (selector: string, nth: number, _avoid: string) => {
-         if (!selector.includes('checkbox') || !current.endsWith('details/interests/') || nth > tabs) {
+         if (selector !== '[role="radio"]' || !current.endsWith('details/interests/') || nth > tabs) {
             return false
          }
 
@@ -37,6 +37,7 @@ const setup = ({ lands = PROFILE, refuse = [], scrolls = 2, pauseMs, tabs = 0 }:
 
          return true
       }),
+      press: vi.fn(async (_key: string) => current),
       back: vi.fn(async () => current),
       scrollBy: vi.fn(async () => {
          if (left > 0) {
@@ -141,14 +142,25 @@ describe('captureProfile', () => {
       await capture()
 
       expect(browser.clickNth.mock.calls.map(([selector, nth]) => [selector, nth])).toEqual([
-         ['input[type="checkbox"] + label', 1],
-         ['input[type="checkbox"] + label', 2],
-         ['input[type="checkbox"] + label', 3],
+         ['[role="radio"]', 1],
+         ['[role="radio"]', 2],
+         ['[role="radio"]', 3],
       ])
       expect(Object.keys(attached)).toEqual(
          expect.arrayContaining(['detail-interests.html', 'detail-interests-2.html', 'detail-interests-3.html'])
       )
       expect(attached).not.toHaveProperty(['detail-interests-4.html'])
+   })
+
+   it('should go back to the top of the page before each chip, where the chips are, after the page was scrolled to its end', async () => {
+      const { capture, browser } = setup({ tabs: 2 })
+
+      await capture()
+
+      expect(browser.press).toHaveBeenCalledWith('Home')
+      browser.clickNth.mock.invocationCallOrder.forEach((order, index) => {
+         expect(browser.press.mock.invocationCallOrder[index]).toBeLessThan(order)
+      })
    })
 
    it('should keep at most four more pages of chips, and stay under the 20 files of a run', async () => {

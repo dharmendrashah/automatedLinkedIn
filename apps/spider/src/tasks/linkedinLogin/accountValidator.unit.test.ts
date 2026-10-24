@@ -756,6 +756,19 @@ describe('AccountValidator', () => {
          expect(session.click).not.toHaveBeenCalled()
       })
 
+      it('should answer INVALID_CREDENTIALS when the new sign-in page shows its error notice', async () => {
+         const base = site({ password: 'right' })
+         const { session } = fakeSession({
+            ...base,
+            elements: url =>
+               url === login ? [SELECTORS.username, SELECTORS.password, SELECTORS.loginErrors[2] ?? ''] : [],
+         })
+
+         const verdict = await validator.validate(session, input({ password: 'wrong' }))
+
+         expect(verdict).toMatchObject({ outcome: 'INVALID_CREDENTIALS' })
+      })
+
       it('should answer a code from the two-step key when LinkedIn asks for one', async () => {
          const code = totpCode(TOTP_SECRET, NOW)
          const { session, typed } = fakeSession(

@@ -133,7 +133,7 @@ export const fullProfile = (now: Date): AccountProfile => ({
             description:
                'A set of templates for planning quarters. I wrote most of them and keep them up to date with what teams tell me.',
             skills: ['Planning', 'Templates', '+7 skills'],
-            associatedWith: 'Sampleworks',
+            associatedWith: 'Associated with Sampleworks',
          },
          {
             name: 'decision-log',

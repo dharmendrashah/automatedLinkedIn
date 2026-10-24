@@ -10,14 +10,20 @@ import {
    experienceMarkup,
    insightsMarkup,
    interestsPage,
+   languagesPage,
+   openToWorkMarkup,
    pagesYouMightLikeMarkup,
    peopleYouMayKnowMarkup,
    postsPage,
    profilePage,
+   projectsPage,
+   recommendationsPage,
+   servicesMarkup,
    skillsPage,
    topCardMarkup,
 } from '../../linkedin/profileFixture'
 import { VisitError } from '../defineTask'
+import { DETAIL_PAGES } from './capture'
 import { BUDGET_MS, readProfile } from './read'
 
 const BASE = 'https://www.linkedin.com'
@@ -30,7 +36,9 @@ const main = profilePage(
       location: 'Sampletown, Exampleland',
       connections: '106',
    }),
+   openToWorkMarkup('Recruiters only', 'Product Lead, Head of Product roles'),
    aboutMarkup('A short about.'),
+   servicesMarkup(['Roadmapping', 'Discovery']),
    insightsMarkup('8 profile views', '0 post impressions', '3 search appearances'),
    activityMarkup('164 followers'),
    experienceMarkup([
@@ -107,6 +115,35 @@ const PAGES: Record<string, string> = {
       },
    ]),
    [`${ME}details/skills/`]: skillsPage([{ name: 'Sales' }, { name: 'Research' }]),
+   [`${ME}details/projects/`]: projectsPage([
+      {
+         name: 'Sample app',
+         dates: '2022 – 2023',
+         skills: 'Roadmapping and +1 skill',
+         associated: 'Associated with Sampleworks',
+      },
+   ]),
+   [`${ME}details/recommendations/`]: recommendationsPage([
+      {
+         name: 'Riley Sample',
+         slug: 'riley-sample',
+         headline: 'Designer',
+         text: 'A good colleague.',
+      },
+   ]),
+   [`${ME}details/recommendations/?detailScreenTabIndex=1`]: recommendationsPage([
+      {
+         name: 'Taylor Demo',
+         slug: 'taylor-demo',
+         text: 'Worked well with me.',
+      },
+   ]),
+   [`${ME}details/languages/`]: languagesPage([
+      {
+         name: 'English',
+         level: 'Native',
+      },
+   ]),
    [`${ME}details/interests/`]: companies,
    [`${ME}recent-activity/all/`]: postsPage('All', [
       {
@@ -150,7 +187,7 @@ const setup = ({ lands = ME, refuse = [], pauseMs, pages = PAGES }: Page = {}) =
          current.endsWith('details/interests/') && chip === 1 ? groups : (pages[current] ?? '<html></html>')
       ),
       clickNth: vi.fn(async (selector: string, nth: number, _avoid: string) => {
-         if (!selector.includes('checkbox') || !current.endsWith('details/interests/') || nth > 1) {
+         if (selector !== '[role="radio"]' || !current.endsWith('details/interests/') || nth > 1) {
             return false
          }
 
@@ -158,6 +195,7 @@ const setup = ({ lands = ME, refuse = [], pauseMs, pages = PAGES }: Page = {}) =
 
          return true
       }),
+      press: vi.fn(async (_key: string) => current),
       screenshot: vi.fn(async () => Buffer.from('png')),
       clearCookies: vi.fn(async () => undefined),
       exists: vi.fn(async () => false),
@@ -259,10 +297,13 @@ describe('readProfile', () => {
       expect(file().interests.groups.map(({ name }) => name)).toEqual(['Reading Club'])
    })
 
-   it('should leave the sections it cannot read yet empty, and say so in nothing it writes but the file', async () => {
-      const { read, file } = setup()
+   it('should leave out what the pages of a bare account do not hold, and still call the read done', async () => {
+      const { read, file } = setup({ pages: { [ME]: main } })
 
-      await read()
+      await expect(read()).resolves.toMatchObject({
+         outcome: 'DONE',
+         dropped: 0,
+      })
 
       expect(file().recommendations).toEqual({
          received: {
@@ -276,25 +317,49 @@ describe('readProfile', () => {
       })
       expect(file().projects.items).toEqual([])
       expect(file().languages.items).toEqual([])
-      expect(file().services).toEqual([])
+      expect(file().topSkills).toEqual([])
    })
 
-   it('should click only the chips of Interests, and open only the pages it can read', async () => {
+   it('should read the projects, the recommendations received and given, the languages, the services and open to work', async () => {
+      const { read, file } = setup()
+
+      await read()
+
+      expect(file().projects).toEqual({
+         items: [
+            {
+               name: 'Sample app',
+               dates: '2022 – 2023',
+               skills: ['Roadmapping'],
+               associatedWith: 'Associated with Sampleworks',
+            },
+         ],
+         total: 1,
+      })
+      expect(file().recommendations.received.items.map(({ name }) => name)).toEqual(['Riley Sample'])
+      expect(file().recommendations.given.items.map(({ name }) => name)).toEqual(['Taylor Demo'])
+      expect(file().recommendations.received.items[0]?.text).toBe('A good colleague.')
+      expect(file().languages.items).toEqual([
+         {
+            name: 'English',
+            proficiency: 'Native',
+         },
+      ])
+      expect(file().services).toEqual(['Roadmapping', 'Discovery'])
+      expect(file().openToWork).toEqual({
+         audience: 'Recruiters only',
+         titles: ['Product Lead', 'Head of Product roles'],
+      })
+   })
+
+   it('should click only the chips of Interests, and open only the pages of the profile', async () => {
       const { read, browser, opened } = setup()
 
       await read()
 
       expect(browser.clickLink).not.toHaveBeenCalled()
       expect(browser.click).not.toHaveBeenCalled()
-      expect(opened).toEqual([
-         `${BASE}/in/me/`,
-         `${ME}details/experience/`,
-         `${ME}details/education/`,
-         `${ME}details/skills/`,
-         `${ME}details/interests/`,
-         `${ME}recent-activity/all/`,
-         `${ME}recent-activity/comments/`,
-      ])
+      expect(opened).toEqual([`${BASE}/in/me/`, ...DETAIL_PAGES.map(({ path }) => `${ME}${path}`)])
    })
 
    it('should say part was read, and still hand over the rest, when one page does not open', async () => {

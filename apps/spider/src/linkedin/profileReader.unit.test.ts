@@ -8,10 +8,15 @@ import {
    experienceMarkup,
    insightsMarkup,
    interestsPage,
+   languagesPage,
+   openToWorkMarkup,
    pagesYouMightLikeMarkup,
    peopleYouMayKnowMarkup,
    postsPage,
    profilePage,
+   projectsPage,
+   recommendationsPage,
+   servicesMarkup,
    skillsPage,
    topCardMarkup,
 } from './profileFixture'
@@ -23,7 +28,12 @@ import {
    parseExperience,
    parseFollowers,
    parseInterests,
+   parseLanguages,
+   parseOpenToWork,
    parsePosts,
+   parseProjects,
+   parseRecommendations,
+   parseServices,
    parseSkills,
    parseSuggestions,
    parseTopCard,
@@ -257,6 +267,34 @@ describe('parseInterests', () => {
       expect(found.schools).toEqual([])
       expect(found.newsletters).toEqual([])
    })
+
+   it('should read a member with the degree, the headline and the followers each in its own place', () => {
+      const found = parseInterests(
+         interestsPage(
+            ['Top Voices'],
+            [
+               {
+                  name: 'Ada Voice',
+                  kind: 'person',
+                  followers: '954,792 followers',
+                  degree: '2nd',
+                  headline: 'Cofounder at Examples',
+               },
+            ]
+         )
+      )
+
+      expect(found.topVoices).toEqual([
+         {
+            name: 'Ada Voice',
+            subtitle: 'Cofounder at Examples',
+            degree: '2nd',
+            followers: '954,792 followers',
+            imageUrl: 'https://media.licdn.com/dms/image/v2/sample/logo/0',
+            url: 'https://www.linkedin.com/in/ada-voice/',
+         },
+      ])
+   })
 })
 
 describe('parseSuggestions', () => {
@@ -359,6 +397,91 @@ describe('parsePosts and parseComments', () => {
       expect(parsePosts(html, 1)).toHaveLength(1)
    })
 
+   it('should read the numbers of an own post: reactions, comments, reposts and impressions, and its picture', () => {
+      const [post] = parsePosts(
+         postsPage('All', [
+            {
+               text: 'With numbers',
+               age: 'Jun 2',
+               reactions: 4,
+               comments: 1,
+               impressions: 501,
+               image: 'https://media.licdn.com/dms/image/v2/sample/feedshare/1',
+            },
+         ]),
+         10
+      )
+
+      expect(post).toMatchObject({
+         kind: 'POST',
+         reactions: 4,
+         comments: 1,
+         impressions: 501,
+         imageUrl: 'https://media.licdn.com/dms/image/v2/sample/feedshare/1',
+      })
+      expect(post?.reposts).toBeUndefined()
+   })
+
+   it('should read a repost as a repost by whoever wrote it, a person with a degree or a company with neither degree nor headline', () => {
+      const posts = parsePosts(
+         postsPage('All', [
+            {
+               text: 'A person’s post',
+               age: 'Feb 21',
+               author: 'Aneesh Naarang',
+               degree: '\u2022 2nd',
+               headline: 'Growth at Examples',
+               repost: true,
+            },
+            {
+               text: 'A company’s post',
+               age: 'Dec 19, 2025',
+               author: 'Elitale',
+               degree: null,
+               headline: null,
+               repost: true,
+               reposts: 5,
+            },
+         ]),
+         10
+      )
+
+      expect(posts).toEqual([
+         expect.objectContaining({
+            kind: 'REPOST',
+            author: 'Aneesh Naarang',
+            authorHeadline: 'Growth at Examples',
+            when: 'Feb 21',
+            text: 'A person’s post',
+         }),
+         expect.objectContaining({
+            kind: 'REPOST',
+            author: 'Elitale',
+            when: 'Dec 19, 2025',
+            reposts: 5,
+         }),
+      ])
+      expect(posts[1]?.authorHeadline).toBeUndefined()
+      // The picture is the author's, not the account's who reposted it.
+      expect(posts[0]?.authorImageUrl).toBe(
+         'https://media.licdn.com/dms/image/v2/sample/profile-displayphoto-shrink_100_100/me'
+      )
+   })
+
+   it('should keep the space around a mention or a hashtag, which the page draws with empty elements', () => {
+      const [post] = parsePosts(
+         postsPage('All', [
+            {
+               text: 'Using<span></span><span><a href="https://www.linkedin.com/company/x/"><strong>Acme</strong></a></span><span></span>for sending.<br><br><span><a href="https://www.linkedin.com/search/results/all/?keywords=%23mail"><strong>#Mail</strong></a></span>',
+               age: '1mo',
+            },
+         ]),
+         10
+      )
+
+      expect(post?.text).toBe('Using Acme for sending.\n#Mail')
+   })
+
    it('should read the account’s own comment, with its age, as written by the account', () => {
       expect(
          parseComments(
@@ -385,5 +508,149 @@ describe('parsePosts and parseComments', () => {
    it('should give nothing for a page with no activity', () => {
       expect(parsePosts(profilePage('<p>x</p>'), 10)).toEqual([])
       expect(parseComments(profilePage('<p>x</p>'), 10, 'Sample Person')).toEqual([])
+   })
+})
+
+describe('parseProjects', () => {
+   it('should read each project: name, dates, text, the skills it names, and the company it belongs to as the page writes it', () => {
+      const [first, second] = parseProjects(
+         projectsPage([
+            {
+               name: 'Sample app',
+               dates: 'May 2022 – Present',
+               description: 'Built the backend.',
+               skills: 'API Development, npm and +7 skills',
+               associated: 'Associated with Sampleworks',
+            },
+            { name: 'Small tool' },
+         ])
+      )
+
+      expect(first).toEqual({
+         name: 'Sample app',
+         dates: 'May 2022 – Present',
+         description: 'Built the backend.',
+         skills: ['API Development', 'npm'],
+         associatedWith: 'Associated with Sampleworks',
+      })
+      expect(second).toEqual({
+         name: 'Small tool',
+         skills: [],
+      })
+   })
+
+   it('should give nothing for a page without projects, and never read the Add button as one', () => {
+      expect(parseProjects(projectsPage([]))).toEqual([])
+      expect(parseProjects(profilePage('<p>x</p>'))).toEqual([])
+   })
+})
+
+describe('parseLanguages', () => {
+   it('should read each language with its level, one row each', () => {
+      expect(
+         parseLanguages(
+            languagesPage([
+               {
+                  name: 'English',
+                  level: 'Professional working proficiency',
+               },
+               { name: 'Hindi' },
+            ])
+         )
+      ).toEqual([
+         {
+            name: 'English',
+            proficiency: 'Professional working proficiency',
+         },
+         { name: 'Hindi' },
+      ])
+   })
+
+   it('should give nothing for a page without languages', () => {
+      expect(parseLanguages(languagesPage([]))).toEqual([])
+   })
+})
+
+describe('parseRecommendations', () => {
+   const cards = [
+      {
+         name: 'Riley Sample',
+         slug: 'riley-sample',
+         headline: 'Founder at Examples',
+         relationship: 'August 27, 2024, Riley was senior to Sample but did not manage them directly',
+         text: 'Worked with Sample for three years.',
+      },
+      {
+         name: 'Taylor Demo',
+         slug: 'taylor-demo',
+         degree: null,
+         headline: 'Engineer at Demo Co',
+         text: 'Great to work with.',
+      },
+   ]
+
+   it('should read each card: who, the degree, the headline, how they know each other and the text', () => {
+      const [first, second] = parseRecommendations(recommendationsPage(cards))
+
+      expect(first).toEqual({
+         name: 'Riley Sample',
+         degree: '1st',
+         headline: 'Founder at Examples',
+         imageUrl: 'https://media.licdn.com/dms/image/v2/sample/profile-displayphoto-shrink_100_100/riley-sample',
+         url: 'https://www.linkedin.com/in/riley-sample/',
+         relationship: 'August 27, 2024, Riley was senior to Sample but did not manage them directly',
+         text: 'Worked with Sample for three years.',
+      })
+      expect(second).toMatchObject({
+         name: 'Taylor Demo',
+         headline: 'Engineer at Demo Co',
+         text: 'Great to work with.',
+      })
+      expect(second?.degree).toBeUndefined()
+      expect(second?.relationship).toBeUndefined()
+   })
+
+   it('should not give a card the text of the next one when its own is missing', () => {
+      const [first, second] = parseRecommendations(
+         recommendationsPage([
+            {
+               ...cards[0],
+               text: '',
+            },
+            cards[1],
+         ] as typeof cards)
+      )
+
+      expect(first?.text).toBe('')
+      expect(second?.text).toBe('Great to work with.')
+   })
+
+   it('should give nothing for a page without cards', () => {
+      expect(parseRecommendations(recommendationsPage([]))).toEqual([])
+   })
+})
+
+describe('parseServices and parseOpenToWork', () => {
+   it('should read the services the card lists, not its Show all link', () => {
+      expect(parseServices(profilePage(servicesMarkup(['Web Development', 'Information Security'])))).toEqual([
+         'Web Development',
+         'Information Security',
+      ])
+      expect(parseServices(profilePage('<p>x</p>'))).toEqual([])
+   })
+
+   it('should read for whom the account is open to work and the titles, from the box that has the edit button', () => {
+      expect(
+         parseOpenToWork(
+            profilePage(openToWorkMarkup('Recruiters only', 'Technical Lead, Back End Developer and PHP roles'))
+         )
+      ).toEqual({
+         audience: 'Recruiters only',
+         titles: ['Technical Lead', 'Back End Developer and PHP roles'],
+      })
+   })
+
+   it('should give nothing when the page has no open to work box', () => {
+      expect(parseOpenToWork(profilePage('<p>x</p>'))).toBeUndefined()
    })
 })

@@ -63,11 +63,15 @@ const CODE_DIALOG = [
    .map(input => `dialog[open] ${input}:visible`)
    .join(', ')
 
+// Recorded 2026-10-24: the new sign-in page has no error ids and hashed class names. Its error is a live region with the
+// error icon, whose id is the icon's name, so it does not depend on the page language.
+const ERROR_NOTICE = '[aria-live="assertive"] svg#signal-error-small:visible'
+
 export const SELECTORS = {
    username: 'input[autocomplete~="username"]:visible, input[type="email"]:visible, #username >> nth=0',
    password: 'input[type="password"]:visible, #password >> nth=0',
    submit: `button${BUTTON}, input[type="submit"]${BUTTON}, [role="button"]${BUTTON} >> nth=0`,
-   loginErrors: ['#error-for-username', '#error-for-password'],
+   loginErrors: ['#error-for-username', '#error-for-password', ERROR_NOTICE],
    codeInput: `${PIN}, ${CODE_DIALOG}`,
    codeField: `${PIN}, ${CODE_DIALOG} >> nth=0`,
    codeDialog: CODE_DIALOG,

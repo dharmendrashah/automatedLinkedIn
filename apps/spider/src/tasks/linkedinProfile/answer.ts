@@ -99,7 +99,7 @@ export const answerForRead = ({ outcome, counts, dropped }: ProfileRead): TaskOu
                items: [
                   {
                      label: 'Sections',
-                     value: 'Recommendations, projects, languages, services, open to work',
+                     value: 'Top skills, endorsements, pending recommendations',
                   },
                   ...(dropped > 0
                      ? [

@@ -11,12 +11,18 @@ import {
    parseExperience,
    parseFollowers,
    parseInterests,
+   parseLanguages,
+   parseOpenToWork,
    parsePosts,
+   parseProjects,
+   parseRecommendations,
+   parseServices,
    parseSkills,
    parseSuggestions,
    parseTopCard,
 } from '../../linkedin/profileReader'
 import { SignedOut } from '../../linkedin/session'
+import { DETAIL_PAGES } from './capture'
 import { type PageContext, type PageDeps, createPages } from './pages'
 
 export type ProfileInput = {
@@ -35,34 +41,8 @@ export type ProfileRead = {
    dropped: number
 }
 
-// The pages behind the profile's "Show all" links that the readers know (the others were not seen populated yet, see the plan), by
-// their address under the profile's own address. Each is opened by its address, as a person could type it.
-const DETAIL_PAGES = [
-   {
-      name: 'experience',
-      path: 'details/experience/',
-   },
-   {
-      name: 'education',
-      path: 'details/education/',
-   },
-   {
-      name: 'skills',
-      path: 'details/skills/',
-   },
-   {
-      name: 'interests',
-      path: 'details/interests/',
-   },
-   {
-      name: 'posts',
-      path: 'recent-activity/all/',
-   },
-   {
-      name: 'comments',
-      path: 'recent-activity/comments/',
-   },
-] as const
+// The pages behind the profile's "Show all" links are the ones the capture opens (`DETAIL_PAGES`); each is opened by its address, as a
+// person could type it.
 
 // No new page is begun after this much of the run; the time limit of the task is longer, so the one in progress can end.
 export const BUDGET_MS = 8 * 60 * 1000
@@ -71,10 +51,13 @@ const MAX_FAILURES_IN_A_ROW = 3
 // How many posts and comments are kept (the contract allows 50).
 const ACTIVITY_LIMIT = 10
 
-const noList = {
-   items: [],
-   total: 0,
-}
+// A list as the contract wants it: the items cut to what it allows, and how many the page listed.
+const listOf = <T>(items: T[], max: number) => ({
+   items: items.slice(0, max),
+   total: items.length,
+})
+
+const noList = listOf([], 0)
 const noInterests: AccountProfile['interests'] = {
    topVoices: [],
    companies: [],
@@ -85,12 +68,20 @@ const noInterests: AccountProfile['interests'] = {
 
 // What a section is when it is left out, for the ones that are not optional.
 const EMPTY: Record<string, unknown> = {
+   openToWork: undefined,
    about: undefined,
+   services: [],
    analytics: undefined,
    activity: undefined,
    experience: [],
    education: [],
+   projects: noList,
    skills: noList,
+   recommendations: {
+      received: noList,
+      given: noList,
+   },
+   languages: noList,
    interests: noInterests,
    peopleYouMayKnow: [],
    youMightLike: [],
@@ -153,7 +144,11 @@ export const readProfile = async (
    const draft = {
       experience: [] as AccountProfile['experience'],
       education: [] as AccountProfile['education'],
+      projects: [] as AccountProfile['projects']['items'],
       skills: [] as AccountProfile['skills']['items'],
+      received: [] as AccountProfile['recommendations']['received']['items'],
+      given: [] as AccountProfile['recommendations']['given']['items'],
+      languages: [] as AccountProfile['languages']['items'],
       posts: [] as NonNullable<AccountProfile['activity']>['posts'],
       comments: [] as NonNullable<AccountProfile['activity']>['comments'],
    }
@@ -217,13 +212,18 @@ export const readProfile = async (
 
             if (page.name === 'experience') draft.experience = parseExperience(html)
             if (page.name === 'education') draft.education = parseEducation(html)
+            if (page.name === 'projects') draft.projects = parseProjects(html)
             if (page.name === 'skills') draft.skills = parseSkills(html)
+            if (page.name === 'recommendations-received') draft.received = parseRecommendations(html)
+            if (page.name === 'recommendations-given') draft.given = parseRecommendations(html)
+            if (page.name === 'languages') draft.languages = parseLanguages(html)
             if (page.name === 'posts') draft.posts = parsePosts(html, ACTIVITY_LIMIT)
             if (page.name === 'comments') draft.comments = parseComments(html, ACTIVITY_LIMIT, name)
 
             if (page.name === 'interests') {
                addInterests(html)
                await pages.eachInterestTab(async () => {
+                  await pages.scrollThrough()
                   addInterests(await pages.html())
                })
             }
@@ -261,8 +261,9 @@ export const readProfile = async (
          followers,
          connections: top.connections,
          about: parseAbout(main),
+         openToWork: parseOpenToWork(main),
          topSkills: [],
-         services: [],
+         services: parseServices(main),
          analytics: parseAnalytics(main),
          activity: {
             followers,
@@ -271,16 +272,13 @@ export const readProfile = async (
          },
          experience: draft.experience,
          education: draft.education,
-         projects: noList,
-         skills: {
-            items: draft.skills,
-            total: draft.skills.length,
-         },
+         projects: listOf(draft.projects, 100),
+         skills: listOf(draft.skills, 500),
          recommendations: {
-            received: noList,
-            given: noList,
+            received: listOf(draft.received, 100),
+            given: listOf(draft.given, 100),
          },
-         languages: noList,
+         languages: listOf(draft.languages, 50),
          interests,
          peopleYouMayKnow: suggestions.peopleYouMayKnow,
          youMightLike: suggestions.youMightLike,
@@ -313,6 +311,26 @@ export const readProfile = async (
             {
                label: 'Skills',
                count: profile.skills.items.length,
+            },
+            {
+               label: 'Projects',
+               count: profile.projects.items.length,
+            },
+            {
+               label: 'Recommendations received',
+               count: profile.recommendations.received.items.length,
+            },
+            {
+               label: 'Recommendations given',
+               count: profile.recommendations.given.items.length,
+            },
+            {
+               label: 'Languages',
+               count: profile.languages.items.length,
+            },
+            {
+               label: 'Services',
+               count: profile.services.length,
             },
             {
                label: 'Interests',

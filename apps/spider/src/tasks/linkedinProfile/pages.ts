@@ -21,10 +21,11 @@ export const PAUSES = {
 } as const
 // The account's own profile, after LinkedIn sent `/in/me/` on to its address.
 const PROFILE_PATH = /^\/in\/([^/]+)\/?$/
-// The Interests page has a chip for each kind it holds (a checkbox and its label, recorded 2026-10-24), and only the first is shown;
-// the others are opened by a click on their label, which changes nothing on the profile. At most this many after the first.
-const INTEREST_TAB = 'input[type="checkbox"] + label'
-// A chip is a label over a checkbox, so the usual "never click an input" would refuse it (the second capture clicked none): only real
+// The Interests page has a chip for each kind it holds: a radio block that holds a checkbox and its label (recorded 2026-10-24), and
+// only the first is shown; the others are opened by a click on their block, which changes nothing on the profile. At most this many
+// after the first.
+const INTEREST_TAB = '[role="radio"]'
+// A chip is a radio over a checkbox, so the usual "never click an input" would refuse it (the second capture clicked none): only real
 // buttons and menus are avoided here.
 const CHIP_AVOID = 'button, [role="button"], [role="menuitem"], [data-view-name="edge-creation-follow-action"]'
 const MAX_INTEREST_TABS = 4
@@ -81,9 +82,14 @@ export const createPages = (
          return owner ? `${here.origin}/in/${owner}/` : undefined
       },
       open: (address: string) => session.open(address),
-      // Opens each other chip of the Interests page by its label, one after the other, until a click finds no more.
+      // Opens each other chip of the Interests page by its block, one after the other, until a click finds no more. The chips are at the
+      // top of the page, which is out of sight once the page was scrolled to its end (the third capture clicked none for that), so the
+      // Home key takes the page back to them first.
       eachInterestTab: async (visitTab: (tab: number) => Promise<void>) => {
          for (let tab = 1; tab <= MAX_INTEREST_TABS; tab += 1) {
+            await hands.press('Home')
+            await reader.wait(PAUSES.scroll)
+
             if (!(await hands.clickNth(INTEREST_TAB, tab, CHIP_AVOID))) {
                return
             }

@@ -92,6 +92,7 @@ const projectSchema = z.strictObject({
    dates: shortText.optional(),
    description: longText.optional(),
    skills: z.array(shortText).max(50),
+   // The line as the page writes it, in its language ("Associated with Sampleworks").
    associatedWith: shortText.optional(),
 })
 
