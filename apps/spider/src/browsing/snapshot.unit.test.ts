@@ -110,4 +110,21 @@ describe('createKeep', () => {
       expect(asked.attach).toHaveBeenCalledTimes(1)
       expect(notAsked.attach).not.toHaveBeenCalled()
    })
+
+   it('should leave out the inspection of a page when asked to, and keep its markup and picture', async () => {
+      const inspect = vi.fn(async () => ({ url: 'https://www.linkedin.com/in/ada/' }))
+      const lean = {
+         ...keeper(),
+         browser: {
+            pageHtml: vi.fn(async () => '<html></html>'),
+            inspect,
+         },
+      }
+
+      await createKeep(lean as never, true, undefined, false)('page')
+
+      expect(inspect).not.toHaveBeenCalled()
+      expect(lean.attach).toHaveBeenCalledTimes(1)
+      expect(lean.attach).toHaveBeenCalledWith('page.html', '<html></html>', 'text/html')
+   })
 })
