@@ -1,4 +1,5 @@
-import { type CSSProperties, useState } from 'react'
+import { Photo } from '@/components/photo'
+import { type CSSProperties } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -18,27 +19,6 @@ type Props = {
    account: UniboxAccount | undefined
    size?: keyof typeof SIZES
    className?: string
-}
-
-// A profile picture over the initials: the initials show while it loads, and stay when it cannot be loaded (an address that expired).
-// Only https addresses are used, and the page that shows it is never named to the image host.
-const Photo = ({ url }: { url: string | undefined }) => {
-   const [failed, setFailed] = useState<string>()
-
-   if (!url?.startsWith('https://') || failed === url) {
-      return null
-   }
-
-   return (
-      <img
-         src={url}
-         alt=""
-         loading="lazy"
-         referrerPolicy="no-referrer"
-         onError={() => setFailed(url)}
-         className="absolute inset-0 size-full rounded-full object-cover"
-      />
-   )
 }
 
 // An account: its initials on its own colour, with a dot when it cannot send. The colour only helps the eye; the name is always

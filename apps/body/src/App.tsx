@@ -28,6 +28,10 @@ const Dashboard = lazy(() => import('./pages/Dashboard').then(({ Dashboard: page
 const WorkflowPage = lazy(() => import('./pages/Workflow').then(({ WorkflowPage: page }) => ({ default: page })))
 // The inbox carries the virtual list and the composer, and is only opened by some of the visits.
 const Unibox = lazy(() => import('./pages/Unibox').then(({ Unibox: page }) => ({ default: page })))
+// The profile of an account carries a dozen cards, and is only opened from the accounts list.
+const AccountProfile = lazy(() =>
+   import('./pages/AccountProfile').then(({ AccountProfile: page }) => ({ default: page }))
+)
 
 const App = () => (
    <Routes>
@@ -61,6 +65,14 @@ const App = () => (
             }
          />
          <Route path="/accounts" element={<Accounts />} />
+         <Route
+            path="/accounts/:id"
+            element={
+               <Suspense fallback={null}>
+                  <AccountProfile />
+               </Suspense>
+            }
+         />
          <Route path="/profiles" element={<Profiles />} />
          <Route path="/companies" element={<Companies />} />
          <Route path="/posts" element={<Posts />} />

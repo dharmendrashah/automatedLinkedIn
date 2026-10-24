@@ -11,6 +11,8 @@ const ROUTES: Array<[RegExp, string]> = [
    // A conversation is only "Unibox": a person's name does not belong in a history list or a bookmark.
    [/^\/unibox(\/[^/]+)?$/, 'Unibox'],
    [/^\/accounts$/, 'LinkedIn accounts'],
+   // The account's own profile; no name in the title, as for a conversation.
+   [/^\/accounts\/[^/]+$/, 'Account profile'],
    [/^\/profiles$/, 'LinkedIn profiles'],
    [/^\/companies$/, 'LinkedIn companies'],
    [/^\/posts$/, 'LinkedIn posts'],

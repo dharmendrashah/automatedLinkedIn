@@ -1,6 +1,7 @@
 export * from './attachments'
 export * from './liAt'
 export * from './messages'
+export * from './profile'
 export * from './schemas'
 export * from './takeover'
 export * from './tasks'
