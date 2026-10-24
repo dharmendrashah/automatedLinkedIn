@@ -74,7 +74,7 @@ export const createLinkedinMessages = ({ baseUrl }: Options) =>
       run: async (context, input) => {
          // A failure of the task is an answer, not a crash: a crash is run again, and a reading of twenty minutes must not be.
          try {
-            return answerFor(await readMessages(context, baseUrl, input), input.skip)
+            return answerFor(await readMessages(context, baseUrl, input))
          } catch (error) {
             context.warn(describeError(error, 'The messages could not be read'))
 

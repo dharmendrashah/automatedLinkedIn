@@ -34,10 +34,13 @@ export type MessagesInput = {
 
 // DONE: everything asked for was read, or the list ended. PARTIAL: it stopped before (time, or conversations that would not open).
 // SIGNED_OUT: LinkedIn asked for a sign-in.
+// `next` is the place in the list after the last conversation read (the skip to go on from), so one that failed in between is not
+// counted as read nor makes the run skip ahead.
 export type MessagesRead = {
    outcome: 'DONE' | 'PARTIAL' | 'SIGNED_OUT'
    conversations: number
    messages: number
+   next: number
 }
 
 type Deps = {
@@ -110,6 +113,7 @@ export const readMessages = async (
    const pictures = { left: PICTURES_PER_RUN }
    let owner: MessagesFile['account']
    let ended = false
+   let next = input.skip
 
    // The id of the conversation the page is on, or undefined when it is on the list alone.
    const currentThread = async () =>
@@ -264,8 +268,31 @@ export const readMessages = async (
          messages,
       })
       log(`Read ${thread.messages.length} messages`)
+      next = index + 1
 
       return true
+   }
+
+   const reopenList = async () => {
+      await session.open(`${baseUrl}${MESSAGING_PATH}`)
+      await reader.wait(PAUSES.open)
+   }
+
+   // A click that did nothing is tried once more from a fresh list, as a person would; on staging about one conversation in four
+   // did not open the first time (run 56c66a47, 2026-10-24).
+   const readOrRetry = async (index: number) => {
+      try {
+         return await readConversation(index)
+      } catch (error) {
+         if (!(error instanceof StepFailed)) {
+            throw error
+         }
+
+         log('Trying the conversation again')
+         await reopenList()
+
+         return readConversation(index)
+      }
    }
 
    // What was read is handed over whatever happened after it, so a run that stops half way still gives the owner its half.
@@ -284,6 +311,7 @@ export const readMessages = async (
       outcome,
       conversations: conversations.length,
       messages: total(),
+      next,
    })
 
    try {
@@ -295,11 +323,8 @@ export const readMessages = async (
       const targets = Array.from({ length: input.limit }, (_, offset) => input.skip + offset)
       const done = await runTargets({
          targets,
-         step: readConversation,
-         recover: async () => {
-            await session.open(`${baseUrl}${MESSAGING_PATH}`)
-            await reader.wait(PAUSES.open)
-         },
+         step: readOrRetry,
+         recover: reopenList,
          between: () => reader.wait(PAUSES.between),
          elapsed: reader.elapsed,
          budgetMs: BUDGET_MS,

@@ -33,12 +33,13 @@ My defaults (change on request):
 
 - Database (migration `add_messages_resume`, additive): `LinkedInAccount.messagesResumeSkip Int?` and `messagesResumeUntil Int?` (the position where the batch ends, `skip + limit` of the batch). Both null means nothing pending.
 - `linkedInMessagesHooks.onResult`, in the transaction that finishes the run:
-  - `PARTIAL`: the run's input (`skip`, `limit`, from `SpiderSession.requestParams`) gives `until = skip + limit`; the report gives the position to go on from (`skip + conversations read`, the item the spider already writes). Save both and set `nextMessagesAt = now` so the next pass sends it. A report that cannot be read clears the pending batch (never loops on a guess).
+  - `PARTIAL`: the run's input (`skip`, `limit`, from `SpiderSession.requestParams`) gives `until = skip + limit`; the report gives the position to go on from (the place after the last conversation read, `next` of the spider's result, the item the spider already writes). Save both and set `nextMessagesAt = now` so the next pass sends it. A report that cannot be read clears the pending batch (never loops on a guess).
   - `DONE`: clear the pending batch.
   - Other verdicts: change nothing.
 - `messagesInput(messagesReadAt, resume)`: with a pending batch it asks `{ skip, limit: until - skip }`; otherwise as today. `AccountDailyJob` and `MessagesRefresh` pass the account's columns.
 - `packages/contracts`: the report label `To read the next ones, set skip to` becomes a shared constant so the spider writes it and the hook reads it from one place.
 - Progress is guaranteed: a `PARTIAL` run read at least one conversation (none read is `FAILED`), so `skip` rises and `limit` falls on every run and the batch ends in at most `limit` runs.
+- Spider (added 2026-10-24 after reading the staging logs of runs 56c66a47 and 59288ee4): the runs were partial because single conversations did not open (about 6 of 20, "The page stayed on the conversation before"), never 3 in a row and never the 20 minutes. `skip + conversations read` is then a wrong place (it ignores the gaps), so the spider reports `next` = place after the last conversation read, and a conversation that did not open is tried once more from a fresh list before it counts as failed. A failed one in the middle is not retried by the batch; the 2-hourly read of the newest 20 covers it.
 
 ## Scope and non-goals
 
@@ -77,4 +78,4 @@ Shipped as designed. A `PARTIAL` read saves where the batch goes on (`LinkedInAc
 
 Verified: lint, `ts:check`, unit tests (brain 1132, body 528, spider 863, contracts 157), brain integration tests (148, including a partial, partial, done chain against Postgres), build. Not run against live LinkedIn.
 
-Follow-ups: if staging shows a sick proxy producing many short runs, add a cap on continuations; the earlier failure stop (3 conversations in a row) on Tripti's account is still unexplained because the run's log could not be read.
+Follow-ups: if staging shows a sick proxy producing many short runs, add a cap on continuations. The Tripti stop was read from the staging logs afterwards (see Design, last bullet): single conversations that did not open, so the spider now retries once and reports the place after the last conversation read. Why a click on a row sometimes does nothing is not known (no screenshots were kept; turn `snapshots` on for a run to study it).

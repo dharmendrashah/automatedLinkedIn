@@ -6,7 +6,7 @@ import { type MessagesRead } from './read'
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
 
 // What the owner is told of a run: fixed sentences and counts, never a name or a word of a message.
-export const answerFor = ({ outcome, conversations, messages }: MessagesRead, skip: number): TaskOutcome => {
+export const answerFor = ({ outcome, conversations, messages, next }: MessagesRead): TaskOutcome => {
    if (outcome === 'SIGNED_OUT') {
       return {
          status: 'FAILED',
@@ -45,7 +45,7 @@ export const answerFor = ({ outcome, conversations, messages }: MessagesRead, sk
                   },
                   {
                      label: MESSAGES_NEXT_SKIP_LABEL,
-                     value: String(skip + conversations),
+                     value: String(next),
                   },
                ],
             },

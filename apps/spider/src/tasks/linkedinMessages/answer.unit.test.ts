@@ -6,14 +6,12 @@ import { answerFor } from './answer'
 
 describe('answerFor', () => {
    it('should say what was read, with counts only, and keep the session when everything was read', () => {
-      const answer = answerFor(
-         {
-            outcome: 'DONE',
-            conversations: 12,
-            messages: 340,
-         },
-         0
-      )
+      const answer = answerFor({
+         outcome: 'DONE',
+         conversations: 12,
+         messages: 340,
+         next: 12,
+      })
 
       expect(answer).toMatchObject({
          status: 'SUCCEEDED',
@@ -25,14 +23,13 @@ describe('answerFor', () => {
    })
 
    it('should say a run that read part succeeded, and where to go on from', () => {
-      const answer = answerFor(
-         {
-            outcome: 'PARTIAL',
-            conversations: 30,
-            messages: 900,
-         },
-         20
-      )
+      // 30 read from the place 20, with one that failed on the way: the place to go on from is after the last one read.
+      const answer = answerFor({
+         outcome: 'PARTIAL',
+         conversations: 30,
+         messages: 900,
+         next: 51,
+      })
 
       expect(answer).toMatchObject({
          status: 'SUCCEEDED',
@@ -41,33 +38,29 @@ describe('answerFor', () => {
       })
       expect(answer.report?.sections[0]?.items).toContainEqual({
          label: MESSAGES_NEXT_SKIP_LABEL,
-         value: '50',
+         value: '51',
       })
    })
 
    it('should fail a run that read nothing, and sign-out is its own verdict', () => {
       expect(
-         answerFor(
-            {
-               outcome: 'PARTIAL',
-               conversations: 0,
-               messages: 0,
-            },
-            0
-         )
+         answerFor({
+            outcome: 'PARTIAL',
+            conversations: 0,
+            messages: 0,
+            next: 0,
+         })
       ).toMatchObject({
          status: 'FAILED',
          verdict: 'ERROR',
       })
       expect(
-         answerFor(
-            {
-               outcome: 'SIGNED_OUT',
-               conversations: 3,
-               messages: 40,
-            },
-            0
-         )
+         answerFor({
+            outcome: 'SIGNED_OUT',
+            conversations: 3,
+            messages: 40,
+            next: 3,
+         })
       ).toMatchObject({
          status: 'FAILED',
          verdict: 'SIGNED_OUT',
@@ -76,14 +69,12 @@ describe('answerFor', () => {
 
    it('should say one conversation and one message in the singular', () => {
       expect(
-         answerFor(
-            {
-               outcome: 'DONE',
-               conversations: 1,
-               messages: 1,
-            },
-            0
-         ).report?.headline
+         answerFor({
+            outcome: 'DONE',
+            conversations: 1,
+            messages: 1,
+            next: 1,
+         }).report?.headline
       ).toBe('Read 1 conversation and 1 message.')
    })
 })

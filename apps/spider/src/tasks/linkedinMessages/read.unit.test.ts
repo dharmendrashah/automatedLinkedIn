@@ -29,6 +29,9 @@ type Page = {
    autoOpen?: boolean
    // How many looks at the address still show the conversation before, after a row was clicked: a conversation slow to open.
    slowOpen?: number
+   // How many clicks on the row at each place do nothing before one opens it: 1 is a click that was missed, a large number a row
+   // that never opens.
+   quiet?: Record<number, number>
    // Milliseconds each pause adds to the clock.
    pauseMs?: number
    // How many looks at the page find no list yet, as through a slow proxy.
@@ -42,6 +45,7 @@ type Page = {
 const setup = (page: Page = {}) => {
    const { conversations = 8, messages = 12, signedOutAt, deaf = false, autoOpen = true, slowOpen = 0, pauseMs } = page
    const saved: Array<{ key: string; bytes: number }> = []
+   const quiet = { ...page.quiet }
    let waiting = page.slowList ?? 0
    let time = 0
    let loadedRows = Math.min(PAGE_ROWS, conversations)
@@ -137,6 +141,14 @@ const setup = (page: Page = {}) => {
 
          if (deaf || selector !== INBOX_ROW || index === undefined || index < top || index >= top + VISIBLE) {
             return false
+         }
+
+         const left = quiet[index] ?? 0
+
+         if (left > 0) {
+            quiet[index] = left - 1
+
+            return true
          }
 
          before = opened
@@ -248,6 +260,7 @@ describe('readMessages', () => {
          outcome: 'DONE',
          conversations: 3,
          messages: 36,
+         next: 3,
       })
 
       const { conversations } = messagesFileSchema.parse(file())
@@ -334,12 +347,53 @@ describe('readMessages', () => {
    it('should start after the rows to skip', async () => {
       const { read, file } = setup()
 
-      await read({
+      const result = await read({
          skip: 2,
          limit: 2,
       })
 
       expect(file().conversations.map(conversation => conversation.id)).toEqual(['thread-2', 'thread-3'])
+      expect(result.next).toBe(4)
+   })
+
+   it('should try a conversation that did not open once more, and read it', async () => {
+      const { read, file } = setup({ quiet: { 1: 1 } })
+
+      await expect(read({ limit: 3 })).resolves.toMatchObject({
+         outcome: 'DONE',
+         conversations: 3,
+         next: 3,
+      })
+
+      expect(file().conversations.map(conversation => conversation.id)).toEqual(['thread-0', 'thread-1', 'thread-2'])
+   })
+
+   it('should say part was read when one conversation never opens, and go on after the last one read', async () => {
+      const { read, file } = setup({ quiet: { 1: 99 } })
+
+      await expect(read({ limit: 4 })).resolves.toMatchObject({
+         outcome: 'PARTIAL',
+         conversations: 3,
+         next: 4,
+      })
+
+      expect(file().conversations.map(conversation => conversation.id)).toEqual(['thread-0', 'thread-2', 'thread-3'])
+   })
+
+   it('should go on from the last conversation read when several in a row will not open', async () => {
+      const { read } = setup({
+         quiet: {
+            1: 99,
+            2: 99,
+            3: 99,
+         },
+      })
+
+      await expect(read({ limit: 6 })).resolves.toMatchObject({
+         outcome: 'PARTIAL',
+         conversations: 1,
+         next: 1,
+      })
    })
 
    it('should be done with fewer when the inbox has fewer conversations than asked', async () => {
@@ -385,6 +439,7 @@ describe('readMessages', () => {
       expect(result.outcome).toBe('PARTIAL')
       expect(result.conversations).toBeGreaterThan(0)
       expect(result.conversations).toBeLessThan(10)
+      expect(result.next).toBe(result.conversations)
       expect(file().conversations).toHaveLength(result.conversations)
    })
 
@@ -395,6 +450,7 @@ describe('readMessages', () => {
          outcome: 'SIGNED_OUT',
          conversations: 1,
          messages: 12,
+         next: 1,
       })
 
       expect(file().conversations.map(conversation => conversation.id)).toEqual(['thread-0'])
@@ -410,6 +466,7 @@ describe('readMessages', () => {
          outcome: 'PARTIAL',
          conversations: 0,
          messages: 0,
+         next: 0,
       })
 
       expect(attached).toEqual({})
