@@ -47,6 +47,11 @@ export const DETAIL_PAGES = [
       name: 'comments',
       path: 'recent-activity/comments/',
    },
+   // The Contact info window of the profile's own address: phone, email, messengers, websites, birthday (the owner's, private).
+   {
+      name: 'contact',
+      path: 'overlay/contact-info/',
+   },
 ] as const
 
 // DONE: the profile and every detail page were kept. PARTIAL: some pages were not (they would not open, or the time ran out).

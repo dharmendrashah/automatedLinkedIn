@@ -103,6 +103,14 @@ The nine questions were answered "all defaults are fine"; the defaults are the o
 - Interests: five chips are `div[role=radio]` blocks (checkbox plus label) above the list; Top Voices items are members (`· 2nd`, headline, followers). Mentions, hashtags and company names in a text are links between empty elements, with no space in the markup.
 - Still not seen: the Companies, Groups, Newsletters and Schools chips (the click found nothing in view, fixed), top skills, endorsement counts, pending recommendations.
 
+## Owner's answers on the gaps (2026-10-24, locked)
+
+- Cover photo: read it; when the profile has none, the page shows a blank (this account has none; the field stays empty).
+- Education: already read (school, degree, years); the school has no link in the markup and the logo is a generic picture, so both stay empty.
+- Endorsement counts and pending recommendations: the account has none, so nothing is built for them; they stay "not read yet".
+- Contact info: wanted. It is the window `/in/<name>/overlay/contact-info/` (what the "Contact info" link under the location opens). Shown: the profile address, phone with its type (Mobile), email, messenger with its type (Skype), birthday (day and month), and websites when there are any. It holds the owner's own private details, so it goes in `profile.json` only (a sensitive file), never in a log, a warning or the report counts.
+- How: the walk opens the window like a page and keeps it with the run; its markup was never recorded, so the reader is written from that recording (one reading run with `snapshots`, which also checks the headline and top skills fixes live), then the contract field, the page card and the tests follow offline.
+
 ## Where it stands (2026-10-24, evening) and what is left
 
 Rule from the owner: every live run on an account is a risk of being flagged, so work offline from the recordings already kept, and do at most one or two live runs to finish. Eight runs were made on one account in one day (captures `b91a6088`, `bb413008`, `ae47281a`, `e615e857`, `da2ab2e8`, `b33c5faf`, an experiment `4ea5e991`, readings `dc791bb6` and a stopped one `79d2212b`); no more are made until the offline work below is done.
