@@ -14,44 +14,77 @@ import { Loader2 } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 import { Link } from 'react-router'
 
-import { type Profile } from './types'
-import { accountChoices, isProfileLink } from './visit-form'
+import { accountChoices, isCompanyLink, isProfileLink } from './visit-form'
 
 import { trpc } from '../../trpc'
 import { ConfirmRunDialog } from '../accounts/confirm-run-dialog'
-import { TextField } from '../links/record-fields'
+import { TextField } from './record-fields'
+
+export type VisitKind = 'PROFILE' | 'COMPANY'
 
 type Props = {
-   // The saved profile to view, or null to paste a link.
-   profile: Pick<Profile, 'id' | 'fullName' | 'slug'> | null
+   kind: VisitKind
+   // The saved page to view, or null to paste a link.
+   saved: {
+      id: string
+      name: string
+   } | null
    onClose: () => void
 }
 
-// Asks one of the owner's accounts to view a profile: it opens it, waits a few seconds and scrolls down, so the member sees a visit.
-export const ViewProfileDialog = ({ profile, onClose }: Props) => {
+// What each kind says. The profile text may say that the member sees a visit; for a company page nobody is named, so it promises nothing.
+const WORDS = {
+   PROFILE: {
+      titleFor: (name: string) => `View ${name}’s profile`,
+      title: 'View someone’s profile',
+      what: 'the profile',
+      linkLabel: 'Profile link',
+      button: 'View profile',
+      notice:
+         'They will see that this account viewed their profile, unless that account’s LinkedIn visibility setting hides it. This app does not change that setting, so it cannot promise they are told.',
+      isLink: isProfileLink,
+   },
+   COMPANY: {
+      titleFor: (name: string) => `View ${name}’s page`,
+      title: 'View a company',
+      what: 'the company page',
+      linkLabel: 'Company link',
+      button: 'View company',
+      notice:
+         'LinkedIn may show the people who run the page that this account viewed it, depending on that account’s visibility setting and the page’s own tools. This app cannot promise anyone is told.',
+      isLink: isCompanyLink,
+   },
+} as const
+
+// Asks one of the owner's accounts to view a profile or a company page: it opens it, waits a few seconds and scrolls down.
+export const ViewPageDialog = ({ kind, saved, onClose }: Props) => {
+   const words = WORDS[kind]
    const utils = trpc.useUtils()
    const accounts = trpc.linkedInAccount.list.useQuery(undefined, { retry: false })
    const [picked, setPicked] = useState('')
    const [link, setLink] = useState('')
    // The server holds a visit that follows another one of the account too soon; the owner can confirm and go on.
    const [recent, setRecent] = useState<string | null>(null)
-   const visit = trpc.linkedInProfile.visit.useMutation({
+   const options = {
       onSuccess: () => {
          void utils.linkedInProfile.list.invalidate()
+         void utils.linkedInCompany.list.invalidate()
          void utils.session.list.invalidate()
       },
-      onError: error => {
+      onError: (error: { data?: { code?: string } | null; message: string }) => {
          if (error.data?.code === 'CONFLICT') {
             setRecent(error.message)
          }
       },
-   })
+   }
+   const profileVisit = trpc.linkedInProfile.visit.useMutation(options)
+   const companyVisit = trpc.linkedInCompany.visit.useMutation(options)
+   const visit = kind === 'PROFILE' ? profileVisit : companyVisit
 
    const choices = accountChoices(accounts.data ?? [])
    const accountId = picked || (choices.find(({ blocker }) => !blocker)?.id ?? '')
-   const target = profile ? { profileId: profile.id } : { link: link.trim() }
-   const ready = Boolean(accountId) && (profile !== null || isProfileLink(link)) && !visit.isPending
-   const name = profile ? (profile.fullName ?? profile.slug) : null
+   const target = saved ? { id: saved.id } : { link: link.trim() }
+   const ready = Boolean(accountId) && (saved !== null || words.isLink(link)) && !visit.isPending
 
    const ask = (confirmed?: boolean) =>
       visit.mutate({
@@ -70,16 +103,16 @@ export const ViewProfileDialog = ({ profile, onClose }: Props) => {
          <DialogContent className="sm:max-w-xl">
             <form onSubmit={submit} className="grid gap-6">
                <DialogHeader>
-                  <DialogTitle>{name ? `View ${name}’s profile` : 'View someone’s profile'}</DialogTitle>
+                  <DialogTitle>{saved ? words.titleFor(saved.name) : words.title}</DialogTitle>
                   <DialogDescription>
-                     The account opens the profile, waits a few seconds and scrolls down to the end. It clicks nothing.
+                     The account opens {words.what}, waits a few seconds and scrolls down to the end. It clicks nothing.
                   </DialogDescription>
                </DialogHeader>
                <div className="grid gap-4">
-                  {profile ? null : (
+                  {saved ? null : (
                      <TextField
                         id="visit-link"
-                        label="Profile link"
+                        label={words.linkLabel}
                         maxLength={500}
                         value={link}
                         onChange={setLink}
@@ -103,13 +136,10 @@ export const ViewProfileDialog = ({ profile, onClose }: Props) => {
                   </div>
                   <Alert>
                      <AlertDescription>
-                        <p>
-                           They will see that this account viewed their profile, unless that account’s LinkedIn
-                           visibility setting hides it. This app does not change that setting, so it cannot promise
-                           they are told.
-                        </p>
+                        <p>{words.notice}</p>
                         <p className="mt-2">
-                           At most 15 views a day for each account, and the same person only once in 30 days.
+                           At most 15 page views a day for each account, profiles and companies together, and the same
+                           page only once in 30 days.
                         </p>
                      </AlertDescription>
                   </Alert>
@@ -131,7 +161,7 @@ export const ViewProfileDialog = ({ profile, onClose }: Props) => {
                   {visit.data ? null : (
                      <Button type="submit" disabled={!ready}>
                         {visit.isPending ? <Loader2 className="animate-spin" /> : null}
-                        View profile
+                        {words.button}
                      </Button>
                   )}
                </DialogFooter>

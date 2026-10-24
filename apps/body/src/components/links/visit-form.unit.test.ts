@@ -1,6 +1,23 @@
 import { describe, expect, it } from 'vitest'
 
-import { accountChoices, isProfileLink, visitedText } from './visit-form'
+import { accountChoices, isCompanyLink, isProfileLink, visitedText } from './visit-form'
+
+describe('isCompanyLink', () => {
+   it.each([
+      'https://www.linkedin.com/company/analytical-engines/',
+      'linkedin.com/company/analytical-engines',
+      '  http://uk.linkedin.com/company/analytical-engines?trk=x ',
+   ])('should take the link of a company page: %s', text => {
+      expect(isCompanyLink(text)).toBe(true)
+   })
+
+   it.each(['', 'https://www.linkedin.com/in/ada-lovelace/', 'https://example.com/company/x', 'linkedin.com/company/'])(
+      'should not take anything else: %j',
+      text => {
+         expect(isCompanyLink(text)).toBe(false)
+      }
+   )
+})
 
 describe('isProfileLink', () => {
    it.each([

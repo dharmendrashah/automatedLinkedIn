@@ -39,7 +39,15 @@ export { type LinkedInPostListQuery, LinkedInPostService } from './linkedInPost.
 export { MAX_IDS, LIST_LIMIT, type ConversationView, LinkedInConversationService } from './linkedInConversation.service'
 export { MESSAGES_TASK } from './linkedInMessages.hooks'
 export { PROFILE_TASK } from './linkedInProfile.hooks'
-export { ProfileVisitService, type ProfileVisitTarget, REPEAT_DAYS, VISITS_PER_DAY } from './profileVisit.service'
+export {
+   PageVisitRefusedError,
+   PageVisitService,
+   type PageVisitTarget,
+   REPEAT_DAYS,
+   VISITS_PER_DAY,
+} from './pageVisit.service'
+export { VisitPoolService } from './visitPool.service'
+export { idleFirst } from './visitPool'
 export { AccountProfileService, type ProfileState } from './accountProfile.service'
 export { REPLY_TASK } from './linkedInReply.hooks'
 export { LinkedInReplyService, REPLY_LIMITS } from './linkedInReply.service'

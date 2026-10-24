@@ -1,22 +1,11 @@
 import { z } from 'zod'
 
-import { LinkedInProfileService, ProfileVisitService } from 'database'
+import { LinkedInProfileService } from 'database'
 
 import { ownerProcedure, router } from 'trpc'
 
-import { asTrpcError } from '../asTrpcError'
 import { byId, createInput, found, ids, labelInput, listInput, readLinks, status, tags, text } from '../linkedInRecord'
-
-const visitInput = z
-   .object({
-      accountId: z.string().min(1).max(100),
-      // A profile the owner saved, or a link pasted for this visit: one of the two.
-      profileId: z.string().min(1).max(100).optional(),
-      link: z.string().min(1).max(500).optional(),
-      // The owner saw that the account viewed a profile a moment ago and wants this one anyway.
-      confirmed: z.boolean().optional(),
-   })
-   .refine(value => (value.profileId === undefined) !== (value.link === undefined), 'Name a saved profile or a link.')
+import { visitProcedure } from '../pageVisit'
 
 const updateInput = z.object({
    id: z.string().min(1),
@@ -56,16 +45,7 @@ export const linkedInProfile = router({
    }),
 
    // Views a profile as one of the owner's accounts: waits a few seconds and scrolls the page, so the member sees a visit.
-   visit: ownerProcedure.input(visitInput).mutation(async ({ ctx, input }) => {
-      const target = input.profileId === undefined ? { link: input.link ?? '' } : { profileId: input.profileId }
-      const visit = await ProfileVisitService.request(ctx.user.id, input.accountId, target, input.confirmed).catch(
-         (error: unknown) => {
-            throw asTrpcError(error)
-         }
-      )
-
-      return found(visit, NOUN)
-   }),
+   visit: visitProcedure('PROFILE'),
 
    archive: ownerProcedure
       .input(byId)

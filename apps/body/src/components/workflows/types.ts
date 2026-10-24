@@ -45,16 +45,21 @@ export const runStatuses: Record<Run['status'], { label: string; className: stri
 }
 
 // A step's state in words; a step whose requests wait for a retry says so.
-export const stepLabel = (step: Pick<StepRun, 'status' | 'progress'>) =>
-   step.progress && step.progress.retrying > 0 && step.status !== 'DONE'
-      ? 'Waiting to retry'
-      : {
-           WAITING: 'Waiting',
-           RUNNING: 'Working',
-           DONE: 'Done',
-           PARTIAL: 'Done with gaps',
-           FAILED: 'Failed',
-        }[step.status]
+export const stepLabel = (step: Pick<StepRun, 'status' | 'progress' | 'tries'>) => {
+   const label =
+      step.progress && step.progress.retrying > 0 && step.status !== 'DONE'
+         ? 'Waiting to retry'
+         : {
+              WAITING: 'Waiting',
+              RUNNING: 'Working',
+              DONE: 'Done',
+              PARTIAL: 'Done with gaps',
+              FAILED: 'Failed',
+           }[step.status]
+
+   // A Retry ran the step again.
+   return step.tries > 0 ? `${label} (try ${step.tries + 1})` : label
+}
 
 export const triggerLabels: Record<Run['trigger'], string> = {
    MANUAL: 'By hand',

@@ -4,10 +4,10 @@ import { linkStatuses } from '@/components/links/link-statuses'
 import { Pager } from '@/components/links/pager'
 import { useSelection } from '@/components/links/use-selection'
 import { useListState } from '@/components/links/use-list-state'
+import { ViewPageDialog } from '@/components/links/view-page-dialog'
 import { AddProfilesDialog } from '@/components/profiles/add-profiles-dialog'
 import { EditProfileDialog } from '@/components/profiles/edit-profile-dialog'
 import { ProfilesTable } from '@/components/profiles/profiles-table'
-import { ViewProfileDialog } from '@/components/profiles/view-profile-dialog'
 import { Button } from '@/components/ui/button'
 import { Eye } from 'lucide-react'
 import { useState } from 'react'
@@ -102,9 +102,10 @@ export const Profiles = () => {
 
          <EditProfileDialog profile={toEdit} onClose={() => setToEdit(null)} />
          {viewing ? (
-            <ViewProfileDialog
+            <ViewPageDialog
                key={viewing.profile?.id ?? 'link'}
-               profile={viewing.profile}
+               kind="PROFILE"
+               saved={viewing.profile ? { id: viewing.profile.id, name: viewing.profile.fullName ?? viewing.profile.slug } : null}
                onClose={() => setViewing(null)}
             />
          ) : null}

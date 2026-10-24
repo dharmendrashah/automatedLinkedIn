@@ -293,6 +293,32 @@ export const summaryOf = (block: Block, config: GraphNode['config'], icpName?: s
       return RUN_WAITS[show(values.wait)] ?? block.summary
    }
 
+   if (block.type === 'logic.wait') {
+      const seconds = (value: ConfigValue | undefined) => Number(value ?? 0)
+
+      return values.mode === 'between'
+         ? `Waits ${seconds(values.minSeconds)} to ${seconds(values.maxSeconds)} seconds`
+         : `Waits ${seconds(values.seconds)} ${seconds(values.seconds) === 1 ? 'second' : 'seconds'}`
+   }
+
+   if (block.type === 'logic.retry') {
+      const times = Number(values.times ?? 0)
+      const pause = Number(values.waitSeconds ?? 0)
+      const tries = times === 1 ? 'Tries once more' : `Tries up to ${times} more times`
+
+      return pause > 0 ? `${tries}, after ${pause} seconds` : tries
+   }
+
+   if (block.type === 'account.select') {
+      const accounts = listOf(values.accounts).length
+
+      return accounts === 0
+         ? 'Pick the accounts to use'
+         : accounts === 1
+           ? 'Uses 1 account'
+           : `Takes turns across ${accounts} accounts`
+   }
+
    if ('howMany' in values) {
       const unit = UNITS[block.type] ?? ''
       const amount = values.all === true ? `All ${unit}`.trim() : `Up to ${show(values.howMany)} ${unit}`.trim()

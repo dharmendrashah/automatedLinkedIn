@@ -5,9 +5,9 @@ import { type TaskResult, type TaskTrigger } from '@automatedLinkedIn/contracts'
 import { linkedInBrowseHooks } from './linkedInBrowse.hooks'
 import { linkedInLoginHooks } from './linkedInLogin.hooks'
 import { MESSAGES_TASK, linkedInMessagesHooks } from './linkedInMessages.hooks'
+import { VIEW_COMPANY_TASK, VIEW_PROFILE_TASK, linkedInVisitHooks } from './linkedInPageVisit.hooks'
 import { PROFILE_TASK, linkedInProfileHooks } from './linkedInProfile.hooks'
 import { REPLY_TASK, linkedInReplyHooks } from './linkedInReply.hooks'
-import { VIEW_PROFILE_TASK, linkedInViewProfileHooks } from './linkedInViewProfile.hooks'
 
 // Where a task needs brain to do something of its own: refuse a request for a reason only brain knows, or change brain's own
 // data when the result arrives. Most tasks have no hook. One file lists them all, by task name.
@@ -41,6 +41,7 @@ export const TASK_HOOKS: Record<string, TaskHooks> = {
    'linkedin-browse': linkedInBrowseHooks,
    [MESSAGES_TASK]: linkedInMessagesHooks,
    [PROFILE_TASK]: linkedInProfileHooks,
-   [VIEW_PROFILE_TASK]: linkedInViewProfileHooks,
+   [VIEW_PROFILE_TASK]: linkedInVisitHooks,
+   [VIEW_COMPANY_TASK]: linkedInVisitHooks,
    [REPLY_TASK]: linkedInReplyHooks,
 }

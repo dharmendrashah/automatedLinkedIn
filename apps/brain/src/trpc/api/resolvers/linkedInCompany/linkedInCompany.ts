@@ -5,6 +5,7 @@ import { LinkedInCompanyService } from 'database'
 import { ownerProcedure, router } from 'trpc'
 
 import { byId, createInput, found, ids, labelInput, listInput, readLinks, status, tags, text } from '../linkedInRecord'
+import { visitProcedure } from '../pageVisit'
 
 const isHttpUrl = (value: string) => {
    try {
@@ -59,6 +60,9 @@ export const linkedInCompany = router({
 
       return found(await LinkedInCompanyService.updateForUser(ctx.user.id, id, changes), NOUN)
    }),
+
+   // Views a company page as one of the owner's accounts: waits a few seconds and scrolls the page.
+   visit: visitProcedure('COMPANY'),
 
    archive: ownerProcedure
       .input(byId)
