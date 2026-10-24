@@ -206,8 +206,8 @@ class CamoufoxSession implements DetectionSession {
 
    // Every link and control that has a box, with where it is, whether something covers it and what surrounds it. With `block`,
    // also what each element of that selector carries and holds. Read-only.
-   public inspect(options: { block?: string } = {}): Promise<PageInspection> {
-      return this.page.evaluate(
+   public async inspect(options: { block?: string } = {}): Promise<PageInspection> {
+      const inspection = await this.page.evaluate(
          ({ maxLinks, maxControls, maxBlocks, block }) => {
             const cut = (value: string | null | undefined, max = 80) =>
                (value ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
@@ -317,16 +317,57 @@ class CamoufoxSession implements DetectionSession {
             block: options.block,
          }
       )
+
+      return {
+         ...inspection,
+         scrollY: (await this.scrollReading()).y,
+      }
    }
 
-   // Where the page is scrolled to and how big the window is.
-   private scrollReading() {
-      return this.page.evaluate(() => ({
-         y: Math.round(window.scrollY),
-         more: window.scrollY + window.innerHeight < document.documentElement.scrollHeight - 2,
-         width: window.innerWidth,
-         height: window.innerHeight,
-      }))
+   // Where the page is scrolled to, and whether there is more below. Most pages scroll the window; LinkedIn's profile pages scroll
+   // inside a container instead, so the window never moves and its height is that of the screen (recorded 2026-10-24: `scrollY` 0
+   // after the page had been scrolled by 1,500 px, and a scroll to the end that stopped after two steps). The page is then read in
+   // its largest container that scrolls. With `by`, that container is also scrolled, smoothly, by script.
+   private scrollReading(by?: number) {
+      return this.page.evaluate((pixels?: number) => {
+         const root = document.scrollingElement ?? document.documentElement
+         const locked = [document.documentElement, document.body].some(
+            element => getComputedStyle(element).overflowY === 'hidden'
+         )
+         let target: Element = root
+         let room = locked ? 0 : root.scrollHeight - window.innerHeight
+
+         for (const element of Array.from(document.querySelectorAll('body *'))) {
+            const overflow = getComputedStyle(element).overflowY
+            const extent = element.scrollHeight - element.clientHeight
+
+            if (
+               (overflow === 'auto' || overflow === 'scroll') &&
+               element.clientHeight >= window.innerHeight * 0.5 &&
+               extent > room
+            ) {
+               target = element
+               room = extent
+            }
+         }
+
+         if (pixels !== undefined) {
+            target.scrollBy({
+               top: pixels,
+               behavior: 'smooth',
+            })
+         }
+
+         const top = target === root ? window.scrollY : target.scrollTop
+         const height = target === root ? window.innerHeight : target.clientHeight
+
+         return {
+            y: Math.round(top),
+            more: top + height < target.scrollHeight - 2,
+            width: window.innerWidth,
+            height: window.innerHeight,
+         }
+      }, by)
    }
 
    // The wheel moves the page smoothly; this waits until it has come to rest.
@@ -367,14 +408,7 @@ class CamoufoxSession implements DetectionSession {
       const room = pixels > 0 ? before.more : before.y > 0
 
       if (after.y === before.y && room) {
-         await this.page.evaluate(
-            by =>
-               window.scrollBy({
-                  top: by,
-                  behavior: 'smooth',
-               }),
-            pixels
-         )
+         await this.scrollReading(pixels)
 
          return (await this.scrollRest()).more
       }

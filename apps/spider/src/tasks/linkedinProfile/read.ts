@@ -3,6 +3,7 @@ import { type AccountProfile, PROFILE_CONTRACT_VERSION, accountProfileSchema } f
 import { StepFailed, describeError } from '../../browsing/errors'
 import { createKeep } from '../../browsing/snapshot'
 import { runTargets } from '../../browsing/targets'
+import { type PageContext, type PageDeps, createPages, listLimit } from '../../linkedin/pages'
 import {
    parseAbout,
    parseAnalytics,
@@ -25,7 +26,6 @@ import {
 } from '../../linkedin/profileReader'
 import { SignedOut } from '../../linkedin/session'
 import { DETAIL_PAGES } from './capture'
-import { type PageContext, type PageDeps, createPages, listLimit } from './pages'
 
 export type ProfileInput = {
    // Keep the pages with the run, to study how they are built (a run keeps at most 20 files, so only the profile keeps its links).
