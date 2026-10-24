@@ -29,6 +29,7 @@ describe('titleFor', () => {
 
    it('should not put a conversation or a workflow id in the title, and name a workflow page apart from the list', () => {
       expect(titleFor('/unibox/2-abc')).toBe('Unibox')
+      expect(titleFor('/accounts/0198-id')).toBe('Account profile')
       expect(titleFor('/workflows/0198-id')).toBe('Workflow')
       expect(titleFor('/workflows/new')).toBe('New workflow')
    })
@@ -39,7 +40,7 @@ describe('titleFor', () => {
 
    it('should have no title for a path the app does not know, or for a longer path of a known page', () => {
       expect(titleFor('/nope')).toBeUndefined()
-      expect(titleFor('/accounts/extra')).toBeUndefined()
+      expect(titleFor('/accounts/0198-id/extra')).toBeUndefined()
       expect(titleFor('/')).toBeUndefined()
    })
 })

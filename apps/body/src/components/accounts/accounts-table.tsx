@@ -9,7 +9,19 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Eye, KeyRound, Loader2, MoreHorizontal, Pause, Pencil, Play, ScanSearch, Trash2 } from 'lucide-react'
+import {
+   Eye,
+   KeyRound,
+   Loader2,
+   MoreHorizontal,
+   Pause,
+   Pencil,
+   Play,
+   ScanSearch,
+   Trash2,
+   UserRound,
+} from 'lucide-react'
+import { Link } from 'react-router'
 
 import { type Account } from './types'
 
@@ -104,7 +116,11 @@ export const AccountsTable = ({
             ) : null}
             {accounts?.map(account => (
                <TableRow key={account.id}>
-                  <TableCell className="font-medium">{account.email}</TableCell>
+                  <TableCell className="font-medium">
+                     <Link to={`/accounts/${account.id}`} className="underline-offset-4 hover:underline">
+                        {account.email}
+                     </Link>
+                  </TableCell>
                   <TableCell>
                      <StatusBadge status={account.status} message={account.statusMessage} />
                   </TableCell>
@@ -153,6 +169,12 @@ export const AccountsTable = ({
                               </Button>
                            </DropdownMenuTrigger>
                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem asChild>
+                                 <Link to={`/accounts/${account.id}`}>
+                                    <UserRound />
+                                    View profile
+                                 </Link>
+                              </DropdownMenuItem>
                               <DropdownMenuItem onSelect={() => onEdit(account)}>
                                  <Pencil />
                                  Edit credentials
