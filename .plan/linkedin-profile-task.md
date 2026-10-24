@@ -103,6 +103,25 @@ The nine questions were answered "all defaults are fine"; the defaults are the o
 - Interests: five chips are `div[role=radio]` blocks (checkbox plus label) above the list; Top Voices items are members (`· 2nd`, headline, followers). Mentions, hashtags and company names in a text are links between empty elements, with no space in the markup.
 - Still not seen: the Companies, Groups, Newsletters and Schools chips (the click found nothing in view, fixed), top skills, endorsement counts, pending recommendations.
 
-## Outcome
+## Where it stands (2026-10-24, evening) and what is left
+
+Rule from the owner: every live run on an account is a risk of being flagged, so work offline from the recordings already kept, and do at most one or two live runs to finish. Eight runs were made on one account in one day (captures `b91a6088`, `bb413008`, `ae47281a`, `e615e857`, `da2ab2e8`, `b33c5faf`, an experiment `4ea5e991`, readings `dc791bb6` and a stopped one `79d2212b`); no more are made until the offline work below is done.
+
+Learned (from the recordings, nothing more to learn live):
+- Every section the contract names that the account has is now read (jobs, schools, projects, skills, recommendations both ways, languages, services, open to work, interests of all five chips, posts with reposts and counts, comments, suggestions); the full reading `dc791bb6` gave a file that fits the contract.
+- Lists come in parts of 10 to 20 and the next part loads only when the end comes back into view: skills went 20, 30, 40, 50 in `79d2212b`. A part is asked for by scrolling up a little and down again.
+- A run that opens the pages by `/in/me/` is sent back to the profile by LinkedIn for Interests and activity; the own address is read from the top card.
+
+Fix (offline, test first):
+- The up-and-down rounds had no goal, so a long list kept going (skills took 47 s, a chip about 45 s) and the browser looked busy on the account for minutes. Each long list now stops at 50 items (the cap the interests already have; skills were allowed 500) or when two rounds bring nothing, whichever comes first.
+- Pauses between pages and at the end of a page were shortened earlier (2 to 4.5 s, two still scrolls).
+
+Pending, and whether it needs a live run:
+- Top skills, endorsement counts, pending recommendations: this account has none, so they cannot be learned from it. No run is made for them; they stay in "Not read yet" until an account that has them is at hand.
+- One final reading run (`capture` off, `snapshots` off) after the fix, to compare `profile.json` with the page, count the time and the page visits. Two at most (a second only if the first shows a defect).
+- The stand-in browser test (step 5) is dropped: the real recordings cover what it would.
+- Brain side (storing, serving, the button): a separate plan.
+
+
 
 Filled in when done.

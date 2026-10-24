@@ -1,3 +1,5 @@
+import { parse } from 'node-html-parser'
+
 import { handsOf } from '../../browsing/hands'
 import { createReader } from '../../browsing/reader'
 import { PACE } from '../../linkedin/pace'
@@ -12,15 +14,29 @@ export type PageDeps = {
    now?: () => number
 }
 
-// The page is scrolled down in steps until it stops moving three times, or this many steps, so its lazy parts are drawn.
+// The page is scrolled down in steps until it stops moving twice, or this many steps, so its lazy parts are drawn.
 const MAX_SCROLLS = 25
+const STILL_LOOKS = 2
 const SCROLL = [500, 900] as const
 const SCROLL_UP = [1500, 2500] as const
+// The small step up that brings the end of a long list back into view.
+const JIGGLE = [700, 1100] as const
+// Rounds of up and down at most, how many in a row may bring nothing before the list is taken as complete, and how often the page is
+// looked at (one scroll pause apart) for the part that loads.
+const MAX_MORE_ROUNDS = 6
+const MAX_STALLED_ROUNDS = 2
+const MORE_LOOKS = 4
+// A list comes in parts of about 20 (recorded 2026-10-24), so one of fewer items than this is complete and is not asked for more.
+const PART_MIN_ITEMS = 10
 export const PAUSES = {
    // After a scroll, and between two pages.
    scroll: [700, 1600],
-   between: [4000, 9000],
+   between: [2000, 4500],
 } as const
+// The pages whose lists come in parts (recorded 2026-10-24): skills, and the items of the Interests chips. A list is asked for more
+// until it holds this many items, the most the profile file keeps of it (50 for each kind of interest, and for skills).
+const LONG_LIST_ITEMS = 50
+export const listLimit = (name: string) => (name === 'skills' || name === 'interests' ? LONG_LIST_ITEMS : 0)
 // The account's own profile, after LinkedIn sent `/in/me/` on to its address.
 const PROFILE_PATH = /^\/in\/([^/]+)\/?$/
 // How often the top card is looked for while the address is still `/in/me/`.
@@ -33,6 +49,8 @@ const INTEREST_TAB = '[role="radio"]'
 // buttons and menus are avoided here.
 const CHIP_AVOID = 'button, [role="button"], [role="menuitem"], [data-view-name="edge-creation-follow-action"]'
 const MAX_INTEREST_TABS = 4
+// How often a chip is tried before the walk goes on without it.
+const CHIP_TRIES = 2
 
 // What the two tasks that walk the profile (the capture and the reading) do the same way: open the account's own profile, open a page
 // of it, scroll a page so its lazy parts are drawn, and go through the chips of Interests.
@@ -41,7 +59,7 @@ export const createPages = (
    baseUrl: string,
    { random = Math.random, now = Date.now }: PageDeps = {}
 ) => {
-   const { browser, visit, pause, log } = context
+   const { browser, visit, pause, log, screenshot } = context
    const hands = handsOf(browser)
    const reader = createReader({
       hands,
@@ -58,13 +76,49 @@ export const createPages = (
       baseUrl,
    })
 
-   // Scrolls the page down at a person's pace until it stops moving, so what loads as it is scrolled is in the markup.
-   const scrollThrough = async () => {
-      for (let step = 0, still = 0; step < MAX_SCROLLS && still < 3; step += 1) {
+   // A long list loads its next part when its end comes into view again, not while it stays in view (20 skills stayed 20 at the end
+   // of the page, and became 30 after a scroll up and down), so the page is scrolled up a little and down again until it stops growing.
+   const loadMore = async (limit: number) => {
+      const items = async () => parse(await hands.html()).querySelectorAll('[data-testid="lazy-column"] hr').length
+
+      if ((await items()) < PART_MIN_ITEMS) {
+         return
+      }
+
+      for (let round = 0, stalled = 0; round < MAX_MORE_ROUNDS && stalled < MAX_STALLED_ROUNDS; round += 1) {
+         if ((await items()) >= limit) {
+            return
+         }
+
+         const before = (await hands.html()).length
+         const up = reader.span(JIGGLE)
+         let grown = false
+
+         await hands.scrollBy(-up)
+         await reader.wait(PAUSES.scroll)
+         await hands.scrollBy(2 * up)
+
+         for (let look = 0; look < MORE_LOOKS && !grown; look += 1) {
+            await reader.wait(PAUSES.scroll)
+            grown = (await hands.html()).length > before
+         }
+
+         stalled = grown ? 0 : stalled + 1
+      }
+   }
+
+   // Scrolls the page down at a person's pace until it stops moving, so what loads as it is scrolled is in the markup; a long list is
+   // then asked for its next parts.
+   const scrollThrough = async (limit = 0) => {
+      for (let step = 0, still = 0; step < MAX_SCROLLS && still < STILL_LOOKS; step += 1) {
          const moved = await hands.scrollBy(reader.span(SCROLL))
 
          await reader.wait(PAUSES.scroll)
          still = moved ? 0 : still + 1
+      }
+
+      if (limit > 0) {
+         await loadMore(limit)
       }
    }
 
@@ -117,12 +171,29 @@ export const createPages = (
       open: (address: string) => session.open(address),
       // Opens each other chip of the Interests page by its block, one after the other, until a click finds no more. The chips are at the
       // top of the page, which is out of sight once the page was scrolled to its end, so the wheel takes the page back up to them first
-      // (the Home key did nothing in the fourth capture).
+      // (the Home key did nothing in the fourth capture). A click that finds the chip out of reach is tried once more, and a picture of
+      // the page is kept with each miss, because a run once stopped at the second chip for no visible reason.
       eachInterestTab: async (visitTab: (tab: number) => Promise<void>) => {
          for (let tab = 1; tab <= MAX_INTEREST_TABS; tab += 1) {
-            await scrollToTop()
+            let clicked = false
 
-            if (!(await hands.clickNth(INTEREST_TAB, tab, CHIP_AVOID))) {
+            for (let attempt = 0; attempt < CHIP_TRIES && !clicked; attempt += 1) {
+               await scrollToTop()
+               await reader.wait(PAUSES.scroll)
+               clicked = await hands.clickNth(INTEREST_TAB, tab, CHIP_AVOID)
+
+               if (!clicked) {
+                  const png = await browser.screenshot?.()
+
+                  log('A chip of Interests was out of reach')
+
+                  if (png) {
+                     await screenshot(`interests-chip-${tab}-missed`, png)
+                  }
+               }
+            }
+
+            if (!clicked) {
                return
             }
 

@@ -17,9 +17,24 @@ type Page = {
    pauseMs?: number
    // How many chips besides the first the Interests page has.
    tabs?: number
+   // The first click on a chip finds nothing in reach.
+   missFirst?: boolean
+   // How many times the list of skills loads another part when it is scrolled up and down again.
+   parts?: number
+   // How many items each list holds (a list of fewer than a part is complete and is not scrolled up and down).
+   listItems?: number
 }
 
-const setup = ({ lands = PROFILE, refuse = [], scrolls = 2, pauseMs, tabs = 0 }: Page = {}) => {
+const setup = ({
+   lands = PROFILE,
+   refuse = [],
+   scrolls = 2,
+   pauseMs,
+   tabs = 0,
+   missFirst = false,
+   parts = 0,
+   listItems = 0,
+}: Page = {}) => {
    const opened: string[] = []
    const attached: Record<string, string> = {}
    let current = BASE
@@ -28,6 +43,9 @@ const setup = ({ lands = PROFILE, refuse = [], scrolls = 2, pauseMs, tabs = 0 }:
    // How far down the page is scrolled, and where it was at each click on a chip.
    let y = 0
    const positions: number[] = []
+   let missed = missFirst
+   let jiggled = false
+   let loaded = 0
    const browser = {
       inspect: vi.fn(async () => ({
          url: current,
@@ -36,6 +54,12 @@ const setup = ({ lands = PROFILE, refuse = [], scrolls = 2, pauseMs, tabs = 0 }:
       clickLink: vi.fn(async () => undefined),
       clickNth: vi.fn(async (selector: string, nth: number, _avoid: string) => {
          positions.push(y)
+
+         if (missed && current.endsWith('details/interests/')) {
+            missed = false
+
+            return false
+         }
 
          if (selector !== '[role="radio"]' || !current.endsWith('details/interests/') || nth > tabs) {
             return false
@@ -49,8 +73,14 @@ const setup = ({ lands = PROFILE, refuse = [], scrolls = 2, pauseMs, tabs = 0 }:
       scrollBy: vi.fn(async (pixels: number) => {
          if (pixels < 0) {
             y = Math.max(0, y + pixels)
+            jiggled = true
 
             return false
+         }
+
+         if (jiggled && current.endsWith('details/skills/') && loaded < parts) {
+            loaded += 1
+            jiggled = false
          }
 
          if (left > 0) {
@@ -62,7 +92,10 @@ const setup = ({ lands = PROFILE, refuse = [], scrolls = 2, pauseMs, tabs = 0 }:
 
          return false
       }),
-      pageHtml: vi.fn(async () => '<html><body>page</body></html>'),
+      pageHtml: vi.fn(
+         async () =>
+            `<html><body>page${'+'.repeat(loaded)}<div data-testid="lazy-column">${'<hr role="presentation">'.repeat(listItems + 10 * loaded)}</div></body></html>`
+      ),
       screenshot: vi.fn(async () => Buffer.from('png')),
       clearCookies: vi.fn(async () => undefined),
       exists: vi.fn(async () => false),
@@ -138,8 +171,32 @@ describe('captureProfile', () => {
 
       await capture()
 
-      // Two scrolls that move and three that do not, for each of the eleven pages, and one back up before the first chip.
-      expect(browser.scrollBy).toHaveBeenCalledTimes(5 * (DETAIL_PAGES.length + 1) + 1)
+      // Two scrolls that move and two that do not, for each of the eleven pages, and one back up before each of the two tries at a chip.
+      expect(browser.scrollBy).toHaveBeenCalledTimes(4 * (DETAIL_PAGES.length + 1) + 2)
+   })
+
+   it('should scroll a long list up and down until it stops growing, so the parts that load as its end comes into view are kept', async () => {
+      const { capture, attached } = setup({
+         parts: 2,
+         listItems: 20,
+      })
+
+      await capture()
+
+      expect(attached['detail-skills.html']).toContain('page++<')
+      expect(attached['detail-education.html']).toContain('page<')
+   })
+
+   it('should stop asking a long list for more once it holds 50 items', async () => {
+      const { capture, attached } = setup({
+         parts: 5,
+         listItems: 45,
+      })
+
+      await capture()
+
+      // The first part brings it to 55, so no second round is made.
+      expect(attached['detail-skills.html']).toContain('page+<')
    })
 
    it('should click nothing', async () => {
@@ -149,7 +206,8 @@ describe('captureProfile', () => {
 
       expect(browser.clickLink).not.toHaveBeenCalled()
       expect(browser.click).not.toHaveBeenCalled()
-      expect(browser.clickNth).toHaveBeenCalledTimes(1)
+      // The one chip is looked for twice before the walk goes on.
+      expect(browser.clickNth).toHaveBeenCalledTimes(2)
    })
 
    it('should open each other chip of the Interests page by its label, and keep a page for each, as far as there are chips', async () => {
@@ -161,6 +219,7 @@ describe('captureProfile', () => {
          ['[role="radio"]', 1],
          ['[role="radio"]', 2],
          ['[role="radio"]', 3],
+         ['[role="radio"]', 3],
       ])
       expect(Object.keys(attached)).toEqual(
          expect.arrayContaining(['detail-interests.html', 'detail-interests-2.html', 'detail-interests-3.html'])
@@ -168,12 +227,25 @@ describe('captureProfile', () => {
       expect(attached).not.toHaveProperty(['detail-interests-4.html'])
    })
 
-   it('should scroll back to the top of the page before each chip, where the chips are, after the page was scrolled to its end', async () => {
+   it('should scroll back to the top of the page before each try at a chip, where the chips are, after the page was scrolled to its end', async () => {
       const { capture, positions } = setup({ tabs: 2 })
 
       await capture()
 
-      expect(positions).toEqual([0, 0, 0])
+      expect(positions).toEqual([0, 0, 0, 0])
+   })
+
+   it('should try a chip once more, and keep a picture of the miss, when the first click finds nothing in reach', async () => {
+      const { capture, attached, context } = setup({
+         tabs: 1,
+         missFirst: true,
+      })
+
+      await capture()
+
+      expect(attached).toHaveProperty(['detail-interests-2.html'])
+      expect(context.screenshot).toHaveBeenCalledWith('interests-chip-1-missed', expect.any(Buffer))
+      expect(context.log).toHaveBeenCalledWith('A chip of Interests was out of reach')
    })
 
    it('should keep at most four more pages of chips, and stay under the 20 files of a run', async () => {

@@ -184,6 +184,24 @@ describe('parseExperience', () => {
       expect(second?.employmentType).toBeUndefined()
    })
 
+   it('should read the place only from the header of a job, not from a note or a skill that follows it', () => {
+      const [job] = parseExperience(
+         profilePage(
+            experienceMarkup([
+               {
+                  title: 'Project lead',
+                  company: 'Sampleworks',
+                  dates: '2025 - Present',
+                  notes: ['A note from LinkedIn', 'Roadmapping'],
+               },
+            ])
+         )
+      )
+
+      expect(job?.location).toBeUndefined()
+      expect(job?.workMode).toBeUndefined()
+   })
+
    it('should give nothing for a page without jobs', () => {
       expect(parseExperience(profilePage('<p>x</p>'))).toEqual([])
    })
@@ -266,6 +284,32 @@ describe('parseInterests', () => {
       expect(found.topVoices.map(({ name }) => name)).toEqual(['Ada Voice'])
       expect(found.schools).toEqual([])
       expect(found.newsletters).toEqual([])
+   })
+
+   it('should read a newsletter with how often it is published, and not take the link to its publisher for another item', () => {
+      const found = parseInterests(
+         interestsPage(
+            ['Newsletters'],
+            [
+               {
+                  name: 'Sample Digest',
+                  kind: 'newsletter',
+                  followers: 'Published monthly',
+               },
+            ]
+         )
+      )
+
+      expect(found.newsletters).toEqual([
+         {
+            name: 'Sample Digest',
+            subtitle: 'Published monthly',
+            imageUrl: 'https://media.licdn.com/dms/image/v2/sample/logo/0',
+            url: 'https://www.linkedin.com/newsletters/sample-digest/',
+         },
+      ])
+      expect(found.companies).toEqual([])
+      expect(found.topVoices).toEqual([])
    })
 
    it('should read a member with the degree, the headline and the followers each in its own place', () => {

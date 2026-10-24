@@ -54,13 +54,15 @@ export type FixtureJob = {
    mode?: string
    description?: string
    skills?: string
+   // Paragraphs after the header that are not part of it (a note from LinkedIn, one skill on its own line).
+   notes?: string[]
 }
 
 const job = (item: FixtureJob, index: number) =>
    `<div componentkey="entity-collection-item-${index}"><a href="https://www.linkedin.com/company/${100 + index}/"><figure><img alt="${item.company} logo" src="${PIC}/company-logo_100_100/${index}"></figure></a>
 <a href="${ME}/details/experience/edit/forms/position/${index}/"><div><div><div><p>${item.title}</p><p>${item.company}${item.type ? ` · ${item.type}` : ''}</p></div></div><p>${item.dates}${item.duration ? ` · ${item.duration}` : ''}</p>${
       item.location ? `<p>${item.location}${item.mode ? ` · ${item.mode}` : ''}</p>` : ''
-   }</div></a>
+   }</div></a>${(item.notes ?? []).map(note => `<p>${note}</p>`).join('')}
 ${item.description ? `<div><p><span data-testid="expandable-text-box">${item.description}<button data-testid="expandable-text-button">…<span>more</span></button></span></p></div>` : ''}
 ${item.skills ? `<a href="${ME}/overlay/${index}/skill-associations-details/">${item.skills}</a>` : ''}</div>`
 
@@ -108,6 +110,10 @@ const KIND_PATH = {
 const pageItem = (name: string, followers: string) =>
    `<div><p><span><span>${name}, Company</span><span>${name}</span></span></p></div><p>${followers}</p>`
 
+// A newsletter: the name, a description, how often it is published, and a link to who publishes it inside the card (recorded 2026-10-24).
+const newsletterItem = (name: string, frequency: string) =>
+   `<div><p><span><span>${name}, Newsletter</span><span>${name}</span></span></p></div><div><p><span>A short description.</span></p></div><p>${frequency}</p><a href="https://www.linkedin.com/company/sample-publisher/"><div><figure><img alt="" src="${PIC}/logo/publisher"></figure><p>Sample Publisher</p></div></a>`
+
 // A member: the name as a link with the degree after it, then the headline, then the followers (recorded 2026-10-24).
 const memberItem = (name: string, slug: string, followers: string, degree = '2nd', headline = 'Writer at Examples') =>
    `<div><p><span><a href="https://www.linkedin.com/in/${slug}/">${name}<span aria-label="Top Voice" role="img"></span></a></span></p><p>· ${degree}</p></div><p>${headline}</p><p>${followers}</p>`
@@ -123,7 +129,11 @@ export const interestsPage = (chips: string[], items: FixtureInterest[]) =>
       .map(({ name, kind = 'company', followers, degree, headline }, index) => {
          const slug = name.toLowerCase().replace(/\W+/g, '-')
          const text =
-            kind === 'person' ? memberItem(name, slug, followers, degree, headline) : pageItem(name, followers)
+            kind === 'person'
+               ? memberItem(name, slug, followers, degree, headline)
+               : kind === 'newsletter'
+                 ? newsletterItem(name, followers)
+                 : pageItem(name, followers)
 
          return `<div><a href="https://www.linkedin.com/${KIND_PATH[kind]}/${slug}/"><div><figure><img alt="" src="${PIC}/logo/${index}"></figure><div>${text}</div></div></a><div><button aria-label="Following, click to unfollow ${name}">Following</button></div><hr role="presentation"></div>`
       })

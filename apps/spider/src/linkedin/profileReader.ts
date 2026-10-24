@@ -187,8 +187,11 @@ const skillsOf = (item: HTMLElement) =>
       .filter(Boolean)
 
 const jobOf = (item: HTMLElement): Experience | undefined => {
+   // The header (title, company, dates, place) is the text of the link to the job's edit form; after it come the text, a note from
+   // LinkedIn and the skills, which must not be taken for the place.
+   const header = item.querySelector('a[href*="/details/experience/edit/forms/"]')
    const lines = linesOf(
-      item,
+      header ?? item,
       paragraph =>
          paragraph.querySelector(TEXT_BOX) != null || paragraph.closest('a[href*="skill-associations"]') != null
    )
@@ -276,8 +279,9 @@ const kindOf = (href: string | undefined): keyof Interests | undefined => {
    return undefined
 }
 
-const entityOf = (link: HTMLElement): ProfileEntity | undefined => {
-   const [named, ...others] = link.querySelectorAll('p')
+const entityOf = (link: HTMLElement, kind: keyof Interests): ProfileEntity | undefined => {
+   // The paragraphs of the card itself, not those of a link inside it (a newsletter links to who publishes it).
+   const [named, ...others] = link.querySelectorAll('p').filter(paragraph => paragraph.closest('a') === link)
    // "TeamXP, Company" is the accessible name, then the name itself, in two spans of the first paragraph.
    const spans = named?.querySelectorAll('span') ?? []
    const name = textOf(spans.at(-1)) || textOf(named)
@@ -286,18 +290,19 @@ const entityOf = (link: HTMLElement): ProfileEntity | undefined => {
       return undefined
    }
 
-   // After the name: a member's degree ("· 2nd"), then the headline, and last how many follow; a page has only the followers.
+   // After the name: a member's degree ("· 2nd"), then the headline, and last how many follow; a page has only the followers. A
+   // newsletter has a description and then how often it is published, which is all it says about its readers.
    const lines = others.map(textOf).filter(Boolean)
    const degree = lines[0]?.startsWith('·') ? lines.shift() : undefined
-   const followers = lines.pop()
+   const last = lines.pop()
 
    return {
       name,
-      subtitle: some(lines[0]),
+      subtitle: some(kind === 'newsletters' ? last : lines[0]),
       degree: some(degree?.replace(/^·\s*/, '')),
       imageUrl: pictureOf(link.querySelector('img')),
       url: addressOf(link.getAttribute('href')),
-      followers: some(followers),
+      followers: kind === 'newsletters' ? undefined : some(last),
    }
 }
 
@@ -313,7 +318,7 @@ export const parseInterests = (html: string): Interests => {
 
    for (const link of parse(html).querySelectorAll('[data-testid="lazy-column"] a[href]')) {
       const kind = kindOf(link.getAttribute('href'))
-      const entity = kind ? entityOf(link) : undefined
+      const entity = kind && link.parentNode?.closest('a') == null ? entityOf(link, kind) : undefined
 
       if (kind && entity && found[kind].length < MAX_ENTITIES) {
          found[kind].push(entity)

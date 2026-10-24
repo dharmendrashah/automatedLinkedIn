@@ -23,7 +23,7 @@ import {
 } from '../../linkedin/profileReader'
 import { SignedOut } from '../../linkedin/session'
 import { DETAIL_PAGES } from './capture'
-import { type PageContext, type PageDeps, createPages } from './pages'
+import { type PageContext, type PageDeps, createPages, listLimit } from './pages'
 
 export type ProfileInput = {
    // Keep the pages with the run, to study how they are built (a run keeps at most 20 files, so only the profile keeps its links).
@@ -205,7 +205,7 @@ export const readProfile = async (
          targets: [...DETAIL_PAGES],
          step: async page => {
             await pages.open(`${profileUrl}${page.path}`)
-            await pages.scrollThrough()
+            await pages.scrollThrough(listLimit(page.name))
             await keepLean(`detail-${page.name}`)
 
             const html = await pages.html()
@@ -223,7 +223,7 @@ export const readProfile = async (
             if (page.name === 'interests') {
                addInterests(html)
                await pages.eachInterestTab(async () => {
-                  await pages.scrollThrough()
+                  await pages.scrollThrough(listLimit('interests'))
                   addInterests(await pages.html())
                })
             }
@@ -273,7 +273,7 @@ export const readProfile = async (
          experience: draft.experience,
          education: draft.education,
          projects: listOf(draft.projects, 100),
-         skills: listOf(draft.skills, 500),
+         skills: listOf(draft.skills, 50),
          recommendations: {
             received: listOf(draft.received, 100),
             given: listOf(draft.given, 100),
