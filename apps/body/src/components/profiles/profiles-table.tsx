@@ -5,7 +5,7 @@ import { Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 import { type Profile } from './types'
-import { visitedText } from './visit-form'
+import { visitedText } from '../links/visit-form'
 
 import { LabelCell } from '../labels/label-cell'
 import { LinkStatusBadge } from '../links/link-status-badge'

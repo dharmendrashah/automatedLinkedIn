@@ -9,6 +9,9 @@ import { linkStatuses } from '@/components/links/link-statuses'
 import { Pager } from '@/components/links/pager'
 import { useSelection } from '@/components/links/use-selection'
 import { useListState } from '@/components/links/use-list-state'
+import { ViewPageDialog } from '@/components/links/view-page-dialog'
+import { Button } from '@/components/ui/button'
+import { Eye } from 'lucide-react'
 import { useState } from 'react'
 
 import { type Company } from '@/components/companies/types'
@@ -20,6 +23,8 @@ export const Companies = () => {
    const state = useListState()
    const selection = useSelection()
    const [toEdit, setToEdit] = useState<Company | null>(null)
+   // The company an account is asked to view; `null` inside means a pasted link.
+   const [viewing, setViewing] = useState<{ company: Company | null } | null>(null)
    const drawer = useDetailDrawer()
 
    const list = trpc.linkedInCompany.list.useQuery(state.query, {
@@ -56,7 +61,13 @@ export const Companies = () => {
                   The companies you want to reach. Paste their links to add them.
                </p>
             </div>
-            <AddCompaniesDialog />
+            <div className="flex flex-wrap items-center gap-2">
+               <Button variant="outline" onClick={() => setViewing({ company: null })}>
+                  <Eye />
+                  View a company
+               </Button>
+               <AddCompaniesDialog />
+            </div>
          </div>
 
          <ListToolbar
@@ -77,6 +88,7 @@ export const Companies = () => {
             error={list.error?.message}
             busyId={busyId}
             onEdit={setToEdit}
+            onView={company => setViewing({ company })}
             onArchive={company => archive.mutate({ id: company.id })}
             onRestore={company => restore.mutate({ id: company.id })}
             onTag={state.addTag}
@@ -93,6 +105,14 @@ export const Companies = () => {
          />
 
          <EditCompanyDialog company={toEdit} onClose={() => setToEdit(null)} />
+         {viewing ? (
+            <ViewPageDialog
+               key={viewing.company?.id ?? 'link'}
+               kind="COMPANY"
+               saved={viewing.company ? { id: viewing.company.id, name: viewing.company.name ?? viewing.company.slug } : null}
+               onClose={() => setViewing(null)}
+            />
+         ) : null}
          <DetailDrawers kind="company" order={list.data?.items.map(({ slug }) => slug) ?? []} />
       </div>
    )

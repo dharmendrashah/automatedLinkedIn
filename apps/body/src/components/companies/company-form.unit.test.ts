@@ -15,6 +15,7 @@ const company: Company = {
    location: null,
    notes: null,
    tags: ['partner'],
+   visits: [],
    status: 'NEW',
    archivedAt: null,
    createdAt: '2026-10-14T00:00:00.000Z',

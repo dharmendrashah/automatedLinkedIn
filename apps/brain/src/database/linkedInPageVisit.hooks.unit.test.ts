@@ -4,7 +4,7 @@ import { type Prisma } from 'generated/prisma/client'
 
 import { type TaskResult } from '@automatedLinkedIn/contracts'
 
-import { linkedInViewProfileHooks } from './linkedInViewProfile.hooks'
+import { linkedInVisitHooks } from './linkedInPageVisit.hooks'
 import { TaskRefusedError } from './taskErrors'
 
 const findUnique = vi.fn()
@@ -15,7 +15,7 @@ const tx = {
       findUnique,
       updateMany: updateAccounts,
    },
-   linkedInProfileVisit: { updateMany: updateVisits },
+   linkedInPageVisit: { updateMany: updateVisits },
 } as unknown as Prisma.TransactionClient
 
 const session = {
@@ -36,10 +36,10 @@ describe('linkedin-view-profile hooks', () => {
       }
 
       findUnique.mockResolvedValueOnce({ status: 'NEEDS_REAUTH' })
-      await expect(linkedInViewProfileHooks.onRequest?.(request, tx)).rejects.toBeInstanceOf(TaskRefusedError)
+      await expect(linkedInVisitHooks.onRequest?.(request, tx)).rejects.toBeInstanceOf(TaskRefusedError)
 
       findUnique.mockResolvedValueOnce({ status: 'ACTIVE' })
-      await expect(linkedInViewProfileHooks.onRequest?.(request, tx)).resolves.toBeUndefined()
+      await expect(linkedInVisitHooks.onRequest?.(request, tx)).resolves.toBeUndefined()
    })
 
    it.each([
@@ -51,7 +51,7 @@ describe('linkedin-view-profile hooks', () => {
       updateVisits.mockReset().mockResolvedValue({ count: 1 })
       updateAccounts.mockReset()
 
-      await linkedInViewProfileHooks.onResult?.(session, result(verdict), tx)
+      await linkedInVisitHooks.onResult?.(session, result(verdict), tx)
 
       expect(updateVisits).toHaveBeenCalledWith({
          where: {
@@ -70,7 +70,7 @@ describe('linkedin-view-profile hooks', () => {
       updateVisits.mockReset().mockResolvedValue({ count: 1 })
       updateAccounts.mockReset().mockResolvedValue({ count: 1 })
 
-      await linkedInViewProfileHooks.onResult?.(session, result('SIGNED_OUT'), tx)
+      await linkedInVisitHooks.onResult?.(session, result('SIGNED_OUT'), tx)
 
       expect(updateVisits.mock.calls[0]?.[0].data).toMatchObject({ status: 'FAILED' })
       expect(updateAccounts).toHaveBeenCalledWith({

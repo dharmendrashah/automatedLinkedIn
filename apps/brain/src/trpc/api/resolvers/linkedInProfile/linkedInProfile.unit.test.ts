@@ -31,7 +31,7 @@ vi.mock('database', () => ({
    TaskOwnershipError: mocks.TaskOwnershipError,
    TaskRefusedError: mocks.TaskRefusedError,
    TaskRecentError: mocks.TaskRecentError,
-   ProfileVisitService: { request: mocks.requestVisit },
+   PageVisitService: { request: mocks.requestVisit },
    LinkedInProfileService: {
       addMany: mocks.addMany,
       list: mocks.list,
@@ -180,7 +180,7 @@ describe('linkedInProfile resolvers', () => {
          await expect(
             caller(authed()).visit({
                accountId: 'acc1',
-               profileId: 'p1',
+               id: 'p1',
             })
          ).resolves.toEqual({ id: 's1' })
          await caller(authed()).visit({
@@ -190,7 +190,16 @@ describe('linkedInProfile resolvers', () => {
          })
 
          expect(mocks.requestVisit).toHaveBeenNthCalledWith(1, 'u1', 'acc1', { profileId: 'p1' }, undefined)
-         expect(mocks.requestVisit).toHaveBeenNthCalledWith(2, 'u1', 'acc1', { link: 'linkedin.com/in/ada' }, true)
+         expect(mocks.requestVisit).toHaveBeenNthCalledWith(
+            2,
+            'u1',
+            'acc1',
+            {
+               kind: 'PROFILE',
+               link: 'linkedin.com/in/ada',
+            },
+            true
+         )
       })
 
       it('should need exactly one of a saved profile and a link', async () => {
@@ -198,7 +207,7 @@ describe('linkedInProfile resolvers', () => {
          await expect(
             caller(authed()).visit({
                accountId: 'acc1',
-               profileId: 'p1',
+               id: 'p1',
                link: 'linkedin.com/in/ada',
             })
          ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
@@ -211,7 +220,7 @@ describe('linkedInProfile resolvers', () => {
          await expect(
             caller(authed()).visit({
                accountId: 'acc1',
-               profileId: 'p1',
+               id: 'p1',
             })
          ).rejects.toMatchObject({ code: 'NOT_FOUND' })
       })
@@ -223,7 +232,7 @@ describe('linkedInProfile resolvers', () => {
          await expect(
             caller(authed()).visit({
                accountId: 'acc1',
-               profileId: 'p1',
+               id: 'p1',
             })
          ).rejects.toMatchObject({
             code: 'PRECONDITION_FAILED',
@@ -232,7 +241,7 @@ describe('linkedInProfile resolvers', () => {
          await expect(
             caller(authed()).visit({
                accountId: 'acc1',
-               profileId: 'p1',
+               id: 'p1',
             })
          ).rejects.toMatchObject({ code: 'CONFLICT' })
       })

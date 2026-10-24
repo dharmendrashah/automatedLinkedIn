@@ -11,6 +11,7 @@ import { LinkStatusBadge } from '../links/link-status-badge'
 import { RowActions } from '../links/row-actions'
 import { SelectAllHead, SelectCell } from '../links/selection'
 import { type Selection } from '../links/use-selection'
+import { visitedText } from '../links/visit-form'
 import { StateRows } from '../links/state-rows'
 
 const COLUMNS = 7
@@ -28,6 +29,7 @@ type Props = {
    error: string | undefined
    busyId: string | undefined
    onEdit: (company: Company) => void
+   onView: (company: Company) => void
    onArchive: (company: Company) => void
    onRestore: (company: Company) => void
    onTag: (tag: string) => void
@@ -42,6 +44,7 @@ export const CompaniesTable = ({
    error,
    busyId,
    onEdit,
+   onView,
    onArchive,
    onRestore,
    onTag,
@@ -83,6 +86,9 @@ export const CompaniesTable = ({
                         {company.name ?? company.slug}
                      </button>
                      {details(company) ? <p className="text-muted-foreground text-xs">{details(company)}</p> : null}
+                     {visitedText(company.visits[0]) ? (
+                        <p className="text-muted-foreground text-xs">{visitedText(company.visits[0])}</p>
+                     ) : null}
                   </TableCell>
                   <TableCell>
                      {company.website && isWebAddress(company.website) ? (
@@ -118,6 +124,8 @@ export const CompaniesTable = ({
                         archived={Boolean(company.archivedAt)}
                         busy={busyId === company.id}
                         onEdit={() => onEdit(company)}
+                        onView={() => onView(company)}
+                        viewWhat="company page"
                         onArchive={() => onArchive(company)}
                         onRestore={() => onRestore(company)}
                      />

@@ -10,14 +10,25 @@ type Props = {
    onEdit?: () => void
    // Left out when the row has nothing to view; an archived row never shows it.
    onView?: () => void
+   // What the view button opens, used in its label.
+   viewWhat?: string
    onArchive: () => void
    onRestore: () => void
 }
 
-export const RowActions = ({ name, archived, busy, onEdit, onView, onArchive, onRestore }: Props) => (
+export const RowActions = ({
+   name,
+   archived,
+   busy,
+   onEdit,
+   onView,
+   viewWhat = 'profile',
+   onArchive,
+   onRestore,
+}: Props) => (
    <div className="flex items-center justify-end gap-1">
       {onView && !archived ? (
-         <Button variant="ghost" size="icon" aria-label={`View the profile of ${name}`} onClick={onView}>
+         <Button variant="ghost" size="icon" aria-label={`View the ${viewWhat} of ${name}`} onClick={onView}>
             <Eye />
          </Button>
       ) : null}

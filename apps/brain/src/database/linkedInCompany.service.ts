@@ -45,6 +45,17 @@ const companySelect = {
    archivedAt: true,
    createdAt: true,
    updatedAt: true,
+   // The latest visit an account of the owner made to this company that was asked for or went through (.plan/visit-company-task.md).
+   visits: {
+      where: { status: { in: ['ASKED', 'DONE'] } },
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+      select: {
+         createdAt: true,
+         status: true,
+         account: { select: { email: true } },
+      },
+   },
 } satisfies Prisma.LinkedInCompanySelect
 
 const SEARCHED_FIELDS = ['name', 'industry', 'website', 'slug'] as const
