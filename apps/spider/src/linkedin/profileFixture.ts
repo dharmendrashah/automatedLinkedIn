@@ -302,6 +302,21 @@ export const recommendationsPage = (cards: FixtureRecommendation[]) =>
       )
       .join('<hr role="presentation">')}</div></div></section>`
 
+export type FixtureContactRow = {
+   label: string
+   // The text of the value paragraph as the page draws it; a link, a value in a span or plain text.
+   value: string
+}
+
+// The contact info overlay: a dialog with a row per kind (an icon, the label, the value), then an offer of the paid plan that is
+// built differently and must not be read as a row.
+export const contactPage = (rows: FixtureContactRow[]) =>
+   `<html lang="en"><body><dialog data-testid="dialog" open><div data-testid="dialog-content"><div data-testid="lazy-column">${rows
+      .map(({ label, value }) => `<div><svg></svg><div><p>${label}</p>${value}</div></div>`)
+      .join(
+         ''
+      )}<div><div><div><div><p>Refine your profile with suggestions</p></div><a href="https://www.linkedin.com/premium/redeem/"><span>Get 50% Off</span></a></div></div></div></div></div></dialog></body></html>`
+
 export const servicesMarkup = (services: string[]) =>
    `<div data-view-name="profile-card-services"><section><div><h2>Services</h2><a data-view-name="services-edit-button" aria-label="Edit services" href="${ME}/opportunities/services/edit"><span></span></a></div><div>${services
       .map(service => `<p>${service}</p>`)

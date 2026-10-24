@@ -1,4 +1,4 @@
-import { AboutCard, OpenToWork, ServicesCard } from '@/components/account-profile/about-cards'
+import { AboutCard, ContactCard, OpenToWork, ServicesCard } from '@/components/account-profile/about-cards'
 import { AccountStrip } from '@/components/account-profile/account-strip'
 import { ActivityCard } from '@/components/account-profile/activity-card'
 import { EducationCard, ExperienceCard, ProjectsCard } from '@/components/account-profile/entries'
@@ -134,6 +134,7 @@ export const AccountProfile = () => {
                   <ProfileHeader profile={profile} strip={strip} />
                   <OpenToWork openToWork={profile.openToWork} />
                   <AboutCard about={profile.about} topSkills={profile.topSkills} />
+                  <ContactCard contact={profile.contact} />
                   <ServicesCard services={profile.services} />
                   <ActivityCard activity={profile.activity} />
                   <ExperienceCard experience={profile.experience} />

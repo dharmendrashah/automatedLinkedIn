@@ -6,6 +6,7 @@ import {
    aboutMarkup,
    activityMarkup,
    commentsPage,
+   contactPage,
    educationPage,
    experienceMarkup,
    insightsMarkup,
@@ -147,6 +148,16 @@ const PAGES: Record<string, string> = {
       },
    ]),
    [`${ME}details/interests/`]: companies,
+   [`${ME}overlay/contact-info/`]: contactPage([
+      {
+         label: 'Email',
+         value: '<p><a href="mailto:sample.person@example.com">sample.person@example.com</a></p>',
+      },
+      {
+         label: 'Phone',
+         value: '<p>(Mobile)<span>+91 75973 65803</span><span></span></p>',
+      },
+   ]),
    [`${ME}recent-activity/all/`]: postsPage('All', [
       {
          text: 'A post',
@@ -171,11 +182,16 @@ type Page = {
    pauseMs?: number
    // The pages, by address, when they are not the ones above.
    pages?: Record<string, string>
+   // Pages that show only their title for their first reads, then their content.
+   late?: string[]
 }
 
-const setup = ({ lands = ME, refuse = [], pauseMs, pages = PAGES }: Page = {}) => {
+const TITLE_ONLY = '<html><body><section aria-label="Primary content"><p>Recommendations</p></section></body></html>'
+
+const setup = ({ lands = ME, refuse = [], pauseMs, pages = PAGES, late = [] }: Page = {}) => {
    const attached: Record<string, string> = {}
    const opened: string[] = []
+   const reads: Record<string, number> = {}
    let current = BASE
    let chip = 0
    let time = 0
@@ -185,9 +201,15 @@ const setup = ({ lands = ME, refuse = [], pauseMs, pages = PAGES }: Page = {}) =
       back: vi.fn(async () => current),
       scrollBy: vi.fn(async () => false),
       // The Interests page shows the second chip's items after one click on its label.
-      pageHtml: vi.fn(async () =>
-         current.endsWith('details/interests/') && chip === 1 ? groups : (pages[current] ?? '<html></html>')
-      ),
+      pageHtml: vi.fn(async () => {
+         reads[current] = (reads[current] ?? 0) + 1
+
+         if (late.includes(current) && (reads[current] ?? 0) <= 2) {
+            return TITLE_ONLY
+         }
+
+         return current.endsWith('details/interests/') && chip === 1 ? groups : (pages[current] ?? '<html></html>')
+      }),
       clickNth: vi.fn(async (selector: string, nth: number, _avoid: string) => {
          if (selector !== '[role="radio"]' || !current.endsWith('details/interests/') || nth > 1) {
             return false
@@ -351,6 +373,33 @@ describe('readProfile', () => {
          audience: 'Recruiters only',
          titles: ['Product Lead', 'Head of Product roles'],
       })
+   })
+
+   it('should read the contact info into the file, and keep it out of the log, the warnings and the report counts', async () => {
+      const { read, file, context } = setup()
+      const result = await read()
+      const said = [...context.log.mock.calls, ...context.warn.mock.calls, JSON.stringify(result)].flat().join(' ')
+
+      expect(file().contact).toEqual({
+         emails: ['sample.person@example.com'],
+         phones: [
+            {
+               value: '+91 75973 65803',
+               type: 'Mobile',
+            },
+         ],
+         other: [],
+      })
+      expect(said).not.toMatch(/example\.com|75973/)
+   })
+
+   it('should wait for a page that shows only its title at first to draw its content', async () => {
+      const given = `${ME}details/recommendations/?detailScreenTabIndex=1`
+      const { read, file } = setup({ late: [given] })
+
+      await read()
+
+      expect(file().recommendations.given.items.map(({ name }) => name)).toEqual(['Taylor Demo'])
    })
 
    it('should click only the chips of Interests, and open only the pages of the profile', async () => {

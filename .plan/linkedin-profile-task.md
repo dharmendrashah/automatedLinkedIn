@@ -111,6 +111,12 @@ The nine questions were answered "all defaults are fine"; the defaults are the o
 - Contact info: wanted. It is the window `/in/<name>/overlay/contact-info/` (what the "Contact info" link under the location opens). Shown: the profile address, phone with its type (Mobile), email, messenger with its type (Skype), birthday (day and month), and websites when there are any. It holds the owner's own private details, so it goes in `profile.json` only (a sensitive file), never in a log, a warning or the report counts.
 - How: the walk opens the window like a page and keeps it with the run; its markup was never recorded, so the reader is written from that recording (one reading run with `snapshots`, which also checks the headline and top skills fixes live), then the contract field, the page card and the tests follow offline.
 
+### Contact info and the render wait (built offline from run `e2e41d9b`)
+
+- The recording keeps no icons (`<svg/>`), so rows are not told apart by icon or label (the page language varies): the email is the row with a `mailto:` link, a phone is a value of digits only, the link to the profile itself is skipped, and every other row (messenger, website, birthday, address) is kept as `{ label, value, type? }` with the label as the page shows it. Contract: optional `contact = { emails, phones: {value,type?}[], other }`.
+- Pages that open showing only their title (recommendations given, once) are now looked at up to 5 times, one scroll pause apart, until their main block or dialog holds 2 paragraphs (`pages.open`).
+- The page shows it as a "Contact info" card under About (sample profile has one).
+
 ## Where it stands (2026-10-24, evening) and what is left
 
 Rule from the owner: every live run on an account is a risk of being flagged, so work offline from the recordings already kept, and do at most one or two live runs to finish. Eight runs were made on one account in one day (captures `b91a6088`, `bb413008`, `ae47281a`, `e615e857`, `da2ab2e8`, `b33c5faf`, an experiment `4ea5e991`, readings `dc791bb6` and a stopped one `79d2212b`); no more are made until the offline work below is done.

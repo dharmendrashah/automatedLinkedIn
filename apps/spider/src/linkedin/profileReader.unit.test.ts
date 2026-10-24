@@ -4,6 +4,7 @@ import {
    aboutMarkup,
    activityMarkup,
    commentsPage,
+   contactPage,
    educationPage,
    experienceMarkup,
    insightsMarkup,
@@ -25,6 +26,7 @@ import {
    parseAbout,
    parseAnalytics,
    parseComments,
+   parseContact,
    parseEducation,
    parseExperience,
    parseFollowers,
@@ -714,6 +716,71 @@ describe('parseRecommendations', () => {
 
    it('should give nothing for a page without cards', () => {
       expect(parseRecommendations(recommendationsPage([]))).toEqual([])
+   })
+})
+
+describe('parseContact', () => {
+   const rows = [
+      {
+         label: 'Your profile',
+         value: `<p><a href="https://www.linkedin.com/in/sample-person/">linkedin.com/in/sample-person</a></p>`,
+      },
+      {
+         label: 'Phone',
+         value: '<p>(Mobile)<span>+91 75973 65803</span><span></span></p>',
+      },
+      {
+         label: 'Email',
+         value: '<p><a href="mailto:sample.person+work@example.com?subject=Hi">sample.person+work@example.com</a></p>',
+      },
+      {
+         label: 'IM',
+         value: '<p>(Skype)<span>sample.person</span><span></span></p>',
+      },
+      {
+         label: 'Website',
+         value: '<p><a href="https://sample.example.com/">sample.example.com</a></p><p>(Company)</p>',
+      },
+      {
+         label: 'Birthday',
+         value: '<p>August 22</p>',
+      },
+   ]
+
+   it('should sort the phones and the emails and keep every other row with the label as the page shows it', () => {
+      expect(parseContact(contactPage(rows))).toEqual({
+         emails: ['sample.person+work@example.com'],
+         phones: [
+            {
+               value: '+91 75973 65803',
+               type: 'Mobile',
+            },
+         ],
+         other: [
+            {
+               label: 'IM',
+               value: 'sample.person',
+               type: 'Skype',
+            },
+            {
+               label: 'Website',
+               value: 'sample.example.com',
+               type: 'Company',
+            },
+            {
+               label: 'Birthday',
+               value: 'August 22',
+            },
+         ],
+      })
+   })
+
+   it('should not read the link to the profile itself or the offer of the paid plan as a row', () => {
+      expect(parseContact(contactPage(rows.slice(0, 1)))).toBeUndefined()
+   })
+
+   it('should give nothing for a page without the dialog', () => {
+      expect(parseContact(profilePage('<p>x</p>'))).toBeUndefined()
    })
 })
 

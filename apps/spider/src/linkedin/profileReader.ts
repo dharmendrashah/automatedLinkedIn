@@ -604,6 +604,58 @@ export const parseRecommendations = (html: string): Recommendation[] => {
    })
 }
 
+// The contact info overlay: a row per kind, each an icon and a block of two paragraphs, the label and the value. The offer of the paid
+// plan below the rows has no icon. The icons are not told apart (the recording keeps none), so an email is found by its mailto link and
+// a phone by its digits; every other row is kept with its label as the page writes it. The link to the profile itself is skipped.
+export const parseContact = (html: string): AccountProfile['contact'] => {
+   const column = parse(html).querySelector('[data-testid="dialog"] [data-testid="lazy-column"]')
+   const emails: string[] = []
+   const phones: NonNullable<AccountProfile['contact']>['phones'] = []
+   const other: NonNullable<AccountProfile['contact']>['other'] = []
+
+   for (const row of column?.children ?? []) {
+      const info = row.children.find(child => child.tagName === 'DIV')
+      const [label, ...values] = info?.children.filter(child => child.tagName === 'P').map(textOf) ?? []
+      const link = info?.querySelector('a[href]')
+      const href = link?.getAttribute('href') ?? ''
+
+      if (row.children.every(child => child.tagName !== 'SVG') || !label || values.length === 0) {
+         continue
+      }
+
+      const text = values.join(' ')
+      const type = some(/\(([^)]{1,40})\)/.exec(text)?.[1]?.trim())
+      const value = clean(text.replace(/\([^)]*\)/, ''))
+
+      if (href.startsWith('mailto:')) {
+         const [address] = href.slice('mailto:'.length).split('?')
+
+         if (address) emails.push(address)
+      } else if (new URL(href, 'https://www.linkedin.com').pathname.startsWith('/in/') && addressOf(href)) {
+         continue
+      } else if (value && /^\+?[\d\s().-]{6,}$/.test(value) && value.replace(/\D/g, '').length >= 6) {
+         phones.push({
+            value,
+            type,
+         })
+      } else if (value) {
+         other.push({
+            label,
+            value,
+            type,
+         })
+      }
+   }
+
+   return emails.length + phones.length + other.length > 0
+      ? {
+           emails: emails.slice(0, 10),
+           phones: phones.slice(0, 10),
+           other: other.slice(0, 20),
+        }
+      : undefined
+}
+
 // The services card of the profile page lists them one per paragraph; its "Show all" link has none.
 export const parseServices = (html: string): string[] => {
    const card = parse(html).querySelector('[data-view-name="profile-card-services"]')

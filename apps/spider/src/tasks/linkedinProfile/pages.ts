@@ -49,6 +49,12 @@ const INTEREST_TAB = '[role="radio"]'
 // buttons and menus are avoided here.
 const CHIP_AVOID = 'button, [role="button"], [role="menuitem"], [data-view-name="edge-creation-follow-action"]'
 const MAX_INTEREST_TABS = 4
+// A page opens with its title and draws its content a moment later (the page of recommendations given had only its title in the markup
+// of one run, 2026-10-24), so a page is looked at, one scroll pause apart, until it holds this many paragraphs in its main block or
+// its dialog, at most this many times; a page that is truly bare is then taken as it is.
+const DRAWN_PARAGRAPHS = 2
+const DRAW_LOOKS = 5
+const DRAWN = 'section[aria-label="Primary content"] p, [data-testid="dialog"] p'
 // How often a chip is tried before the walk goes on without it.
 const CHIP_TRIES = 2
 
@@ -156,7 +162,19 @@ export const createPages = (
 
          return `${here.origin}/in/me/`
       },
-      open: (address: string) => session.open(address),
+      open: async (address: string) => {
+         const opened = await session.open(address)
+
+         for (let look = 0; look < DRAW_LOOKS; look += 1) {
+            if (parse(await hands.html()).querySelectorAll(DRAWN).length >= DRAWN_PARAGRAPHS) {
+               break
+            }
+
+            await reader.wait(PAUSES.scroll)
+         }
+
+         return opened
+      },
       // Opens each other chip of the Interests page by its block, one after the other, until a click finds no more. The chips are at the
       // top of the page, which is out of sight once its list was scrolled to the end, so the click brings the chip into view itself
       // (the Home key did nothing, and scrolling up by the wheel missed a chip in the sixth reading). A click that finds the chip out of

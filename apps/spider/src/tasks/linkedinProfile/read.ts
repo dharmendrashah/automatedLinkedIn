@@ -7,6 +7,7 @@ import {
    parseAbout,
    parseAnalytics,
    parseComments,
+   parseContact,
    parseEducation,
    parseExperience,
    parseFollowers,
@@ -71,6 +72,7 @@ const noInterests: AccountProfile['interests'] = {
 const EMPTY: Record<string, unknown> = {
    openToWork: undefined,
    about: undefined,
+   contact: undefined,
    services: [],
    analytics: undefined,
    activity: undefined,
@@ -150,6 +152,7 @@ export const readProfile = async (
       received: [] as AccountProfile['recommendations']['received']['items'],
       given: [] as AccountProfile['recommendations']['given']['items'],
       languages: [] as AccountProfile['languages']['items'],
+      contact: undefined as AccountProfile['contact'],
       posts: [] as NonNullable<AccountProfile['activity']>['posts'],
       comments: [] as NonNullable<AccountProfile['activity']>['comments'],
    }
@@ -218,6 +221,7 @@ export const readProfile = async (
             if (page.name === 'recommendations-received') draft.received = parseRecommendations(html)
             if (page.name === 'recommendations-given') draft.given = parseRecommendations(html)
             if (page.name === 'languages') draft.languages = parseLanguages(html)
+            if (page.name === 'contact') draft.contact = parseContact(html)
             if (page.name === 'posts') draft.posts = parsePosts(html, ACTIVITY_LIMIT)
             if (page.name === 'comments') draft.comments = parseComments(html, ACTIVITY_LIMIT, name)
 
@@ -262,6 +266,7 @@ export const readProfile = async (
          followers,
          connections: top.connections,
          about: parseAbout(main),
+         contact: draft.contact,
          openToWork: parseOpenToWork(main),
          topSkills: parseTopSkills(main),
          services: parseServices(main),
