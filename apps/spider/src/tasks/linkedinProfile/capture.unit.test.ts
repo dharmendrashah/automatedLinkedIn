@@ -187,6 +187,23 @@ describe('captureProfile', () => {
       expect(attached['detail-education.html']).toContain('page<')
    })
 
+   it('should ask a list of eight items for more, because the first part of a list can be that small, but not one of six', async () => {
+      const eight = setup({
+         parts: 1,
+         listItems: 8,
+      })
+      const six = setup({
+         parts: 1,
+         listItems: 6,
+      })
+
+      await eight.capture()
+      await six.capture()
+
+      expect(eight.attached['detail-skills.html']).toContain('page+<')
+      expect(six.attached['detail-skills.html']).toContain('page<')
+   })
+
    it('should stop asking a long list for more once it holds 50 items', async () => {
       const { capture, attached } = setup({
          parts: 5,

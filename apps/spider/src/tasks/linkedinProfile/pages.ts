@@ -25,8 +25,9 @@ const JIGGLE = [700, 1100] as const
 const MAX_MORE_ROUNDS = 6
 const MAX_STALLED_ROUNDS = 3
 const MORE_LOOKS = 4
-// A list comes in parts of about 20 (recorded 2026-10-24), so one of fewer items than this is complete and is not asked for more.
-const PART_MIN_ITEMS = 10
+// The first part of a list is 9 to 20 items (recorded 2026-10-24: groups 9 once and 21 another time), while the complete lists seen held 2,
+// 4 and 6, so a list of fewer items than this is complete and is not asked for more.
+const PART_MIN_ITEMS = 8
 export const PAUSES = {
    // After a scroll, and between two pages.
    scroll: [700, 1600],

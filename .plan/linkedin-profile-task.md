@@ -60,7 +60,7 @@ The nine questions were answered "all defaults are fine"; the defaults are the o
 - [x] 4. `tasks/linkedinProfile/read.ts` (the walk, budget, failures, chips, contract check that drops a section that does not fit), `pages.ts` (shared with the capture), `answer.ts` (`answerForRead`, counts only), `index.ts` (task version 2: input `capture` and `snapshots`); unit tests with a stateful fake page. Now opens the same ten detail pages as the capture (`DETAIL_PAGES`).
 - [x] 4b. Chip fix: the chips are `div[role=radio]` blocks at the top of the page, and the page had been scrolled to its end, so the click found nothing in view. The fourth capture (`bb413008`) showed the real cause for that run: the detail addresses were built on `/in/me/`, which LinkedIn answers for Interests and activity with the profile page, so there were no chips; `openOwn` now takes the vanity address from the top card's photo link. The fifth (`ae47281a`) showed that the Home key does not scroll the page back up, so `eachInterestTab` scrolls up with the wheel until `scrollY` is 0. Not seen to work live yet.
 - [ ] 5. A real-browser test against a stand-in profile page. Not done (the unit tests use a fake page; the readers were checked on the real pages).
-- [ ] 6. A local run of the reading on a real account (`dev:record`, LinkedIn profile, `capture` off), read `profile.json` and the log; one more capture for the four Interests chips; `MEMORY.md`; plan done.
+- [x] 6. Local reading runs on a real account (`dev:record`, LinkedIn profile, `capture` off): `dc791bb6`, then `f65a84f2` (192 s, all five Interests chips, skills 40, file fits the contract). Top skills, endorsements and pending recommendations stay unread: this account has none.
 
 ## Edge cases and risks
 
