@@ -19,6 +19,7 @@ import {
    servicesMarkup,
    skillsPage,
    topCardMarkup,
+   topSkillsMarkup,
 } from './profileFixture'
 import {
    parseAbout,
@@ -37,6 +38,7 @@ import {
    parseSkills,
    parseSuggestions,
    parseTopCard,
+   parseTopSkills,
 } from './profileReader'
 
 describe('parseTopCard', () => {
@@ -60,6 +62,34 @@ describe('parseTopCard', () => {
          imageUrl: 'https://media.licdn.com/dms/image/v2/sample/profile-displayphoto-shrink_100_100/x',
          coverUrl: 'https://media.licdn.com/dms/image/v2/sample/profile-displaybackgroundimage-shrink_350_1400/x',
          profileUrl: 'https://www.linkedin.com/in/sample-person/',
+      })
+   })
+
+   it('should read the pronouns and the headline apart when the name sits one level deeper', () => {
+      const wrapped = parseTopCard(
+         profilePage(
+            topCardMarkup({
+               ...card,
+               wrapped: true,
+            })
+         )
+      )
+
+      expect(wrapped?.pronouns).toBe('They/Them')
+      expect(wrapped?.headline).toBe('Product lead at Sampleworks')
+      expect(
+         parseTopCard(
+            profilePage(
+               topCardMarkup({
+                  ...card,
+                  pronouns: undefined,
+                  wrapped: true,
+               })
+            )
+         )
+      ).toMatchObject({
+         headline: 'Product lead at Sampleworks',
+         pronouns: undefined,
       })
    })
 
@@ -94,6 +124,19 @@ describe('parseTopCard', () => {
 
    it('should give nothing for a page that has no top card', () => {
       expect(parseTopCard(profilePage('<p>nothing</p>'))).toBeUndefined()
+   })
+})
+
+describe('parseTopSkills', () => {
+   it('should read the skills named under the About text, split at the bullet, whatever the language of the label', () => {
+      expect(parseTopSkills(profilePage(topSkillsMarkup(['Product Strategy', 'Team Leadership'])))).toEqual([
+         'Product Strategy',
+         'Team Leadership',
+      ])
+   })
+
+   it('should give nothing when the page names none', () => {
+      expect(parseTopSkills(profilePage('<p>x</p>'))).toEqual([])
    })
 })
 

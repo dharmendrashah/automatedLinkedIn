@@ -13,14 +13,26 @@ export type FixtureTopCard = {
    places?: string
    location?: string
    connections?: string
+   // The name sits one level deeper, so the pronouns are beside its wrapper and the headline one level above them (seen on a profile
+   // recorded last, where the headline was read as the pronouns).
+   wrapped?: boolean
 }
 
-export const topCardMarkup = ({ name, verified, pronouns, headline, places, location, connections }: FixtureTopCard) =>
+export const topCardMarkup = ({
+   name,
+   verified,
+   pronouns,
+   headline,
+   places,
+   location,
+   connections,
+   wrapped,
+}: FixtureTopCard) =>
    `<div data-view-name="profile-top-card"><section componentkey="com.linkedin.sdui.profile.card.refSampleTopcard">
 <div role="button"><figure data-view-name="image"><img alt="Cover photo" src="${PIC}/profile-displaybackgroundimage-shrink_350_1400/x"></figure></div>
 <a href="${ME}/?isSelfProfile=true" componentkey="topcard-logo-image-referencekey" data-view-name="profile-top-card-member-photo"><div aria-label="Profile photo"><figure data-view-name="image"><img src="${PIC}/profile-displayphoto-shrink_100_100/x"></figure></div></a>
 <div><div><div><div>
-<div data-view-name="profile-top-card-verified-badge" data-display-contents="true"><div><h2>${name}</h2>${verified ? '<span role="img" aria-label="Verified"></span>' : ''}</div></div>
+${wrapped ? '<div>' : ''}<div data-view-name="profile-top-card-verified-badge" data-display-contents="true"><div><h2>${name}</h2>${verified ? '<span role="img" aria-label="Verified"></span>' : ''}</div></div>${wrapped ? '</div>' : ''}
 ${pronouns ? `<p>${pronouns}</p>` : ''}
 <div data-view-name="tg-entrypoint-selfviewtopcard"><div><a href="https://www.linkedin.com/trust/verification/" data-view-name="tg-entrypoint-verify-cta"><div><p>Verify in 2 minutes </p></div></a></div></div>
 </div><p>${headline}</p>${places ? `<p>${places}</p>` : ''}
@@ -40,6 +52,10 @@ export const insightsMarkup = (views: string, impressions: string, search: strin
 
    return `<div data-view-name="profile-card-insights"><section><h2>Analytics</h2>${links}<hr role="presentation">${links}</section></div>`
 }
+
+// The line under the About text that names the top skills, with the link to all of them (recorded 2026-10-24).
+export const topSkillsMarkup = (skills: string[]) =>
+   `<div><div><svg></svg><div><p>Top skills</p><p>${skills.join(' \u2022 ')}</p></div></div><a href="${ME}/overlay/top-skills-details/" data-view-name="form-about-top-skills-view-details" aria-label="Show top skills"><span></span></a></div>`
 
 export const activityMarkup = (followers: string) =>
    `<div data-view-name="profile-card-recent-activity"><section><h2>Activity</h2><a href="https://www.linkedin.com/feed/followers/">${followers}</a></section></div>`

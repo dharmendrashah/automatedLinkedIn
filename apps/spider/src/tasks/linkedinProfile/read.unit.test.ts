@@ -21,6 +21,7 @@ import {
    servicesMarkup,
    skillsPage,
    topCardMarkup,
+   topSkillsMarkup,
 } from '../../linkedin/profileFixture'
 import { VisitError } from '../defineTask'
 import { DETAIL_PAGES } from './capture'
@@ -38,6 +39,7 @@ const main = profilePage(
    }),
    openToWorkMarkup('Recruiters only', 'Product Lead, Head of Product roles'),
    aboutMarkup('A short about.'),
+   topSkillsMarkup(['Roadmapping', 'Discovery']),
    servicesMarkup(['Roadmapping', 'Discovery']),
    insightsMarkup('8 profile views', '0 post impressions', '3 search appearances'),
    activityMarkup('164 followers'),
@@ -316,7 +318,7 @@ describe('readProfile', () => {
       })
       expect(file().projects.items).toEqual([])
       expect(file().languages.items).toEqual([])
-      expect(file().topSkills).toEqual([])
+      expect(file().topSkills).toEqual(['Roadmapping', 'Discovery'])
    })
 
    it('should read the projects, the recommendations received and given, the languages, the services and open to work', async () => {

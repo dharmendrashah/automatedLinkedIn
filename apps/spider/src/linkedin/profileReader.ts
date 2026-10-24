@@ -103,9 +103,32 @@ export type TopCard = Pick<
    'name' | 'verified' | 'pronouns' | 'headline' | 'location' | 'imageUrl' | 'coverUrl' | 'connections' | 'profileUrl'
 >
 
+// The paragraphs that follow a block, grouped by how many levels above it they sit: the paragraphs beside the block, then those beside
+// its parent, and so on up to the card.
+const paragraphsAbove = (block: HTMLElement, card: HTMLElement) => {
+   const levels: HTMLElement[][] = []
+
+   for (let node: HTMLElement | null = block; node && node !== card; node = node.parentNode) {
+      const found: HTMLElement[] = []
+
+      for (let next = node.nextElementSibling; next; next = next.nextElementSibling) {
+         if (next.tagName === 'P') {
+            found.push(next)
+         }
+      }
+
+      if (found.length > 0) {
+         levels.push(found)
+      }
+   }
+
+   return levels
+}
+
 // The top of the profile: name, the verified mark, pronouns, headline, place, the pictures and the connections. The name sits in a
-// block marked as the verified badge (a picture with a role inside it when the member is verified), pronouns follow it, and the
-// headline and the line of current places come after, before the block that ends with the "Contact info" link.
+// block marked as the verified badge (a picture with a role inside it when the member is verified). The pronouns, when there are any,
+// are a paragraph nearer to that block than the headline, which is followed by the line of current places, before the block that ends
+// with the "Contact info" link; how deep the name sits differs between profiles, so the paragraphs are told apart by their nearness.
 export const parseTopCard = (html: string): TopCard | undefined => {
    const card = parse(html).querySelector('[data-view-name="profile-top-card"]')
    const name = textOf(card?.querySelector('h2'))
@@ -115,12 +138,9 @@ export const parseTopCard = (html: string): TopCard | undefined => {
    }
 
    const badge = card.querySelector('[data-view-name="profile-top-card-verified-badge"]')
-   const above = badge?.parentNode
-   const block = above?.parentNode
-   const pronouns = badge?.nextElementSibling?.tagName === 'P' ? textOf(badge.nextElementSibling) : undefined
-   const direct = (block?.childNodes ?? []).filter(
-      (node): node is HTMLElement => 'tagName' in node && (node as HTMLElement).tagName === 'P'
-   )
+   const [first, second] = badge ? paragraphsAbove(badge, card) : []
+   const pronouns = second ? textOf(first?.[0]) : undefined
+   const headline = textOf((second ?? first)?.[0])
    const contact = card.querySelector('a[href*="/overlay/contact-info/"]')
    const place = contact?.closest('div')?.querySelector('p')
    const photoLink = card.querySelector('[data-view-name="profile-top-card-member-photo"]')
@@ -129,7 +149,7 @@ export const parseTopCard = (html: string): TopCard | undefined => {
       name,
       verified: badge?.querySelector('[role="img"]') != null,
       pronouns: some(pronouns),
-      headline: some(textOf(direct[0])),
+      headline: some(headline),
       location: place && !place.querySelector('a') ? some(textOf(place)) : undefined,
       imageUrl: pictureOf(photoLink?.querySelector('img')),
       coverUrl: pictureOf(
@@ -142,6 +162,16 @@ export const parseTopCard = (html: string): TopCard | undefined => {
       ),
       profileUrl: addressOf(photoLink?.getAttribute('href')),
    }
+}
+
+// The skills named under the About text: a block of two paragraphs (a label, then the skills joined by bullets) beside the link that
+// shows them all, which is found by its own name so the label may be in any language.
+export const parseTopSkills = (html: string): string[] => {
+   const block = parse(html).querySelector(
+      'a[data-view-name="form-about-top-skills-view-details"]'
+   )?.previousElementSibling
+
+   return (block ? (linesOf(block)[1] ?? '') : '').split('•').map(clean).filter(Boolean).slice(0, 10)
 }
 
 // The text of the about card, without its "more" button.

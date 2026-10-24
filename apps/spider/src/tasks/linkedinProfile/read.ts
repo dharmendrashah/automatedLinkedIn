@@ -20,6 +20,7 @@ import {
    parseSkills,
    parseSuggestions,
    parseTopCard,
+   parseTopSkills,
 } from '../../linkedin/profileReader'
 import { SignedOut } from '../../linkedin/session'
 import { DETAIL_PAGES } from './capture'
@@ -262,7 +263,7 @@ export const readProfile = async (
          connections: top.connections,
          about: parseAbout(main),
          openToWork: parseOpenToWork(main),
-         topSkills: [],
+         topSkills: parseTopSkills(main),
          services: parseServices(main),
          analytics: parseAnalytics(main),
          activity: {
