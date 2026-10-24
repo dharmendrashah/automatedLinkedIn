@@ -25,10 +25,18 @@ const setup = ({ lands = PROFILE, refuse = [], scrolls = 2, pauseMs, tabs = 0 }:
    let current = BASE
    let left = scrolls
    let time = 0
+   // How far down the page is scrolled, and where it was at each click on a chip.
+   let y = 0
+   const positions: number[] = []
    const browser = {
-      inspect: vi.fn(async () => ({ url: current })),
+      inspect: vi.fn(async () => ({
+         url: current,
+         scrollY: y,
+      })),
       clickLink: vi.fn(async () => undefined),
       clickNth: vi.fn(async (selector: string, nth: number, _avoid: string) => {
+         positions.push(y)
+
          if (selector !== '[role="radio"]' || !current.endsWith('details/interests/') || nth > tabs) {
             return false
          }
@@ -37,11 +45,17 @@ const setup = ({ lands = PROFILE, refuse = [], scrolls = 2, pauseMs, tabs = 0 }:
 
          return true
       }),
-      press: vi.fn(async (_key: string) => current),
       back: vi.fn(async () => current),
-      scrollBy: vi.fn(async () => {
+      scrollBy: vi.fn(async (pixels: number) => {
+         if (pixels < 0) {
+            y = Math.max(0, y + pixels)
+
+            return false
+         }
+
          if (left > 0) {
             left -= 1
+            y += 800
 
             return true
          }
@@ -65,6 +79,7 @@ const setup = ({ lands = PROFILE, refuse = [], scrolls = 2, pauseMs, tabs = 0 }:
 
          current = url === `${BASE}/in/me/` ? lands : url
          left = scrolls
+         y = 0
 
          return current
       }),
@@ -84,6 +99,7 @@ const setup = ({ lands = PROFILE, refuse = [], scrolls = 2, pauseMs, tabs = 0 }:
       context,
       opened,
       attached,
+      positions,
       capture: () =>
          captureProfile(context as never, BASE, {
             random: () => 0.5,
@@ -122,8 +138,8 @@ describe('captureProfile', () => {
 
       await capture()
 
-      // Two scrolls that move and three that do not, for each of the eleven pages.
-      expect(browser.scrollBy).toHaveBeenCalledTimes(5 * (DETAIL_PAGES.length + 1))
+      // Two scrolls that move and three that do not, for each of the eleven pages, and one back up before the first chip.
+      expect(browser.scrollBy).toHaveBeenCalledTimes(5 * (DETAIL_PAGES.length + 1) + 1)
    })
 
    it('should click nothing', async () => {
@@ -152,15 +168,12 @@ describe('captureProfile', () => {
       expect(attached).not.toHaveProperty(['detail-interests-4.html'])
    })
 
-   it('should go back to the top of the page before each chip, where the chips are, after the page was scrolled to its end', async () => {
-      const { capture, browser } = setup({ tabs: 2 })
+   it('should scroll back to the top of the page before each chip, where the chips are, after the page was scrolled to its end', async () => {
+      const { capture, positions } = setup({ tabs: 2 })
 
       await capture()
 
-      expect(browser.press).toHaveBeenCalledWith('Home')
-      browser.clickNth.mock.invocationCallOrder.forEach((order, index) => {
-         expect(browser.press.mock.invocationCallOrder[index]).toBeLessThan(order)
-      })
+      expect(positions).toEqual([0, 0, 0])
    })
 
    it('should keep at most four more pages of chips, and stay under the 20 files of a run', async () => {

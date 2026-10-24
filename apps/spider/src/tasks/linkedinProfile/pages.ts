@@ -15,6 +15,7 @@ export type PageDeps = {
 // The page is scrolled down in steps until it stops moving three times, or this many steps, so its lazy parts are drawn.
 const MAX_SCROLLS = 25
 const SCROLL = [500, 900] as const
+const SCROLL_UP = [1500, 2500] as const
 export const PAUSES = {
    // After a scroll, and between two pages.
    scroll: [700, 1600],
@@ -67,6 +68,18 @@ export const createPages = (
       }
    }
 
+   // Scrolls back up with the wheel, in bigger steps, until the page is at its top.
+   const scrollToTop = async () => {
+      for (let step = 0; step < MAX_SCROLLS; step += 1) {
+         await hands.scrollBy(-reader.span(SCROLL_UP))
+         await reader.wait(PAUSES.scroll)
+
+         if (!((await hands.inspect()).scrollY > 0)) {
+            return
+         }
+      }
+   }
+
    return {
       reader,
       session,
@@ -100,17 +113,14 @@ export const createPages = (
          }
 
          return `${here.origin}/in/me/`
-
-         return owner ? `${here.origin}/in/${owner}/` : undefined
       },
       open: (address: string) => session.open(address),
       // Opens each other chip of the Interests page by its block, one after the other, until a click finds no more. The chips are at the
-      // top of the page, which is out of sight once the page was scrolled to its end (the third capture clicked none for that), so the
-      // Home key takes the page back to them first.
+      // top of the page, which is out of sight once the page was scrolled to its end, so the wheel takes the page back up to them first
+      // (the Home key did nothing in the fourth capture).
       eachInterestTab: async (visitTab: (tab: number) => Promise<void>) => {
          for (let tab = 1; tab <= MAX_INTEREST_TABS; tab += 1) {
-            await hands.press('Home')
-            await reader.wait(PAUSES.scroll)
+            await scrollToTop()
 
             if (!(await hands.clickNth(INTEREST_TAB, tab, CHIP_AVOID))) {
                return

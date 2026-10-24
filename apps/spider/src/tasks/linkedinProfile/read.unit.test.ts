@@ -195,7 +195,6 @@ const setup = ({ lands = ME, refuse = [], pauseMs, pages = PAGES }: Page = {}) =
 
          return true
       }),
-      press: vi.fn(async (_key: string) => current),
       screenshot: vi.fn(async () => Buffer.from('png')),
       clearCookies: vi.fn(async () => undefined),
       exists: vi.fn(async () => false),
