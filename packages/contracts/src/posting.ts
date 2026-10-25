@@ -5,15 +5,17 @@ import { UPLOAD_ID, extensionOf } from './attachments'
 // What a post may hold (.plan/posting-page.md). Brain enforces these on every draft it stores and reads, and the page uses the same
 // rules to refuse early. The numbers are from what LinkedIn shows in its composer and are not verified against its documentation.
 export const POST_TEXT_MAX = 3000
-export const POST_PHOTOS_MAX = 20
+export const POST_PHOTOS_MAX = 10
 export const POST_BLOCKS_MAX = 20
 export const POST_ALT_MAX = 300
 export const POST_PHOTO_TYPES = ['jpg', 'jpeg', 'png', 'gif']
 export const POST_VIDEO_TYPES = ['mp4', 'mov']
 export const POST_DOCUMENT_TYPES = ['pdf', 'ppt', 'pptx', 'doc', 'docx']
 export const POST_PHOTO_BYTES = 8 * 1024 * 1024
-export const POST_VIDEO_BYTES = 512 * 1024 * 1024
-export const POST_DOCUMENT_BYTES = 100 * 1024 * 1024
+export const POST_VIDEO_BYTES = 20 * 1024 * 1024
+export const POST_DOCUMENT_BYTES = 20 * 1024 * 1024
+// All the files of one post together (the platform's own limit, owner 2026-10-26).
+export const POST_FILES_TOTAL_BYTES = 20 * 1024 * 1024
 export const POST_DRAFTS_MAX = 200
 
 export const POST_ONE_ATTACHMENT =
@@ -128,6 +130,23 @@ export const postKey = (userId: string, fileId: string, name: string) => `posts/
 
 export const POST_FILE_ID = UPLOAD_ID
 
+// A post's address on LinkedIn, in any of the three forms it is given (`activity` on the feed, `share` and `ugcPost` in the
+// success window); the link a run hands back is only ever one of these, checked here and again by whoever stores it.
+const POST_LINK = /^\/feed\/update\/urn:li:(?:activity|share|ugcPost):\d{10,25}\/?$/
+
+// The address with its query and fragment dropped and a slash at the end, or undefined when it is not a post's address.
+export const postLinkOf = (value: string | undefined) => {
+   if (!value || !URL.canParse(value)) {
+      return undefined
+   }
+
+   const { protocol, hostname, pathname } = new URL(value)
+
+   return protocol === 'https:' && hostname === 'www.linkedin.com' && POST_LINK.test(pathname)
+      ? `https://www.linkedin.com${pathname.replace(/\/?$/, '/')}`
+      : undefined
+}
+
 export type PostFileRef = {
    id: string
    name: string
@@ -156,6 +175,58 @@ export const postFilesOf = (blocks: PostBlock[]): PostFileRef[] =>
          : []
    })
 
+const filesBytes = (blocks: PostBlock[]) =>
+   blocks.reduce((total, block) => {
+      if (block.type === 'PHOTOS') {
+         return total + block.items.reduce((sum, { bytes }) => sum + bytes, 0)
+      }
+
+      return block.type === 'VIDEO' || block.type === 'DOCUMENT' ? total + block.file.bytes : total
+   }, 0)
+
+// What the posting task is given for the files of a post: where each one is kept and what kind it is, never the file. One kind only:
+// up to ten photos, or one video, or one document (owner 2026-10-26).
+export const postTaskFilesSchema = z
+   .array(
+      z.strictObject({
+         id: z.string().regex(POST_FILE_ID),
+         name: z.string().min(1).max(120),
+         kind: z.enum(['PHOTOS', 'VIDEO', 'DOCUMENT']),
+      })
+   )
+   .max(POST_PHOTOS_MAX)
+   .superRefine((files, context) => {
+      const kind = files[0]?.kind
+
+      if (files.some(file => file.kind !== kind)) {
+         context.addIssue({
+            code: 'custom',
+            message: 'A post holds photos or a video or a document, not a mix.',
+         })
+      }
+
+      if (kind && kind !== 'PHOTOS' && files.length > 1) {
+         context.addIssue({
+            code: 'custom',
+            message: 'A post holds one video or one document.',
+         })
+      }
+
+      if (new Set(files.map(({ id }) => id)).size !== files.length) {
+         context.addIssue({
+            code: 'custom',
+            message: 'Two files have the same id.',
+         })
+      }
+
+      if (files.some(file => !POST_FILES[file.kind].types.includes(extensionOf(file.name) ?? ''))) {
+         context.addIssue({
+            code: 'custom',
+            message: 'A file is of a type its kind does not take.',
+         })
+      }
+   })
+
 export const postBlocksSchema = z
    .array(blockSchema)
    .max(POST_BLOCKS_MAX)
@@ -178,6 +249,13 @@ export const postBlocksSchema = z
          context.addIssue({
             code: 'custom',
             message: `The text of a post can be at most ${POST_TEXT_MAX} characters.`,
+         })
+      }
+
+      if (filesBytes(blocks) > POST_FILES_TOTAL_BYTES) {
+         context.addIssue({
+            code: 'custom',
+            message: `The files of a post can be at most ${POST_FILES_TOTAL_BYTES / (1024 * 1024)} MB together.`,
          })
       }
    })

@@ -3,6 +3,7 @@ import { CryptoService, KeptFiles } from 'core'
 import { type Prisma } from 'generated/prisma/client'
 
 import { PostDraftService } from './postDraft.service'
+import { PostPublicationService } from './postPublication.service'
 import { PrismaService } from './prisma.service'
 
 export type LinkedInSecrets = {
@@ -308,6 +309,7 @@ export class LinkedInAccountService {
    public static async deleteForUser(userId: string, id: string) {
       await KeptFiles.removeAccount(userId, id)
       await PostDraftService.removeFilesOfAccount(userId, id)
+      await PostPublicationService.removeFilesOfAccount(userId, id)
 
       const { count } = await PrismaService.client.linkedInAccount.deleteMany({
          where: {

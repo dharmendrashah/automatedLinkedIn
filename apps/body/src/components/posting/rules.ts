@@ -10,11 +10,12 @@ export type FileRef = Extract<PostBlock, { type: 'VIDEO' }>['file']
 // the two differ.
 export const LIMITS = {
    TEXT: 3000,
-   PHOTOS: 20,
+   PHOTOS: 10,
    ALT: 300,
    PHOTO_BYTES: 8 * 1024 * 1024,
-   VIDEO_BYTES: 512 * 1024 * 1024,
-   DOCUMENT_BYTES: 100 * 1024 * 1024,
+   VIDEO_BYTES: 20 * 1024 * 1024,
+   DOCUMENT_BYTES: 20 * 1024 * 1024,
+   FILES_BYTES: 20 * 1024 * 1024,
    PHOTO_TYPES: ['jpg', 'jpeg', 'png', 'gif'],
    VIDEO_TYPES: ['mp4', 'mov'],
    DOCUMENT_TYPES: ['pdf', 'ppt', 'pptx', 'doc', 'docx'],

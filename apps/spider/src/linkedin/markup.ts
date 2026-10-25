@@ -51,3 +51,33 @@ export const IMAGE_INPUT = 'input.msg-form__attachment-upload-input[accept="imag
 export const FILE_INPUT = 'input.msg-form__attachment-upload-input[accept*=".pdf"]'
 // The button after the beacon at the bottom of the list, for a page that does not load more by itself.
 export const LOAD_MORE = '[data-test-msg-cross-pillar-visible-beacon] + button'
+
+// The page where a post is written, the box its words go in (a rich-text editor; real key presses reach it) and the button that
+// sends it, which is greyed until there are words and while it sends; recorded 2026-10-25.
+export const POST_COMPOSE_PATH = '/sharing/compose'
+export const POST_EDITOR = 'div[contenteditable="true"][componentkey="ShareBox_textEditor"]'
+export const POST_BUTTON = 'button[data-view-name="share-post"]'
+// The chips that say who sees the post and who may comment, and the rows their pop-ups offer. The comment rows have their own names
+// (recorded 2026-10-25). The audience rows were only seen on video, so they are found by their words among the radio rows.
+export const POST_AUDIENCE_CHIP = '[aria-label^="Post to "]'
+export const POST_COMMENTS_CHIP = '[data-view-name="share-view-comment-controls-list"]'
+export const POST_OPTION = '[role="radio"]'
+export const POST_COMMENT_OPTIONS = {
+   ANYONE: '[data-view-name="share-change-comment-anyone"]',
+   CONNECTIONS: '[data-view-name="share-change-comment-connections"]',
+   OFF: '[data-view-name="share-change-comment-no-one"]',
+} as const
+// The files of a post (recorded 2026-10-26). Media opens the "Editor" dialog for photos and a video; a document has its own dialog,
+// reached through "Expand content types". LinkedIn adds a hidden file input to the end of the page each time a dialog opens, so the
+// first one that matches is the one of the dialog just opened. The Editor's buttons have no names, so they are found by their words
+// among the buttons of every dialog.
+export const POST_MEDIA_BUTTON = 'button[data-view-name="share-sharebox-bottom-bar-media"]'
+export const POST_MORE_TYPES = 'button[aria-label="Expand content types"]'
+export const POST_DOCUMENT_LINK = 'a[aria-label="Document"]'
+export const POST_PHOTO_INPUT = 'input[type="file"][accept*="image/jpeg"]'
+export const POST_VIDEO_INPUT = 'input[type="file"][accept*="video/"]'
+export const POST_DOCUMENT_INPUT = 'input[type="file"][accept*="application/pdf"]'
+export const POST_DIALOG_BUTTON = 'dialog button'
+export const POST_DOCUMENT_TITLE = 'input[placeholder="Add a descriptive title to your document"]'
+export const POST_DOCUMENT_DONE = 'button[data-view-name="media-document-share-confirm"]'
+export const POST_PREVIEW_REMOVE = 'button[data-view-name="share-detour-preview-remove"]'

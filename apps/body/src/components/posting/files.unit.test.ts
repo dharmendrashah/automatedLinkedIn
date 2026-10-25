@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { LIMITS } from './rules'
-import { fileProblem, formatBytes, kindOfFile, splitDrop, storedName } from './files'
+import { fileProblem, formatBytes, kindOfFile, splitDrop, storedName, totalProblem } from './files'
 
 const file = (name: string, size = 1000) => ({
    name,
@@ -23,7 +23,14 @@ describe('fileProblem', () => {
    it('should refuse an empty file and one over the size limit', () => {
       expect(fileProblem(file('a.jpg', 0), 'PHOTOS')).toMatch(/empty/)
       expect(fileProblem(file('a.jpg', LIMITS.PHOTO_BYTES + 1), 'PHOTOS')).toMatch(/8 MB/)
-      expect(fileProblem(file('a.mp4', LIMITS.VIDEO_BYTES + 1), 'VIDEO')).toMatch(/512 MB/)
+      expect(fileProblem(file('a.mp4', LIMITS.VIDEO_BYTES + 1), 'VIDEO')).toMatch(/20 MB/)
+   })
+})
+
+describe('totalProblem', () => {
+   it('should refuse a file that would take the files of a post past 20 MB together, and accept one that fits', () => {
+      expect(totalProblem(LIMITS.FILES_BYTES - 1000, file('a.jpg', 1000))).toBeUndefined()
+      expect(totalProblem(LIMITS.FILES_BYTES - 1000, file('a.jpg', 1001))).toMatch(/20 MB together/)
    })
 })
 
@@ -37,7 +44,7 @@ describe('kindOfFile', () => {
    })
 
    it('should refuse a document over the size limit', () => {
-      expect(fileProblem(file('a.pdf', LIMITS.DOCUMENT_BYTES + 1), 'DOCUMENT')).toMatch(/100 MB/)
+      expect(fileProblem(file('a.pdf', LIMITS.DOCUMENT_BYTES + 1), 'DOCUMENT')).toMatch(/20 MB/)
       expect(fileProblem(file('a.pdf'), 'DOCUMENT')).toBeUndefined()
    })
 })

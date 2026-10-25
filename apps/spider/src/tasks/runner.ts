@@ -28,7 +28,7 @@ import { ObjectNotFoundError, type ObjectStore } from '../storage/store'
 import { type Handover } from '../takeover/waitForOwner'
 import { type Credentials } from './credentials'
 import { type TaskContext, type TaskDefinition, type TaskOutcome, VisitError } from './defineTask'
-import { type Download, fetchUploads } from './uploads'
+import { type Download, fetchPostFiles, fetchUploads } from './uploads'
 
 const MAX_ARTIFACTS = 300
 
@@ -571,6 +571,7 @@ const execute = async (
          )
       },
       ...(fetchFiles && { uploads: { fetch: fetchFiles } }),
+      ...(download && { postFiles: { fetch: files => fetchPostFiles(download, command.user_id, files) } }),
       ...(deps.files &&
          account && {
             kept: {

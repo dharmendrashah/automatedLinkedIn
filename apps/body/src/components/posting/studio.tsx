@@ -10,8 +10,10 @@ import { toast } from 'sonner'
 import type { PostBlock } from '@automatedLinkedIn/contracts'
 
 import { Composer } from './composer'
+import { PostConfirmDialog } from './post-confirm-dialog'
 import { PostPreview, type PreviewWidth } from './post-preview'
 import { type Planned, ScheduleDialog } from './schedule-dialog'
+import { summaryOf } from './summary'
 import { identityOf, ineligibleReason } from './accounts'
 import {
    attachmentRefusal,
@@ -23,7 +25,7 @@ import {
    withPhotos,
    withoutPhoto,
 } from './draft'
-import { type FileKind, fileProblem, storedName } from './files'
+import { type FileKind, fileProblem, storedName, totalProblem } from './files'
 import { LIMITS, type Attachment, type PhotoItem } from './rules'
 import { describePlanned } from './schedule'
 import { useAttachments } from './use-attachments'
@@ -67,6 +69,7 @@ export const Studio = ({ initial, accounts }: Props) => {
    const [width, setWidth] = useState<PreviewWidth>('desktop')
    const [tab, setTab] = useState<'edit' | 'preview'>('edit')
    const [scheduling, setScheduling] = useState(false)
+   const [confirming, setConfirming] = useState<'now' | 'schedule'>()
    const { files, attach, detach } = useAttachments()
    // A file is uploaded as soon as it is picked; when it is checked and kept, the draft keeps where it is.
    const uploads = useUploads((fileId, uploaded) => setAttachment(current => withKey(current, fileId, uploaded)))
@@ -83,6 +86,8 @@ export const Studio = ({ initial, accounts }: Props) => {
    const draftId = useRef(initial.draftId)
    const mounted = useRef(true)
    const first = useRef(true)
+   const publish = trpc.postPublication.publish.useMutation()
+   const schedule = trpc.postPublication.schedule.useMutation()
    const saveDraft = trpc.postDraft.save.useMutation()
 
    const autosave = useAutosave(async ({ blank, input }) => {
@@ -149,6 +154,48 @@ export const Studio = ({ initial, accounts }: Props) => {
            ? `Uploading ${uploading} ${uploading === 1 ? 'file' : 'files'}…`
            : SAVE_TEXT[autosave.state]
    const blocks = blocksOf(text, attachment)
+   const sending = publish.isPending || schedule.isPending
+   const blocker = refusal
+      ? `This account cannot post now. ${refusal}`
+      : isBlank(text, attachment)
+        ? 'Write something first.'
+        : uploading > 0
+          ? 'Wait for the files to finish uploading.'
+          : undefined
+
+   // The draft is saved first, so what is posted is what is on the page; the copy brain makes is the post, and the draft is gone.
+   const send = async () => {
+      const mode = confirming
+
+      setConfirming(undefined)
+
+      if (!mode) {
+         return
+      }
+
+      if (!(await autosave.flush()) || draftId.current === undefined) {
+         toast.error('Your draft could not be saved, so nothing was sent.')
+
+         return
+      }
+
+      try {
+         if (mode === 'schedule') {
+            await schedule.mutateAsync({ draftId: draftId.current })
+         } else {
+            await publish.mutateAsync({ draftId: draftId.current })
+         }
+      } catch (error) {
+         toast.error(error instanceof Error ? readableError(error) : 'It could not be sent.')
+
+         return
+      }
+
+      void utils.postDraft.list.invalidate()
+      void utils.postPublication.list.invalidate()
+      toast(mode === 'schedule' ? 'Post planned' : 'Post sent for posting')
+      void navigate('/posting')
+   }
 
    const changeAccount = (next: string) => {
       setAccountId(next)
@@ -157,11 +204,12 @@ export const Studio = ({ initial, accounts }: Props) => {
 
    const addPhotos = (picked: File[]) => {
       let room = LIMITS.PHOTOS - (attachment?.type === 'PHOTOS' ? attachment.items.length : 0)
+      let used = attachment?.type === 'PHOTOS' ? attachment.items.reduce((sum, { bytes }) => sum + bytes, 0) : 0
       const added: PhotoItem[] = []
       const problems: string[] = []
 
       for (const file of picked) {
-         const problem = fileProblem(file, 'PHOTOS')
+         const problem = fileProblem(file, 'PHOTOS') ?? (room > 0 ? totalProblem(used, file) : undefined)
 
          if (problem) {
             problems.push(problem)
@@ -178,6 +226,7 @@ export const Studio = ({ initial, accounts }: Props) => {
                bytes: file.size,
             })
             room -= 1
+            used += file.size
          }
       }
 
@@ -307,12 +356,11 @@ export const Studio = ({ initial, accounts }: Props) => {
             </ToggleGroup>
          </div>
 
-         <Alert>
-            <AlertDescription>
-               Posting is not connected yet. Your post is kept as a draft and nothing is sent to LinkedIn.
-               {refusal ? ` This account cannot post now. ${refusal}` : ''}
-            </AlertDescription>
-         </Alert>
+         {refusal ? (
+            <Alert>
+               <AlertDescription>This account cannot post now. {refusal}</AlertDescription>
+            </Alert>
+         ) : null}
 
          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,34rem)]">
             <div className={tab === 'preview' ? 'hidden lg:block' : undefined}>
@@ -358,7 +406,22 @@ export const Studio = ({ initial, accounts }: Props) => {
                               <CalendarClock />
                               {planned ? describePlanned(planned.at, planned.zone) : 'Plan a time'}
                            </Button>
-                           <Button type="button" disabled title="Posting is not connected yet">
+                           <Button
+                              type="button"
+                              variant="outline"
+                              disabled={Boolean(blocker) || sending || !planned}
+                              title={blocker ?? (planned ? undefined : 'Plan a time first.')}
+                              onClick={() => setConfirming('schedule')}
+                           >
+                              <CalendarClock />
+                              Schedule
+                           </Button>
+                           <Button
+                              type="button"
+                              disabled={Boolean(blocker) || sending}
+                              title={blocker}
+                              onClick={() => setConfirming('now')}
+                           >
                               <Send />
                               Post now
                            </Button>
@@ -401,6 +464,15 @@ export const Studio = ({ initial, accounts }: Props) => {
             current={planned}
             onSave={setPlanned}
             onClear={() => setPlanned(null)}
+         />
+         <PostConfirmDialog
+            mode={confirming}
+            account={account.displayName ?? account.email}
+            words={summaryOf(blocks).words}
+            attachment={summaryOf(blocks).attachment}
+            plannedText={planned ? describePlanned(planned.at, planned.zone) : undefined}
+            onConfirm={() => void send()}
+            onCancel={() => setConfirming(undefined)}
          />
       </div>
    )

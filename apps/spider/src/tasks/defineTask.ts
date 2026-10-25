@@ -64,6 +64,9 @@ export interface TaskContext {
    // The files of an upload brain made for this run's user, on this machine until `remove` is called; absent where files cannot be
    // fetched (the paths are built from the user of the run, never from the input).
    uploads?: { fetch: (uploadId: string, names: string[]) => Promise<Fetched> }
+   // The files of a post, on this machine until `remove` is called, from the folder of this run's user; absent where files cannot be
+   // fetched. Each file is told by its id and name, never by a path.
+   postFiles?: { fetch: (files: Array<{ id: string; name: string }>) => Promise<Fetched> }
    // Keeps the files of messages for good, in the folder of the owner and account of this run (they are deleted only with the
    // account). The place of a received file is the same on every read, so one already kept is not downloaded again. Absent where
    // nothing can be kept (the local devtools) or for a run with no account.

@@ -75,7 +75,7 @@ describe('attachmentRefusal', () => {
 })
 
 describe('photos', () => {
-   it('should start a photo attachment, add to it up to 20 and keep the order', () => {
+   it('should start a photo attachment, add to it up to 10 and keep the order', () => {
       const first = withPhotos(undefined, [photo('a'), photo('b')], 'p1')
       const more = withPhotos(
          first,
@@ -84,7 +84,7 @@ describe('photos', () => {
       )
 
       expect(first).toMatchObject({ id: 'p1', type: 'PHOTOS' })
-      expect(more?.type === 'PHOTOS' && more.items).toHaveLength(20)
+      expect(more?.type === 'PHOTOS' && more.items).toHaveLength(10)
       expect(more?.type === 'PHOTOS' && more.items.slice(0, 2).map(({ id }) => id)).toEqual(['a', 'b'])
    })
 

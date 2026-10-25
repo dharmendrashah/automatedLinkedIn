@@ -1,20 +1,32 @@
 import { AccountCard } from '@/components/posting/account-card'
 import { DeleteDraftDialog } from '@/components/posting/delete-draft-dialog'
 import { DraftsList, type Draft } from '@/components/posting/drafts-list'
+import { hasActive } from '@/components/posting/publication'
+import { PublicationsList, type Publication } from '@/components/posting/publications-list'
 import { PageStatus } from '@/components/page-status'
 import { readableError } from '@/lib/trpc-error'
 import { useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
 import { trpc } from '../trpc'
 
-// Step one of writing a post: pick the account it is for. Below, the drafts already started.
+const POLL_MS = 5000
+
+// Step one of writing a post: pick the account it is for. Below, the posts sent or planned and the drafts already started.
 export const Posting = () => {
    const utils = trpc.useUtils()
+   const navigate = useNavigate()
    const accounts = trpc.linkedInAccount.list.useQuery(undefined, { retry: false })
    const drafts = trpc.postDraft.list.useQuery(undefined, { retry: false })
+   const posts = trpc.postPublication.list.useQuery(undefined, {
+      retry: false,
+      refetchInterval: query => (hasActive(query.state.data) ? POLL_MS : false),
+   })
    const [toDelete, setToDelete] = useState<Draft | null>(null)
+   const back = trpc.postPublication.backToDraft.useMutation({
+      onError: error => toast.error(readableError(error)),
+   })
    const remove = trpc.postDraft.remove.useMutation({
       onSuccess: () => {
          void utils.postDraft.list.invalidate()
@@ -22,6 +34,16 @@ export const Posting = () => {
       },
       onError: error => toast.error(readableError(error)),
    })
+
+   const takeBack = async (post: Publication) => {
+      const draft = await back.mutateAsync({ id: post.id }).catch(() => undefined)
+
+      if (draft) {
+         void utils.postDraft.list.invalidate()
+         void utils.postPublication.list.invalidate()
+         void navigate(`/posting/${post.accountId}/${draft.id}`)
+      }
+   }
 
    if (accounts.isPending) {
       return <PageStatus>Loading your accounts…</PageStatus>
@@ -58,6 +80,15 @@ export const Posting = () => {
                </div>
             )}
          </section>
+
+         {posts.data && posts.data.length > 0 ? (
+            <section className="grid gap-3" aria-labelledby="posts">
+               <h2 id="posts" className="text-lg font-semibold">
+                  Your posts
+               </h2>
+               <PublicationsList posts={posts.data} accounts={accounts.data} onBack={post => void takeBack(post)} />
+            </section>
+         ) : null}
 
          <section className="grid gap-3" aria-labelledby="drafts">
             <h2 id="drafts" className="text-lg font-semibold">

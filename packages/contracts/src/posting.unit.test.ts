@@ -11,6 +11,7 @@ import {
    postDraftInputSchema,
    postFilesOf,
    postKey,
+   postLinkOf,
    postUploadKey,
 } from './posting'
 
@@ -87,7 +88,7 @@ describe('postBlocksSchema', () => {
       ).toBe(false)
    })
 
-   it('should refuse more than 20 photos, an empty photo block and duplicate block ids', () => {
+   it('should refuse more than 10 photos, an empty photo block and duplicate block ids', () => {
       expect(postBlocksSchema.safeParse([photos('p1', POST_PHOTOS_MAX)]).success).toBe(true)
       expect(postBlocksSchema.safeParse([photos('p1', POST_PHOTOS_MAX + 1)]).success).toBe(false)
       expect(postBlocksSchema.safeParse([photos('p1', 0)]).success).toBe(false)
@@ -159,6 +160,39 @@ describe('postBlocksSchema', () => {
       expect(postBlocksSchema.safeParse([text('t1', 'a'.repeat(1500)), text('t2', 'b'.repeat(1500))]).success).toBe(
          false
       )
+   })
+})
+
+describe('postLinkOf', () => {
+   it('should accept the address of a post, whichever kind of id LinkedIn gives it, and end it with a slash', () => {
+      for (const kind of ['activity', 'share', 'ugcPost']) {
+         expect(postLinkOf(`https://www.linkedin.com/feed/update/urn:li:${kind}:7520195721216827392`)).toBe(
+            `https://www.linkedin.com/feed/update/urn:li:${kind}:7520195721216827392/`
+         )
+      }
+   })
+
+   it('should drop a query and a fragment of an address of a post', () => {
+      expect(postLinkOf('https://www.linkedin.com/feed/update/urn:li:activity:7520195721216827392/?x=1#y')).toBe(
+         'https://www.linkedin.com/feed/update/urn:li:activity:7520195721216827392/'
+      )
+   })
+
+   it('should refuse anything that is not the address of a post on LinkedIn', () => {
+      for (const value of [
+         undefined,
+         '',
+         'not a link',
+         'http://www.linkedin.com/feed/update/urn:li:activity:7520195721216827392/',
+         'https://evil.example/feed/update/urn:li:activity:7520195721216827392/',
+         'https://www.linkedin.com.evil.example/feed/update/urn:li:activity:7520195721216827392/',
+         'https://www.linkedin.com/feed/update/urn:li:activity:abc/',
+         'https://www.linkedin.com/feed/update/urn:li:person:7520195721216827392/',
+         'https://www.linkedin.com/in/someone/',
+         'javascript:alert(1)',
+      ]) {
+         expect(postLinkOf(value)).toBeUndefined()
+      }
    })
 })
 

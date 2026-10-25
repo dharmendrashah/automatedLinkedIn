@@ -53,10 +53,15 @@ export const createSaveQueue = <T>({ save: first, delay, onState }: Options<T>) 
          clearTimeout(timer)
          timer = setTimeout(() => void run(), delay)
       },
-      flush: () => {
+      // Saves what is waiting at once; resolves to whether everything was saved (false when a save failed and its value is kept).
+      flush: async () => {
          clearTimeout(timer)
 
-         return pending || inflight ? run() : Promise.resolve()
+         if (pending || inflight) {
+            await run()
+         }
+
+         return !pending
       },
       retry: () => {
          if (pending) {

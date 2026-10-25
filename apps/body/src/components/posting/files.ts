@@ -82,6 +82,12 @@ export const fileProblem = (file: Picked, kind: FileKind) => {
    return file.size > max ? `${file.name} is over ${formatBytes(max)}.` : undefined
 }
 
+// Why a file cannot join the files a post already holds, when that would pass the limit of all of them together.
+export const totalProblem = (used: number, file: Picked) =>
+   used + file.size > LIMITS.FILES_BYTES
+      ? `${file.name} was not added: the files of a post can be at most ${formatBytes(LIMITS.FILES_BYTES)} together.`
+      : undefined
+
 // The name kept with the draft: no folder, at most 120 characters, the extension kept.
 export const storedName = (name: string) => {
    const base = name.split(/[\\/]/).pop() ?? ''

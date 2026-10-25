@@ -85,7 +85,7 @@ describe('PostFiles', () => {
             expect.objectContaining({
                fields: { 'Content-Type': 'application/octet-stream' },
                conditions: [
-                  ['content-length-range', 1, 100 * 1024 * 1024],
+                  ['content-length-range', 1, 20 * 1024 * 1024],
                   ['eq', '$Content-Type', 'application/octet-stream'],
                ],
             })

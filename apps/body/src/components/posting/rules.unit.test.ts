@@ -36,6 +36,7 @@ describe('posting rules', () => {
          PHOTO_BYTES: contract.POST_PHOTO_BYTES,
          VIDEO_BYTES: contract.POST_VIDEO_BYTES,
          DOCUMENT_BYTES: contract.POST_DOCUMENT_BYTES,
+         FILES_BYTES: contract.POST_FILES_TOTAL_BYTES,
          PHOTO_TYPES: contract.POST_PHOTO_TYPES,
          VIDEO_TYPES: contract.POST_VIDEO_TYPES,
          DOCUMENT_TYPES: contract.POST_DOCUMENT_TYPES,

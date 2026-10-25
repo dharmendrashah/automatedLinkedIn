@@ -1,33 +1,14 @@
-import { copyFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { type ProxyConfig } from '@automatedLinkedIn/contracts'
 
-import { type ProxyConfig, RUNNER_VERDICTS, type TaskResult, runPrefix } from '@automatedLinkedIn/contracts'
-
-import { createDeviceIdentity } from '../identity/createDeviceIdentity'
-import { IdentityStore } from '../identity/identityStore'
-import { lookupExit } from '../identity/lookupExit'
-import { Recorder } from '../recording/recorder'
-import { CamoufoxDriver } from '../scraping/camoufoxDriver'
-import { DiskProfiles } from '../sessions/profiles'
-import { SessionVault } from '../sessions/sessionVault'
-import { openCredentials } from '../tasks/credentials'
 import { type TaskDefinition } from '../tasks/defineTask'
 import { TASK_NAME as BROWSE_TASK } from '../tasks/linkedinBrowse'
 import { TASK_NAME as LOGIN_TASK } from '../tasks/linkedinLogin'
-import { AccountValidator } from '../tasks/linkedinLogin/accountValidator'
-import { buildTasks } from '../tasks/registry'
-import { type RunnerDeps, runTask } from '../tasks/runner'
-import { buildCommand } from './command'
-import { hostOs } from './hostOs'
 import { askInput } from './inputPrompt'
 import { type SavedAccount, listSavedAccounts } from './localDb'
-import { LocalStore } from './localStore'
-import { MemoryStore } from './memoryStore'
 import { ask, choose, confirm, handleInterrupt } from './prompt'
-import { type RunRecord, formatRun, summarise } from './summary'
+import { createRunEnvironment } from './runEnvironment'
+import { type RunRecord, summarise } from './summary'
 
-const LINKEDIN_URL = 'https://www.linkedin.com'
-const ACTION_TIMEOUT_MS = 30_000
 const MAX_RUNS = 10
 // A sign-in to a real account is what gets it locked, so it is not repeated often.
 const MAX_ACCOUNT_RUNS = 3
@@ -43,19 +24,6 @@ const describeNeeds = ({ needs }: TaskDefinition) =>
    [needs.proxy === 'required' ? 'needs a proxy' : '', needs.account ? 'needs an account' : '']
       .filter(Boolean)
       .join(', ')
-
-// The task runs under no allowlist, no robots.txt check and no delay: a person is watching, and a new page has to be
-// reachable before a task is written for it. The worker still applies all three.
-const freeRules = {
-   policy: {
-      allowsUrl: () => true,
-      allowsCookieDomain: () => true,
-      exemptsRobots: () => true,
-   },
-   robots: { check: async () => ({ allowed: true }) },
-   limiter: { wait: async () => undefined },
-   accountLock: { acquire: async () => ({ release: async () => undefined }) },
-}
 
 const chooseAccount = async (databaseUrl: string): Promise<SavedAccount> => {
    const accounts = await listSavedAccounts(databaseUrl)
@@ -96,16 +64,10 @@ const countRuns = async (needsAccount: boolean) => {
 }
 
 export const runTasks = async ({ proxy, databaseUrl, encryptionKey, outputRoot }: RunModeOptions) => {
-   const tasks = buildTasks({
-      linkedin: {
-         validator: new AccountValidator({
-            baseUrl: LINKEDIN_URL,
-            mode: 'full',
-            pause: async () => undefined,
-            allowsCookieDomain: () => true,
-         }),
-         baseUrl: LINKEDIN_URL,
-      },
+   const { tasks, profiles, runOnce } = createRunEnvironment({
+      proxy,
+      encryptionKey,
+      outputRoot,
    })
 
    console.log(
@@ -127,24 +89,8 @@ export const runTasks = async ({ proxy, databaseUrl, encryptionKey, outputRoot }
    const input = await askInput(task)
    const account = task.needs.account ? await chooseAccount(databaseUrl) : undefined
    const runs = await countRuns(Boolean(account))
-   const store = new LocalStore(outputRoot)
-
-   const driver = new CamoufoxDriver({
-      actionTimeoutMs: ACTION_TIMEOUT_MS,
-      isAllowedNavigation: () => true,
-      blocking: 'none',
-      headless: false,
-      operatingSystems: [hostOs()],
-   })
-
    const records: RunRecord[] = []
    let stopping = false
-   // The device and the browser profile of an account stay on this computer between sessions, as on the worker they stay in
-   // the bucket (.plan/account-browser-profile.md). The signed-in session only lives for this session.
-   const memory = new MemoryStore()
-   const identities = new IdentityStore(store, () => createDeviceIdentity(hostOs()))
-   const sessions = new SessionVault(memory, encryptionKey)
-   const profiles = new DiskProfiles(join(outputRoot, 'profiles'))
 
    const release = handleInterrupt(() => {
       if (stopping) {
@@ -156,70 +102,6 @@ export const runTasks = async ({ proxy, databaseUrl, encryptionKey, outputRoot }
    })
 
    try {
-      // Runs one task once and prints its answer; undefined when the run ended without one.
-      const runOnce = async (run: TaskDefinition, runInput: Record<string, unknown>) => {
-         const command = buildCommand({
-            task: run,
-            input: runInput,
-            proxy,
-            ...(account && { account }),
-         })
-         let result: TaskResult | undefined
-         const deps: RunnerDeps = {
-            ...freeRules,
-            tasks,
-            driver,
-            store,
-            identities,
-            sessions,
-            profiles,
-            exitGeo: lookupExit,
-            // The browser window is open in front of the person running this, so they finish a check right there.
-            handover: async () =>
-               (await confirm('\nA security check needs you. Finish it in the browser window, then answer y here'))
-                  ? 'done'
-                  : 'gave_up',
-            openCredentials: sealed => openCredentials(sealed, encryptionKey),
-            startRecording: ({ task: kind, id, prefix, videoSize }) =>
-               Recorder.start({
-                  kind,
-                  id,
-                  prefix,
-                  mode: 'always',
-                  video: true,
-                  ...(videoSize && { videoSize }),
-                  store,
-               }),
-            publishResult: async found => {
-               result = found
-            },
-            // Files for a reply are read from .devtools-uploads/<upload id>/<name> of this folder instead of the bucket.
-            uploads: {
-               download: (key, path) =>
-                  copyFile(join(process.cwd(), '.devtools-uploads', key.replace(/^uploads\/[^/]+\//, '')), path),
-            },
-            workerBuild: 'devtools',
-         }
-
-         try {
-            await runTask(command, deps)
-         } catch (error) {
-            console.log(`The run stopped with an error: ${error instanceof Error ? error.message : 'unknown'}`)
-         }
-
-         if (result) {
-            const label =
-               run.verdicts[result.verdict]?.label ??
-               RUNNER_VERDICTS[result.verdict as keyof typeof RUNNER_VERDICTS]?.label ??
-               result.verdict
-
-            formatRun(result, label).forEach(line => console.log(line))
-            console.log(`Files: ${join(outputRoot, runPrefix(command))}`)
-         }
-
-         return result
-      }
-
       // On the worker the visit starts from the profile its daily sign-in kept. Here an account that has no profile on this
       // computer yet signs in first, so the visit has a session.
       const hasProfile = account ? (await profiles.checkout(account.id)).restored : false
@@ -229,7 +111,7 @@ export const runTasks = async ({ proxy, databaseUrl, encryptionKey, outputRoot }
       if (signIn) {
          console.log('\n--- Sign-in first, so the visit has a session ---')
 
-         const signedIn = await runOnce(signIn, {})
+         const signedIn = await runOnce(signIn, {}, account)
 
          if (signedIn?.status !== 'SUCCEEDED') {
             console.log('The sign-in did not work, so the visit is not run.')
@@ -241,7 +123,7 @@ export const runTasks = async ({ proxy, databaseUrl, encryptionKey, outputRoot }
       for (let index = 1; index <= runs && !stopping; index += 1) {
          console.log(`\n--- Run ${index} of ${runs} ---`)
 
-         const result = await runOnce(task, input)
+         const result = await runOnce(task, input, account)
 
          records.push(
             result

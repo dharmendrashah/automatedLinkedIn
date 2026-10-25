@@ -6,7 +6,7 @@ import { type ElementInfo, buildSelector } from './selector'
 // What devtools/recordSession.ts writes to steps.json: the same StepEntry the production recorder writes, plus the
 // typed value itself (never for a password field, see R6 in .plan/spider-devtools-recorder.md) so the output is
 // directly reusable when writing a new task by hand.
-export type DevStepEntry = StepEntry & { value?: string }
+export type DevStepEntry = StepEntry & { value?: string; snapshot?: string }
 
 type RawEvent =
    | { call: 'click'; element: ElementInfo; urlBefore: string }

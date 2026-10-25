@@ -164,6 +164,14 @@ class CamoufoxSession implements DetectionSession {
       private readonly closeTimeoutMs = CONTEXT_CLOSE_MS
    ) {}
 
+   // The browser's own context and page, for the devtools that watch a person browse; a task never uses them.
+   public native() {
+      return {
+         context: this.context,
+         page: this.page,
+      }
+   }
+
    // The owner's hands on the page. Nothing here is recorded as a step: what they type could be a code or a password.
    public readonly control: SessionControl = {
       frame: async () => {
@@ -1026,6 +1034,10 @@ class CamoufoxSession implements DetectionSession {
       }
    }
 }
+
+// The native context and page of a session this driver opened; undefined for any other session.
+export const nativeOf = (session: DetectionSession) =>
+   session instanceof CamoufoxSession ? session.native() : undefined
 
 // Starts Camoufox, a Firefox that reports a device identity of its own (LinkedIn authorized this for the project,
 // see .plan/linkedin-account-linking.md). Human-like cursor movement is on. With a proxy, timezone, locale,

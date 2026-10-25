@@ -36,5 +36,6 @@ export const useAutosave = (save: (value: DraftValue) => Promise<void>) => {
       state,
       push: queue.push,
       retry: queue.retry,
+      flush: queue.flush,
    }
 }
