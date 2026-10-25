@@ -129,6 +129,17 @@
    }
 }
 
+/* Printing a browsing report keeps the heatmap colours and drops the dimmed backdrop of an open drawer. */
+@media print {
+   * {
+      print-color-adjust: exact;
+   }
+
+   [data-slot='drawer-overlay'] {
+      display: none;
+   }
+}
+
 /* A bar with no real percent: a third of it slides across. */
 @keyframes indeterminate {
    from {

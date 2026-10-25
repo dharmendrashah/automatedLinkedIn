@@ -114,10 +114,10 @@ Answered by the owner on 2026-10-25:
 ## Approach
 
 - [x] 1. Lock this plan (answer the open questions).
-- [ ] 2. Pure helpers, tests first: `buildYear(days, today, weekStart)` (53 by 7 grid with blanks, month label positions), `levelOf(seconds, limit, working)` (the six levels), `formatMinutes`, the live working-hours sentence, the window check, the tooltip text.
-- [ ] 3. `BrowsingHeatmap` with sample data and `?sample=`: grid, legend, tooltip, keyboard (arrow keys move, Enter opens the day), table view, states (loading, empty, error, paused); checked in the browser in light and dark, at a narrow width, and with a screen reader pass.
-- [ ] 4. Browsing drawer and `BrowsingPanel`: Today block, mode cards with instant save and Undo, the Aggressive confirmation, the working hours line and editor with its live sentence and validation, the day layer, the mix of use, Print.
-- [ ] 5. Client labels (migration `add_account_client_label`, form field, chip), the small table cell, the overview strip and bulk actions, the compact Activity view with group by client, the inline panel on the account page; the account hint in `accountChoices` and the "Select accounts" picker.
+- [x] 2. Pure helpers, tests first: `buildYear(days, today, weekStart)` (53 by 7 grid with blanks, month label positions), `levelOf(seconds, limit, working)` (the six levels), `formatMinutes`, the live working-hours sentence, the window check, the tooltip text.
+- [x] 3. `BrowsingHeatmap` with sample data and `?sample=`: grid, legend, tooltip, keyboard (arrow keys move, Enter opens the day), table view, states (loading, empty, error, paused); checked in the browser in light and dark, at a narrow width, and with a screen reader pass.
+- [x] 4. Browsing drawer and `BrowsingPanel`: Today block, mode cards with instant save and Undo, the Aggressive confirmation, the working hours line and editor with its live sentence and validation, the day layer, the mix of use, Print.
+- [~] 5. (front end done on sample data; client labels in the database and form, the account hint in the pickers and row selection in the main table are left) Client labels (migration `add_account_client_label`, form field, chip), the small table cell, the overview strip and bulk actions, the compact Activity view with group by client, the inline panel on the account page; the account hint in `accountChoices` and the "Select accounts" picker.
 - [ ] 6. Wire to the real data once the budget plan's endpoints exist; the `?sample=` switch stays for looking at states.
 - [ ] 7. `pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build`, all warnings fixed; `MEMORY.md`; plan done. A walk-through in the browser with you before it is called done.
 
@@ -143,4 +143,4 @@ Answered by the owner on 2026-10-25:
 
 ## Outcome
 
-Filled in when done.
+Front end built on sample data (2026-10-25), checks pass (lint, ts:check, unit tests, build). Deviations: the switch is `?browse=` (`?sample=` is taken by the account profile); bulk selection is in the Activity view, not in the main table; client labels exist only in the sample store. Not run: a browser walk-through (sign-in not available to the agent). Left: steps 5 (rest), 6 and 7 after the budget backend.
