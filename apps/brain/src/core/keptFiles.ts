@@ -2,19 +2,9 @@ import { Storage } from '@google-cloud/storage'
 
 import { SPIDER_GCS_BUCKET } from 'env'
 
-import { extensionOf, keptPrefix, sentKey } from '@automatedLinkedIn/contracts'
+import { keptPrefix, sentKey } from '@automatedLinkedIn/contracts'
 
-// A link works for this long; the page asks for a new one each time a file is opened.
-const LINK_TTL_MS = 10 * 60 * 1000
-
-// Only pictures a browser draws are shown in the page; everything else is a download, with a neutral type.
-const PICTURES: Record<string, string> = {
-   png: 'image/png',
-   jpg: 'image/jpeg',
-   jpeg: 'image/jpeg',
-   gif: 'image/gif',
-   webp: 'image/webp',
-}
+import { readLink } from './signedLink'
 
 // The files of messages, kept for good in the spider bucket under kept/<user>/<account>/ (.plan/unibox-keep-messages-and-files.md).
 // The only deletion is `removeAccount`, when the owner removes the account. Credentials come from Application Default Credentials.
@@ -50,18 +40,7 @@ export class KeptFiles {
          throw new Error('Only your own files can be linked.')
       }
 
-      const picture = PICTURES[extensionOf(name) ?? '']
-      const [url] = await KeptFiles.bucket()
-         .file(key)
-         .getSignedUrl({
-            version: 'v4',
-            action: 'read',
-            expires: Date.now() + LINK_TTL_MS,
-            responseType: picture ?? 'application/octet-stream',
-            responseDisposition: `${picture ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(name)}`,
-         })
-
-      return url
+      return readLink(KeptFiles.bucket().file(key), name)
    }
 
    // Deletes every file of an account, which the owner removed. Where there is no bucket there is nothing to delete.

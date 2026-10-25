@@ -34,6 +34,7 @@ model User {
   replies           LinkedInReply[]
   accountProfiles   LinkedInAccountProfile[]
   profileVisits     LinkedInPageVisit[]
+  postDrafts        PostDraft[]
   workflowLists     WorkflowList[]
   suppressions      Suppression[]
   personSnapshots   PersonSnapshot[]
@@ -621,6 +622,7 @@ model LinkedInAccount {
   replies        LinkedInReply[]
   profile        LinkedInAccountProfile?
   profileVisits  LinkedInPageVisit[]
+  postDrafts     PostDraft[]
 
   @@unique([userId, email])
   @@index([userId])
@@ -1165,4 +1167,24 @@ model LinkedInReply {
   @@index([accountId, startedAt])
   @@index([conversationId, createdAt])
   @@index([state, createdAt])
+}
+
+// A post the owner is writing for one of their own LinkedIn accounts (.plan/posting-page.md). It is always a draft: nothing sends
+// it yet. `blocks` follows the contract `postBlocksSchema` (text, one attachment); files are never stored, only their name,
+// size and alt text. `plannedAt` is the time the owner chose, in `plannedZone`. The owner's own words, so it is only ever served
+// to the owner and goes with the account.
+model PostDraft {
+  id          String          @id @default(uuid(7))
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId   String
+  account     LinkedInAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  blocks      Json            @default("[]")
+  plannedAt   DateTime?
+  plannedZone String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([userId, updatedAt])
+  @@index([accountId])
 }

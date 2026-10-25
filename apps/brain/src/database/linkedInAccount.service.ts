@@ -2,6 +2,7 @@ import { CryptoService, KeptFiles } from 'core'
 
 import { type Prisma } from 'generated/prisma/client'
 
+import { PostDraftService } from './postDraft.service'
 import { PrismaService } from './prisma.service'
 
 export type LinkedInSecrets = {
@@ -51,6 +52,9 @@ const metadataSelect = {
    statusUpdatedAt: true,
    lastVerifiedAt: true,
    nextBrowseAt: true,
+   // The name and picture LinkedIn showed for the account; null until its messages were read.
+   displayName: true,
+   imageUrl: true,
    createdAt: true,
    updatedAt: true,
 } satisfies Prisma.LinkedInAccountSelect
@@ -303,6 +307,7 @@ export class LinkedInAccountService {
    // files go first, so that a failure leaves the account in place to try again and never leaves files behind.
    public static async deleteForUser(userId: string, id: string) {
       await KeptFiles.removeAccount(userId, id)
+      await PostDraftService.removeFilesOfAccount(userId, id)
 
       const { count } = await PrismaService.client.linkedInAccount.deleteMany({
          where: {
