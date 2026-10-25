@@ -79,6 +79,10 @@ export const createLinkedinMessages = ({ baseUrl }: Options) =>
             tone: 'failure',
          },
       },
+      budget: {
+         estimateS: 180,
+         class: 'BACKGROUND',
+      },
       policy: {
          cooldownMs: 0,
          oneAtATime: 'account',

@@ -1,6 +1,6 @@
 import { type z } from 'zod'
 
-import { type TaskReport } from '@automatedLinkedIn/contracts'
+import { type BrowseClass, type TaskReport } from '@automatedLinkedIn/contracts'
 
 import { StepFailed } from '../browsing/errors'
 import { type DetectionSession } from '../scraping/driver'
@@ -92,6 +92,9 @@ export type TaskDefinition<Input = unknown> = {
    verdicts: Record<string, VerdictLabel>
    // Verdicts that another proxy may fix.
    retryOn?: string[]
+   // How long the browser usually stays open, and how a session counts against the account's browsing time: an ACTION is asked
+   // by the owner or a workflow, BACKGROUND is what the system schedules, SYSTEM is a sign-in check (counted, never refused).
+   budget: { estimateS: number; class: BrowseClass }
    policy: {
       cooldownMs: number
       oneAtATime: 'proxy' | 'account' | 'none'

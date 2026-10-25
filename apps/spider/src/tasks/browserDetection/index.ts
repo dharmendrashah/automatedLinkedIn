@@ -277,6 +277,10 @@ export const createBrowserDetection = (pages: DetectionPage[] = DETECTION_PAGES)
             tone: 'neutral',
          },
       },
+      budget: {
+         estimateS: 120,
+         class: 'ACTION',
+      },
       policy: {
          cooldownMs: 5 * 60 * 1000,
          oneAtATime: 'proxy',

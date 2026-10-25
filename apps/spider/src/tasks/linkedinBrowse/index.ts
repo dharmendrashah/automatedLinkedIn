@@ -67,6 +67,10 @@ export const createLinkedinBrowse = ({ baseUrl }: Options) =>
             tone: 'failure',
          },
       },
+      budget: {
+         estimateS: 510,
+         class: 'BACKGROUND',
+      },
       policy: {
          cooldownMs: 60 * 60 * 1000,
          oneAtATime: 'account',

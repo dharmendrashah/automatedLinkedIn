@@ -179,6 +179,10 @@ describe('the task contract on a real RabbitMQ', () => {
                tone: 'success',
             },
          },
+         budget: {
+            estimateS: 120,
+            class: 'SYSTEM',
+         },
          policy: {
             cooldownMs: 0,
             oneAtATime: 'account',

@@ -13,13 +13,16 @@ import { noticeOf, viewOf } from '@/components/account-profile/view'
 import { ConfirmRunDialog } from '@/components/accounts/confirm-run-dialog'
 import { LOGIN_TASK } from '@/components/accounts/login-test'
 import { VISIT_TASK } from '@/components/accounts/visit'
+import { BrowseSampleBanner } from '@/components/browsing/browse-sample-banner'
+import { BrowsingPanel } from '@/components/browsing/browsing-panel'
+import { useBrowsing } from '@/components/browsing/use-browse'
 import { FailureCard } from '@/components/failure-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 
 import { cn } from '@/lib/utils'
@@ -70,6 +73,14 @@ export const AccountProfile = () => {
       queryFn: () => loadProfile(kind ?? 'full'),
       enabled: sample,
    })
+   // Browsing time is brain's, or invented with `?browse=` in the address.
+   const browseAccounts = useMemo(
+      () =>
+         account.data ? [{ id: account.data.id, email: account.data.email, status: account.data.status }] : undefined,
+      [account.data]
+   )
+   const browsing = useBrowsing(browseAccounts)
+   const browseNow = browsing.byId?.get(id)
    const refresh = () => {
       void utils.accountProfile.state.invalidate({ accountId: id })
       void utils.session.list.invalidate()
@@ -146,7 +157,9 @@ export const AccountProfile = () => {
          hasWorkingProxy={hasWorkingProxy}
          testing={pending(LOGIN_TASK)}
          visiting={pending(VISIT_TASK)}
-         readBlocker={sample ? 'This is sample data. Remove ?sample= from the address.' : (state.data?.blocker ?? undefined)}
+         readBlocker={
+            sample ? 'This is sample data. Remove ?sample= from the address.' : (state.data?.blocker ?? undefined)
+         }
          reading={reading}
          onTestLogin={() => runTask.mutate({ task: LOGIN_TASK, accountId: id })}
          onVisit={() => runTask.mutate({ task: VISIT_TASK, accountId: id })}
@@ -177,6 +190,17 @@ export const AccountProfile = () => {
                </Link>
                .
             </p>
+         ) : null}
+
+         {browseNow ? (
+            <>
+               {browsing.kind ? <BrowseSampleBanner kind={browsing.kind} /> : null}
+               <Card>
+                  <CardContent>
+                     <BrowsingPanel account={browseNow} kind={browsing.kind} now={browsing.now} />
+                  </CardContent>
+               </Card>
+            </>
          ) : null}
 
          {view === 'LOADING' || account.isPending ? <ProfileSkeleton /> : null}

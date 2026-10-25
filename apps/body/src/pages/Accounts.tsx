@@ -7,8 +7,15 @@ import { LOGIN_TASK } from '@/components/accounts/login-test'
 import { NeedsProxyNotice } from '@/components/accounts/needs-proxy-notice'
 import { RevealDialog } from '@/components/accounts/reveal-dialog'
 import { VISIT_TASK, visitRunning } from '@/components/accounts/visit'
+import { ActivityView } from '@/components/browsing/activity-view'
+import { BrowseSampleBanner } from '@/components/browsing/browse-sample-banner'
+import { BrowsingDrawer } from '@/components/browsing/browsing-drawer'
+import { type Bucket, bucketOf, countBuckets } from '@/components/browsing/overview'
+import { OverviewStrip } from '@/components/browsing/overview-strip'
+import { useBrowsing } from '@/components/browsing/use-browse'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 
 import { type Account } from '@/components/accounts/types'
 
@@ -44,6 +51,30 @@ export const Accounts = () => {
    )
 
    const refresh = () => void utils.linkedInAccount.list.invalidate()
+
+   // Browsing time is brain's, or invented with `?browse=` in the address.
+   const [params, setParams] = useSearchParams()
+   const sampleAccounts = useMemo(() => list.data?.map(({ id, email, status }) => ({ id, email, status })), [list.data])
+   const { kind, byId, now, error: browseError } = useBrowsing(sampleAccounts)
+   const [bucket, setBucket] = useState<Bucket | null>(null)
+   const [openBrowsing, setOpenBrowsing] = useState<string | null>(null)
+   const view = params.get('view') === 'activity' ? 'activity' : 'accounts'
+   const browseRows = byId ? [...byId.values()] : []
+   const shownRows = bucket ? browseRows.filter(row => bucketOf(row) === bucket) : browseRows
+   const shownAccounts =
+      byId && bucket ? list.data?.filter(({ id }) => shownRows.some(row => row.accountId === id)) : list.data
+   const openAccount = openBrowsing ? (byId?.get(openBrowsing) ?? null) : null
+   const setView = (next: string) =>
+      setParams(
+         current => {
+            const updated = new URLSearchParams(current)
+
+            updated.set('view', next)
+
+            return updated
+         },
+         { replace: true }
+      )
 
    const reveal = trpc.linkedInAccount.reveal.useMutation()
    const revealTotp = trpc.linkedInAccount.reveal.useMutation({
@@ -112,33 +143,62 @@ export const Accounts = () => {
 
          <NeedsProxyNotice accounts={list.data} accountsWithProxy={accountsWithProxy} />
 
-         <AccountsTable
-            accounts={list.data}
-            loading={list.isPending}
-            error={list.error?.message}
-            busyId={busyId}
-            testingId={testingId}
-            visitingId={visitingId}
-            accountsWithProxy={accountsWithProxy}
-            totpCodes={totpCodes}
-            revealingTotpId={revealTotp.isPending ? revealTotp.variables?.id : undefined}
-            onEdit={setToEdit}
-            onTestLogin={account => runTask.mutate({ task: LOGIN_TASK, accountId: account.id })}
-            onVisit={account => runTask.mutate({ task: VISIT_TASK, accountId: account.id })}
-            onReveal={account => reveal.mutate({ id: account.id })}
-            onShowTotpCode={account => revealTotp.mutate({ id: account.id })}
-            onHideTotpCode={account =>
-               setTotpCodes(current => {
-                  const next = { ...current }
+         {kind && byId ? <BrowseSampleBanner kind={kind} /> : null}
+         {browseError ? <p className="text-destructive text-sm">{browseError}</p> : null}
+         {byId ? (
+            <>
+               <OverviewStrip
+                  accounts={browseRows}
+                  counts={countBuckets(browseRows)}
+                  active={bucket}
+                  onChange={setBucket}
+               />
+               <Tabs value={view} onValueChange={setView}>
+                  <TabsList>
+                     <TabsTrigger value="accounts">Accounts</TabsTrigger>
+                     <TabsTrigger value="activity">Activity</TabsTrigger>
+                  </TabsList>
+               </Tabs>
+            </>
+         ) : null}
 
-                  delete next[account.id]
+         {byId && view === 'activity' ? (
+            <ActivityView accounts={shownRows} sample={kind !== null} onOpen={setOpenBrowsing} />
+         ) : (
+            <AccountsTable
+               browse={byId}
+               onOpenBrowsing={setOpenBrowsing}
+               accounts={shownAccounts}
+               loading={list.isPending}
+               error={list.error?.message}
+               busyId={busyId}
+               testingId={testingId}
+               visitingId={visitingId}
+               accountsWithProxy={accountsWithProxy}
+               totpCodes={totpCodes}
+               revealingTotpId={revealTotp.isPending ? revealTotp.variables?.id : undefined}
+               onEdit={setToEdit}
+               onTestLogin={account => runTask.mutate({ task: LOGIN_TASK, accountId: account.id })}
+               onVisit={account => runTask.mutate({ task: VISIT_TASK, accountId: account.id })}
+               onReveal={account => reveal.mutate({ id: account.id })}
+               onShowTotpCode={account => revealTotp.mutate({ id: account.id })}
+               onHideTotpCode={account =>
+                  setTotpCodes(current => {
+                     const next = { ...current }
 
-                  return next
-               })
-            }
-            onTogglePause={account => setPaused.mutate({ id: account.id, paused: account.status !== 'DISABLED' })}
-            onDelete={setToDelete}
-         />
+                     delete next[account.id]
+
+                     return next
+                  })
+               }
+               onTogglePause={account => setPaused.mutate({ id: account.id, paused: account.status !== 'DISABLED' })}
+               onDelete={setToDelete}
+            />
+         )}
+
+         {byId ? (
+            <BrowsingDrawer account={openAccount} kind={kind} now={now} onClose={() => setOpenBrowsing(null)} />
+         ) : null}
 
          <RevealDialog reveal={reveal} />
          <EditAccountDialog account={toEdit} onClose={() => setToEdit(null)} />

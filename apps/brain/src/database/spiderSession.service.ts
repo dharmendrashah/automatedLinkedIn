@@ -10,6 +10,7 @@ import {
    runPrefix,
 } from '@automatedLinkedIn/contracts'
 
+import { BrowseBudgetService } from './browseBudget.service'
 import { PrismaService } from './prisma.service'
 import { type FinishedSession } from './taskHooks'
 
@@ -179,6 +180,7 @@ export class SpiderSessionService {
 
    // The check could not even be queued.
    public static async fail(id: string, message: string, verdict?: string) {
+      await BrowseBudgetService.release(id).catch(() => undefined)
       await PrismaService.client.spiderSession.updateMany({
          where: {
             id,

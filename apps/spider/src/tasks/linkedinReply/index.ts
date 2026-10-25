@@ -88,6 +88,10 @@ export const createLinkedinReply = ({ baseUrl }: Options) =>
             tone: 'failure',
          },
       },
+      budget: {
+         estimateS: 90,
+         class: 'ACTION',
+      },
       policy: {
          cooldownMs: 0,
          oneAtATime: 'account',

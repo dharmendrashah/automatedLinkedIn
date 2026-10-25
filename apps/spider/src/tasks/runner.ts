@@ -194,7 +194,8 @@ export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
 
    const publish = async (
       outcome: Pick<TaskOutcome, 'status' | 'verdict' | 'message' | 'report'>,
-      artifacts: Artifact[] = []
+      artifacts: Artifact[] = [],
+      browserSeconds?: number
    ) => {
       await publishResult(
          taskResultSchema.parse({
@@ -211,6 +212,7 @@ export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
             worker: { build: deps.workerBuild },
             started_at: new Date(startedAt).toISOString(),
             finished_at: new Date(now()).toISOString(),
+            ...(browserSeconds !== undefined && { browser_seconds: browserSeconds }),
          })
       )
       await markDone()
@@ -310,7 +312,8 @@ type Shared = {
    startedAt: number
    publish: (
       outcome: Pick<TaskOutcome, 'status' | 'verdict' | 'message' | 'report'>,
-      artifacts?: Artifact[]
+      artifacts?: Artifact[],
+      browserSeconds?: number
    ) => Promise<void>
    now: () => number
    pause: (ms: number) => Promise<void>
@@ -332,7 +335,7 @@ const execute = async (
    input: unknown,
    account: TaskContext['account'],
    deps: RunnerDeps,
-   { publish, pause, profile }: Shared
+   { publish, pause, profile, now }: Shared
 ) => {
    const prefix = runPrefix(command)
 
@@ -365,6 +368,9 @@ const execute = async (
       `Task ${task.name} started${command.proxy ? ' through a proxy' : ' without a proxy'}`
    )
 
+   // When the browser opened, for the browsing time the account is booked: from then until it is closed.
+   let openedAt: number | undefined
+
    // Closes the browser first (the video is complete only then), saves the files, then publishes the result.
    const finish = async (outcome: TaskOutcome, session: DetectionSession | undefined) => {
       // Taken before the browser closes. Only sites the operator allowed are kept.
@@ -376,6 +382,9 @@ const execute = async (
          : undefined
 
       await session?.close().catch(() => undefined)
+
+      const browserSeconds =
+         session && openedAt !== undefined ? Math.max(0, Math.round((now() - openedAt) / 1000)) : undefined
 
       if (state) {
          recorder?.attachSession(JSON.stringify(state))
@@ -417,7 +426,7 @@ const execute = async (
          })
       }
 
-      await publish(outcome, artifacts)
+      await publish(outcome, artifacts, browserSeconds)
    }
 
    let session: DetectionSession
@@ -472,6 +481,7 @@ const execute = async (
          ...(saved && { storageState: allowedState(saved, deps.policy) }),
          ...(profile && { profileDir: profile.dir }),
       })
+      openedAt = now()
    } catch (error) {
       // A proxy that does not work is an answer to this task, not a reason to retry it.
       if (error instanceof TaskError) {

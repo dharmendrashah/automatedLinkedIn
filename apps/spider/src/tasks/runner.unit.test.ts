@@ -142,6 +142,10 @@ const demo = (overrides: Partial<TaskDefinition<{ word: string }>> = {}) =>
             tone: 'failure',
          },
       },
+      budget: {
+         estimateS: 120,
+         class: 'ACTION',
+      },
       policy: {
          cooldownMs: 0,
          oneAtATime: 'proxy',
@@ -409,6 +413,39 @@ describe('runTask', () => {
          verdict: 'PROXY_FAILED',
       })
       expect(store.objects.has(`${PREFIX}/timeline.json`)).toBe(true)
+   })
+
+   it('should report how long the browser stayed open, for the browsing time of the account', async () => {
+      const clock = { time: Date.parse('2026-10-13T10:00:00.000Z') }
+      const task = demo({
+         run: async () => {
+            clock.time += 152_400
+
+            return {
+               status: 'SUCCEEDED',
+               verdict: 'GOOD',
+               message: 'ok',
+            }
+         },
+      })
+      const { run, published } = setup({
+         task,
+         overrides: { now: () => clock.time },
+      })
+
+      await run()
+
+      expect(published[0]).toMatchObject({ browser_seconds: 152 })
+   })
+
+   it('should report no browser time when the browser never opened', async () => {
+      const { run, published, deps } = setup()
+
+      vi.mocked(deps.driver.open).mockRejectedValue(new TaskError('proxy refused'))
+
+      await run()
+
+      expect(published[0]).not.toHaveProperty('browser_seconds')
    })
 
    it('should let an unexpected failure to start the browser reach the broker, which retries it', async () => {

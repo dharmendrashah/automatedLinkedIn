@@ -72,6 +72,10 @@ export const createLinkedinLogin = ({ validator, baseUrl }: Options) =>
       },
       // A different address may get past a security check or a page that did not load.
       retryOn: ['ERROR', 'SECURITY_CHECK'],
+      budget: {
+         estimateS: 120,
+         class: 'SYSTEM',
+      },
       policy: {
          // Brain keeps the owner's 5 minute wait between two sign-ins of one account; this only stops two at once.
          cooldownMs: 0,

@@ -65,6 +65,8 @@ export class RetentionService {
          data: { reviewAt: now },
       })
       const ledger = await db.spendLedger.deleteMany({ where: { createdAt: { lt: ledgerCutoff } } })
+      // The browsing time of accounts is kept as long as the spend record, for the year graph.
+      const browsing = await db.browseUsage.deleteMany({ where: { startedAt: { lt: ledgerCutoff } } })
       // A finished read keeps the link it read; the result itself lives in the snapshot.
       const readCutoff = daysBefore(now, RETENTION.itemsDays)
       const reads = await db.dataRead.deleteMany({ where: { finishedAt: { lt: readCutoff } } })
@@ -101,6 +103,7 @@ export class RetentionService {
          reviewed: reviewed.count,
          marked: marked.count,
          ledger: ledger.count,
+         browsing: browsing.count,
          reads: reads.count,
          snapshots,
          pages,

@@ -88,8 +88,10 @@ export { TakeoverNotFoundError, TakeoverService } from './takeover.service'
 export { TASK_HOOKS } from './taskHooks'
 export { TaskDispatchService } from './taskDispatch.service'
 export { TaskService } from './task.service'
+export { BrowseService, BrowseSettingsError } from './browse.service'
 export {
    AccountNotReadyError,
+   BrowseBudgetError,
    TaskBusyError,
    TaskNeedsProxyError,
    TaskOwnershipError,
