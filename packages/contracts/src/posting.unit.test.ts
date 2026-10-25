@@ -7,6 +7,7 @@ import {
    characterCount,
    joinedText,
    mediaBlock,
+   postBlocksOfText,
    postBlocksSchema,
    postDraftInputSchema,
    postFilesOf,
@@ -160,6 +161,31 @@ describe('postBlocksSchema', () => {
       expect(postBlocksSchema.safeParse([text('t1', 'a'.repeat(1500)), text('t2', 'b'.repeat(1500))]).success).toBe(
          false
       )
+   })
+})
+
+describe('postBlocksOfText', () => {
+   it('should read the blocks of a post saved as one text', () => {
+      const blocks = [text('t1', 'Hello'), photos('p1', 2)]
+
+      expect(postBlocksOfText(JSON.stringify(blocks))).toEqual(blocks)
+      expect(postBlocksOfText('[]')).toEqual([])
+   })
+
+   it('should give nothing for text that is not a valid post', () => {
+      expect(postBlocksOfText('not json')).toBeNull()
+      expect(postBlocksOfText(JSON.stringify([photos('p1'), video]))).toBeNull()
+      expect(
+         postBlocksOfText(
+            JSON.stringify([
+               {
+                  id: 't1',
+                  type: 'TEXT',
+               },
+            ])
+         )
+      ).toBeNull()
+      expect(postBlocksOfText(undefined)).toBeNull()
    })
 })
 

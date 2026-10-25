@@ -2,18 +2,11 @@ import { PostFiles } from 'core'
 
 import { type PostDraft } from 'generated/prisma/client'
 
-import {
-   POST_DRAFTS_MAX,
-   type PostBlock,
-   type PostDraftInput,
-   postBlocksSchema,
-   postFilesOf,
-   postKey,
-   safeFileName,
-} from '@automatedLinkedIn/contracts'
+import { POST_DRAFTS_MAX, type PostBlock, type PostDraftInput, postBlocksSchema } from '@automatedLinkedIn/contracts'
 
 import { ConflictError } from './conflict'
 import { orNull } from './linkedInRecord'
+import { dropFiles, keysOf, ownsKeys } from './postFileKeys'
 import { PrismaService } from './prisma.service'
 
 export type StoredPostDraft = {
@@ -41,27 +34,6 @@ const readDraft = (row: PostDraft): StoredPostDraft | null => {
            updatedAt: row.updatedAt.toISOString(),
         }
       : null
-}
-
-const keysOf = (blocks: PostBlock[]) => postFilesOf(blocks).flatMap(({ key }) => (key ? [key] : []))
-
-// A key is only taken when it is exactly where this owner's upload of that file ends up, so a draft cannot point at anyone else's object.
-const ownsKeys = (userId: string, blocks: PostBlock[]) =>
-   postFilesOf(blocks).every(
-      ({ id, name, key }) => key === undefined || key === postKey(userId, id, safeFileName(name))
-   )
-
-// Files nobody refers to any more are deleted after the draft changed; a failure is logged and never fails the save.
-const dropFiles = async (keys: string[]) => {
-   if (keys.length === 0) {
-      return
-   }
-
-   const failed = await PostFiles.remove(keys).catch(() => keys.length)
-
-   if (failed > 0) {
-      console.error(`Post files: ${failed} of ${keys.length} could not be deleted`)
-   }
 }
 
 // The posts an owner is writing (.plan/posting-page.md). Every call names the owner, so a foreign id is the same as a missing one.

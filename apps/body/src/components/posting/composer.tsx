@@ -1,12 +1,8 @@
-import { Mark } from '@/components/account-profile/mark'
 import { Card } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Globe } from 'lucide-react'
 import { type ChangeEvent, type DragEvent, type ReactNode, useRef, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
-import type { Identity } from './accounts'
 import { AttachmentArea } from './attachment-area'
 import { ComposerToolbar } from './composer-toolbar'
 import { insertAt } from './emoji'
@@ -19,10 +15,8 @@ import { characterCount, LIMITS, type Attachment } from './rules'
 import type { UploadState } from './use-uploads'
 
 type Props = {
-   identity: Identity
-   accounts: { id: string; label: string }[]
-   accountId: string
-   onAccount: (id: string) => void
+   // The top of the writer: who the post is from.
+   header: ReactNode
    text: string
    onText: (text: string) => void
    attachment: Attachment | undefined
@@ -47,10 +41,7 @@ const MOD = typeof navigator === 'undefined' ? 'Ctrl' : modKey(navigator.platfor
 // The post writer: who it is from, one big text box, what is attached, a row of buttons to add things, and the footer. It looks and
 // works like LinkedIn's, and a file can be dropped anywhere on it.
 export const Composer = ({
-   identity,
-   accounts,
-   accountId,
-   onAccount,
+   header,
    text,
    onText,
    attachment,
@@ -182,30 +173,7 @@ export const Composer = ({
             }}
          />
 
-         <div className="flex items-center gap-3 px-5 pt-5">
-            <Mark name={identity.name} imageUrl={identity.imageUrl} className="size-12 text-base" />
-            <div className="grid min-w-0 gap-0.5">
-               <Select value={accountId} onValueChange={onAccount}>
-                  <SelectTrigger
-                     aria-label="Post as"
-                     className="h-auto w-auto max-w-full gap-1 border-0 bg-transparent p-0 text-base font-semibold shadow-none focus-visible:ring-2 dark:bg-transparent dark:hover:bg-transparent"
-                  >
-                     <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                     {accounts.map(({ id, label }) => (
-                        <SelectItem key={id} value={id}>
-                           {id === accountId ? identity.name : label}
-                        </SelectItem>
-                     ))}
-                  </SelectContent>
-               </Select>
-               <p className="text-muted-foreground flex items-center gap-1 text-xs">
-                  <Globe className="size-3" aria-hidden />
-                  Post to anyone
-               </p>
-            </div>
-         </div>
+         <div className="flex items-center gap-3 px-5 pt-5">{header}</div>
 
          <div className="grid gap-4 px-5 pt-4">
             <TextEditor

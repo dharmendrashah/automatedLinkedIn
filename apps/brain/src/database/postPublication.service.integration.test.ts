@@ -479,4 +479,83 @@ describe('PostPublicationService (database)', () => {
          await expect(PostPublicationService.list(userId)).resolves.toHaveLength(1)
       })
    })
+
+   describe('publishFromBlock', () => {
+      const link = {
+         runId: 'run-1',
+         nodeId: 'write',
+      }
+
+      it('should queue the post with its run and block, and start it at once when the account is free', async () => {
+         const made = await PostPublicationService.publishFromBlock(userId, accountId, [words('From a workflow')], link)
+
+         expect(requested).toHaveLength(1)
+         await expect(stateOf(made.id)).resolves.toBe('SENDING')
+         await expect(PostPublicationService.ofStep(link.runId, link.nodeId)).resolves.toEqual([
+            expect.objectContaining({
+               id: made.id,
+               state: 'SENDING',
+            }),
+         ])
+         await expect(PostPublicationService.get(userId, made.id)).resolves.toMatchObject({ fromWorkflow: true })
+      })
+
+      it('should refuse with a sentence when the account is not signed in, the post is empty or the words are a repeat', async () => {
+         await PostPublicationService.publishFromBlock(userId, accountId, [words('Same words')], link)
+
+         await expect(
+            PostPublicationService.publishFromBlock(userId, accountId, [words('Same words')], link)
+         ).rejects.toThrow('already has a post with these words')
+         await expect(PostPublicationService.publishFromBlock(userId, accountId, [], link)).rejects.toBeInstanceOf(
+            TaskRefusedError
+         )
+
+         const pending = await account(userId, 'PENDING')
+
+         await expect(
+            PostPublicationService.publishFromBlock(userId, pending.id, [words('Other words')], link)
+         ).rejects.toThrow('signed in')
+      })
+
+      it('should refuse a file that is not the owner’s', async () => {
+         const foreign: PostBlock = {
+            id: randomUUID(),
+            type: 'DOCUMENT',
+            file: {
+               id: FILE_ID,
+               name: 'a.pdf',
+               bytes: 1000,
+               key: `posts/${otherUserId}/${FILE_ID}/a.pdf`,
+            },
+         }
+
+         await expect(PostPublicationService.publishFromBlock(userId, accountId, [foreign], link)).rejects.toThrow(
+            'not yours'
+         )
+         expect(requested).toHaveLength(0)
+      })
+
+      it('should read the last post of each account, and leave a workflow post out of Back to draft and the file sweep', async () => {
+         const remove = vi.spyOn(PostFiles, 'remove').mockResolvedValue(0)
+         const went = await publication({
+            state: 'POSTED',
+            blocks: [photo()],
+            ...link,
+         })
+         const failed = await publication({
+            state: 'FAILED',
+            blocks: [photo()],
+            ...link,
+         })
+
+         const last = await PostPublicationService.lastPosts([accountId, otherAccountId])
+
+         expect([...last.keys()]).toEqual([accountId])
+         await expect(PostPublicationService.deleteFiles()).resolves.toBe(0)
+         await expect(PostPublicationService.backToDraft(userId, failed.id)).resolves.toBeNull()
+         await expect(PostPublicationService.removeFilesOfAccount(userId, accountId)).resolves.toBeUndefined()
+         expect(remove).not.toHaveBeenCalled()
+         await expect(stateOf(went.id)).resolves.toBe('POSTED')
+      })
+   })
 })

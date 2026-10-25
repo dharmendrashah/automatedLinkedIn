@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { INDUSTRY_PAIRS } from './industries'
+import { joinedText, mediaBlock, postBlocksOfText, postFilesOf } from './posting'
 
 // The closed catalog of workflow blocks, the graph they form, and the pure rules on it (.plan/gtm-workflows.md).
 // Ids and labels are neutral: no data supplier is named here, because the browser shows these.
@@ -57,6 +58,8 @@ export type Field = (
    | { key: string; label: string; kind: 'workflow' }
    // One or more of the owner's LinkedIn accounts.
    | { key: string; label: string; kind: 'accounts' }
+   // A LinkedIn post written in the block, kept as text.
+   | { key: string; label: string; kind: 'post' }
 ) & {
    hint?: string
    advanced?: boolean
@@ -186,6 +189,12 @@ const GIVE_UP_AFTER = optionsOf([
 // Blocks that act on LinkedIn with the owner's accounts.
 export const VISIT_BLOCKS = new Set<BlockType>(['account.visitProfile', 'account.visitCompany'])
 
+// Blocks that take their accounts from the nearest "Select accounts" before them.
+export const POOL_BLOCKS = new Set<BlockType>([...VISIT_BLOCKS, 'account.writePost'])
+
+// The most text a written post takes as settings: its words with escapes, and ten photos with their names and keys.
+export const POST_CONFIG_MAX = 40_000
+
 // The most accounts one "Select accounts" block holds.
 export const MAX_POOL = 20
 
@@ -197,6 +206,7 @@ export const TAKES_ANYTHING = new Set<BlockType>([
    'process.merge',
    'logic.runWorkflow',
    'account.select',
+   'account.writePost',
    'logic.wait',
    'logic.taskResult',
    'logic.retry',
@@ -509,6 +519,7 @@ export const BLOCK_TYPES = [
    'account.select',
    'account.visitProfile',
    'account.visitCompany',
+   'account.writePost',
    'output.list',
    'output.markPosts',
    'output.csv',
@@ -1943,6 +1954,29 @@ const BLOCKS = {
       config: empty,
       fields: [],
    },
+   'account.writePost': {
+      group: 'Account Actions',
+      label: 'Write a post',
+      summary:
+         'Posts what you write here on LinkedIn, once per run, from one of the chosen accounts. Passes everything on unchanged.',
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         post: z
+            .string()
+            .max(POST_CONFIG_MAX)
+            .default('[]')
+            .refine(value => postBlocksOfText(value) !== null, 'is not a post'),
+      }),
+      fields: [
+         {
+            key: 'post',
+            label: 'Post',
+            kind: 'post',
+            hint: 'Posted once per run, never more than the account’s limits allow. A preview posts nothing.',
+         },
+      ],
+   },
    'output.csv': {
       group: 'Output',
       label: 'Export to CSV',
@@ -2396,7 +2430,7 @@ export const validateGraph = (graph: Graph): GraphError[] => {
          })
       }
 
-      if (VISIT_BLOCKS.has(node.type) && !nodeBefore(graph, node.id, 'account.select')) {
+      if (POOL_BLOCKS.has(node.type) && !nodeBefore(graph, node.id, 'account.select')) {
          problems.push({
             nodeId: node.id,
             level: 'error',
@@ -2404,10 +2438,28 @@ export const validateGraph = (graph: Graph): GraphError[] => {
          })
       }
 
+      if (node.type === 'account.writePost') {
+         const blocks = postBlocksOfText(node.config.post ?? '[]')
+
+         if (blocks && joinedText(blocks) === '' && !mediaBlock(blocks)) {
+            problems.push({
+               nodeId: node.id,
+               level: 'error',
+               message: 'Write the post: it needs words or a file.',
+            })
+         } else if (blocks && postFilesOf(blocks).some(({ key }) => key === undefined)) {
+            problems.push({
+               nodeId: node.id,
+               level: 'error',
+               message: 'A file of the post is not uploaded. Open the block and attach it again.',
+            })
+         }
+      }
+
       if (node.type === 'account.select') {
          const after = downstreamOf(graph.edges, node.id)
 
-         if (!graph.nodes.some(other => VISIT_BLOCKS.has(other.type) && other.id !== node.id && after.has(other.id))) {
+         if (!graph.nodes.some(other => POOL_BLOCKS.has(other.type) && other.id !== node.id && after.has(other.id))) {
             note('No LinkedIn action comes after this block, so the accounts are not used.', node.id)
          }
       }

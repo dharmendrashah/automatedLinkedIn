@@ -260,6 +260,22 @@ export const postBlocksSchema = z
       }
    })
 
+// A "Write a post" block keeps its post as one text, since block settings hold plain values only. Null when the text is not a valid
+// post.
+export const postBlocksOfText = (value: unknown): PostBlock[] | null => {
+   if (typeof value !== 'string') {
+      return null
+   }
+
+   try {
+      const parsed = postBlocksSchema.safeParse(JSON.parse(value))
+
+      return parsed.success ? parsed.data : null
+   } catch {
+      return null
+   }
+}
+
 const isZone = (value: string) => {
    try {
       return Boolean(new Intl.DateTimeFormat('en', { timeZone: value }))

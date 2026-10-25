@@ -77,6 +77,7 @@ import { runWorkflow } from './runWorkflow'
 import { sendPages } from './sendApi'
 import { applyProfiles, conditionsOf, filterPeople, matches, scorePeople } from './steps'
 import { selectAccounts, visitCompany, visitProfile } from './visitPages'
+import { writePost } from './writePost'
 
 const DONE: StepResult = {
    status: 'DONE',
@@ -841,6 +842,7 @@ export const EXECUTORS: Record<GraphNode['type'], (ctx: Context) => Promise<Step
    'account.select': selectAccounts,
    'account.visitProfile': visitProfile,
    'account.visitCompany': visitCompany,
+   'account.writePost': writePost,
    'output.list': addToList,
    'output.markPosts': markPosts,
    'output.csv': exportCsv,

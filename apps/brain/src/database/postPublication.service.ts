@@ -12,6 +12,7 @@ import {
 } from '@automatedLinkedIn/contracts'
 
 import { POST_TASK } from './linkedInPost.hooks'
+import { keysOf, ownsKeys } from './postFileKeys'
 import { POST_LIMITS, contentProblem, limitProblem, taskInputOf } from './postPublication.rules'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
@@ -41,8 +42,6 @@ const blocksOf = (row: Pick<PostPublication, 'blocks'>) => {
    return parsed.success ? parsed.data : undefined
 }
 
-const keysOf = (blocks: PostBlock[]) => postFilesOf(blocks).flatMap(({ key }) => (key ? [key] : []))
-
 // What the page shows of a post: where it is, what it says in short, and the link once it went. The owner's own words, served only
 // to the owner.
 const readPublication = (row: PostPublication) => {
@@ -60,6 +59,7 @@ const readPublication = (row: PostPublication) => {
       plannedZone: row.plannedZone,
       failure: row.failure,
       link: row.link,
+      fromWorkflow: row.runId !== null,
       createdAt: row.createdAt.toISOString(),
       postedAt: row.postedAt?.toISOString() ?? null,
    }
@@ -121,28 +121,9 @@ export class PostPublicationService {
          throw new TaskRefusedError('This draft cannot be read. Open it and save it again.')
       }
 
-      const problem = contentProblem(parsed.data)
-
-      if (problem) {
-         throw new TaskRefusedError(problem)
-      }
-
-      const account = await db.linkedInAccount.findFirst({
-         where: {
-            id: draft.accountId,
-            userId,
-         },
-         select: { status: true },
-      })
-
-      if (account?.status !== 'ACTIVE') {
-         throw new TaskRefusedError('Posting needs an account that is signed in. Run Test login first.')
-      }
-
       const at = plannedAt?.getTime() ?? now
 
-      await this.checkRepeat(draft.accountId, parsed.data, now)
-      await this.checkLimits(draft.accountId, at)
+      await this.checkPost(userId, draft.accountId, parsed.data, at, now)
 
       const created = await db.$transaction(async tx => {
          const { count } = await tx.postDraft.deleteMany({
@@ -187,6 +168,97 @@ export class PostPublicationService {
       }
 
       return created
+   }
+
+   // Sends the post a "Write a post" block of a run holds, now, from one of the owner's accounts (.plan/write-a-post-block.md). The files
+   // stay with the block, so they are never deleted with the post. Throws TaskRefusedError with a sentence when the account cannot post it.
+   public static async publishFromBlock(
+      userId: string,
+      accountId: string,
+      blocks: PostBlock[],
+      link: { runId: string; nodeId: string },
+      now = Date.now()
+   ) {
+      if (!ownsKeys(userId, blocks)) {
+         throw new TaskRefusedError('A file of this post is not yours. Attach it again.')
+      }
+
+      await this.checkPost(userId, accountId, blocks, now, now)
+
+      const created = await PrismaService.client.postPublication.create({
+         data: {
+            userId,
+            accountId,
+            blocks,
+            state: 'QUEUED',
+            runId: link.runId,
+            nodeId: link.nodeId,
+         },
+         select: {
+            id: true,
+            state: true,
+         },
+      })
+
+      await this.dispatchNext(accountId, now).catch((error: unknown) => {
+         console.error(`Could not start the queued posts of account ${accountId}: ${(error as Error).message}`)
+      })
+
+      return created
+   }
+
+   // The posts a block of a run made so far, oldest first.
+   public static ofStep(runId: string, nodeId: string) {
+      return PrismaService.client.postPublication.findMany({
+         where: {
+            runId,
+            nodeId,
+         },
+         orderBy: { createdAt: 'asc' },
+         select: {
+            id: true,
+            state: true,
+            failure: true,
+            link: true,
+         },
+      })
+   }
+
+   // When each account last had a post, whatever came of it.
+   public static async lastPosts(accountIds: string[]) {
+      const rows = await PrismaService.client.postPublication.groupBy({
+         by: ['accountId'],
+         where: { accountId: { in: accountIds } },
+         _max: { createdAt: true },
+      })
+
+      return new Map(
+         rows.flatMap(({ accountId, _max }) => (_max.createdAt ? [[accountId, _max.createdAt] as const] : []))
+      )
+   }
+
+   // Why this account cannot take this post at `at`, as a sentence; nothing when it can.
+   private static async checkPost(userId: string, accountId: string, blocks: PostBlock[], at: number, now: number) {
+      const problem = contentProblem(blocks)
+
+      if (problem) {
+         throw new TaskRefusedError(problem)
+      }
+
+      const account = await PrismaService.client.linkedInAccount.findFirst({
+         where: {
+            id: accountId,
+            userId,
+         },
+         select: { status: true },
+      })
+
+      if (account?.status !== 'ACTIVE') {
+         throw new TaskRefusedError('Posting needs an account that is signed in. Run Test login first.')
+      }
+
+      await this.checkRepeat(accountId, blocks, now)
+      await this.checkLimits(accountId, at)
    }
 
    // The limits of the account for a post at `at`. Posts that did not go do not count.
@@ -283,6 +355,7 @@ export class PostPublicationService {
             where: {
                id,
                userId,
+               runId: null,
                state: { in: RETURNABLE },
             },
          })
@@ -291,6 +364,7 @@ export class PostPublicationService {
                  where: {
                     id,
                     userId,
+                    runId: null,
                     state: { in: RETURNABLE },
                  },
               })
@@ -499,6 +573,7 @@ export class PostPublicationService {
          where: {
             state: 'POSTED',
             filesDeletedAt: null,
+            runId: null,
          },
          select: {
             id: true,
@@ -534,6 +609,7 @@ export class PostPublicationService {
             userId,
             accountId,
             filesDeletedAt: null,
+            runId: null,
          },
          select: { blocks: true },
       })

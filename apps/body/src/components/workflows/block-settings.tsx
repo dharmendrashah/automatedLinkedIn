@@ -14,6 +14,7 @@ import { BlockOutput } from './block-output'
 import { INPUT_KINDS, isInputType } from './input-kinds'
 import { InputMatches } from './input-matches'
 import { ScheduleSettings } from './schedule-settings'
+import { PostField } from './post-field'
 import { Chips, ChipsInput, SearchPick, Stepper } from './setting-inputs'
 
 import { LabelMultiSelect } from '../labels/label-multi-select'
@@ -63,7 +64,12 @@ const flowOf = (block: Block) => {
       return 'Takes anything, gives what it got or the people the other workflow saved'
    }
 
-   if (block.type === 'account.select' || block.type === 'logic.wait' || block.type === 'logic.retry') {
+   if (
+      block.type === 'account.select' ||
+      block.type === 'account.writePost' ||
+      block.type === 'logic.wait' ||
+      block.type === 'logic.retry'
+   ) {
       return 'Takes anything, passes it on unchanged'
    }
 
@@ -149,6 +155,10 @@ export const BlockSettings = ({ node, workflowId, problems, icps, workflows, par
          return (
             <AccountsPick id={id} value={Array.isArray(value) ? value : []} onChange={next => onChange(item.key, next)} />
          )
+      }
+
+      if (item.kind === 'post') {
+         return <PostField id={id} value={typeof value === 'string' ? value : '[]'} onChange={next => onChange(item.key, next)} />
       }
 
       if (item.kind === 'toggle') {

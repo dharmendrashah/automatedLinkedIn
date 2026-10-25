@@ -57,6 +57,7 @@ export const PublicationsList = ({ posts, accounts, onBack }: Props) => (
                            </Badge>
                            <span>{account?.displayName ?? account?.email ?? 'Account removed'}</span>
                            {post.attachment ? <span>{ATTACHMENT[post.attachment] ?? post.attachment}</span> : null}
+                           {post.fromWorkflow ? <span>From a workflow</span> : null}
                            {post.scheduledAt && post.plannedZone && post.state === 'SCHEDULED' ? (
                               <span className="flex items-center gap-1">
                                  <CalendarClock className="size-3" aria-hidden />
@@ -79,7 +80,7 @@ export const PublicationsList = ({ posts, accounts, onBack }: Props) => (
                         </span>
                         {post.failure ? <span className="text-muted-foreground text-xs">{post.failure}</span> : null}
                      </div>
-                     {canTakeBack(post.state) ? (
+                     {!post.fromWorkflow && canTakeBack(post.state) ? (
                         <Button type="button" variant="outline" size="sm" onClick={() => onBack(post)}>
                            {backText(post.state)}
                         </Button>

@@ -208,6 +208,42 @@ describe('Account Actions blocks', () => {
       expect(summaryOf(select, { accounts: ['a1'] })).toBe('Uses 1 account')
       expect(summaryOf(select, {})).toBe('Pick the accounts to use')
    })
+
+   it('should show the first words of a written post, or ask for one', () => {
+      const write = block('account.writePost', 'profile', 'profile')
+      const post = (blocks: unknown[]) => ({ post: JSON.stringify(blocks) })
+
+      expect(summaryOf(write, {})).toBe('Write the post')
+      expect(summaryOf(write, post([]))).toBe('Write the post')
+      expect(
+         summaryOf(
+            write,
+            post([
+               {
+                  id: 't1',
+                  type: 'TEXT',
+                  text: 'Hello   there',
+               },
+            ])
+         )
+      ).toBe('Posts “Hello there”')
+      expect(
+         summaryOf(
+            write,
+            post([
+               {
+                  id: 'v1',
+                  type: 'VIDEO',
+                  file: {
+                     id: 'f1',
+                     name: 'a.mp4',
+                     bytes: 10,
+                  },
+               },
+            ])
+         )
+      ).toBe('Posts only Video')
+   })
 })
 
 describe('Logic blocks', () => {

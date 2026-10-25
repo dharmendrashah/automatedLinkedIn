@@ -1229,8 +1229,12 @@ model PostPublication {
   postedAt       DateTime?
   // Set once the files of a post that went were deleted from the bucket.
   filesDeletedAt DateTime?
+  // The run and block of a workflow that made this post; empty for a post sent from the Posting page. The block keeps the files.
+  runId          String?
+  nodeId         String?
 
   @@index([userId, createdAt])
   @@index([accountId, state])
   @@index([state, scheduledAt])
+  @@index([runId, nodeId])
 }
