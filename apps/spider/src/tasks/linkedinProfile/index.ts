@@ -55,6 +55,10 @@ export const createLinkedinProfile = ({ baseUrl }: Options) =>
             tone: 'failure',
          },
       },
+      budget: {
+         estimateS: 300,
+         class: 'BACKGROUND',
+      },
       policy: {
          // The page's Read profile button asks again after this; the owner can still confirm and read at once.
          cooldownMs: 30 * 60 * 1000,

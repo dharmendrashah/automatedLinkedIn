@@ -52,10 +52,10 @@ export const Accounts = () => {
 
    const refresh = () => void utils.linkedInAccount.list.invalidate()
 
-   // Browsing time is shown only on sample data for now (`?browse=`), until brain serves it.
+   // Browsing time is brain's, or invented with `?browse=` in the address.
    const [params, setParams] = useSearchParams()
    const sampleAccounts = useMemo(() => list.data?.map(({ id, email, status }) => ({ id, email, status })), [list.data])
-   const { kind, byId, now } = useBrowsing(sampleAccounts)
+   const { kind, byId, now, error: browseError } = useBrowsing(sampleAccounts)
    const [bucket, setBucket] = useState<Bucket | null>(null)
    const [openBrowsing, setOpenBrowsing] = useState<string | null>(null)
    const view = params.get('view') === 'activity' ? 'activity' : 'accounts'
@@ -144,7 +144,8 @@ export const Accounts = () => {
          <NeedsProxyNotice accounts={list.data} accountsWithProxy={accountsWithProxy} />
 
          {kind && byId ? <BrowseSampleBanner kind={kind} /> : null}
-         {kind && byId ? (
+         {browseError ? <p className="text-destructive text-sm">{browseError}</p> : null}
+         {byId ? (
             <>
                <OverviewStrip
                   accounts={browseRows}
@@ -161,8 +162,8 @@ export const Accounts = () => {
             </>
          ) : null}
 
-         {kind && byId && view === 'activity' ? (
-            <ActivityView accounts={shownRows} onOpen={setOpenBrowsing} />
+         {byId && view === 'activity' ? (
+            <ActivityView accounts={shownRows} sample={kind !== null} onOpen={setOpenBrowsing} />
          ) : (
             <AccountsTable
                browse={byId}
@@ -195,7 +196,7 @@ export const Accounts = () => {
             />
          )}
 
-         {kind ? (
+         {byId ? (
             <BrowsingDrawer account={openAccount} kind={kind} now={now} onClose={() => setOpenBrowsing(null)} />
          ) : null}
 

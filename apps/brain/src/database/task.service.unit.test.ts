@@ -28,6 +28,19 @@ const mocks = vi.hoisted(() => ({
    dispatch: vi.fn(),
    transaction: vi.fn(),
    createDispatch: vi.fn(),
+   reserve: vi.fn(),
+   settle: vi.fn(),
+}))
+
+vi.mock('./browseBudget.service', () => ({
+   BrowseBudgetService: {
+      reserve: mocks.reserve,
+      settle: mocks.settle,
+   },
+   DEFAULT_BUDGET: {
+      estimate_s: 300,
+      class: 'ACTION',
+   },
 }))
 
 vi.mock('./taskDispatch.service', () => ({ TaskDispatchService: { dispatch: mocks.dispatch } }))
@@ -522,6 +535,107 @@ describe('TaskService', () => {
             },
             tx
          )
+      })
+   })
+
+   describe('browsing time', () => {
+      const ask = () =>
+         TaskService.request({
+            userId: 'u1',
+            task: 'browser-detection',
+            proxyId: 'p1',
+            trigger: 'automatic',
+         })
+
+      it('should book the session in the transaction that saves it, with the budget of the task and who asked', async () => {
+         mocks.findDefinitions.mockResolvedValue([
+            definition({
+               budget: {
+                  estimate_s: 240,
+                  class: 'BACKGROUND',
+               },
+            }),
+         ])
+
+         const { id } = await ask()
+
+         expect(mocks.reserve).toHaveBeenCalledWith(tx, {
+            accountId: 'acc1',
+            sessionId: id,
+            budget: {
+               estimate_s: 240,
+               class: 'BACKGROUND',
+            },
+            trigger: 'automatic',
+         })
+      })
+
+      it('should assume an action of 5 minutes for a task that announced no budget', async () => {
+         await ask()
+
+         expect(mocks.reserve).toHaveBeenCalledWith(
+            tx,
+            expect.objectContaining({
+               budget: {
+                  estimate_s: 300,
+                  class: 'ACTION',
+               },
+            })
+         )
+      })
+
+      it('should save nothing and publish nothing when the account has no browsing time', async () => {
+         mocks.reserve.mockRejectedValue(new TaskRefusedError('This account has used its browsing time for today.'))
+
+         await expect(ask()).rejects.toThrow('This account has used its browsing time for today.')
+         expect(mocks.startTask).not.toHaveBeenCalled()
+         expect(mocks.createDispatch).not.toHaveBeenCalled()
+         expect(mocks.dispatch).not.toHaveBeenCalled()
+      })
+
+      it('should book what a session used when its answer is applied, before the hook of the task', async () => {
+         const order: string[] = []
+         const session = {
+            id: 'sess1',
+            userId: 'u1',
+            linkedInAccountId: 'acc1',
+         }
+         const result = {
+            contract: 1 as const,
+            task_id: '0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11',
+            task: 'browser-detection',
+            task_version: 1,
+            status: 'SUCCEEDED' as const,
+            verdict: 'NOT_DETECTED',
+            message: 'ok',
+            artifacts: [],
+            artifacts_truncated: false,
+            worker: { build: 'abc1234' },
+            started_at: '2026-10-13T10:00:00.000Z',
+            finished_at: '2026-10-13T10:01:00.000Z',
+            browser_seconds: 58,
+         }
+
+         mocks.settle.mockImplementation(async () => {
+            order.push('settle')
+         })
+         TASK_HOOKS['browser-detection'] = {
+            onResult: async () => {
+               order.push('hook')
+            },
+         }
+         mocks.finishTask.mockImplementation(
+            async (_result: unknown, after: (finished: typeof session, tx: unknown) => Promise<void>) => {
+               await after(session, tx)
+
+               return session
+            }
+         )
+
+         await TaskService.applyResult(result)
+
+         expect(mocks.settle).toHaveBeenCalledWith(tx, 'sess1', result)
+         expect(order).toEqual(['settle', 'hook'])
       })
    })
 

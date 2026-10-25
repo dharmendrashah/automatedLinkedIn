@@ -10,6 +10,7 @@ import {
    type TaskTrigger,
 } from '@automatedLinkedIn/contracts'
 
+import { BrowseBudgetService, DEFAULT_BUDGET } from './browseBudget.service'
 import { PrismaService } from './prisma.service'
 import { ProxyServerOwnershipError, ProxyServerService } from './proxyServer.service'
 import { SpiderSessionService } from './spiderSession.service'
@@ -186,6 +187,13 @@ export class TaskService {
 
       // The task's own effect, the session and the row that says "to publish" are saved together or not at all.
       await PrismaService.client.$transaction(async tx => {
+         // First, so a refusal leaves nothing behind, and with the account locked so two requests cannot both pass.
+         await BrowseBudgetService.reserve(tx, {
+            accountId,
+            sessionId: id,
+            budget: definition.budget ?? DEFAULT_BUDGET,
+            trigger,
+         })
          await TASK_HOOKS[task]?.onRequest?.(
             {
                id,

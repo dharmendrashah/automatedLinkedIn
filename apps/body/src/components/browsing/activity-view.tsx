@@ -83,12 +83,13 @@ const Row = ({ account, selected, onSelect, onOpen }: RowProps) => {
 
 type Props = {
    accounts: AccountBrowse[]
+   sample: boolean
    onOpen: (accountId: string) => void
 }
 
 // Every account in one compact row: today's use and the last 30 days. A click opens the drawer with the year; rows can be picked
 // for a change to all of them, and grouped by client.
-export const ActivityView = ({ accounts, onOpen }: Props) => {
+export const ActivityView = ({ accounts, sample, onOpen }: Props) => {
    const [query, setQuery] = useState('')
    const [grouped, setGrouped] = useState(false)
    const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -130,7 +131,9 @@ export const ActivityView = ({ accounts, onOpen }: Props) => {
                Group by client
             </label>
          </div>
-         {selected.length > 0 ? <BulkBrowseBar accounts={selected} onClear={() => setPicked(new Set())} /> : null}
+         {selected.length > 0 ? (
+            <BulkBrowseBar accounts={selected} sample={sample} onClear={() => setPicked(new Set())} />
+         ) : null}
          {visible.length === 0 ? (
             <p className="text-muted-foreground rounded-lg border border-dashed p-6 text-center text-sm">
                No accounts match.

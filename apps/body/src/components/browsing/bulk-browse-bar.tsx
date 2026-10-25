@@ -10,7 +10,7 @@ import { hoursProblem } from './format'
 import { HoursEditor } from './hours-editor'
 import { ModeCards } from './mode-cards'
 import { MODES, modeOf } from './modes'
-import { changeBrowse, countText } from './use-browse'
+import { countText, useBrowseChange } from './use-browse'
 
 type Dialogs = 'mode' | 'hours' | 'client' | null
 
@@ -28,10 +28,18 @@ const demanding = (accounts: AccountBrowse[]): BrowseMode =>
    ).mode
 
 // Over the Activity list while rows are picked: one change for all of them, with an Undo.
-export const BulkBrowseBar = ({ accounts, onClear }: { accounts: AccountBrowse[]; onClear: () => void }) => {
+export const BulkBrowseBar = ({
+   accounts,
+   sample,
+   onClear,
+}: {
+   accounts: AccountBrowse[]
+   sample: boolean
+   onClear: () => void
+}) => {
+   const change = useBrowseChange(sample)
    const [open, setOpen] = useState<Dialogs>(null)
    const [client, setClient] = useState('')
-   const ids = accounts.map(({ accountId }) => accountId)
    const who = countText(accounts)
 
    const setMode = (mode: BrowseMode) => {
@@ -43,17 +51,17 @@ export const BulkBrowseBar = ({ accounts, onClear }: { accounts: AccountBrowse[]
          return
       }
 
-      changeBrowse(ids, { mode }, `${modeOf(mode).label} set for ${who}`)
+      change(accounts, { mode }, `${modeOf(mode).label} set for ${who}`)
       setOpen(null)
    }
 
    const setHours = (hours: WorkingHours) => {
-      changeBrowse(ids, { hours }, `Working hours changed for ${who}`)
+      change(accounts, { hours }, `Working hours changed for ${who}`)
       setOpen(null)
    }
 
    const setClientLabel = () => {
-      changeBrowse(ids, { clientLabel: client.trim() || null }, `Client changed for ${who}`)
+      change(accounts, { clientLabel: client.trim() || null }, `Client changed for ${who}`)
       setOpen(null)
    }
 

@@ -24,6 +24,10 @@ export const catalogEntryOf = (task: TaskDefinition): TaskCatalogEntry => ({
       }),
    },
    ...(task.retryOn && { retry_on: task.retryOn }),
+   budget: {
+      estimate_s: task.budget.estimateS,
+      class: task.budget.class,
+   },
    hosts: task.hosts,
 })
 

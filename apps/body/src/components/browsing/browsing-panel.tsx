@@ -1,25 +1,28 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Printer } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
-import { type AccountBrowse, type DayUsage, type WorkingHours } from './types'
+import { type AccountBrowse, type DaySession, type DayUsage, type WorkingHours } from './types'
 
 import { BrowsingHeatmap } from './browsing-heatmap'
 import { formatMinutes, hoursProblem, meterText, stateText } from './format'
-import { dayLabel } from './heatmap-grid'
+import { dayInZone, dayLabel } from './heatmap-grid'
 import { HoursEditor } from './hours-editor'
 import { ModeCards } from './mode-cards'
 import { limitSecondsOf, modeOf } from './modes'
-import { type SampleKind, dayOf, sampleDays, sampleMix, sampleSessions } from './sample'
+import { type SampleKind, dayOf } from './sample'
 import { UseBar } from './use-bar'
-import { changeBrowse } from './use-browse'
+import { useBrowseChange } from './use-browse'
+import { useBrowseDay, useBrowseMix, useBrowseYear } from './use-browse-data'
 
 type Props = {
    account: AccountBrowse
-   kind: SampleKind
+   // Null shows what brain serves; a kind shows invented data.
+   kind: SampleKind | null
    now: Date
 }
 
@@ -30,7 +33,12 @@ const Section = ({ title, children }: { title: string; children: ReactNode }) =>
    </section>
 )
 
-const DaySessions = ({ accountId, usage }: { accountId: string; usage: DayUsage | undefined }) => {
+type DayProps = {
+   usage: DayUsage | undefined
+   sessions: { data: DaySession[] | undefined; loading: boolean; error: string | undefined }
+}
+
+const DaySessions = ({ usage, sessions }: DayProps) => {
    if (!usage) {
       return <p className="text-muted-foreground text-sm">Pick a day on the graph to see its sessions.</p>
    }
@@ -45,13 +53,15 @@ const DaySessions = ({ accountId, usage }: { accountId: string; usage: DayUsage 
             {dayLabel(usage.day)}: {formatMinutes(usage.seconds)} in {usage.sessions}{' '}
             {usage.sessions === 1 ? 'session' : 'sessions'}
          </p>
-         <ul className="divide-y rounded-md border text-sm">
-            {sampleSessions(accountId, usage).map(session => (
+         {sessions.loading ? <Skeleton className="h-16 w-full" /> : null}
+         {sessions.error ? <p className="text-destructive text-sm">{sessions.error}</p> : null}
+         <ul className="divide-y rounded-md border text-sm empty:hidden">
+            {sessions.data?.map(session => (
                <li key={session.id} className="flex items-center justify-between gap-3 px-3 py-1.5">
                   <span className="tabular-nums">{session.at}</span>
                   <span className="min-w-0 flex-1 truncate">{session.action}</span>
                   <span className="text-muted-foreground tabular-nums">{formatMinutes(session.seconds)}</span>
-                  <span className="text-muted-foreground w-20 text-right">{session.result}</span>
+                  <span className="text-muted-foreground w-24 text-right">{session.result}</span>
                </li>
             ))}
          </ul>
@@ -60,16 +70,22 @@ const DaySessions = ({ accountId, usage }: { accountId: string; usage: DayUsage 
 }
 
 // Everything about one account's browsing time, once. It is shown in the drawer beside the table and inline on the account's own
-// page. The numbers are invented until brain serves them (see the sample kind).
+// page. With a sample kind the numbers are invented, and nothing is sent to brain.
 export const BrowsingPanel = ({ account, kind, now }: Props) => {
    const { accountId, email, mode, hours, usedSeconds } = account
-   const today = dayOf(now)
+   const change = useBrowseChange(kind !== null)
+   const today = kind ? dayOf(now) : dayInZone(now, hours.timeZone)
    const thisYear = Number(today.slice(0, 4))
    const [year, setYear] = useState<'recent' | number>('recent')
    const [selectedDay, setSelectedDay] = useState<string | null>(null)
-   const days = useMemo(() => sampleDays(kind, accountId, now), [kind, accountId, now])
+   const yearDays = useBrowseYear(accountId, year === 'recent' ? undefined : year, kind, now)
+   const days = useMemo(() => yearDays.data ?? [], [yearDays.data])
    const limitSeconds = limitSecondsOf(mode)
-   const mix = sampleMix(usedSeconds)
+   const selected =
+      days.find(item => item.day === selectedDay) ??
+      (selectedDay ? { day: selectedDay, seconds: 0, sessions: 0, limitSeconds } : undefined)
+   const daySessions = useBrowseDay(accountId, selected, kind)
+   const mix = useBrowseMix(accountId, usedSeconds, kind).data ?? []
    const hasAnyDay = days.length > 0
 
    const setMode = (next: typeof mode) => {
@@ -81,11 +97,10 @@ export const BrowsingPanel = ({ account, kind, now }: Props) => {
          return
       }
 
-      changeBrowse([accountId], { mode: next }, `${modeOf(next).label} set for ${email}`)
+      change([account], { mode: next }, `${modeOf(next).label} set for ${email}`)
    }
 
-   const setHours = (next: WorkingHours) =>
-      changeBrowse([accountId], { hours: next }, `Working hours changed for ${email}`)
+   const setHours = (next: WorkingHours) => change([account], { hours: next }, `Working hours changed for ${email}`)
 
    return (
       <div className="grid gap-5">
@@ -115,7 +130,11 @@ export const BrowsingPanel = ({ account, kind, now }: Props) => {
          </Section>
 
          <Section title="Client">
-            <ClientField key={account.clientLabel ?? ''} account={account} />
+            <ClientField
+               key={account.clientLabel ?? ''}
+               account={account}
+               onChange={clientLabel => change([account], { clientLabel }, `Client changed for ${email}`)}
+            />
          </Section>
 
          <Section title="Activity">
@@ -137,6 +156,8 @@ export const BrowsingPanel = ({ account, kind, now }: Props) => {
                   Print
                </Button>
             </div>
+            {yearDays.loading ? <Skeleton className="h-40 w-full" /> : null}
+            {yearDays.error ? <p className="text-destructive text-sm">{yearDays.error}</p> : null}
             {hasAnyDay ? (
                <>
                   <BrowsingHeatmap
@@ -146,15 +167,9 @@ export const BrowsingPanel = ({ account, kind, now }: Props) => {
                      selectedDay={selectedDay}
                      onSelect={setSelectedDay}
                   />
-                  <DaySessions
-                     accountId={accountId}
-                     usage={
-                        days.find(item => item.day === selectedDay) ??
-                        (selectedDay ? { day: selectedDay, seconds: 0, sessions: 0, limitSeconds } : undefined)
-                     }
-                  />
+                  <DaySessions usage={selected} sessions={daySessions} />
                </>
-            ) : (
+            ) : yearDays.loading || yearDays.error ? null : (
                <p className="text-muted-foreground rounded-md border border-dashed p-4 text-sm">
                   Nothing browsed yet. The graph fills in as this account's workflows and visits run.
                </p>
@@ -180,7 +195,13 @@ export const BrowsingPanel = ({ account, kind, now }: Props) => {
    )
 }
 
-const ClientField = ({ account }: { account: AccountBrowse }) => (
+const ClientField = ({
+   account,
+   onChange,
+}: {
+   account: AccountBrowse
+   onChange: (clientLabel: string | null) => void
+}) => (
    <Input
       aria-label="Client"
       placeholder="Client (your own note)"
@@ -190,7 +211,7 @@ const ClientField = ({ account }: { account: AccountBrowse }) => (
          const value = event.target.value.trim()
 
          if (value !== (account.clientLabel ?? '')) {
-            changeBrowse([account.accountId], { clientLabel: value || null }, `Client changed for ${account.email}`)
+            onChange(value || null)
          }
       }}
    />

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { refusalOf } from './visitRefusal'
+import { type Refusal, deferralOf, refusalOf } from './visitRefusal'
 
 const mocks = vi.hoisted(() => {
    class TaskRefusedError extends Error {}
@@ -9,6 +9,16 @@ const mocks = vi.hoisted(() => {
    class AccountNotReadyError extends TaskRefusedError {}
    class TaskBusyError extends TaskRefusedError {}
    class TaskRecentError extends TaskRefusedError {}
+   class BrowseBudgetError extends TaskRefusedError {
+      public constructor(
+         message: string,
+         public readonly reason: string,
+         public readonly until: Date,
+         public readonly when: string
+      ) {
+         super(message)
+      }
+   }
    class PageVisitRefusedError extends TaskRefusedError {
       public readonly reason: string
 
@@ -25,6 +35,7 @@ const mocks = vi.hoisted(() => {
       AccountNotReadyError,
       TaskBusyError,
       TaskRecentError,
+      BrowseBudgetError,
       PageVisitRefusedError,
    }
 })
@@ -68,5 +79,66 @@ describe('refusalOf', () => {
          text: 'an account cannot act now',
       })
       expect(refusalOf(new Error('database down'))).toBeNull()
+   })
+})
+
+describe('browsing time refusals', () => {
+   const budget = (reason: string, until: string, when: string) =>
+      new mocks.BrowseBudgetError('x', reason, new Date(until), when)
+
+   it('should say why an account has no browsing time, and when it has again', () => {
+      expect(refusalOf(budget('DAY_FULL', '2026-10-22T09:12:00Z', 'tomorrow at 09:12'))).toEqual({
+         kind: 'later',
+         text: 'an account has used its browsing time for today',
+         until: new Date('2026-10-22T09:12:00Z'),
+         when: 'tomorrow at 09:12',
+      })
+      const closed = refusalOf(budget('OUTSIDE_OFFICE', '2026-10-22T09:12:00Z', 'tomorrow at 09:12'))
+      const resting = refusalOf(budget('GAP', '2026-10-21T12:10:00Z', 'at 12:10'))
+
+      expect(closed?.text).toBe('an account is outside its working hours')
+      expect(resting?.text).toBe('an account is resting between two sessions')
+   })
+})
+
+describe('deferralOf', () => {
+   const now = new Date('2026-10-21T18:30:00Z')
+   const night = (until: string): Refusal => ({
+      kind: 'later',
+      text: 'an account has used its browsing time for today',
+      until: new Date(until),
+      when: 'tomorrow at 09:12',
+   })
+
+   it('should hold the block until the earliest time when every chosen account is out of browsing time for hours', () => {
+      const refused = new Map([
+         ['a', night('2026-10-22T09:30:00Z')],
+         ['b', night('2026-10-22T09:12:00Z')],
+      ])
+
+      expect(deferralOf(refused, ['a', 'b'], now)).toEqual({
+         until: new Date('2026-10-22T09:12:00Z'),
+         when: 'tomorrow at 09:12',
+      })
+   })
+
+   it('should not hold the block while one account can still take a visit, or for a short wait', () => {
+      expect(deferralOf(new Map([['a', night('2026-10-22T09:12:00Z')]]), ['a', 'b'], now)).toBeNull()
+      expect(deferralOf(new Map([['a', night('2026-10-21T18:40:00Z')]]), ['a'], now)).toBeNull()
+      expect(
+         deferralOf(
+            new Map([
+               [
+                  'a',
+                  {
+                     kind: 'later',
+                     text: 'an account is busy with another visit',
+                  },
+               ],
+            ]),
+            ['a'],
+            now
+         )
+      ).toBeNull()
    })
 })

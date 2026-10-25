@@ -602,10 +602,20 @@ model LinkedInAccount {
   // When the profile was first asked for (by the first visit of the page or the button); null means "never asked", which is
   // what lets the first visit start the read once (.plan/account-profile-backend.md).
   profileAskedAt        DateTime?
+  // How much the account may browse in a day, and when (.plan/account-browsing-budget.md). Office days are bits, Monday is bit 0
+  // (31 is Monday to Friday); minutes are after midnight in `officeTimeZone`, or in the zone of the proxy's country when null.
+  browseMode            BrowseMode            @default(SAFE)
+  officeTimeZone        String?
+  officeDays            Int                   @default(31)
+  officeStartMinute     Int                   @default(540)
+  officeEndMinute       Int                   @default(1080)
+  // The owner's own note on who the account works for; changes no limit.
+  clientLabel           String?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
   proxyServers   ProxyServer[]
+  browseUsage    BrowseUsage[]
   spiderSessions SpiderSession[]
   conversations  LinkedInConversation[]
   replies        LinkedInReply[]
@@ -614,6 +624,44 @@ model LinkedInAccount {
 
   @@unique([userId, email])
   @@index([userId])
+}
+
+enum BrowseMode {
+  SAFE
+  MODERATE
+  AGGRESSIVE
+}
+
+enum BrowseClass {
+  ACTION
+  BACKGROUND
+  SYSTEM
+}
+
+// ESTIMATED: the task's own guess while it runs, or the run's wall time when the worker did not say; MEASURED: how long the
+// browser stayed open; NONE: the browser never opened.
+enum BrowseSource {
+  ESTIMATED
+  MEASURED
+  NONE
+}
+
+// The browser time of one session, booked to the account (.plan/account-browsing-budget.md). Reserved at its estimate when the
+// session is asked for and settled when it ends. Not tied to the session row, which is deleted after 30 days; usage is kept
+// 13 months.
+model BrowseUsage {
+  sessionId         String          @id
+  linkedInAccountId String
+  linkedInAccount   LinkedInAccount @relation(fields: [linkedInAccountId], references: [id], onDelete: Cascade)
+  // The calendar day in the account's zone when it was asked for.
+  day               String
+  class             BrowseClass
+  seconds           Int
+  source            BrowseSource    @default(ESTIMATED)
+  startedAt         DateTime        @default(now())
+  settledAt         DateTime?
+
+  @@index([linkedInAccountId, day])
 }
 
 enum ProxyProtocol {

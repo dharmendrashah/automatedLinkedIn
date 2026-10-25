@@ -203,11 +203,55 @@ describe('taskResultSchema', () => {
 
       expect(taskResultSchema.safeParse(without).success).toBe(true)
    })
+
+   it('should carry how long the browser stayed open, and refuse a negative or fractional time', () => {
+      expect(
+         taskResultSchema.safeParse({
+            ...result,
+            browser_seconds: 152,
+         }).success
+      ).toBe(true)
+      expect(
+         taskResultSchema.safeParse({
+            ...result,
+            browser_seconds: -1,
+         }).success
+      ).toBe(false)
+      expect(
+         taskResultSchema.safeParse({
+            ...result,
+            browser_seconds: 1.5,
+         }).success
+      ).toBe(false)
+   })
 })
 
 describe('taskCatalogEntrySchema', () => {
    it('should accept the entry a worker announces', () => {
       expect(taskCatalogEntrySchema.parse(catalogEntry)).toEqual(catalogEntry)
+   })
+
+   it('should accept how the task counts against browsing time, and refuse a class it does not know', () => {
+      const budget = {
+         estimate_s: 240,
+         class: 'BACKGROUND',
+      }
+
+      expect(
+         taskCatalogEntrySchema.parse({
+            ...catalogEntry,
+            budget,
+         }).budget
+      ).toEqual(budget)
+      expect(
+         taskCatalogEntrySchema.safeParse({
+            ...catalogEntry,
+            budget: {
+               ...budget,
+               class: 'OTHER',
+            },
+         }).success
+      ).toBe(false)
    })
 
    it.each([

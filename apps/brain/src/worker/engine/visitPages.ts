@@ -22,7 +22,7 @@ import {
    peopleOf,
    wordsIn,
 } from './context'
-import { type Refusal, refusalOf } from './visitRefusal'
+import { type Refusal, deferralOf, refusalOf } from './visitRefusal'
 
 // "Select accounts" and the two visit blocks (.plan/select-accounts-block.md). A visit block hands each person or company to
 // the chosen account that went longest without a visit, as accounts become free, and waits until every visit ended.
@@ -242,7 +242,15 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
                     .concat(refused.size === 0 ? ['waiting before the next try'] : [])
          ),
       ].join('; ')
-      const note = waiting > 0 ? `Waiting to visit ${waiting} of ${items.length}: ${why}.` : null
+      // Out of browsing time for hours: the block is put off until the accounts are back, not asked again every few seconds.
+      const deferral =
+         waiting > 0 && asked === 0 && inFlight === 0 && !noneSignedIn ? deferralOf(refused, usable) : null
+      const note =
+         waiting > 0
+            ? deferral
+               ? `Scheduled ${deferral.when}: ${why}.`
+               : `Waiting to visit ${waiting} of ${items.length}: ${why}.`
+            : null
 
       // Said once, and again only when it changes, so a long wait neither fills the log nor hides what is wrong.
       if (note !== (ctx.step.message ?? null)) {
@@ -262,6 +270,12 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
 
       if (blocked && sinceMs > BLOCKED_LIMIT_MS) {
          throw new StepError(`Visits stopped: ${why}.`)
+      }
+
+      if (deferral) {
+         await WorkflowRunService.setWaitUntil(ctx.step.id, deferral.until)
+         // The 8 hours of the block count from the end of the wait, so a night does not use them up.
+         await WorkflowRunService.markStarted(ctx.step.id, deferral.until)
       }
 
       throw new Waiting()

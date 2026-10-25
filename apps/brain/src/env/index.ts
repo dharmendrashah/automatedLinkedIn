@@ -29,6 +29,7 @@ export const {
    AUTHENTIK_EMAIL__HOST,
    AUTHENTIK_EMAIL__PORT,
    AUTHENTIK_EMAIL__USE_SSL,
+   BROWSE_BUDGET,
    GIT_SHA,
    BUILD_TIME,
 } = Environment.config()

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { type DayUsage } from './types'
 
-import { buildYear, dayLabel, lastDays, levelOf, summaryText, tooltipText } from './heatmap-grid'
+import { buildYear, dayInZone, dayLabel, lastDays, levelOf, summaryText, tooltipText } from './heatmap-grid'
 
 const usage = (day: string, seconds: number, sessions = 1, limitSeconds = 90 * 60): DayUsage => ({
    day,
@@ -111,6 +111,11 @@ describe('words', () => {
          '2 h 6 min · 2 active days · busiest day 1 h 36 min'
       )
       expect(summaryText([])).toBe('Nothing browsed yet')
+   })
+
+   it('should name the day in the zone of the account, not in the browser', () => {
+      expect(dayInZone(new Date('2026-10-21T22:30:00Z'), 'Asia/Kolkata')).toBe('2026-10-22')
+      expect(dayInZone(new Date('2026-10-21T22:30:00Z'), 'UTC')).toBe('2026-10-21')
    })
 
    it('should list the last days, oldest first', () => {

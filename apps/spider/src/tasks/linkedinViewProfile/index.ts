@@ -73,6 +73,10 @@ export const createLinkedinViewProfile = ({ baseUrl }: Options) =>
             tone: 'failure',
          },
       },
+      budget: {
+         estimateS: 150,
+         class: 'ACTION',
+      },
       policy: {
          // The same account views again only after a few minutes; the owner can confirm and go on.
          cooldownMs: 3 * 60 * 1000,

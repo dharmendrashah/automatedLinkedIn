@@ -31,3 +31,20 @@ export class AccountNotReadyError extends TaskRefusedError {}
 
 // The same task is still running for this scope. Waiting solves it, so a caller that can wait does.
 export class TaskBusyError extends TaskRefusedError {}
+
+// The account has used the browsing time it may use now (.plan/account-browsing-budget.md). `until` is when it may be asked again,
+// so a caller that can wait (a workflow) waits that long instead of asking again and again.
+export class BrowseBudgetError extends TaskRefusedError {
+   public readonly reason: 'OUTSIDE_OFFICE' | 'DAY_FULL' | 'BACKGROUND_FULL' | 'TOO_SOON' | 'GAP'
+   public readonly until: Date
+   // `until` as the owner reads it, in the account's zone: "tomorrow at 09:12".
+   public readonly when: string
+
+   public constructor(message: string, reason: BrowseBudgetError['reason'], until: Date, when: string) {
+      super(message)
+      this.name = 'BrowseBudgetError'
+      this.reason = reason
+      this.until = until
+      this.when = when
+   }
+}

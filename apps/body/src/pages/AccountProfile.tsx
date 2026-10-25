@@ -73,7 +73,7 @@ export const AccountProfile = () => {
       queryFn: () => loadProfile(kind ?? 'full'),
       enabled: sample,
    })
-   // Browsing time is shown only on sample data for now (`?browse=`), until brain serves it.
+   // Browsing time is brain's, or invented with `?browse=` in the address.
    const browseAccounts = useMemo(
       () =>
          account.data ? [{ id: account.data.id, email: account.data.email, status: account.data.status }] : undefined,
@@ -192,9 +192,9 @@ export const AccountProfile = () => {
             </p>
          ) : null}
 
-         {browsing.kind && browseNow ? (
+         {browseNow ? (
             <>
-               <BrowseSampleBanner kind={browsing.kind} />
+               {browsing.kind ? <BrowseSampleBanner kind={browsing.kind} /> : null}
                <Card>
                   <CardContent>
                      <BrowsingPanel account={browseNow} kind={browsing.kind} now={browsing.now} />

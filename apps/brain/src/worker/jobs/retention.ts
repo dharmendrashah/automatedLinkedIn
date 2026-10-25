@@ -8,7 +8,7 @@ export const retention = defineJob({
    name: 'retention',
    title: 'Data retention',
    purpose:
-      "Deletes data that is past its time: old workflow runs and items, the spend record, and this monitor's own history.",
+      "Deletes data that is past its time: old workflow runs and items, the spend record, the browsing time of accounts, and this monitor's own history.",
    everyMs: 6 * 60 * 60 * 1000,
    startAfterMs: 5 * 60 * 1000,
    timeoutMs: 30 * 60 * 1000,

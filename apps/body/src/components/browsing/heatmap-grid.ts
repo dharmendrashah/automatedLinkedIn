@@ -33,6 +33,15 @@ export const dayLabel = (day: string) => {
    return `${WEEKDAYS[date.getUTCDay()]} ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}`
 }
 
+// The calendar day of a moment in a time zone, as YYYY-MM-DD; the browser's own zone when the name is not known.
+export const dayInZone = (moment: Date, timeZone: string) => {
+   try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone }).format(moment)
+   } catch {
+      return toDay(Date.UTC(moment.getFullYear(), moment.getMonth(), moment.getDate()))
+   }
+}
+
 // ISO weekday of a day: 1 is Monday, 7 is Sunday.
 export const weekdayOf = (day: string) => new Date(toTime(day)).getUTCDay() || 7
 

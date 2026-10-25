@@ -14,6 +14,16 @@ const mocks = vi.hoisted(() => {
    class AccountNotReadyError extends TaskRefusedError {}
    class TaskBusyError extends TaskRefusedError {}
    class TaskRecentError extends TaskRefusedError {}
+   class BrowseBudgetError extends TaskRefusedError {
+      public constructor(
+         message: string,
+         public readonly reason: string,
+         public readonly until: Date,
+         public readonly when: string
+      ) {
+         super(message)
+      }
+   }
    class PageVisitRefusedError extends TaskRefusedError {
       public readonly reason: string
 
@@ -30,8 +40,11 @@ const mocks = vi.hoisted(() => {
       AccountNotReadyError,
       TaskBusyError,
       TaskRecentError,
+      BrowseBudgetError,
       PageVisitRefusedError,
       setNote: vi.fn(),
+      setWaitUntil: vi.fn(),
+      markStarted: vi.fn(),
       accounts: vi.fn(),
       lastVisits: vi.fn(),
       viewedBy: vi.fn(),
@@ -60,6 +73,7 @@ vi.mock('database', async () => ({
    AccountNotReadyError: mocks.AccountNotReadyError,
    TaskBusyError: mocks.TaskBusyError,
    TaskRecentError: mocks.TaskRecentError,
+   BrowseBudgetError: mocks.BrowseBudgetError,
    PageVisitService: { request: mocks.request },
    VisitPoolService: {
       accounts: mocks.accounts,
@@ -71,6 +85,8 @@ vi.mock('database', async () => ({
    WorkflowRunService: {
       replaceItems: mocks.replaceItems,
       setNote: mocks.setNote,
+      setWaitUntil: mocks.setWaitUntil,
+      markStarted: mocks.markStarted,
    },
    IcpService: {},
    WalletService: {},
@@ -515,6 +531,36 @@ describe('visit blocks', () => {
             .mockRejectedValueOnce(new mocks.TaskNeedsProxyError('No proxy.'))
 
          await expect(visitProfile(context('go', [ada], started(60)))).rejects.toBeInstanceOf(Waiting)
+      })
+
+      it('should put the block off until the accounts have browsing time again, and restart its 8 hours then', async () => {
+         const later = (until: string) =>
+            new mocks.BrowseBudgetError('x', 'DAY_FULL', new Date(until), 'tomorrow at 09:12')
+         const tomorrow = Date.now() + 14 * HOUR_MS
+
+         mocks.request
+            .mockRejectedValueOnce(later(new Date(tomorrow + 20 * 60_000).toISOString()))
+            .mockRejectedValueOnce(later(new Date(tomorrow).toISOString()))
+            .mockRejectedValueOnce(later(new Date(tomorrow + 5 * 60_000).toISOString()))
+
+         await expect(visitProfile(context('go', [ada], started(1)))).rejects.toBeInstanceOf(Waiting)
+
+         expect(mocks.setNote.mock.calls[0]?.[1]).toMatch(
+            /^Scheduled tomorrow at 09:12: an account has used its browsing time/
+         )
+         expect(mocks.setWaitUntil).toHaveBeenCalledWith('s1', new Date(tomorrow))
+         expect(mocks.markStarted).toHaveBeenCalledWith('s1', new Date(tomorrow))
+      })
+
+      it('should not put the block off when the wait is a few minutes', async () => {
+         mocks.request.mockRejectedValue(
+            new mocks.BrowseBudgetError('x', 'GAP', new Date(Date.now() + 5 * 60_000), 'at 14:20')
+         )
+
+         await expect(visitProfile(context('go', [ada], started(1)))).rejects.toBeInstanceOf(Waiting)
+
+         expect(mocks.setNote.mock.calls[0]?.[1]).toContain('Waiting to visit 1 of 1')
+         expect(mocks.setWaitUntil).not.toHaveBeenCalled()
       })
 
       it('should say so when no chosen account is signed in but a visit was asked before', async () => {

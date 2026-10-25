@@ -8,7 +8,7 @@ import { type SampleKind } from './sample'
 
 type Props = {
    account: AccountBrowse | null
-   kind: SampleKind
+   kind: SampleKind | null
    now: Date
    onClose: () => void
 }
@@ -16,7 +16,7 @@ type Props = {
 // The browsing time of one account, beside the table. It floats on the right like the other detail drawers.
 export const BrowsingDrawer = ({ account, kind, now, onClose }: Props) => (
    <Drawer direction="right" open={Boolean(account)} onOpenChange={open => (open ? undefined : onClose())}>
-      <DrawerContent className={floatingDrawer('sm:max-w-3xl')}>
+      <DrawerContent className={floatingDrawer('data-[vaul-drawer-direction=right]:sm:max-w-4xl')}>
          <DrawerHeader className="border-b text-left">
             <DrawerTitle>{account?.email}</DrawerTitle>
             <DrawerDescription>Browsing time, daily limit and working hours.</DrawerDescription>

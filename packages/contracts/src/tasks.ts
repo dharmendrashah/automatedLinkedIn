@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { taskBudgetSchema } from './browse'
 import { accountIdSchema, proxySchema, sealedSchema } from './schemas'
 
 // The one contract every task uses (see .plan/spider-task-framework.md). Task-specific content travels only inside `input`
@@ -110,6 +111,8 @@ export const taskResultSchema = z.strictObject({
    worker: z.strictObject({ build: z.string().min(1).max(64) }),
    started_at: z.iso.datetime(),
    finished_at: z.iso.datetime(),
+   // How long the browser stayed open, in seconds: what the account's browsing time counts. Absent when it never opened.
+   browser_seconds: z.number().int().min(0).max(86_400).optional(),
 })
 
 export const verdictToneSchema = z.enum(['success', 'failure', 'neutral'])
@@ -150,6 +153,8 @@ export const taskCatalogEntrySchema = z.strictObject({
    }),
    // Verdicts that another proxy may fix, so the web app offers "try again" for them.
    retry_on: z.array(verdictSchema).max(20).optional(),
+   // How the task's sessions count against the account's browsing time; brain assumes an action of 5 minutes without it.
+   budget: taskBudgetSchema.optional(),
    // The sites the task means to visit; the operator's allowlist still decides.
    hosts: z.array(z.string().max(255)).max(20),
 })

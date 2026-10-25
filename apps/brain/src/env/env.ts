@@ -163,6 +163,11 @@ export class Environment {
             desc: 'Whether that SMTP server speaks TLS from the first byte',
             default: false,
          }),
+         BROWSE_BUDGET: bool({
+            desc: 'Whether an account only browses inside its working hours and daily browsing time (.plan/account-browsing-budget.md). Off in development and tests unless set',
+            default: true,
+            devDefault: false,
+         }),
          GIT_SHA: string({
             desc: 'Git commit the image was built from, reported by GET /health',
             example: 'a1b2c3d',

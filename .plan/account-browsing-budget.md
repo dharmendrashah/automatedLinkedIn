@@ -1,6 +1,6 @@
 # Browsing time budget per LinkedIn account (safe, moderate, aggressive)
 
-- Status: locked <!-- draft | locked | in progress | done -->
+- Status: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-10-25
 - Locked by user: yes, 2026-10-25 (answers below; plan only, not built yet)
 
@@ -82,13 +82,13 @@ Answered by the owner on 2026-10-25:
 ## Approach
 
 - [x] 1. Lock this plan (answer the open questions).
-- [ ] 2. Contracts, tests first: the three limits, `BrowseMode`, the optional result fields, the manifest `budget` entry.
-- [ ] 3. Pure allowance function, tests first (office window and zone, weekday, evenly released line, burst, gap, day full, next time it can start), then the migration (create-only, folder name sorts last, read the SQL) for `browseMode`, office columns and `BrowseUsage`.
-- [ ] 4. `BrowseBudgetService`: reserve inside `TaskService.request` with the account row locked, settle in `applyResult` and the give-up path, a daily sum for the page; unit and integration tests (two requests at once cannot both pass, a failed run still books, a run that never opened books zero).
-- [ ] 5. Spider: measure the video and the browser-open time, report them; tests with a real short video and a run with no video.
-- [ ] 6. Refusal mapping (router error text with the time), the workflow side: a refusal with `until` becomes the step's `waitUntil` and its note, the visit step's 8 hour clock restarts after a deferral, tested through the engine (a full day defers to the next office start; a short gap waits minutes).
-- [ ] 7. Body: mode selector, usage meter and next time on the accounts page, minutes on the Sessions page; helpers tested first.
-- [ ] 8. `pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build`, all warnings fixed, brain integration tests; `MEMORY.md`; plan done. A live check with a test account and a short window, with your go-ahead.
+- [x] 2. Contracts, tests first: the three limits, `BrowseMode`, the optional result fields, the manifest `budget` entry.
+- [x] 3. Pure allowance function, tests first (office window and zone, weekday, evenly released line, burst, gap, day full, next time it can start), then the migration (create-only, folder name sorts last, read the SQL) for `browseMode`, office columns and `BrowseUsage`.
+- [x] 4. `BrowseBudgetService`: reserve inside `TaskService.request` with the account row locked, settle in `applyResult` and the give-up path, a daily sum for the page; unit and integration tests (two requests at once cannot both pass, a failed run still books, a run that never opened books zero).
+- [x] 5. Spider: measure the video and the browser-open time, report them; tests with a real short video and a run with no video.
+- [x] 6. Refusal mapping (router error text with the time), the workflow side: a refusal with `until` becomes the step's `waitUntil` and its note, the visit step's 8 hour clock restarts after a deferral, tested through the engine (a full day defers to the next office start; a short gap waits minutes).
+- [x] 7. Body: mode selector, usage meter and next time on the accounts page, minutes on the Sessions page; helpers tested first.
+- [~] 8. (checks pass; the live check with a test account is left) `pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build`, all warnings fixed, brain integration tests; `MEMORY.md`; plan done. A live check with a test account and a short window, with your go-ahead.
 
 ## Edge cases and risks
 
@@ -111,4 +111,8 @@ Answered by the owner on 2026-10-25:
 
 ## Outcome
 
-Filled in when done.
+Built 2026-10-25 on branch `feat/browsing-ui`. Contracts (`packages/contracts/src/browse.ts`, optional `browser_seconds` on the result and `budget` on the catalog entry), migration `20261025010000_add_browse_budget` (`browseMode`, office columns, `clientLabel`, `BrowseUsage`), `database/browseAllowance.ts` (pure), `browseBudget.service.ts` (reserve inside `TaskService.request` with the account row locked, settle in `applyTaskResult`, release in `SpiderSessionService.fail`), `browse.service.ts` and router `browse` (overview, year, day, mix, change), the visit block puts itself off until the accounts are back (`visitRefusal.deferralOf`, `waitUntil`, its 8 hours restart), spider `budget` on every task and `browser_seconds` in the runner, 13 month retention of `BrowseUsage`. The check is `BROWSE_BUDGET` (on in production, off in development and tests).
+
+Deviations: (1) the measure is the time the browser stayed open (context opened to closed), not the length of the video read with ffmpeg; the two are the same in practice because the video records the context, and it needs no ffmpeg, no extra file and works with recording off. (2) A result from a worker without `browser_seconds` is booked at the run's own time (source `ESTIMATED`). (3) Without a zone of its own, an account follows the main zone of its proxy's detected country (`browseZone.ts`), UTC when none. (4) Past days of the year graph show the account's current limit, because the limit of each day is not kept. (5) A scheduled read by the owner's own click counts as an action; only `automatic` background tasks count towards the 40 percent.
+
+Rollout: brain first, then the spider (results are strict objects). On staging `BROWSE_BUDGET` is on by default: every account starts Safe, 09:00 to 18:00 Monday to Friday in its proxy's zone, so visits and reads outside those hours wait. Left: the live check with a test account on a short window, and an owner field in the add and edit forms for the client label (it can be set from the Accounts drawer and the Activity view).
