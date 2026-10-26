@@ -13,6 +13,7 @@ import { AccountBusyError, ShutdownError, TaskError } from '../scraping/errors'
 import { type SavedState } from '../sessions/sessionVault'
 import { ObjectNotFoundError } from '../storage/store'
 import { type TaskDefinition, type TaskOutcome, VisitError, defineTask } from './defineTask'
+import { type Verdict } from './linkedinLogin/accountValidator'
 import { type RunnerDeps, exhaustedResult, hasAttempt, runTask } from './runner'
 
 const TASK_ID = '0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11'
@@ -1594,6 +1595,132 @@ describe('a task that stops for its owner', () => {
       await run(accountCommand)
 
       expect(String(store.objects.get(`${PREFIX}/result.json`))).not.toContain('resume')
+   })
+})
+
+describe('the feed and the sign-in before a task that uses an account', () => {
+   const FEED = 'https://www.linkedin.com/feed/'
+   const LOGIN = 'https://www.linkedin.com/uas/login'
+
+   const prepare = (feedLands: string, signIn: Verdict['outcome'] = 'VALID') => {
+      const sessions = {
+         load: vi.fn(async (_id: string) => undefined),
+         save: vi.fn(async (_id: string, _state: unknown) => undefined),
+      }
+      const validator = {
+         validate: vi.fn(async (): Promise<Verdict> => {
+            return signIn === 'VALID'
+               ? {
+                    outcome: 'VALID',
+                    cookies: [],
+                 }
+               : {
+                    outcome: signIn,
+                    message: 'No.',
+                 }
+         }),
+      }
+      const taskRun = vi.fn(async (): Promise<TaskOutcome> => ({
+         status: 'SUCCEEDED',
+         verdict: 'GOOD',
+         message: 'ok',
+      }))
+      const session = makeSession()
+
+      session.goto.mockImplementation(async (url: string) => (url === FEED ? feedLands : url))
+
+      return {
+         sessions,
+         validator,
+         taskRun,
+         ...setup({
+            session,
+            task: accountTask({
+               run: taskRun,
+               verdicts: {
+                  GOOD: {
+                     label: 'Good',
+                     tone: 'success',
+                  },
+                  SIGNED_OUT: {
+                     label: 'Signed out',
+                     tone: 'failure',
+                  },
+               },
+            }),
+            overrides: {
+               sessions,
+               reauth: {
+                  baseUrl: 'https://www.linkedin.com',
+                  validator,
+               },
+            },
+         }),
+      }
+   }
+
+   beforeEach(() => {
+      vi.restoreAllMocks()
+      vi.spyOn(console, 'error').mockImplementation(() => undefined)
+   })
+
+   it('should open the feed first and run the task without signing in when the feed opens', async () => {
+      const { run, validator, taskRun, session, sessions } = prepare(FEED)
+
+      await run(accountCommand)
+
+      expect(session.goto.mock.calls[0]?.[0]).toBe(FEED)
+      expect(validator.validate).not.toHaveBeenCalled()
+      expect(taskRun).toHaveBeenCalledOnce()
+      expect(sessions.save).not.toHaveBeenCalled()
+   })
+
+   it('should sign in with the stored credentials when the feed shows the login page, run the task, and keep the new session and profile', async () => {
+      const { run, validator, taskRun, sessions, published } = prepare(LOGIN)
+
+      await run(accountCommand)
+
+      expect(validator.validate).toHaveBeenCalledOnce()
+      expect(validator.validate).toHaveBeenCalledWith(
+         expect.anything(),
+         expect.objectContaining({
+            email: 'ada@work.com',
+            credentials,
+         })
+      )
+      expect(taskRun).toHaveBeenCalledOnce()
+      expect(published[0]).toMatchObject({
+         status: 'SUCCEEDED',
+         verdict: 'GOOD',
+      })
+      // The task did not ask for its session to be kept; the sign-in did.
+      expect(sessions.save).toHaveBeenCalledOnce()
+   })
+
+   it.each(['NEEDS_REAUTH', 'INVALID_CREDENTIALS', 'ERROR'] as const)(
+      'should answer SIGNED_OUT, not run the task and keep nothing, when the sign-in answers %s',
+      async outcome => {
+         const { run, validator, taskRun, sessions, published } = prepare(LOGIN, outcome)
+
+         await run(accountCommand)
+
+         expect(validator.validate).toHaveBeenCalledOnce()
+         expect(taskRun).not.toHaveBeenCalled()
+         expect(sessions.save).not.toHaveBeenCalled()
+         expect(published[0]).toMatchObject({
+            status: 'FAILED',
+            verdict: 'SIGNED_OUT',
+         })
+      }
+   )
+
+   it('should not do any of this for a run with no account', async () => {
+      const { run, validator, session } = prepare(LOGIN)
+
+      await run()
+
+      expect(validator.validate).not.toHaveBeenCalled()
+      expect(session.goto).not.toHaveBeenCalledWith(FEED)
    })
 })
 

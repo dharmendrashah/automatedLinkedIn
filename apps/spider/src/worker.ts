@@ -105,14 +105,15 @@ const main = async () => {
       maxRecords: SPIDER_MAX_RECORDS,
    })
 
+   const validator = new AccountValidator({
+      baseUrl: SPIDER_LINKEDIN_BASE_URL,
+      mode: SPIDER_VALIDATION_MODE,
+      pause: host => limiter.wait(host),
+      allowsCookieDomain: domain => policy.allowsCookieDomain(domain),
+   })
    const tasks = buildTasks({
       linkedin: {
-         validator: new AccountValidator({
-            baseUrl: SPIDER_LINKEDIN_BASE_URL,
-            mode: SPIDER_VALIDATION_MODE,
-            pause: host => limiter.wait(host),
-            allowsCookieDomain: domain => policy.allowsCookieDomain(domain),
-         }),
+         validator,
          baseUrl: SPIDER_LINKEDIN_BASE_URL,
       },
    })
@@ -167,6 +168,10 @@ const main = async () => {
                   identities: new IdentityStore(store, createDeviceIdentity),
                   exitGeo: lookupExit,
                   sessions: new SessionVault(store, LINKEDIN_CRED_ENC_KEY),
+                  reauth: {
+                     baseUrl: SPIDER_LINKEDIN_BASE_URL,
+                     validator,
+                  },
                   ...(SPIDER_BROWSER_PROFILES && { profiles }),
                   handover: (taskId, control) =>
                      waitForOwner(taskId, control, {

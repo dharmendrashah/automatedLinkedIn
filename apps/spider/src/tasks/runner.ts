@@ -28,9 +28,14 @@ import { ObjectNotFoundError, type ObjectStore } from '../storage/store'
 import { type Handover } from '../takeover/waitForOwner'
 import { type Credentials } from './credentials'
 import { type TaskContext, type TaskDefinition, type TaskOutcome, VisitError } from './defineTask'
+import { ensureSignedIn } from './ensureSignedIn'
+import { TASK_NAME as LOGIN_TASK } from './linkedinLogin'
+import { type AccountValidator } from './linkedinLogin/accountValidator'
 import { type Download, fetchPostFiles, fetchUploads } from './uploads'
 
 const MAX_ARTIFACTS = 300
+// A sign-in that is not done in this long is given up, as the sign-in task does.
+const SIGN_IN_LIMIT_MS = 3 * 60 * 1000
 
 export type RecordingRequest = {
    task: string
@@ -59,6 +64,9 @@ export type RunnerDeps = {
    exitGeo?: (proxy: ProxyConfig) => Promise<ExitRegion>
    // The cookies an account keeps between runs. Without it nothing is restored or kept (the local devtools).
    sessions?: Pick<SessionVault, 'load' | 'save'>
+   // With it every task that uses an account starts from the feed and signs the account in again when LinkedIn does not accept
+   // the session (.plan/sign-in-before-tasks.md). Without it the task starts as it is.
+   reauth?: { baseUrl: string; validator: Pick<AccountValidator, 'validate'> }
    // The account's whole browser profile between runs (.plan/account-browser-profile.md). Without it every run starts a new
    // browser from `sessions`.
    profiles?: Profiles
@@ -390,6 +398,8 @@ const execute = async (
 
    // When the browser opened, for the browsing time the account is booked: from then until it is closed.
    let openedAt: number | undefined
+   // A sign-in was done in this run: the session and the profile it made are kept for the next run, whatever the task answers.
+   let signedInAgain = false
 
    // Closes the browser first (the video is complete only then), saves the files, then publishes the result.
    const finish = async (outcome: TaskOutcome, session: DetectionSession | undefined) => {
@@ -436,7 +446,12 @@ const execute = async (
       }
 
       // Only a run that passed its own check replaces the saved session, so a failed or logged-out one never overwrites a good one.
-      if (state && account && outcome.commitSession && outcome.status === 'SUCCEEDED') {
+      if (
+         state &&
+         account &&
+         ((outcome.commitSession && outcome.status === 'SUCCEEDED') ||
+            (signedInAgain && outcome.verdict !== 'SIGNED_OUT'))
+      ) {
          await deps.sessions?.save(account.id, state).catch(error => {
             console.error(`Could not keep the session of ${account.id}: ${(error as Error).message}`)
          })
@@ -640,7 +655,37 @@ const execute = async (
    }
 
    try {
-      outcome = await withLimit(task.run(context, input), task.limits.timeoutMs, deps.signal)
+      // Every task that uses an account starts from the feed; a session LinkedIn does not accept is signed in again, once.
+      const entry =
+         account && deps.reauth && task.name !== LOGIN_TASK
+            ? await withLimit(
+                 ensureSignedIn({
+                    baseUrl: deps.reauth.baseUrl,
+                    visit,
+                    log: message => recorder?.log('spider', 'info', message),
+                    signIn: async () =>
+                       (
+                          await deps.reauth?.validator.validate(browser, {
+                             email: account.email,
+                             credentials: account.credentials,
+                             ...(device?.locale && { language: device.locale }),
+                          })
+                       )?.outcome === 'VALID',
+                 }),
+                 SIGN_IN_LIMIT_MS,
+                 deps.signal
+              )
+            : 'READY'
+
+      signedInAgain = entry === 'SIGNED_IN'
+      outcome =
+         entry === 'FAILED'
+            ? {
+                 status: 'FAILED',
+                 verdict: 'SIGNED_OUT',
+                 message: 'LinkedIn asked for a sign-in and signing in again did not work.',
+              }
+            : await withLimit(task.run(context, input), task.limits.timeoutMs, deps.signal)
    } catch (error) {
       if (error instanceof TimedOut) {
          return finish(
