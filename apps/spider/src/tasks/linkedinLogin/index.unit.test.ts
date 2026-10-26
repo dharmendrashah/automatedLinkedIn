@@ -19,9 +19,11 @@ const run = async (verdict: Verdict, recheck: Verdict = verdict) => {
    } as unknown as Pick<AccountValidator, 'validate' | 'recheck'>
    const browser = { pageHtml: vi.fn(async () => '<html>login</html>') }
    const attach = vi.fn()
+   const keepSession = vi.fn(async () => undefined)
    const context = {
       browser,
       attach,
+      keepSession,
       account: {
          id: 'acc1',
          email: 'ada@example.com',
@@ -39,6 +41,7 @@ const run = async (verdict: Verdict, recheck: Verdict = verdict) => {
       recheck: vi.mocked(validator.recheck),
       browser,
       attach,
+      keepSession,
    }
 }
 
@@ -76,6 +79,25 @@ describe('linkedin-login task', () => {
          email: 'ada@example.com',
          credentials,
       })
+   })
+
+   it('should keep the session right after a good sign-in, before it looks around, and not after a failed one', async () => {
+      const good = await run({
+         outcome: 'VALID',
+         cookies: [],
+      })
+
+      expect(good.keepSession).toHaveBeenCalledOnce()
+      expect(vi.mocked(good.keepSession).mock.invocationCallOrder[0]).toBeLessThan(
+         vi.mocked(browseAfterLogin).mock.invocationCallOrder.at(-1) ?? 0
+      )
+
+      const bad = await run({
+         outcome: 'INVALID_CREDENTIALS',
+         message: 'No.',
+      })
+
+      expect(bad.keepSession).not.toHaveBeenCalled()
    })
 
    it('should succeed and keep the session when the login worked', async () => {

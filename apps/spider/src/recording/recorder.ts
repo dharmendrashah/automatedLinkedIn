@@ -107,8 +107,8 @@ export type RecorderOptions = {
 const MAX_ENTRIES = 500
 // A walk of ten minutes logs every scroll and every page's console; the last lines are the ones that say how it ended.
 const MAX_LOG_LINES = 2000
-const MAX_BODY_BYTES = 64 * 1024
-const MAX_TOTAL_BODY_BYTES = 2 * 1024 * 1024
+export const MAX_BODY_BYTES = 64 * 1024
+export const MAX_TOTAL_BODY_BYTES = 2 * 1024 * 1024
 const MAX_SCREENSHOTS = 40
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024
 const MAX_ATTACHMENTS = 20

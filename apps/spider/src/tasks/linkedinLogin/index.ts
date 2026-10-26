@@ -102,6 +102,9 @@ export const createLinkedinLogin = ({ validator, baseUrl }: Options) =>
             const answer = answerOf(found)
 
             if (answer.verdict === 'VALID') {
+               // Before looking around: a browser that closes during it must not take the sign-in with it.
+               await context.keepSession?.()
+
                return {
                   ...answer,
                   commitSession: await browseAfterLogin(context, baseUrl),

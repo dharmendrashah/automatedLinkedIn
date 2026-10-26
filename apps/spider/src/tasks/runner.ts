@@ -400,15 +400,17 @@ const execute = async (
    let openedAt: number | undefined
    // A sign-in was done in this run: the session and the profile it made are kept for the next run, whatever the task answers.
    let signedInAgain = false
+   // The session copied in the middle of the run (right after a sign-in), for a browser that cannot be read at the end.
+   let kept: StorageState | undefined
 
    // Closes the browser first (the video is complete only then), saves the files, then publishes the result.
    const finish = async (outcome: TaskOutcome, session: DetectionSession | undefined) => {
       // Taken before the browser closes. Only sites the operator allowed are kept.
       const state = account
-         ? await session
+         ? ((await session
               ?.storageState()
               .then(found => allowedState(found, deps.policy))
-              .catch(() => undefined)
+              .catch(() => undefined)) ?? kept)
          : undefined
 
       await session?.close().catch(() => undefined)
@@ -582,6 +584,14 @@ const execute = async (
       browser,
       ...(account && { account }),
       ...(device?.locale && { language: device.locale }),
+      ...(account && {
+         keepSession: async () => {
+            kept = await browser
+               .storageState()
+               .then(found => allowedState(found, deps.policy))
+               .catch(() => undefined)
+         },
+      }),
       visit,
       log: message => recorder?.log('spider', 'info', message),
       warn: message => recorder?.log('spider', 'warn', message),
