@@ -118,6 +118,17 @@ describe('accountProfile resolvers', () => {
       })
    })
 
+   it('should pass on that the owner reads although the account may not browse now', async () => {
+      mocks.request.mockResolvedValue({ id: 's1' })
+
+      await caller().read({
+         accountId: 'acc1',
+         startAnyway: true,
+      })
+
+      expect(mocks.request).toHaveBeenLastCalledWith(expect.objectContaining({ startAnyway: true }))
+   })
+
    it('should say a recent read needs a confirmation, and that a refused read cannot start', async () => {
       mocks.request.mockRejectedValueOnce(new mocks.TaskRecentError('Wait 20 minute(s) before running this again.'))
       mocks.request.mockRejectedValueOnce(new mocks.TaskRefusedError('Run Test login first.'))
