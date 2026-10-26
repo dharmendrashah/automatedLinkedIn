@@ -341,6 +341,7 @@ describe('RUNNER_VERDICTS', () => {
             'NEEDS_PROXY',
             'NOT_ALLOWED',
             'NOT_QUEUED',
+            'NOT_STARTED',
             'PROXY_FAILED',
             'TIMED_OUT',
             'UNKNOWN_TASK',

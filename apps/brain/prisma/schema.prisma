@@ -34,6 +34,8 @@ model User {
   replies           LinkedInReply[]
   accountProfiles   LinkedInAccountProfile[]
   profileVisits     LinkedInPageVisit[]
+  postDrafts        PostDraft[]
+  postPublications  PostPublication[]
   workflowLists     WorkflowList[]
   suppressions      Suppression[]
   personSnapshots   PersonSnapshot[]
@@ -614,13 +616,15 @@ model LinkedInAccount {
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
-  proxyServers   ProxyServer[]
-  browseUsage    BrowseUsage[]
-  spiderSessions SpiderSession[]
-  conversations  LinkedInConversation[]
-  replies        LinkedInReply[]
-  profile        LinkedInAccountProfile?
-  profileVisits  LinkedInPageVisit[]
+  proxyServers     ProxyServer[]
+  browseUsage      BrowseUsage[]
+  spiderSessions   SpiderSession[]
+  conversations    LinkedInConversation[]
+  replies          LinkedInReply[]
+  profile          LinkedInAccountProfile?
+  profileVisits    LinkedInPageVisit[]
+  postDrafts       PostDraft[]
+  postPublications PostPublication[]
 
   @@unique([userId, email])
   @@index([userId])
@@ -1082,7 +1086,7 @@ model JobDefinition {
 
 // One run of a scheduled job of the brain worker, idle ones too, kept 30 days. No text of any message and no secret.
 model JobRun {
-  id         String          @id
+  id         String        @id
   job        String
   startedAt  DateTime
   finishedAt DateTime
@@ -1165,4 +1169,82 @@ model LinkedInReply {
   @@index([accountId, startedAt])
   @@index([conversationId, createdAt])
   @@index([state, createdAt])
+}
+
+// A post the owner is writing for one of their own LinkedIn accounts (.plan/posting-page.md). It is always a draft: nothing sends
+// it yet. `blocks` follows the contract `postBlocksSchema` (text, one attachment); files are never stored, only their name,
+// size and alt text. `plannedAt` is the time the owner chose, in `plannedZone`. The owner's own words, so it is only ever served
+// to the owner and goes with the account.
+model PostDraft {
+  id          String          @id @default(uuid(7))
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId   String
+  account     LinkedInAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  blocks      Json            @default("[]")
+  // Who can see the post and who can comment on it.
+  audience    PostVisibility  @default(ANYONE)
+  comments    PostVisibility  @default(ANYONE)
+  plannedAt   DateTime?
+  plannedZone String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([userId, updatedAt])
+  @@index([accountId])
+}
+
+enum PostVisibility {
+  ANYONE
+  CONNECTIONS
+}
+
+enum PostPublicationState {
+  // Chosen to go out at `scheduledAt`; the post-send job queues it when it is due.
+  SCHEDULED
+  // Asked for and waiting its turn: the account is busy, or its start is not yet allowed.
+  QUEUED
+  SENDING
+  POSTED
+  FAILED
+  // Post was pressed and LinkedIn never said it went, so it may have.
+  UNKNOWN
+}
+
+// A post that was sent for posting or is planned (.plan/posting-send-task.md). It is the frozen copy of a draft: the blocks as they
+// were when the owner pressed Post now or Schedule, so a later edit of the draft changes nothing here. The owner's own words, only
+// served to the owner and gone with the account. A partial unique index (see the migration) allows one `SENDING` post per account.
+model PostPublication {
+  id             String               @id @default(uuid(7))
+  userId         String
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        LinkedInAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  blocks         Json                 @default("[]")
+  audience       PostVisibility       @default(ANYONE)
+  comments       PostVisibility       @default(ANYONE)
+  state          PostPublicationState
+  // When it is to start (scheduled), in the zone the owner chose; empty for a post sent now.
+  scheduledAt    DateTime?
+  plannedZone    String?
+  // A fixed sentence the owner can read, set when it did not go or went without a link.
+  failure        String?
+  // The address of the post on LinkedIn, only ever one that passed the contract's check.
+  link           String?
+  // The spider run that makes it; empty while it waits.
+  sessionId      String?              @unique
+  createdAt      DateTime             @default(now())
+  // When its run was asked for; the quiet time between two posts of an account counts from it.
+  startedAt      DateTime?
+  postedAt       DateTime?
+  // Set once the files of a post that went were deleted from the bucket.
+  filesDeletedAt DateTime?
+  // The run and block of a workflow that made this post; empty for a post sent from the Posting page. The block keeps the files.
+  runId          String?
+  nodeId         String?
+
+  @@index([userId, createdAt])
+  @@index([accountId, state])
+  @@index([state, scheduledAt])
+  @@index([runId, nodeId])
 }

@@ -172,6 +172,7 @@ describe('linkedin-login hooks', () => {
          ['PROXY_FAILED', 'ERROR'],
          ['CRASHED', 'ERROR'],
          ['NOT_QUEUED', 'ERROR'],
+         ['NOT_STARTED', 'ERROR'],
          ['UNKNOWN_TASK', 'ERROR'],
          ['NEEDS_PROXY', 'PENDING'],
       ])(

@@ -6,6 +6,7 @@ import { linkedInBrowseHooks } from './linkedInBrowse.hooks'
 import { linkedInLoginHooks } from './linkedInLogin.hooks'
 import { MESSAGES_TASK, linkedInMessagesHooks } from './linkedInMessages.hooks'
 import { VIEW_COMPANY_TASK, VIEW_PROFILE_TASK, linkedInVisitHooks } from './linkedInPageVisit.hooks'
+import { POST_TASK, linkedInPostHooks } from './linkedInPost.hooks'
 import { PROFILE_TASK, linkedInProfileHooks } from './linkedInProfile.hooks'
 import { REPLY_TASK, linkedInReplyHooks } from './linkedInReply.hooks'
 
@@ -44,4 +45,5 @@ export const TASK_HOOKS: Record<string, TaskHooks> = {
    [VIEW_PROFILE_TASK]: linkedInVisitHooks,
    [VIEW_COMPANY_TASK]: linkedInVisitHooks,
    [REPLY_TASK]: linkedInReplyHooks,
+   [POST_TASK]: linkedInPostHooks,
 }

@@ -16,7 +16,12 @@ const mocks = vi.hoisted(() => ({
    seal: vi.fn(),
    open: vi.fn(),
    removeFiles: vi.fn(),
+   removeDraftFiles: vi.fn(),
+   postService: { removeFilesOfAccount: vi.fn() },
 }))
+
+vi.mock('./postDraft.service', () => ({ PostDraftService: { removeFilesOfAccount: mocks.removeDraftFiles } }))
+vi.mock('./postPublication.service', () => ({ PostPublicationService: mocks.postService }))
 
 vi.mock('core', () => ({
    CryptoService: {
@@ -533,7 +538,12 @@ describe('LinkedInAccountService', () => {
          await LinkedInAccountService.deleteForUser('u1', 'a1')
 
          expect(mocks.removeFiles).toHaveBeenCalledWith('u1', 'a1')
+         expect(mocks.removeDraftFiles).toHaveBeenCalledWith('u1', 'a1')
+         expect(mocks.postService.removeFilesOfAccount).toHaveBeenCalledWith('u1', 'a1')
          expect(mocks.removeFiles.mock.invocationCallOrder[0]).toBeLessThan(
+            mocks.deleteMany.mock.invocationCallOrder[0] ?? 0
+         )
+         expect(mocks.removeDraftFiles.mock.invocationCallOrder[0]).toBeLessThan(
             mocks.deleteMany.mock.invocationCallOrder[0] ?? 0
          )
 

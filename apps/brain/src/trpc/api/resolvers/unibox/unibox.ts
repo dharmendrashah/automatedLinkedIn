@@ -1,40 +1,17 @@
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
-import {
-   LinkedInConversationService,
-   LinkedInReplyService,
-   MAX_IDS,
-   MessagesRefresh,
-   REPLY_LIMITS,
-   TaskRefusedError,
-} from 'database'
+import { LinkedInConversationService, LinkedInReplyService, MAX_IDS, MessagesRefresh, REPLY_LIMITS } from 'database'
 
 import { MAX_ATTACHMENT_BYTES, UPLOAD_ID } from '@automatedLinkedIn/contracts'
 
 import { ownerProcedure, router } from 'trpc'
 
-import { present } from '../owned'
+import { orRefused, present } from '../owned'
 
 const WORDS_OR_FILES = { message: 'A reply needs words or files.' }
 const id = z.string().min(1).max(100)
 const ids = z.array(id).min(1).max(MAX_IDS)
-
-// A refusal brain wrote as a sentence for the owner (the limits, a type, an account that is busy) is a precondition that failed.
-const orRefused = async <T>(work: Promise<T>) => {
-   try {
-      return await work
-   } catch (error) {
-      if (error instanceof TaskRefusedError) {
-         throw new TRPCError({
-            code: 'PRECONDITION_FAILED',
-            message: error.message,
-         })
-      }
-
-      throw error
-   }
-}
 
 // The Unibox: the owner's conversations as the spider read them, and the owner's own marks on them. Every call is scoped to
 // ctx.user.id, so a foreign id answers like a missing one. See .plan/unibox-backend.md.

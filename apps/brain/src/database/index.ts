@@ -36,6 +36,10 @@ export {
    LinkedInCompanyService,
 } from './linkedInCompany.service'
 export { type LinkedInPostListQuery, LinkedInPostService } from './linkedInPost.service'
+export { type StoredPostDraft, PostDraftService } from './postDraft.service'
+export { POST_TASK } from './linkedInPost.hooks'
+export { type PublicationView, PostPublicationService } from './postPublication.service'
+export { POST_LIMITS } from './postPublication.rules'
 export { MAX_IDS, LIST_LIMIT, type ConversationView, LinkedInConversationService } from './linkedInConversation.service'
 export { MESSAGES_TASK } from './linkedInMessages.hooks'
 export { PROFILE_TASK } from './linkedInProfile.hooks'

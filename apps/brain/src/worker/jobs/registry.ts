@@ -2,6 +2,8 @@ import { unique } from '../registry'
 import { accountDaily } from './accountDaily'
 import { dataReads } from './dataReads'
 import { messageImport } from './messageImport'
+import { postSend } from './postSend'
+import { postSweep } from './postSweep'
 import { profileImport } from './profileImport'
 import { proxyScoring } from './proxyScoring'
 import { replySend } from './replySend'
@@ -25,4 +27,6 @@ export const JOBS = unique('job', [
    profileImport,
    replySend,
    replySweep,
+   postSend,
+   postSweep,
 ])

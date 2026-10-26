@@ -54,7 +54,7 @@ import { catalogOf } from './tasks/catalog'
 import { openCredentials } from './tasks/credentials'
 import { AccountValidator } from './tasks/linkedinLogin/accountValidator'
 import { buildTasks } from './tasks/registry'
-import { exhaustedResult, runTask } from './tasks/runner'
+import { exhaustedResult, hasAttempt, runTask } from './tasks/runner'
 
 const main = async () => {
    if (Buffer.from(LINKEDIN_CRED_ENC_KEY, 'base64').length !== 32) {
@@ -192,7 +192,10 @@ const main = async () => {
             ),
          // A session must never stay in progress because the worker kept failing: brain gets an answer instead.
          onExhausted: async command =>
-            publishRunResult(await broker.publishChannel(), exhaustedResult(command, GIT_SHA)),
+            publishRunResult(
+               await broker.publishChannel(),
+               exhaustedResult(command, GIT_SHA, Date.now, await hasAttempt(store, command))
+            ),
       },
       {
          republish: async (message, retries) => republishRun(await broker.publishChannel(), message, retries),

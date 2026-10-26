@@ -63,6 +63,8 @@ const main = async () => {
          picked,
          name: process.argv[2] ?? '',
          outputRoot: OUTPUT_ROOT,
+         databaseUrl,
+         encryptionKey,
       })
 
       return

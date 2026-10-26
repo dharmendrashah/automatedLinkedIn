@@ -21,6 +21,7 @@ import {
    ListChecks,
    Network,
    Send,
+   SquarePen,
    Target,
    Timer,
    UserCircle,
@@ -40,6 +41,7 @@ import { trpc } from '../trpc'
 const navMain: NavItem[] = [
    { title: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
    { title: 'Unibox', to: '/unibox', icon: Inbox },
+   { title: 'Write a post', to: '/posting', icon: SquarePen },
    { title: 'LinkedIn accounts', to: '/accounts', icon: Briefcase },
    { title: 'LinkedIn profiles', to: '/profiles', icon: Users },
    { title: 'LinkedIn companies', to: '/companies', icon: Building2 },

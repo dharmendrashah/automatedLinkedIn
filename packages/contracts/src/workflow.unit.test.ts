@@ -578,12 +578,104 @@ describe('Account Actions', () => {
       })),
    })
 
-   it('should group the account block and both visit blocks under "Account Actions"', () => {
+   it('should group the account block, both visit blocks and Write a post under "Account Actions"', () => {
       const groups = catalog()
          .filter(({ group }) => group === 'Account Actions')
          .map(({ type }) => type)
 
-      expect(groups).toEqual(['account.select', 'account.visitProfile', 'account.visitCompany'])
+      expect(groups).toEqual(['account.select', 'account.visitProfile', 'account.visitCompany', 'account.writePost'])
+   })
+
+   it('should keep a post written in the block as text that reads as a post, and say so when it does not', () => {
+      const parse = (post: string) => blockOf('account.writePost').config.safeParse({ post }).success
+      const written = JSON.stringify([
+         {
+            id: 't1',
+            type: 'TEXT',
+            text: 'Hello',
+         },
+      ])
+
+      expect(blockOf('account.writePost').config.safeParse({}).data).toEqual({
+         post: '[]',
+         audience: 'ANYONE',
+         comments: 'ANYONE',
+      })
+      expect(
+         blockOf('account.writePost').config.safeParse({
+            audience: 'CONNECTIONS',
+            comments: 'CONNECTIONS',
+         }).success
+      ).toBe(true)
+      // The writer holds the two choices next to the post, so the form lists the post only.
+      expect(blockOf('account.writePost').fields.map(({ key }) => key)).toEqual(['post'])
+      expect(blockOf('account.writePost').config.safeParse({ audience: 'OFF' }).success).toBe(false)
+      expect(blockOf('account.writePost').config.safeParse({ comments: 'OFF' }).success).toBe(false)
+      expect(parse(written)).toBe(true)
+      expect(parse('{}')).toBe(false)
+      expect(parse('x'.repeat(40_001))).toBe(false)
+   })
+
+   it('should stop a Write a post block with nothing to post or no account block before it', () => {
+      const written = JSON.stringify([
+         {
+            id: 't1',
+            type: 'TEXT',
+            text: 'Hello',
+         },
+      ])
+      const empty = chain(
+         node('start', 'trigger.manual'),
+         node('pool', 'account.select', { accounts: ['a1'] }),
+         node('post', 'account.writePost')
+      )
+      const lonely = chain(node('start', 'trigger.manual'), node('post', 'account.writePost', { post: written }))
+      const good = chain(
+         node('start', 'trigger.manual'),
+         node('pool', 'account.select', { accounts: ['a1'] }),
+         node('post', 'account.writePost', { post: written })
+      )
+
+      expect(errorsOf(validateGraph(empty)).map(({ nodeId }) => nodeId)).toEqual(['post'])
+      expect(errorsOf(validateGraph(lonely)).map(({ nodeId }) => nodeId)).toEqual(['post'])
+      expect(validateGraph(good).filter(({ nodeId }) => nodeId === 'pool' || nodeId === 'post')).toEqual([])
+   })
+
+   it('should stop a Write a post block whose file was not uploaded', () => {
+      const notUploaded = JSON.stringify([
+         {
+            id: 'd1',
+            type: 'DOCUMENT',
+            file: {
+               id: 'f1',
+               name: 'a.pdf',
+               bytes: 100,
+            },
+         },
+      ])
+      const graph = chain(
+         node('start', 'trigger.manual'),
+         node('pool', 'account.select', { accounts: ['a1'] }),
+         node('post', 'account.writePost', { post: notUploaded })
+      )
+
+      expect(errorsOf(validateGraph(graph)).map(({ nodeId }) => nodeId)).toEqual(['post'])
+   })
+
+   it('should pass on what reaches Write a post and cost nothing', () => {
+      const graph = chain(
+         node('profiles', 'input.profiles', { links: ['https://www.linkedin.com/in/ada'] }),
+         node('pool', 'account.select', { accounts: ['a1'] }),
+         node('post', 'account.writePost')
+      )
+      const estimate = estimateGraph(graph, {
+         posts: 0,
+         profiles: 7,
+         companies: 0,
+      })
+
+      expect(estimate.totalMicros).toBe(0)
+      expect(estimate.nodes.post?.items).toBe(estimate.nodes.profiles?.items)
    })
 
    it('should need one to twenty different accounts', () => {

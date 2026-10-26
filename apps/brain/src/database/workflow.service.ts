@@ -9,6 +9,7 @@ import {
    estimateGraph,
    graphSchema,
    nextScheduledRun,
+   postBlocksOfText,
    previewGraph,
    scheduleOf,
    validateGraph,
@@ -19,6 +20,7 @@ import { InputPickService } from './inputPick.service'
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
 import { LinkedInProfileService } from './linkedInProfile.service'
+import { dropFiles, keysOf, ownsKeys } from './postFileKeys'
 import { PrismaService } from './prisma.service'
 import { WalletService } from './wallet.service'
 import { WorkflowRunService } from './workflowRun.service'
@@ -83,6 +85,14 @@ const workflowTaken = (name: string) => `You already have a workflow named "${na
 const listTaken = (name: string) => `You already have a list named "${name}". Pick another workflow name.`
 
 export const readGraph = (value: unknown): Graph => graphSchema.parse(value)
+
+// The posts written in the "Write a post" blocks of a graph; their files belong to the graph.
+const postsOf = (graph: Graph) =>
+   graph.nodes.flatMap(({ type, config }) =>
+      type === 'account.writePost' ? (postBlocksOfText(config.post) ?? []) : []
+   )
+
+const FOREIGN_FILE = 'A file of a post is not yours. Attach it again.'
 
 const usesPosts = (graph: Graph) => graph.nodes.some(({ type }) => type === 'input.posts')
 
@@ -278,6 +288,10 @@ export class WorkflowService {
 
    // The workflow and its own output list, made together.
    public static create(userId: string, input: { name: string; goal: string | null; graph: Graph }) {
+      if (!ownsKeys(userId, postsOf(input.graph))) {
+         throw new ConflictError(FOREIGN_FILE)
+      }
+
       return PrismaService.client.$transaction(async tx => {
          const list = await uniqueOr(
             tx.workflowList.create({
@@ -315,6 +329,10 @@ export class WorkflowService {
 
       const graph = changes.graph ?? readGraph(current.graph)
       const enabled = changes.enabled ?? current.enabled
+
+      if (!ownsKeys(userId, postsOf(graph))) {
+         throw new ConflictError(FOREIGN_FILE)
+      }
       const schedule = scheduleOf(graph)
 
       if (enabled && !graph.nodes.some(({ type }) => AUTOMATIC.has(type))) {
@@ -334,7 +352,7 @@ export class WorkflowService {
          throw new ConflictError('The maybe score must be lower than the qualified score.')
       }
 
-      return uniqueOr(
+      const updated = await uniqueOr(
          PrismaService.client.workflow.update({
             where: { id },
             data: {
@@ -346,16 +364,30 @@ export class WorkflowService {
          }),
          workflowTaken(changes.name ?? current.name)
       )
+
+      // The files the saved graph no longer holds are deleted from the bucket.
+      if (changes.graph) {
+         const kept = new Set(keysOf(postsOf(changes.graph)))
+
+         await dropFiles(keysOf(postsOf(readGraph(current.graph))).filter(key => !kept.has(key)))
+      }
+
+      return updated
    }
 
    // Deletes the workflow and its runs; its list and the people in it stay.
    public static async delete(userId: string, id: string) {
+      const before = await WorkflowService.get(userId, id)
       const { count } = await PrismaService.client.workflow.deleteMany({
          where: {
             id,
             userId,
          },
       })
+
+      if (count > 0 && before) {
+         await dropFiles(keysOf(postsOf(readGraph(before.graph))))
+      }
 
       return count > 0
    }

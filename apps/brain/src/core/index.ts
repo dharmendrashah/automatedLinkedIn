@@ -23,6 +23,7 @@ export { type LinkKind, type LinkedInLink, TooManyLinksError, parseLinkedInUrl, 
 export { MessageBroker } from './messageBroker'
 export { MessageFiles } from './messageFiles'
 export { type StoredFile, UploadFiles, UploadRefused } from './uploadFiles'
+export { PostFiles } from './postFiles'
 export { RecordingLinks } from './recordingLinks'
 export { expandShortPostLink, isShortPostLink } from './shortLink'
 export { TakeoverRateError, TakeoverRelay } from './takeoverRelay'

@@ -22,6 +22,7 @@ import {
    Merge,
    MessageSquare,
    Newspaper,
+   PenLine,
    Repeat,
    RotateCw,
    Search,
@@ -78,6 +79,7 @@ export const BLOCK_ICONS: Record<Block['type'], LucideIcon> = {
    'account.select': UserCog,
    'account.visitProfile': Eye,
    'account.visitCompany': Building2,
+   'account.writePost': PenLine,
    'output.csv': FileDown,
    'output.sendApi': Send,
 }

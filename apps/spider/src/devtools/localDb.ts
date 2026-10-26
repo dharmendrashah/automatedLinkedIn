@@ -11,6 +11,7 @@ const DEV_FALLBACK_KEY = 'pqaZGClH/kqxNTLoLT4c0lMTloNIi2At3Jzz9a2rkIQ='
 
 export type SavedProxy = {
    id: string
+   accountId: string
    accountEmail: string
    protocol: string
    host: string
@@ -92,9 +93,10 @@ export const listSavedProxies = (databaseUrl: string): Promise<SavedProxy[]> =>
          secretIv: string
          secretTag: string
          keyVersion: number
+         accountId: string
          email: string
       }>(
-         `select ps.id, ps.protocol, ps.host, ps.port, ps.status, ps.secret, ps."secretIv", ps."secretTag",
+         `select ps.id, ps."linkedInAccountId" as "accountId", ps.protocol, ps.host, ps.port, ps.status, ps.secret, ps."secretIv", ps."secretTag",
                  ps."keyVersion", la.email
             from "ProxyServer" ps
             join "LinkedInAccount" la on la.id = ps."linkedInAccountId"
@@ -103,6 +105,7 @@ export const listSavedProxies = (databaseUrl: string): Promise<SavedProxy[]> =>
 
       return result.rows.map(row => ({
          id: row.id,
+         accountId: row.accountId,
          accountEmail: row.email,
          protocol: row.protocol,
          host: row.host,

@@ -257,6 +257,12 @@ removes a LinkedIn account, which deletes that account's folder. Three places in
 - `kept/<user>/<account>/sent/<upload>/`: the files of replies, moved here for good by brain.
 - `kept/<user>/<account>/received/<message>/`: the pictures of messages from other people, written by the spider worker when it
   reads the messages (a file already there is not downloaded again).
+- `post-uploads/<user>/<file>/` and `posts/<user>/<file>/`: the photos, video and documents of the posts the owner is writing
+  (`.plan/posting-file-uploads.md`). The page posts a file to `post-uploads/` with a form brain signed (`postFile.form`, from 1 byte to
+  8 MB a photo, 512 MB a video, 100 MB a document); brain then checks its size and first bytes (`postFile.confirm`) and **moves** it
+  to `posts/`, where the draft keeps its key. A file uploaded and never confirmed (the tab was closed) stays in `post-uploads/`, so a
+  one day lifecycle rule removes it. Brain deletes a file of `posts/` when its draft drops it, when the draft is deleted and when the
+  LinkedIn account is removed. An owner may hold 2 GB in both folders.
 
 Brain signs the upload forms and the ten minute links that open a kept file. A signed form carries the rights of the account that
 signed it, so brain's service account needs to create, read, list, move and delete under `uploads/` and `kept/` (this is the first
@@ -271,21 +277,22 @@ export SIGNER_EMAIL="brain-recording-links@$PROJECT_ID.iam.gserviceaccount.com"
 
 # Not runs/ (read only, above), sessions/ (login cookies) or results/. Listing has no object name, so it is allowed by the
 # prefix it asks for (uploads/ to check a reply's files, kept/ to delete an account's files). The condition has commas, which
-# `--condition` cannot take, so it goes in a file.
+# `--condition` cannot take, so it goes in a file. post-uploads/ and posts/ are the files of posts being written.
 cat > /tmp/uploads-condition.json <<EOF
-{"title": "uploads-and-kept-only", "expression": "resource.name.startsWith('projects/_/buckets/$BUCKET/objects/uploads/') || resource.name.startsWith('projects/_/buckets/$BUCKET/objects/kept/') || api.getAttribute('storage.googleapis.com/objectListPrefix', '').startsWith('uploads/') || api.getAttribute('storage.googleapis.com/objectListPrefix', '').startsWith('kept/')"}
+{"title": "uploads-and-kept-only", "expression": "resource.name.startsWith('projects/_/buckets/$BUCKET/objects/uploads/') || resource.name.startsWith('projects/_/buckets/$BUCKET/objects/kept/') || resource.name.startsWith('projects/_/buckets/$BUCKET/objects/post-uploads/') || resource.name.startsWith('projects/_/buckets/$BUCKET/objects/posts/') || api.getAttribute('storage.googleapis.com/objectListPrefix', '').startsWith('uploads/') || api.getAttribute('storage.googleapis.com/objectListPrefix', '').startsWith('kept/') || api.getAttribute('storage.googleapis.com/objectListPrefix', '').startsWith('post-uploads/') || api.getAttribute('storage.googleapis.com/objectListPrefix', '').startsWith('posts/')"}
 EOF
 gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" \
   --member="serviceAccount:$SIGNER_EMAIL" \
   --role="roles/storage.objectAdmin" \
   --condition-from-file=/tmp/uploads-condition.json
 
-# Only uploads/ is ever deleted by a rule (files never sent); kept/ has none, on purpose. Merge this with the rules already on the
+# Only uploads/ and post-uploads/ are deleted by a rule (files never sent or never confirmed); kept/ and posts/ have none, on purpose.
+# Merge this with the rules already on the
 # bucket: `--lifecycle-file` replaces the whole configuration (see the check under Session recordings).
 cat > /tmp/lifecycle.json <<EOF
 {"rule": [
   {"action": {"type": "Delete"}, "condition": {"age": 7, "matchesPrefix": ["runs/", "recordings/"]}},
-  {"action": {"type": "Delete"}, "condition": {"age": 1, "matchesPrefix": ["uploads/"]}}
+  {"action": {"type": "Delete"}, "condition": {"age": 1, "matchesPrefix": ["uploads/", "post-uploads/"]}}
 ]}
 EOF
 gcloud storage buckets update "gs://$BUCKET" --lifecycle-file=/tmp/lifecycle.json
@@ -310,6 +317,25 @@ EOF
 gcloud storage buckets update "gs://$BUCKET" --cors-file=/tmp/cors.json
 ```
 
+The local dev bucket (`automate-linkedin-511215-spider-dev`) needs the same rule for the origins `pnpm dev` and compose use,
+`http://localhost:3000` (compose and `vite --port 3000`) and `http://localhost:5173` (plain Vite). One list can carry all three
+origins and be set on both buckets, so a person who opens the staging app against either bucket is not refused. The spider's service account
+(`spider-dev@...`) cannot read or change bucket settings, so run this with **your own** account, which needs
+`roles/storage.admin` on the buckets, and check `gcloud config list account` first: a gcloud login for another organisation fails
+with `storage.buckets.get` denied.
+
+```sh
+export DEV_BUCKET=automate-linkedin-511215-spider-dev
+
+# See what is there first; setting a CORS file replaces the whole list, so keep any rule that exists.
+for b in "$BUCKET" "$DEV_BUCKET"; do gcloud storage buckets describe "gs://$b" --format="json(cors_config)"; done
+
+cat > /tmp/cors-all.json <<EOF
+[{"origin": ["http://localhost:3000", "http://localhost:5173", "https://app.staging.elitale.com"], "method": ["GET", "POST"], "responseHeader": ["Content-Type", "Range"], "maxAgeSeconds": 3600}]
+EOF
+for b in "$BUCKET" "$DEV_BUCKET"; do gcloud storage buckets update "gs://$b" --cors-file=/tmp/cors-all.json; done
+```
+
 | Error | Cause |
 | --- | --- |
 | The page says a file could not be sent, brain logs `403` or "does not have storage.objects.list" | The grant above is missing or its condition does not match. |
@@ -317,7 +343,9 @@ gcloud storage buckets update "gs://$BUCKET" --cors-file=/tmp/cors.json
 | A reply is refused with "A file is not what its name says it is" | The file's first bytes did not match its extension; brain deleted it. Attach the real file. |
 | A reply with files ends as failed with "the files could not be read" | The spider worker could not download from `uploads/`; check its bucket role. |
 | A file of a sent reply does not open, brain logs `403` or `404` on `kept/` | The grant lacks `kept/`, or the reply's files were not moved yet (the sweep runs every minute; a failure is logged and retried). |
-| Removing a LinkedIn account fails | Brain could not delete `kept/<user>/<account>/`; the account stays so it can be tried again. Check the grant. |
+| Removing a LinkedIn account fails | Brain could not delete `kept/<user>/<account>/` or the files of its drafts in `posts/`; the account stays so it can be tried again. Check the grant. |
+| A file of a draft shows "Uploading" and then a sentence with Try again | The signed form was refused, the bucket refused the post (CORS or the grant), or the check after it failed; the sentence says which of the checks it was. |
+| A photo of a reloaded draft stays on "Loading…" | Brain could not sign a read link for `posts/`; it needs the signing service account and the grant above. |
 
 ## Browser tests (staging prerequisites, not applied)
 

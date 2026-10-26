@@ -3,6 +3,7 @@ import { type TaskDefinition } from './defineTask'
 import { createLinkedinBrowse } from './linkedinBrowse'
 import { createLinkedinLogin } from './linkedinLogin'
 import { createLinkedinMessages } from './linkedinMessages'
+import { createLinkedinPost } from './linkedinPost'
 import { createLinkedinProfile } from './linkedinProfile'
 import { createLinkedinReply } from './linkedinReply'
 import { createLinkedinViewCompany } from './linkedinViewCompany'
@@ -20,6 +21,7 @@ export const buildTasks = (config: TaskConfig): TaskDefinition[] => [
    createLinkedinBrowse({ baseUrl: config.linkedin.baseUrl }),
    createLinkedinMessages({ baseUrl: config.linkedin.baseUrl }),
    createLinkedinProfile({ baseUrl: config.linkedin.baseUrl }),
+   createLinkedinPost({ baseUrl: config.linkedin.baseUrl }),
    createLinkedinReply({ baseUrl: config.linkedin.baseUrl }),
    createLinkedinViewProfile({ baseUrl: config.linkedin.baseUrl }),
    createLinkedinViewCompany({ baseUrl: config.linkedin.baseUrl }),

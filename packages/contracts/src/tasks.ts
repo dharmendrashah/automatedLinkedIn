@@ -211,6 +211,11 @@ export const RUNNER_VERDICTS = {
       label: 'The browser failed',
       tone: 'failure',
    },
+   // Given when a command was given up on before the task reached the step that changes anything on LinkedIn.
+   NOT_STARTED: {
+      label: 'It did not run',
+      tone: 'failure',
+   },
 } as const
 
 type RunRequest = { task: string; user_id: string; requested_at: string; task_id: string }

@@ -1,5 +1,9 @@
 import { type Edge, type Node } from '@xyflow/react'
 
+import { readPostBlocks } from '../posting/post-config'
+import { joinedText } from '../posting/rules'
+import { summaryOf as postSummaryOf } from '../posting/summary'
+import { restrictionText } from '../posting/visibility'
 import { browserTimeZone, describeSchedule } from './schedule-text'
 import { type Block, type ConfigValue, type Graph, type GraphNode, type StepRun } from './types'
 
@@ -317,6 +321,23 @@ export const summaryOf = (block: Block, config: GraphNode['config'], icpName?: s
          : accounts === 1
            ? 'Uses 1 account'
            : `Takes turns across ${accounts} accounts`
+   }
+
+   if (block.type === 'account.writePost') {
+      const blocks = readPostBlocks(values.post)
+      const { words, attachment } = postSummaryOf(blocks)
+
+      if (blocks.length === 0) {
+         return 'Write the post'
+      }
+
+      const posts =
+         joinedText(blocks).trim() === ''
+            ? `Posts only ${attachment ?? 'a file'}`
+            : [`Posts “${words}”`, attachment].filter(Boolean).join(' · ')
+      const only = (value: ConfigValue | undefined) => (value === 'CONNECTIONS' ? 'CONNECTIONS' : 'ANYONE')
+
+      return [posts, restrictionText(only(values.audience), only(values.comments))].filter(Boolean).join(' · ')
    }
 
    if ('howMany' in values) {

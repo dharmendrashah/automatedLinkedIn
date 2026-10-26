@@ -10,6 +10,7 @@ const ROUTES: Array<[RegExp, string]> = [
    [/^\/dashboard$/, 'Dashboard'],
    // A conversation is only "Unibox": a person's name does not belong in a history list or a bookmark.
    [/^\/unibox(\/[^/]+)?$/, 'Unibox'],
+   [/^\/posting(\/[^/]+(\/[^/]+)?)?$/, 'Write a post'],
    [/^\/accounts$/, 'LinkedIn accounts'],
    // The account's own profile; no name in the title, as for a conversation.
    [/^\/accounts\/[^/]+$/, 'Account profile'],

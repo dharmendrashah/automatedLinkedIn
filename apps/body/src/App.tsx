@@ -12,6 +12,7 @@ import { Icps } from './pages/Icps'
 import { Jobs } from './pages/Jobs'
 import { Lists } from './pages/Lists'
 import { Login } from './pages/Login'
+import { Posting } from './pages/Posting'
 import { Posts } from './pages/Posts'
 import { Profile } from './pages/Profile'
 import { Profiles } from './pages/Profiles'
@@ -31,6 +32,10 @@ const Unibox = lazy(() => import('./pages/Unibox').then(({ Unibox: page }) => ({
 // The profile of an account carries a dozen cards, and is only opened from the accounts list.
 const AccountProfile = lazy(() =>
    import('./pages/AccountProfile').then(({ AccountProfile: page }) => ({ default: page }))
+)
+// The post canvas carries the blocks, the preview and the schedule dialog, and is only opened after an account is picked.
+const PostingCanvas = lazy(() =>
+   import('./pages/PostingCanvas').then(({ PostingCanvas: page }) => ({ default: page }))
 )
 
 const App = () => (
@@ -61,6 +66,15 @@ const App = () => (
             element={
                <Suspense fallback={null}>
                   <Unibox />
+               </Suspense>
+            }
+         />
+         <Route path="/posting" element={<Posting />} />
+         <Route
+            path="/posting/:accountId/:draftId?"
+            element={
+               <Suspense fallback={null}>
+                  <PostingCanvas />
                </Suspense>
             }
          />
