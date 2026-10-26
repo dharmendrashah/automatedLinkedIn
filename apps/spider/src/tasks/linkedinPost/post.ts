@@ -511,6 +511,8 @@ export const sendPost = async (
 
       if (!composer.present) {
          log('The page has no place to write a post')
+         // A composer that is on screen but not read (the box or the Post button markup changed) can only be fixed from the page.
+         attach('composer-missing.html', compactHtml(await hands.html()), 'text/html')
 
          return { outcome: 'NO_COMPOSER' }
       }
@@ -583,7 +585,14 @@ export const sendPost = async (
          }
       }
 
-      if (!(await hands.clickSelector(POST_BUTTON))) {
+      // Pressed by its name, or by its place among the dialog buttons on the composer whose buttons have none (2026-10-27).
+      const { postIndex } = parsePostComposer(await hands.html())
+
+      if (
+         !(postIndex >= 0
+            ? await hands.clickNth(POST_DIALOG_BUTTON, postIndex, '')
+            : await hands.clickSelector(POST_BUTTON))
+      ) {
          log('The Post button could not be clicked')
          await clearBox().catch(() => undefined)
 

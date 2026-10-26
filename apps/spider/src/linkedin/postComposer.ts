@@ -31,13 +31,24 @@ export type PostComposer = {
    canPost: boolean
    // Post was pressed and the page is sending: the button is greyed and says so.
    busy: boolean
+   // Where Post is among the buttons of every dialog, for a click by order, when the page gives it no name of its own; -1 otherwise.
+   postIndex: number
 }
 
 // What the page shows of the post composer (recorded 2026-10-25). The words are read, never logged.
 export const parsePostComposer = (html: string): PostComposer => {
    const root = parse(html)
    const editor = root.querySelector(POST_EDITOR)
-   const button = root.querySelector(POST_BUTTON)
+   const byName = root.querySelector(POST_BUTTON)
+   // Some accounts get a composer whose buttons carry no names (2026-10-27): Post is then the button of the box's dialog that says so.
+   const byWords = byName
+      ? undefined
+      : editor
+           ?.closest('dialog')
+           ?.querySelectorAll('button')
+           .find(found => found.text.trim() === 'Post')
+   const button = byName ?? byWords
+   const postIndex = byWords ? root.querySelectorAll(POST_DIALOG_BUTTON).indexOf(byWords) : -1
    const labels = root.querySelectorAll('[aria-label]').map(element => element.getAttribute('aria-label') ?? '')
    const named = (prefix: string) =>
       labels
@@ -58,6 +69,7 @@ export const parsePostComposer = (html: string): PostComposer => {
       attachment: Boolean(root.querySelector(POST_PREVIEW_REMOVE)),
       canPost: Boolean(button) && !button?.hasAttribute('disabled'),
       busy: button?.getAttribute('aria-busy') === 'true',
+      postIndex,
    }
 }
 
