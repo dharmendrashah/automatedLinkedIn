@@ -136,6 +136,30 @@ export const describeStep = ({ call, ok, target, urlAfter, length, found, count 
       case 'scroll':
          return 'Scrolled down the page'
 
+      case 'clickSelector':
+         return ok
+            ? found === false
+               ? 'Looked for an element to click and it was not there'
+               : 'Clicked an element'
+            : 'Could not click the element'
+
+      case 'clickNth':
+         return ok
+            ? found === false
+               ? 'Looked for an element of a list to click and it was not there'
+               : 'Clicked an element of a list'
+            : 'Could not click the element'
+
+      case 'typeKeys':
+         return ok ? `Typed ${plural(length ?? 0, 'character', 'characters')} into the page` : 'Could not type into the page'
+
+      case 'attachFiles':
+         return ok
+            ? found === false
+               ? 'Found nowhere to give the files'
+               : `Gave ${plural(count ?? 0, 'file', 'files')} to the page`
+            : 'Could not give the files to the page'
+
       case 'cookies':
          return "Collected the browser's session"
 

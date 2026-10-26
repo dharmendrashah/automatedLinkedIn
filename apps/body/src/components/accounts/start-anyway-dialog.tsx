@@ -22,8 +22,6 @@ type Props = {
 
 // Whether a failed request was refused because the account may not browse now (its rest between two sessions, its working
 // hours or its day), as the server says it.
-export const isBudgetRefusal = (error: { data?: { budgetRefusal?: boolean } | null }) => error.data?.budgetRefusal === true
-
 // The owner may start it anyway, after saying they understand the risk to the account.
 export const StartAnywayDialog = ({ message, onConfirm, onCancel }: Props) => {
    const [understood, setUnderstood] = useState(false)

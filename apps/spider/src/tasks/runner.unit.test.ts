@@ -290,7 +290,7 @@ describe('runTask', () => {
          started_at: expect.any(String),
          finished_at: expect.any(String),
       })
-      expect(published[0].artifacts.map(file => file.kind).sort()).toEqual(['log', 'network', 'timeline'])
+      expect(published[0].artifacts.map(file => file.kind).sort()).toEqual(['file', 'log', 'network', 'timeline'])
       expect(published[0].artifacts.every(file => file.path.startsWith(`${PREFIX}/`))).toBe(true)
       expect([...store.objects.keys()]).toEqual(
          expect.arrayContaining([`${PREFIX}/result.json`, `${PREFIX}/manifest.json`])
@@ -298,6 +298,22 @@ describe('runTask', () => {
       const manifest = JSON.parse(String(store.objects.get(`${PREFIX}/manifest.json`)))
 
       expect(manifest).toEqual({ artifacts: published[0].artifacts })
+   })
+
+   it('should keep the input of the run with its files, with the run secrets masked and the rest as it was', async () => {
+      const { run, store } = setup()
+
+      await run({ input: { word: 'hello' } })
+
+      expect(JSON.parse(String(store.objects.get(`${PREFIX}/files/input.json`)))).toEqual({ word: 'hello' })
+   })
+
+   it('should mask a proxy password that turns up in the input', async () => {
+      const { run, store } = setup()
+
+      await run({ input: { word: 'proxy-password-1' } })
+
+      expect(String(store.objects.get(`${PREFIX}/files/input.json`))).not.toContain('proxy-password-1')
    })
 
    it('should close the browser before it saves the files, so the video is complete', async () => {
@@ -1667,12 +1683,16 @@ describe('the feed and the sign-in before a task that uses an account', () => {
    const LOGIN = 'https://www.linkedin.com/uas/login'
 
    const prepare = (feedLands: string, signIn: Verdict['outcome'] = 'VALID') => {
+      // Once the sign-in worked, the feed opens.
+      let signedIn = false
       const sessions = {
          load: vi.fn(async (_id: string) => undefined),
          save: vi.fn(async (_id: string, _state: unknown) => undefined),
       }
       const validator = {
          validate: vi.fn(async (): Promise<Verdict> => {
+            signedIn = signIn === 'VALID'
+
             return signIn === 'VALID'
                ? {
                     outcome: 'VALID',
@@ -1691,7 +1711,7 @@ describe('the feed and the sign-in before a task that uses an account', () => {
       }))
       const session = makeSession()
 
-      session.goto.mockImplementation(async (url: string) => (url === FEED ? feedLands : url))
+      session.goto.mockImplementation(async (url: string) => (url === FEED && !signedIn ? feedLands : url))
 
       return {
          sessions,
@@ -1737,7 +1757,23 @@ describe('the feed and the sign-in before a task that uses an account', () => {
       expect(validator.validate).not.toHaveBeenCalled()
       expect(taskRun).toHaveBeenCalledOnce()
       expect(sessions.save).not.toHaveBeenCalled()
+      // A session that is fine is not waited on or scrolled before the task.
+      expect(session.scrollBy).not.toHaveBeenCalled()
    })
+
+   it.each([LOGIN, 'https://www.linkedin.com/'])(
+      'should, after signing in because the feed showed %s, open the feed again, wait 5 seconds and scroll before the task',
+      async landing => {
+         const { run, deps, session, taskRun } = prepare(landing)
+
+         await run(accountCommand)
+
+         expect(session.goto.mock.calls.filter(([url]) => url === FEED)).toHaveLength(2)
+         expect(deps.pause).toHaveBeenCalledWith(5000)
+         expect(session.scrollBy).toHaveBeenCalledOnce()
+         expect(taskRun).toHaveBeenCalledOnce()
+      }
+   )
 
    it('should sign in with the stored credentials when the feed shows the login page, run the task, and keep the new session and profile', async () => {
       const { run, validator, taskRun, sessions, published } = prepare(LOGIN)
@@ -1785,6 +1821,196 @@ describe('the feed and the sign-in before a task that uses an account', () => {
 
       expect(validator.validate).not.toHaveBeenCalled()
       expect(session.goto).not.toHaveBeenCalledWith(FEED)
+   })
+})
+
+describe('the end of a run', () => {
+   const FEED = 'https://www.linkedin.com/feed/'
+
+   const prepare = (
+      outcome: TaskOutcome,
+      session: ReturnType<typeof makeSession> & Record<string, unknown>,
+      name = 'demo'
+   ) => {
+      const checkout = {
+         dir: '/tmp/profile-acc1',
+         restored: true,
+         keep: vi.fn(async () => undefined),
+         release: vi.fn(async () => undefined),
+      }
+      const sessions = {
+         load: vi.fn(async (_id: string): Promise<SavedState> => ({
+            cookies: [],
+            origins: [],
+         })),
+         save: vi.fn(async (_id: string, _state: unknown) => undefined),
+      }
+
+      return {
+         checkout,
+         sessions,
+         ...setup({
+            session,
+            task: accountTask({
+               name,
+               run: async () => outcome,
+               verdicts: {
+                  GOOD: {
+                     label: 'Good',
+                     tone: 'success',
+                  },
+                  BAD: {
+                     label: 'Bad',
+                     tone: 'failure',
+                  },
+                  SIGNED_OUT: {
+                     label: 'Signed out',
+                     tone: 'failure',
+                  },
+               },
+            }),
+            overrides: {
+               sessions,
+               profiles: { checkout: vi.fn(async (_id: string) => checkout) },
+            },
+         }),
+      }
+   }
+
+   const seeing = (endsOn: string | undefined) => ({
+      ...makeSession(),
+      screenshot: vi.fn(async () => Buffer.from('png')),
+      pageHtml: vi.fn(async () => '<html><head><title>x</title></head><body><p>the final page</p></body></html>'),
+      ...(endsOn !== undefined && { pageUrl: vi.fn(() => endsOn) }),
+   })
+
+   const failed = {
+      status: 'FAILED',
+      verdict: 'BAD',
+      message: 'It did not work.',
+   } as const
+   const passed = {
+      status: 'SUCCEEDED',
+      verdict: 'GOOD',
+      message: 'ok',
+   } as const
+
+   beforeEach(() => {
+      vi.restoreAllMocks()
+      vi.spyOn(console, 'error').mockImplementation(() => undefined)
+   })
+
+   it('should keep a final picture of every run, before the browser closes', async () => {
+      const session = seeing(FEED)
+      const { run, store } = prepare(passed, session)
+      const order: string[] = []
+
+      session.screenshot.mockImplementation(async () => {
+         order.push('picture')
+
+         return Buffer.from('png')
+      })
+      session.close.mockImplementation(async () => {
+         order.push('closed')
+      })
+
+      await run(accountCommand)
+
+      expect(store.upload).toHaveBeenCalledWith(`${PREFIX}/screenshots/final.png`, expect.any(String), 'image/png')
+      expect(order).toEqual(['picture', 'closed'])
+   })
+
+   it('should keep the compact final page of a failed run, and of no other', async () => {
+      const bad = prepare(failed, seeing(FEED))
+      const good = prepare(passed, seeing(FEED))
+
+      await bad.run(accountCommand)
+      await good.run(accountCommand)
+
+      expect(String(bad.store.objects.get(`${PREFIX}/failure.html`))).toContain('the final page')
+      expect(String(bad.store.objects.get(`${PREFIX}/failure.html`))).not.toContain('<head>')
+      expect(good.store.objects.has(`${PREFIX}/failure.html`)).toBe(false)
+   })
+
+   it('should still answer when the browser can no longer give its picture or page', async () => {
+      const session = seeing(FEED)
+      const { run, published } = prepare(failed, session)
+
+      session.screenshot.mockRejectedValue(new Error('browser has been closed'))
+      session.pageHtml.mockRejectedValue(new Error('browser has been closed'))
+
+      await run(accountCommand)
+
+      expect(published[0]).toMatchObject({ verdict: 'BAD' })
+   })
+
+   it('should keep the session and the profile of a failed run that ends on a signed-in page, so refreshed cookies are not lost', async () => {
+      const { run, sessions, checkout } = prepare(failed, seeing(FEED))
+
+      await run(accountCommand)
+
+      expect(sessions.save).toHaveBeenCalledOnce()
+      expect(checkout.keep).toHaveBeenCalledOnce()
+   })
+
+   it.each([
+      ['a sign-in page', 'https://www.linkedin.com/uas/login'],
+      ['the public home page', 'https://www.linkedin.com/'],
+      ['a security check', 'https://www.linkedin.com/checkpoint/challenge/x'],
+      ['a restricted account', 'https://www.linkedin.com/flagship-web/login/login-restriction'],
+   ])('should keep nothing of a failed run that ends on %s', async (_name, endsOn) => {
+      const { run, sessions, checkout } = prepare(failed, seeing(endsOn))
+
+      await run(accountCommand)
+
+      expect(sessions.save).not.toHaveBeenCalled()
+      expect(checkout.keep).not.toHaveBeenCalled()
+   })
+
+   it('should keep nothing of a run that says it is signed out, wherever it ends', async () => {
+      const { run, sessions } = prepare(
+         {
+            ...failed,
+            verdict: 'SIGNED_OUT',
+         },
+         seeing(FEED)
+      )
+
+      await run(accountCommand)
+
+      expect(sessions.save).not.toHaveBeenCalled()
+   })
+
+   it('should keep nothing of a failed run whose browser holds no login any more', async () => {
+      const session = seeing(FEED)
+      const { run, sessions } = prepare(failed, session)
+
+      session.storageState.mockResolvedValue({
+         cookies: [],
+         origins: [],
+      })
+      await run(accountCommand)
+
+      expect(sessions.save).not.toHaveBeenCalled()
+   })
+
+   it('should keep nothing of a failed run when the browser cannot say where it ended', async () => {
+      const { run, sessions } = prepare(failed, seeing(undefined))
+
+      await run(accountCommand)
+
+      expect(sessions.save).not.toHaveBeenCalled()
+   })
+
+   it('should leave the session of the sign-in task to the task itself, even when a failed run ends on the feed', async () => {
+      const { run, sessions } = prepare(failed, seeing(FEED), 'linkedin-login')
+
+      await run({
+         ...accountCommand,
+         task: 'linkedin-login',
+      })
+
+      expect(sessions.save).not.toHaveBeenCalled()
    })
 })
 

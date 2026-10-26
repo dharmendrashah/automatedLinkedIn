@@ -15,7 +15,7 @@ import { useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
-import { isBudgetRefusal } from '../accounts/start-anyway-dialog'
+import { isBudgetRefusal } from '../accounts/budget-refusal'
 
 import { type SessionDetail } from './types'
 

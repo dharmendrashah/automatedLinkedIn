@@ -8,6 +8,8 @@ type Options = {
    visit: (url: string) => Promise<string>
    // Signs the account in again in this browser; resolves to whether it worked. Asked at most once.
    signIn: () => Promise<boolean>
+   // What a person does once signed in and on the feed: waits a moment and scrolls. Only after a sign-in.
+   afterSignIn?: () => Promise<void>
    log: (message: string) => void
 }
 
@@ -29,8 +31,8 @@ const land = async (visit: Options['visit'], url: string) => {
 
 // What every task that uses an account starts with: the feed. A sign-in page there means the session is gone. A feed that does not
 // open is looked into through the login page, which sends a signed-in member to the feed (a 404 on a deep address was seen on
-// staging, 2026-10-26). Only then does the account sign in again, once.
-export const ensureSignedIn = async ({ baseUrl, visit, signIn, log }: Options): Promise<Entry> => {
+// staging, 2026-10-26). Only then does the account sign in again, once, and the feed is opened again, waited on and scrolled.
+export const ensureSignedIn = async ({ baseUrl, visit, signIn, afterSignIn, log }: Options): Promise<Entry> => {
    const feed = await land(visit, `${baseUrl}/feed/`)
 
    if (feed !== undefined && !isSignedOutPage(feed)) {
@@ -58,6 +60,16 @@ export const ensureSignedIn = async ({ baseUrl, visit, signIn, log }: Options): 
    }
 
    log('Signed in again')
+
+   const feedAgain = await land(visit, `${baseUrl}/feed/`)
+
+   if (feedAgain !== undefined && isSignedOutPage(feedAgain)) {
+      log('The feed asks for a sign-in again after signing in')
+
+      return 'FAILED'
+   }
+
+   await afterSignIn?.()
 
    return 'SIGNED_IN'
 }

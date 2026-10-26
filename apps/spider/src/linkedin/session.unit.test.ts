@@ -1,9 +1,25 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { VisitError } from '../tasks/defineTask'
-import { SignedOut, createSession } from './session'
+import { SignedOut, createSession, isSignedOutPage } from './session'
 
 const BASE = 'https://www.linkedin.com'
+
+describe('isSignedOutPage', () => {
+   it.each([`${BASE}/`, BASE, `${BASE}/?trk=public`, `${BASE}/uas/login`, `${BASE}/checkpoint/x`])(
+      'should say %s is a page for someone who is not signed in',
+      url => {
+         expect(isSignedOutPage(url)).toBe(true)
+      }
+   )
+
+   it.each([`${BASE}/feed/`, `${BASE}/in/ada/`, `${BASE}/messaging/`, `${BASE}/connect-services/consent`])(
+      'should say %s is not',
+      url => {
+         expect(isSignedOutPage(url)).toBe(false)
+      }
+   )
+})
 
 const setup = (visit: (url: string) => Promise<string>, back: () => Promise<string> = async () => `${BASE}/feed/`) => {
    const browser = {

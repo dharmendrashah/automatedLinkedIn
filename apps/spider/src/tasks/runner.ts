@@ -11,9 +11,11 @@ import {
 
 import { type ProxyConfig } from '../types'
 
+import { compactHtml } from '../browsing/snapshot'
 import { type DeviceIdentity } from '../identity/deviceIdentity'
 import { type IdentityStore } from '../identity/identityStore'
 import { type ExitRegion, regionToKeep } from '../identity/region'
+import { isSignedInPage } from '../linkedin/session'
 import { RecordedDetectionSession } from '../recording/recordedDetectionSession'
 import { type Recorder } from '../recording/recorder'
 import { type AccountLock } from '../scraping/accountLock'
@@ -36,6 +38,9 @@ import { type Download, fetchPostFiles, fetchUploads } from './uploads'
 const MAX_ARTIFACTS = 300
 // A sign-in that is not done in this long is given up, as the sign-in task does.
 const SIGN_IN_LIMIT_MS = 3 * 60 * 1000
+// After a sign-in the feed is waited on and scrolled a little, as a person does before doing anything else.
+const AFTER_SIGN_IN_WAIT_MS = 5000
+const AFTER_SIGN_IN_SCROLL_PX = 700
 
 export type RecordingRequest = {
    task: string
@@ -140,6 +145,15 @@ export const exhaustedResult = (
 }
 
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+// Work on a browser that may already be gone; what it cannot give is simply missing.
+const quietly = async <T>(work: () => Promise<T>) => {
+   try {
+      return await work()
+   } catch {
+      return undefined
+   }
+}
 
 const withLimit = <T>(work: Promise<T>, ms: number, signal?: AbortSignal) => {
    let timer: NodeJS.Timeout | undefined
@@ -395,6 +409,8 @@ const execute = async (
       'info',
       `Task ${task.name} started${command.proxy ? ' through a proxy' : ' without a proxy'}`
    )
+   // What the run was asked to do, so it can be repeated; the run's secrets are masked in it as in every file.
+   recorder?.attach('input.json', JSON.stringify(input, null, 1), 'application/json')
 
    // When the browser opened, for the browsing time the account is booked: from then until it is closed.
    let openedAt: number | undefined
@@ -402,6 +418,34 @@ const execute = async (
    let signedInAgain = false
    // The session copied in the middle of the run (right after a sign-in), for a browser that cannot be read at the end.
    let kept: StorageState | undefined
+
+   // The end of the run, kept before the browser closes: a picture always, the page too when the run failed (the clearest record of how
+   // it ended). Says where the browser is; the browser may be gone, which changes nothing about the answer.
+   const keepEnd = async (session: DetectionSession | undefined, failed: boolean) => {
+      if (!session) {
+         return undefined
+      }
+
+      if (recorder) {
+         const picture = await quietly(async () => session.screenshot?.())
+
+         if (picture) {
+            await recorder.saveScreenshot('final.png', picture, true).catch(() => undefined)
+         }
+
+         const page = failed ? await quietly(() => session.pageHtml()) : undefined
+
+         if (page !== undefined) {
+            recorder.saveFailureHtml(compactHtml(page))
+         }
+      }
+
+      try {
+         return session.pageUrl?.()
+      } catch {
+         return undefined
+      }
+   }
 
    // Closes the browser first (the video is complete only then), saves the files, then publishes the result.
    const finish = async (outcome: TaskOutcome, session: DetectionSession | undefined) => {
@@ -412,6 +456,14 @@ const execute = async (
               .then(found => allowedState(found, deps.policy))
               .catch(() => undefined)) ?? kept)
          : undefined
+      const endedOn = await keepEnd(session, outcome.status === 'FAILED')
+      // The browser still holds a login and ended on a page only a signed-in member sees. The sign-in task decides its own session.
+      const stillSignedIn =
+         task.name !== LOGIN_TASK &&
+         endedOn !== undefined &&
+         isSignedInPage(endedOn) &&
+         outcome.verdict !== 'SIGNED_OUT' &&
+         Boolean(state?.cookies.some(({ name }) => name === 'li_at'))
 
       await session?.close().catch(() => undefined)
 
@@ -447,12 +499,14 @@ const execute = async (
          }
       }
 
-      // Only a run that passed its own check replaces the saved session, so a failed or logged-out one never overwrites a good one.
+      // A run that passed its own check, signed in again, or still ends signed in replaces the saved session and profile; one that
+      // ends on a sign-in page or says it is signed out never does, so a good session is not overwritten by a lost one.
       if (
          state &&
          account &&
          ((outcome.commitSession && outcome.status === 'SUCCEEDED') ||
-            (signedInAgain && outcome.verdict !== 'SIGNED_OUT'))
+            (signedInAgain && outcome.verdict !== 'SIGNED_OUT') ||
+            stillSignedIn)
       ) {
          await deps.sessions?.save(account.id, state).catch(error => {
             console.error(`Could not keep the session of ${account.id}: ${(error as Error).message}`)
@@ -673,6 +727,10 @@ const execute = async (
                     baseUrl: deps.reauth.baseUrl,
                     visit,
                     log: message => recorder?.log('spider', 'info', message),
+                    afterSignIn: async () => {
+                       await pause(AFTER_SIGN_IN_WAIT_MS)
+                       await browser.scrollBy(AFTER_SIGN_IN_SCROLL_PX)
+                    },
                     signIn: async () =>
                        (
                           await deps.reauth?.validator.validate(browser, {
