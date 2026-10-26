@@ -81,7 +81,15 @@ describe('visitProcedure', () => {
          confirmed: true,
       })
 
-      expect(mocks.request).toHaveBeenNthCalledWith(1, 'u1', 'acc1', { companyId: 'c1' }, undefined)
+      expect(mocks.request).toHaveBeenNthCalledWith(
+         1,
+         'u1',
+         'acc1',
+         { companyId: 'c1' },
+         undefined,
+         undefined,
+         undefined
+      )
       expect(mocks.request).toHaveBeenNthCalledWith(
          2,
          'u1',
@@ -90,8 +98,22 @@ describe('visitProcedure', () => {
             kind: 'COMPANY',
             link: 'linkedin.com/company/sample',
          },
-         true
+         true,
+         undefined,
+         undefined
       )
+   })
+
+   it('should pass on that the owner starts it although the account may not browse now', async () => {
+      mocks.request.mockResolvedValue({ id: 's1' })
+
+      await caller('PROFILE')({
+         accountId: 'acc1',
+         id: 'p1',
+         startAnyway: true,
+      })
+
+      expect(mocks.request).toHaveBeenCalledWith('u1', 'acc1', { profileId: 'p1' }, undefined, undefined, true)
    })
 
    it('should ask for a saved profile as a profile', async () => {
@@ -102,7 +124,7 @@ describe('visitProcedure', () => {
          id: 'p1',
       })
 
-      expect(mocks.request).toHaveBeenCalledWith('u1', 'acc1', { profileId: 'p1' }, undefined)
+      expect(mocks.request).toHaveBeenCalledWith('u1', 'acc1', { profileId: 'p1' }, undefined, undefined, undefined)
    })
 
    it('should need exactly one of a saved page and a link, and answer NOT_FOUND for one that is not the owner’s', async () => {

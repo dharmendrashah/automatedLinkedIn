@@ -1,6 +1,7 @@
 import { AccountsTable } from '@/components/accounts/accounts-table'
 import { AddAccountDialog } from '@/components/accounts/add-account-dialog'
 import { ConfirmRunDialog } from '@/components/accounts/confirm-run-dialog'
+import { StartAnywayDialog, isBudgetRefusal } from '@/components/accounts/start-anyway-dialog'
 import { DeleteAccountDialog } from '@/components/accounts/delete-account-dialog'
 import { EditAccountDialog } from '@/components/accounts/edit-account-dialog'
 import { LOGIN_TASK } from '@/components/accounts/login-test'
@@ -89,6 +90,8 @@ export const Accounts = () => {
    // A visit counts as the day's visit, so the list shows a new next time once it is asked for.
    // The server refuses a run that follows a good one too soon; the owner can confirm and send it again.
    const [recent, setRecent] = useState<{ run: RunInput; message: string } | null>(null)
+   // The account may not browse now; the owner can start it anyway after saying they understand the risk.
+   const [blocked, setBlocked] = useState<{ run: RunInput; message: string } | null>(null)
    const runTask = trpc.task.run.useMutation({
       onSuccess: () => {
          refresh()
@@ -97,6 +100,11 @@ export const Accounts = () => {
       onError: (error, run) => {
          if (error.data?.code === 'CONFLICT') {
             setRecent({
+               run,
+               message: error.message,
+            })
+         } else if (isBudgetRefusal(error)) {
+            setBlocked({
                run,
                message: error.message,
             })
@@ -116,7 +124,7 @@ export const Accounts = () => {
    const testingId = pendingFor(LOGIN_TASK)
    const visitingId = pendingFor(VISIT_TASK)
    const actionError =
-      setPaused.error?.message ?? remove.error?.message ?? (recent ? undefined : runTask.error?.message)
+      setPaused.error?.message ?? remove.error?.message ?? (recent || blocked ? undefined : runTask.error?.message)
    const startedSession = runTask.data
 
    return (
@@ -219,6 +227,20 @@ export const Accounts = () => {
                }
 
                setRecent(null)
+            }}
+         />
+         <StartAnywayDialog
+            message={blocked?.message ?? null}
+            onCancel={() => setBlocked(null)}
+            onConfirm={() => {
+               if (blocked) {
+                  runTask.mutate({
+                     ...blocked.run,
+                     startAnyway: true,
+                  })
+               }
+
+               setBlocked(null)
             }}
          />
       </div>

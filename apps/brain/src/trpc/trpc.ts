@@ -2,8 +2,9 @@ import { TRPCError, initTRPC } from '@trpc/server'
 
 import { type Context } from './api/context'
 import { provisionUser } from './api/identity'
+import { errorShape } from './errorShape'
 
-const t = initTRPC.context<Context>().create()
+const t = initTRPC.context<Context>().create({ errorFormatter: errorShape })
 
 export const { middleware, router } = t
 

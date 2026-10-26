@@ -11,6 +11,7 @@ import { LanguagesCard, SkillsCard } from '@/components/account-profile/skills-c
 import { loadProfile, sampleKindOf } from '@/components/account-profile/source'
 import { noticeOf, viewOf } from '@/components/account-profile/view'
 import { ConfirmRunDialog } from '@/components/accounts/confirm-run-dialog'
+import { StartAnywayDialog, isBudgetRefusal } from '@/components/accounts/start-anyway-dialog'
 import { LOGIN_TASK } from '@/components/accounts/login-test'
 import { VISIT_TASK } from '@/components/accounts/visit'
 import { BrowseSampleBanner } from '@/components/browsing/browse-sample-banner'
@@ -95,11 +96,15 @@ export const AccountProfile = () => {
    const open = trpc.accountProfile.open.useMutation({ onSuccess: refresh })
    // The server holds a read that follows a good one too soon; the owner can confirm and read anyway.
    const [recent, setRecent] = useState<string | null>(null)
+   // The account may not browse now; the owner can read anyway after saying they understand the risk.
+   const [blocked, setBlocked] = useState<string | null>(null)
    const read = trpc.accountProfile.read.useMutation({
       onSuccess: refresh,
       onError: error => {
          if (error.data?.code === 'CONFLICT') {
             setRecent(error.message)
+         } else if (isBudgetRefusal(error)) {
+            setBlocked(error.message)
          }
       },
    })
@@ -275,6 +280,18 @@ export const AccountProfile = () => {
                   confirmed: true,
                })
                setRecent(null)
+            }}
+         />
+         <StartAnywayDialog
+            message={blocked}
+            onCancel={() => setBlocked(null)}
+            onConfirm={() => {
+               read.mutate({
+                  accountId: id,
+                  confirmed: true,
+                  startAnyway: true,
+               })
+               setBlocked(null)
             }}
          />
       </div>

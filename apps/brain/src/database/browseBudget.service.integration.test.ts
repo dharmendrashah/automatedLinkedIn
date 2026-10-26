@@ -40,7 +40,8 @@ const reserve = (
    sessionId: string,
    now: Date,
    budget: TaskBudget = ACTION,
-   trigger: 'manual' | 'automatic' = 'manual'
+   trigger: 'manual' | 'automatic' = 'manual',
+   override = false
 ) =>
    PrismaService.client.$transaction(tx =>
       BrowseBudgetService.reserve(tx, {
@@ -49,6 +50,7 @@ const reserve = (
          budget,
          trigger,
          now,
+         override,
       })
    )
 
@@ -115,6 +117,24 @@ describe('the browsing time of an account (PostgreSQL)', () => {
          message: expect.stringContaining('on Mon 26 Oct at 09:'),
       })
       await expect(usage(id)).resolves.toBeNull()
+   })
+
+   it('should let the owner start outside the working hours anyway, booking the time, but never an automatic start', async () => {
+      const asked = randomUUID()
+
+      await reserve(asked, SATURDAY_NOON, ACTION, 'manual', true)
+      await expect(usage(asked)).resolves.toMatchObject({
+         class: 'ACTION',
+         seconds: 300,
+      })
+
+      const scheduled = randomUUID()
+      const refused = await reserve(scheduled, SATURDAY_NOON, ACTION, 'automatic', true).catch(
+         (error: unknown) => error
+      )
+
+      expect(refused).toBeInstanceOf(BrowseBudgetError)
+      await expect(usage(scheduled)).resolves.toBeNull()
    })
 
    it('should count a sign-in check even outside the working hours, and never refuse it', async () => {

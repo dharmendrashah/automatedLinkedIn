@@ -23,6 +23,7 @@ export const asTrpcError = (error: unknown) => {
       return new TRPCError({
          code: 'PRECONDITION_FAILED',
          message: error.message,
+         cause: error,
       })
    }
 

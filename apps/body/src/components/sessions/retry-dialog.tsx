@@ -1,5 +1,6 @@
 import { RadioMark } from '@/components/radio-mark'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
    Dialog,
    DialogContent,
@@ -8,10 +9,13 @@ import {
    DialogHeader,
    DialogTitle,
 } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
 
 import { cn } from '@/lib/utils'
+
+import { isBudgetRefusal } from '../accounts/start-anyway-dialog'
 
 import { type SessionDetail } from './types'
 
@@ -29,6 +33,7 @@ type Props = {
 export const RetryDialog = ({ session, open, onOpenChange, onStarted }: Props) => {
    const utils = trpc.useUtils()
    const [chosen, setChosen] = useState<string | null>(null)
+   const [understood, setUnderstood] = useState(false)
    const proxies = session.retryProxies
 
    // The proxy it ran through is chosen to begin with, so "Try again" alone repeats it.
@@ -47,10 +52,13 @@ export const RetryDialog = ({ session, open, onOpenChange, onStarted }: Props) =
    // An older check is tried again through the account's own flow; a task run starts the same task with the same input.
    const { requestParams } = session
    const retry = requestParams.action === 'TASK' ? runAgain : retryCheck
+   // The account may not browse now (its rest, hours or day): the owner can start it anyway, after saying they understand.
+   const blocked = requestParams.action === 'TASK' && retry.error ? isBudgetRefusal(retry.error) : false
 
    const close = (next: boolean) => {
       if (!next) {
          setChosen(null)
+         setUnderstood(false)
          retry.reset()
       }
 
@@ -121,12 +129,19 @@ export const RetryDialog = ({ session, open, onOpenChange, onStarted }: Props) =
 
             {retry.error ? <p className="text-destructive text-sm">{retry.error.message}</p> : null}
 
+            {blocked ? (
+               <div className="flex items-center gap-2">
+                  <Checkbox id="retry-start-anyway" checked={understood} onCheckedChange={value => setUnderstood(value === true)} />
+                  <Label htmlFor="retry-start-anyway">I understand this can put the account at risk.</Label>
+               </div>
+            ) : null}
+
             <DialogFooter>
                <Button variant="outline" onClick={() => close(false)}>
                   Cancel
                </Button>
                <Button
-                  disabled={!selected || retry.isPending}
+                  disabled={!selected || retry.isPending || (blocked && !understood)}
                   onClick={() => {
                      if (!selected) {
                         return
@@ -137,6 +152,7 @@ export const RetryDialog = ({ session, open, onOpenChange, onStarted }: Props) =
                            task: session.task as string,
                            proxyId: selected,
                            input: requestParams.input,
+                           ...(blocked && { startAnyway: true }),
                         })
                      } else {
                         retryCheck.mutate({

@@ -189,7 +189,15 @@ describe('linkedInProfile resolvers', () => {
             confirmed: true,
          })
 
-         expect(mocks.requestVisit).toHaveBeenNthCalledWith(1, 'u1', 'acc1', { profileId: 'p1' }, undefined)
+         expect(mocks.requestVisit).toHaveBeenNthCalledWith(
+            1,
+            'u1',
+            'acc1',
+            { profileId: 'p1' },
+            undefined,
+            undefined,
+            undefined
+         )
          expect(mocks.requestVisit).toHaveBeenNthCalledWith(
             2,
             'u1',
@@ -198,7 +206,9 @@ describe('linkedInProfile resolvers', () => {
                kind: 'PROFILE',
                link: 'linkedin.com/in/ada',
             },
-            true
+            true,
+            undefined,
+            undefined
          )
       })
 

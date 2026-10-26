@@ -34,7 +34,12 @@ export const accountProfile = router({
 
    // The Read profile button.
    read: ownerProcedure
-      .input(byAccount.extend({ confirmed: z.boolean().optional() }))
+      .input(
+         byAccount.extend({
+            confirmed: z.boolean().optional(),
+            startAnyway: z.boolean().optional(),
+         })
+      )
       .mutation(async ({ ctx, input }) => {
          try {
             return await TaskService.request({
@@ -42,6 +47,7 @@ export const accountProfile = router({
                task: PROFILE_TASK,
                accountId: input.accountId,
                confirmed: input.confirmed,
+               startAnyway: input.startAnyway,
                trigger: 'manual',
             })
          } catch (error) {
