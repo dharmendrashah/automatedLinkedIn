@@ -68,6 +68,26 @@ describe('RecordedDetectionSession', () => {
       )
    })
 
+   it('should note a file chooser opened by a click as a step with its place and how many files, and offer it only when the browser can', async () => {
+      const chooseFiles = vi.fn(async (_selector: string, _index: number, _paths: string[]) => true)
+      const choosing = new RecordedDetectionSession({ chooseFiles } as unknown as DetectionSession, recorder)
+      const plain = new RecordedDetectionSession({} as unknown as DetectionSession, recorder)
+
+      await expect(choosing.chooseFiles?.('dialog button', 2, ['/tmp/a.pdf'])).resolves.toBe(true)
+
+      expect(chooseFiles).toHaveBeenCalledWith('dialog button', 2, ['/tmp/a.pdf'])
+      expect(recorder.addStep).toHaveBeenCalledWith(
+         expect.objectContaining({
+            call: 'chooseFiles',
+            selector: 'dialog button',
+            index: 2,
+            count: 1,
+            found: true,
+         })
+      )
+      expect(plain.chooseFiles).toBeUndefined()
+   })
+
    it('should note typing as a step with how much was typed and never what', async () => {
       const typeKeys = vi.fn(async (_text: string) => undefined)
       const session = new RecordedDetectionSession({ typeKeys } as unknown as DetectionSession, recorder)

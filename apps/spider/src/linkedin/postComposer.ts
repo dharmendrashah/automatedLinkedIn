@@ -6,7 +6,6 @@ import {
    POST_BUTTON,
    POST_DIALOG_BUTTON,
    POST_DOCUMENT_DONE,
-   POST_DOCUMENT_TITLE,
    POST_EDITOR,
    POST_OPTION,
    POST_PREVIEW_REMOVE,
@@ -85,6 +84,13 @@ const REFUSED_WORDS = ['something went wrong', 'not supported']
 const dialogTitled = (root: ReturnType<typeof parse>, title: string) =>
    root.querySelectorAll('dialog').find(found => found.querySelector('h1,h2')?.text.trim() === title)
 
+// Where the button that says `words` is among the buttons of every dialog of the page, for a click by order; -1 when there is none.
+const buttonIndex = (root: ReturnType<typeof parse>, dialog: HTMLElement | undefined, words: string) => {
+   const found = dialog?.querySelectorAll('button').find(button => button.text.trim() === words)
+
+   return found ? root.querySelectorAll(POST_DIALOG_BUTTON).indexOf(found) : -1
+}
+
 export type EditorDialog = {
    open: boolean
    // The upload finished: Next is there and not greyed.
@@ -93,6 +99,8 @@ export type EditorDialog = {
    refused: boolean
    // Where Next is among the buttons of every dialog of the page (for a click by order); -1 when there is none.
    nextIndex: number
+   // Where the Upload from computer button is, for a dialog that draws no file input until it is pressed; -1 when there is none.
+   chooseIndex: number
 }
 
 // The "Editor" dialog that takes photos and a video: LinkedIn greys Next until the upload has finished.
@@ -106,19 +114,22 @@ export const parseEditorDialog = (html: string): EditorDialog => {
       ready: Boolean(next) && !next?.hasAttribute('disabled') && next?.getAttribute('aria-busy') !== 'true',
       refused: REFUSED_WORDS.some(words => dialog?.text.toLowerCase().includes(words)),
       nextIndex: next ? root.querySelectorAll(POST_DIALOG_BUTTON).indexOf(next) : -1,
+      chooseIndex: buttonIndex(root, dialog, 'Upload from computer'),
    }
 }
 
 export type DocumentDialog = {
    open: boolean
-   // A file was chosen (its title field is drawn) and Done is not greyed.
+   // A file was chosen and Done is not greyed (LinkedIn greys it until a file is chosen and uploaded).
    ready: boolean
    refused: boolean
    // Where Done is among the buttons of every dialog of the page, for a click by order, when the page gives it no name of its own; -1 otherwise.
    doneIndex: number
+   // Where the Choose file button is, for a dialog that draws no file input until it is pressed; -1 when there is none.
+   chooseIndex: number
 }
 
-// The "Share a document" dialog: its title field is drawn once a file was chosen, and Done is greyed until the upload has finished.
+// The "Share a document" dialog: Done is greyed until a file was chosen and uploaded.
 export const parseDocumentDialog = (html: string): DocumentDialog => {
    const root = parse(html)
    const dialog = dialogTitled(root, 'Share a document')
@@ -129,9 +140,10 @@ export const parseDocumentDialog = (html: string): DocumentDialog => {
 
    return {
       open: Boolean(dialog),
-      ready: Boolean(dialog?.querySelector(POST_DOCUMENT_TITLE)) && Boolean(done) && !done?.hasAttribute('disabled'),
+      ready: Boolean(done) && !done?.hasAttribute('disabled'),
       refused: REFUSED_WORDS.some(words => dialog?.text.toLowerCase().includes(words)),
       doneIndex: byWords ? root.querySelectorAll(POST_DIALOG_BUTTON).indexOf(byWords) : -1,
+      chooseIndex: buttonIndex(root, dialog, 'Choose file'),
    }
 }
 

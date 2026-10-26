@@ -5,12 +5,18 @@ import { composerMarkup } from './postFixture'
 import { documentMarkup, editorMarkup } from './postMediaFixture'
 
 describe('parseEditorDialog', () => {
+   it('should say where the Upload from computer button is, for a dialog that draws no file input until it is pressed', () => {
+      expect(parseEditorDialog(editorMarkup()).chooseIndex).toBeGreaterThanOrEqual(0)
+      expect(parseEditorDialog(composerMarkup()).chooseIndex).toBe(-1)
+   })
+
    it('should say the dialog is not open on a page that has none, and on the composer alone', () => {
       expect(parseEditorDialog('<html></html>')).toEqual({
          open: false,
          ready: false,
          refused: false,
          nextIndex: -1,
+         chooseIndex: -1,
       })
       expect(parseEditorDialog(composerMarkup()).open).toBe(false)
    })
@@ -26,6 +32,7 @@ describe('parseEditorDialog', () => {
          ready: true,
          refused: false,
          nextIndex: 4,
+         chooseIndex: expect.any(Number),
       })
    })
 
@@ -52,6 +59,7 @@ describe('parseDocumentDialog', () => {
          ready: true,
          refused: false,
          doneIndex: -1,
+         chooseIndex: -1,
       })
       expect(parseDocumentDialog(documentMarkup({ doneDisabled: true }))).toMatchObject({
          open: true,
@@ -79,6 +87,23 @@ describe('parseDocumentDialog', () => {
             })
          ).ready
       ).toBe(false)
+   })
+
+   it('should say where the Choose file button is until a file was chosen, and be ready once Done is alive whatever else is drawn', () => {
+      const empty = parseDocumentDialog(
+         documentMarkup({
+            chosen: false,
+            plain: true,
+         })
+      )
+      const chosen = parseDocumentDialog(documentMarkup({ plain: true }))
+
+      expect(empty).toMatchObject({ ready: false })
+      expect(empty.chooseIndex).toBeGreaterThanOrEqual(0)
+      expect(chosen).toMatchObject({
+         ready: true,
+         chooseIndex: -1,
+      })
    })
 
    it('should say it is not open on another page, and that LinkedIn refused the file', () => {

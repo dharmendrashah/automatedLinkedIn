@@ -29,6 +29,7 @@ export type StepCall =
    | 'clickNth'
    | 'typeKeys'
    | 'attachFiles'
+   | 'chooseFiles'
 // One thing the spider did in the browser. `t` is the time in milliseconds since the run started, when it finished.
 export type StepEntry = {
    n: number

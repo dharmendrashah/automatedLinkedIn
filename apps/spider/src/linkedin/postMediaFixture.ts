@@ -42,7 +42,9 @@ ${
    refused
       ? '<div><p>Something went wrong</p><p>File(s) not supported.</p></div>'
       : chosen
-        ? '<input type="text" placeholder="Add a descriptive title to your document"><div data-view-name="media-document-share-remove-preview" role="button"></div>'
+        ? plain
+           ? ''
+           : '<input type="text" placeholder="Add a descriptive title to your document"><div data-view-name="media-document-share-remove-preview" role="button"></div>'
         : '<button type="button"><span>Choose file</span></button>'
 }
 <button type="button" data-view-name="media-document-share-cancel"><span>Back</span></button><button type="button"${plain ? '' : ' data-view-name="media-document-share-confirm"'}${doneDisabled || !chosen ? ' disabled=""' : ''}><span>Done</span></button></dialog></body></html>`
