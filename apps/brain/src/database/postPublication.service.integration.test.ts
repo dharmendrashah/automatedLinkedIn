@@ -379,6 +379,81 @@ describe('PostPublicationService (database)', () => {
          })
       })
 
+      it('should say why a queued post waits and when it can start, and clear that once it starts', async () => {
+         const queued = await publication({
+            state: 'QUEUED',
+            createdAt: new Date(),
+         })
+         const noteOf = async () =>
+            PrismaService.client.postPublication.findUniqueOrThrow({
+               where: { id: queued.id },
+               select: {
+                  waitReason: true,
+                  waitUntil: true,
+                  waitZone: true,
+               },
+            })
+         const until = new Date(Date.now() + 3 * 60 * 1000)
+
+         vi.mocked(TaskService.request).mockRejectedValueOnce(new TaskBusyError('busy'))
+         await PostPublicationService.dispatchDue()
+         await expect(noteOf()).resolves.toEqual({
+            waitReason: 'Waiting for another task on this account to finish.',
+            waitUntil: null,
+            waitZone: null,
+         })
+
+         vi.mocked(TaskService.request).mockRejectedValueOnce(
+            new BrowseBudgetError('Spread out.', 'TOO_SOON', until, 'at 08:28', 'America/New_York')
+         )
+         await PostPublicationService.dispatchDue()
+         await expect(noteOf()).resolves.toEqual({
+            waitReason: "Waiting for the account's next slot.",
+            waitUntil: until,
+            waitZone: 'America/New_York',
+         })
+         await expect(PostPublicationService.get(userId, queued.id)).resolves.toMatchObject({
+            waiting: {
+               reason: "Waiting for the account's next slot.",
+               until: until.toISOString(),
+               zone: 'America/New_York',
+            },
+         })
+
+         await PostPublicationService.dispatchDue()
+         await expect(stateOf(queued.id)).resolves.toBe('SENDING')
+         await expect(noteOf()).resolves.toEqual({
+            waitReason: null,
+            waitUntil: null,
+            waitZone: null,
+         })
+         await expect(PostPublicationService.get(userId, queued.id)).resolves.toMatchObject({ waiting: null })
+      })
+
+      it('should say a post waits for the hour between two posts, with the time it ends', async () => {
+         const startedAt = new Date(Date.now() - 20 * 60 * 1000)
+
+         await publication({
+            state: 'POSTED',
+            startedAt,
+         })
+
+         const queued = await publication({
+            state: 'QUEUED',
+            createdAt: new Date(),
+         })
+
+         await PostPublicationService.dispatchDue()
+
+         const view = await PostPublicationService.get(userId, queued.id)
+
+         expect(view?.waiting).toEqual({
+            reason: 'Waiting for the hour between two posts of this account.',
+            until: new Date(startedAt.getTime() + HOUR).toISOString(),
+            zone: null,
+         })
+      })
+
       it('should start one post at a time per account, and the next an hour after the last started', async () => {
          const one = await publication({
             state: 'QUEUED',

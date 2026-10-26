@@ -39,12 +39,15 @@ export class BrowseBudgetError extends TaskRefusedError {
    public readonly until: Date
    // `until` as the owner reads it, in the account's zone: "tomorrow at 09:12".
    public readonly when: string
+   // The zone of the account's working hours, so `until` can be shown in it too.
+   public readonly zone: string | undefined
 
-   public constructor(message: string, reason: BrowseBudgetError['reason'], until: Date, when: string) {
+   public constructor(message: string, reason: BrowseBudgetError['reason'], until: Date, when: string, zone?: string) {
       super(message)
       this.name = 'BrowseBudgetError'
       this.reason = reason
       this.until = until
       this.when = when
+      this.zone = zone
    }
 }

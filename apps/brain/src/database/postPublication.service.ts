@@ -13,7 +13,7 @@ import {
 
 import { POST_TASK } from './linkedInPost.hooks'
 import { keysOf, ownsKeys } from './postFileKeys'
-import { POST_LIMITS, contentProblem, limitProblem, taskInputOf } from './postPublication.rules'
+import { POST_LIMITS, WAIT, budgetWait, contentProblem, limitProblem, taskInputOf } from './postPublication.rules'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
 import { BrowseBudgetError, TaskBusyError, TaskRefusedError, TaskUnavailableError } from './taskErrors'
@@ -61,6 +61,15 @@ const readPublication = (row: PostPublication) => {
       plannedZone: row.plannedZone,
       failure: row.failure,
       link: row.link,
+      // Why a queued post has not started, and the earliest it may.
+      waiting:
+         row.state === 'QUEUED' && row.waitReason
+            ? {
+                 reason: row.waitReason,
+                 until: row.waitUntil?.toISOString() ?? null,
+                 zone: row.waitZone,
+              }
+            : null,
       fromWorkflow: row.runId !== null,
       createdAt: row.createdAt.toISOString(),
       postedAt: row.postedAt?.toISOString() ?? null,
@@ -398,23 +407,37 @@ export class PostPublicationService {
       })
    }
 
+   // Saves why a queued post has not started and the earliest it may, for the Posting page. Written only when it changed, since the job asks
+   // every few seconds.
+   private static async noteWait(
+      post: Pick<PostPublication, 'id' | 'waitReason' | 'waitUntil' | 'waitZone'>,
+      wait: { reason: string; until?: Date; zone?: string }
+   ) {
+      const until = wait.until ?? null
+      const zone = wait.zone ?? null
+
+      if (post.waitReason === wait.reason && post.waitUntil?.getTime() === until?.getTime() && post.waitZone === zone) {
+         return
+      }
+
+      await PrismaService.client.postPublication.updateMany({
+         where: {
+            id: post.id,
+            state: 'QUEUED',
+         },
+         data: {
+            waitReason: wait.reason,
+            waitUntil: until,
+            waitZone: zone,
+         },
+      })
+   }
+
    // Starts the oldest queued post of the account when nothing blocks it: none is sending, and the last one started more than the quiet
    // time ago. Resolves to whether one was started. A post whose run cannot be asked for yet (the task is running, not announced, or the
    // account has no browsing time now) stays queued; one that can never start ends as failed with the sentence of the refusal.
    public static async dispatchNext(accountId: string, now = Date.now()) {
       const db = PrismaService.client
-      const busy = await db.postPublication.findFirst({
-         where: {
-            accountId,
-            OR: [{ state: 'SENDING' }, { startedAt: { gte: new Date(now - POST_LIMITS.gapMs) } }],
-         },
-         select: { id: true },
-      })
-
-      if (busy) {
-         return false
-      }
-
       const next = await db.postPublication.findFirst({
          where: {
             accountId,
@@ -424,6 +447,32 @@ export class PostPublicationService {
       })
 
       if (!next) {
+         return false
+      }
+
+      const busy = await db.postPublication.findFirst({
+         where: {
+            accountId,
+            OR: [{ state: 'SENDING' }, { startedAt: { gte: new Date(now - POST_LIMITS.gapMs) } }],
+         },
+         orderBy: { startedAt: 'desc' },
+         select: {
+            state: true,
+            startedAt: true,
+         },
+      })
+
+      if (busy) {
+         await this.noteWait(
+            next,
+            busy.state === 'SENDING'
+               ? { reason: WAIT.SENDING }
+               : {
+                    reason: WAIT.POST_GAP,
+                    until: new Date((busy.startedAt?.getTime() ?? now) + POST_LIMITS.gapMs),
+                 }
+         )
+
          return false
       }
 
@@ -465,6 +514,9 @@ export class PostPublicationService {
                      state: 'SENDING',
                      sessionId,
                      startedAt: new Date(),
+                     waitReason: null,
+                     waitUntil: null,
+                     waitZone: null,
                   },
                })
 
@@ -476,14 +528,24 @@ export class PostPublicationService {
 
          return true
       } catch (error) {
-         // Someone else took it, the account is busy, or it has no browsing time now: it keeps its place.
-         if (
-            error instanceof PostTaken ||
-            isUniqueViolation(error) ||
-            error instanceof TaskBusyError ||
-            error instanceof TaskUnavailableError ||
-            error instanceof BrowseBudgetError
-         ) {
+         // Someone else took it, the account is busy, or it has no browsing time now: it keeps its place, and says why.
+         if (error instanceof BrowseBudgetError) {
+            await this.noteWait(next, {
+               reason: budgetWait(error.reason),
+               until: error.until,
+               zone: error.zone,
+            })
+
+            return false
+         }
+
+         if (error instanceof TaskBusyError || error instanceof TaskUnavailableError) {
+            await this.noteWait(next, { reason: error instanceof TaskBusyError ? WAIT.BUSY : WAIT.WORKER })
+
+            return false
+         }
+
+         if (error instanceof PostTaken || isUniqueViolation(error)) {
             return false
          }
 

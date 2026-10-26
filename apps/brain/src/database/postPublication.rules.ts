@@ -1,5 +1,7 @@
 import { type PostBlock, joinedText, mediaBlock, safeFileName } from '@automatedLinkedIn/contracts'
 
+import { type BrowseBudgetError } from './taskErrors'
+
 // The limits of posting for one account (.plan/posting-send-task.md, Q2 and Q6), kept in one place. Unverified against LinkedIn's own.
 export const POST_LIMITS = {
    // Posts in any 24 hours, and the quiet time between two.
@@ -16,6 +18,24 @@ export const POST_LIMITS = {
 } as const
 
 const DAY_MS = 24 * 60 * 60 * 1000
+
+// Why a queued post has not started, in fixed sentences the owner reads on the Posting page.
+export const WAIT = {
+   SLOT: "Waiting for the account's next slot.",
+   HOURS: "Waiting for the account's working hours.",
+   TIME: "Waiting for the account's browsing time.",
+   BUSY: 'Waiting for another task on this account to finish.',
+   SENDING: "Waiting for this account's other post to finish.",
+   POST_GAP: 'Waiting for the hour between two posts of this account.',
+   WORKER: 'Waiting for the browser worker to be ready.',
+} as const
+
+export const budgetWait = (reason: BrowseBudgetError['reason']) =>
+   reason === 'OUTSIDE_OFFICE'
+      ? WAIT.HOURS
+      : reason === 'DAY_FULL' || reason === 'BACKGROUND_FULL'
+        ? WAIT.TIME
+        : WAIT.SLOT
 
 // Why a post at `at` would break the limits next to the times of the account's other posts (milliseconds since the epoch), or
 // nothing when it does not. Scheduled posts count at their time, so a plan never lets a day carry more than it may.

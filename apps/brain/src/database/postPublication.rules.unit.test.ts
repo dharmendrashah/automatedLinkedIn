@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { type PostBlock } from '@automatedLinkedIn/contracts'
 
-import { POST_LIMITS, contentProblem, limitProblem, taskInputOf } from './postPublication.rules'
+import { POST_LIMITS, WAIT, budgetWait, contentProblem, limitProblem, taskInputOf } from './postPublication.rules'
 
 const HOUR = 60 * 60 * 1000
 const text = (value: string): PostBlock => ({
@@ -54,6 +54,23 @@ describe('limitProblem', () => {
          perDay: 3,
          gapMs: HOUR,
       })
+   })
+})
+
+describe('budgetWait', () => {
+   it('should say the account is waiting for its next slot after a session, and for its hours or its time when those are the reason', () => {
+      expect(budgetWait('TOO_SOON')).toBe(WAIT.SLOT)
+      expect(budgetWait('GAP')).toBe(WAIT.SLOT)
+      expect(budgetWait('OUTSIDE_OFFICE')).toBe(WAIT.HOURS)
+      expect(budgetWait('DAY_FULL')).toBe(WAIT.TIME)
+      expect(budgetWait('BACKGROUND_FULL')).toBe(WAIT.TIME)
+   })
+
+   it('should only use fixed sentences, none naming the data supplier', () => {
+      expect(Object.values(WAIT).every(sentence => sentence.startsWith('Waiting for ') && sentence.endsWith('.'))).toBe(
+         true
+      )
+      expect(JSON.stringify(WAIT).toLowerCase()).not.toMatch(/mindcase|apify/)
    })
 })
 
