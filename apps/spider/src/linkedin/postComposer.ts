@@ -6,6 +6,7 @@ import {
    POST_BUTTON,
    POST_DIALOG_BUTTON,
    POST_DOCUMENT_DONE,
+   POST_DOCUMENT_TITLE,
    POST_EDITOR,
    POST_OPTION,
    POST_PREVIEW_REMOVE,
@@ -120,16 +121,18 @@ export const parseEditorDialog = (html: string): EditorDialog => {
 
 export type DocumentDialog = {
    open: boolean
-   // A file was chosen and Done is not greyed (LinkedIn greys it until a file is chosen and uploaded).
+   // A file was chosen and Done is not greyed.
    ready: boolean
    refused: boolean
    // Where Done is among the buttons of every dialog of the page, for a click by order, when the page gives it no name of its own; -1 otherwise.
    doneIndex: number
    // Where the Choose file button is, for a dialog that draws no file input until it is pressed; -1 when there is none.
    chooseIndex: number
+   // The title field is drawn (a file was chosen); LinkedIn keeps Done greyed until it has a title.
+   titleField: boolean
 }
 
-// The "Share a document" dialog: Done is greyed until a file was chosen and uploaded.
+// The "Share a document" dialog: Done is greyed until a file was chosen and uploaded and its title field holds a title.
 export const parseDocumentDialog = (html: string): DocumentDialog => {
    const root = parse(html)
    const dialog = dialogTitled(root, 'Share a document')
@@ -144,6 +147,7 @@ export const parseDocumentDialog = (html: string): DocumentDialog => {
       refused: REFUSED_WORDS.some(words => dialog?.text.toLowerCase().includes(words)),
       doneIndex: byWords ? root.querySelectorAll(POST_DIALOG_BUTTON).indexOf(byWords) : -1,
       chooseIndex: buttonIndex(root, dialog, 'Choose file'),
+      titleField: Boolean(dialog?.querySelector(POST_DOCUMENT_TITLE)),
    }
 }
 

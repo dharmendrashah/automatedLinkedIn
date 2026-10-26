@@ -77,7 +77,7 @@ const setup = (page: Page = {}) => {
 
          return documentMarkup({
             chosen,
-            doneDisabled: waiting,
+            doneDisabled: waiting || titles.length === 0,
             refused: chosen && refused,
             plain: page.plain ?? false,
          })
