@@ -27,9 +27,16 @@ type Document = {
    chosen?: boolean
    doneDisabled?: boolean
    refused?: boolean
+   // The layout whose buttons have no data-view-name (seen 2026-10-27): Done is found by its words.
+   plain?: boolean
 }
 
-export const documentMarkup = ({ chosen = true, doneDisabled = false, refused = false }: Document = {}) =>
+export const documentMarkup = ({
+   chosen = true,
+   doneDisabled = false,
+   refused = false,
+   plain = false,
+}: Document = {}) =>
    `<html><body>${COMPOSER_BEHIND}<dialog data-testid="dialog" open aria-labelledby="dialog-header"><h2 id="dialog-header">Share a document</h2>
 ${
    refused
@@ -38,4 +45,4 @@ ${
         ? '<input type="text" placeholder="Add a descriptive title to your document"><div data-view-name="media-document-share-remove-preview" role="button"></div>'
         : '<button type="button"><span>Choose file</span></button>'
 }
-<button type="button" data-view-name="media-document-share-cancel"><span>Back</span></button><button type="button" data-view-name="media-document-share-confirm"${doneDisabled || !chosen ? ' disabled=""' : ''}><span>Done</span></button></dialog></body></html>`
+<button type="button" data-view-name="media-document-share-cancel"><span>Back</span></button><button type="button"${plain ? '' : ' data-view-name="media-document-share-confirm"'}${doneDisabled || !chosen ? ' disabled=""' : ''}><span>Done</span></button></dialog></body></html>`

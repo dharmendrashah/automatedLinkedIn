@@ -304,10 +304,13 @@ export const sendPost = async (
       return false
    }
 
-   // Whether the composer shows the files as attached once the dialog is closed.
+   // Whether the composer shows the files as attached once the dialog is closed: by their remove button, or, on the layout that has none
+   // to find, by Post coming alive while the box is still empty (nothing is typed before the files are given).
    const shown = async () => {
       for (let look = 0; look < READY_LOOKS; look += 1) {
-         if (parsePostComposer(await hands.html()).attachment) {
+         const composer = parsePostComposer(await hands.html())
+
+         if (composer.attachment || (composer.present && composer.typed === '' && composer.canPost)) {
             return true
          }
 
@@ -423,7 +426,9 @@ export const sendPost = async (
                await reader.wait(PAUSES.click)
             }
 
-            return (await hands.clickSelector(POST_DOCUMENT_DONE)) && (await shown())
+            return (dialog.doneIndex >= 0
+               ? await hands.clickNth(POST_DIALOG_BUTTON, dialog.doneIndex, '')
+               : await hands.clickSelector(POST_DOCUMENT_DONE)) && (await shown())
                ? undefined
                : {
                     outcome: 'FAILED',
@@ -511,8 +516,6 @@ export const sendPost = async (
 
       if (!composer.present) {
          log('The page has no place to write a post')
-         // A composer that is on screen but not read (the box or the Post button markup changed) can only be fixed from the page.
-         attach('composer-missing.html', compactHtml(await hands.html()), 'text/html')
 
          return { outcome: 'NO_COMPOSER' }
       }

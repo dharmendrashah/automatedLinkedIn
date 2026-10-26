@@ -417,14 +417,6 @@ describe('sendPost', () => {
       expect(context.markAttempt).not.toHaveBeenCalled()
    })
 
-   it('should keep the page it looked at when there is no composer, so the markup it missed can be read', async () => {
-      const { send, context } = setup({ slowPage: 1000 })
-
-      await send()
-
-      expect(context.attach).toHaveBeenCalledWith('composer-missing.html', expect.any(String), 'text/html')
-   })
-
    it('should change the audience and who may comment when the account has others, then post', async () => {
       const { send, calls, posted } = setup({
          audience: 'Connections only',

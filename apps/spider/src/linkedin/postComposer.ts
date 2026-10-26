@@ -114,18 +114,24 @@ export type DocumentDialog = {
    // A file was chosen (its title field is drawn) and Done is not greyed.
    ready: boolean
    refused: boolean
+   // Where Done is among the buttons of every dialog of the page, for a click by order, when the page gives it no name of its own; -1 otherwise.
+   doneIndex: number
 }
 
 // The "Share a document" dialog: its title field is drawn once a file was chosen, and Done is greyed until the upload has finished.
 export const parseDocumentDialog = (html: string): DocumentDialog => {
    const root = parse(html)
    const dialog = dialogTitled(root, 'Share a document')
-   const done = dialog?.querySelector(POST_DOCUMENT_DONE)
+   const byName = dialog?.querySelector(POST_DOCUMENT_DONE)
+   // The layout whose buttons carry no names (2026-10-27) has Done as the button that says so.
+   const byWords = byName ? undefined : dialog?.querySelectorAll('button').find(found => found.text.trim() === 'Done')
+   const done = byName ?? byWords
 
    return {
       open: Boolean(dialog),
       ready: Boolean(dialog?.querySelector(POST_DOCUMENT_TITLE)) && Boolean(done) && !done?.hasAttribute('disabled'),
       refused: REFUSED_WORDS.some(words => dialog?.text.toLowerCase().includes(words)),
+      doneIndex: byWords ? root.querySelectorAll(POST_DIALOG_BUTTON).indexOf(byWords) : -1,
    }
 }
 
