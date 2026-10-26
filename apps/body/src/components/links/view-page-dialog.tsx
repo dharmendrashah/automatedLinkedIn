@@ -18,7 +18,8 @@ import { accountChoices, isCompanyLink, isProfileLink } from './visit-form'
 
 import { trpc } from '../../trpc'
 import { ConfirmRunDialog } from '../accounts/confirm-run-dialog'
-import { StartAnywayDialog, isBudgetRefusal } from '../accounts/start-anyway-dialog'
+import { isBudgetRefusal } from '../accounts/budget-refusal'
+import { StartAnywayDialog } from '../accounts/start-anyway-dialog'
 import { TextField } from './record-fields'
 
 export type VisitKind = 'PROFILE' | 'COMPANY'

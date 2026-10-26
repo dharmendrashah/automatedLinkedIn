@@ -6,9 +6,15 @@ import { SELECTORS, kindOf } from '../tasks/linkedinLogin/accountValidator'
 // LinkedIn asked for a sign-in: the session this run started with is no longer accepted.
 export class SignedOut extends Error {}
 
-// A sign-in or security check page: the session is not accepted. Every walk through LinkedIn checks each page it lands on
-// with this, so a task answers SIGNED_OUT instead of reading or clicking a login form.
-export const isSignedOutPage = (url: string) => ['login', 'checkpoint'].includes(kindOf(url))
+// A sign-in or security check page, or the public home page a signed-out visit to the feed can end on: the session is not accepted.
+// Every walk through LinkedIn checks each page it lands on with this, so a task answers SIGNED_OUT instead of reading or clicking a
+// login form.
+export const isSignedOutPage = (url: string) =>
+   ['login', 'checkpoint'].includes(kindOf(url)) || (URL.canParse(url) && new URL(url).pathname === '/')
+
+// A page only a signed-in member in good standing sees: not a sign-in, a check, the home page or the restriction notice.
+export const isSignedInPage = (url: string) =>
+   URL.canParse(url) && !isSignedOutPage(url) && kindOf(url) !== 'restricted'
 
 type Deps = {
    browser: Pick<DetectionSession, 'clearCookies' | 'exists' | 'click'>

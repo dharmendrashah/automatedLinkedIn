@@ -25,7 +25,10 @@ export type StepCall =
    | 'addCookies'
    | 'clearCookies'
    | 'scroll'
-
+   | 'clickSelector'
+   | 'clickNth'
+   | 'typeKeys'
+   | 'attachFiles'
 // One thing the spider did in the browser. `t` is the time in milliseconds since the run started, when it finished.
 export type StepEntry = {
    n: number
@@ -44,6 +47,8 @@ export type StepEntry = {
    count?: number
    // scroll: how far the page was scrolled down.
    pixels?: number
+   // clickNth: which of the matching elements was clicked, from 0.
+   index?: number
    error?: string
    screenshot?: string
 }
@@ -231,8 +236,9 @@ export class Recorder implements RunRecorder {
       return entry
    }
 
-   public async saveScreenshot(name: string, png: Buffer) {
-      if (this.screenshots.length >= MAX_SCREENSHOTS) {
+   // The picture at the end of a run (`final`) has a place of its own, so the pictures of the steps cannot use it up.
+   public async saveScreenshot(name: string, png: Buffer, final = false) {
+      if (this.screenshots.length >= MAX_SCREENSHOTS + (final ? 1 : 0)) {
          return false
       }
 

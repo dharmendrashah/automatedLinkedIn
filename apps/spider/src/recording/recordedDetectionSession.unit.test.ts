@@ -1,10 +1,15 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { type DetectionSession } from '../scraping/driver'
 import { RecordedDetectionSession } from './recordedDetectionSession'
+import { type StepEntry } from './recorder'
 
 const recorder = {
-   addStep: vi.fn(),
+   addStep: vi.fn((step: Omit<StepEntry, 'n' | 't'>): StepEntry => ({
+      ...step,
+      n: 1,
+      t: 0,
+   })),
    log: vi.fn(),
    addSecret: vi.fn(),
    saveScreenshot: vi.fn(),
@@ -12,6 +17,89 @@ const recorder = {
 }
 
 describe('RecordedDetectionSession', () => {
+   beforeEach(() => {
+      recorder.addStep.mockClear()
+   })
+
+   it('should note a click on a selector as a step, with whether it found something to click', async () => {
+      const clickSelector = vi.fn(async (_selector: string) => false)
+      const session = new RecordedDetectionSession({ clickSelector } as unknown as DetectionSession, recorder)
+
+      await expect(session.clickSelector?.('div.box')).resolves.toBe(false)
+
+      expect(recorder.addStep).toHaveBeenCalledWith(
+         expect.objectContaining({
+            call: 'clickSelector',
+            selector: 'div.box',
+            found: false,
+            ok: true,
+         })
+      )
+   })
+
+   it('should note a click by place with its place, and a file given to the page with how many', async () => {
+      const clickNth = vi.fn(async (_selector: string, _index: number, _avoid: string) => true)
+      const attachFiles = vi.fn(async (_selector: string, _paths: string[]) => true)
+      const session = new RecordedDetectionSession(
+         {
+            clickNth,
+            attachFiles,
+         } as unknown as DetectionSession,
+         recorder
+      )
+
+      await session.clickNth?.('dialog button', 3, '')
+      await session.attachFiles?.('input[type=file]', ['/tmp/a.png', '/tmp/b.png'])
+
+      expect(recorder.addStep).toHaveBeenCalledWith(
+         expect.objectContaining({
+            call: 'clickNth',
+            selector: 'dialog button',
+            index: 3,
+            found: true,
+         })
+      )
+      expect(recorder.addStep).toHaveBeenCalledWith(
+         expect.objectContaining({
+            call: 'attachFiles',
+            count: 2,
+            found: true,
+         })
+      )
+   })
+
+   it('should note typing as a step with how much was typed and never what', async () => {
+      const typeKeys = vi.fn(async (_text: string) => undefined)
+      const session = new RecordedDetectionSession({ typeKeys } as unknown as DetectionSession, recorder)
+
+      await session.typeKeys?.('my secret words')
+
+      expect(recorder.addStep).toHaveBeenCalledWith(
+         expect.objectContaining({
+            call: 'typeKeys',
+            length: 15,
+         })
+      )
+      expect(JSON.stringify(recorder.addStep.mock.calls)).not.toContain('secret')
+      expect(recorder.addSecret).not.toHaveBeenCalled()
+   })
+
+   it('should note a call that fails as a failed step and let the failure through', async () => {
+      const clickSelector = vi.fn(async (_selector: string): Promise<boolean> => {
+         throw new Error('The page is gone')
+      })
+      const session = new RecordedDetectionSession({ clickSelector } as unknown as DetectionSession, recorder)
+
+      await expect(session.clickSelector?.('button')).rejects.toThrow('The page is gone')
+
+      expect(recorder.addStep).toHaveBeenCalledWith(
+         expect.objectContaining({
+            call: 'clickSelector',
+            ok: false,
+         })
+      )
+   })
+
    it('should let a task type into the page when the browser can, and not offer it when the browser cannot', async () => {
       const typeKeys = vi.fn(async (_text: string) => undefined)
       const typing = new RecordedDetectionSession({ typeKeys } as unknown as DetectionSession, recorder)
