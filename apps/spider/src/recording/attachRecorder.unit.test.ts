@@ -26,7 +26,9 @@ const setup = () => {
    }
 }
 
-const makeResponse = (overrides: { type?: string; contentType?: string; text?: () => Promise<string> } = {}) => {
+const makeResponse = (
+   overrides: { type?: string; contentType?: string; length?: number; text?: () => Promise<string> } = {}
+) => {
    const request = {
       method: () => 'POST',
       url: () => 'https://www.linkedin.com/uas/login-submit',
@@ -38,7 +40,10 @@ const makeResponse = (overrides: { type?: string; contentType?: string; text?: (
    return {
       request: () => request,
       status: () => 200,
-      allHeaders: async () => ({ 'content-type': overrides.contentType ?? 'text/html' }),
+      allHeaders: async () => ({
+         'content-type': overrides.contentType ?? 'text/html',
+         ...(overrides.length !== undefined && { 'content-length': String(overrides.length) }),
+      }),
       headers: () => ({}),
       text: overrides.text ?? (async () => '<html>hello</html>'),
    }
@@ -108,6 +113,44 @@ describe('attachRecorder', () => {
 
       expect(text).not.toHaveBeenCalled()
       expect(recorder.network).toHaveBeenCalledWith(expect.not.objectContaining({ body: expect.anything() }))
+   })
+
+   it('should not read a body that says it is larger than the record keeps, but still note the response', async () => {
+      const { handlers, recorder } = setup()
+      const text = vi.fn(async () => 'x')
+
+      handlers.response(
+         makeResponse({
+            type: 'fetch',
+            contentType: 'application/json',
+            length: 5_000_000,
+            text,
+         })
+      )
+      await recorder.track.mock.calls[0][0]
+
+      expect(text).not.toHaveBeenCalled()
+      expect(recorder.network).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }))
+   })
+
+   it('should stop reading bodies once the record has all it keeps, so the browser is not asked for what is thrown away', async () => {
+      const { handlers, recorder } = setup()
+      const big = 'x'.repeat(200_000)
+      const text = vi.fn(async () => big)
+
+      for (let count = 0; count < 40; count += 1) {
+         handlers.response(
+            makeResponse({
+               type: 'fetch',
+               contentType: 'application/json',
+               text,
+            })
+         )
+         await recorder.track.mock.calls[count][0]
+      }
+
+      // The record keeps 64 KB of each body and 2 MB in all: 32 bodies.
+      expect(text).toHaveBeenCalledTimes(32)
    })
 
    it('should hand every response to the recorder to finish before the run is saved', async () => {

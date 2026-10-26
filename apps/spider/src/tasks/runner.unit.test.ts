@@ -1302,6 +1302,70 @@ describe('a task that needs an account', () => {
       expect(sessions.save).not.toHaveBeenCalled()
    })
 
+   describe('a session kept in the middle of a run', () => {
+      const early = {
+         cookies: [
+            {
+               name: 'li_at',
+               value: 'EARLY-TOKEN',
+               domain: '.linkedin.com',
+               path: '/',
+            },
+         ],
+         origins: [],
+      }
+
+      const prepare = (commitSession: boolean) => {
+         const session = makeSession()
+         const sessions = {
+            load: vi.fn(async (_id: string) => undefined),
+            save: vi.fn(async (_id: string, _state: unknown) => undefined),
+         }
+         const task = accountTask({
+            run: async context => {
+               await context.keepSession?.()
+               // The browser goes after the sign-in, as on staging.
+               session.storageState.mockRejectedValue(new Error('Target page, context or browser has been closed'))
+
+               return {
+                  status: 'SUCCEEDED',
+                  verdict: 'GOOD',
+                  message: 'ok',
+                  commitSession,
+               }
+            },
+         })
+
+         session.storageState.mockResolvedValueOnce(early as never)
+
+         return {
+            sessions,
+            ...setup({
+               task,
+               session,
+               overrides: { sessions },
+            }),
+         }
+      }
+
+      it('should save it when the browser can no longer be read at the end', async () => {
+         const { run, sessions } = prepare(true)
+
+         await run(accountCommand)
+
+         expect(sessions.save).toHaveBeenCalledOnce()
+         expect(sessions.save.mock.calls[0]?.[1]).toMatchObject({ cookies: [{ value: 'EARLY-TOKEN' }] })
+      })
+
+      it('should not save it for a run that did not ask for its session to be kept', async () => {
+         const { run, sessions } = prepare(false)
+
+         await run(accountCommand)
+
+         expect(sessions.save).not.toHaveBeenCalled()
+      })
+   })
+
    it('should still answer when the session cannot be kept', async () => {
       const { run, sessions, published } = withVault(committing())
 

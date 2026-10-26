@@ -47,6 +47,9 @@ export interface TaskContext {
    // The language of the account's device (a locale such as en-US), when the run has one. A site that picks a language by
    // itself (from the address it sees) is told this one instead.
    readonly language?: string
+   // Takes a copy of the browser's session now, for a run that has just signed in. If the browser can no longer be read when the run
+   // ends, that copy is what is kept (when the task asks for its session to be kept at all). Absent for a run with no account.
+   keepSession?: () => Promise<void>
    // Opens a page. The allowlist, robots.txt and the rate limit are applied here, so a task cannot skip them.
    // Throws VisitError with a sentence when the page may not or could not be opened.
    visit: (url: string) => Promise<string>

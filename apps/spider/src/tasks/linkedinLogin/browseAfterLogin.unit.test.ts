@@ -66,6 +66,20 @@ describe('browseAfterLogin', () => {
       await expect(browse()).resolves.toBe(false)
    })
 
+   it('should say in one sentence that the browser closed, and stop at once, when it goes while it looks around', async () => {
+      const { context, browse } = setup(async () => `${BASE}/in/ada/`)
+
+      context.browser.scrollBy.mockRejectedValue(
+         new Error('page.evaluate: Target page, context or browser has been closed\nBrowser logs: [pid=251]')
+      )
+
+      await expect(browse()).resolves.toBe(true)
+
+      expect(context.warn).toHaveBeenCalledWith('The browser closed while it looked around')
+      expect(context.browser.scrollBy).toHaveBeenCalledTimes(1)
+      expect(context.visit).not.toHaveBeenCalled()
+   })
+
    it('should keep the login when the browser fails while it looks around, without quoting the error', async () => {
       const { context, browse } = setup(async () => `${BASE}/in/ada/`)
 
