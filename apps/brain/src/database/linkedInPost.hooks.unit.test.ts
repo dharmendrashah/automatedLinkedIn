@@ -123,6 +123,7 @@ describe('linkedin-post hooks', () => {
          'SIGNED_OUT',
          'ERROR',
          'NOT_ALLOWED',
+         'NOT_STARTED',
       ]) {
          const { data } = await run({
             verdict,

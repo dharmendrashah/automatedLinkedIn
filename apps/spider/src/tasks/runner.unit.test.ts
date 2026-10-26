@@ -13,7 +13,7 @@ import { AccountBusyError, ShutdownError, TaskError } from '../scraping/errors'
 import { type SavedState } from '../sessions/sessionVault'
 import { ObjectNotFoundError } from '../storage/store'
 import { type TaskDefinition, type TaskOutcome, VisitError, defineTask } from './defineTask'
-import { type RunnerDeps, exhaustedResult, runTask } from './runner'
+import { type RunnerDeps, exhaustedResult, hasAttempt, runTask } from './runner'
 
 const TASK_ID = '0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11'
 
@@ -1598,6 +1598,31 @@ describe('a task that stops for its owner', () => {
 })
 
 describe('exhaustedResult', () => {
+   it('should say nothing was changed on LinkedIn when no attempt was made', () => {
+      expect(exhaustedResult(command, 'abc1234', Date.now, false)).toMatchObject({
+         status: 'FAILED',
+         verdict: 'NOT_STARTED',
+         message: 'The task could not run, and it changed nothing on LinkedIn. Try again later.',
+      })
+   })
+
+   it('should know whether the run made an attempt, and take an unreadable store as yes', async () => {
+      const { get } = makeStore()
+
+      await expect(hasAttempt({ get }, command)).resolves.toBe(false)
+      await expect(hasAttempt({ get: async () => '{}' }, command)).resolves.toBe(true)
+      await expect(
+         hasAttempt(
+            {
+               get: async () => {
+                  throw new Error('bucket down')
+               },
+            },
+            command
+         )
+      ).resolves.toBe(true)
+   })
+
    it('should answer CRASHED for a command the worker gave up on, so the session never waits for ever', () => {
       expect(exhaustedResult(command, 'abc1234', () => Date.parse('2026-10-13T10:05:00.000Z'))).toEqual({
          contract: 1,

@@ -11,7 +11,9 @@ const statusOf = (verdict: string) => {
       return 'BLOCKED' as const
    }
 
-   return ['ERROR', 'PROXY_FAILED', 'CRASHED', 'TIMED_OUT', 'NOT_QUEUED', 'UNKNOWN_TASK'].includes(verdict)
+   return ['ERROR', 'PROXY_FAILED', 'CRASHED', 'TIMED_OUT', 'NOT_QUEUED', 'NOT_STARTED', 'UNKNOWN_TASK'].includes(
+      verdict
+   )
       ? ('ERROR' as const)
       : ('NEEDS_REAUTH' as const)
 }

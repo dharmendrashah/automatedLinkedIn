@@ -17,6 +17,7 @@ const NOT_SENT = new Set([
    'NEEDS_ACCOUNT',
    'NOT_ALLOWED',
    'NOT_QUEUED',
+   'NOT_STARTED',
    'CANCELLED',
 ])
 

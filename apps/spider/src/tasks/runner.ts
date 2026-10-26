@@ -91,8 +91,26 @@ const HANDOVER_LOG: Record<Handover, string> = {
    timed_out: 'The owner did not come in time',
 }
 
-// The answer for a command the broker delivered for the last time without the task ever finishing.
-export const exhaustedResult = (command: TaskCommand, workerBuild: string, now = Date.now): TaskResult => {
+// Whether the run pressed the button that changes something on LinkedIn: `markAttempt` leaves this object right before. When the store
+// cannot say, it is taken as yes, so a post that may have gone is never called not posted.
+export const hasAttempt = async (store: Pick<ObjectStore, 'get'>, command: TaskCommand) => {
+   try {
+      await store.get(`${runPrefix(command)}/attempt.json`)
+
+      return true
+   } catch (error) {
+      return !(error instanceof ObjectNotFoundError)
+   }
+}
+
+// The answer for a command the broker delivered for the last time without the task ever finishing. Before any attempt nothing was
+// changed on LinkedIn, and the answer says so.
+export const exhaustedResult = (
+   command: TaskCommand,
+   workerBuild: string,
+   now = Date.now,
+   attempted = true
+): TaskResult => {
    const time = new Date(now()).toISOString()
 
    return taskResultSchema.parse({
@@ -101,8 +119,10 @@ export const exhaustedResult = (command: TaskCommand, workerBuild: string, now =
       task: command.task,
       task_version: command.task_version,
       status: 'FAILED',
-      verdict: 'CRASHED',
-      message: 'The task could not run. Try again later.',
+      verdict: attempted ? 'CRASHED' : 'NOT_STARTED',
+      message: attempted
+         ? 'The task could not run. Try again later.'
+         : 'The task could not run, and it changed nothing on LinkedIn. Try again later.',
       artifacts: [],
       artifacts_truncated: false,
       worker: { build: workerBuild },

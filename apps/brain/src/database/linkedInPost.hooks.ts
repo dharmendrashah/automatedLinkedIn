@@ -22,6 +22,7 @@ const NOT_POSTED = new Set([
    'NEEDS_ACCOUNT',
    'NOT_ALLOWED',
    'NOT_QUEUED',
+   'NOT_STARTED',
    'CANCELLED',
 ])
 
