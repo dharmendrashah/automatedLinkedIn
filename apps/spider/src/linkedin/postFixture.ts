@@ -42,7 +42,7 @@ ${
            typed.length > 0 ? typed.map(line => `<p>${line}</p>`).join('') : '<p class="is-empty"><br></p>'
         }</div></div>`
 }
-${attached ? '<figure data-view-name="image"></figure><button type="button" data-view-name="share-detour-preview-remove" aria-label="Close"></button>' : ''}
+${attached ? (plain ? '<figure><img src="blob:https://www.linkedin.com/x"></figure>' : '<figure data-view-name="image"></figure><button type="button" data-view-name="share-detour-preview-remove" aria-label="Close"></button>') : ''}
 <div id="ShareBoxlinkPreview" componentkey="ShareBoxlinkPreview"></div>
 <button type="button" aria-label="Show Emoji Picker" data-view-name="comment-emoji-picker"></button>
 <button type="button" aria-label="Media" data-view-name="share-sharebox-bottom-bar-media"></button>

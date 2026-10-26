@@ -51,6 +51,7 @@ describe('parseDocumentDialog', () => {
          open: true,
          ready: true,
          refused: false,
+         doneIndex: -1,
       })
       expect(parseDocumentDialog(documentMarkup({ doneDisabled: true }))).toMatchObject({
          open: true,
@@ -60,6 +61,24 @@ describe('parseDocumentDialog', () => {
          open: true,
          ready: false,
       })
+   })
+
+   it('should find Done by its words when it has no name of its own, and say where it is among the dialog buttons', () => {
+      const ready = parseDocumentDialog(documentMarkup({ plain: true }))
+
+      expect(ready).toMatchObject({
+         open: true,
+         ready: true,
+      })
+      expect(ready.doneIndex).toBeGreaterThanOrEqual(0)
+      expect(
+         parseDocumentDialog(
+            documentMarkup({
+               plain: true,
+               doneDisabled: true,
+            })
+         ).ready
+      ).toBe(false)
    })
 
    it('should say it is not open on another page, and that LinkedIn refused the file', () => {
@@ -72,5 +91,29 @@ describe('parsePostComposer and the media of a post', () => {
    it('should know whether the composer shows a file ready to post', () => {
       expect(parsePostComposer(composerMarkup()).attachment).toBe(false)
       expect(parsePostComposer(composerMarkup({ attached: true })).attachment).toBe(true)
+   })
+
+   it('should let Post come alive with an empty box, which only an attached file does, on the layout with no remove button', () => {
+      const bare = parsePostComposer(
+         composerMarkup({
+            plain: true,
+            disabled: true,
+         })
+      )
+      const attached = parsePostComposer(
+         composerMarkup({
+            plain: true,
+            attached: true,
+         })
+      )
+
+      expect(bare).toMatchObject({
+         typed: '',
+         canPost: false,
+      })
+      expect(attached).toMatchObject({
+         typed: '',
+         canPost: true,
+      })
    })
 })

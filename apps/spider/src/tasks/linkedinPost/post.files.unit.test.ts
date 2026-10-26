@@ -13,6 +13,7 @@ import {
    POST_PHOTO_INPUT,
    POST_VIDEO_INPUT,
 } from '../../linkedin/markup'
+import { parseDocumentDialog, parsePostComposer } from '../../linkedin/postComposer'
 import { composerMarkup, postedMarkup } from '../../linkedin/postFixture'
 import { documentMarkup, editorMarkup } from '../../linkedin/postMediaFixture'
 import { type PostInput, sendPost } from './post'
@@ -32,6 +33,8 @@ type Page = {
    // The files cannot be fetched, or the task is given no way to fetch them.
    fetchFails?: boolean
    canFetch?: boolean
+   // The layout whose buttons have no data-view-name: Post and Done are pressed by their place among the dialog buttons.
+   plain?: boolean
 }
 
 const setup = (page: Page = {}) => {
@@ -74,6 +77,7 @@ const setup = (page: Page = {}) => {
             chosen,
             doneDisabled: waiting,
             refused: chosen && refused,
+            plain: page.plain ?? false,
          })
       }
 
@@ -83,6 +87,7 @@ const setup = (page: Page = {}) => {
          comments: 'Anyone',
          attached,
          disabled: typed.length === 0 && !attached,
+         plain: page.plain ?? false,
       })
    }
    const browser = {
@@ -124,15 +129,57 @@ const setup = (page: Page = {}) => {
          return true
       }),
       clickNth: vi.fn(async (selector: string, index: number) => {
-         if (selector !== POST_DIALOG_BUTTON || dialog !== 'editor') {
+         if (selector !== POST_DIALOG_BUTTON) {
             return false
          }
 
-         calls.push(`click button ${index}`)
-         dialog = undefined
-         attached = true
+         if (dialog === 'editor') {
+            calls.push(`click button ${index}`)
+            dialog = undefined
+            attached = true
 
-         return true
+            return true
+         }
+
+         if (dialog === 'document' && page.plain) {
+            if (
+               parseDocumentDialog(
+                  documentMarkup({
+                     chosen,
+                     plain: true,
+                  })
+               ).doneIndex !== index
+            ) {
+               return false
+            }
+
+            calls.push('click done')
+            dialog = undefined
+            attached = true
+
+            return true
+         }
+
+         if (!dialog && page.plain) {
+            if (
+               parsePostComposer(
+                  composerMarkup({
+                     typed,
+                     attached,
+                     plain: true,
+                  })
+               ).postIndex !== index
+            ) {
+               return false
+            }
+
+            calls.push('click post')
+            pressed = true
+
+            return true
+         }
+
+         return false
       }),
       clickSelector: vi.fn(async (selector: string) => {
          if (selector === POST_MEDIA_BUTTON) {
@@ -164,6 +211,10 @@ const setup = (page: Page = {}) => {
          }
 
          if (selector === POST_DOCUMENT_DONE) {
+            if (page.plain) {
+               return false
+            }
+
             calls.push('click done')
             dialog = undefined
             attached = true
@@ -179,6 +230,10 @@ const setup = (page: Page = {}) => {
          }
 
          if (selector === POST_BUTTON) {
+            if (page.plain) {
+               return false
+            }
+
             calls.push('click post')
             pressed = true
 
@@ -291,6 +346,36 @@ describe('sendPost with files', () => {
       ])
       expect(calls).toEqual(['open media', 'give photos 2', 'click button 4', 'click box', 'type box', 'click post'])
       expect(remove).toHaveBeenCalledTimes(1)
+   })
+
+   it('should post photos on the layout with no data-view-names, knowing the photos are on from the Post button coming alive', async () => {
+      const { send, calls } = setup({ plain: true })
+
+      await expect(send({ files: photos })).resolves.toEqual({
+         outcome: 'POSTED',
+         link: ACTIVITY,
+      })
+      expect(calls).toEqual(['open media', 'give photos 2', 'click button 4', 'click box', 'type box', 'click post'])
+   })
+
+   it('should post a document on that layout, pressing Done by its words and Post by its place', async () => {
+      const { send, calls } = setup({
+         plain: true,
+         uploadLooks: 2,
+      })
+
+      await expect(send({ files: document })).resolves.toMatchObject({ outcome: 'POSTED' })
+      expect(calls).toEqual([
+         'expand types',
+         'open document',
+         'give document 1',
+         'press ControlOrMeta+A',
+         'type title',
+         'click done',
+         'click box',
+         'type box',
+         'click post',
+      ])
    })
 
    it('should give a video to the input that takes videos', async () => {

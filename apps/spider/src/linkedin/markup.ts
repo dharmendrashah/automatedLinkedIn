@@ -75,7 +75,8 @@ export const POST_COMMENT_OPTIONS = {
 // reached through "Expand content types". LinkedIn adds a hidden file input to the end of the page each time a dialog opens, so the
 // first one that matches is the one of the dialog just opened. The Editor's buttons have no names, so they are found by their words
 // among the buttons of every dialog.
-export const POST_MEDIA_BUTTON = 'button[data-view-name="share-sharebox-bottom-bar-media"]'
+// The Media button has this name in both composer layouts; the one without data-view-names (2026-10-27) has nothing else.
+export const POST_MEDIA_BUTTON = 'button[aria-label="Media"]'
 export const POST_MORE_TYPES = 'button[aria-label="Expand content types"]'
 export const POST_DOCUMENT_LINK = 'a[aria-label="Document"]'
 export const POST_PHOTO_INPUT = 'input[type="file"][accept*="image/jpeg"]'

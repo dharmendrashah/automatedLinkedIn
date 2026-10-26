@@ -56,7 +56,7 @@ The order every account task runs in:
 - [ ] Waits are bounded loops; a slow page (15 to 30 s through a proxy) is not read as empty.
 - [ ] Pacing uses `pause` and random gaps; `policy` and `budget` fit LinkedIn's limits and the account's browsing budget.
 - [ ] Messages are fixed sentences; no page text, words the owner wrote, or secrets reach the log, the result or the files.
-- [ ] On a "page not understood" verdict the task keeps the compact page (`attach(..., compactHtml(html), 'text/html')`).
+- [ ] A failed run keeps its final page without any code in the task: the runner saves `failure.html` and `screenshots/final.png` for every FAILED run (production records failures by default, `SPIDER_RECORDING=failures`). A task only `attach`es a page when it needs one from the middle of the run.
 
 ## 6. Brain side
 

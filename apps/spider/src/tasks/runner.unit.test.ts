@@ -204,6 +204,7 @@ const setup = (
       task?: ReturnType<typeof demo>
       session?: ReturnType<typeof makeSession> & { control?: SessionControl }
       overrides?: Partial<RunnerDeps>
+      recording?: 'always' | 'failures'
    } = {}
 ) => {
    const session = options.session ?? makeSession()
@@ -228,7 +229,7 @@ const setup = (
             kind: 'demo',
             id,
             prefix,
-            mode: 'always',
+            mode: options.recording ?? 'always',
             video: false,
             ...(videoSize && { videoSize }),
             store,
@@ -1930,6 +1931,40 @@ describe('the end of a run', () => {
       expect(String(bad.store.objects.get(`${PREFIX}/failure.html`))).toContain('the final page')
       expect(String(bad.store.objects.get(`${PREFIX}/failure.html`))).not.toContain('<head>')
       expect(good.store.objects.has(`${PREFIX}/failure.html`)).toBe(false)
+   })
+
+   it('should, when only failures are recorded, keep the final picture and page of a failed run of any task and nothing of a good one', async () => {
+      const run = async (outcome: TaskOutcome) => {
+         const { run: start, store } = setup({
+            session: seeing(FEED),
+            recording: 'failures',
+            task: demo({
+               run: async () => outcome,
+               verdicts: {
+                  GOOD: {
+                     label: 'Good',
+                     tone: 'success',
+                  },
+                  BAD: {
+                     label: 'Bad',
+                     tone: 'failure',
+                  },
+               },
+            }),
+         })
+
+         await start()
+
+         return store
+      }
+
+      const failedRun = await run(failed)
+      const goodRun = await run(passed)
+
+      expect(String(failedRun.objects.get(`${PREFIX}/failure.html`))).toContain('the final page')
+      expect(failedRun.upload).toHaveBeenCalledWith(`${PREFIX}/screenshots/final.png`, expect.any(String), 'image/png')
+      expect(goodRun.objects.has(`${PREFIX}/failure.html`)).toBe(false)
+      expect(goodRun.upload).not.toHaveBeenCalled()
    })
 
    it('should still answer when the browser can no longer give its picture or page', async () => {

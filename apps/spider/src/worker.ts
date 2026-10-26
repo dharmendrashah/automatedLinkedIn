@@ -73,7 +73,8 @@ const main = async () => {
    // Aborted when a stopping worker runs out of time (see the signal handler below).
    const stop = new AbortController()
    const recordingMode = SPIDER_RECORDING
-   // Off by default for tasks that do not insist on it: a recording holds what the browser showed.
+   // At least `failures` unless the operator turns it off: a failed run keeps its final picture and page. A recording holds what the
+   // browser showed, so `off` stays possible.
    if (!policy.allowsUrl(SPIDER_LINKEDIN_BASE_URL)) {
       console.error(
          `${SPIDER_LINKEDIN_BASE_URL} is not in SPIDER_ALLOWED_HOSTS: LinkedIn sign-in checks will report an error`

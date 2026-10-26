@@ -81,9 +81,9 @@ export class Environment {
             default: 'full',
          }),
          SPIDER_RECORDING: string({
-            desc: 'Record each account check for the Sessions page: off, failures (keep a recording only when the run went wrong) or always',
+            desc: 'Record each run for the Sessions page: off, failures (keep a recording, with the final picture and page, only when the run went wrong) or always',
             choices: ['off', 'failures', 'always'] as const,
-            default: 'off',
+            default: 'failures',
             devDefault: 'always',
          }),
          SPIDER_RECORD_VIDEO: bool({
