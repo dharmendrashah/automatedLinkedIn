@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { type PostBlock } from '@automatedLinkedIn/contracts'
+import { type PostBlock, taskInputOf } from '@automatedLinkedIn/contracts'
 
-import { POST_LIMITS, WAIT, budgetWait, contentProblem, limitProblem, taskInputOf } from './postPublication.rules'
+import { POST_LIMITS, WAIT, budgetWait, contentProblem, limitProblem } from './postPublication.rules'
 
 const HOUR = 60 * 60 * 1000
 const text = (value: string): PostBlock => ({

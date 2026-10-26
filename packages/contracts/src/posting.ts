@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { UPLOAD_ID, extensionOf } from './attachments'
+import { UPLOAD_ID, extensionOf, safeFileName } from './attachments'
 
 // What a post may hold (.plan/posting-page.md). Brain enforces these on every draft it stores and reads, and the page uses the same
 // rules to refuse early. The numbers are from what LinkedIn shows in its composer and are not verified against its documentation.
@@ -304,3 +304,31 @@ export const postDraftInputSchema = z
    })
 
 export type PostDraftInput = z.infer<typeof postDraftInputSchema>
+
+// What the `linkedin-post` task is told: the words (a link goes after them on a line of its own) and each file by its id, a safe name
+// and its kind. Where the files are kept is never told: the run builds it from its own user.
+export const taskInputOf = (blocks: PostBlock[]) => {
+   const media = mediaBlock(blocks)
+   const words = [joinedText(blocks), media?.type === 'LINK' ? media.url : ''].filter(part => part !== '').join('\n\n')
+   const files =
+      media?.type === 'PHOTOS'
+         ? media.items.map(({ id, name }) => ({
+              id,
+              name: safeFileName(name),
+              kind: 'PHOTOS' as const,
+           }))
+         : media?.type === 'VIDEO' || media?.type === 'DOCUMENT'
+           ? [
+                {
+                   id: media.file.id,
+                   name: safeFileName(media.file.name),
+                   kind: media.type,
+                },
+             ]
+           : []
+
+   return {
+      text: words,
+      files,
+   }
+}

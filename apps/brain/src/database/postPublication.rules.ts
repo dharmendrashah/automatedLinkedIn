@@ -1,4 +1,4 @@
-import { type PostBlock, joinedText, mediaBlock, safeFileName } from '@automatedLinkedIn/contracts'
+import { type PostBlock, joinedText, mediaBlock } from '@automatedLinkedIn/contracts'
 
 import { type BrowseBudgetError } from './taskErrors'
 
@@ -71,32 +71,4 @@ export const contentProblem = (blocks: PostBlock[]) => {
            : []
 
    return files.some(key => key === undefined) ? 'A file is still uploading. Wait for it to finish.' : undefined
-}
-
-// What the `linkedin-post` task is told: the words (a link goes after them on a line of its own) and each file by its id, a safe name
-// and its kind. Where the files are kept is never told: the run builds it from its own user.
-export const taskInputOf = (blocks: PostBlock[]) => {
-   const media = mediaBlock(blocks)
-   const words = [joinedText(blocks), media?.type === 'LINK' ? media.url : ''].filter(part => part !== '').join('\n\n')
-   const files =
-      media?.type === 'PHOTOS'
-         ? media.items.map(({ id, name }) => ({
-              id,
-              name: safeFileName(name),
-              kind: 'PHOTOS' as const,
-           }))
-         : media?.type === 'VIDEO' || media?.type === 'DOCUMENT'
-           ? [
-                {
-                   id: media.file.id,
-                   name: safeFileName(media.file.name),
-                   kind: media.type,
-                },
-             ]
-           : []
-
-   return {
-      text: words,
-      files,
-   }
 }
