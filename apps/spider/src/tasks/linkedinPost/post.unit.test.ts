@@ -10,6 +10,7 @@ import {
    POST_START,
 } from '../../linkedin/markup'
 import { composerMarkup, postedMarkup } from '../../linkedin/postFixture'
+import { VisitError } from '../defineTask'
 import { sendPost } from './post'
 
 const BASE = 'https://www.linkedin.com'
@@ -38,6 +39,8 @@ type Page = {
    // The compose address draws the feed with no composer, as on staging (LinkedIn's page failed to hydrate): the composer comes only
    // once "Start a post" is pressed, on this page ('here') or on the feed after it was opened ('feed'), or never.
    needsStart?: 'here' | 'feed' | 'never'
+   // LinkedIn answers the compose address with a 404 (it does not load).
+   composeFails?: boolean
    // The typing reaches the box.
    typingWorks?: boolean
    // The Post button comes alive once there are words.
@@ -230,6 +233,10 @@ const setup = (page: Page = {}) => {
    const context = {
       browser,
       visit: vi.fn(async (url: string) => {
+         if (page.composeFails && url.endsWith('/sharing/compose')) {
+            throw new VisitError('load', 'The page did not load.')
+         }
+
          onFeed = url.endsWith('/feed/')
 
          return at
@@ -298,6 +305,20 @@ describe('sendPost', () => {
 
       await expect(send()).resolves.toMatchObject({ outcome: 'POSTED' })
       expect(context.visit.mock.calls.map(call => call[0]).slice(0, 2)).toEqual([`${BASE}/sharing/compose`, ACTIVITY])
+   })
+
+   it('should go on from the feed, not end in an error, when the compose address answers a 404', async () => {
+      const { send, calls, context } = setup({
+         composeFails: true,
+         needsStart: 'feed',
+      })
+
+      await expect(send()).resolves.toMatchObject({ outcome: 'POSTED' })
+      expect(calls).toEqual(['start a post', 'start a post', 'click box', 'type', 'click post'])
+      expect(context.visit.mock.calls.map(call => call[0]).slice(0, 2)).toEqual([
+         `${BASE}/sharing/compose`,
+         `${BASE}/feed/`,
+      ])
    })
 
    it('should keep looking when the page cannot be read while it moves to the feed', async () => {

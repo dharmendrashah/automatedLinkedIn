@@ -62,14 +62,15 @@ export type RunEnvironmentOptions = {
 // and the files of an account stay. The device and the profile of an account stay on this computer between sessions, as on the
 // worker they stay in the bucket (.plan/account-browser-profile.md). The signed-in session only lives for this session.
 export const createRunEnvironment = ({ proxy, encryptionKey, outputRoot, seed }: RunEnvironmentOptions) => {
+   const validator = new AccountValidator({
+      baseUrl: LINKEDIN_URL,
+      mode: 'full',
+      pause: async () => undefined,
+      allowsCookieDomain: () => true,
+   })
    const tasks = buildTasks({
       linkedin: {
-         validator: new AccountValidator({
-            baseUrl: LINKEDIN_URL,
-            mode: 'full',
-            pause: async () => undefined,
-            allowsCookieDomain: () => true,
-         }),
+         validator,
          baseUrl: LINKEDIN_URL,
       },
    })
@@ -103,6 +104,10 @@ export const createRunEnvironment = ({ proxy, encryptionKey, outputRoot, seed }:
          identities,
          sessions,
          profiles,
+         reauth: {
+            baseUrl: LINKEDIN_URL,
+            validator,
+         },
          exitGeo: lookupExit,
          // The browser window is open in front of the person running this, so they finish a check right there.
          handover: async () =>

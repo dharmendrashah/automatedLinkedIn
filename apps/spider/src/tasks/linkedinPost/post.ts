@@ -31,7 +31,7 @@ import {
    parsePostResult,
 } from '../../linkedin/postComposer'
 import { SignedOut, createSession } from '../../linkedin/session'
-import { type TaskContext } from '../defineTask'
+import { type TaskContext, VisitError } from '../defineTask'
 import { type Fetched } from '../uploads'
 
 type Context = Pick<
@@ -486,13 +486,26 @@ export const sendPost = async (
    let pressed = false
 
    try {
-      await session.acceptConsent(await session.open(`${baseUrl}${POST_COMPOSE_PATH}`))
-      log('Opened the composer')
+      let loaded = true
+
+      try {
+         await session.acceptConsent(await session.open(`${baseUrl}${POST_COMPOSE_PATH}`))
+         log('Opened the composer')
+      } catch (error) {
+         // LinkedIn answered the compose address with a 404 (staging, 2026-10-26): the window is opened from the feed instead.
+         if (!(error instanceof VisitError && error.reason === 'load')) {
+            throw error
+         }
+
+         loaded = false
+         log('The compose address did not load')
+      }
+
       await reader.wait(PAUSES.open)
 
-      let composer = parsePostComposer(await settled(QUICK_LOOKS))
+      let composer = loaded ? parsePostComposer(await settled(QUICK_LOOKS)) : undefined
 
-      if (!composer.present) {
+      if (!composer?.present) {
          composer = await openByStart()
       }
 
