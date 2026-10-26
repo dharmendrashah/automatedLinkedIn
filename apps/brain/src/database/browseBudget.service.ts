@@ -191,7 +191,7 @@ export class BrowseBudgetService {
 
          const when = whenText(until, now, office.timeZone)
 
-         throw new BrowseBudgetError(whenOf(verdict.reason, when), verdict.reason, until, when)
+         throw new BrowseBudgetError(whenOf(verdict.reason, when), verdict.reason, until, when, office.timeZone)
       }
 
       await tx.browseUsage.create({

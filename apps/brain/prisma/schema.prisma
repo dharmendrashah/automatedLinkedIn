@@ -1242,6 +1242,10 @@ model PostPublication {
   // The run and block of a workflow that made this post; empty for a post sent from the Posting page. The block keeps the files.
   runId          String?
   nodeId         String?
+  // Why a queued post has not started, and the earliest it may be asked for again; set by the post-send job and cleared when it starts.
+  waitReason     String?
+  waitUntil      DateTime?
+  waitZone       String?
 
   @@index([userId, createdAt])
   @@index([accountId, state])

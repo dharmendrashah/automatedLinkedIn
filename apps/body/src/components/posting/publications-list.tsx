@@ -2,10 +2,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { CalendarClock, ExternalLink } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 import { type RouterOutputs } from '../../trpc'
 import { type Account } from '../accounts/types'
-import { canTakeBack, isPostLink, stateText } from './publication'
+import { canTakeBack, isPostLink, stateText, waitingText } from './publication'
 import { describePlanned } from './schedule'
 
 export type Publication = RouterOutputs['postPublication']['list'][number]
@@ -34,7 +35,29 @@ const backText = (state: Publication['state']) =>
    state === 'SCHEDULED' || state === 'QUEUED' ? 'Cancel and edit' : 'Edit and post again'
 
 // The owner's posts that were sent for posting or planned, newest first, with where each is and, once it went, its link.
-export const PublicationsList = ({ posts, accounts, onBack }: Props) => (
+const REFRESH_MS = 30_000
+
+// The time now, renewed while a post waits, so "in about 3 min" counts down between the list's own refreshes.
+const useNow = (active: boolean) => {
+   const [now, setNow] = useState(() => Date.now())
+
+   useEffect(() => {
+      if (!active) {
+         return undefined
+      }
+
+      const timer = setInterval(() => setNow(Date.now()), REFRESH_MS)
+
+      return () => clearInterval(timer)
+   }, [active])
+
+   return now
+}
+
+export const PublicationsList = ({ posts, accounts, onBack }: Props) => {
+   const now = useNow(posts.some(({ waiting }) => waiting !== null))
+
+   return (
    <ul className="grid gap-2">
       {posts.map(post => {
          const account = accounts.find(({ id }) => id === post.accountId)
@@ -78,6 +101,9 @@ export const PublicationsList = ({ posts, accounts, onBack }: Props) => (
                               </a>
                            ) : null}
                         </span>
+                        {post.waiting ? (
+                           <span className="text-muted-foreground text-xs">{waitingText(post.waiting, { now })}</span>
+                        ) : null}
                         {post.failure ? <span className="text-muted-foreground text-xs">{post.failure}</span> : null}
                      </div>
                      {!post.fromWorkflow && canTakeBack(post.state) ? (
@@ -91,4 +117,5 @@ export const PublicationsList = ({ posts, accounts, onBack }: Props) => (
          )
       })}
    </ul>
-)
+   )
+}
