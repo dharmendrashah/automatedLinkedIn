@@ -37,7 +37,7 @@ Every task that uses an account runs inside the same lifecycle, so a run can be 
 | 5 | The actual task | `task.run` |
 | 6 | Keep the final picture (`screenshots/final.png`) and, for a FAILED run, the compact final page (`failure.html`); then close the browser | runner |
 | 7 | Save the session and the browser profile when the run passed its own check (`commitSession` on a SUCCEEDED verdict), signed in again, or still ends on a signed-in page (not a sign-in page, the home page, a check or a restriction notice) with a login cookie and a verdict other than `SIGNED_OUT`; never otherwise | runner |
-| 8 | Record everything: `timeline.json` (steps: `goto`, `scroll`, `clickSelector`, `clickNth`, `typeKeys` with its length only, `attachFiles`), `network.json`, `logs.json`, `screenshots/`, `video.webm`, `files/input.json`, `result.json`, `session.json` | recorder |
+| 8 | Record everything: `timeline.json` (steps: `goto`, `scroll`, `clickSelector`, `clickNth`, `typeKeys` with its length only, `attachFiles`, `chooseFiles`), `network.json`, `logs.json`, `screenshots/`, `video.webm`, `files/input.json`, `result.json`, `session.json` | recorder |
 
 What a task may assume: it starts on a signed-in feed with the account's own session and profile. What a task must do: use `visit` for every page, check each landed page for the sign-in page, answer `SIGNED_OUT` when it finds one, return `commitSession` on every SUCCEEDED verdict whose own check passed, and leave the browser on a normal signed-in page. A run that ends on a sign-in page never replaces a good saved session.
 

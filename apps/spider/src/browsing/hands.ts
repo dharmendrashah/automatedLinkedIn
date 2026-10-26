@@ -20,6 +20,9 @@ export type Hands = {
    typeKeys: (text: string) => Promise<boolean>
    // Gives files to the first file input of a selector (it may be hidden); false when the browser cannot or there is no such input.
    attachFiles: (selector: string, paths: string[]) => Promise<boolean>
+   // Presses the Nth button of a selector and gives the files to the file chooser it opens; false when the browser cannot, there is
+   // no such button, or no chooser opens.
+   chooseFiles: (selector: string, index: number, paths: string[]) => Promise<boolean>
    // Downloads a file the page points to through the browser; undefined when it cannot, or the file is too large or not a success.
    fetchFile: (url: string, maxBytes: number) => Promise<{ body: Buffer; contentType: string } | undefined>
    // Listens for the statuses the page's requests are answered with, from now on; hears nothing in a browser that cannot.
@@ -46,6 +49,7 @@ export const handsOf = (browser: DetectionSession): Hands => {
       scrollOver,
       typeKeys,
       attachFiles,
+      chooseFiles,
       fetchFile,
       watchAnswers,
       hover,
@@ -71,6 +75,8 @@ export const handsOf = (browser: DetectionSession): Hands => {
          return true
       },
       attachFiles: async (selector, paths) => (await attachFiles?.call(browser, selector, paths)) === true,
+      chooseFiles: async (selector, index, paths) =>
+         (await chooseFiles?.call(browser, selector, index, paths)) === true,
       fetchFile: async (url, maxBytes) => fetchFile?.call(browser, url, maxBytes),
       watchAnswers: (method, parts) =>
          watchAnswers?.call(browser, method, parts) ?? {

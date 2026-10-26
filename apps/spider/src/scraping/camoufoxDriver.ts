@@ -118,6 +118,8 @@ const SCROLL_POLLS = 8
 const HOVER_MIN_MS = 150
 const HOVER_RANGE_MS = 300
 const LINK_NAVIGATION_MS = 15_000
+// How long a press waits for the file chooser it should open.
+const CHOOSER_MS = 5000
 
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
 
@@ -682,6 +684,33 @@ class CamoufoxSession implements DetectionSession {
       await input.setInputFiles(paths)
 
       return true
+   }
+
+   // Presses the Nth match as a hand does and hands the files to the chooser that opens. The wait for the chooser starts before the
+   // press, so it is not missed.
+   public async chooseFiles(selector: string, index: number, paths: string[]) {
+      const spot = await this.spot({
+         selector,
+         nth: index,
+         avoid: '',
+      })
+
+      if (!spot) {
+         return false
+      }
+
+      try {
+         const [chooser] = await Promise.all([
+            this.page.waitForEvent('filechooser', { timeout: CHOOSER_MS }),
+            this.pressAt(spot),
+         ])
+
+         await chooser.setFiles(paths)
+
+         return true
+      } catch {
+         return false
+      }
    }
 
    // How the page's requests of one kind are answered from now on, for a task that must know whether an action was taken (LinkedIn

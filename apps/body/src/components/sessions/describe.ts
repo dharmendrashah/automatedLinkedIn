@@ -160,6 +160,11 @@ export const describeStep = ({ call, ok, target, urlAfter, length, found, count 
                : `Gave ${plural(count ?? 0, 'file', 'files')} to the page`
             : 'Could not give the files to the page'
 
+      case 'chooseFiles':
+         return ok && found !== false
+            ? `Gave ${plural(count ?? 0, 'file', 'files')} to the page through its file chooser`
+            : 'Its file chooser did not open'
+
       case 'cookies':
          return "Collected the browser's session"
 

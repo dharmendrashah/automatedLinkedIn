@@ -217,6 +217,8 @@ describe('describeStep', () => {
       expect(describeStep(step({ call: 'typeKeys', length: 12 }))).toBe('Typed 12 characters into the page')
       expect(describeStep(step({ call: 'attachFiles', count: 1, found: true }))).toBe('Gave 1 file to the page')
       expect(describeStep(step({ call: 'attachFiles', count: 2, found: false }))).toBe('Found nowhere to give the files')
+      expect(describeStep(step({ call: 'chooseFiles', count: 1, found: true }))).toBe('Gave 1 file to the page through its file chooser')
+      expect(describeStep(step({ call: 'chooseFiles', count: 1, found: false }))).toBe('Its file chooser did not open')
    })
 
    it('should still say something for a call it does not know', () => {

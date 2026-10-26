@@ -17,6 +17,7 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
    public readonly scrollOver?: DetectionSession['scrollOver']
    public readonly typeKeys?: DetectionSession['typeKeys']
    public readonly attachFiles?: DetectionSession['attachFiles']
+   public readonly chooseFiles?: DetectionSession['chooseFiles']
    public readonly fetchFile?: DetectionSession['fetchFile']
    public readonly watchAnswers?: DetectionSession['watchAnswers']
    public readonly back?: DetectionSession['back']
@@ -39,6 +40,7 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
          scrollOver,
          typeKeys,
          attachFiles,
+         chooseFiles,
          fetchFile,
          watchAnswers,
          back,
@@ -105,6 +107,20 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
                   count: paths.length,
                },
                () => attachFiles.call(detector, selector, paths),
+               found => ({ found })
+            )
+      }
+
+      if (chooseFiles) {
+         this.chooseFiles = (selector, index, paths) =>
+            this.step(
+               'chooseFiles',
+               {
+                  selector,
+                  index,
+                  count: paths.length,
+               },
+               () => chooseFiles.call(detector, selector, index, paths),
                found => ({ found })
             )
       }

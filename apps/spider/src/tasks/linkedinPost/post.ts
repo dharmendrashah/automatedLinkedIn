@@ -291,10 +291,17 @@ export const sendPost = async (
 
    let fetched: Fetched | undefined
 
-   // Gives the files to the dialog that has just opened (LinkedIn adds the input a moment after it draws the dialog).
-   const giveFiles = async (selector: string, paths: string[]) => {
+   // Gives the files to the dialog that has just opened (LinkedIn adds the input a moment after it draws the dialog). Some layouts
+   // draw no input at all until the dialog's own button is pressed (2026-10-27); the files then go to the file chooser it opens.
+   const giveFiles = async (selector: string, paths: string[], chooseIndex: (html: string) => number) => {
       for (let look = 0; look < DIALOG_LOOKS; look += 1) {
          if (await hands.attachFiles(selector, paths)) {
+            return true
+         }
+
+         const index = chooseIndex(await hands.html())
+
+         if (index >= 0 && (await hands.chooseFiles(POST_DIALOG_BUTTON, index, paths))) {
             return true
          }
 
@@ -333,7 +340,13 @@ export const sendPost = async (
 
       await reader.wait(PAUSES.click)
 
-      if (!(await giveFiles(kind === 'VIDEO' ? POST_VIDEO_INPUT : POST_PHOTO_INPUT, paths))) {
+      if (
+         !(await giveFiles(
+            kind === 'VIDEO' ? POST_VIDEO_INPUT : POST_PHOTO_INPUT,
+            paths,
+            html => parseEditorDialog(html).chooseIndex
+         ))
+      ) {
          log('The Media dialog offered no place to give files')
 
          return {
@@ -392,7 +405,7 @@ export const sendPost = async (
 
       await reader.wait(PAUSES.click)
 
-      if (!(await giveFiles(POST_DOCUMENT_INPUT, paths))) {
+      if (!(await giveFiles(POST_DOCUMENT_INPUT, paths, html => parseDocumentDialog(html).chooseIndex))) {
          log('The document dialog offered no place to give a file')
 
          return {

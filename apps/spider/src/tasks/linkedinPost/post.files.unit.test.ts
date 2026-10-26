@@ -13,7 +13,7 @@ import {
    POST_PHOTO_INPUT,
    POST_VIDEO_INPUT,
 } from '../../linkedin/markup'
-import { parseDocumentDialog, parsePostComposer } from '../../linkedin/postComposer'
+import { parseDocumentDialog, parseEditorDialog, parsePostComposer } from '../../linkedin/postComposer'
 import { composerMarkup, postedMarkup } from '../../linkedin/postFixture'
 import { documentMarkup, editorMarkup } from '../../linkedin/postMediaFixture'
 import { type PostInput, sendPost } from './post'
@@ -35,6 +35,8 @@ type Page = {
    canFetch?: boolean
    // The layout whose buttons have no data-view-name: Post and Done are pressed by their place among the dialog buttons.
    plain?: boolean
+   // The dialog draws no file input at all: its Choose file or Upload from computer button opens a file chooser (staging, 2026-10-27).
+   chooserOnly?: boolean
 }
 
 const setup = (page: Page = {}) => {
@@ -117,13 +119,37 @@ const setup = (page: Page = {}) => {
       attachFiles: vi.fn(async (selector: string, paths: string[]) => {
          const wanted = dialog === 'document' ? POST_DOCUMENT_INPUT : [POST_PHOTO_INPUT, POST_VIDEO_INPUT]
 
-         if (!dialog || noInput || ![wanted].flat().includes(selector)) {
+         if (!dialog || noInput || page.chooserOnly || ![wanted].flat().includes(selector)) {
             return false
          }
 
          calls.push(
             `give ${selector === POST_PHOTO_INPUT ? 'photos' : selector === POST_VIDEO_INPUT ? 'video' : 'document'} ${paths.length}`
          )
+         chosen = true
+
+         return true
+      }),
+      chooseFiles: vi.fn(async (selector: string, index: number, paths: string[]) => {
+         if (selector !== POST_DIALOG_BUTTON || !dialog || noInput) {
+            return false
+         }
+
+         const wanted =
+            dialog === 'document'
+               ? parseDocumentDialog(
+                    documentMarkup({
+                       chosen,
+                       plain: page.plain ?? false,
+                    })
+                 ).chooseIndex
+               : parseEditorDialog(editorMarkup({ nextDisabled: true })).chooseIndex
+
+         if (wanted !== index) {
+            return false
+         }
+
+         calls.push(`choose ${dialog === 'document' ? 'document' : 'photos'} ${paths.length}`)
          chosen = true
 
          return true
@@ -376,6 +402,27 @@ describe('sendPost with files', () => {
          'type box',
          'click post',
       ])
+   })
+
+   it('should give a document through the file chooser of its Choose file button when the dialog draws no file input', async () => {
+      const { send, calls } = setup({
+         plain: true,
+         chooserOnly: true,
+      })
+
+      await expect(send({ files: document })).resolves.toMatchObject({ outcome: 'POSTED' })
+      expect(calls.slice(0, 3)).toEqual(['expand types', 'open document', 'choose document 1'])
+      expect(calls).toContain('click done')
+   })
+
+   it('should give photos through the file chooser of its Upload from computer button when the dialog draws no file input', async () => {
+      const { send, calls } = setup({
+         plain: true,
+         chooserOnly: true,
+      })
+
+      await expect(send({ files: photos })).resolves.toMatchObject({ outcome: 'POSTED' })
+      expect(calls.slice(0, 3)).toEqual(['open media', 'choose photos 2', 'click button 4'])
    })
 
    it('should give a video to the input that takes videos', async () => {

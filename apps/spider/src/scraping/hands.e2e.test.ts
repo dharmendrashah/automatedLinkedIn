@@ -40,6 +40,9 @@ const PAGES: Record<string, string> = {
 <input id="hidden" class="picker" type="file" accept="image/*" multiple style="display:none"
   onchange="document.title = Array.from(this.files).map(file => file.name + ':' + file.size).join(',')">
 </body></html>`,
+   '/chooser': `<!doctype html><html><body style="margin:20px">
+<button type="button" style="width:160px;height:40px" onclick="const input = document.createElement('input'); input.type = 'file'; input.onchange = () => { document.title = Array.from(input.files).map(file => file.name + ':' + file.size).join(',') }; input.click()">Choose file</button>
+</body></html>`,
    '/profile/ada': `<!doctype html><html><body><p id="followed"></p><script>document.getElementById('followed').textContent = 'followed:' + (sessionStorage.getItem('followed') || 'no')</script></body></html>`,
    '/covered': '<!doctype html><html><body>covered page</body></html>',
    '/answers': `<!doctype html><html><body>
@@ -227,6 +230,29 @@ describe('what a hand does on the page', () => {
          expect(html).toContain('three')
          expect((await session.inspect?.())?.title).not.toBe('sent')
       })
+   })
+
+   it('should give files to the file chooser a button opens, when the page makes its file input only when that button is pressed', async () => {
+      const folder = await mkdtemp(join(tmpdir(), 'choose-'))
+      const file = join(folder, 'guide.pdf')
+
+      await writeFile(file, Buffer.from('1234567890'))
+
+      try {
+         await withSession(async session => {
+            await session.goto(`${origin}/chooser`)
+
+            expect(await session.attachFiles?.('input[type="file"]', [file])).toBe(false)
+            expect(await session.chooseFiles?.('button', 1, [file])).toBe(false)
+            expect(await session.chooseFiles?.('button', 0, [file])).toBe(true)
+            expect((await session.inspect?.())?.title).toBe('guide.pdf:10')
+         })
+      } finally {
+         await rm(folder, {
+            recursive: true,
+            force: true,
+         })
+      }
    })
 
    it('should give files to a hidden file input, and say there is none when the selector matches nothing', async () => {
