@@ -39,6 +39,9 @@ export type CamoufoxOptions = {
    headless?: true | 'virtual' | false
    // Limits the fingerprint to these systems. Only a run on a desktop passes it (see `newFingerprint`).
    operatingSystems?: FingerprintOs[]
+   // Changes the launch options just before the browser starts. Only the devtools set it, for a machine whose fonts differ
+   // from the device's.
+   adjustLaunch?: <T extends object>(options: T) => Promise<T>
    // Tests shorten how long closing the page may take; production keeps the default.
    closeTimeoutMs?: number
 }
@@ -208,8 +211,28 @@ class CamoufoxSession implements DetectionSession {
       return this.page.screenshot({ timeout: SNAPSHOT_TIMEOUT_MS })
    }
 
-   public pageHtml() {
-      return this.page.content()
+   // The page as the browser holds it, with what sits in open shadow roots added at the end: LinkedIn draws its composer in one
+   // (recorded 2026-10-26), and `content()` leaves shadow roots out.
+   public async pageHtml() {
+      const html = await this.page.content()
+      const shadow = await this.page.evaluate(() => {
+         const roots: Array<Document | ShadowRoot> = [document]
+         const found: string[] = []
+
+         for (const root of roots) {
+            for (const element of Array.from(root.querySelectorAll('*'))) {
+               if (element.shadowRoot) {
+                  roots.push(element.shadowRoot)
+                  found.push(element.shadowRoot.innerHTML)
+               }
+            }
+         }
+
+         return found.join('')
+      })
+      const end = html.lastIndexOf('</body>')
+
+      return shadow === '' || end < 0 ? html : `${html.slice(0, end)}${shadow}${html.slice(end)}`
    }
 
    // Every link and control that has a box, with where it is, whether something covers it and what surrounds it. With `block`,
@@ -447,7 +470,34 @@ class CamoufoxSession implements DetectionSession {
             width: window.innerWidth,
             height: window.innerHeight,
          }
-         const matches = Array.from(document.querySelectorAll(selector))
+         // The document and every open shadow root in it, so a control inside one is found and hit-tested like any other.
+         const roots: Array<Document | ShadowRoot> = [document]
+
+         for (const root of roots) {
+            for (const host of Array.from(root.querySelectorAll('*'))) {
+               if (host.shadowRoot) {
+                  roots.push(host.shadowRoot)
+               }
+            }
+         }
+
+         const elementAt = (x: number, y: number) => {
+            let on = document.elementFromPoint(x, y)
+
+            while (on?.shadowRoot) {
+               const deeper = on.shadowRoot.elementFromPoint(x, y)
+
+               if (!deeper || deeper === on) {
+                  break
+               }
+
+               on = deeper
+            }
+
+            return on
+         }
+         const matches = roots
+            .flatMap(root => Array.from(root.querySelectorAll(selector)))
             .filter(element => href === undefined || (element instanceof HTMLAnchorElement && element.href === href))
             .filter(element => {
                if (!box) {
@@ -489,7 +539,7 @@ class CamoufoxSession implements DetectionSession {
             }
 
             for (const point of points.sort(() => Math.random() - 0.5)) {
-               const on = document.elementFromPoint(point.x, point.y)
+               const on = elementAt(point.x, point.y)
 
                if (on && (on === element || element.contains(on)) && !(avoid && on.closest(avoid))) {
                   return {
@@ -565,10 +615,22 @@ class CamoufoxSession implements DetectionSession {
       if (bringIntoView) {
          await this.page.evaluate(
             ({ selector: target, nth }) => {
-               document.querySelectorAll(target)[nth]?.scrollIntoView({
-                  block: 'center',
-                  behavior: 'instant',
-               })
+               const roots: Array<Document | ShadowRoot> = [document]
+
+               for (const root of roots) {
+                  for (const host of Array.from(root.querySelectorAll('*'))) {
+                     if (host.shadowRoot) {
+                        roots.push(host.shadowRoot)
+                     }
+                  }
+               }
+
+               roots
+                  .flatMap(root => Array.from(root.querySelectorAll(target)))
+                  [nth]?.scrollIntoView({
+                     block: 'center',
+                     behavior: 'instant',
+                  })
             },
             {
                selector,
@@ -1056,7 +1118,9 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver, DetectionDriv
       storageState,
       exitIp,
    }: OpenOptions): Promise<DetectionSession> {
-      const browser = await this.start(proxy, recorder, () => Camoufox(this.launchOptions(proxy, identity, exitIp)))
+      const browser = await this.start(proxy, recorder, async () =>
+         Camoufox(await this.adjusted(this.launchOptions(proxy, identity, exitIp)))
+      )
 
       try {
          const context = await browser.newContext({
@@ -1084,14 +1148,16 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver, DetectionDriv
       { proxy, recorder, identity, storageState, exitIp }: OpenOptions,
       profileDir: string
    ): Promise<DetectionSession> {
-      const context = await this.start(proxy, recorder, () =>
-         Camoufox({
-            ...this.launchOptions(proxy, identity, exitIp),
-            ...contextOptions(proxy, recorder),
-            persistent_context: true,
-            user_data_dir: profileDir,
-            enable_cache: true,
-         })
+      const context = await this.start(proxy, recorder, async () =>
+         Camoufox(
+            await this.adjusted({
+               ...this.launchOptions(proxy, identity, exitIp),
+               ...contextOptions(proxy, recorder),
+               persistent_context: true,
+               user_data_dir: profileDir,
+               enable_cache: true,
+            })
+         )
       )
 
       try {
@@ -1128,6 +1194,10 @@ export class CamoufoxDriver implements BrowserDriver, LoginDriver, DetectionDriv
       }
 
       return page
+   }
+
+   private adjusted<T extends object>(options: T) {
+      return this.options.adjustLaunch ? this.options.adjustLaunch(options) : Promise.resolve(options)
    }
 
    private launchOptions(

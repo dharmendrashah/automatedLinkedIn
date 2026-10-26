@@ -173,14 +173,16 @@ export const sendPost = async (
    const openByStart = async () => {
       log('The composer did not open; pressing Start a post')
 
+      // The box is covered while the window is still drawing (through a proxy it took 16 s, 2026-10-26), so a press that finds
+      // nothing to press still waits here before the page is left.
       if (await hands.clickSelector(POST_START)) {
          await reader.wait(PAUSES.click)
+      }
 
-         const here = parsePostComposer(await settled(START_LOOKS))
+      const here = parsePostComposer(await settled(START_LOOKS))
 
-         if (here.present) {
-            return here
-         }
+      if (here.present) {
+         return here
       }
 
       await session.acceptConsent(await session.open(`${baseUrl}${POST_FEED_PATH}`))

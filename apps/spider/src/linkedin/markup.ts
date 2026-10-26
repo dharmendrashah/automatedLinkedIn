@@ -59,7 +59,8 @@ export const POST_FEED_PATH = '/feed/'
 export const POST_EDITOR = 'div[contenteditable="true"][componentkey="ShareBox_textEditor"]'
 export const POST_BUTTON = 'button[data-view-name="share-post"]'
 // The box on the feed that opens the composer (seen 2026-10-25); pressed when the compose address draws the feed and no window.
-export const POST_START = 'div[aria-label="Start a post"]:visible >> nth=0'
+// Plain CSS: the hands look for it with `querySelectorAll`.
+export const POST_START = 'div[aria-label="Start a post"]'
 // The chips that say who sees the post and who may comment, and the rows their pop-ups offer. The comment rows have their own names
 // (recorded 2026-10-25). The audience rows were only seen on video, so they are found by their words among the radio rows.
 export const POST_AUDIENCE_CHIP = '[aria-label^="Post to "]'

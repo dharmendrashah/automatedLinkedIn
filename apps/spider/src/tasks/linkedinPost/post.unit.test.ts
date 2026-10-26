@@ -33,6 +33,8 @@ type Page = {
    commentsStuck?: boolean
    // How many looks at the page find the box not drawn yet, as through a slow proxy; a huge number never draws it.
    slowPage?: number
+   // "Start a post" cannot be pressed: the window that is still drawing covers it.
+   startCovered?: boolean
    // The compose address draws the feed with no composer, as on staging (LinkedIn's page failed to hydrate): the composer comes only
    // once "Start a post" is pressed, on this page ('here') or on the feed after it was opened ('feed'), or never.
    needsStart?: 'here' | 'feed' | 'never'
@@ -185,6 +187,10 @@ const setup = (page: Page = {}) => {
          }
 
          if (selector === POST_START) {
+            if (page.startCovered) {
+               return false
+            }
+
             calls.push('start a post')
             started = page.needsStart === 'here' || (page.needsStart === 'feed' && onFeed)
 
@@ -282,6 +288,16 @@ describe('sendPost', () => {
          outcome: 'POSTED',
          link: ACTIVITY,
       })
+   })
+
+   it('should keep looking on the compose page, not leave for the feed, when the composer is slow and covers Start a post', async () => {
+      const { send, context } = setup({
+         slowPage: 9,
+         startCovered: true,
+      })
+
+      await expect(send()).resolves.toMatchObject({ outcome: 'POSTED' })
+      expect(context.visit.mock.calls.map(call => call[0]).slice(0, 2)).toEqual([`${BASE}/sharing/compose`, ACTIVITY])
    })
 
    it('should keep looking when the page cannot be read while it moves to the feed', async () => {
