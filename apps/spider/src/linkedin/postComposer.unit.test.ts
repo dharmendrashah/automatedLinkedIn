@@ -16,6 +16,7 @@ describe('parsePostComposer', () => {
          attachment: false,
          canPost: true,
          busy: false,
+         postIndex: -1,
       })
    })
 
@@ -46,6 +47,36 @@ describe('parsePostComposer', () => {
          busy: true,
          canPost: false,
       })
+   })
+
+   it('should find a Post button that has no name of its own by its words, and say where it is among the dialog buttons', () => {
+      const typed = parsePostComposer(
+         composerMarkup({
+            typed: ['Hello'],
+            plain: true,
+         })
+      )
+      const greyed = parsePostComposer(
+         composerMarkup({
+            plain: true,
+            disabled: true,
+         })
+      )
+
+      expect(typed).toMatchObject({
+         present: true,
+         canPost: true,
+      })
+      expect(typed.postIndex).toBeGreaterThanOrEqual(0)
+      expect(greyed).toMatchObject({
+         present: true,
+         canPost: false,
+      })
+      expect(greyed.postIndex).toBe(typed.postIndex)
+   })
+
+   it('should leave the place of Post out when the button has its own name, which is found by it', () => {
+      expect(parsePostComposer(composerMarkup({ typed: ['Hello'] })).postIndex).toBe(-1)
    })
 
    it('should read the audience LinkedIn names, whatever it is', () => {

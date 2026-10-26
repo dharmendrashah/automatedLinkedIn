@@ -16,6 +16,8 @@ type Composer = {
    disabled?: boolean
    // No box at all (the page is still drawing, or LinkedIn offers no composer).
    noEditor?: boolean
+   // The variant seen on one account on 2026-10-27: the buttons carry no data-view-name, so Post is found by its words.
+   plain?: boolean
 }
 
 export const composerMarkup = ({
@@ -27,6 +29,7 @@ export const composerMarkup = ({
    busy = false,
    disabled = false,
    noEditor = false,
+   plain = false,
 }: Composer = {}) =>
    `<html><body><dialog data-testid="dialog" open><div data-sdui-screen="com.linkedin.sdui.flagshipnav.sharing.ShareCompose">
 <div role="button" tabindex="0" data-view-name="share-view-actor-list"><div aria-label="Dharmendra Soni"><p><span>Dharmendra Soni</span></p></div></div>
@@ -43,7 +46,7 @@ ${attached ? '<figure data-view-name="image"></figure><button type="button" data
 <div id="ShareBoxlinkPreview" componentkey="ShareBoxlinkPreview"></div>
 <button type="button" aria-label="Show Emoji Picker" data-view-name="comment-emoji-picker"></button>
 <button type="button" aria-label="Media" data-view-name="share-sharebox-bottom-bar-media"></button>
-<button type="button" data-view-name="share-post"${busy || disabled ? ' disabled=""' : ''}${busy ? ' aria-busy="true"' : ''}><span>${
+<button type="button"${plain ? ' componentkey="acdd9111-867c-4406-a0e1-6a30738b69f6"' : ' data-view-name="share-post"'}${busy || disabled ? ' disabled=""' : ''}${busy ? ' aria-busy="true"' : ''}><span>${
       busy ? '<div></div>' : '<span>Post</span>'
    }</span></button>
 ${

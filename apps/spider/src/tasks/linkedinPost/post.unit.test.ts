@@ -5,10 +5,12 @@ import {
    POST_BUTTON,
    POST_COMMENTS_CHIP,
    POST_COMMENT_OPTIONS,
+   POST_DIALOG_BUTTON,
    POST_EDITOR,
    POST_OPTION,
    POST_START,
 } from '../../linkedin/markup'
+import { parsePostComposer } from '../../linkedin/postComposer'
 import { composerMarkup, postedMarkup } from '../../linkedin/postFixture'
 import { VisitError } from '../defineTask'
 import { sendPost } from './post'
@@ -47,6 +49,8 @@ type Page = {
    postWorks?: boolean
    // A click on Post does not land.
    clickFails?: boolean
+   // The composer whose buttons have no names, so Post is found by its words and pressed by its place among the dialog buttons.
+   plain?: boolean
    // After Post: the page says the post went at once, after some looks, or never; with its address or without.
    says?: 'now' | 'late' | 'never'
    link?: boolean
@@ -106,6 +110,7 @@ const setup = (page: Page = {}) => {
                  audience,
                  comments,
                  busy: true,
+                 plain: page.plain ?? false,
               })
       }
 
@@ -115,7 +120,21 @@ const setup = (page: Page = {}) => {
          comments,
          popup: open && !page.noRows ? ROWS : [],
          disabled: typed.length === 0 || !postWorks,
+         plain: page.plain ?? false,
       })
+   }
+   // A press on Post, by its name or by its place among the dialog buttons: it lands only when there are words and the button is alive.
+   const pressPost = () => {
+      calls.push('click post')
+
+      if (typed.length === 0 || !postWorks || clickFails) {
+         return false
+      }
+
+      pressed = true
+      posted.push(typed)
+
+      return true
    }
    const browser = {
       pageHtml: vi.fn(async () => html()),
@@ -150,6 +169,17 @@ const setup = (page: Page = {}) => {
          return ''
       }),
       clickNth: vi.fn(async (selector: string, index: number) => {
+         if (selector === POST_DIALOG_BUTTON) {
+            const { postIndex } = parsePostComposer(
+               composerMarkup({
+                  typed,
+                  plain: page.plain ?? false,
+               })
+            )
+
+            return postIndex === index && postIndex >= 0 ? pressPost() : false
+         }
+
          if (selector !== POST_OPTION || !open) {
             return false
          }
@@ -208,16 +238,8 @@ const setup = (page: Page = {}) => {
          }
 
          if (selector === POST_BUTTON) {
-            calls.push('click post')
-
-            if (typed.length === 0 || !postWorks || clickFails) {
-               return false
-            }
-
-            pressed = true
-            posted.push(typed)
-
-            return true
+            // The composer without names has no button to find by one.
+            return page.plain ? false : pressPost()
          }
 
          return false
@@ -376,12 +398,31 @@ describe('sendPost', () => {
       expect(context.markAttempt).not.toHaveBeenCalled()
    })
 
+   it('should post from the composer whose buttons have no names, pressing Post by its place among the dialog buttons', async () => {
+      const { send, calls, posted } = setup({ plain: true })
+
+      await expect(send()).resolves.toEqual({
+         outcome: 'POSTED',
+         link: ACTIVITY,
+      })
+      expect(calls).toEqual(['click box', 'type', 'click post'])
+      expect(posted).toEqual([[TEXT]])
+   })
+
    it('should say there is no composer, and type nothing, when the box never draws', async () => {
       const { send, calls, context } = setup({ slowPage: 1000 })
 
       await expect(send()).resolves.toEqual({ outcome: 'NO_COMPOSER' })
       expect(calls).toEqual(['start a post', 'start a post'])
       expect(context.markAttempt).not.toHaveBeenCalled()
+   })
+
+   it('should keep the page it looked at when there is no composer, so the markup it missed can be read', async () => {
+      const { send, context } = setup({ slowPage: 1000 })
+
+      await send()
+
+      expect(context.attach).toHaveBeenCalledWith('composer-missing.html', expect.any(String), 'text/html')
    })
 
    it('should change the audience and who may comment when the account has others, then post', async () => {
