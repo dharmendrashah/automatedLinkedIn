@@ -57,12 +57,22 @@ const photo = (keyed = true): PostBlock => ({
    ],
 })
 
-const draft = (blocks: PostBlock[], plannedAt: Date | null = null, forUser = userId, forAccount = accountId) =>
+const draft = (
+   blocks: PostBlock[],
+   plannedAt: Date | null = null,
+   forUser = userId,
+   forAccount = accountId,
+   visibility: { audience: 'ANYONE' | 'CONNECTIONS'; comments: 'ANYONE' | 'CONNECTIONS' } = {
+      audience: 'ANYONE',
+      comments: 'ANYONE',
+   }
+) =>
    PrismaService.client.postDraft.create({
       data: {
          userId: forUser,
          accountId: forAccount,
          blocks,
+         ...visibility,
          plannedAt,
          plannedZone: plannedAt ? 'Asia/Kolkata' : null,
       },
@@ -163,6 +173,26 @@ describe('PostPublicationService (database)', () => {
                },
             },
          ])
+      })
+
+      it('should send who can see and who can comment, as the draft had them when it was sent', async () => {
+         const connections = await draft([words('For connections')], null, userId, accountId, {
+            audience: 'CONNECTIONS',
+            comments: 'CONNECTIONS',
+         })
+
+         const made = await PostPublicationService.publish(userId, connections.id)
+
+         expect(requested[0]?.input).toMatchObject({
+            audience: 'CONNECTIONS',
+            comments: 'CONNECTIONS',
+         })
+         await expect(
+            PrismaService.client.postPublication.findUniqueOrThrow({ where: { id: made?.id ?? '' } })
+         ).resolves.toMatchObject({
+            audience: 'CONNECTIONS',
+            comments: 'CONNECTIONS',
+         })
       })
 
       it("should answer null for a draft that is not the owner's", async () => {
@@ -485,10 +515,27 @@ describe('PostPublicationService (database)', () => {
          runId: 'run-1',
          nodeId: 'write',
       }
+      const anyone = {
+         audience: 'ANYONE' as const,
+         comments: 'ANYONE' as const,
+      }
 
       it('should queue the post with its run and block, and start it at once when the account is free', async () => {
-         const made = await PostPublicationService.publishFromBlock(userId, accountId, [words('From a workflow')], link)
+         const made = await PostPublicationService.publishFromBlock(
+            userId,
+            accountId,
+            [words('From a workflow')],
+            link,
+            {
+               audience: 'CONNECTIONS',
+               comments: 'ANYONE',
+            }
+         )
 
+         expect(requested[0]?.input).toMatchObject({
+            audience: 'CONNECTIONS',
+            comments: 'ANYONE',
+         })
          expect(requested).toHaveLength(1)
          await expect(stateOf(made.id)).resolves.toBe('SENDING')
          await expect(PostPublicationService.ofStep(link.runId, link.nodeId)).resolves.toEqual([
@@ -501,19 +548,19 @@ describe('PostPublicationService (database)', () => {
       })
 
       it('should refuse with a sentence when the account is not signed in, the post is empty or the words are a repeat', async () => {
-         await PostPublicationService.publishFromBlock(userId, accountId, [words('Same words')], link)
+         await PostPublicationService.publishFromBlock(userId, accountId, [words('Same words')], link, anyone)
 
          await expect(
-            PostPublicationService.publishFromBlock(userId, accountId, [words('Same words')], link)
+            PostPublicationService.publishFromBlock(userId, accountId, [words('Same words')], link, anyone)
          ).rejects.toThrow('already has a post with these words')
-         await expect(PostPublicationService.publishFromBlock(userId, accountId, [], link)).rejects.toBeInstanceOf(
-            TaskRefusedError
-         )
+         await expect(
+            PostPublicationService.publishFromBlock(userId, accountId, [], link, anyone)
+         ).rejects.toBeInstanceOf(TaskRefusedError)
 
          const pending = await account(userId, 'PENDING')
 
          await expect(
-            PostPublicationService.publishFromBlock(userId, pending.id, [words('Other words')], link)
+            PostPublicationService.publishFromBlock(userId, pending.id, [words('Other words')], link, anyone)
          ).rejects.toThrow('signed in')
       })
 
@@ -529,9 +576,9 @@ describe('PostPublicationService (database)', () => {
             },
          }
 
-         await expect(PostPublicationService.publishFromBlock(userId, accountId, [foreign], link)).rejects.toThrow(
-            'not yours'
-         )
+         await expect(
+            PostPublicationService.publishFromBlock(userId, accountId, [foreign], link, anyone)
+         ).rejects.toThrow('not yours')
          expect(requested).toHaveLength(0)
       })
 

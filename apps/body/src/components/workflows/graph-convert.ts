@@ -3,6 +3,7 @@ import { type Edge, type Node } from '@xyflow/react'
 import { readPostBlocks } from '../posting/post-config'
 import { joinedText } from '../posting/rules'
 import { summaryOf as postSummaryOf } from '../posting/summary'
+import { restrictionText } from '../posting/visibility'
 import { browserTimeZone, describeSchedule } from './schedule-text'
 import { type Block, type ConfigValue, type Graph, type GraphNode, type StepRun } from './types'
 
@@ -330,7 +331,13 @@ export const summaryOf = (block: Block, config: GraphNode['config'], icpName?: s
          return 'Write the post'
       }
 
-      return joinedText(blocks).trim() === '' ? `Posts only ${attachment ?? 'a file'}` : [`Posts “${words}”`, attachment].filter(Boolean).join(' · ')
+      const posts =
+         joinedText(blocks).trim() === ''
+            ? `Posts only ${attachment ?? 'a file'}`
+            : [`Posts “${words}”`, attachment].filter(Boolean).join(' · ')
+      const only = (value: ConfigValue | undefined) => (value === 'CONNECTIONS' ? 'CONNECTIONS' : 'ANYONE')
+
+      return [posts, restrictionText(only(values.audience), only(values.comments))].filter(Boolean).join(' · ')
    }
 
    if ('howMany' in values) {

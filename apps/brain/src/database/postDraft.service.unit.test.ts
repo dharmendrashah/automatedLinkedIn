@@ -61,6 +61,8 @@ const row = (id: string, overrides: Record<string, unknown> = {}) => ({
    id,
    accountId: 'a1',
    blocks,
+   audience: 'ANYONE',
+   comments: 'ANYONE',
    plannedAt: null,
    plannedZone: null,
    createdAt: new Date('2026-10-25T10:00:00.000Z'),
@@ -71,6 +73,8 @@ const row = (id: string, overrides: Record<string, unknown> = {}) => ({
 const input = {
    accountId: 'a1',
    blocks: blocks as never,
+   audience: 'ANYONE' as const,
+   comments: 'ANYONE' as const,
    plannedAt: null,
    plannedZone: null,
 }
@@ -99,6 +103,8 @@ describe('PostDraftService', () => {
                   id: 'd1',
                   accountId: 'a1',
                   blocks,
+                  audience: 'ANYONE',
+                  comments: 'ANYONE',
                   plannedAt: null,
                   plannedZone: null,
                   createdAt: '2026-10-25T10:00:00.000Z',
@@ -161,6 +167,8 @@ describe('PostDraftService', () => {
                userId: 'u1',
                accountId: 'a1',
                blocks,
+               audience: 'ANYONE',
+               comments: 'ANYONE',
                plannedAt: null,
                plannedZone: null,
             },
@@ -192,6 +200,7 @@ describe('PostDraftService', () => {
          const saved = await PostDraftService.save('u1', {
             ...input,
             id: 'd1',
+            audience: 'CONNECTIONS',
             plannedAt: '2026-11-03T09:00:00.000Z',
             plannedZone: 'Asia/Kolkata',
          })
@@ -204,6 +213,8 @@ describe('PostDraftService', () => {
             data: {
                accountId: 'a1',
                blocks,
+               audience: 'CONNECTIONS',
+               comments: 'ANYONE',
                plannedAt: new Date('2026-11-03T09:00:00.000Z'),
                plannedZone: 'Asia/Kolkata',
             },

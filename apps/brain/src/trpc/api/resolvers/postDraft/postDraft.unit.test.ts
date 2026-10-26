@@ -111,7 +111,11 @@ describe('postDraft resolvers', () => {
       mocks.save.mockResolvedValueOnce({ id: 'd1' })
 
       expect(await caller(authed()).save(draft)).toEqual({ id: 'd1' })
-      expect(mocks.save).toHaveBeenCalledWith('u1', draft)
+      expect(mocks.save).toHaveBeenCalledWith('u1', {
+         ...draft,
+         audience: 'ANYONE',
+         comments: 'ANYONE',
+      })
    })
 
    it('should answer NOT_FOUND when the account or the draft is not the caller', async () => {

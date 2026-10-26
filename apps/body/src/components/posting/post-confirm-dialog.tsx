@@ -9,6 +9,10 @@ import {
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
+import type { PostVisibility } from '@automatedLinkedIn/contracts'
+
+import { reachText } from './visibility'
+
 type Props = {
    // What is being confirmed; none keeps the dialog closed.
    mode: 'now' | 'schedule' | undefined
@@ -16,6 +20,8 @@ type Props = {
    // The words in short and what the post carries, as the drafts list shows them.
    words: string
    attachment: string | undefined
+   audience: PostVisibility
+   comments: PostVisibility
    // When it is planned for, for the plan.
    plannedText: string | undefined
    onConfirm: () => void
@@ -23,7 +29,7 @@ type Props = {
 }
 
 // Posting is real: the dialog says so, with the account, the words and the attachment, before anything is sent.
-export const PostConfirmDialog = ({ mode, account, words, attachment, plannedText, onConfirm, onCancel }: Props) => (
+export const PostConfirmDialog = ({ mode, account, words, attachment, audience, comments, plannedText, onConfirm, onCancel }: Props) => (
    <AlertDialog open={mode !== undefined} onOpenChange={open => (open ? undefined : onCancel())}>
       <AlertDialogContent>
          <AlertDialogHeader>
@@ -32,8 +38,8 @@ export const PostConfirmDialog = ({ mode, account, words, attachment, plannedTex
                <div className="grid gap-3">
                   <p>
                      {mode === 'schedule'
-                        ? `It is posted for real as ${account} ${plannedText ?? ''}. You can cancel it until it starts.`
-                        : `It is posted for real as ${account}. Anyone on LinkedIn can see it and comment on it.`}
+                        ? `It is posted for real as ${account} ${plannedText ?? ''}. You can cancel it until it starts. ${reachText(audience, comments)}`
+                        : `It is posted for real as ${account}. ${reachText(audience, comments)}`}
                   </p>
                   <p className="text-foreground rounded-md border px-3 py-2 text-sm" dir="auto">
                      {words}

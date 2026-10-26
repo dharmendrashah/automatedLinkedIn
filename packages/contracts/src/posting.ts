@@ -17,6 +17,9 @@ export const POST_DOCUMENT_BYTES = 20 * 1024 * 1024
 // All the files of one post together (the platform's own limit, owner 2026-10-26).
 export const POST_FILES_TOTAL_BYTES = 20 * 1024 * 1024
 export const POST_DRAFTS_MAX = 200
+// Who can see a post and who can comment on it. Anyone unless the owner says otherwise.
+export const POST_VISIBILITIES = ['ANYONE', 'CONNECTIONS'] as const
+export type PostVisibility = (typeof POST_VISIBILITIES)[number]
 
 export const POST_ONE_ATTACHMENT =
    'A post can hold photos or a video or a document or a link, not more than one of them.'
@@ -290,6 +293,8 @@ export const postDraftInputSchema = z
       id: z.string().min(1).max(64).optional(),
       accountId: z.string().min(1).max(64),
       blocks: postBlocksSchema,
+      audience: z.enum(POST_VISIBILITIES).default('ANYONE'),
+      comments: z.enum(POST_VISIBILITIES).default('ANYONE'),
       plannedAt: z.iso.datetime().nullable(),
       plannedZone: z.string().min(1).max(64).refine(isZone, 'Use a time zone name such as Asia/Kolkata.').nullable(),
    })

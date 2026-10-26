@@ -2,7 +2,13 @@ import { PostFiles } from 'core'
 
 import { type PostDraft } from 'generated/prisma/client'
 
-import { POST_DRAFTS_MAX, type PostBlock, type PostDraftInput, postBlocksSchema } from '@automatedLinkedIn/contracts'
+import {
+   POST_DRAFTS_MAX,
+   type PostBlock,
+   type PostDraftInput,
+   type PostVisibility,
+   postBlocksSchema,
+} from '@automatedLinkedIn/contracts'
 
 import { ConflictError } from './conflict'
 import { orNull } from './linkedInRecord'
@@ -13,6 +19,8 @@ export type StoredPostDraft = {
    id: string
    accountId: string
    blocks: PostBlock[]
+   audience: PostVisibility
+   comments: PostVisibility
    plannedAt: string | null
    plannedZone: string | null
    createdAt: string
@@ -28,6 +36,8 @@ const readDraft = (row: PostDraft): StoredPostDraft | null => {
            id: row.id,
            accountId: row.accountId,
            blocks: blocks.data,
+           audience: row.audience,
+           comments: row.comments,
            plannedAt: row.plannedAt?.toISOString() ?? null,
            plannedZone: row.plannedZone,
            createdAt: row.createdAt.toISOString(),
@@ -85,6 +95,8 @@ export class PostDraftService {
       const data = {
          accountId: input.accountId,
          blocks: input.blocks,
+         audience: input.audience,
+         comments: input.comments,
          plannedAt: input.plannedAt === null ? null : new Date(input.plannedAt),
          plannedZone: input.plannedZone,
       }

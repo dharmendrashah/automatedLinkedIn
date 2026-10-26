@@ -14,6 +14,9 @@ const WAIT_LIMIT_MS = HOUR_MS
 
 const PENDING = new Set(['SCHEDULED', 'QUEUED', 'SENDING'])
 
+// Anyone unless the block says connections only.
+const visibilityOf = (value: unknown) => (value === 'CONNECTIONS' ? 'CONNECTIONS' : 'ANYONE')
+
 const passOn = async (ctx: Context, status: StepResult['status'], message: string): Promise<StepResult> => ({
    ...(await keepItems(ctx, ctx.inputs, ctx.inputs.length)),
    status,
@@ -34,10 +37,19 @@ const makePost = async (ctx: Context, pool: GraphNode, blocks: PostBlock[]) => {
 
    for (const id of idleFirst(usable, await PostPublicationService.lastPosts(usable))) {
       try {
-         await PostPublicationService.publishFromBlock(run.userId, id, blocks, {
-            runId: run.id,
-            nodeId: node.id,
-         })
+         await PostPublicationService.publishFromBlock(
+            run.userId,
+            id,
+            blocks,
+            {
+               runId: run.id,
+               nodeId: node.id,
+            },
+            {
+               audience: visibilityOf(node.config.audience),
+               comments: visibilityOf(node.config.comments),
+            }
+         )
          deps.log.info(`workflow run=${run.id} step=${node.id} asked 1 post`)
 
          return

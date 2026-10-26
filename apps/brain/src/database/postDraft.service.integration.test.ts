@@ -27,6 +27,8 @@ let otherAccountId: string
 const input = (overrides: Partial<Parameters<typeof PostDraftService.save>[1]> = {}) => ({
    accountId,
    blocks,
+   audience: 'ANYONE' as const,
+   comments: 'ANYONE' as const,
    plannedAt: null,
    plannedZone: null,
    ...overrides,
@@ -69,6 +71,33 @@ describe('PostDraftService (database)', () => {
       expect((await PostDraftService.list(userId)).items.map(({ id }) => id)).toEqual([created?.id])
       expect(await PostDraftService.remove(userId, created?.id ?? '')).toBe(true)
       expect(await PostDraftService.get(userId, created?.id ?? '')).toBeNull()
+   })
+
+   it('should keep who can see and who can comment, anyone unless it was changed', async () => {
+      const created = await PostDraftService.save(userId, input())
+
+      expect(created).toMatchObject({
+         audience: 'ANYONE',
+         comments: 'ANYONE',
+      })
+
+      const changed = await PostDraftService.save(
+         userId,
+         input({
+            id: created?.id,
+            audience: 'CONNECTIONS',
+            comments: 'CONNECTIONS',
+         })
+      )
+
+      expect(changed).toMatchObject({
+         audience: 'CONNECTIONS',
+         comments: 'CONNECTIONS',
+      })
+      expect(await PostDraftService.get(userId, created?.id ?? '')).toMatchObject({
+         audience: 'CONNECTIONS',
+         comments: 'CONNECTIONS',
+      })
    })
 
    it('should never let one owner read, change, delete or attach to the drafts and accounts of another', async () => {

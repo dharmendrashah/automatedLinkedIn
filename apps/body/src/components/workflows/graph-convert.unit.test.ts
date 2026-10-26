@@ -244,6 +244,23 @@ describe('Account Actions blocks', () => {
          )
       ).toBe('Posts only Video')
    })
+
+   it('should say when only connections can see or comment on the post', () => {
+      const write = block('account.writePost', 'profile', 'profile')
+      const words = JSON.stringify([
+         {
+            id: 't1',
+            type: 'TEXT',
+            text: 'Hello',
+         },
+      ])
+
+      expect(summaryOf(write, { post: words, audience: 'CONNECTIONS' })).toBe('Posts “Hello” · Seen by connections only')
+      expect(summaryOf(write, { post: words, comments: 'CONNECTIONS' })).toBe(
+         'Posts “Hello” · Comments from connections only'
+      )
+      expect(summaryOf(write, { post: words, audience: 'ANYONE', comments: 'ANYONE' })).toBe('Posts “Hello”')
+   })
 })
 
 describe('Logic blocks', () => {

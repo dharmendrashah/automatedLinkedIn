@@ -1,10 +1,10 @@
 import { Mark } from '@/components/account-profile/mark'
-import { FileText, Globe, MessageSquare, Repeat2, Send, ThumbsUp } from 'lucide-react'
+import { FileText, Globe, MessageSquare, Repeat2, Send, ThumbsUp, Users } from 'lucide-react'
 import { useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
-import type { PostBlock } from '@automatedLinkedIn/contracts'
+import type { PostBlock, PostVisibility } from '@automatedLinkedIn/contracts'
 
 import type { Identity } from './accounts'
 import { formatBytes } from './files'
@@ -19,6 +19,7 @@ type Props = {
    blocks: PostBlock[]
    urls: ReadonlyMap<string, string>
    width: PreviewWidth
+   audience?: PostVisibility
 }
 
 const BLUE = 'text-[#0a66c2]'
@@ -99,7 +100,7 @@ const Action = ({ icon: Icon, label }: { icon: typeof ThumbsUp; label: string })
 // The post as LinkedIn shows it in the feed: who it is from, the words, the attachment, and the buttons under it. It is always in
 // LinkedIn's light look, because that is what readers see. The "see more" cut is an estimate. There are no counts: nothing has been
 // posted, so there is nothing to count.
-export const PostPreview = ({ identity, blocks, urls, width }: Props) => {
+export const PostPreview = ({ identity, blocks, urls, width, audience = 'ANYONE' }: Props) => {
    const [expanded, setExpanded] = useState(false)
    const text = joinedText(blocks)
    const media = mediaBlock(blocks)
@@ -130,7 +131,12 @@ export const PostPreview = ({ identity, blocks, urls, width }: Props) => {
                   </p>
                ) : null}
                <p className="mt-0.5 flex items-center gap-1 text-xs text-neutral-500">
-                  Now · <Globe className="size-3" aria-label="Visible to anyone" role="img" />
+                  Now ·{' '}
+                  {audience === 'CONNECTIONS' ? (
+                     <Users className="size-3" aria-label="Visible to connections only" role="img" />
+                  ) : (
+                     <Globe className="size-3" aria-label="Visible to anyone" role="img" />
+                  )}
                </p>
             </div>
          </div>

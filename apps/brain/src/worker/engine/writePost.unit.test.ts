@@ -63,8 +63,14 @@ const node = (id: string, type: Graph['nodes'][number]['type'], config: Graph['n
    },
 })
 
-const graph = (post = JSON.stringify(BLOCKS)): Graph => ({
-   nodes: [node('pool', 'account.select', { accounts: ['a1', 'a2'] }), node('write', 'account.writePost', { post })],
+const graph = (post = JSON.stringify(BLOCKS), settings: Record<string, string> = {}): Graph => ({
+   nodes: [
+      node('pool', 'account.select', { accounts: ['a1', 'a2'] }),
+      node('write', 'account.writePost', {
+         post,
+         ...settings,
+      }),
+   ],
    edges: [
       {
          from: 'pool',
@@ -78,9 +84,16 @@ const ada = person({
    url: 'https://www.linkedin.com/in/ada',
 })
 
-const context = (overrides: Partial<Context> & { post?: string; tries?: number; startedAt?: Date } = {}) => {
-   const { post, tries = 0, startedAt = new Date(), ...rest } = overrides
-   const built = graph(post)
+const context = (
+   overrides: Partial<Context> & {
+      post?: string
+      tries?: number
+      startedAt?: Date
+      settings?: Record<string, string>
+   } = {}
+) => {
+   const { post, tries = 0, startedAt = new Date(), settings, ...rest } = overrides
+   const built = graph(post, settings)
 
    return {
       run: {
@@ -131,9 +144,40 @@ describe('writePost', () => {
       await expect(writePost(context())).rejects.toBeInstanceOf(Waiting)
 
       expect(mocks.publishFromBlock).toHaveBeenCalledTimes(1)
-      expect(mocks.publishFromBlock).toHaveBeenCalledWith('u1', 'a2', BLOCKS, {
-         runId: 'r1',
-         nodeId: 'write',
+      expect(mocks.publishFromBlock).toHaveBeenCalledWith(
+         'u1',
+         'a2',
+         BLOCKS,
+         {
+            runId: 'r1',
+            nodeId: 'write',
+         },
+         {
+            audience: 'ANYONE',
+            comments: 'ANYONE',
+         }
+      )
+   })
+
+   it('should post with the audience and comments the block says, anyone when it says nothing else', async () => {
+      const connections = {
+         audience: 'CONNECTIONS',
+         comments: 'CONNECTIONS',
+      }
+      const odd = {
+         audience: 'OFF',
+         comments: 'CONNECTIONS',
+      }
+
+      await expect(writePost(context({ settings: connections }))).rejects.toBeInstanceOf(Waiting)
+      expect(mocks.publishFromBlock.mock.calls[0]?.[4]).toEqual(connections)
+
+      mocks.publishFromBlock.mockClear()
+
+      await expect(writePost(context({ settings: odd }))).rejects.toBeInstanceOf(Waiting)
+      expect(mocks.publishFromBlock.mock.calls[0]?.[4]).toEqual({
+         audience: 'ANYONE',
+         comments: 'CONNECTIONS',
       })
    })
 

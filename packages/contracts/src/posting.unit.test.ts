@@ -288,6 +288,35 @@ describe('postDraftInputSchema', () => {
       ).toBe(true)
    })
 
+   it('should let anyone see and comment unless the draft says connections only', () => {
+      expect(postDraftInputSchema.parse(draft)).toMatchObject({
+         audience: 'ANYONE',
+         comments: 'ANYONE',
+      })
+      expect(
+         postDraftInputSchema.parse({
+            ...draft,
+            audience: 'CONNECTIONS',
+            comments: 'CONNECTIONS',
+         })
+      ).toMatchObject({
+         audience: 'CONNECTIONS',
+         comments: 'CONNECTIONS',
+      })
+      expect(
+         postDraftInputSchema.safeParse({
+            ...draft,
+            audience: 'OFF',
+         }).success
+      ).toBe(false)
+      expect(
+         postDraftInputSchema.safeParse({
+            ...draft,
+            comments: 'OFF',
+         }).success
+      ).toBe(false)
+   })
+
    it('should refuse a time without a zone, a zone that does not exist and a time that is not a date', () => {
       expect(
          postDraftInputSchema.safeParse({

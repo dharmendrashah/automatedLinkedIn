@@ -216,6 +216,11 @@ export const TAKES_ANYTHING = new Set<BlockType>([
 // "working block" that Task result and Retry can look at.
 const PASSES_ON = new Set<BlockType>(['logic.wait', 'logic.taskResult', 'logic.retry', 'logic.else'])
 
+const VISIBILITIES = optionsOf([
+   ['ANYONE', 'Anyone'],
+   ['CONNECTIONS', 'Connections only'],
+])
+
 const WAIT_MODES = optionsOf([
    ['exact', 'Exactly'],
    ['between', 'Between'],
@@ -1967,6 +1972,8 @@ const BLOCKS = {
             .max(POST_CONFIG_MAX)
             .default('[]')
             .refine(value => postBlocksOfText(value) !== null, 'is not a post'),
+         audience: oneOf(VISIBILITIES, 'ANYONE'),
+         comments: oneOf(VISIBILITIES, 'ANYONE'),
       }),
       fields: [
          {

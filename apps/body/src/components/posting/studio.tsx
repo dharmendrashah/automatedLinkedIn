@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
-import type { PostBlock } from '@automatedLinkedIn/contracts'
+import type { PostBlock, PostVisibility } from '@automatedLinkedIn/contracts'
 
 import { Composer } from './composer'
 import { PostAs } from './post-as'
@@ -28,6 +28,8 @@ export type Initial = {
    draftId: string | undefined
    accountId: string
    blocks: PostBlock[]
+   audience: PostVisibility
+   comments: PostVisibility
    planned: Planned | null
 }
 
@@ -51,6 +53,8 @@ export const Studio = ({ initial, accounts }: Props) => {
    const [start] = useState(() => composerOf(initial.blocks))
    const writer = usePostWriter(start)
    const { text, attachment, blocks, urls, uploading } = writer
+   const [audience, setAudience] = useState(initial.audience)
+   const [comments, setComments] = useState(initial.comments)
    const [planned, setPlanned] = useState(initial.planned)
    const [width, setWidth] = useState<PreviewWidth>('desktop')
    const [tab, setTab] = useState<'edit' | 'preview'>('edit')
@@ -115,11 +119,13 @@ export const Studio = ({ initial, accounts }: Props) => {
          input: {
             accountId,
             blocks: blocksOf(text, attachment),
+            audience,
+            comments,
             plannedAt: planned?.at ?? null,
             plannedZone: planned?.zone ?? null,
          },
       })
-   }, [text, attachment, planned, accountId, push])
+   }, [text, attachment, audience, comments, planned, accountId, push])
 
    if (!account) {
       return null
@@ -214,7 +220,16 @@ export const Studio = ({ initial, accounts }: Props) => {
             <div className={tab === 'preview' ? 'hidden lg:block' : undefined}>
                <Composer
                   header={
-                     <PostAs identity={identity} accounts={options} accountId={accountId} onAccount={changeAccount} />
+                     <PostAs
+                        identity={identity}
+                        accounts={options}
+                        accountId={accountId}
+                        onAccount={changeAccount}
+                        audience={audience}
+                        comments={comments}
+                        onAudience={setAudience}
+                        onComments={setComments}
+                     />
                   }
                   {...writer.composer}
                   footer={
@@ -277,7 +292,7 @@ export const Studio = ({ initial, accounts }: Props) => {
                      <ToggleGroupItem value="mobile">Mobile</ToggleGroupItem>
                   </ToggleGroup>
                </div>
-               <PostPreview identity={identity} blocks={blocks} urls={urls} width={width} />
+               <PostPreview identity={identity} blocks={blocks} urls={urls} width={width} audience={audience} />
                {identity.known ? null : (
                   <p className="text-muted-foreground text-xs">
                      This account's name and photo are not known yet.{' '}
@@ -302,6 +317,8 @@ export const Studio = ({ initial, accounts }: Props) => {
             account={account.displayName ?? account.email}
             words={summaryOf(blocks).words}
             attachment={summaryOf(blocks).attachment}
+            audience={audience}
+            comments={comments}
             plannedText={planned ? describePlanned(planned.at, planned.zone) : undefined}
             onConfirm={() => void send()}
             onCancel={() => setConfirming(undefined)}

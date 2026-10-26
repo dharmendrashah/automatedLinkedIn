@@ -1182,6 +1182,9 @@ model PostDraft {
   accountId   String
   account     LinkedInAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   blocks      Json            @default("[]")
+  // Who can see the post and who can comment on it.
+  audience    PostVisibility  @default(ANYONE)
+  comments    PostVisibility  @default(ANYONE)
   plannedAt   DateTime?
   plannedZone String?
   createdAt   DateTime        @default(now())
@@ -1189,6 +1192,11 @@ model PostDraft {
 
   @@index([userId, updatedAt])
   @@index([accountId])
+}
+
+enum PostVisibility {
+  ANYONE
+  CONNECTIONS
 }
 
 enum PostPublicationState {
@@ -1213,6 +1221,8 @@ model PostPublication {
   accountId      String
   account        LinkedInAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
   blocks         Json                 @default("[]")
+  audience       PostVisibility       @default(ANYONE)
+  comments       PostVisibility       @default(ANYONE)
   state          PostPublicationState
   // When it is to start (scheduled), in the zone the owner chose; empty for a post sent now.
   scheduledAt    DateTime?

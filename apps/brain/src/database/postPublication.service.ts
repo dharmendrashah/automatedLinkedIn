@@ -28,6 +28,8 @@ const RETURNABLE: PostPublicationState[] = ['SCHEDULED', 'QUEUED', 'FAILED', 'UN
 const DAY_MS = 24 * 60 * 60 * 1000
 const WORDS_SHOWN = 200
 
+type Visibility = Pick<PostPublication, 'audience' | 'comments'>
+
 // Another process took the post first: it stays as that process left it.
 class PostTaken extends Error {}
 
@@ -142,6 +144,8 @@ export class PostPublicationService {
                userId,
                accountId: draft.accountId,
                blocks: parsed.data,
+               audience: draft.audience,
+               comments: draft.comments,
                state: plannedAt ? 'SCHEDULED' : 'QUEUED',
                ...(plannedAt && {
                   scheduledAt: plannedAt,
@@ -177,6 +181,7 @@ export class PostPublicationService {
       accountId: string,
       blocks: PostBlock[],
       link: { runId: string; nodeId: string },
+      settings: Visibility,
       now = Date.now()
    ) {
       if (!ownsKeys(userId, blocks)) {
@@ -190,6 +195,7 @@ export class PostPublicationService {
             userId,
             accountId,
             blocks,
+            ...settings,
             state: 'QUEUED',
             runId: link.runId,
             nodeId: link.nodeId,
@@ -446,8 +452,8 @@ export class PostPublicationService {
             trigger: 'manual',
             input: {
                ...taskInputOf(blocks),
-               audience: 'ANYONE',
-               comments: 'ANYONE',
+               audience: next.audience,
+               comments: next.comments,
             },
             onStart: async (sessionId, tx) => {
                const { count } = await tx.postPublication.updateMany({

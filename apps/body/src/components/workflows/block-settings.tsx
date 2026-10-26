@@ -158,7 +158,17 @@ export const BlockSettings = ({ node, workflowId, problems, icps, workflows, par
       }
 
       if (item.kind === 'post') {
-         return <PostField id={id} value={typeof value === 'string' ? value : '[]'} onChange={next => onChange(item.key, next)} />
+         return (
+            <PostField
+               id={id}
+               value={typeof value === 'string' ? value : '[]'}
+               onChange={next => onChange(item.key, next)}
+               audience={values.audience === 'CONNECTIONS' ? 'CONNECTIONS' : 'ANYONE'}
+               comments={values.comments === 'CONNECTIONS' ? 'CONNECTIONS' : 'ANYONE'}
+               onAudience={next => onChange('audience', next)}
+               onComments={next => onChange('comments', next)}
+            />
+         )
       }
 
       if (item.kind === 'toggle') {

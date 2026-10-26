@@ -3,6 +3,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { PenLine } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
+import type { PostVisibility } from '@automatedLinkedIn/contracts'
+
 import { type Identity } from '../posting/accounts'
 import { Composer } from '../posting/composer'
 import { composerOf } from '../posting/draft'
@@ -10,6 +12,7 @@ import { readPostBlocks } from '../posting/post-config'
 import { PostPreview } from '../posting/post-preview'
 import { summaryOf } from '../posting/summary'
 import { usePostWriter } from '../posting/use-post-writer'
+import { VisibilityPicks } from '../posting/visibility-picks'
 
 // Which account posts is decided when the run reaches the block, so the writer shows no one in particular.
 const ANY_ACCOUNT: Identity = {
@@ -19,7 +22,14 @@ const ANY_ACCOUNT: Identity = {
    known: false,
 }
 
-type Props = {
+type Visibility = {
+   audience: PostVisibility
+   comments: PostVisibility
+   onAudience: (value: PostVisibility) => void
+   onComments: (value: PostVisibility) => void
+}
+
+type Props = Visibility & {
    value: string
    onChange: (next: string) => void
    onClose: () => void
@@ -27,7 +37,7 @@ type Props = {
 
 // The same writer as the Posting page, in a dialog. Every change applies at once, like the other settings of a block; the canvas's
 // Save keeps them. It cannot be closed while a file is still uploading, so the block never keeps a file that has no key.
-const PostWriter = ({ value, onChange, onClose }: Props) => {
+const PostWriter = ({ value, onChange, onClose, audience, comments, onAudience, onComments }: Props) => {
    const writer = usePostWriter(composerOf(readPostBlocks(value)))
    const { uploading } = writer
    const json = JSON.stringify(writer.blocks)
@@ -56,7 +66,17 @@ const PostWriter = ({ value, onChange, onClose }: Props) => {
             </DialogHeader>
             <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]">
                <Composer
-                  header={<p className="text-sm font-medium">From one of the accounts you chose</p>}
+                  header={
+                     <div className="grid gap-1">
+                        <p className="text-sm font-medium">From one of the accounts you chose</p>
+                        <VisibilityPicks
+                           audience={audience}
+                           comments={comments}
+                           onAudience={onAudience}
+                           onComments={onComments}
+                        />
+                     </div>
+                  }
                   {...writer.composer}
                   footer={
                      <p role="status" className="text-muted-foreground text-sm">
@@ -66,7 +86,7 @@ const PostWriter = ({ value, onChange, onClose }: Props) => {
                />
                <div className="grid gap-2">
                   <p className="text-muted-foreground text-xs">Preview. LinkedIn may fold long text a little differently.</p>
-                  <PostPreview identity={ANY_ACCOUNT} blocks={writer.blocks} urls={writer.urls} width="desktop" />
+                  <PostPreview identity={ANY_ACCOUNT} blocks={writer.blocks} urls={writer.urls} width="desktop" audience={audience} />
                </div>
             </div>
             <DialogFooter>
@@ -80,7 +100,7 @@ const PostWriter = ({ value, onChange, onClose }: Props) => {
 }
 
 // The setting of a "Write a post" block: what is written, short, and a button to open the writer.
-export const PostField = ({ id, value, onChange }: { id: string; value: string; onChange: (next: string) => void }) => {
+export const PostField = ({ id, value, onChange, ...visibility }: Visibility & { id: string; value: string; onChange: (next: string) => void }) => {
    const [open, setOpen] = useState(false)
    const blocks = readPostBlocks(value)
    const { words, attachment } = summaryOf(blocks)
@@ -96,7 +116,7 @@ export const PostField = ({ id, value, onChange }: { id: string; value: string; 
                {blocks.length === 0 ? 'Write the post' : 'Edit the post'}
             </Button>
          </div>
-         {open ? <PostWriter value={value} onChange={onChange} onClose={() => setOpen(false)} /> : null}
+         {open ? <PostWriter value={value} onChange={onChange} onClose={() => setOpen(false)} {...visibility} /> : null}
       </div>
    )
 }

@@ -64,6 +64,8 @@ export const PostingCanvas = () => {
             draftId: draft?.id,
             accountId,
             blocks: draft?.blocks ?? [],
+            audience: draft?.audience ?? 'ANYONE',
+            comments: draft?.comments ?? 'ANYONE',
             planned:
                draft?.plannedAt && draft.plannedZone
                   ? {

@@ -596,7 +596,21 @@ describe('Account Actions', () => {
          },
       ])
 
-      expect(blockOf('account.writePost').config.safeParse({}).data).toEqual({ post: '[]' })
+      expect(blockOf('account.writePost').config.safeParse({}).data).toEqual({
+         post: '[]',
+         audience: 'ANYONE',
+         comments: 'ANYONE',
+      })
+      expect(
+         blockOf('account.writePost').config.safeParse({
+            audience: 'CONNECTIONS',
+            comments: 'CONNECTIONS',
+         }).success
+      ).toBe(true)
+      // The writer holds the two choices next to the post, so the form lists the post only.
+      expect(blockOf('account.writePost').fields.map(({ key }) => key)).toEqual(['post'])
+      expect(blockOf('account.writePost').config.safeParse({ audience: 'OFF' }).success).toBe(false)
+      expect(blockOf('account.writePost').config.safeParse({ comments: 'OFF' }).success).toBe(false)
       expect(parse(written)).toBe(true)
       expect(parse('{}')).toBe(false)
       expect(parse('x'.repeat(40_001))).toBe(false)
