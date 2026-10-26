@@ -14,10 +14,12 @@ import {
    POST_DOCUMENT_LINK,
    POST_DOCUMENT_TITLE,
    POST_EDITOR,
+   POST_FEED_PATH,
    POST_MEDIA_BUTTON,
    POST_MORE_TYPES,
    POST_OPTION,
    POST_PHOTO_INPUT,
+   POST_START,
    POST_VIDEO_INPUT,
 } from '../../linkedin/markup'
 import { PACE } from '../../linkedin/pace'
@@ -92,6 +94,9 @@ type Deps = {
 // How many times the page is looked at for the box (it draws a grey skeleton first), for the Post button to come alive once the
 // words are in, and for the message that says the post went, which showed about two seconds after Post in the recording.
 const READY_LOOKS = 20
+// Looks at the compose address before "Start a post" is pressed, and after the first press before the feed is tried.
+const QUICK_LOOKS = 6
+const START_LOOKS = 8
 const ENABLE_LOOKS = 8
 const RESULT_LOOKS = 15
 // Looks that go on once the page said the post went, for its address to show.
@@ -152,15 +157,40 @@ export const sendPost = async (
    }
 
    // The page as it is once the box and the Post button are there; as it is after the last look when they never come.
-   const settled = async () => {
+   const settled = async (looks = READY_LOOKS) => {
       let html = await hands.html()
 
-      for (let look = 0; look < READY_LOOKS && !parsePostComposer(html).present; look += 1) {
+      for (let look = 0; look < looks && !parsePostComposer(html).present; look += 1) {
          await reader.wait(PAUSES.look)
          html = await hands.html()
       }
 
       return html
+   }
+
+   // LinkedIn can draw the feed on the compose address and never open the window (staging, 2026-10-26: a hydration error after the page
+   // drew). A person presses "Start a post"; so does the task, here and then on the feed, before it says there is no composer.
+   const openByStart = async () => {
+      log('The composer did not open; pressing Start a post')
+
+      if (await hands.clickSelector(POST_START)) {
+         await reader.wait(PAUSES.click)
+
+         const here = parsePostComposer(await settled(START_LOOKS))
+
+         if (here.present) {
+            return here
+         }
+      }
+
+      await session.acceptConsent(await session.open(`${baseUrl}${POST_FEED_PATH}`))
+      await reader.wait(PAUSES.open)
+
+      if (await hands.clickSelector(POST_START)) {
+         await reader.wait(PAUSES.click)
+      }
+
+      return parsePostComposer(await settled())
    }
 
    // Whether the Post button comes alive once the words are typed (it is greyed until the page has taken them in).
@@ -458,7 +488,11 @@ export const sendPost = async (
       log('Opened the composer')
       await reader.wait(PAUSES.open)
 
-      let composer = parsePostComposer(await settled())
+      let composer = parsePostComposer(await settled(QUICK_LOOKS))
+
+      if (!composer.present) {
+         composer = await openByStart()
+      }
 
       if (!composer.present) {
          log('The page has no place to write a post')
