@@ -53,6 +53,8 @@ type RequestOptions = {
    changed?: boolean
    // The owner was told it ran a moment ago and wants it anyway.
    confirmed?: boolean
+   // The owner was told the account may not browse now and starts it anyway. Only a manual request can; the time is still booked.
+   startAnyway?: boolean
    // Saved in the same transaction as the session, so the caller's own row and the run exist together or not at all.
    onStart?: (sessionId: string, tx: Prisma.TransactionClient) => Promise<void>
 }
@@ -193,6 +195,7 @@ export class TaskService {
             sessionId: id,
             budget: definition.budget ?? DEFAULT_BUDGET,
             trigger,
+            ...(options.startAnyway && trigger === 'manual' && { override: true }),
          })
          await TASK_HOOKS[task]?.onRequest?.(
             {

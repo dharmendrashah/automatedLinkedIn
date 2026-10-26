@@ -584,6 +584,23 @@ describe('TaskService', () => {
          )
       })
 
+      it('should let the owner start past the browsing time, and never an automatic start', async () => {
+         const start = (trigger: 'manual' | 'automatic') =>
+            TaskService.request({
+               userId: 'u1',
+               task: 'browser-detection',
+               proxyId: 'p1',
+               trigger,
+               startAnyway: true,
+            })
+
+         await start('manual')
+         expect(mocks.reserve).toHaveBeenLastCalledWith(tx, expect.objectContaining({ override: true }))
+
+         await start('automatic')
+         expect(mocks.reserve).toHaveBeenLastCalledWith(tx, expect.not.objectContaining({ override: true }))
+      })
+
       it('should save nothing and publish nothing when the account has no browsing time', async () => {
          mocks.reserve.mockRejectedValue(new TaskRefusedError('This account has used its browsing time for today.'))
 

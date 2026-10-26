@@ -120,13 +120,21 @@ export class BrowseBudgetService {
    // now; otherwise books the estimate under the session.
    public static async reserve(
       tx: Prisma.TransactionClient,
-      input: { accountId: string; sessionId: string; budget: TaskBudget; trigger: TaskTrigger; now?: Date }
+      input: {
+         accountId: string
+         sessionId: string
+         budget: TaskBudget
+         trigger: TaskTrigger
+         now?: Date
+         // The owner starts it despite the refusal (a manual request only): the time is booked all the same.
+         override?: boolean
+      }
    ) {
       if (!BROWSE_BUDGET) {
          return
       }
 
-      const { accountId, sessionId, budget, trigger, now = new Date() } = input
+      const { accountId, sessionId, budget, trigger, now = new Date(), override = false } = input
       const klass = classOf(budget, trigger)
 
       await tx.$queryRaw`SELECT "id" FROM "LinkedInAccount" WHERE "id" = ${accountId} FOR UPDATE`
@@ -182,7 +190,7 @@ export class BrowseBudgetService {
          inFlight: fresh.some(({ settledAt }) => !settledAt),
       })
 
-      if (!verdict.ok) {
+      if (!verdict.ok && !(override && trigger === 'manual')) {
          const long =
             verdict.reason === 'OUTSIDE_OFFICE' || verdict.reason === 'DAY_FULL' || verdict.reason === 'BACKGROUND_FULL'
          const until = long

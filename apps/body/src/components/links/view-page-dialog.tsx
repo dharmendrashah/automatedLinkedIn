@@ -18,6 +18,7 @@ import { accountChoices, isCompanyLink, isProfileLink } from './visit-form'
 
 import { trpc } from '../../trpc'
 import { ConfirmRunDialog } from '../accounts/confirm-run-dialog'
+import { StartAnywayDialog, isBudgetRefusal } from '../accounts/start-anyway-dialog'
 import { TextField } from './record-fields'
 
 export type VisitKind = 'PROFILE' | 'COMPANY'
@@ -65,15 +66,19 @@ export const ViewPageDialog = ({ kind, saved, onClose }: Props) => {
    const [link, setLink] = useState('')
    // The server holds a visit that follows another one of the account too soon; the owner can confirm and go on.
    const [recent, setRecent] = useState<string | null>(null)
+   // The account may not browse now; the owner can go on anyway after saying they understand the risk.
+   const [blocked, setBlocked] = useState<string | null>(null)
    const options = {
       onSuccess: () => {
          void utils.linkedInProfile.list.invalidate()
          void utils.linkedInCompany.list.invalidate()
          void utils.session.list.invalidate()
       },
-      onError: (error: { data?: { code?: string } | null; message: string }) => {
+      onError: (error: { data?: { code?: string; budgetRefusal?: boolean } | null; message: string }) => {
          if (error.data?.code === 'CONFLICT') {
             setRecent(error.message)
+         } else if (isBudgetRefusal(error)) {
+            setBlocked(error.message)
          }
       },
    }
@@ -86,11 +91,12 @@ export const ViewPageDialog = ({ kind, saved, onClose }: Props) => {
    const target = saved ? { id: saved.id } : { link: link.trim() }
    const ready = Boolean(accountId) && (saved !== null || words.isLink(link)) && !visit.isPending
 
-   const ask = (confirmed?: boolean) =>
+   const ask = (confirmed?: boolean, startAnyway?: boolean) =>
       visit.mutate({
          accountId,
          ...target,
          confirmed,
+         startAnyway,
       })
 
    const submit = (event: FormEvent) => {
@@ -172,6 +178,14 @@ export const ViewPageDialog = ({ kind, saved, onClose }: Props) => {
                onConfirm={() => {
                   ask(true)
                   setRecent(null)
+               }}
+            />
+            <StartAnywayDialog
+               message={blocked}
+               onCancel={() => setBlocked(null)}
+               onConfirm={() => {
+                  ask(true, true)
+                  setBlocked(null)
                }}
             />
          </DialogContent>

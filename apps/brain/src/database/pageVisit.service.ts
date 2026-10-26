@@ -132,7 +132,9 @@ export class PageVisitService {
       target: PageVisitTarget,
       confirmed?: boolean,
       // The workflow run and block that ask for it, kept on the visit.
-      from?: { runId: string; nodeId: string }
+      from?: { runId: string; nodeId: string },
+      // The owner starts it although the account may not browse now.
+      startAnyway?: boolean
    ): Promise<{ id: string } | null> {
       const who = await resolve(userId, target)
 
@@ -195,6 +197,7 @@ export class PageVisitService {
          accountId,
          trigger: 'manual',
          confirmed,
+         startAnyway,
          ...addressOf(kind, slug),
          onStart: async (sessionId, tx) => {
             await tx.linkedInPageVisit.create({

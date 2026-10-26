@@ -21,6 +21,8 @@ const runInput = z.object({
       .optional(),
    // The owner saw that it ran a moment ago and wants it again anyway.
    confirmed: z.boolean().optional(),
+   // The owner was told the account may not browse now (its rest, hours or day) and starts it anyway.
+   startAnyway: z.boolean().optional(),
 })
 
 // Every task goes through these two procedures; a new task needs nothing here. Everything is scoped to ctx.user.id.
@@ -41,6 +43,7 @@ export const task = router({
             accountId: input.accountId,
             input: input.input,
             confirmed: input.confirmed,
+            startAnyway: input.startAnyway,
             trigger: 'manual',
          })
       } catch (error) {

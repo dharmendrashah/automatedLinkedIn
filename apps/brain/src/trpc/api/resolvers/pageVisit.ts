@@ -15,6 +15,8 @@ const visitInput = z
       link: z.string().min(1).max(500).optional(),
       // The owner saw that the account viewed a page a moment ago and wants this one anyway.
       confirmed: z.boolean().optional(),
+      // The account may not browse now and the owner starts it anyway.
+      startAnyway: z.boolean().optional(),
    })
    .refine(value => (value.id === undefined) !== (value.link === undefined), 'Name a saved page or a link.')
 
@@ -35,11 +37,16 @@ export const visitProcedure = (kind: keyof typeof NOUN) =>
                  link: input.link ?? '',
               }
             : saved
-      const visit = await PageVisitService.request(ctx.user.id, input.accountId, target, input.confirmed).catch(
-         (error: unknown) => {
-            throw asTrpcError(error)
-         }
-      )
+      const visit = await PageVisitService.request(
+         ctx.user.id,
+         input.accountId,
+         target,
+         input.confirmed,
+         undefined,
+         input.startAnyway
+      ).catch((error: unknown) => {
+         throw asTrpcError(error)
+      })
 
       return found(visit, NOUN[kind])
    })

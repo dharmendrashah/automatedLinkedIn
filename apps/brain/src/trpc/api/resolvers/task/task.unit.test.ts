@@ -99,8 +99,20 @@ describe('task resolvers', () => {
          accountId: undefined,
          input: { word: 'hello' },
          confirmed: undefined,
+         startAnyway: undefined,
          trigger: 'manual',
       })
+   })
+
+   it('should pass on that the owner starts it although the account may not browse now', async () => {
+      mocks.request.mockResolvedValueOnce({ id: 's3' })
+
+      await caller().run({
+         task: 'linkedin-post',
+         startAnyway: true,
+      })
+
+      expect(mocks.request).toHaveBeenLastCalledWith(expect.objectContaining({ startAnyway: true }))
    })
 
    it('should ask for confirmation when the task ran a moment ago, and pass the confirmation on', async () => {
