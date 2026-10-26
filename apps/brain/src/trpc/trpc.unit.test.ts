@@ -7,6 +7,17 @@ const mocks = vi.hoisted(() => ({ provisionUser: vi.fn() }))
 
 vi.mock('./api/identity', () => ({ provisionUser: mocks.provisionUser }))
 
+vi.mock('env', () => ({
+   AUTHENTIK_ISSUER: 'http://localhost:9000/application/o/automatedlinkedin/',
+   AUTHENTIK_CLIENT_ID: 'automatedlinkedin',
+   AUTHENTIK_INTERNAL_URL: '',
+   DATABASE_URL: 'postgresql://localhost:5432/test',
+   CORS_ORIGINS: 'http://localhost:3000',
+   GIT_SHA: 'test',
+   BUILD_TIME: 'test',
+   PORT: 3001,
+}))
+
 const auth = {
    token: 'tok',
    sub: 'sub-1',
