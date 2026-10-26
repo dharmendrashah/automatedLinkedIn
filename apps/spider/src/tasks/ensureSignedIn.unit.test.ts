@@ -5,14 +5,19 @@ import { ensureSignedIn } from './ensureSignedIn'
 
 const BASE = 'https://www.linkedin.com'
 
-// Each address answers with the page it lands on, or with a load failure (a 404 does not load).
-const setup = (pages: Record<string, string | 'fail'>, signIn: () => Promise<boolean> = async () => true) => {
+// Each address answers with the page it lands on (a list is the answers of its successive visits, the last one repeating), or with
+// a load failure (a 404 does not load).
+const setup = (
+   pages: Record<string, string | string[] | 'fail'>,
+   signIn: () => Promise<boolean> = async () => true
+) => {
    const opened: string[] = []
    const lines: string[] = []
    const visit = async (url: string) => {
       opened.push(url)
 
-      const page = pages[url]
+      const answer = pages[url]
+      const page = Array.isArray(answer) ? (answer.length > 1 ? answer.shift() : answer[0]) : answer
 
       if (page === undefined || page === 'fail') {
          throw new VisitError('load', 'The page did not load.')
@@ -21,39 +26,53 @@ const setup = (pages: Record<string, string | 'fail'>, signIn: () => Promise<boo
       return page
    }
    const signer = vi.fn(signIn)
+   const settle = vi.fn(async () => undefined)
 
    return {
       opened,
       lines,
       signer,
+      settle,
       run: () =>
          ensureSignedIn({
             baseUrl: BASE,
             visit,
             signIn: signer,
+            afterSignIn: settle,
             log: line => lines.push(line),
          }),
    }
 }
 
 describe('ensureSignedIn', () => {
-   it('goes on when the feed opens, without signing in', async () => {
-      const { run, signer, opened } = setup({ [`${BASE}/feed/`]: `${BASE}/feed/` })
+   it('goes on when the feed opens, without signing in, waiting or scrolling', async () => {
+      const { run, signer, settle, opened } = setup({ [`${BASE}/feed/`]: `${BASE}/feed/` })
 
       expect(await run()).toBe('READY')
       expect(signer).not.toHaveBeenCalled()
+      expect(settle).not.toHaveBeenCalled()
       expect(opened).toEqual([`${BASE}/feed/`])
    })
 
-   it.each(['/uas/login', '/login', '/checkpoint/challenge/x', '/authwall'])(
-      'signs in when the feed shows %s, and says it did',
+   it.each(['/', '/uas/login', '/login', '/checkpoint/challenge/x', '/authwall'])(
+      'signs in when the feed shows %s, lands on the feed again, then waits and scrolls',
       async path => {
-         const { run, signer } = setup({ [`${BASE}/feed/`]: `${BASE}${path}` })
+         const { run, signer, settle, opened } = setup({ [`${BASE}/feed/`]: [`${BASE}${path}`, `${BASE}/feed/`] })
 
          expect(await run()).toBe('SIGNED_IN')
          expect(signer).toHaveBeenCalledOnce()
+         expect(opened).toEqual([`${BASE}/feed/`, `${BASE}/feed/`])
+         expect(settle).toHaveBeenCalledOnce()
       }
    )
+
+   it('fails, once, when the feed still asks for a sign-in after a sign-in that said it worked', async () => {
+      const { run, signer, settle } = setup({ [`${BASE}/feed/`]: `${BASE}/uas/login` })
+
+      expect(await run()).toBe('FAILED')
+      expect(signer).toHaveBeenCalledOnce()
+      expect(settle).not.toHaveBeenCalled()
+   })
 
    it('looks at the login page when the feed gives a 404, and goes on when it leads to the feed', async () => {
       const { run, signer, opened } = setup({
@@ -68,7 +87,7 @@ describe('ensureSignedIn', () => {
 
    it('signs in when the feed gives a 404 and the login page stays a login page', async () => {
       const { run, signer } = setup({
-         [`${BASE}/feed/`]: 'fail',
+         [`${BASE}/feed/`]: ['fail', `${BASE}/feed/`],
          [`${BASE}/login`]: `${BASE}/login`,
       })
 

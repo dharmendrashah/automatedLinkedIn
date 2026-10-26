@@ -94,7 +94,7 @@ describe('viewCompany', () => {
       }
    )
 
-   it.each(['/feed/', '/in/someone/', '/404/', '/'])(
+   it.each(['/feed/', '/in/someone/', '/404/'])(
       'should say the page is not available, and not wait or scroll, when the address leads to %s',
       async path => {
          const { view, browser } = setup({ lands: `${BASE}${path}` })
@@ -104,8 +104,8 @@ describe('viewCompany', () => {
       }
    )
 
-   it('should say signed out when LinkedIn asks for a sign-in', async () => {
-      const { view } = setup({ lands: `${BASE}/login` })
+   it.each(['/login', '/'])('should say signed out when LinkedIn sends the visit to %s', async path => {
+      const { view } = setup({ lands: `${BASE}${path}` })
 
       await expect(view()).resolves.toBe('SIGNED_OUT')
    })

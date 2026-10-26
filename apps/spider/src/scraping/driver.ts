@@ -52,6 +52,8 @@ export interface LoginSession extends BrowserSession {
    // Only what a recording needs; a fake browser may leave them out.
    screenshot?: () => Promise<Buffer>
    pageHtml?: () => Promise<string>
+   // Where the browser is now, for the end of a run. A fake browser may leave it out.
+   pageUrl?: () => string
    // Waits for the redirects after a submit to end, and says where the browser is. A fake browser may leave it out.
    settled?: () => Promise<string>
 }

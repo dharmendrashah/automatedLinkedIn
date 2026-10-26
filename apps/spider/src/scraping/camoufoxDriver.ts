@@ -211,6 +211,10 @@ class CamoufoxSession implements DetectionSession {
       return this.page.screenshot({ timeout: SNAPSHOT_TIMEOUT_MS })
    }
 
+   public pageUrl() {
+      return this.page.url()
+   }
+
    // The page as the browser holds it, with what sits in open shadow roots added at the end: LinkedIn draws its composer in one
    // (recorded 2026-10-26), and `content()` leaves shadow roots out.
    public async pageHtml() {
