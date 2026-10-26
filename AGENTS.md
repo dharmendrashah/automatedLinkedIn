@@ -18,6 +18,7 @@ The full project guide is [.github/copilot-instructions.md](.github/copilot-inst
 - Run everything from the repo root. Definition of done: `pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build`.
 - Brain imports top-level `src` folders as bare modules through `module-alias`. `./aliases` must load before them in `server.ts`, and a new top-level folder must be added to `importOrder` in `.prettierrc`.
 - Prisma: use `PrismaService.client` only, keep migrations additive, never reset a database with data, and keep every runtime import of brain in `dependencies`.
+- Spider tasks: check every LinkedIn page a task lands on with `isSignedOutPage` or the session's `signedIn` (`apps/spider/src/linkedin/session.ts`) and answer `SIGNED_OUT` on a sign-in page; a task that uses an account must declare `SIGNED_OUT` (the registry test enforces it). Details in [.github/copilot-instructions.md](.github/copilot-instructions.md).
 - Tests sit next to the code as `*.unit.test.ts`, `*.integration.test.ts` (Postgres) or `*.e2e.test.ts` (running server). Write the test first.
 - Local database: `docker compose up -d postgres`. Full stack: `docker compose up -d --build`.
 - Do not push, change remotes, or print tokens or the remote URL unless asked. Conventional commits, and no literal `!` in commit messages.

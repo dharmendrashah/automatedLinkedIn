@@ -73,6 +73,13 @@ Turborepo behaviour differs between versions: read the docs bundled in the insta
 - tRPC: `trpc/trpc.ts` defines `router` and procedures. `trpc/api/router.ts` exports `AppRouter`. Resolvers live in `trpc/api/resolvers/<name>/<name>.ts` with their tests next to them.
 - `apps/body` consumes `AppRouter` as a type by importing brain source directly (`apps/body/src/trpc/trpc.ts`). `apps/body/tsconfig.app.json` maps `trpc`, `trpc/*`, `auth`, `database`, `env` and `generated/*` to brain so brain's bare imports resolve. A new bare alias used by the router chain needs the same mapping.
 
+## Spider tasks and the sign-in page (`apps/spider`)
+
+- Every LinkedIn page a task lands on (a first visit, a click that navigates, a back, a retry) must be checked for the sign-in page before the task reads or clicks anything: `isSignedOutPage(url)` or `createSession(...).signedIn(url)` from `linkedin/session.ts` (login, `/uas/login`, authwall and checkpoint pages). The task then answers its `SIGNED_OUT` verdict; it never fills or clicks a login form (only `linkedin-login` does).
+- A task that uses an account must declare a `SIGNED_OUT` verdict. `tasks/registry.unit.test.ts` fails for a new task that does not. Add a unit test for the task that lands on `/uas/login` and expects `SIGNED_OUT`.
+- Selectors given to the hands (`hands.clickSelector`, `clickNth`) are plain CSS: they run through `querySelectorAll`, so Playwright-only syntax (`:visible`, `>>`) throws and ends the task in ERROR. The driver's `pageHtml()`, `clickSelector` and `clickNth` reach open shadow roots (LinkedIn draws the post composer in one); keep new reads and clicks on those paths. Unit tests mock the hands, so check a new selector against real markup or the e2e test.
+- Devtools (`dev:record`): `reachFeed` (`devtools/signIn.ts`) opens the feed and, on a sign-in page, signs the account in again by itself with the stored password and two-step key (a staging account only; a local profile is open in the browser) and carries on. `replaySteps` stops at a step that lands on a sign-in page.
+
 ## Environment
 
 - Copy `apps/brain/.env.example` to `apps/brain/.env`. Tests load `apps/brain/.env.test` (see `.env.test-example`). Never commit `.env*` files except the examples.

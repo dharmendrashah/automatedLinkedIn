@@ -9,11 +9,12 @@ import {
    mediaBlock,
    postBlocksSchema,
    postFilesOf,
+   taskInputOf,
 } from '@automatedLinkedIn/contracts'
 
 import { POST_TASK } from './linkedInPost.hooks'
 import { keysOf, ownsKeys } from './postFileKeys'
-import { POST_LIMITS, WAIT, budgetWait, contentProblem, limitProblem, taskInputOf } from './postPublication.rules'
+import { POST_LIMITS, WAIT, budgetWait, contentProblem, limitProblem } from './postPublication.rules'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
 import { BrowseBudgetError, TaskBusyError, TaskRefusedError, TaskUnavailableError } from './taskErrors'

@@ -7,6 +7,7 @@ import {
    POST_COMMENT_OPTIONS,
    POST_EDITOR,
    POST_OPTION,
+   POST_START,
 } from '../../linkedin/markup'
 import { composerMarkup, postedMarkup } from '../../linkedin/postFixture'
 import { sendPost } from './post'
@@ -32,6 +33,11 @@ type Page = {
    commentsStuck?: boolean
    // How many looks at the page find the box not drawn yet, as through a slow proxy; a huge number never draws it.
    slowPage?: number
+   // "Start a post" cannot be pressed: the window that is still drawing covers it.
+   startCovered?: boolean
+   // The compose address draws the feed with no composer, as on staging (LinkedIn's page failed to hydrate): the composer comes only
+   // once "Start a post" is pressed, on this page ('here') or on the feed after it was opened ('feed'), or never.
+   needsStart?: 'here' | 'feed' | 'never'
    // The typing reaches the box.
    typingWorks?: boolean
    // The Post button comes alive once there are words.
@@ -52,6 +58,8 @@ const setup = (page: Page = {}) => {
    let comments = page.comments ?? 'Anyone'
    let open = false
    let waiting = page.slowPage ?? 0
+   let started = false
+   let onFeed = false
    let unreadable = page.unreadable ?? 0
    let looks = 0
    let focused = false
@@ -69,6 +77,10 @@ const setup = (page: Page = {}) => {
       if (waiting > 0) {
          waiting -= 1
 
+         return composerMarkup({ noEditor: true })
+      }
+
+      if (page.needsStart && !started) {
          return composerMarkup({ noEditor: true })
       }
 
@@ -174,6 +186,17 @@ const setup = (page: Page = {}) => {
             return true
          }
 
+         if (selector === POST_START) {
+            if (page.startCovered) {
+               return false
+            }
+
+            calls.push('start a post')
+            started = page.needsStart === 'here' || (page.needsStart === 'feed' && onFeed)
+
+            return true
+         }
+
          if (selector === POST_EDITOR) {
             calls.push('click box')
             focused = true
@@ -206,7 +229,11 @@ const setup = (page: Page = {}) => {
    }
    const context = {
       browser,
-      visit: vi.fn(async (_url: string) => at),
+      visit: vi.fn(async (url: string) => {
+         onFeed = url.endsWith('/feed/')
+
+         return at
+      }),
       pause: vi.fn(async () => undefined),
       log: vi.fn(),
       warn: vi.fn(),
@@ -263,6 +290,16 @@ describe('sendPost', () => {
       })
    })
 
+   it('should keep looking on the compose page, not leave for the feed, when the composer is slow and covers Start a post', async () => {
+      const { send, context } = setup({
+         slowPage: 9,
+         startCovered: true,
+      })
+
+      await expect(send()).resolves.toMatchObject({ outcome: 'POSTED' })
+      expect(context.visit.mock.calls.map(call => call[0]).slice(0, 2)).toEqual([`${BASE}/sharing/compose`, ACTIVITY])
+   })
+
    it('should keep looking when the page cannot be read while it moves to the feed', async () => {
       const { send } = setup({ unreadable: 3 })
 
@@ -290,11 +327,39 @@ describe('sendPost', () => {
       expect(calls.filter(call => call === 'type')).toHaveLength(1)
    })
 
+   it('should press Start a post when the compose address shows the feed with no composer, then post', async () => {
+      const { send, calls, context } = setup({ needsStart: 'here' })
+
+      await expect(send()).resolves.toMatchObject({ outcome: 'POSTED' })
+      expect(calls).toEqual(['start a post', 'click box', 'type', 'click post'])
+      // The page is opened once before the post; the next visits are to the post itself and back to the feed.
+      expect(context.visit.mock.calls.map(call => call[0]).slice(0, 2)).toEqual([`${BASE}/sharing/compose`, ACTIVITY])
+   })
+
+   it('should go to the feed and press Start a post there when the first press opens nothing', async () => {
+      const { send, calls, context } = setup({ needsStart: 'feed' })
+
+      await expect(send()).resolves.toMatchObject({ outcome: 'POSTED' })
+      expect(calls).toEqual(['start a post', 'start a post', 'click box', 'type', 'click post'])
+      expect(context.visit.mock.calls.map(call => call[0]).slice(0, 2)).toEqual([
+         `${BASE}/sharing/compose`,
+         `${BASE}/feed/`,
+      ])
+   })
+
+   it('should still say there is no composer, and type nothing, when pressing Start a post never opens it', async () => {
+      const { send, calls, context } = setup({ needsStart: 'never' })
+
+      await expect(send()).resolves.toEqual({ outcome: 'NO_COMPOSER' })
+      expect(calls).toEqual(['start a post', 'start a post'])
+      expect(context.markAttempt).not.toHaveBeenCalled()
+   })
+
    it('should say there is no composer, and type nothing, when the box never draws', async () => {
       const { send, calls, context } = setup({ slowPage: 1000 })
 
       await expect(send()).resolves.toEqual({ outcome: 'NO_COMPOSER' })
-      expect(calls).toEqual([])
+      expect(calls).toEqual(['start a post', 'start a post'])
       expect(context.markAttempt).not.toHaveBeenCalled()
    })
 

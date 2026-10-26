@@ -67,6 +67,16 @@ describe('the registered tasks', () => {
       }
    )
 
+   // Every page such a task lands on is checked with `isSignedOutPage` (or the session's `signedIn`); a new task fails here
+   // until it declares the verdict that check leads to.
+   it('should answer SIGNED_OUT in every task that uses an account, except the sign-in itself', () => {
+      const missing = TASKS.filter(task => task.needs.account && task.name !== 'linkedin-login')
+         .filter(task => !('SIGNED_OUT' in task.verdicts))
+         .map(task => task.name)
+
+      expect(missing).toEqual([])
+   })
+
    it('should announce every task in one catalog message', () => {
       const catalog = catalogOf(TASKS, 'abc1234', new Date('2026-10-13T10:00:00.000Z'))
 

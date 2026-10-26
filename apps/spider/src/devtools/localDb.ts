@@ -81,44 +81,45 @@ const withClient = async <T>(databaseUrl: string, run: (client: Client) => Promi
 
 // Every saved proxy across every account, newest account first. Credentials stay sealed; only the devtools decrypt the
 // one the developer picks.
-export const listSavedProxies = (databaseUrl: string): Promise<SavedProxy[]> =>
-   withClient(databaseUrl, async client => {
-      const result = await client.query<{
-         id: string
-         protocol: string
-         host: string
-         port: number
-         status: string
-         secret: string
-         secretIv: string
-         secretTag: string
-         keyVersion: number
-         accountId: string
-         email: string
-      }>(
-         `select ps.id, ps."linkedInAccountId" as "accountId", ps.protocol, ps.host, ps.port, ps.status, ps.secret, ps."secretIv", ps."secretTag",
+export const selectProxies = async (client: Client): Promise<SavedProxy[]> => {
+   const result = await client.query<{
+      id: string
+      protocol: string
+      host: string
+      port: number
+      status: string
+      secret: string
+      secretIv: string
+      secretTag: string
+      keyVersion: number
+      accountId: string
+      email: string
+   }>(
+      `select ps.id, ps."linkedInAccountId" as "accountId", ps.protocol, ps.host, ps.port, ps.status, ps.secret, ps."secretIv", ps."secretTag",
                  ps."keyVersion", la.email
             from "ProxyServer" ps
             join "LinkedInAccount" la on la.id = ps."linkedInAccountId"
            order by la.email, ps."createdAt"`
-      )
+   )
 
-      return result.rows.map(row => ({
-         id: row.id,
-         accountId: row.accountId,
-         accountEmail: row.email,
-         protocol: row.protocol,
-         host: row.host,
-         port: row.port,
-         status: row.status,
-         secret: {
-            ciphertext: row.secret,
-            iv: row.secretIv,
-            tag: row.secretTag,
-            key_version: row.keyVersion,
-         },
-      }))
-   })
+   return result.rows.map(row => ({
+      id: row.id,
+      accountId: row.accountId,
+      accountEmail: row.email,
+      protocol: row.protocol,
+      host: row.host,
+      port: row.port,
+      status: row.status,
+      secret: {
+         ciphertext: row.secret,
+         iv: row.secretIv,
+         tag: row.secretTag,
+         key_version: row.keyVersion,
+      },
+   }))
+}
+
+export const listSavedProxies = (databaseUrl: string) => withClient(databaseUrl, selectProxies)
 
 export type SavedAccount = {
    id: string
@@ -128,31 +129,32 @@ export type SavedAccount = {
 }
 
 // Every LinkedIn account, with its credentials still sealed: they are opened by the same code the worker uses.
-export const listSavedAccounts = (databaseUrl: string): Promise<SavedAccount[]> =>
-   withClient(databaseUrl, async client => {
-      const result = await client.query<{
-         id: string
-         email: string
-         status: string
-         secret: string
-         secretIv: string
-         secretTag: string
-         keyVersion: number
-      }>(
-         `select id, email, status, secret, "secretIv", "secretTag", "keyVersion"
+export const selectAccounts = async (client: Client): Promise<SavedAccount[]> => {
+   const result = await client.query<{
+      id: string
+      email: string
+      status: string
+      secret: string
+      secretIv: string
+      secretTag: string
+      keyVersion: number
+   }>(
+      `select id, email, status, secret, "secretIv", "secretTag", "keyVersion"
             from "LinkedInAccount"
            order by email`
-      )
+   )
 
-      return result.rows.map(row => ({
-         id: row.id,
-         email: row.email,
-         status: row.status,
-         secret: {
-            ciphertext: row.secret,
-            iv: row.secretIv,
-            tag: row.secretTag,
-            key_version: row.keyVersion,
-         },
-      }))
-   })
+   return result.rows.map(row => ({
+      id: row.id,
+      email: row.email,
+      status: row.status,
+      secret: {
+         ciphertext: row.secret,
+         iv: row.secretIv,
+         tag: row.secretTag,
+         key_version: row.keyVersion,
+      },
+   }))
+}
+
+export const listSavedAccounts = (databaseUrl: string) => withClient(databaseUrl, selectAccounts)

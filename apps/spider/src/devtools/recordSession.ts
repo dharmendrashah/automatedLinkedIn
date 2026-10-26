@@ -18,13 +18,15 @@ import { buildCamoufoxOptions, nativeOf, newFingerprint } from '../scraping/camo
 import { openCredentials } from '../tasks/credentials'
 import { TASK_NAME as LOGIN_TASK } from '../tasks/linkedinLogin'
 import { hostOs } from './hostOs'
-import { type SavedAccount, type SavedProxy, listSavedAccounts } from './localDb'
+import { type SavedAccount, type SavedProxy } from './localDb'
 import { type NetworkEntry, networkEntry } from './networkLog'
 import { type DevStepEntry, attachPageRecorder } from './pageRecorder'
-import { handleInterrupt, prompt } from './prompt'
+import { ask, handleInterrupt, prompt } from './prompt'
 import { parseRecordCommand, snapshotName, stepSnapshotName } from './recordCommands'
-import { createRunEnvironment } from './runEnvironment'
+import { type RunSeed, createRunEnvironment } from './runEnvironment'
+import { reachFeed } from './signIn'
 import { renderSkeleton } from './skeleton'
+import { type ReplayStep, playwrightReplayPage, replaySteps } from './staging/replay'
 
 const FEED_URL = 'https://www.linkedin.com/feed/'
 const MOST_REQUESTS = 5000
@@ -72,26 +74,36 @@ const openAnonymous = async (proxy: ProxyConfig | undefined, videoDir: string): 
 type AccountOptions = {
    proxy: ProxyConfig | undefined
    picked: SavedProxy
-   databaseUrl: string
+   listAccounts: () => Promise<SavedAccount[]>
    encryptionKey: string
    outputRoot: string
+   seed?: RunSeed
    // The recording's folder name under outputRoot; the run files go in its `run` folder.
    folder: string
 }
 
 // The account behind the chosen proxy, in the browser profile its daily visits use: the same device, language, timezone and
 // session, so what is recorded is what the worker will see. A profile that does not exist yet is made by the sign-in first.
-const openAccount = async ({ proxy, picked, databaseUrl, encryptionKey, outputRoot, folder }: AccountOptions) => {
-   const account = (await listSavedAccounts(databaseUrl)).find(found => found.id === picked.accountId)
+const openAccount = async ({
+   proxy,
+   picked,
+   listAccounts,
+   encryptionKey,
+   outputRoot,
+   seed,
+   folder,
+}: AccountOptions) => {
+   const account = (await listAccounts()).find(found => found.id === picked.accountId)
 
    if (!account) {
-      throw new Error('The account of this proxy is not in the local database.')
+      throw new Error('The account of this proxy is not in the database.')
    }
 
    const env = createRunEnvironment({
       proxy,
       encryptionKey,
       outputRoot,
+      seed,
    })
    const profile = await env.profiles.checkout(account.id)
 
@@ -124,6 +136,9 @@ const openAccount = async ({ proxy, picked, databaseUrl, encryptionKey, outputRo
       store: env.store,
    }).catch(() => undefined)
    const credentials = openCredentials(account.secret, encryptionKey)
+   // The worker's own browser may hold its login only in the saved session (a login cookie without an expiry is not kept in
+   // a profile), so the pulled session goes in too.
+   const saved = seed ? await env.sessions.load(account.id) : undefined
 
    for (const secret of [
       proxy?.username,
@@ -144,6 +159,7 @@ const openAccount = async ({ proxy, picked, databaseUrl, encryptionKey, outputRo
          identity: device,
          exitIp: exit.ip,
          profileDir: profile.dir,
+         ...(saved && { storageState: saved }),
       })
       .catch((error: unknown) => {
          throw new Error(
@@ -177,21 +193,50 @@ const openAccount = async ({ proxy, picked, databaseUrl, encryptionKey, outputRo
    return {
       opened,
       account,
+      // A pulled copy of a profile can be signed in again in a run of its own; a profile on this computer is open in this
+      // browser, so it cannot (see `reachFeed`).
+      ...(seed && {
+         signIn: async () => {
+            const login = env.tasks.find(found => found.name === LOGIN_TASK)
+
+            if (!login || (await env.runOnce(login, {}, account))?.status !== 'SUCCEEDED') {
+               return false
+            }
+
+            const saved = await env.sessions.load(account.id)
+
+            if (!saved) {
+               return false
+            }
+
+            await opened.context.addCookies(saved.cookies)
+
+            return true
+         },
+      }),
    }
 }
 
 // Opened after the recorder is attached: its script only reaches documents loaded from then on, so a page loaded before would
 // record no click.
-const visitFeed = async (page: Page, account: SavedAccount) => {
-   await page.goto(FEED_URL, { waitUntil: 'domcontentloaded' }).catch(() => undefined)
+const visitFeed = async (page: Page, account: SavedAccount, signIn?: () => Promise<boolean>) => {
+   const onFeed = await reachFeed({
+      page: {
+         goto: async url => {
+            await page.goto(url, { waitUntil: 'domcontentloaded' }).catch(() => undefined)
+         },
+         url: () => page.url(),
+      },
+      feedUrl: FEED_URL,
+      signIn,
+      log: console.log,
+   })
 
-   const { pathname } = new URL(page.url())
+   if (onFeed) {
+      console.log(`\nSigned in as ${account.email}, with the device and profile its daily visits use.`)
+   }
 
-   console.log(
-      pathname.startsWith('/feed')
-         ? `\nSigned in as ${account.email}, with the device and profile its daily visits use.`
-         : `\nLinkedIn showed ${pathname} instead of the feed: the session may need a sign-in by hand.`
-   )
+   return onFeed
 }
 
 // Stops on Enter, Ctrl+C, the last browser window closing, or the browser quitting; `s` then Enter keeps the page as it is. A
@@ -290,11 +335,23 @@ export type RecordOptions = {
    picked?: SavedProxy
    name: string
    outputRoot: string
-   databaseUrl: string
+   listAccounts: () => Promise<SavedAccount[]>
    encryptionKey: string
+   seed?: RunSeed
+   // The steps of a staging run to repeat once the feed is open; the session then goes on as a recording.
+   replay?: ReplayStep[]
 }
 
-export const recordSession = async ({ proxy, picked, name, outputRoot, databaseUrl, encryptionKey }: RecordOptions) => {
+export const recordSession = async ({
+   proxy,
+   picked,
+   name,
+   outputRoot,
+   listAccounts,
+   encryptionKey,
+   seed,
+   replay,
+}: RecordOptions) => {
    if (!picked) {
       console.log(
          '\nNo proxy, so no account: this opens a plain browser. Pick an account\u2019s proxy to record as that account.'
@@ -307,9 +364,10 @@ export const recordSession = async ({ proxy, picked, name, outputRoot, databaseU
       ? await openAccount({
            proxy,
            picked,
-           databaseUrl,
+           listAccounts,
            encryptionKey,
            outputRoot,
+           seed,
            folder,
         })
       : undefined
@@ -363,7 +421,24 @@ export const recordSession = async ({ proxy, picked, name, outputRoot, databaseU
       })
 
       if (found) {
-         await visitFeed(opened.page, found.account)
+         const onFeed = await visitFeed(opened.page, found.account, found.signIn)
+
+         if (replay && !onFeed) {
+            console.log('\nNot repeating the steps while signed out. Sign in, then run it again.')
+         } else if (replay) {
+            const outcome = await replaySteps({
+               steps: replay,
+               page: playwrightReplayPage(opened.page),
+               ask,
+               log: console.log,
+            })
+
+            console.log(
+               outcome.stoppedAt === undefined
+                  ? `\nRepeated ${outcome.done} step(s).`
+                  : `\nRepeated ${outcome.done} step(s); the page is left as it is at the step that stopped.`
+            )
+         }
       } else {
          await opened.page.goto('about:blank')
       }
