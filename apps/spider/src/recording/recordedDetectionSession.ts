@@ -63,24 +63,50 @@ export class RecordedDetectionSession extends RecordedSession implements Detecti
       }
 
       if (clickSelector) {
-         this.clickSelector = selector => clickSelector.call(detector, selector)
+         this.clickSelector = selector =>
+            this.step(
+               'clickSelector',
+               { selector },
+               () => clickSelector.call(detector, selector),
+               found => ({ found })
+            )
       }
 
       if (clickNth) {
+         // A list can be clicked through row by row, so these steps leave no picture each.
          this.clickNth = (selector, index, avoid, bringIntoView) =>
-            clickNth.call(detector, selector, index, avoid, bringIntoView)
+            this.step(
+               'clickNth',
+               {
+                  selector,
+                  index,
+               },
+               () => clickNth.call(detector, selector, index, avoid, bringIntoView),
+               found => ({ found }),
+               false
+            )
       }
 
       if (scrollOver) {
          this.scrollOver = (selector, pixels) => scrollOver.call(detector, selector, pixels)
       }
 
+      // What was typed is never noted, only how much.
       if (typeKeys) {
-         this.typeKeys = text => typeKeys.call(detector, text)
+         this.typeKeys = text => this.step('typeKeys', { length: text.length }, () => typeKeys.call(detector, text))
       }
 
       if (attachFiles) {
-         this.attachFiles = (selector, paths) => attachFiles.call(detector, selector, paths)
+         this.attachFiles = (selector, paths) =>
+            this.step(
+               'attachFiles',
+               {
+                  selector,
+                  count: paths.length,
+               },
+               () => attachFiles.call(detector, selector, paths),
+               found => ({ found })
+            )
       }
 
       if (fetchFile) {

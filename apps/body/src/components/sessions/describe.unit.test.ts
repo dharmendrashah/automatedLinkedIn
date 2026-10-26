@@ -210,6 +210,15 @@ describe('describeStep', () => {
       expect(describeStep(step({ call: 'addCookies' }))).toBe('Loaded the saved browser session')
    })
 
+   it('should describe a click on a place, typing into the page and files given to it', () => {
+      expect(describeStep(step({ call: 'clickSelector', found: true }))).toBe('Clicked an element')
+      expect(describeStep(step({ call: 'clickSelector', found: false }))).toBe('Looked for an element to click and it was not there')
+      expect(describeStep(step({ call: 'clickNth', found: true }))).toBe('Clicked an element of a list')
+      expect(describeStep(step({ call: 'typeKeys', length: 12 }))).toBe('Typed 12 characters into the page')
+      expect(describeStep(step({ call: 'attachFiles', count: 1, found: true }))).toBe('Gave 1 file to the page')
+      expect(describeStep(step({ call: 'attachFiles', count: 2, found: false }))).toBe('Found nowhere to give the files')
+   })
+
    it('should still say something for a call it does not know', () => {
       expect(describeStep(step({ call: 'teleport' }))).toBe('teleport')
    })

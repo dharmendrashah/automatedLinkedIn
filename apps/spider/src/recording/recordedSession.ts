@@ -7,7 +7,7 @@ import { type Recorder, type StepCall, type StepEntry } from './recorder'
 type StepRecorder = Pick<Recorder, 'addStep' | 'log' | 'addSecret' | 'saveScreenshot' | 'saveFailureHtml'>
 
 type Details = Partial<
-   Pick<StepEntry, 'selector' | 'target' | 'urlBefore' | 'urlAfter' | 'length' | 'found' | 'count' | 'pixels'>
+   Pick<StepEntry, 'selector' | 'target' | 'urlBefore' | 'urlAfter' | 'length' | 'found' | 'count' | 'pixels' | 'index'>
 >
 
 // Wraps a browser session and notes every call it gets: what it was, how long it took, how it ended, and a

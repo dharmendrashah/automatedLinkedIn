@@ -75,6 +75,10 @@ Turborepo behaviour differs between versions: read the docs bundled in the insta
 
 ## Spider tasks and the sign-in page (`apps/spider`)
 
+- Every new or changed spider task follows the `spider-task-writer` skill (`.github/skills/spider-task-writer/SKILL.md`). Copy its checklist (`assets/checklist.md`) into the task's plan under Approach and do not mark the plan `done` until every box is ticked or marked not applicable with a reason. The skill also says how to read a failed run (`result.json`, `logs.json`, `timeline.json`, `files/`, a contact sheet of `video.webm`).
+- Every account task keeps one lifecycle (details in the skill): load the account's session, device and browser profile, land on `/feed/`, sign in once with the two-step key if the landing is `/`, `/login` or another sign-in page, land on `/feed/` again, wait 5 s and scroll (after a sign-in only), run the task, keep the final picture and page, save the session and profile, and record steps, network, logs, screenshots, video, input and result. The runner owns it; a task does not repeat it. Only `browser-detection` (no account) and `linkedin-login` (signs in itself) are outside the sign-in part of it.
+- Verify every selector and page shape against the real page (a devtools snapshot or a kept run page) before writing it, and note the account and date. LinkedIn serves different layouts to different accounts, so keep fixtures for each layout seen. Anything not verified is listed as unverified in the plan and in `MEMORY.md`, and the task keeps the page it could not read (`attach` with `compactHtml`).
+- An irreversible step (typing a post, Post, Send) asks `markAttempt()` just before it, happens at most once, and ends in `UNKNOWN`, never a retry, when the outcome is unclear.
 - Every LinkedIn page a task lands on (a first visit, a click that navigates, a back, a retry) must be checked for the sign-in page before the task reads or clicks anything: `isSignedOutPage(url)` or `createSession(...).signedIn(url)` from `linkedin/session.ts` (login, `/uas/login`, authwall and checkpoint pages). The task then answers its `SIGNED_OUT` verdict; it never fills or clicks a login form (only `linkedin-login` does).
 - A task that uses an account must declare a `SIGNED_OUT` verdict. `tasks/registry.unit.test.ts` fails for a new task that does not. Add a unit test for the task that lands on `/uas/login` and expects `SIGNED_OUT`.
 - Every account task starts from the feed: the runner opens `/feed/` before `task.run` (`tasks/ensureSignedIn.ts`, wired by `RunnerDeps.reauth` in the worker and the devtools). A sign-in page there, or a feed that does not open and a `/login` that stays a login page, makes it sign in again once with the stored password and two-step key; a failed sign-in answers `SIGNED_OUT` and the task never runs, and a good one keeps the session and the profile for the next run. A task whose own first address answers 404 must not end in `ERROR` (the post task goes on from the feed).
@@ -141,6 +145,12 @@ Turborepo behaviour differs between versions: read the docs bundled in the insta
 | Toolchain Engineer | pnpm, Turborepo, TypeScript, lint, tests, Docker, CI |
 | Platform Engineer | Kubernetes-only deployment, platform agnostic (AWS and GCP knowledge) |
 | User - GTM Engineer, User - Agency Owner, User - Founder, User - Sales Rep, User - Platform Admin | Read-only reviewers that judge plans, flows and screens from a real user's seat (persona agents, not engineers); they never name the data supplier |
+
+## Skills (`.github/skills`)
+
+| Skill | Use it for |
+| --- | --- |
+| `spider-task-writer` | Writing, changing, reviewing or debugging a spider task: procedure, hard rules, reading a failed run, and the checklist to copy into the task's plan |
 
 ## Git and safety
 

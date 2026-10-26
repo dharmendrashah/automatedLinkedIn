@@ -398,6 +398,26 @@ describe('Recorder in the task layout', () => {
       vi.restoreAllMocks()
    })
 
+   it('should keep the final picture of a run even when the pictures of the steps filled the allowance', async () => {
+      const { recorder } = start({
+         kind: 'browser-detection',
+         prefix: PREFIX,
+      })
+      const run = await recorder
+
+      for (let n = 1; n <= 40; n += 1) {
+         await run.saveScreenshot(`${String(n).padStart(2, '0')}-goto.png`, Buffer.from('png'))
+      }
+
+      await expect(run.saveScreenshot('41-goto.png', Buffer.from('png'))).resolves.toBe(false)
+      await expect(run.saveScreenshot('final.png', Buffer.from('png'), true)).resolves.toBe(true)
+
+      await run.finish({ failed: false })
+
+      expect(run.artifacts().map(file => file.name)).toContain('final.png')
+      expect(run.artifacts().map(file => file.name)).not.toContain('41-goto.png')
+   })
+
    it('should write under the prefix it was given and list every file it saved, with its kind and size', async () => {
       const { recorder, store } = start({
          kind: 'browser-detection',
