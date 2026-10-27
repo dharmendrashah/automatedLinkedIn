@@ -1,6 +1,6 @@
 # Staging: browse runs killed for memory, and sessions left "In progress"
 
-- Status: in progress
+- Status: done
 - Created: 2026-10-28
 - Locked by user: yes, 2026-10-28 ("go ahead" to fixes 1, 2 and 4)
 
@@ -47,4 +47,8 @@ Open questions: none.
 
 ## Outcome
 
+<<<<<<< HEAD
 Filled in when done.
+=======
+Shipped fixes 1, 2 and 4 as planned; lint, ts:check, unit tests and build pass. Not run on staging yet. Follow-up: fix 3 (feed reader for the layout without `data-view-name`) after new recordings.
+>>>>>>> fix/spider-browse-oom

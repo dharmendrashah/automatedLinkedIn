@@ -240,6 +240,13 @@ describe('CamoufoxDriver', () => {
       expect(mocks.camoufox).toHaveBeenCalledWith(expect.objectContaining(prefs))
    })
 
+   it('should not let a video play by itself, which ran the worker out of memory on a feed', async () => {
+      await driver.open()
+
+      const prefs = { firefox_user_prefs: expect.objectContaining({ 'media.autoplay.default': 5 }) }
+      expect(mocks.camoufox).toHaveBeenCalledWith(expect.objectContaining(prefs))
+   })
+
    it('should start the browser on a virtual display when that is set', async () => {
       await new CamoufoxDriver({
          actionTimeoutMs: 1000,
@@ -565,6 +572,24 @@ describe('CamoufoxDriver', () => {
          await expect(session.scrollBy(-300)).resolves.toBe(true)
          expect(mocks.page.mouse.wheel).toHaveBeenCalledWith(0, -300)
          expect(mocks.page.evaluate).not.toHaveBeenCalledWith(expect.any(Function), -300)
+      })
+
+      it('should fail a scroll of a page that does not answer, instead of waiting for the end of the task', async () => {
+         vi.useFakeTimers()
+
+         try {
+            const session = await driver.open()
+
+            mocks.page.evaluate.mockImplementation(async () => reading(0))
+            mocks.page.mouse.wheel.mockImplementationOnce(() => new Promise<undefined>(() => undefined))
+
+            const scrolled = expect(session.scrollBy(600)).rejects.toThrow('The page did not answer a scroll in time')
+
+            await vi.advanceTimersByTimeAsync(30_000)
+            await scrolled
+         } finally {
+            vi.useRealTimers()
+         }
       })
    })
 
