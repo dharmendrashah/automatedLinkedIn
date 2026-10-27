@@ -105,6 +105,8 @@ const LINK_LOOKS = 3
 // are at most 20 MB, so about two minutes is generous.
 const DIALOG_LOOKS = 10
 const UPLOAD_LOOKS = 80
+// How many times Done is pressed on the document dialog before it is given up on.
+const DONE_PRESSES = 5
 // The title LinkedIn takes for a document is at most this many characters.
 const TITLE_MAX = 58
 // The title is required, so a file whose name leaves none gets this one.
@@ -422,6 +424,7 @@ export const sendPost = async (
       }
 
       let titled = false
+      let presses = 0
 
       for (let look = 0; look < UPLOAD_LOOKS; look += 1) {
          const dialog = parseDocumentDialog(await hands.html())
@@ -433,6 +436,15 @@ export const sendPost = async (
                outcome: 'FAILED',
                why: 'FILE_REFUSED',
             }
+         }
+
+         if (presses > 0 && !dialog.open) {
+            return (await shown())
+               ? undefined
+               : {
+                    outcome: 'FAILED',
+                    why: 'ATTACH',
+                 }
          }
 
          // The title is required and Done stays greyed until it is typed, so it comes first, as soon as its field is drawn.
@@ -448,15 +460,32 @@ export const sendPost = async (
             continue
          }
 
+         // A press of Done can be lost (staging, 2026-10-27: the dialog stayed open with Done alive), and Done is safe to press again.
          if (dialog.ready) {
-            return (dialog.doneIndex >= 0
-               ? await hands.clickNth(POST_DIALOG_BUTTON, dialog.doneIndex, '')
-               : await hands.clickSelector(POST_DOCUMENT_DONE)) && (await shown())
-               ? undefined
-               : {
-                    outcome: 'FAILED',
-                    why: 'ATTACH',
-                 }
+            if (presses === DONE_PRESSES) {
+               log('The document dialog stayed open after Done')
+
+               return {
+                  outcome: 'FAILED',
+                  why: 'ATTACH',
+               }
+            }
+
+            presses += 1
+
+            if (
+               !(dialog.doneIndex >= 0
+                  ? await hands.clickNth(POST_DIALOG_BUTTON, dialog.doneIndex, '')
+                  : await hands.clickSelector(POST_DOCUMENT_DONE))
+            ) {
+               return {
+                  outcome: 'FAILED',
+                  why: 'ATTACH',
+               }
+            }
+
+            await reader.wait(PAUSES.preview)
+            continue
          }
 
          await reader.wait(PAUSES.look)
