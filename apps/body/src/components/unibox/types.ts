@@ -13,6 +13,8 @@ export type UniboxAccount = {
    imageUrl?: string
    // When the worker last read this account's messages.
    lastReadAt?: number
+   // When the next automatic read of this account's messages is due, as an ISO time.
+   nextReadAt?: string
 }
 
 export type AttachmentKind = 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FILE' | 'LINK'
@@ -64,7 +66,15 @@ export type UniboxConversation = {
    doneAt?: number
    // The owner's reply, being sent (it can still be undone until it is on its way). `progress` is how much of the files is uploaded;
    // `replyId` and `since` say it is on its way (brain has it, from when); `done` says LinkedIn took it and the message is being shown.
-   sending?: { text: string; attachments: Attachment[]; at: number; progress?: number; replyId?: string; since?: number; done?: boolean }
+   sending?: {
+      text: string
+      attachments: Attachment[]
+      at: number
+      progress?: number
+      replyId?: string
+      since?: number
+      done?: boolean
+   }
    // The owner's reply that did not go, kept so it can be sent again; `replyId` is brain's, so a dismissal is kept after a reload.
    failed?: { reason: string; text: string; attachments: Attachment[]; unsure?: boolean; replyId?: string }
 }

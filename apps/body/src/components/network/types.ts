@@ -31,6 +31,8 @@ export type AccountRead = {
    // How many LinkedIn says are waiting (its own count), which can be more than were read.
    total: number
    readAt: string | null
+   // When the next automatic read of the account is due (null until its time is drawn).
+   nextCheckAt: string | null
    reading: boolean
    // Answers taken by this account in the last 24 hours.
    answeredToday: number

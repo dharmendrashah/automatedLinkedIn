@@ -36,6 +36,7 @@ describe('the busy view', () => {
             accountId: ACCOUNT,
             total: 8,
             readAt: '2026-10-27T11:48:00.000Z',
+            nextCheckAt: '2026-10-28T08:00:00.000Z',
             reading: false,
             answeredToday: 0,
          },

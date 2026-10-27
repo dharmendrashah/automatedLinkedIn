@@ -500,6 +500,7 @@ export class LinkedInConversationService {
                displayName: true,
                imageUrl: true,
                messagesReadAt: true,
+               nextMessagesAt: true,
             },
             orderBy: { createdAt: 'asc' },
          }),

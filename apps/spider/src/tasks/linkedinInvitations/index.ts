@@ -65,9 +65,10 @@ export const createLinkedinInvitations = ({ baseUrl }: Options) =>
             tone: 'failure',
          },
       },
+      // The daily read the system asks for is background; what the owner asks for counts as an action (`classOf` in brain).
       budget: {
          estimateS: 120,
-         class: 'ACTION',
+         class: 'BACKGROUND',
       },
       policy: {
          cooldownMs: 0,

@@ -172,6 +172,19 @@ describe('LinkedInInvitationService (database)', () => {
       expect(await LinkedInInvitationService.list(userId, [otherAccountId])).toBeNull()
    })
 
+   it('should say when the next automatic read of each account is due, and nothing for one without a time yet', async () => {
+      const next = new Date('2026-10-28T08:42:00.000Z')
+
+      await PrismaService.client.linkedInAccount.update({
+         where: { id: accountId },
+         data: { nextInvitationsAt: next },
+      })
+
+      const list = await LinkedInInvitationService.list(userId, [accountId, secondAccountId])
+
+      expect(list?.accounts.map(account => account.nextCheckAt)).toEqual([next.toISOString(), null])
+   })
+
    it('should say the account is signed out when it is not signed in any more', async () => {
       await PrismaService.client.linkedInAccount.update({
          where: { id: accountId },

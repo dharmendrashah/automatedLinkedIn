@@ -2,18 +2,19 @@ import { AccountDailyJob } from 'database'
 
 import { defineJob } from './defineJob'
 
-// The daily sign-in check, visit and message read of every account, each at its own random time (.plan/account-daily-check.md). It wakes
-// every 10 minutes and sends what is due, so a time missed while the worker was off is made up at the next wake-up.
+// The daily sign-in check, visit and read of the connection requests, and the message read every 2 hours, of every account, each at its
+// own random time (.plan/account-daily-check.md, .plan/my-network-daily-read.md). It wakes every 10 minutes and sends what is due, so a
+// time missed while the worker was off is made up at the next wake-up.
 export const accountDaily = defineJob({
    name: 'account-daily',
-   title: 'Account checks, visits and message reads',
+   title: 'Account checks, visits and reads',
    purpose:
-      "Asks for each LinkedIn account's daily sign-in check and visit and its message read every 2 hours, each at its own time, for accounts that are signed in.",
+      "Asks for each LinkedIn account's daily sign-in check, visit and read of the connection requests, and its message read every 2 hours, each at its own time, for accounts that are signed in.",
    everyMs: 10 * 60 * 1000,
    startAfterMs: 60_000,
    timeoutMs: 5 * 60 * 1000,
    run: async () => {
-      const { accounts, checks, visits, reads, drawn, items } = await AccountDailyJob.runDue()
+      const { accounts, checks, visits, reads, invitationReads, drawn, items } = await AccountDailyJob.runDue()
 
       if (accounts === 0) {
          return undefined
@@ -24,14 +25,15 @@ export const accountDaily = defineJob({
          checks,
          visits,
          reads,
+         invitationReads,
          skipped: items.filter(({ result }) => result === 'SKIPPED').length,
          timesDrawn: drawn,
       }
 
       // Only what was asked for is a log line; accounts that were left alone are for the monitor.
-      return checks > 0 || visits > 0 || reads > 0
+      return checks > 0 || visits > 0 || reads > 0 || invitationReads > 0
          ? {
-              summary: `${checks} sign-in checks, ${visits} visits, ${reads} message reads asked for`,
+              summary: `${checks} sign-in checks, ${visits} visits, ${reads} message reads, ${invitationReads} connection request reads asked for`,
               counts,
               items,
            }

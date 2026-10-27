@@ -43,6 +43,8 @@ export type InvitationAccountView = {
    // How many requests LinkedIn says wait, or how many were read when it did not say.
    total: number
    readAt: string | null
+   // When the next automatic read of the account is due (null until its time is drawn).
+   nextCheckAt: string | null
    reading: boolean
    answeredToday: number
    problem?: 'SIGNED_OUT'
@@ -170,6 +172,7 @@ export class LinkedInInvitationService {
             status: true,
             invitationsReadAt: true,
             invitationsTotal: true,
+            nextInvitationsAt: true,
          },
       })
 
@@ -255,6 +258,7 @@ export class LinkedInInvitationService {
                accountId: account.id,
                total: account.invitationsTotal ?? waitingOf(account.id),
                readAt: account.invitationsReadAt?.toISOString() ?? null,
+               nextCheckAt: account.nextInvitationsAt?.toISOString() ?? null,
                reading: session !== undefined && (running || stored) && session._count.invitations === 0,
                answeredToday: answered.get(account.id) ?? 0,
                ...(account.status !== 'ACTIVE' && { problem: 'SIGNED_OUT' as const }),

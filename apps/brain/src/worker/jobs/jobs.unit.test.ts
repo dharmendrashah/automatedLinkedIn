@@ -157,6 +157,7 @@ describe('worker jobs', () => {
          checks: 0,
          visits: 0,
          reads: 1,
+         invitationReads: 2,
          drawn: 0,
          items: [item],
       })
@@ -165,6 +166,7 @@ describe('worker jobs', () => {
          checks: 0,
          visits: 0,
          reads: 0,
+         invitationReads: 0,
          drawn: 1,
          items: [item],
       })
@@ -173,15 +175,17 @@ describe('worker jobs', () => {
          checks: 0,
          visits: 0,
          reads: 0,
+         invitationReads: 0,
          drawn: 0,
          items: [],
       })
 
       await expect(accountDaily?.run(context)).resolves.toMatchObject({
-         summary: '0 sign-in checks, 0 visits, 1 message reads asked for',
+         summary: '0 sign-in checks, 0 visits, 1 message reads, 2 connection request reads asked for',
          counts: {
             accountsDue: 2,
             reads: 1,
+            invitationReads: 2,
             skipped: 1,
          },
          items: [item],
