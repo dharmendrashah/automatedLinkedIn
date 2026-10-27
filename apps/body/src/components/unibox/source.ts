@@ -1,3 +1,4 @@
+import { type Waiting } from '../posting/publication'
 import { type Attachment, type UniboxAccount, type UniboxConversation } from './types'
 
 export type UniboxData = {
@@ -14,11 +15,12 @@ export type UniboxData = {
 // `unsure`: the reply may have been sent (LinkedIn did not show whether), so sending it again asks the owner first.
 export type SendResult = { ok: true } | { ok: false; reason: string; unsure?: boolean }
 
-// What happens to a reply while it is sent, for the page to show: how much of the files is uploaded (percent), and brain having it
-// (its id), from which on it can be followed, also after a reload.
+// What happens to a reply while it is sent, for the page to show: how much of the files is uploaded (percent), brain having it (its id),
+// from which on it can be followed, also after a reload, and why it is queued and from when it can start (nothing once it starts).
 export type SendEvents = {
    progress?: (percent: number) => void
    started?: (replyId: string) => void
+   waiting?: (wait: Waiting | undefined) => void
 }
 
 export type RefreshResult = {
@@ -46,7 +48,7 @@ export type UniboxSource = {
    // A short link to open the kept file of a message (its first, second... attachment); absent for a source that keeps none.
    fileLink?: (messageId: string, index: number) => Promise<string>
    // Follows a reply brain has until it ends, as `send` does after it started it; for a reply that was on its way when the page loaded.
-   follow?: (replyId: string) => Promise<SendResult>
+   follow?: (replyId: string, onWaiting?: SendEvents['waiting']) => Promise<SendResult>
    // Keeps that the owner dismissed a reply that did not go, so it is not shown after a reload.
    dismissReply?: (replyId: string) => Promise<void>
 }

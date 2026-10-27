@@ -1,6 +1,8 @@
 // What the Unibox shows. The shapes follow `messages.json` (packages/contracts/src/messages.ts), with the account the conversation
 // belongs to, the state the owner gives it here, and a time (epoch milliseconds) on every message so they can be ordered and aged.
 
+import { type Waiting } from '../posting/publication'
+
 export type AccountState = 'ACTIVE' | 'PAUSED' | 'DISCONNECTED' | 'RESTRICTED'
 
 export type UniboxAccount = {
@@ -65,7 +67,8 @@ export type UniboxConversation = {
    // When the owner closed it without replying; a message newer than this brings it back.
    doneAt?: number
    // The owner's reply, being sent (it can still be undone until it is on its way). `progress` is how much of the files is uploaded;
-   // `replyId` and `since` say it is on its way (brain has it, from when); `done` says LinkedIn took it and the message is being shown.
+   // `replyId` and `since` say it is on its way (brain has it, from when); `wait` says it is queued because the account cannot start it
+   // yet, and from when it can (it starts by itself); `done` says LinkedIn took it and the message is being shown.
    sending?: {
       text: string
       attachments: Attachment[]
@@ -73,6 +76,7 @@ export type UniboxConversation = {
       progress?: number
       replyId?: string
       since?: number
+      wait?: Waiting
       done?: boolean
    }
    // The owner's reply that did not go, kept so it can be sent again; `replyId` is brain's, so a dismissal is kept after a reload.

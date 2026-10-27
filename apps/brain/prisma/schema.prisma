@@ -1175,6 +1175,11 @@ model LinkedInReply {
   // When its run was asked for; the quiet time between two replies of an account counts from it.
   startedAt      DateTime?
   sentAt         DateTime?
+  // Why a queued reply has not started and the earliest it may (the account is resting, outside its working hours, out of browsing time),
+  // and the zone of the account's working hours; set by brain, cleared when it starts (.plan/reply-wait-for-rest.md).
+  waitReason     String?
+  waitUntil      DateTime?
+  waitZone       String?
 
   @@index([accountId, createdAt])
   @@index([accountId, startedAt])

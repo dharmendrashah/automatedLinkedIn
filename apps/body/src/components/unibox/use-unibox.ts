@@ -128,16 +128,18 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
          following.current.add(replyId)
          setFlying(set => new Set(set).add(id))
 
-         const result: SendResult = await source.follow(replyId).catch(() => ({
-            ok: false as const,
-            unsure: true,
-            reason: 'No answer came. Check the conversation on LinkedIn.',
-         }))
+         const result: SendResult = await source
+            .follow(replyId, wait => dispatch({ type: 'WAITING', id, wait }))
+            .catch(() => ({
+               ok: false as const,
+               unsure: true,
+               reason: 'No answer came. Check the conversation on LinkedIn.',
+            }))
 
          following.current.delete(replyId)
          await conclude(id, result)
       },
-      [conclude, source]
+      [conclude, dispatch, source]
    )
 
    const run = useCallback(() => {
@@ -195,6 +197,7 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
                        following.current.add(replyId)
                        dispatch({ type: 'STARTED', id, replyId, since: Date.now() })
                     },
+                    waiting: wait => dispatch({ type: 'WAITING', id, wait }),
                  })
                  .catch(() => ({ ok: false as const, reason: 'The reply could not be sent. Try again.' }))
             : { ok: false as const, reason: 'The account of this conversation is not known.' }

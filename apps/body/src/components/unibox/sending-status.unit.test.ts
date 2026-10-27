@@ -33,6 +33,28 @@ describe('sendingStatus', () => {
       )
    })
 
+   it('should say a reply is queued, that it need not be sent again, and from when the account can start it, with no moving bar', () => {
+      const status = sendingStatus(
+         {
+            ...base,
+            replyId: 'r1',
+            since: 0,
+            wait: {
+               reason: "Waiting for the account's next slot.",
+               until: new Date(NOW + 3 * 60_000).toISOString(),
+               zone: null,
+            },
+         },
+         NOW
+      )
+
+      expect(status.bar).toBeUndefined()
+      expect(status.line).toMatch(
+         /^Queued\. You do not need to send it again\. Waiting for the account's next slot\. It can start /
+      )
+      expect(status.line).toMatch(/in about 3 min\.$/)
+   })
+
    it('should say the message is being shown once LinkedIn took the reply', () => {
       expect(sendingStatus({ ...base, replyId: 'r1', since: 0, done: true }, NOW)).toEqual({
          line: 'Sent. Showing the message...',

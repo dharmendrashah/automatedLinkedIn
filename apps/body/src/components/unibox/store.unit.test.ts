@@ -87,6 +87,21 @@ describe('send', () => {
       expect(of(reduce(started, { type: 'FAIL', id: 'c1', reason: 'No.' })).failed).toMatchObject({ replyId: 'r1' })
    })
 
+   it('should keep why a queued reply waits and until when, change nothing for the same wait, and drop it once the reply starts', () => {
+      const started = reduce(sending, { type: 'STARTED', id: 'c1', replyId: 'r1', since: 5000 })
+      const wait = {
+         reason: "Waiting for the account's next slot.",
+         until: '2026-10-28T17:53:00.000Z',
+         zone: null,
+      }
+      const waiting = reduce(started, { type: 'WAITING', id: 'c1', wait })
+
+      expect(of(waiting).sending?.wait).toEqual(wait)
+      expect(reduce(waiting, { type: 'WAITING', id: 'c1', wait: { ...wait } })).toBe(waiting)
+      expect(of(reduce(waiting, { type: 'WAITING', id: 'c1', wait: undefined })).sending).not.toHaveProperty('wait')
+      expect(reduce(start, { type: 'WAITING', id: 'c1', wait })).toBe(start)
+   })
+
    it('should keep the reply as it is when LinkedIn took it, marked done and read, until its message is stored', () => {
       const sent = reduce(sending, { type: 'SENT', id: 'c1' })
 
