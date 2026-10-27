@@ -51,11 +51,14 @@ export type CamoufoxOptions = {
 const HUMANIZE_MAX_S = 0.7
 
 // The worker runs one page at a time, so one content process is enough; each extra one cost hundreds of MB and got the
-// worker killed for memory on staging (2026-10-19). The memory cache is capped in case it is ever turned on.
+// worker killed for memory on staging (2026-10-19). The memory cache is capped in case it is ever turned on. A feed video that
+// plays runs the worker out of memory and freezes the page (staging and a recording, 2026-10-28), so none plays by itself, as
+// with Firefox's own "block audio and video" setting.
 const MEMORY_PREFS = {
    'dom.ipc.processCount': 1,
    'dom.ipc.processCount.webIsolated': 1,
    'browser.cache.memory.capacity': 16_384,
+   'media.autoplay.default': 5,
 }
 
 // What CamoufoxDriver passes to Camoufox(), shared with the local devtools recorder so both start the exact same
@@ -122,6 +125,19 @@ const LINK_NAVIGATION_MS = 15_000
 const CHOOSER_MS = 5000
 
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+// A scroll takes a second or two. The wheel and the page reads have no time limit of their own, so on a page that stopped
+// answering one scroll took up to four minutes, and the run only ended at its task limit (recorded 2026-10-27).
+const SCROLL_LIMIT_MS = 30_000
+
+const withinScrollLimit = <T>(work: Promise<T>) => {
+   let timer: NodeJS.Timeout | undefined
+   const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new TaskError('The page did not answer a scroll in time')), SCROLL_LIMIT_MS)
+   })
+
+   return Promise.race([work, late]).finally(() => clearTimeout(timer))
+}
 
 // A feed holds hundreds of links; these caps keep an inspection small enough to save with the run.
 const INSPECT_LIMITS = {
@@ -432,7 +448,11 @@ class CamoufoxSession implements DetectionSession {
    // whatever is under the pointer, and the pointer starts in the corner, over LinkedIn's header, which let the feed stay at the
    // top for a whole visit (recorded 2026-10-19). So the pointer rests over the middle of the page first, and a wheel that still
    // moved nothing, with room to move, is followed by a scroll made by the page itself.
-   public async scrollBy(pixels: number) {
+   public scrollBy(pixels: number) {
+      return withinScrollLimit(this.turnWheel(pixels))
+   }
+
+   private async turnWheel(pixels: number) {
       const before = await this.scrollReading()
 
       if (!this.pointer) {
@@ -791,7 +811,11 @@ class CamoufoxSession implements DetectionSession {
 
    // The wheel over the first element of `selector` that shows, so it is the pane that holds that element which scrolls, not the
    // page in general (a list and the conversation beside it scroll on their own). Says whether the pane moved.
-   public async scrollOver(selector: string, pixels: number) {
+   public scrollOver(selector: string, pixels: number) {
+      return withinScrollLimit(this.turnWheelOver(selector, pixels))
+   }
+
+   private async turnWheelOver(selector: string, pixels: number) {
       const point = await this.page.evaluate(sel => {
          for (const element of document.querySelectorAll(sel)) {
             const rect = element.getBoundingClientRect()

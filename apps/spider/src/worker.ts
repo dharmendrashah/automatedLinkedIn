@@ -1,6 +1,6 @@
 import 'dotenv/config'
 
-import { TASK_QUEUE, taskCommandSchema } from '@automatedLinkedIn/contracts'
+import { TASK_QUEUE, type TaskCommand, taskCommandSchema } from '@automatedLinkedIn/contracts'
 
 import {
    GIT_SHA,
@@ -32,6 +32,7 @@ import { IdentityStore } from './identity/identityStore'
 import { lookupExit } from './identity/lookupExit'
 import { Broker } from './messaging/broker'
 import { consumeQueue, consumeTasks } from './messaging/consumer'
+import { answerDeadTasks } from './messaging/deadLetters'
 import { publishCatalog, publishResult, publishRunResult, republishRun, republishTask } from './messaging/publisher'
 import { listenForInput, publishFrame } from './messaging/takeover'
 import { assertTopology } from './messaging/topology'
@@ -123,7 +124,7 @@ const main = async () => {
    const taskChannel = await broker.consumeChannel()
    // The owner's inputs while a run waits for them; each run listens on a queue of its own.
    const takeoverChannel = await broker.consumeChannel()
-
+   const deadChannel = await broker.consumeChannel()
    await assertTopology(channel)
 
    const consumer = await consumeTasks(
@@ -144,6 +145,11 @@ const main = async () => {
    )
 
    // Every task of the standard contract runs here: the runner records it, applies the limits and answers.
+   const giveUpAnswer = async (command: TaskCommand) =>
+      publishRunResult(
+         await broker.publishChannel(),
+         exhaustedResult(command, GIT_SHA, Date.now, await hasAttempt(store, command))
+      )
    const taskConsumer = await consumeQueue(
       taskChannel,
       {
@@ -197,11 +203,7 @@ const main = async () => {
                })
             ),
          // A session must never stay in progress because the worker kept failing: brain gets an answer instead.
-         onExhausted: async command =>
-            publishRunResult(
-               await broker.publishChannel(),
-               exhaustedResult(command, GIT_SHA, Date.now, await hasAttempt(store, command))
-            ),
+         onExhausted: giveUpAnswer,
       },
       {
          republish: async (message, retries) => republishRun(await broker.publishChannel(), message, retries),
@@ -211,6 +213,9 @@ const main = async () => {
 
    // Brain keeps the latest, so a worker that starts later or newer simply replaces what brain knew.
    await publishCatalog(await broker.publishChannel(), catalogOf(tasks, GIT_SHA))
+
+   // A task the broker gave up on after a worker died (killed for memory) never reaches onExhausted above.
+   const deadConsumer = await answerDeadTasks(deadChannel, giveUpAnswer)
 
    let stopping = false
 
@@ -231,7 +236,7 @@ const main = async () => {
    )
 
    // A lost connection ends the process, so the container's restart policy brings a clean worker back.
-   for (const open of [channel, taskChannel, takeoverChannel]) {
+   for (const open of [channel, taskChannel, takeoverChannel, deadChannel]) {
       open.on('close', () => {
          if (!stopping) {
             console.error('The broker channel closed; exiting so the worker restarts')
@@ -255,7 +260,7 @@ const main = async () => {
          }, SPIDER_SHUTDOWN_GRACE_MS)
 
          // Finish the task in progress, take no new one, then leave. A second signal leaves at once (no handler is left).
-         Promise.all([consumer.stop(), taskConsumer.stop()])
+         Promise.all([consumer.stop(), taskConsumer.stop(), deadConsumer.stop()])
             .then(() => broker.close())
             .finally(() => {
                clearTimeout(timer)
