@@ -6,17 +6,18 @@ import { InterestsCard } from '@/components/account-profile/interests-card'
 import { ProfileHeader } from '@/components/account-profile/profile-header'
 import { RecommendationsCard } from '@/components/account-profile/recommendations-card'
 import { SampleBanner } from '@/components/account-profile/sample-banner'
-import { AnalyticsCard, SuggestionsCard } from '@/components/account-profile/side-cards'
+import { SuggestionsCard } from '@/components/account-profile/side-cards'
 import { LanguagesCard, SkillsCard } from '@/components/account-profile/skills-cards'
 import { loadProfile, sampleKindOf } from '@/components/account-profile/source'
 import { noticeOf, viewOf } from '@/components/account-profile/view'
-import { ConfirmRunDialog } from '@/components/accounts/confirm-run-dialog'
+import { AccountDialogs } from '@/components/accounts/account-dialogs'
+import { AccountsDrawers } from '@/components/accounts/accounts-drawers'
 import { isBudgetRefusal } from '@/components/accounts/budget-refusal'
+import { ConfirmRunDialog } from '@/components/accounts/confirm-run-dialog'
 import { StartAnywayDialog } from '@/components/accounts/start-anyway-dialog'
-import { LOGIN_TASK } from '@/components/accounts/login-test'
-import { VISIT_TASK } from '@/components/accounts/visit'
+import { useAccountActions } from '@/components/accounts/use-account-actions'
+import { useDrawerNav } from '@/components/accounts/use-drawer-nav'
 import { BrowseSampleBanner } from '@/components/browsing/browse-sample-banner'
-import { BrowsingPanel } from '@/components/browsing/browsing-panel'
 import { useBrowsing } from '@/components/browsing/use-browse'
 import { FailureCard } from '@/components/failure-card'
 import { Button } from '@/components/ui/button'
@@ -25,7 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router'
+import { Link, Navigate, useParams, useSearchParams } from 'react-router'
 
 import { cn } from '@/lib/utils'
 
@@ -52,6 +53,10 @@ export const AccountProfile = () => {
    const sample = kind !== null
    const utils = trpc.useUtils()
    const account = trpc.linkedInAccount.get.useQuery({ id }, { retry: false })
+   // The list holds what the account's drawer shows; the page's own `get` is what it is about.
+   const accounts = trpc.linkedInAccount.list.useQuery(undefined, { retry: false })
+   const actions = useAccountActions()
+   const nav = useDrawerNav()
    const proxies = trpc.proxyServer.list.useQuery(undefined, { retry: false })
    const state = trpc.accountProfile.state.useQuery(
       { accountId: id },
@@ -82,17 +87,10 @@ export const AccountProfile = () => {
       [account.data]
    )
    const browsing = useBrowsing(browseAccounts)
-   const browseNow = browsing.byId?.get(id)
    const refresh = () => {
       void utils.accountProfile.state.invalidate({ accountId: id })
       void utils.session.list.invalidate()
    }
-   const runTask = trpc.task.run.useMutation({
-      onSuccess: () => {
-         void utils.linkedInAccount.get.invalidate({ id })
-         refresh()
-      },
-   })
    // The first visit of an account that was never read: brain starts the read when it can, once, and says why when it cannot.
    const open = trpc.accountProfile.open.useMutation({ onSuccess: refresh })
    // The server holds a read that follows a good one too soon; the owner can confirm and read anyway.
@@ -124,7 +122,6 @@ export const AccountProfile = () => {
            proxy => proxy.linkedInAccountId === id && (proxy.status === 'ACTIVE' || proxy.status === 'GEO_MISMATCH')
         )
       : undefined
-   const pending = (task: string) => runTask.isPending && runTask.variables?.task === task
    const profile = sample ? sampled.data?.profile : (stored.data?.profile ?? undefined)
    const view = sample
       ? sampled.isPending
@@ -139,9 +136,7 @@ export const AccountProfile = () => {
          ? `The last read did not give a new profile${state.data.lastRun.message ? `: ${state.data.lastRun.message}` : '.'}`
          : null
    // A new account has nothing for the right rail, so the main column takes the whole width.
-   const hasRail = Boolean(
-      profile && (profile.analytics || profile.peopleYouMayKnow.length > 0 || profile.youMightLike.length > 0)
-   )
+   const hasRail = Boolean(profile && (profile.peopleYouMayKnow.length > 0 || profile.youMightLike.length > 0))
 
    if (account.data === null) {
       return (
@@ -156,20 +151,26 @@ export const AccountProfile = () => {
       )
    }
 
+   // The account was removed from the drawer: this page is about nothing now.
+   if (account.data && accounts.data && !accounts.data.some(item => item.id === id)) {
+      return <Navigate to="/accounts" replace />
+   }
+
    const strip = account.data ? (
       <AccountStrip
          account={account.data}
          readAt={state.data?.capturedAt ?? profile?.captured_at ?? null}
          hasWorkingProxy={hasWorkingProxy}
-         testing={pending(LOGIN_TASK)}
-         visiting={pending(VISIT_TASK)}
+         testing={actions.testingId === id}
+         visiting={actions.visitingId === id}
          readBlocker={
             sample ? 'This is sample data. Remove ?sample= from the address.' : (state.data?.blocker ?? undefined)
          }
          reading={reading}
-         onTestLogin={() => runTask.mutate({ task: LOGIN_TASK, accountId: id })}
-         onVisit={() => runTask.mutate({ task: VISIT_TASK, accountId: id })}
+         onTestLogin={() => actions.testLogin({ id })}
+         onVisit={() => actions.visit({ id })}
          onRead={() => read.mutate({ accountId: id })}
+         onSettings={() => nav.openAccount(id)}
       />
    ) : null
 
@@ -186,28 +187,19 @@ export const AccountProfile = () => {
          {kind ? <SampleBanner kind={kind} onChange={next => setSearch({ sample: next }, { replace: true })} /> : null}
 
          {account.error ? <p className="text-destructive text-sm">{account.error.message}</p> : null}
-         {runTask.error ? <p className="text-destructive text-sm">{runTask.error.message}</p> : null}
+         {actions.error ? <p className="text-destructive text-sm">{actions.error}</p> : null}
          {read.error && !recent ? <p className="text-destructive text-sm">{read.error.message}</p> : null}
-         {runTask.data ? (
+         {actions.started ? (
             <p className="text-sm" role="status">
                Started.{' '}
-               <Link className="underline underline-offset-4" to={`/sessions?session=${runTask.data.id}`}>
+               <Link className="underline underline-offset-4" to={`/sessions?session=${actions.started.id}`}>
                   Follow it in Sessions
                </Link>
                .
             </p>
          ) : null}
 
-         {browseNow ? (
-            <>
-               {browsing.kind ? <BrowseSampleBanner kind={browsing.kind} /> : null}
-               <Card>
-                  <CardContent>
-                     <BrowsingPanel account={browseNow} kind={browsing.kind} now={browsing.now} />
-                  </CardContent>
-               </Card>
-            </>
-         ) : null}
+         {browsing.kind && browsing.byId?.has(id) ? <BrowseSampleBanner kind={browsing.kind} /> : null}
 
          {view === 'LOADING' || account.isPending ? <ProfileSkeleton /> : null}
 
@@ -264,7 +256,6 @@ export const AccountProfile = () => {
                </div>
                {hasRail ? (
                   <aside className="grid grid-cols-[minmax(0,1fr)] gap-4" aria-label="More about this profile">
-                     <AnalyticsCard analytics={profile.analytics} />
                      <SuggestionsCard title="People you may know" entities={profile.peopleYouMayKnow} />
                      <SuggestionsCard title="You might like" entities={profile.youMightLike} shape="square" />
                   </aside>
@@ -295,6 +286,8 @@ export const AccountProfile = () => {
                setBlocked(null)
             }}
          />
+         <AccountsDrawers accounts={accounts.data} browsing={browsing} actions={actions} />
+         <AccountDialogs actions={actions} />
       </div>
    )
 }

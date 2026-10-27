@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { type AccountBrowse } from './types'
 
-import { bucketOf, clientGroups, countBuckets, needAttention, sortByUse } from './overview'
+import { bucketOf, countBuckets, needAttention } from './overview'
 
 const hours = {
    days: [1, 2, 3, 4, 5],
@@ -62,34 +62,11 @@ describe('the overview', () => {
       })
    })
 
-   it('should sort by today’s share of the limit, the fullest first, with a higher mode giving more room', () => {
-      const sorted = sortByUse([
-         account('a', { usedSeconds: 60 * 60 }),
-         account('b', { usedSeconds: 60 * 60, mode: 'AGGRESSIVE' }),
-         account('c', { usedSeconds: 85 * 60 }),
-      ])
-
-      expect(sorted.map(({ accountId }) => accountId)).toEqual(['c', 'a', 'b'])
-   })
-
    it('should name the accounts that went over their limit on 3 or more of the last 14 days', () => {
       expect(
          needAttention([account('a', { overLimitDays14: 3 }), account('b', { overLimitDays14: 2 })]).map(
             ({ accountId }) => accountId
          )
       ).toEqual(['a'])
-   })
-
-   it('should group by client, with accounts that have none last and each group’s total', () => {
-      const groups = clientGroups([
-         account('a', { clientLabel: 'Acme', usedSeconds: 600 }),
-         account('b'),
-         account('c', { clientLabel: 'Acme', usedSeconds: 300 }),
-         account('d', { clientLabel: 'Beta', usedSeconds: 100 }),
-      ])
-
-      expect(groups.map(({ label }) => label)).toEqual(['Acme', 'Beta', null])
-      expect(groups[0]).toMatchObject({ usedSeconds: 900 })
-      expect(groups[0]?.accounts.map(({ accountId }) => accountId)).toEqual(['a', 'c'])
    })
 })

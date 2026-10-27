@@ -1,6 +1,7 @@
 import { TestButton } from '@/components/test-button'
+import { Button } from '@/components/ui/button'
 import { timeAgo } from '@/lib/time-ago'
-import { FileText, ScanEye, ScanSearch } from 'lucide-react'
+import { FileText, ScanEye, ScanSearch, Settings2 } from 'lucide-react'
 
 import { type Account } from '../accounts/types'
 
@@ -21,6 +22,8 @@ type Props = {
    onTestLogin: () => void
    onVisit: () => void
    onRead: () => void
+   // Opens the account's drawer: its state, browsing time and sign-in details.
+   onSettings: () => void
 }
 
 // What the app knows and can do about the account itself, under the profile's own details.
@@ -35,6 +38,7 @@ export const AccountStrip = ({
    onTestLogin,
    onVisit,
    onRead,
+   onSettings,
 }: Props) => (
    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
       <span className="font-medium">{account.email}</span>
@@ -63,6 +67,10 @@ export const AccountStrip = ({
             busy={reading}
             onClick={onRead}
          />
+         <Button variant="outline" size="sm" onClick={onSettings}>
+            <Settings2 />
+            Account settings
+         </Button>
       </div>
    </div>
 )

@@ -27,15 +27,19 @@ const demanding = (accounts: AccountBrowse[]): BrowseMode =>
       MODES[0] ?? { mode: 'SAFE' as const, label: 'Safe', minutes: 90, line: '' }
    ).mode
 
-// Over the Activity list while rows are picked: one change for all of them, with an Undo.
+// Fixed to the bottom of the list while rows are picked: one change for all of them, with an Undo.
 export const BulkBrowseBar = ({
    accounts,
    sample,
    onClear,
+   onPause,
+   onResume,
 }: {
    accounts: AccountBrowse[]
    sample: boolean
    onClear: () => void
+   onPause: () => void
+   onResume: () => void
 }) => {
    const change = useBrowseChange(sample)
    const [open, setOpen] = useState<Dialogs>(null)
@@ -66,8 +70,10 @@ export const BulkBrowseBar = ({
    }
 
    return (
-      <div className="bg-muted/50 flex flex-wrap items-center gap-2 rounded-lg border p-2 text-sm">
-         <span className="px-1 font-medium">{accounts.length} selected</span>
+      <div className="bg-background sticky bottom-4 z-10 flex flex-wrap items-center gap-2 rounded-lg border p-2 text-sm shadow-md">
+         <span className="px-1 font-medium">
+            {accounts.length} {accounts.length === 1 ? 'account' : 'accounts'} selected
+         </span>
          <Button size="sm" variant="outline" onClick={() => setOpen('mode')}>
             Set daily limit
          </Button>
@@ -76,6 +82,12 @@ export const BulkBrowseBar = ({
          </Button>
          <Button size="sm" variant="outline" onClick={() => setOpen('client')}>
             Set client
+         </Button>
+         <Button size="sm" variant="outline" onClick={onPause}>
+            Pause
+         </Button>
+         <Button size="sm" variant="outline" onClick={onResume}>
+            Resume
          </Button>
          <Button size="sm" variant="ghost" className="ml-auto" onClick={onClear}>
             Clear selection

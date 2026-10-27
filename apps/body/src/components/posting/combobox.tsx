@@ -22,11 +22,15 @@ type Props = {
    className?: string
 }
 
-// A list to search and pick one from, for the many accounts of an agency; the name, the hint (the client) and the group all match.
-export const Combobox = ({ options, value, onChange, placeholder, label, className }: Props) => {
-   const [open, setOpen] = useState(false)
+type ListProps = {
+   options: Option[]
+   value: string
+   onPick: (value: string) => void
+}
+
+// The searchable list on its own, for the many accounts of an agency; the name, the hint (the client) and the group all match.
+export const OptionList = ({ options, value, onPick }: ListProps) => {
    const [query, setQuery] = useState('')
-   const current = options.find(option => option.value === value)
    const needle = query.trim().toLowerCase()
    // Matched here, not by the list, so an id in a value never matches what was typed.
    const shown = options.filter(
@@ -35,13 +39,37 @@ export const Combobox = ({ options, value, onChange, placeholder, label, classNa
    const groups = [...new Set(shown.map(({ group }) => group ?? ''))]
 
    return (
-      <Popover
-         open={open}
-         onOpenChange={next => {
-            setOpen(next)
-            setQuery('')
-         }}
-      >
+      <Command shouldFilter={false}>
+         <CommandInput placeholder="Search" value={query} onValueChange={setQuery} />
+         <CommandList>
+            <CommandEmpty>Nothing found.</CommandEmpty>
+            {groups.map(group => (
+               <CommandGroup key={group} {...(group ? { heading: group } : {})}>
+                  {shown
+                     .filter(option => (option.group ?? '') === group)
+                     .map(option => (
+                        <CommandItem key={option.value} value={option.value} onSelect={() => onPick(option.value)}>
+                           <Check className={cn(option.value === value ? 'opacity-100' : 'opacity-0')} aria-hidden />
+                           <span className="truncate">{option.label}</span>
+                           {option.hint ? (
+                              <span className="text-muted-foreground ml-auto truncate text-xs">{option.hint}</span>
+                           ) : null}
+                        </CommandItem>
+                     ))}
+               </CommandGroup>
+            ))}
+         </CommandList>
+      </Command>
+   )
+}
+
+// A button that opens the list to pick one from.
+export const Combobox = ({ options, value, onChange, placeholder, label, className }: Props) => {
+   const [open, setOpen] = useState(false)
+   const current = options.find(option => option.value === value)
+
+   return (
+      <Popover open={open} onOpenChange={setOpen}>
          <PopoverTrigger asChild>
             <Button
                type="button"
@@ -60,39 +88,14 @@ export const Combobox = ({ options, value, onChange, placeholder, label, classNa
             </Button>
          </PopoverTrigger>
          <PopoverContent align="start" className="w-80 p-0">
-            <Command shouldFilter={false}>
-               <CommandInput placeholder="Search" value={query} onValueChange={setQuery} />
-               <CommandList>
-                  <CommandEmpty>Nothing found.</CommandEmpty>
-                  {groups.map(group => (
-                     <CommandGroup key={group} {...(group ? { heading: group } : {})}>
-                        {shown
-                           .filter(option => (option.group ?? '') === group)
-                           .map(option => (
-                              <CommandItem
-                                 key={option.value}
-                                 value={option.value}
-                                 onSelect={() => {
-                                    onChange(option.value)
-                                    setOpen(false)
-                                 }}
-                              >
-                                 <Check
-                                    className={cn(option.value === value ? 'opacity-100' : 'opacity-0')}
-                                    aria-hidden
-                                 />
-                                 <span className="truncate">{option.label}</span>
-                                 {option.hint ? (
-                                    <span className="text-muted-foreground ml-auto truncate text-xs">
-                                       {option.hint}
-                                    </span>
-                                 ) : null}
-                              </CommandItem>
-                           ))}
-                     </CommandGroup>
-                  ))}
-               </CommandList>
-            </Command>
+            <OptionList
+               options={options}
+               value={value}
+               onPick={next => {
+                  onChange(next)
+                  setOpen(false)
+               }}
+            />
          </PopoverContent>
       </Popover>
    )

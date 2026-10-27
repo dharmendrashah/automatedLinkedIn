@@ -1,4 +1,5 @@
 export { PrismaService } from './prisma.service'
+export { AccountTodayService } from './accountToday.service'
 export { ConflictError } from './conflict'
 export { type IcpInput, IcpService } from './icp.service'
 export { RETENTION, RetentionService } from './retention.service'

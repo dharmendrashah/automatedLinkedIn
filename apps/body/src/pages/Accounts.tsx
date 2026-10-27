@@ -1,132 +1,127 @@
-import { AccountsTable } from '@/components/accounts/accounts-table'
+import { AccountDialogs } from '@/components/accounts/account-dialogs'
+import { AccountList } from '@/components/accounts/account-list'
+import { AccountsDrawers } from '@/components/accounts/accounts-drawers'
+import { AccountsToolbar } from '@/components/accounts/accounts-toolbar'
 import { AddAccountDialog } from '@/components/accounts/add-account-dialog'
-import { ConfirmRunDialog } from '@/components/accounts/confirm-run-dialog'
-import { isBudgetRefusal } from '@/components/accounts/budget-refusal'
-import { StartAnywayDialog } from '@/components/accounts/start-anyway-dialog'
-import { DeleteAccountDialog } from '@/components/accounts/delete-account-dialog'
-import { EditAccountDialog } from '@/components/accounts/edit-account-dialog'
-import { LOGIN_TASK } from '@/components/accounts/login-test'
+import { readAddress, writeAddress } from '@/components/accounts/address'
+import { COLUMNS, columnsFrom, columnsToText } from '@/components/accounts/columns'
 import { NeedsProxyNotice } from '@/components/accounts/needs-proxy-notice'
-import { RevealDialog } from '@/components/accounts/reveal-dialog'
-import { VISIT_TASK, visitRunning } from '@/components/accounts/visit'
-import { ActivityView } from '@/components/browsing/activity-view'
+import { OverLimitNote, SummaryBanner } from '@/components/accounts/summary-banner'
+import { dayProgress, progressSentence } from '@/components/accounts/today'
+import { todayCsv } from '@/components/accounts/today-csv'
+import {
+   clientsOf,
+   countChips,
+   filterRows,
+   groupRows,
+   rowsOf,
+   showTools,
+   sortRows,
+   summaryOf,
+} from '@/components/accounts/toolbar'
+import { useAccountActions } from '@/components/accounts/use-account-actions'
+import { useAccountsWithProxy } from '@/components/accounts/use-accounts-with-proxy'
+import { useDrawerNav } from '@/components/accounts/use-drawer-nav'
+import { useToday } from '@/components/accounts/use-today'
+import { visitRunning } from '@/components/accounts/visit'
 import { BrowseSampleBanner } from '@/components/browsing/browse-sample-banner'
-import { BrowsingDrawer } from '@/components/browsing/browsing-drawer'
-import { type Bucket, bucketOf, countBuckets } from '@/components/browsing/overview'
-import { OverviewStrip } from '@/components/browsing/overview-strip'
+import { BulkBrowseBar } from '@/components/browsing/bulk-browse-bar'
 import { useBrowsing } from '@/components/browsing/use-browse'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useMemo, useState } from 'react'
+import { EmptyState } from '@/components/network/notices'
+import { downloadCsv } from '@/components/posting/posts-csv'
+import { Button } from '@/components/ui/button'
+import { useStoredSetting } from '@/hooks/use-stored-setting'
+import { UserPlus } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 
-import { type Account } from '@/components/accounts/types'
-
-import { type RouterInputs, trpc } from '../trpc'
-
-type RunInput = RouterInputs['task']['run']
+import { trpc } from '../trpc'
 
 // A visit takes a few minutes; look again until the newest one has an answer.
 const VISIT_POLL_MS = 3000
+const SEARCH_WAIT_MS = 250
 
+const groupFrom = (raw: string | null) => raw === '1'
+const groupToText = (value: boolean) => (value ? '1' : '0')
+
+// The LinkedIn accounts as one list, worst first: what needs the owner, what each account can do now, and its browsing today. A row
+// opens the account's drawer; the search, chips, grouping and optional columns appear from 4 accounts
+// (.plan/accounts-drawers-simplify.md).
 export const Accounts = () => {
    const utils = trpc.useUtils()
    const list = trpc.linkedInAccount.list.useQuery(undefined, {
       retry: false,
       refetchInterval: query => (query.state.data?.some(visitRunning) ? VISIT_POLL_MS : false),
    })
-   const proxies = trpc.proxyServer.list.useQuery(undefined, { retry: false })
-   const [toDelete, setToDelete] = useState<Account | null>(null)
-   const [toEdit, setToEdit] = useState<Account | null>(null)
-   // The owner's own two-step keys, revealed one account at a time, kept only in this page's memory.
-   const [totpCodes, setTotpCodes] = useState<Record<string, string>>({})
-
-   const accountsWithProxy = useMemo(
-      () =>
-         proxies.data
-            ? new Set(
-                 proxies.data
-                    .filter(proxy => proxy.status === 'ACTIVE' || proxy.status === 'GEO_MISMATCH')
-                    .map(proxy => proxy.linkedInAccountId)
-              )
-            : undefined,
-      [proxies.data]
-   )
-
-   const refresh = () => void utils.linkedInAccount.list.invalidate()
-
-   // Browsing time is brain's, or invented with `?browse=` in the address.
+   const accountsWithProxy = useAccountsWithProxy()
+   const actions = useAccountActions()
+   const nav = useDrawerNav()
    const [params, setParams] = useSearchParams()
+   const address = readAddress(params)
    const sampleAccounts = useMemo(() => list.data?.map(({ id, email, status }) => ({ id, email, status })), [list.data])
-   const { kind, byId, now, error: browseError } = useBrowsing(sampleAccounts)
-   const [bucket, setBucket] = useState<Bucket | null>(null)
-   const [openBrowsing, setOpenBrowsing] = useState<string | null>(null)
-   const view = params.get('view') === 'activity' ? 'activity' : 'accounts'
-   const browseRows = byId ? [...byId.values()] : []
-   const shownRows = bucket ? browseRows.filter(row => bucketOf(row) === bucket) : browseRows
-   const shownAccounts =
-      byId && bucket ? list.data?.filter(({ id }) => shownRows.some(row => row.accountId === id)) : list.data
-   const openAccount = openBrowsing ? (byId?.get(openBrowsing) ?? null) : null
-   const setView = (next: string) =>
-      setParams(
-         current => {
-            const updated = new URLSearchParams(current)
+   const browsing = useBrowsing(sampleAccounts)
+   const today = useToday(list.data, browsing.byId)
+   const [storedGroup, setStoredGroup] = useStoredSetting('accounts.group', groupFrom, groupToText)
+   const [columns, setColumns] = useStoredSetting('accounts.columns', columnsFrom, columnsToText)
+   const [q, setQ] = useState(address.q)
+   const [picked, setPicked] = useState<Set<string>>(new Set())
 
-            updated.set('view', next)
+   // The search is written to the address once the typing stops.
+   useEffect(() => {
+      const timer = setTimeout(() => {
+         if (q !== address.q) {
+            setParams(writeAddress(params, { q }), { replace: true })
+         }
+      }, SEARCH_WAIT_MS)
 
-            return updated
-         },
-         { replace: true }
+      return () => clearTimeout(timer)
+   }, [q, address.q, params, setParams])
+
+   const rows = useMemo(
+      () => rowsOf(list.data ?? [], browsing.byId, today.statesById),
+      [list.data, browsing.byId, today.statesById]
+   )
+   const tools = showTools(rows.length)
+   const grouped = tools && (address.group ?? storedGroup)
+   // A short list shows the full chips; a long one the compact line, unless the owner asked for the details.
+   const detailed = !tools || columns.includes('detail')
+   const shown = sortRows(
+      filterRows(rows, tools ? { q, client: address.client, chip: address.chip } : { q: '', client: '', chip: 'all' })
+   )
+   const selectedRows = rows.filter(({ account }) => picked.has(account.id))
+   const selectedAccounts = selectedRows.map(({ account }) => account)
+   const progress = progressSentence(
+      dayProgress(
+         rows.flatMap(({ account, states }) => (states ? [{ status: account.status, states }] : [])),
+         today.now
+      ),
+      Intl.DateTimeFormat().resolvedOptions().timeZone
+   )
+   const summary = summaryOf(rows, progress)
+   const filtered = tools && (q.trim() !== '' || address.client !== '' || address.chip !== 'all')
+   const columnIds = COLUMNS.map(({ id }) => id).filter(id => columns.includes(id))
+
+   const select = (ids: string[], on: boolean) =>
+      setPicked(current => {
+         const next = new Set(current)
+
+         ids.forEach(id => (on ? next.add(id) : next.delete(id)))
+
+         return next
+      })
+   const change = (patch: Parameters<typeof writeAddress>[1]) =>
+      setParams(writeAddress(params, patch), { replace: true })
+   const clearFilters = () => {
+      setQ('')
+      change({ q: '', client: '', chip: 'all' })
+   }
+   const exportToday = () =>
+      downloadCsv(
+         `today-${today.now.toISOString().slice(0, 10)}.csv`,
+         todayCsv(
+            shown.flatMap(({ account, client, states }) => (states ? [{ email: account.email, client, states }] : []))
+         )
       )
-
-   const reveal = trpc.linkedInAccount.reveal.useMutation()
-   const revealTotp = trpc.linkedInAccount.reveal.useMutation({
-      onSuccess: (data, variables) => {
-         if (data.secrets.totpSecret) {
-            setTotpCodes(current => ({ ...current, [variables.id]: data.secrets.totpSecret as string }))
-         }
-      },
-   })
-   const setPaused = trpc.linkedInAccount.setPaused.useMutation({ onSuccess: refresh })
-   // The worker signs in or visits through the account's most reliable proxy; the server picks it and says why when it cannot.
-   // A visit counts as the day's visit, so the list shows a new next time once it is asked for.
-   // The server refuses a run that follows a good one too soon; the owner can confirm and send it again.
-   const [recent, setRecent] = useState<{ run: RunInput; message: string } | null>(null)
-   // The account may not browse now; the owner can start it anyway after saying they understand the risk.
-   const [blocked, setBlocked] = useState<{ run: RunInput; message: string } | null>(null)
-   const runTask = trpc.task.run.useMutation({
-      onSuccess: () => {
-         refresh()
-         void utils.session.list.invalidate()
-      },
-      onError: (error, run) => {
-         if (error.data?.code === 'CONFLICT') {
-            setRecent({
-               run,
-               message: error.message,
-            })
-         } else if (isBudgetRefusal(error)) {
-            setBlocked({
-               run,
-               message: error.message,
-            })
-         }
-      },
-   })
-   const remove = trpc.linkedInAccount.delete.useMutation({
-      onSuccess: () => {
-         setToDelete(null)
-         refresh()
-      },
-   })
-
-   const busyId = setPaused.isPending ? setPaused.variables?.id : remove.isPending ? remove.variables?.id : undefined
-   const pendingFor = (task: string) =>
-      runTask.isPending && runTask.variables?.task === task ? runTask.variables.accountId : undefined
-   const testingId = pendingFor(LOGIN_TASK)
-   const visitingId = pendingFor(VISIT_TASK)
-   const actionError =
-      setPaused.error?.message ?? remove.error?.message ?? (recent || blocked ? undefined : runTask.error?.message)
-   const startedSession = runTask.data
 
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
@@ -135,15 +130,19 @@ export const Accounts = () => {
                <h2 className="text-lg font-semibold">LinkedIn accounts</h2>
                <p className="text-muted-foreground text-sm">The LinkedIn logins this tool can act as.</p>
             </div>
-            <AddAccountDialog />
+            {list.data?.length !== 0 ? <AddAccountDialog /> : null}
          </div>
 
-         {actionError ? <p className="text-destructive text-sm">{actionError}</p> : null}
+         {actions.error ? (
+            <p className="text-destructive text-sm" role="alert">
+               {actions.error}
+            </p>
+         ) : null}
 
-         {startedSession ? (
+         {actions.started ? (
             <p className="text-sm" role="status">
                Started.{' '}
-               <Link className="underline underline-offset-4" to={`/sessions?session=${startedSession.id}`}>
+               <Link className="underline underline-offset-4" to={`/sessions?session=${actions.started.id}`}>
                   Follow it in Sessions
                </Link>
                .
@@ -152,98 +151,113 @@ export const Accounts = () => {
 
          <NeedsProxyNotice accounts={list.data} accountsWithProxy={accountsWithProxy} />
 
-         {kind && byId ? <BrowseSampleBanner kind={kind} /> : null}
-         {browseError ? <p className="text-destructive text-sm">{browseError}</p> : null}
-         {byId ? (
-            <>
-               <OverviewStrip
-                  accounts={browseRows}
-                  counts={countBuckets(browseRows)}
-                  active={bucket}
-                  onChange={setBucket}
-               />
-               <Tabs value={view} onValueChange={setView}>
-                  <TabsList>
-                     <TabsTrigger value="accounts">Accounts</TabsTrigger>
-                     <TabsTrigger value="activity">Activity</TabsTrigger>
-                  </TabsList>
-               </Tabs>
-            </>
+         {browsing.kind && browsing.byId ? <BrowseSampleBanner kind={browsing.kind} /> : null}
+         {browsing.error ? (
+            <p className="text-destructive text-sm" role="alert">
+               Could not load browsing data. {browsing.error}{' '}
+               <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0"
+                  onClick={() => void utils.browse.overview.invalidate()}
+               >
+                  Retry
+               </Button>
+            </p>
          ) : null}
 
-         {byId && view === 'activity' ? (
-            <ActivityView accounts={shownRows} sample={kind !== null} onOpen={setOpenBrowsing} />
+         {list.error ? (
+            <p className="text-destructive text-sm" role="alert">
+               {list.error.message}
+            </p>
+         ) : null}
+
+         {list.data?.length === 0 ? (
+            <div className="bg-card rounded-xl border">
+               <EmptyState
+                  icon={UserPlus}
+                  title="No LinkedIn account yet"
+                  text="Add the LinkedIn login this tool acts as. It browses a little each day, like you would. Nothing is posted or sent unless you set it up."
+                  action={<AddAccountDialog />}
+               />
+            </div>
          ) : (
-            <AccountsTable
-               browse={byId}
-               onOpenBrowsing={setOpenBrowsing}
-               accounts={shownAccounts}
-               loading={list.isPending}
-               error={list.error?.message}
-               busyId={busyId}
-               testingId={testingId}
-               visitingId={visitingId}
-               accountsWithProxy={accountsWithProxy}
-               totpCodes={totpCodes}
-               revealingTotpId={revealTotp.isPending ? revealTotp.variables?.id : undefined}
-               onEdit={setToEdit}
-               onTestLogin={account => runTask.mutate({ task: LOGIN_TASK, accountId: account.id })}
-               onVisit={account => runTask.mutate({ task: VISIT_TASK, accountId: account.id })}
-               onReveal={account => reveal.mutate({ id: account.id })}
-               onShowTotpCode={account => revealTotp.mutate({ id: account.id })}
-               onHideTotpCode={account =>
-                  setTotpCodes(current => {
-                     const next = { ...current }
+            <>
+               {summary ? <SummaryBanner summary={summary} onFix={nav.openAccount} /> : null}
+               {browsing.byId ? <OverLimitNote accounts={[...browsing.byId.values()]} /> : null}
 
-                     delete next[account.id]
+               {tools ? (
+                  <AccountsToolbar
+                     q={q}
+                     onQ={setQ}
+                     client={address.client}
+                     onClient={client => change({ client })}
+                     clients={clientsOf(rows)}
+                     chip={address.chip}
+                     onChip={chip => change({ chip })}
+                     counts={countChips(rows)}
+                     grouped={grouped}
+                     onGrouped={on => {
+                        setStoredGroup(on)
+                        change({ group: on })
+                     }}
+                     columns={columns}
+                     onColumns={setColumns}
+                     onExport={exportToday}
+                     canExport={shown.some(({ states }) => states !== undefined)}
+                  />
+               ) : null}
 
-                     return next
-                  })
-               }
-               onTogglePause={account => setPaused.mutate({ id: account.id, paused: account.status !== 'DISABLED' })}
-               onDelete={setToDelete}
-            />
+               {actions.result ? (
+                  <p className="text-sm" role="status">
+                     {actions.result}{' '}
+                     <Button variant="link" size="sm" className="h-auto p-0" onClick={actions.clearResult}>
+                        Dismiss
+                     </Button>
+                  </p>
+               ) : null}
+
+               {filtered && shown.length === 0 ? (
+                  <div className="text-muted-foreground flex flex-wrap items-center gap-3 rounded-lg border border-dashed p-6 text-sm">
+                     No account matches.
+                     <Button variant="outline" size="sm" onClick={clearFilters}>
+                        Clear the filters
+                     </Button>
+                  </div>
+               ) : (
+                  <AccountList
+                     rows={shown}
+                     groups={grouped ? groupRows(shown) : null}
+                     columns={columnIds}
+                     detailed={detailed}
+                     todayLoading={today.loading}
+                     selectable={tools && browsing.byId !== undefined}
+                     selected={picked}
+                     loading={list.isPending}
+                     busy={actions.busy}
+                     onSelect={select}
+                     onOpen={nav.openAccount}
+                     onPause={account => actions.askPause([account])}
+                     onResume={account => actions.resume([account])}
+                     onClientActivity={nav.openClient}
+                     onPauseGroup={actions.askPause}
+                  />
+               )}
+
+               {selectedRows.length > 0 && browsing.byId ? (
+                  <BulkBrowseBar
+                     accounts={selectedRows.flatMap(({ browse }) => (browse ? [browse] : []))}
+                     sample={browsing.kind !== null}
+                     onClear={() => setPicked(new Set())}
+                     onPause={() => actions.askPause(selectedAccounts)}
+                     onResume={() => actions.resume(selectedAccounts)}
+                  />
+               ) : null}
+            </>
          )}
 
-         {byId ? (
-            <BrowsingDrawer account={openAccount} kind={kind} now={now} onClose={() => setOpenBrowsing(null)} />
-         ) : null}
-
-         <RevealDialog reveal={reveal} />
-         <EditAccountDialog account={toEdit} onClose={() => setToEdit(null)} />
-         <DeleteAccountDialog
-            account={toDelete}
-            onCancel={() => setToDelete(null)}
-            onConfirm={account => remove.mutate({ id: account.id })}
-         />
-         <ConfirmRunDialog
-            message={recent?.message ?? null}
-            onCancel={() => setRecent(null)}
-            onConfirm={() => {
-               if (recent) {
-                  runTask.mutate({
-                     ...recent.run,
-                     confirmed: true,
-                  })
-               }
-
-               setRecent(null)
-            }}
-         />
-         <StartAnywayDialog
-            message={blocked?.message ?? null}
-            onCancel={() => setBlocked(null)}
-            onConfirm={() => {
-               if (blocked) {
-                  runTask.mutate({
-                     ...blocked.run,
-                     startAnyway: true,
-                  })
-               }
-
-               setBlocked(null)
-            }}
-         />
+         <AccountsDrawers accounts={list.data} browsing={browsing} actions={actions} />
+         <AccountDialogs actions={actions} />
       </div>
    )
 }
