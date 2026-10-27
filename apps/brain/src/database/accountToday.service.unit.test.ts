@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => ({
    findSessions: vi.fn(),
 }))
 
+// These two only export a task name; loading them whole would validate the environment, which CI does not have.
+vi.mock('./linkedInAccount.service', () => ({ VISIT_TASK: 'linkedin-browse' }))
+vi.mock('./linkedInAccountValidation.service', () => ({ LOGIN_TASK: 'linkedin-login' }))
 vi.mock('./prisma.service', () => ({
    PrismaService: {
       client: {
