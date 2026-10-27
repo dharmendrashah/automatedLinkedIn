@@ -1,3 +1,4 @@
+import { NextCheckLine } from '@/components/next-check-line'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -537,6 +538,15 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, ap
          <div className={FRAME}>
             <div className="unibox flex h-full flex-col bg-background text-foreground">
                {sample ? <SampleBanner /> : null}
+               <div className="border-b px-4 py-2">
+                  <NextCheckLine
+                     times={accounts
+                        .filter(account => account.state === 'ACTIVE' && (!accountIds || accountIds.has(account.id)))
+                        .map(({ nextReadAt }) => nextReadAt)}
+                     rhythm="EVERY_2_HOURS"
+                     now={new Date(now)}
+                  />
+               </div>
                <div className="grid min-h-0 flex-1 @3xl/main:grid-cols-[minmax(20rem,26rem)_minmax(0,1fr)] @6xl/main:grid-cols-[13rem_minmax(20rem,26rem)_minmax(0,1fr)]">
                   <div className="hidden overflow-y-auto border-r bg-card @6xl/main:block">
                      <ViewsList counts={counts} active={view} onChange={next => go({ view: next })} />

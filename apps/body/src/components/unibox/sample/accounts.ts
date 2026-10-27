@@ -109,4 +109,8 @@ export const sampleAccounts = (now: number): UniboxAccount[] =>
    SEEDS.map(({ readAgo, ...account }) => ({
       ...account,
       ...(readAgo !== undefined && { lastReadAt: now - readAgo }),
+      // The sample accounts that are signed in are read again in under two hours, each a little later than the one before.
+      ...(account.state === 'ACTIVE' && {
+         nextReadAt: new Date(now + (25 + (Number(account.id.replace(/\D/g, '')) % 7) * 11) * 60_000).toISOString(),
+      }),
    }))

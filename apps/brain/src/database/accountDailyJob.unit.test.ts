@@ -64,6 +64,7 @@ const account = (extra: Record<string, unknown> = {}) => ({
    nextBrowseAt: EARLIER,
    // Not due, so the tests of the check and the visit stay about those.
    nextMessagesAt: LATER,
+   nextInvitationsAt: LATER,
    // The first read is done and a sweep was made a moment ago, so the tests of the other jobs stay about those.
    messagesBackfilledAt: EARLIER,
    messagesSweptAt: NOW,
@@ -88,8 +89,117 @@ const announce = (version: number) =>
          version,
       },
    ])
-const movedTo = (field: 'nextCheckAt' | 'nextBrowseAt' | 'nextMessagesAt') =>
+const movedTo = (field: 'nextCheckAt' | 'nextBrowseAt' | 'nextMessagesAt' | 'nextInvitationsAt') =>
    mocks.updateMany.mock.calls.filter(([{ data }]) => field in data).map(([{ data }]) => data[field])
+
+describe('AccountDailyJob, the connection requests', () => {
+   beforeEach(() => {
+      vi.resetAllMocks()
+      vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      mocks.updateMany.mockResolvedValue({ count: 1 })
+      mocks.updateAccount.mockResolvedValue({})
+      mocks.countSessions.mockResolvedValue(0)
+      mocks.findConversations.mockResolvedValue([{ rowHash: 'aaaaaaaa' }])
+      announce(3)
+      mocks.requestCheck.mockResolvedValue(true)
+      mocks.requestTask.mockResolvedValue({ id: 's1' })
+   })
+
+   const due = (extra: Record<string, unknown> = {}) =>
+      account({
+         nextCheckAt: LATER,
+         nextBrowseAt: LATER,
+         nextInvitationsAt: EARLIER,
+         ...extra,
+      })
+
+   it('should ask for a read of the connection requests with no answers when it is due, then draw tomorrow in the account time zone', async () => {
+      mocks.findMany.mockResolvedValue([due()])
+
+      await expect(run()).resolves.toMatchObject({
+         invitationReads: 1,
+         visits: 0,
+         reads: 0,
+         items: [
+            {
+               accountId: 'acc1',
+               action: 'invitations-read',
+               result: 'ASKED',
+               sessionId: 's1',
+            },
+         ],
+      })
+      expect(mocks.requestTask).toHaveBeenCalledTimes(1)
+      expect(mocks.requestTask).toHaveBeenCalledWith({
+         userId: 'u1',
+         task: 'linkedin-invitations',
+         accountId: 'acc1',
+         trigger: 'automatic',
+         input: { answers: [] },
+      })
+      expect(movedTo('nextInvitationsAt')).toEqual([TOMORROW_8_IN_INDIA])
+   })
+
+   it('should only draw a time, later today, for an account that has none yet', async () => {
+      mocks.findMany.mockResolvedValue([due({ nextInvitationsAt: null })])
+
+      await expect(run()).resolves.toMatchObject({
+         invitationReads: 0,
+         drawn: 1,
+      })
+      expect(mocks.requestTask).not.toHaveBeenCalled()
+      expect(movedTo('nextInvitationsAt')).toEqual([new Date('2026-10-19T10:01:00Z')])
+   })
+
+   it('should keep the time of a read that could not be queued, so the next pass tries again', async () => {
+      mocks.findMany.mockResolvedValue([due()])
+      mocks.requestTask.mockRejectedValue(new TaskRefusedError('This account is outside its working hours.'))
+
+      await expect(run()).resolves.toMatchObject({
+         invitationReads: 0,
+         items: [
+            {
+               action: 'invitations-read',
+               result: 'SKIPPED',
+               reason: 'This account is outside its working hours.',
+            },
+         ],
+      })
+      expect(movedTo('nextInvitationsAt')).toEqual([])
+      expect(console.error).not.toHaveBeenCalled()
+   })
+
+   it('should log an unexpected failure without its details in the sentence, and try again on the next pass', async () => {
+      mocks.findMany.mockResolvedValue([due()])
+      mocks.requestTask.mockRejectedValue(new Error('connect ECONNREFUSED'))
+
+      await expect(run()).resolves.toMatchObject({
+         items: [
+            {
+               result: 'SKIPPED',
+               reason: 'Could not be queued now, tried again on the next pass',
+            },
+         ],
+      })
+      expect(console.error).toHaveBeenCalled()
+      expect(movedTo('nextInvitationsAt')).toEqual([])
+   })
+
+   it('should let the read go for the day, without asking, when there was no good sign-in in the last day', async () => {
+      mocks.findMany.mockResolvedValue([due({ lastVerifiedAt: new Date('2026-10-18T09:00:00Z') })])
+
+      await expect(run()).resolves.toMatchObject({ invitationReads: 0 })
+      expect(mocks.requestTask).not.toHaveBeenCalled()
+      expect(movedTo('nextInvitationsAt')).toEqual([TOMORROW_8_IN_INDIA])
+   })
+
+   it('should not ask for the read of an account that is not signed in', async () => {
+      mocks.findMany.mockResolvedValue([due({ status: 'ERROR' })])
+
+      await expect(run()).resolves.toMatchObject({ invitationReads: 0 })
+      expect(mocks.requestTask).not.toHaveBeenCalled()
+   })
+})
 
 describe('AccountDailyJob', () => {
    beforeEach(() => {

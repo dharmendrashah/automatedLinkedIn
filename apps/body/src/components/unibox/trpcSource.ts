@@ -52,6 +52,7 @@ const accountOf = (account: WireAccount): UniboxAccount => ({
    headline: '',
    state: STATES[account.status],
    ...(account.messagesReadAt && { lastReadAt: localClock(account.messagesReadAt) }),
+   ...(account.nextMessagesAt && { nextReadAt: account.nextMessagesAt }),
    ...(account.imageUrl && { imageUrl: account.imageUrl }),
 })
 
@@ -196,96 +197,96 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
    }
 
    return {
-   load: async (): Promise<UniboxData> => {
-      const [accounts, conversations] = await Promise.all([
-         client.unibox.accounts.query(),
-         client.unibox.conversations.query({}),
-      ])
+      load: async (): Promise<UniboxData> => {
+         const [accounts, conversations] = await Promise.all([
+            client.unibox.accounts.query(),
+            client.unibox.conversations.query({}),
+         ])
 
-      return {
-         accounts: accounts.map(accountOf),
-         conversations: conversations.map(conversationOf),
-         sample: false,
-         canSend: true,
-         canRefresh: true,
-      }
-   },
-
-   open: async id => conversationOf(await client.unibox.conversation.query({ id })),
-
-   mark: async (ids, change) => {
-      for (const group of groups(ids)) {
-         if ('unread' in change) {
-            await client.unibox.setUnread.mutate({ ids: group, unread: change.unread })
-         } else {
-            await client.unibox.setDone.mutate({ ids: group, done: change.done })
-         }
-      }
-   },
-
-   refresh: accountIds => client.unibox.refresh.mutate(accountIds ? { accountIds } : {}),
-
-   fileLink: async (messageId, index) => (await client.unibox.fileLink.query({ messageId, index })).url,
-
-   send: async (_account, text, attachments, conversationId, events) => {
-      // A link is only text on the page; there is nothing of it to upload.
-      if (attachments.some(({ kind }) => kind === 'LINK')) {
          return {
-            ok: false,
-            reason: 'A link cannot be sent as an attachment. Put it in the words of the reply.',
+            accounts: accounts.map(accountOf),
+            conversations: conversations.map(conversationOf),
+            sample: false,
+            canSend: true,
+            canRefresh: true,
          }
-      }
+      },
 
-      const uploadId = attachments.length > 0 ? crypto.randomUUID() : undefined
-      // Progress is of all the files together, by their sizes.
-      const total = attachments.reduce((sum, { file }) => sum + (file?.size ?? 0), 0)
-      let done = 0
+      open: async id => conversationOf(await client.unibox.conversation.query({ id })),
 
-      for (const attachment of attachments) {
-         const label = attachment.name ?? 'A file'
+      mark: async (ids, change) => {
+         for (const group of groups(ids)) {
+            if ('unread' in change) {
+               await client.unibox.setUnread.mutate({ ids: group, unread: change.unread })
+            } else {
+               await client.unibox.setDone.mutate({ ids: group, done: change.done })
+            }
+         }
+      },
 
-         if (!attachment.file || !upload) {
+      refresh: accountIds => client.unibox.refresh.mutate(accountIds ? { accountIds } : {}),
+
+      fileLink: async (messageId, index) => (await client.unibox.fileLink.query({ messageId, index })).url,
+
+      send: async (_account, text, attachments, conversationId, events) => {
+         // A link is only text on the page; there is nothing of it to upload.
+         if (attachments.some(({ kind }) => kind === 'LINK')) {
             return {
                ok: false,
-               reason: `${label} is no longer here. Attach it again.`,
+               reason: 'A link cannot be sent as an attachment. Put it in the words of the reply.',
             }
          }
 
-         const { size } = attachment.file
-         const uploaded = await upload(uploadId ?? '', attachment.file, percent =>
-            events?.progress?.(Math.round(((done + (size * percent) / 100) / total) * 100))
-         )
+         const uploadId = attachments.length > 0 ? crypto.randomUUID() : undefined
+         // Progress is of all the files together, by their sizes.
+         const total = attachments.reduce((sum, { file }) => sum + (file?.size ?? 0), 0)
+         let done = 0
 
-         if (!uploaded.ok) {
+         for (const attachment of attachments) {
+            const label = attachment.name ?? 'A file'
+
+            if (!attachment.file || !upload) {
+               return {
+                  ok: false,
+                  reason: `${label} is no longer here. Attach it again.`,
+               }
+            }
+
+            const { size } = attachment.file
+            const uploaded = await upload(uploadId ?? '', attachment.file, percent =>
+               events?.progress?.(Math.round(((done + (size * percent) / 100) / total) * 100))
+            )
+
+            if (!uploaded.ok) {
+               return {
+                  ok: false,
+                  reason: `${label}: ${uploaded.reason}`,
+               }
+            }
+
+            done += size
+         }
+
+         const started = await client.unibox.send
+            .mutate({ conversationId, text, ...(uploadId && { uploadId }) })
+            .catch((error: unknown) => refusalOf(error))
+
+         if (typeof started === 'string') {
             return {
                ok: false,
-               reason: `${label}: ${uploaded.reason}`,
+               reason: started,
             }
          }
 
-         done += size
-      }
+         events?.started?.(started.id)
 
-      const started = await client.unibox.send
-         .mutate({ conversationId, text, ...(uploadId && { uploadId }) })
-         .catch((error: unknown) => refusalOf(error))
+         return follow(started.id)
+      },
 
-      if (typeof started === 'string') {
-         return {
-            ok: false,
-            reason: started,
-         }
-      }
+      follow,
 
-      events?.started?.(started.id)
-
-      return follow(started.id)
-   },
-
-   follow,
-
-   dismissReply: async replyId => {
-      await client.unibox.dismissReply.mutate({ id: replyId })
-   },
+      dismissReply: async replyId => {
+         await client.unibox.dismissReply.mutate({ id: replyId })
+      },
    }
 }

@@ -34,6 +34,7 @@ const account = (overrides: Partial<AccountRead> = {}): AccountRead => ({
    accountId: 'one',
    total: 0,
    readAt: null,
+   nextCheckAt: null,
    reading: false,
    answeredToday: 0,
    ...overrides,

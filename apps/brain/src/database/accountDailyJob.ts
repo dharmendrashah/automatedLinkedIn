@@ -3,6 +3,7 @@ import { dailyTime, timezoneOfCountry } from 'core'
 import { type JobItemInput } from './jobRun.service'
 import { VISIT_TASK } from './linkedInAccount.service'
 import { LinkedInAccountValidationService } from './linkedInAccountValidation.service'
+import { INVITATIONS_TASK } from './linkedInInvitation.hooks'
 import { MESSAGES_TASK } from './linkedInMessages.hooks'
 import { messagesInput, sweepDue } from './messagesRefresh'
 import { PrismaService } from './prisma.service'
@@ -20,7 +21,7 @@ const MAX_FIRST_READS_A_DAY = 5
 const RECENT_SIGN_IN_MS = 12 * 60 * 60 * 1000
 
 type Due = Awaited<ReturnType<typeof findDue>>[number]
-type Field = 'nextCheckAt' | 'nextBrowseAt' | 'nextMessagesAt'
+type Field = 'nextCheckAt' | 'nextBrowseAt' | 'nextMessagesAt' | 'nextInvitationsAt'
 // Asked for: the task is queued. Let go: the time moves on without a task, for a fixed reason. Retry: it could not be queued now,
 // so the time stays and the next pass tries again.
 type Attempt =
@@ -53,6 +54,10 @@ const findDue = (now: Date) => {
                status: 'ACTIVE',
                OR: due('nextMessagesAt'),
             },
+            {
+               status: 'ACTIVE',
+               OR: due('nextInvitationsAt'),
+            },
          ],
       },
       select: {
@@ -62,6 +67,7 @@ const findDue = (now: Date) => {
          nextCheckAt: true,
          nextBrowseAt: true,
          nextMessagesAt: true,
+         nextInvitationsAt: true,
          messagesReadAt: true,
          messagesBackfilledAt: true,
          messagesSweptAt: true,
@@ -110,6 +116,34 @@ const requestVisit = async ({ id, userId }: Due): Promise<Attempt> => {
    } catch (error) {
       if (!(error instanceof TaskRefusedError)) {
          console.error(`Could not request the daily visit of account ${id}: ${(error as Error).message}`)
+      }
+
+      return {
+         kind: 'retry',
+         reason: error instanceof TaskRefusedError ? error.message : NOT_QUEUED,
+      }
+   }
+}
+
+const requestInvitations = async ({ id, userId }: Due): Promise<Attempt> => {
+   try {
+      const { id: sessionId } = await TaskService.request({
+         userId,
+         task: INVITATIONS_TASK,
+         accountId: id,
+         trigger: 'automatic',
+         input: { answers: [] },
+      })
+
+      return {
+         kind: 'asked',
+         sessionId,
+      }
+   } catch (error) {
+      if (!(error instanceof TaskRefusedError)) {
+         console.error(
+            `Could not request the daily read of the connection requests of account ${id}: ${(error as Error).message}`
+         )
       }
 
       return {
@@ -186,6 +220,7 @@ export class AccountDailyJob {
          checks: 0,
          visits: 0,
          reads: 0,
+         invitationReads: 0,
          drawn: 0,
          items: [] as JobItemInput[],
       }
@@ -306,6 +341,14 @@ export class AccountDailyJob {
 
             if (read) {
                result.reads += 1
+            }
+
+            const invitations = await daily('nextInvitationsAt', 'invitations-read', async () =>
+               signedInToday ? requestInvitations(account) : notSignedIn
+            )
+
+            if (invitations) {
+               result.invitationReads += 1
             }
          }
       } finally {

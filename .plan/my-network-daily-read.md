@@ -1,6 +1,6 @@
 # My network: read the connection requests once a day, automatically
 
-- Status: locked; step 0 (the empty page) done, steps 1 to 9 not started
+- Status: built and tested 2026-10-27; waits for a real run on staging (step 8) and the merge
 - Created: 2026-10-27
 - Locked by user: yes, 2026-10-27
 - Builds on: `.plan/my-network-invitations.md` (the page, the task `linkedin-invitations`, brain tables and job). That plan locked "read on demand only"; this one changes it on the owner's request of 2026-10-27.
@@ -24,6 +24,7 @@ Confirmed by the owner, 2026-10-27:
 - Every ACTIVE account is read (the same as the daily visit), not only the accounts whose owner has opened My network.
 - A read the owner clicks does NOT count as the day's read: the daily read runs anyway at its own time.
 - The empty manager page was unseen; the owner ran the task on an account with no pending requests (run 411f526d) and step 0 is done.
+- Asked on 2026-10-27 after seeing My network on staging: a written line at the top of My network, and the same on Unibox, says when the next automatic check is. With several accounts (each has its own random time) it shows the earliest next time, in the browser's time zone, e.g. "Next check: tomorrow at 08:42", and says how many accounts it is the earliest of. On Unibox the messages are read every 2 hours, so the line says that rhythm and the earliest next read, e.g. "Next read: in about 1 hour 20 minutes".
 
 Open questions: none.
 
@@ -35,13 +36,13 @@ Open questions: none.
 ## Approach
 
 - [x] 0. Done 2026-10-27 on `dharmendrashaheagle+linkedin` (run 411f526d, ERROR before the fix): the empty manager page draws the tabs Received and Sent, a single dropdown "Focused (0)" (not the chips "All (N)" of the other account), and inside the same `[data-testid="lazy-column"]` a paragraph "No new invitations" followed by "Suggestions for you" (listitems that are not requests). The reader now takes that paragraph as `empty` (no rows, and the words in the list), the task answers `DONE` with an empty complete list without scrolling, and a request asked for on such a page is `GONE`. Fixture and tests added. Not seen: a populated page on this layout ("Focused (N)" may leave out an "Other" group of requests), the words in another language.
-- [ ] 1. Schema: `LinkedInAccount.nextInvitationsAt DateTime?` (additive migration, nullable, so existing accounts get a first draw on the next pass).
-- [ ] 2. Spider: `linkedin-invitations` `budget.class` becomes `'BACKGROUND'` (a manual request is still `ACTION` through `classOf`); keep `estimateS: 120`. The worker announces the new catalog on restart.
-- [ ] 3. Brain `accountDailyJob.ts`: `Field` gains `nextInvitationsAt`; `findDue` and its `select` gain it; `requestInvitations(account)` asks `INVITATIONS_TASK` with `trigger: 'automatic'` and `input: { answers: [] }` like `requestVisit` (refusal: `retry`, other error logged and `retry`); `daily('nextInvitationsAt', 'invitations-read', ...)` runs after the visit, once a day (a new `every` is not used), with the same `signedInToday` gate; the result counts `invitationReads` and the summary line says it only when one was asked for.
+- [x] 1. Schema: `LinkedInAccount.nextInvitationsAt DateTime?` (additive migration, nullable, so existing accounts get a first draw on the next pass).
+- [x] 2. Spider: `linkedin-invitations` `budget.class` becomes `'BACKGROUND'` (a manual request is still `ACTION` through `classOf`); keep `estimateS: 120`. The worker announces the new catalog on restart.
+- [x] 3. Brain `accountDailyJob.ts`: `Field` gains `nextInvitationsAt`; `findDue` and its `select` gain it; `requestInvitations(account)` asks `INVITATIONS_TASK` with `trigger: 'automatic'` and `input: { answers: [] }` like `requestVisit` (refusal: `retry`, other error logged and `retry`); `daily('nextInvitationsAt', 'invitations-read', ...)` runs after the visit, once a day (a new `every` is not used), with the same `signedInToday` gate; the result counts `invitationReads` and the summary line says it only when one was asked for.
 - [ ] 4. Dropped: the owner chose that a read clicked by hand does not move the daily time, so the brain hook needs no change.
-- [ ] 5. Job text: `accountDaily` `purpose` and summary mention the invitation read; `apps/body/src/components/jobs/describe.ts` gets the label for `invitations-read`.
-- [ ] 6. My network page: the header line says the requests are also read once a day (one short sentence next to "Last read"); no other UI change.
-- [ ] 7. Tests first: `accountDailyJob.unit.test.ts` (due and drawn; asked once a day and the time moves; refusal keeps the time; not signed in is let go; item `invitations-read`), `linkedInInvitation.hooks.unit.test.ts` is unchanged, reader test for the empty page, and an integration case in `linkedInInvitation.service.integration.test.ts` for a read of an account with nothing.
+- [x] 5. Job text: `accountDaily` `purpose` and summary mention the invitation read; `apps/body/src/components/jobs/describe.ts` gets the label for `invitations-read`.
+- [x] 6. The next-check line: brain returns `nextCheckAt` for each account of `network.list` (`nextInvitationsAt`) and `nextMessagesAt` for each account of `unibox.accounts`; the body has one pure module (`next-check.ts`, tested) that turns the times of the accounts shown into the sentence (earliest of the signed-in accounts; "today at", "tomorrow at" or the date; "due now" when the time has passed; "being scheduled" when no account has a time yet; the count of accounts when more than one), used by a small component at the top of My network and at the top of Unibox; the sample views carry times so the line can be looked at.
+- [x] 7. Tests first: `accountDailyJob.unit.test.ts` (due and drawn; asked once a day and the time moves; refusal keeps the time; not signed in is let go; item `invitations-read`), `linkedInInvitation.hooks.unit.test.ts` is unchanged, reader test for the empty page, and an integration case in `linkedInInvitation.service.integration.test.ts` for a read of an account with nothing.
 - [ ] 8. Gate (`pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build`), then a real run: leave one staging account due and watch the monitor show `invitations-read` ASKED and the session DONE.
 - [ ] 9. Plan `done` with Outcome; `MEMORY.md` updated; the `my-network-invitations.md` requirement "no scheduled read" marked superseded.
 
@@ -70,4 +71,4 @@ Open questions: none.
 
 ## Outcome
 
-Filled in when done.
+Built 2026-10-27, gate green (`pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build`), the Postgres service test and the daily job test pass. NOT run on staging yet (step 8) and the new lines were not seen in a browser. Brain: `LinkedInAccount.nextInvitationsAt` (migration `20261027152854_add_next_invitations_at`, nullable), `AccountDailyJob` asks `linkedin-invitations` (input `answers: []`, trigger `automatic`) once a day at the account's own random time with the same gates as the visit (item `invitations-read`, counted as `invitationReads`), job text and the monitor label updated. Spider: the task budget class is `BACKGROUND` (a manual request is still `ACTION`). The next-check line (asked on staging 2026-10-27): `network.list` returns `nextCheckAt` for each account and `unibox.accounts` returns `nextMessagesAt`; the body has one pure sentence maker (`lib/next-check.ts`, tested) and one line component (`components/next-check-line.tsx`) used at the top of My network ("Read automatically once a day. Next checks: tomorrow between 06:30 and 17:40, each account at its own time.") and of the Unibox ("Messages are read automatically every 2 hours. Next read: in about 35 minutes. It is the earliest of 2 accounts."), for the accounts shown that are signed in, in the viewer's time zone. Deviations: the Unibox reads every 2 hours already, so its line says that, not "once a day"; step 4 was dropped as planned. Follow-ups: the line shows only accounts that are signed in; an account with no drawn time yet is counted as "not scheduled yet" for the daily line; a real run on staging to see `invitations-read` ASKED in the monitor and the session DONE.

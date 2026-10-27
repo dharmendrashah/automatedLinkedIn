@@ -23,6 +23,7 @@ import { Toolbar } from '@/components/network/toolbar'
 import { createTrpcSource } from '@/components/network/trpc-source'
 import { useNetwork } from '@/components/network/use-network'
 import { useNow } from '@/components/network/use-now'
+import { NextCheckLine } from '@/components/next-check-line'
 import { PageStatus } from '@/components/page-status'
 import { identityOf, ineligibleReason } from '@/components/posting/accounts'
 import { Button } from '@/components/ui/button'
@@ -159,17 +160,24 @@ const Requests = ({ source, accounts, picker }: RequestsProps) => {
    )
 
    const top = (
-      <div className="flex flex-wrap items-center justify-between gap-3">
-         {picker}
-         <div className="flex items-center gap-3">
-            {snapshot ? (
-               <span className="text-muted-foreground text-sm" role="status">
-                  {readLine(reads, now)}
-               </span>
-            ) : null}
-            {snapshot && !reads.every(({ problem }) => problem) ? read : null}
+      <>
+         <NextCheckLine
+            times={reads.filter(({ problem }) => !problem).map(({ nextCheckAt }) => nextCheckAt)}
+            rhythm="DAILY"
+            now={now}
+         />
+         <div className="flex flex-wrap items-center justify-between gap-3">
+            {picker}
+            <div className="flex items-center gap-3">
+               {snapshot ? (
+                  <span className="text-muted-foreground text-sm" role="status">
+                     {readLine(reads, now)}
+                  </span>
+               ) : null}
+               {snapshot && !reads.every(({ problem }) => problem) ? read : null}
+            </div>
          </div>
-      </div>
+      </>
    )
 
    if (network.isPending) {

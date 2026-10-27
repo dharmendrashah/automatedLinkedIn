@@ -31,6 +31,7 @@ const OFFSET = 3
 type Store = {
    requests: NetworkRequest[]
    readAt: string | null
+   nextCheckAt: string
    reading: boolean
    answeredToday: number
    // The preview refuses once, as the browse budget does, until the owner goes on with Start anyway.
@@ -88,6 +89,8 @@ export const createSampleSource = (scenario: Scenario, clock: () => Date = () =>
       const created: Store = {
          requests: requestsFor(scenario, now, accountId, stores.size * OFFSET),
          readAt: new Date(now.getTime() - 12 * 60_000).toISOString(),
+         // Tomorrow morning, a little later for each account, as the daily read draws a time of its own for each.
+         nextCheckAt: new Date(now.getTime() + (20 * 60 + stores.size * 95) * 60_000).toISOString(),
          reading: false,
          answeredToday: scenario === 'mixed' ? 2 : 0,
          blocked: scenario === 'budget',
@@ -146,6 +149,7 @@ export const createSampleSource = (scenario: Scenario, clock: () => Date = () =>
                   accountId,
                   total: store.requests.filter(isOpen).length,
                   readAt: store.readAt,
+                  nextCheckAt: store.nextCheckAt,
                   reading: store.reading,
                   answeredToday: store.answeredToday,
                   ...(scenario === 'signedout' ? { problem: 'SIGNED_OUT' as const } : {}),

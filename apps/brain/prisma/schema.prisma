@@ -590,6 +590,8 @@ model LinkedInAccount {
   nextBrowseAt          DateTime?
   // The daily automatic read of the account's messages, at a random time of its day (.plan/unibox-backend.md).
   nextMessagesAt        DateTime?
+  // The daily automatic read of the connection requests, at a random time of the account's day (.plan/my-network-daily-read.md).
+  nextInvitationsAt     DateTime?
   // The name and picture LinkedIn showed for the account when its messages were last read; shown in the Unibox.
   displayName           String?
   imageUrl              String?
