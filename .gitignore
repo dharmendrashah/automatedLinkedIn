@@ -31,3 +31,4 @@ apps/spider/.devtools-uploads/
 # Real messages kept for trying the Unibox in development (never committed or built).
 apps/body/public/messages.json
 apps/spider/.devtools-staging.env
+**/.vitest

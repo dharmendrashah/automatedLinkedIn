@@ -34,12 +34,16 @@ export const identityOf = (account: AccountLike, profile: ProfileLike | null | u
 }
 
 const REASONS: Record<Exclude<AccountStatus, 'ACTIVE'>, string> = {
-   PENDING: 'Its sign-in was not checked yet. Run Test login on the accounts page.',
+   PENDING: 'Its sign-in was not checked yet. Check it on the accounts page.',
    NEEDS_REAUTH: 'LinkedIn asks to sign in again. Fix it on the accounts page.',
    ERROR: 'The last sign-in check failed. Look at it on the accounts page.',
    DISABLED: 'It is paused. Resume it on the accounts page.',
    BLOCKED: 'LinkedIn restricted this account.',
 }
+
+// What an account is called in a list: its name on LinkedIn, else its email; a sentence for one that was removed.
+export const accountName = (account: AccountLike | undefined) =>
+   account ? (account.displayName ?? account.email) : 'Account removed'
 
 // Only an account that is signed in can be written for; why not, in a sentence, for the others.
 export const ineligibleReason = (status: AccountStatus) => (status === 'ACTIVE' ? undefined : REASONS[status])

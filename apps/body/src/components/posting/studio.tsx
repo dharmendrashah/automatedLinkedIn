@@ -9,20 +9,21 @@ import { toast } from 'sonner'
 
 import type { PostBlock, PostVisibility } from '@automatedLinkedIn/contracts'
 
+import { type Account } from '../accounts/types'
+
+import { trpc } from '../../trpc'
+import { accountName, identityOf, ineligibleReason } from './accounts'
 import { Composer } from './composer'
+import { blocksOf, composerOf, isBlank } from './draft'
 import { PostAs } from './post-as'
 import { PostConfirmDialog } from './post-confirm-dialog'
 import { PostPreview, type PreviewWidth } from './post-preview'
+import { describePlanned } from './schedule'
 import { type Planned, ScheduleDialog } from './schedule-dialog'
 import { summaryOf } from './summary'
-import { identityOf, ineligibleReason } from './accounts'
-import { blocksOf, composerOf, isBlank } from './draft'
-import { describePlanned } from './schedule'
 import { useAutosave } from './use-autosave'
+import { useClientLabels } from './use-client-labels'
 import { usePostWriter } from './use-post-writer'
-
-import { type Account } from '../accounts/types'
-import { trpc } from '../../trpc'
 
 export type Initial = {
    draftId: string | undefined
@@ -62,12 +63,11 @@ export const Studio = ({ initial, accounts }: Props) => {
    const [confirming, setConfirming] = useState<'now' | 'schedule'>()
    const account = accounts.find(({ id }) => id === accountId)
    const profile = trpc.accountProfile.get.useQuery({ accountId }, { retry: false })
-   const options = accounts
-      .filter(({ id, status }) => id === accountId || status === 'ACTIVE')
-      .map(({ id, email, displayName }) => ({
-         id,
-         label: displayName ?? email,
-      }))
+   const client = useClientLabels().get(accountId)
+   const options = accounts.map(({ id, email, displayName }) => ({
+      id,
+      label: displayName ?? email,
+   }))
 
    const draftId = useRef(initial.draftId)
    const mounted = useRef(true)
@@ -141,13 +141,15 @@ export const Studio = ({ initial, accounts }: Props) => {
            ? `Uploading ${uploading} ${uploading === 1 ? 'file' : 'files'}…`
            : SAVE_TEXT[autosave.state]
    const sending = publish.isPending || schedule.isPending
-   const blocker = refusal
-      ? `This account cannot post now. ${refusal}`
-      : isBlank(text, attachment)
-        ? 'Write something first.'
-        : uploading > 0
-          ? 'Wait for the files to finish uploading.'
-          : undefined
+   const unsent = isBlank(text, attachment)
+      ? 'Write something first.'
+      : uploading > 0
+        ? 'Wait for the files to finish uploading.'
+        : undefined
+   const blocker = refusal ? `This account cannot post now. ${refusal}` : unsent
+   const warning = refusal
+      ? 'This account is not signed in. Fix it before this time, or the post will not go.'
+      : undefined
 
    // The draft is saved first, so what is posted is what is on the page; the copy brain makes is the post, and the draft is gone.
    const send = async () => {
@@ -212,7 +214,9 @@ export const Studio = ({ initial, accounts }: Props) => {
 
          {refusal ? (
             <Alert>
-               <AlertDescription>This account cannot post now. {refusal}</AlertDescription>
+               <AlertDescription>
+                  This account cannot post now. {refusal} You can keep writing and plan a time.
+               </AlertDescription>
             </Alert>
          ) : null}
 
@@ -234,20 +238,26 @@ export const Studio = ({ initial, accounts }: Props) => {
                   {...writer.composer}
                   footer={
                      <>
-                        <p role="status" className="text-muted-foreground flex items-center gap-2 text-sm">
-                           {saveText}
-                           {autosave.state === 'error' ? (
-                              <Button
-                                 type="button"
-                                 variant="link"
-                                 size="sm"
-                                 className="h-auto p-0"
-                                 onClick={() => void autosave.retry()}
-                              >
-                                 Try again
-                              </Button>
-                           ) : null}
-                        </p>
+                        <div className="grid gap-0.5">
+                           <p className="text-sm font-medium" dir="auto">
+                              Posting as {identity.name}
+                              {client ? ` (${client})` : ''}
+                           </p>
+                           <p role="status" className="text-muted-foreground flex items-center gap-2 text-sm">
+                              {saveText}
+                              {autosave.state === 'error' ? (
+                                 <Button
+                                    type="button"
+                                    variant="link"
+                                    size="sm"
+                                    className="h-auto p-0"
+                                    onClick={() => void autosave.retry()}
+                                 >
+                                    Try again
+                                 </Button>
+                              ) : null}
+                           </p>
+                        </div>
                         <div className="flex items-center gap-2">
                            <Button type="button" variant="ghost" onClick={() => setScheduling(true)}>
                               <CalendarClock />
@@ -256,8 +266,8 @@ export const Studio = ({ initial, accounts }: Props) => {
                            <Button
                               type="button"
                               variant="outline"
-                              disabled={Boolean(blocker) || sending || !planned}
-                              title={blocker ?? (planned ? undefined : 'Plan a time first.')}
+                              disabled={Boolean(unsent) || sending || !planned}
+                              title={unsent ?? (planned ? undefined : 'Plan a time first.')}
                               onClick={() => setConfirming('schedule')}
                            >
                               <CalendarClock />
@@ -277,9 +287,13 @@ export const Studio = ({ initial, accounts }: Props) => {
                   }
                />
             </div>
-            <div className={tab === 'edit' ? 'hidden gap-3 lg:sticky lg:top-4 lg:grid' : 'grid gap-3 lg:sticky lg:top-4'}>
+            <div
+               className={tab === 'edit' ? 'hidden gap-3 lg:sticky lg:top-4 lg:grid' : 'grid gap-3 lg:sticky lg:top-4'}
+            >
                <div className="flex items-center justify-between gap-2">
-                  <p className="text-muted-foreground text-xs">Preview. LinkedIn may fold long text a little differently.</p>
+                  <p className="text-muted-foreground text-xs">
+                     Preview. LinkedIn may fold long text a little differently.
+                  </p>
                   <ToggleGroup
                      type="single"
                      size="sm"
@@ -314,12 +328,13 @@ export const Studio = ({ initial, accounts }: Props) => {
          />
          <PostConfirmDialog
             mode={confirming}
-            account={account.displayName ?? account.email}
+            account={`${accountName(account)}${client ? ` (${client})` : ''}`}
             words={summaryOf(blocks).words}
             attachment={summaryOf(blocks).attachment}
             audience={audience}
             comments={comments}
             plannedText={planned ? describePlanned(planned.at, planned.zone) : undefined}
+            warning={confirming === 'schedule' ? warning : undefined}
             onConfirm={() => void send()}
             onCancel={() => setConfirming(undefined)}
          />
