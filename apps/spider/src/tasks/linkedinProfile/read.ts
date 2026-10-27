@@ -25,7 +25,7 @@ import {
    parseTopSkills,
 } from '../../linkedin/profileReader'
 import { SignedOut } from '../../linkedin/session'
-import { DETAIL_PAGES } from './capture'
+import { DETAIL_PAGES } from './detailPages'
 
 export type ProfileInput = {
    // Keep the pages with the run, to study how they are built (a run keeps at most 20 files, so only the profile keeps its links).
@@ -43,7 +43,7 @@ export type ProfileRead = {
    dropped: number
 }
 
-// The pages behind the profile's "Show all" links are the ones the capture opens (`DETAIL_PAGES`); each is opened by its address, as a
+// The pages behind the profile's "Show all" links are the ones in `DETAIL_PAGES`; each is opened by its address, as a
 // person could type it.
 
 // No new page is begun after this much of the run; the time limit of the task is longer, so the one in progress can end.
