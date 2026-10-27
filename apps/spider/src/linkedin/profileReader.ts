@@ -125,25 +125,52 @@ const paragraphsAbove = (block: HTMLElement, card: HTMLElement) => {
    return levels
 }
 
+// Some accounts get the main page with no `data-view-name` at all (staging, 2026-10-27, an account whose card says "Verify in 2
+// minutes": a run ended "could not be opened" on it). There the cards are found by what every layout has: the `componentkey` of the
+// photo, the addresses of the links (contact info, summary edit, analytics, connections) and the order of the paragraphs. Each reader
+// looks for the first layout's marker and falls back to these, so what was read before does not change.
+const PHOTO = 'a[componentkey="topcard-logo-image-referencekey"]'
+const CONTACT_LINK = 'a[href*="/overlay/contact-info/"]'
+
+// The top card is the nearest block around the profile photo that holds the name and the contact link (the page's first heading is a
+// count of notices, so the name is not found by being the first `h2`).
+const topCardOf = (root: HTMLElement) => {
+   const marked = root.querySelector('[data-view-name="profile-top-card"]')
+
+   if (marked) {
+      return marked
+   }
+
+   for (let node = root.querySelector(PHOTO)?.parentNode; node; node = node.parentNode) {
+      if (node.querySelector('h2') && node.querySelector(CONTACT_LINK)) {
+         return node
+      }
+   }
+
+   return undefined
+}
+
 // The top of the profile: name, the verified mark, pronouns, headline, place, the pictures and the connections. The name sits in a
-// block marked as the verified badge (a picture with a role inside it when the member is verified). The pronouns, when there are any,
-// are a paragraph nearer to that block than the headline, which is followed by the line of current places, before the block that ends
-// with the "Contact info" link; how deep the name sits differs between profiles, so the paragraphs are told apart by their nearness.
+// block marked as the verified badge (a picture with a role inside it when the member is verified); a page with no marks has the block
+// around the name instead. The pronouns, when there are any, are a paragraph nearer to that block than the headline, which is followed
+// by the line of current places, before the block that ends with the "Contact info" link; how deep the name sits differs between
+// profiles, so the paragraphs are told apart by their nearness.
 export const parseTopCard = (html: string): TopCard | undefined => {
-   const card = parse(html).querySelector('[data-view-name="profile-top-card"]')
-   const name = textOf(card?.querySelector('h2'))
+   const card = topCardOf(parse(html))
+   const heading = card?.querySelector('h2')
+   const name = textOf(heading)
 
    if (!card || !name) {
       return undefined
    }
 
-   const badge = card.querySelector('[data-view-name="profile-top-card-verified-badge"]')
+   const badge = card.querySelector('[data-view-name="profile-top-card-verified-badge"]') ?? heading?.parentNode
    const [first, second] = badge ? paragraphsAbove(badge, card) : []
    const pronouns = second ? textOf(first?.[0]) : undefined
    const headline = textOf((second ?? first)?.[0])
-   const contact = card.querySelector('a[href*="/overlay/contact-info/"]')
+   const contact = card.querySelector(CONTACT_LINK)
    const place = contact?.closest('div')?.querySelector('p')
-   const photoLink = card.querySelector('[data-view-name="profile-top-card-member-photo"]')
+   const photoLink = card.querySelector(`[data-view-name="profile-top-card-member-photo"], ${PHOTO}`)
 
    return {
       name,
@@ -157,7 +184,11 @@ export const parseTopCard = (html: string): TopCard | undefined => {
       ),
       connections: some(
          /^(\d[\d.,]*\+?)/.exec(
-            textOf(card.querySelector('[data-view-name="profile-top-card-view-all-connections"]'))
+            textOf(
+               card.querySelector(
+                  '[data-view-name="profile-top-card-view-all-connections"], a[href*="/mynetwork/invite-connect/connections/"]'
+               )
+            )
          )?.[1]
       ),
       profileUrl: addressOf(photoLink?.getAttribute('href')),
@@ -174,18 +205,42 @@ export const parseTopSkills = (html: string): string[] => {
    return (block ? (linesOf(block)[1] ?? '') : '').split('•').map(clean).filter(Boolean).slice(0, 10)
 }
 
-// The text of the about card, without its "more" button.
-export const parseAbout = (html: string) =>
-   bodyOf(parse(html).querySelector('[data-view-name="profile-card-about"] [data-testid="expandable-text-box"]'))
+// The text of the about card, without its "more" button. A page with no marks has the card around the link that edits it (the nearest
+// block with a text and a single heading, so the text of a post further down is never taken).
+const aboutBoxOf = (root: HTMLElement) => {
+   const marked = root.querySelector('[data-view-name="profile-card-about"] [data-testid="expandable-text-box"]')
 
-// The three numbers LinkedIn shows only to the account: each is a link marked by its own name, and each appears twice in the page.
+   if (marked) {
+      return marked
+   }
+
+   for (let node = root.querySelector('a[href*="/edit/forms/summary/"]')?.parentNode; node; node = node.parentNode) {
+      if (node.querySelectorAll('h2').length > 1) {
+         return undefined
+      }
+
+      const box = node.querySelector(TEXT_BOX)
+
+      if (box) {
+         return box
+      }
+   }
+
+   return undefined
+}
+
+export const parseAbout = (html: string) => bodyOf(aboutBoxOf(parse(html)))
+
+// The three numbers LinkedIn shows only to the account: each is a link marked by its own name (or, on a page with no marks, by its
+// address), and each appears twice in the page.
 export const parseAnalytics = (html: string): AccountProfile['analytics'] => {
    const root = parse(html)
-   const link = (name: string) => root.querySelector(`[data-view-name="insights-${name}"]`)
-   const impressions = link('content-impressions')
-   const profileViews = leadingCount(textOf(link('wvmp')))
+   const link = (name: string, path: string) =>
+      root.querySelector(`[data-view-name="insights-${name}"], a[href*="/analytics/${path}"]`)
+   const impressions = link('content-impressions', 'creator/content/')
+   const profileViews = leadingCount(textOf(link('wvmp', 'profile-views/')))
    const postImpressions = leadingCount(textOf(impressions))
-   const searchAppearances = leadingCount(textOf(link('search-appearances')))
+   const searchAppearances = leadingCount(textOf(link('search-appearances', 'search-appearances/')))
 
    if (profileViews === undefined || postImpressions === undefined || searchAppearances === undefined) {
       return undefined
@@ -364,46 +419,64 @@ export const parseInterests = (html: string): Interests => {
 export const parseSuggestions = (html: string) => {
    const root = parse(html)
    const seen = new Set<string>()
-   const peopleYouMayKnow = root
-      .querySelectorAll('[data-view-name^="profile-card-pymk-recommendation"] a[href*="/in/"]')
-      .flatMap(link => {
-         const [name, degree, headline] = linesOf(link)
-         const url = addressOf(link.getAttribute('href'))
+   const marked = root.querySelectorAll('[data-view-name^="profile-card-pymk-recommendation"] a[href*="/in/"]')
+   const people =
+      marked.length > 0
+         ? marked
+         : root
+              .querySelectorAll('a[href*="/in/"]')
+              .filter(link => link.querySelector('figure') != null && /^·\s*\d/.test(linesOf(link)[1] ?? ''))
+   const peopleYouMayKnow = people.flatMap(link => {
+      const [name, degree, headline] = linesOf(link)
+      const url = addressOf(link.getAttribute('href'))
 
-         if (!name || !degree || !url || seen.has(url)) {
-            return []
-         }
+      if (!name || !degree || !url || seen.has(url)) {
+         return []
+      }
 
-         seen.add(url)
+      seen.add(url)
 
-         return [
-            {
-               name,
-               subtitle: some(headline),
-               degree: some(degree.replace(/^·\s*/, '')),
-               imageUrl: pictureOf(link.querySelector('img')),
-               url,
-            },
-         ]
-      })
-   const youMightLike = root
-      .querySelectorAll('[data-view-name="company-recommendation-card-impression"]')
-      .flatMap(card => {
-         const link = card.querySelector('a[href*="/company/"], a[href*="/showcase/"]')
-         const [name, industry, followers] = linesOf(card)
+      return [
+         {
+            name,
+            subtitle: some(headline),
+            degree: some(degree.replace(/^·\s*/, '')),
+            imageUrl: pictureOf(link.querySelector('img')),
+            url,
+         },
+      ]
+   })
+   const cards = root.querySelectorAll('[data-view-name="company-recommendation-card-impression"]')
+   const pageLinks = (parent: HTMLElement) => parent.querySelectorAll('a[href*="/company/"], a[href*="/showcase/"]')
+   // With no marks a page is one link holding the picture, the name, what it is and how many follow it; a company named in the
+   // Interests card has no line for what it is, so it is not taken.
+   const pages =
+      cards.length > 0
+         ? cards.map(card => ({
+              card,
+              link: pageLinks(card)[0],
+           }))
+         : pageLinks(root)
+              .filter(link => link.querySelector('figure') != null && /^\d/.test(linesOf(link)[2] ?? ''))
+              .map(link => ({
+                 card: link,
+                 link,
+              }))
+   const youMightLike = pages.flatMap(({ card, link }) => {
+      const [name, industry, followers] = linesOf(card)
 
-         return name
-            ? [
-                 {
-                    name,
-                    subtitle: some(industry),
-                    followers: some(followers),
-                    imageUrl: pictureOf(link?.querySelector('img')),
-                    url: addressOf(link?.getAttribute('href')),
-                 },
-              ]
-            : []
-      })
+      return name
+         ? [
+              {
+                 name,
+                 subtitle: some(industry),
+                 followers: some(followers),
+                 imageUrl: pictureOf(link?.querySelector('img')),
+                 url: addressOf(link?.getAttribute('href')),
+              },
+           ]
+         : []
+   })
 
    return {
       peopleYouMayKnow: peopleYouMayKnow.slice(0, MAX_ENTITIES),

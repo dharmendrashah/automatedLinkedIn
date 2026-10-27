@@ -2,8 +2,7 @@ import { z } from 'zod'
 
 import { describeError } from '../../browsing/errors'
 import { defineTask } from '../defineTask'
-import { answerFor, answerForRead } from './answer'
-import { captureProfile } from './capture'
+import { answerForRead } from './answer'
 import { readProfile } from './read'
 
 export const TASK_NAME = 'linkedin-profile'
@@ -13,8 +12,8 @@ type Options = {
 }
 
 // Opens the account's own profile and the pages behind its "Show all" links, reads what they show, and hands over `profile.json`
-// (.plan/linkedin-profile-task.md). It starts from the saved session and clicks only the chips of Interests. With `capture` it only
-// keeps the pages with the run, to study how they are built.
+// (.plan/linkedin-profile-task.md, .plan/linkedin-profile-always-json.md). It starts from the saved session and clicks only the chips
+// of Interests. The file comes out of every run; `capture` and `snapshots` only also keep the pages with the run.
 export const createLinkedinProfile = ({ baseUrl }: Options) =>
    defineTask({
       name: TASK_NAME,
@@ -26,7 +25,9 @@ export const createLinkedinProfile = ({ baseUrl }: Options) =>
          capture: z
             .boolean()
             .default(false)
-            .describe('Only keep the pages (markup, links and a picture) with the run, and read nothing.'),
+            .describe(
+               'Also keep the pages (markup, links and a picture) with the run, as snapshots does. The profile is read either way.'
+            ),
          snapshots: z
             .boolean()
             .default(false)
@@ -64,15 +65,13 @@ export const createLinkedinProfile = ({ baseUrl }: Options) =>
          cooldownMs: 30 * 60 * 1000,
          oneAtATime: 'account',
       },
-      // The run begins no new page after 10 minutes (see capture.ts and read.ts); the rest is room for the one in progress.
+      // The run begins no new page after 8 minutes (see read.ts); the rest is room for the one in progress.
       limits: { timeoutMs: 15 * 60 * 1000 },
       recording: { always: true },
       run: async (context, input) => {
          // A failure of the task is an answer, not a crash: a crash is run again, and a reading of ten minutes must not be.
          try {
-            return input.capture
-               ? answerFor(await captureProfile(context, baseUrl))
-               : answerForRead(await readProfile(context, baseUrl, input))
+            return answerForRead(await readProfile(context, baseUrl, { snapshots: input.snapshots || input.capture }))
          } catch (error) {
             context.warn(describeError(error, 'The profile could not be opened'))
 

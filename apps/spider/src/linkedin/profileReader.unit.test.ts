@@ -13,6 +13,11 @@ import {
    openToWorkMarkup,
    pagesYouMightLikeMarkup,
    peopleYouMayKnowMarkup,
+   plainAboutMarkup,
+   plainInsightsMarkup,
+   plainPagesYouMightLikeMarkup,
+   plainPeopleYouMayKnowMarkup,
+   plainTopCardMarkup,
    postsPage,
    profilePage,
    projectsPage,
@@ -806,5 +811,113 @@ describe('parseServices and parseOpenToWork', () => {
 
    it('should give nothing when the page has no open to work box', () => {
       expect(parseOpenToWork(profilePage('<p>x</p>'))).toBeUndefined()
+   })
+})
+
+// The page as LinkedIn serves some accounts, with no `data-view-name` (staging, 2026-10-27): a run ended "could not be opened" on it.
+describe('the main page with no data-view-name', () => {
+   const toast = '<section><h2 data-testid="toasts-title">0 notifications</h2></section>'
+   const card = {
+      name: 'Sample Person',
+      pronouns: 'They/Them',
+      headline: 'Product lead at Sampleworks',
+      places: 'Sampleworks · Example University',
+      location: 'Sampletown, Exampleland',
+      connections: '112',
+   }
+
+   it('should read the top card around the photo, not the first heading of the page', () => {
+      expect(parseTopCard(profilePage(toast, plainTopCardMarkup(card)))).toEqual({
+         name: 'Sample Person',
+         verified: false,
+         pronouns: 'They/Them',
+         headline: 'Product lead at Sampleworks',
+         location: 'Sampletown, Exampleland',
+         connections: '112',
+         imageUrl: 'https://media.licdn.com/dms/image/v2/sample/profile-displayphoto-shrink_100_100/x',
+         coverUrl: 'https://media.licdn.com/dms/image/v2/sample/profile-displaybackgroundimage-shrink_200_800/x',
+         profileUrl: 'https://www.linkedin.com/in/sample-person/',
+      })
+   })
+
+   it('should tell the headline from the pronouns, and read a verified mark', () => {
+      expect(
+         parseTopCard(
+            profilePage(
+               plainTopCardMarkup({
+                  ...card,
+                  pronouns: undefined,
+                  verified: true,
+               })
+            )
+         )
+      ).toMatchObject({
+         pronouns: undefined,
+         headline: 'Product lead at Sampleworks',
+         verified: true,
+      })
+   })
+
+   it('should give nothing when the page has a heading but no profile photo', () => {
+      expect(parseTopCard(profilePage(toast, '<div><h2>Sample</h2></div>'))).toBeUndefined()
+   })
+
+   it('should read the about text and the three numbers, by their links', () => {
+      const html = profilePage(
+         plainAboutMarkup('First line.<br><br>Second line.'),
+         plainInsightsMarkup('9 profile views', '120 post impressions', '3 search appearances')
+      )
+
+      expect(parseAbout(html)).toBe('First line.\nSecond line.')
+      expect(parseAnalytics(html)).toEqual({
+         profileViews: 9,
+         postImpressions: 120,
+         searchAppearances: 3,
+         period: 'Past 7 days',
+      })
+   })
+
+   it('should read the suggestions, and not the own profile or a company that only names its followers', () => {
+      const html = profilePage(
+         plainTopCardMarkup(card),
+         plainPeopleYouMayKnowMarkup([
+            {
+               name: 'Riley Sample',
+               degree: '3rd',
+               headline: 'Designer at Examples',
+               slug: 'riley-sample',
+            },
+         ]),
+         plainPagesYouMightLikeMarkup([
+            {
+               name: 'Sample News',
+               what: 'Newspaper Publishing',
+               followers: '826,303 followers',
+               slug: 'sample-news',
+               mutual: 'A friend follows this page',
+            },
+         ]),
+         '<a href="https://www.linkedin.com/company/teamxp/"><figure><img src="https://media.licdn.com/x"></figure><p>TeamXP</p><p>173 followers</p></a>'
+      )
+      const { peopleYouMayKnow, youMightLike } = parseSuggestions(html)
+
+      expect(peopleYouMayKnow).toEqual([
+         {
+            name: 'Riley Sample',
+            subtitle: 'Designer at Examples',
+            degree: '3rd',
+            imageUrl: 'https://media.licdn.com/dms/image/v2/sample/profile-displayphoto-scale_100_100/riley-sample',
+            url: 'https://www.linkedin.com/in/riley-sample/',
+         },
+      ])
+      expect(youMightLike).toEqual([
+         {
+            name: 'Sample News',
+            subtitle: 'Newspaper Publishing',
+            followers: '826,303 followers',
+            imageUrl: 'https://media.licdn.com/dms/image/v2/sample/company-logo_100_100/sample-news',
+            url: 'https://www.linkedin.com/company/sample-news/',
+         },
+      ])
    })
 })
