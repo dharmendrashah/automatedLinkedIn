@@ -7,6 +7,8 @@ import { readAddress, writeAddress } from '@/components/accounts/address'
 import { COLUMNS, columnsFrom, columnsToText } from '@/components/accounts/columns'
 import { NeedsProxyNotice } from '@/components/accounts/needs-proxy-notice'
 import { OverLimitNote, SummaryBanner } from '@/components/accounts/summary-banner'
+import { dayProgress, progressSentence } from '@/components/accounts/today'
+import { todayCsv } from '@/components/accounts/today-csv'
 import {
    clientsOf,
    countChips,
@@ -20,11 +22,13 @@ import {
 import { useAccountActions } from '@/components/accounts/use-account-actions'
 import { useAccountsWithProxy } from '@/components/accounts/use-accounts-with-proxy'
 import { useDrawerNav } from '@/components/accounts/use-drawer-nav'
+import { useToday } from '@/components/accounts/use-today'
 import { visitRunning } from '@/components/accounts/visit'
 import { BrowseSampleBanner } from '@/components/browsing/browse-sample-banner'
 import { BulkBrowseBar } from '@/components/browsing/bulk-browse-bar'
 import { useBrowsing } from '@/components/browsing/use-browse'
 import { EmptyState } from '@/components/network/notices'
+import { downloadCsv } from '@/components/posting/posts-csv'
 import { Button } from '@/components/ui/button'
 import { useStoredSetting } from '@/hooks/use-stored-setting'
 import { UserPlus } from 'lucide-react'
@@ -56,6 +60,7 @@ export const Accounts = () => {
    const address = readAddress(params)
    const sampleAccounts = useMemo(() => list.data?.map(({ id, email, status }) => ({ id, email, status })), [list.data])
    const browsing = useBrowsing(sampleAccounts)
+   const today = useToday(list.data, browsing.byId)
    const [storedGroup, setStoredGroup] = useStoredSetting('accounts.group', groupFrom, groupToText)
    const [columns, setColumns] = useStoredSetting('accounts.columns', columnsFrom, columnsToText)
    const [q, setQ] = useState(address.q)
@@ -72,15 +77,27 @@ export const Accounts = () => {
       return () => clearTimeout(timer)
    }, [q, address.q, params, setParams])
 
-   const rows = useMemo(() => rowsOf(list.data ?? [], browsing.byId), [list.data, browsing.byId])
+   const rows = useMemo(
+      () => rowsOf(list.data ?? [], browsing.byId, today.statesById),
+      [list.data, browsing.byId, today.statesById]
+   )
    const tools = showTools(rows.length)
    const grouped = tools && (address.group ?? storedGroup)
+   // A short list shows the full chips; a long one the compact line, unless the owner asked for the details.
+   const detailed = !tools || columns.includes('detail')
    const shown = sortRows(
       filterRows(rows, tools ? { q, client: address.client, chip: address.chip } : { q: '', client: '', chip: 'all' })
    )
    const selectedRows = rows.filter(({ account }) => picked.has(account.id))
    const selectedAccounts = selectedRows.map(({ account }) => account)
-   const summary = summaryOf(rows, browsing.now)
+   const progress = progressSentence(
+      dayProgress(
+         rows.flatMap(({ account, states }) => (states ? [{ status: account.status, states }] : [])),
+         today.now
+      ),
+      Intl.DateTimeFormat().resolvedOptions().timeZone
+   )
+   const summary = summaryOf(rows, progress)
    const filtered = tools && (q.trim() !== '' || address.client !== '' || address.chip !== 'all')
    const columnIds = COLUMNS.map(({ id }) => id).filter(id => columns.includes(id))
 
@@ -98,6 +115,13 @@ export const Accounts = () => {
       setQ('')
       change({ q: '', client: '', chip: 'all' })
    }
+   const exportToday = () =>
+      downloadCsv(
+         `today-${today.now.toISOString().slice(0, 10)}.csv`,
+         todayCsv(
+            shown.flatMap(({ account, client, states }) => (states ? [{ email: account.email, client, states }] : []))
+         )
+      )
 
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
@@ -179,6 +203,8 @@ export const Accounts = () => {
                      }}
                      columns={columns}
                      onColumns={setColumns}
+                     onExport={exportToday}
+                     canExport={shown.some(({ states }) => states !== undefined)}
                   />
                ) : null}
 
@@ -203,6 +229,8 @@ export const Accounts = () => {
                      rows={shown}
                      groups={grouped ? groupRows(shown) : null}
                      columns={columnIds}
+                     detailed={detailed}
+                     todayLoading={today.loading}
                      selectable={tools && browsing.byId !== undefined}
                      selected={picked}
                      loading={list.isPending}

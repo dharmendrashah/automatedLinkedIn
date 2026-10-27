@@ -14,6 +14,7 @@ import { limitSecondsOf } from '../browsing/modes'
 import { BrowsingMeter } from './browsing-meter'
 import { type ColumnId } from './columns'
 import { StatusBadge } from './status-badge'
+import { TodayCell } from './today-cell'
 import { type Group, type Row } from './toolbar'
 import { hoursNowText, whyText } from './verdict'
 import { VisitSummary } from './visit-summary'
@@ -28,6 +29,10 @@ type Props = {
    // With grouping on, the rows by client; the rows above are then their union.
    groups: Group<Account>[] | null
    columns: ColumnId[]
+   // Full chips with times in the Today cell, instead of the compact line.
+   detailed: boolean
+   // The day of the accounts is still being read.
+   todayLoading: boolean
    selectable: boolean
    selected: Set<string>
    loading: boolean
@@ -42,13 +47,34 @@ type Props = {
 
 type RowProps = Pick<
    Props,
-   'columns' | 'selectable' | 'selected' | 'busy' | 'onSelect' | 'onOpen' | 'onPause' | 'onResume'
+   | 'columns'
+   | 'detailed'
+   | 'todayLoading'
+   | 'selectable'
+   | 'selected'
+   | 'busy'
+   | 'onSelect'
+   | 'onOpen'
+   | 'onPause'
+   | 'onResume'
 > & {
    row: Row<Account>
 }
 
-const AccountRow = ({ row, columns, selectable, selected, busy, onSelect, onOpen, onPause, onResume }: RowProps) => {
-   const { account, browse, verdict, client } = row
+const AccountRow = ({
+   row,
+   columns,
+   detailed,
+   todayLoading,
+   selectable,
+   selected,
+   busy,
+   onSelect,
+   onOpen,
+   onPause,
+   onResume,
+}: RowProps) => {
+   const { account, browse, verdict, client, states } = row
    const paused = account.status === 'DISABLED'
 
    return (
@@ -105,6 +131,15 @@ const AccountRow = ({ row, columns, selectable, selected, busy, onSelect, onOpen
                   <span className="text-muted-foreground text-xs">Checked {formatDate(account.lastVerifiedAt)}</span>
                ) : null}
             </div>
+         </TableCell>
+         <TableCell className="align-top">
+            <TodayCell
+               states={states}
+               browse={browse}
+               detailed={detailed}
+               loading={todayLoading}
+               onOpen={() => onOpen(account.id)}
+            />
          </TableCell>
          {columns.includes('browsing') ? (
             <TableCell className="align-top">
@@ -172,6 +207,8 @@ export const AccountList = ({
    rows,
    groups,
    columns,
+   detailed,
+   todayLoading,
    selectable,
    selected,
    loading,
@@ -183,11 +220,11 @@ export const AccountList = ({
    onClientActivity,
    onPauseGroup,
 }: Props) => {
-   const span = 3 + columns.length + (selectable ? 1 : 0)
+   const span = 4 + columns.filter(id => id !== 'detail').length + (selectable ? 1 : 0)
    const ids = rows.map(({ account }) => account.id)
    const allSelected = ids.length > 0 && ids.every(id => selected.has(id))
    const someSelected = ids.some(id => selected.has(id))
-   const rowProps = { columns, selectable, selected, busy, onSelect, onOpen, onPause, onResume }
+   const rowProps = { columns, detailed, todayLoading, selectable, selected, busy, onSelect, onOpen, onPause, onResume }
 
    return (
       <div className="overflow-x-auto rounded-lg border">
@@ -205,6 +242,7 @@ export const AccountList = ({
                   ) : null}
                   <TableHead>Account</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Today</TableHead>
                   {columns.includes('browsing') ? <TableHead>Browsing today</TableHead> : null}
                   {columns.includes('visit') ? <TableHead>Daily visit</TableHead> : null}
                   {columns.includes('verified') ? <TableHead>Last verified</TableHead> : null}

@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => {
       LinkedInVerifyCooldownError,
       create: vi.fn(),
       listForUser: vi.fn(),
+      today: vi.fn(),
       getForUser: vi.fn(),
       revealForUser: vi.fn(),
       updateForUser: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('database', () => ({
    LinkedInCredentialsError: mocks.LinkedInCredentialsError,
    LinkedInAccountPausedError: mocks.LinkedInAccountPausedError,
    LinkedInVerifyCooldownError: mocks.LinkedInVerifyCooldownError,
+   AccountTodayService: { forUser: mocks.today },
    LinkedInAccountService: {
       create: mocks.create,
       listForUser: mocks.listForUser,
@@ -263,6 +265,15 @@ describe('linkedInAccount resolvers', () => {
          await caller(authed()).get({ id: 'a1' })
 
          expect(mocks.getForUser).toHaveBeenCalledWith('u1', 'a1')
+      })
+   })
+
+   describe('today', () => {
+      it("should read only the current user's accounts", async () => {
+         mocks.today.mockResolvedValueOnce([])
+
+         await expect(caller(authed()).today()).resolves.toEqual([])
+         expect(mocks.today).toHaveBeenCalledWith('u1')
       })
    })
 

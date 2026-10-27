@@ -32,9 +32,7 @@ export const SummaryBanner = ({ summary, onFix }: Props) => (
          {summary.tone === 'fine' ? (
             <p className="text-muted-foreground">
                Nothing is posted or sent from here.
-               {summary.nextAt
-                  ? ` Next check: ${summary.nextAt.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}.`
-                  : ''}
+               {summary.progress ? ` ${summary.progress}` : ''}
             </p>
          ) : null}
       </div>

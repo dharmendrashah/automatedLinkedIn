@@ -12,7 +12,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { ChevronDown, Columns3 } from 'lucide-react'
+import { ChevronDown, Columns3, Download } from 'lucide-react'
 
 import { COLUMNS, type ColumnId, toggleColumn } from './columns'
 import { CHIPS, type Chip, MAIN_CHIPS } from './toolbar'
@@ -32,6 +32,9 @@ type Props = {
    onGrouped: (value: boolean) => void
    columns: ColumnId[]
    onColumns: (value: ColumnId[]) => void
+   // A spreadsheet of what the accounts shown did today.
+   onExport: () => void
+   canExport: boolean
 }
 
 // Find an account and narrow the list: words, a client, one chip, grouping by client and which optional columns show. The four
@@ -49,6 +52,8 @@ export const AccountsToolbar = ({
    onGrouped,
    columns,
    onColumns,
+   onExport,
+   canExport,
 }: Props) => {
    const shown = MAIN_CHIPS.includes(chip) ? MAIN_CHIPS : [...MAIN_CHIPS, chip]
    const more = CHIPS.filter(item => !shown.includes(item.chip))
@@ -87,9 +92,20 @@ export const AccountsToolbar = ({
                <Checkbox checked={grouped} onCheckedChange={value => onGrouped(value === true)} />
                Group by client
             </label>
+            <Button
+               variant="outline"
+               size="sm"
+               className="ml-auto"
+               disabled={!canExport}
+               title="Downloads what the accounts shown did today and what comes next, as a spreadsheet file."
+               onClick={onExport}
+            >
+               <Download />
+               Export today
+            </Button>
             <DropdownMenu>
                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="ml-auto">
+                  <Button variant="outline" size="sm">
                      <Columns3 />
                      Columns
                   </Button>

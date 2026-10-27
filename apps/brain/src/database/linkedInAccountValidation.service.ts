@@ -4,7 +4,7 @@ import { retryRefusal } from './sessionRetry'
 import { TaskService } from './task.service'
 import { TaskNeedsProxyError, TaskRefusedError } from './taskErrors'
 
-const TASK = 'linkedin-login'
+export const LOGIN_TASK = 'linkedin-login'
 
 // Asking again right away would only repeat a login that LinkedIn may already be suspicious of.
 const VERIFY_COOLDOWN_MS = 5 * 60 * 1000
@@ -65,7 +65,7 @@ export class LinkedInAccountValidationService {
       try {
          return await TaskService.request({
             userId: row.userId,
-            task: TASK,
+            task: LOGIN_TASK,
             accountId: row.id,
             proxyId: options.proxyId,
             trigger: options.retryOfId ? 'retry' : options.asked ? 'manual' : 'automatic',

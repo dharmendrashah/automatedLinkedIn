@@ -37,6 +37,18 @@ type Props = {
    verdict?: string | null
 }
 
+// The chip of a result, from its label and tone: the same look wherever a run is shown.
+export const ToneBadge = ({ label, tone }: { label: string; tone: ResultTone }) => {
+   const { icon: Icon, className } = tones[tone]
+
+   return (
+      <Badge variant="outline" className={cn('gap-1', className)}>
+         <Icon className={cn(tone === 'running' && 'animate-spin')} />
+         {label}
+      </Badge>
+   )
+}
+
 export const SessionStatusBadge = ({ status, noAnswer, kind, task, verdict }: Props) => {
    const catalog = useTaskCatalog()
    const { label, tone } = resultOf(
@@ -49,12 +61,6 @@ export const SessionStatusBadge = ({ status, noAnswer, kind, task, verdict }: Pr
       },
       catalog
    )
-   const { icon: Icon, className } = tones[tone]
 
-   return (
-      <Badge variant="outline" className={cn('gap-1', className)}>
-         <Icon className={cn(tone === 'running' && 'animate-spin')} />
-         {label}
-      </Badge>
-   )
+   return <ToneBadge label={label} tone={tone} />
 }

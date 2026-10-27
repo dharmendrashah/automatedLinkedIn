@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { type AccountBrowse } from '../browsing/types'
 
+import { type ItemState } from './today'
 import {
    type AccountLike,
    TOOLS_FROM,
@@ -91,6 +92,9 @@ describe('countChips and filterRows', () => {
          all: 6,
          needs: 1,
          ready: 3,
+         failed: 0,
+         pending: 0,
+         due: 0,
          full: 1,
          near: 1,
          idle: 1,
@@ -112,6 +116,41 @@ describe('countChips and filterRows', () => {
       const bare = rowsOf(accounts, undefined)
 
       expect(countChips(bare)).toMatchObject({ full: 0, near: 0, idle: 0, 'not-browsing': 0, needs: 1, paused: 1 })
+   })
+
+   it('should filter by the state of the daily items: failed, pending today and due now', () => {
+      const state = (kind: ItemState['kind']): ItemState[] => [
+         {
+            item: 'visit',
+            kind,
+            tone: 'muted',
+            text: 'Visit',
+            detail: '',
+            last: null,
+            result: null,
+            resultTone: null,
+            runId: null,
+            lastOkText: null,
+            lastOkId: null,
+            next: '',
+            at: null,
+         },
+      ]
+      const withStates = rowsOf(
+         accounts,
+         byId,
+         new Map([
+            ['full', state('FAILED')],
+            ['near', state('PENDING')],
+            ['idle', state('WAITING')],
+            ['ready', state('DONE')],
+         ])
+      )
+
+      expect(ids(filterRows(withStates, { q: '', client: '', chip: 'failed' }))).toEqual(['full'])
+      expect(ids(filterRows(withStates, { q: '', client: '', chip: 'pending' }))).toEqual(['near'])
+      expect(ids(filterRows(withStates, { q: '', client: '', chip: 'due' }))).toEqual(['idle'])
+      expect(countChips(withStates)).toMatchObject({ failed: 1, pending: 1, due: 1 })
    })
 })
 
@@ -142,14 +181,12 @@ describe('groupRows', () => {
 })
 
 describe('summaryOf', () => {
-   const now = new Date('2026-10-27T12:00:00Z')
-
    it('should say nothing without accounts', () => {
-      expect(summaryOf([], now)).toBeNull()
+      expect(summaryOf([], null)).toBeNull()
    })
 
    it('should name how many need you and why, with the worst one to fix', () => {
-      const summary = summaryOf(rows, now)
+      const summary = summaryOf(rows, null)
 
       expect(summary).toMatchObject({ tone: 'attention', fix: 'error' })
       expect(summary?.text).toBe(
@@ -160,27 +197,49 @@ describe('summaryOf', () => {
    it('should say the next step for one account whose sign-in was never checked', () => {
       const first = rowsOf([account('new', { status: 'PENDING', lastVerifiedAt: null })], undefined)
 
-      expect(summaryOf(first, now)).toEqual({
+      expect(summaryOf(first, null)).toEqual({
          tone: 'first',
          text: 'Next step: press Test login on new@example.com.',
          fix: 'new',
-         nextAt: null,
+         progress: null,
       })
    })
 
-   it('should say all is fine with the next planned check', () => {
-      const fine = rowsOf(
-         [
-            account('a', { nextBrowseAt: '2026-10-28T02:55:00Z' }),
-            account('b', { nextBrowseAt: '2026-10-27T18:00:00Z' }),
-            account('c', { nextBrowseAt: '2026-10-26T18:00:00Z' }),
-         ],
-         undefined
-      )
-      const summary = summaryOf(fine, now)
+   it('should name a failed check when nothing else needs you', () => {
+      const failed: ItemState = {
+         item: 'login',
+         kind: 'FAILED',
+         tone: 'bad',
+         text: 'Login failed 09:12',
+         detail: '',
+         last: null,
+         result: null,
+         resultTone: null,
+         runId: null,
+         lastOkText: null,
+         lastOkId: null,
+         next: '',
+         at: null,
+      }
+      const list = rowsOf([account('a'), account('b')], undefined, new Map([['b', [failed]]]))
 
-      expect(summary).toMatchObject({ tone: 'fine', text: 'All 3 accounts are fine.', fix: null })
-      expect(summary?.nextAt?.toISOString()).toBe('2026-10-27T18:00:00.000Z')
-      expect(summaryOf(fine.slice(0, 1), now)?.text).toBe('The account is fine.')
+      expect(summaryOf(list, '1 of 8 checks done today.')).toEqual({
+         tone: 'attention',
+         text: '1 account has a failed check. b@example.com: Login failed 09:12.',
+         fix: 'b',
+         progress: null,
+      })
+   })
+
+   it('should say all is fine with the day so far', () => {
+      const fine = rowsOf([account('a'), account('b'), account('c')], undefined)
+
+      expect(summaryOf(fine, '7 of 12 checks done today. Next: messages 14:00.')).toEqual({
+         tone: 'fine',
+         text: 'All 3 accounts are fine.',
+         fix: null,
+         progress: '7 of 12 checks done today. Next: messages 14:00.',
+      })
+      expect(summaryOf(fine.slice(0, 1), null)?.text).toBe('The account is fine.')
    })
 })

@@ -11,6 +11,7 @@ import { readAddress } from './address'
 import { type AccountActions } from './use-account-actions'
 import { useAccountsWithProxy } from './use-accounts-with-proxy'
 import { useDrawerNav } from './use-drawer-nav'
+import { useToday } from './use-today'
 
 type Props = {
    // Undefined while the list loads.
@@ -25,6 +26,7 @@ export const AccountsDrawers = ({ accounts, browsing, actions }: Props) => {
    const [params] = useSearchParams()
    const nav = useDrawerNav()
    const accountsWithProxy = useAccountsWithProxy()
+   const today = useToday(accounts, browsing.byId)
    const { open, panel, activity } = readAddress(params)
    const account = accounts?.find(({ id }) => id === open) ?? null
    const browse = open ? browsing.byId?.get(open) : undefined
@@ -57,6 +59,9 @@ export const AccountsDrawers = ({ accounts, browsing, actions }: Props) => {
             browse={browse}
             browseLoading={browsing.loading}
             browseError={browsing.error}
+            states={open ? today.statesById?.get(open) : undefined}
+            todayLoading={today.loading}
+            todayError={today.error}
             sample={browsing.kind}
             actions={actions}
             accountsWithProxy={accountsWithProxy}

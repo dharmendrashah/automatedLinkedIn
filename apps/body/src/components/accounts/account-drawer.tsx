@@ -1,5 +1,4 @@
 import { floatingDrawer } from '@/components/floating-drawer'
-import { TestButton } from '@/components/test-button'
 import { Accordion } from '@/components/ui/accordion'
 import {
    AlertDialog,
@@ -14,7 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
-import { Eye, Pause, Pencil, Play, ScanEye, ScanSearch, Trash2, UserRound, X } from 'lucide-react'
+import { Eye, Pause, Pencil, Play, Trash2, UserRound, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 
@@ -23,19 +22,22 @@ import { type Account } from './types'
 
 import { type SampleKind } from '../browsing/sample'
 import { BrowsingParts, Part } from './drawer-browsing'
-import { loginTestBlocker } from './login-test'
 import { SecretCode } from './secret-code'
 import { StatusBadge } from './status-badge'
+import { type ItemState, progressText } from './today'
+import { TodayChecklist } from './today-checklist'
 import { type AccountActions } from './use-account-actions'
 import { whyText } from './verdict'
-import { visitBlocker } from './visit'
-import { VisitSummary } from './visit-summary'
 
 type Props = {
    account: Account | null
    browse: AccountBrowse | undefined
    browseLoading: boolean
    browseError: string | undefined
+   // What the account did today; undefined while it is read.
+   states: ItemState[] | undefined
+   todayLoading: boolean
+   todayError: string | undefined
    sample: SampleKind | null
    actions: AccountActions
    accountsWithProxy: Set<string> | undefined
@@ -60,6 +62,9 @@ const Body = ({
    browse,
    browseLoading,
    browseError,
+   states,
+   todayLoading,
+   todayError,
    sample,
    actions,
    accountsWithProxy,
@@ -92,47 +97,27 @@ const Body = ({
             </Button>
          </DrawerHeader>
          <div className="overflow-y-auto px-4 pb-6">
-            <Accordion type="multiple" defaultValue={['state', 'today', 'limit']}>
+            <Accordion type="multiple" defaultValue={['checklist', 'state', 'today', 'limit']}>
+               <Part value="checklist" title="Today's checklist" summary={states ? progressText(states) : undefined}>
+                  <TodayChecklist
+                     account={account}
+                     states={states}
+                     loading={todayLoading}
+                     error={todayError}
+                     actions={actions}
+                     hasProxy={hasProxy}
+                  />
+               </Part>
                <Part value="state" title="State">
                   <div className="grid gap-3">
                      <div className="grid gap-1">
                         <p className="text-sm">{whyText(account, browse)}</p>
                         <p className="text-muted-foreground text-xs">Nothing is posted or sent from here.</p>
                      </div>
-                     <dl className="grid gap-1 text-sm">
-                        <div className="flex gap-2">
-                           <dt className="text-muted-foreground">Last verified</dt>
-                           <dd>{formatDate(account.lastVerifiedAt)}</dd>
-                        </div>
-                        <div className="grid gap-1">
-                           <dt className="text-muted-foreground">Daily visit</dt>
-                           <dd>
-                              <VisitSummary account={account} />
-                           </dd>
-                        </div>
-                     </dl>
-                     <div className="grid gap-1">
-                        <TestButton
-                           label="Test login"
-                           icon={<ScanSearch />}
-                           blocker={loginTestBlocker(account.status, hasProxy)}
-                           busy={actions.testingId === account.id}
-                           onClick={() => actions.testLogin(account)}
-                        />
-                        <p className="text-muted-foreground text-xs">
-                           Checks the saved sign-in works. Posts and messages nothing.
-                        </p>
-                     </div>
-                     <div className="grid gap-1">
-                        <TestButton
-                           label="Visit now"
-                           icon={<ScanEye />}
-                           blocker={visitBlocker(account.status, hasProxy)}
-                           busy={actions.visitingId === account.id}
-                           onClick={() => actions.visit(account)}
-                        />
-                        <p className="text-muted-foreground text-xs">Opens LinkedIn once, like the daily check-in.</p>
-                     </div>
+                     <p className="text-sm">
+                        <span className="text-muted-foreground">Last verified </span>
+                        {formatDate(account.lastVerifiedAt)}
+                     </p>
                      <Button
                         variant="outline"
                         size="sm"
@@ -143,23 +128,6 @@ const Body = ({
                         {paused ? <Play /> : <Pause />}
                         {paused ? 'Resume account' : 'Pause account'}
                      </Button>
-                     {actions.error ? (
-                        <p className="text-destructive text-sm" role="alert">
-                           {actions.error}
-                        </p>
-                     ) : null}
-                     {actions.started ? (
-                        <p className="text-sm" role="status">
-                           Started.{' '}
-                           <Link
-                              className="underline underline-offset-4"
-                              to={`/sessions?session=${actions.started.id}`}
-                           >
-                              Follow it in Sessions
-                           </Link>
-                           .
-                        </p>
-                     ) : null}
                   </div>
                </Part>
                <BrowsingParts

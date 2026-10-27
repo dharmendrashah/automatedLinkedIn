@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { extractLiAt, parseTotpSecret } from 'core'
 
 import {
+   AccountTodayService,
    LinkedInAccountConflictError,
    LinkedInAccountPausedError,
    LinkedInAccountService,
@@ -113,6 +114,9 @@ const notFound = () =>
 // Every procedure scopes to ctx.user.id, so one user can never reach another's accounts by id.
 // Only `reveal` returns decrypted secrets; it is a mutation so the secret is never cached by react-query.
 export const linkedInAccount = router({
+   // What each account did today for its four daily items and when each comes next. Read only.
+   today: ownerProcedure.query(({ ctx }) => AccountTodayService.forUser(ctx.user.id)),
+
    create: ownerProcedure.input(createInput).mutation(async ({ ctx, input }) => {
       try {
          const account = await LinkedInAccountService.create(ctx.user.id, input.email, {

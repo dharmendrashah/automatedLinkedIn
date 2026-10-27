@@ -2,6 +2,7 @@ import { type AccountBrowse } from '../browsing/types'
 import { type AccountStatus } from './types'
 
 import { bucketOf } from '../browsing/overview'
+import { type ItemState } from './today'
 import { type Verdict, rankOf, verdictOf, whyText } from './verdict'
 
 // The search, the client select, the chips and the tools around the list appear from this many accounts; with fewer the list
@@ -10,12 +11,16 @@ export const TOOLS_FROM = 4
 
 export const showTools = (count: number) => count >= TOOLS_FROM
 
-export type Chip = 'all' | 'needs' | 'ready' | 'full' | 'near' | 'idle' | 'not-browsing' | 'paused'
+export type Chip =
+   'all' | 'needs' | 'ready' | 'failed' | 'pending' | 'due' | 'full' | 'near' | 'idle' | 'not-browsing' | 'paused'
 
 export const CHIPS: { chip: Chip; label: string; rule: string }[] = [
    { chip: 'all', label: 'All', rule: 'Every account.' },
    { chip: 'needs', label: 'Needs you', rule: 'Not signed in, or LinkedIn needs something from you.' },
    { chip: 'ready', label: 'Ready', rule: 'Signed in, inside working hours, with time left today.' },
+   { chip: 'failed', label: 'Failed', rule: 'A check failed and no later run has worked yet.' },
+   { chip: 'pending', label: 'Pending today', rule: 'A daily check is planned for later today.' },
+   { chip: 'due', label: 'Due now', rule: 'A check is due and has not started yet.' },
    { chip: 'full', label: 'Full today', rule: "Today's limit is used." },
    { chip: 'near', label: 'Near full', rule: "85% or more of today's limit is used." },
    { chip: 'idle', label: 'Idle', rule: 'Nothing browsed on 3 or more working days in a row.' },
@@ -24,7 +29,7 @@ export const CHIPS: { chip: Chip; label: string; rule: string }[] = [
 ]
 
 // The chips shown in the row; the rest sit in the More menu.
-export const MAIN_CHIPS: Chip[] = ['all', 'needs', 'ready']
+export const MAIN_CHIPS: Chip[] = ['all', 'needs', 'ready', 'failed']
 
 export const isChip = (value: string | null): value is Chip => CHIPS.some(({ chip }) => chip === value)
 
@@ -43,9 +48,15 @@ export type Row<A extends AccountLike> = {
    browse: AccountBrowse | undefined
    verdict: Verdict
    client: string | null
+   // What each of the four daily items is in; undefined until the account's day is known.
+   states: ItemState[] | undefined
 }
 
-export const rowsOf = <A extends AccountLike>(accounts: A[], byId: Map<string, AccountBrowse> | undefined): Row<A>[] =>
+export const rowsOf = <A extends AccountLike>(
+   accounts: A[],
+   byId: Map<string, AccountBrowse> | undefined,
+   statesById?: Map<string, ItemState[]>
+): Row<A>[] =>
    accounts.map(account => {
       const browse = byId?.get(account.id)
 
@@ -54,10 +65,14 @@ export const rowsOf = <A extends AccountLike>(accounts: A[], byId: Map<string, A
          browse,
          verdict: verdictOf(account, browse),
          client: browse?.clientLabel ?? null,
+         states: statesById?.get(account.id),
       }
    })
 
-export const matchesChip = <A extends AccountLike>(chip: Chip, { account, browse, verdict }: Row<A>) => {
+const hasState = (states: ItemState[] | undefined, kind: ItemState['kind']) =>
+   states?.some(state => state.kind === kind) ?? false
+
+export const matchesChip = <A extends AccountLike>(chip: Chip, { account, browse, verdict, states }: Row<A>) => {
    switch (chip) {
       case 'all':
          return true
@@ -65,6 +80,12 @@ export const matchesChip = <A extends AccountLike>(chip: Chip, { account, browse
          return verdict === 'NEEDS_YOU'
       case 'ready':
          return verdict === 'READY'
+      case 'failed':
+         return hasState(states, 'FAILED')
+      case 'pending':
+         return hasState(states, 'PENDING')
+      case 'due':
+         return hasState(states, 'WAITING')
       case 'paused':
          return account.status === 'DISABLED'
       case 'full':
@@ -83,6 +104,9 @@ export const countChips = <A extends AccountLike>(rows: Row<A>[]) => {
       all: 0,
       needs: 0,
       ready: 0,
+      failed: 0,
+      pending: 0,
+      due: 0,
       full: 0,
       near: 0,
       idle: 0,
@@ -153,15 +177,15 @@ export type Summary = {
    text: string
    // The account the Fix button opens; none when everything is fine.
    fix: string | null
-   // The earliest planned check of a signed-in account after `now`.
-   nextAt: Date | null
+   // "7 of 12 checks done today. Next: messages 14:00.", when the day is known.
+   progress: string | null
 }
 
 const countText = (count: number, total: number) =>
    total === 1 ? 'This account needs you.' : `${count} of ${total} accounts need you.`
 
 // One sentence for the top of the page: does anything need the owner, and what is the next step.
-export const summaryOf = <A extends AccountLike>(rows: Row<A>[], now: Date): Summary | null => {
+export const summaryOf = <A extends AccountLike>(rows: Row<A>[], progress: string | null): Summary | null => {
    if (rows.length === 0) {
       return null
    }
@@ -177,7 +201,7 @@ export const summaryOf = <A extends AccountLike>(rows: Row<A>[], now: Date): Sum
             tone: 'first',
             text: `Next step: press Test login on ${account.email}.`,
             fix: account.id,
-            nextAt: null,
+            progress: null,
          }
       }
 
@@ -185,20 +209,27 @@ export const summaryOf = <A extends AccountLike>(rows: Row<A>[], now: Date): Sum
          tone: 'attention',
          text: `${countText(needs.length, rows.length)} ${account.email}: ${whyText(account, browse)}`,
          fix: account.id,
-         nextAt: null,
+         progress: null,
       }
    }
 
-   const times = rows
-      .filter(({ account }) => account.status === 'ACTIVE' && account.nextBrowseAt)
-      .map(({ account }) => new Date(account.nextBrowseAt ?? 0))
-      .filter(date => date.getTime() > now.getTime())
-      .sort((a, b) => a.getTime() - b.getTime())
+   const failed = rows.filter(({ states }) => hasState(states, 'FAILED'))
+   const [failedRow] = failed
+   const failure = failedRow?.states?.find(({ kind }) => kind === 'FAILED')
+
+   if (failedRow && failure) {
+      return {
+         tone: 'attention',
+         text: `${failed.length === 1 ? '1 account has a failed check.' : `${failed.length} accounts have a failed check.`} ${failedRow.account.email}: ${failure.text}.`,
+         fix: failedRow.account.id,
+         progress: null,
+      }
+   }
 
    return {
       tone: 'fine',
       text: rows.length === 1 ? 'The account is fine.' : `All ${rows.length} accounts are fine.`,
       fix: null,
-      nextAt: times[0] ?? null,
+      progress,
    }
 }

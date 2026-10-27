@@ -1,7 +1,9 @@
-export type ColumnId = 'browsing' | 'visit' | 'verified' | 'added' | 'credentials' | 'hours'
+export type ColumnId = 'detail' | 'browsing' | 'visit' | 'verified' | 'added' | 'credentials' | 'hours'
 
-// Account and Status are always shown; every other column is the owner's choice, kept in this browser.
+// Account, Status and Today are always shown; every other entry is the owner's choice, kept in this browser. `detail` is not a column:
+// it shows the full chips with times in the Today cell instead of the compact line.
 export const COLUMNS: { id: ColumnId; label: string }[] = [
+   { id: 'detail', label: 'Today: show details' },
    { id: 'browsing', label: 'Browsing today' },
    { id: 'visit', label: 'Daily visit' },
    { id: 'verified', label: 'Last verified' },
@@ -10,7 +12,7 @@ export const COLUMNS: { id: ColumnId; label: string }[] = [
    { id: 'hours', label: 'Working hours now' },
 ]
 
-export const DEFAULT_COLUMNS: ColumnId[] = ['browsing', 'visit']
+export const DEFAULT_COLUMNS: ColumnId[] = []
 
 const known = (value: unknown): value is ColumnId => COLUMNS.some(({ id }) => id === value)
 
