@@ -107,6 +107,13 @@ const DIALOG_LOOKS = 10
 const UPLOAD_LOOKS = 80
 // The title LinkedIn takes for a document is at most this many characters.
 const TITLE_MAX = 58
+// The title is required, so a file whose name leaves none gets this one.
+const documentTitle = (name: string) =>
+   name
+      .replace(/\.[^.]*$/, '')
+      .replace(/[_-]+/g, ' ')
+      .trim()
+      .slice(0, TITLE_MAX) || 'Document'
 // How long the post just made stays open before the run leaves it.
 const LOOK_AT_POST_MS = 10_000
 
@@ -414,6 +421,8 @@ export const sendPost = async (
          }
       }
 
+      let titled = false
+
       for (let look = 0; look < UPLOAD_LOOKS; look += 1) {
          const dialog = parseDocumentDialog(await hands.html())
 
@@ -426,19 +435,20 @@ export const sendPost = async (
             }
          }
 
-         if (dialog.ready) {
-            const title = file.name
-               .replace(/\.[^.]*$/, '')
-               .replace(/[_-]+/g, ' ')
-               .trim()
-               .slice(0, TITLE_MAX)
+         // The title is required and Done stays greyed until it is typed, so it comes first, as soon as its field is drawn.
+         if (dialog.titleField && !titled) {
+            titled = true
 
-            if (title !== '' && (await hands.clickSelector(POST_DOCUMENT_TITLE))) {
+            if (await hands.clickSelector(POST_DOCUMENT_TITLE)) {
                await hands.press('ControlOrMeta+A')
-               await hands.typeKeys(title)
+               await hands.typeKeys(documentTitle(file.name))
                await reader.wait(PAUSES.click)
             }
 
+            continue
+         }
+
+         if (dialog.ready) {
             return (dialog.doneIndex >= 0
                ? await hands.clickNth(POST_DIALOG_BUTTON, dialog.doneIndex, '')
                : await hands.clickSelector(POST_DOCUMENT_DONE)) && (await shown())

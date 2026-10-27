@@ -60,6 +60,7 @@ describe('parseDocumentDialog', () => {
          refused: false,
          doneIndex: -1,
          chooseIndex: -1,
+         titleField: true,
       })
       expect(parseDocumentDialog(documentMarkup({ doneDisabled: true }))).toMatchObject({
          open: true,
@@ -98,11 +99,15 @@ describe('parseDocumentDialog', () => {
       )
       const chosen = parseDocumentDialog(documentMarkup({ plain: true }))
 
-      expect(empty).toMatchObject({ ready: false })
+      expect(empty).toMatchObject({
+         ready: false,
+         titleField: false,
+      })
       expect(empty.chooseIndex).toBeGreaterThanOrEqual(0)
       expect(chosen).toMatchObject({
          ready: true,
          chooseIndex: -1,
+         titleField: true,
       })
    })
 
