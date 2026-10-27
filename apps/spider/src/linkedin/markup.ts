@@ -86,3 +86,25 @@ export const POST_DIALOG_BUTTON = 'dialog button'
 export const POST_DOCUMENT_TITLE = 'input[placeholder="Add a descriptive title to your document"]'
 export const POST_DOCUMENT_DONE = 'button[data-view-name="media-document-share-confirm"]'
 export const POST_PREVIEW_REMOVE = 'button[data-view-name="share-detour-preview-remove"]'
+
+// The connection requests the account received, on the page that lists them all (/mynetwork/invitation-manager/, "Manage invitations",
+// tabs Received and Sent, chips "All (5)", "Verified (5)" and "Mutual Connections (3)"; the page scrolls as a whole and draws
+// "Suggestions for you" under the requests). Recorded 2026-10-27 on one account: each request is a `listitem` named by the request's
+// own number, with two buttons whose names are English words ("Accept <Name>’s invitation" with the curly apostrophe, "Ignore an
+// invitation to connect from <Name>"). The page's empty state and its layout on other accounts are not recorded.
+export const INVITATIONS_PATH = '/mynetwork/invitation-manager/'
+export const INVITATION_ROW = '[role="listitem"][componentkey^="urn:li:invitation:"]'
+export const INVITATION_KEY = /^urn:li:invitation:(\d{15,25})$/
+export const INVITATION_NAME = 'a[aria-label^="View "] strong'
+export const INVITATION_NOTE = '[data-testid="expandable-text-box"]'
+// What the sender wrote is next to a link that opens a reply; neither is a headline.
+export const INVITATION_REPLY = 'a[href*="/messaging/compose/"]'
+
+// The button that answers one request, from the request's own number (digits only, so nothing else can reach a selector).
+export const invitationButton = (id: string, action: 'ACCEPT' | 'IGNORE') => {
+   if (!/^\d{15,25}$/.test(id)) {
+      throw new Error('Not a request number')
+   }
+
+   return `[componentkey="urn:li:invitation:${id}"] button[aria-label^="${action === 'ACCEPT' ? 'Accept ' : 'Ignore an invitation'}"]`
+}

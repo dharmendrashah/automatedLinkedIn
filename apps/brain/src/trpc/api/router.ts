@@ -16,6 +16,7 @@ import {
    linkedInPost,
    linkedInProfile,
    me,
+   network,
    person,
    postDraft,
    postFile,
@@ -36,6 +37,7 @@ export type AppRouter = typeof appRouter
 
 export const appRouter = router({
    me,
+   network,
    accountProfile,
    browse,
    companyPage,

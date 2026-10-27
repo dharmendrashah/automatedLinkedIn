@@ -12,6 +12,7 @@ import { Icps } from './pages/Icps'
 import { Jobs } from './pages/Jobs'
 import { Lists } from './pages/Lists'
 import { Login } from './pages/Login'
+import { Network } from './pages/Network'
 import { Posting } from './pages/Posting'
 import { Posts } from './pages/Posts'
 import { Profile } from './pages/Profile'
@@ -69,6 +70,7 @@ const App = () => (
                </Suspense>
             }
          />
+         <Route path="/network/:accountId?" element={<Network />} />
          <Route path="/posting" element={<Posting />} />
          <Route
             path="/posting/:accountId/:draftId?"

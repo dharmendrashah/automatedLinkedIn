@@ -42,7 +42,7 @@ const textOf = (node: Node): string => {
    return element.childNodes.map(textOf).join('')
 }
 
-const shown = (element: HTMLElement | null) => (element ? clean(textOf(element)) : '')
+export const shown = (element: HTMLElement | null) => (element ? clean(textOf(element)) : '')
 
 const person = (name: string, profileUrl: string | undefined, imageUrl?: string): Person => ({
    name,
