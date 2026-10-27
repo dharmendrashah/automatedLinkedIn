@@ -35,6 +35,8 @@ type Page = {
    canFetch?: boolean
    // The layout whose buttons have no data-view-name: Post and Done are pressed by their place among the dialog buttons.
    plain?: boolean
+   // How many presses of Done change nothing before one closes the dialog.
+   lostDone?: number
    // The dialog draws no file input at all: its Choose file or Upload from computer button opens a file chooser (staging, 2026-10-27).
    chooserOnly?: boolean
 }
@@ -48,6 +50,7 @@ const setup = (page: Page = {}) => {
    let focus: 'box' | 'title' | undefined
    let typed: string[] = []
    let pressed = false
+   let lostDone = page.lostDone ?? 0
    const calls: string[] = []
    const titles: string[] = []
    const html = () => {
@@ -180,6 +183,13 @@ const setup = (page: Page = {}) => {
             }
 
             calls.push('click done')
+
+            if (lostDone > 0) {
+               lostDone -= 1
+
+               return true
+            }
+
             dialog = undefined
             attached = true
 
@@ -402,6 +412,27 @@ describe('sendPost with files', () => {
          'type box',
          'click post',
       ])
+   })
+
+   it('should press Done again when the dialog stays open, and give up when it never closes', async () => {
+      const lost = setup({
+         plain: true,
+         lostDone: 2,
+      })
+
+      await expect(lost.send({ files: document })).resolves.toMatchObject({ outcome: 'POSTED' })
+      expect(lost.calls.filter(call => call === 'click done')).toHaveLength(3)
+
+      const stuck = setup({
+         plain: true,
+         lostDone: 99,
+      })
+
+      await expect(stuck.send({ files: document })).resolves.toEqual({
+         outcome: 'FAILED',
+         why: 'ATTACH',
+      })
+      expect(stuck.calls.filter(call => call === 'click done')).toHaveLength(5)
    })
 
    it('should give a document through the file chooser of its Choose file button when the dialog draws no file input', async () => {
