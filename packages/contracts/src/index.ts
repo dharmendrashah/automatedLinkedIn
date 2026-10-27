@@ -1,5 +1,6 @@
 export * from './attachments'
 export * from './browse'
+export * from './connections'
 export * from './invitations'
 export * from './liAt'
 export * from './messages'

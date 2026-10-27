@@ -33,6 +33,7 @@ model User {
   conversations     LinkedInConversation[]
   replies           LinkedInReply[]
   invitations       LinkedInInvitation[]
+  connections       LinkedInConnection[]
   accountProfiles   LinkedInAccountProfile[]
   profileVisits     LinkedInPageVisit[]
   postDrafts        PostDraft[]
@@ -607,6 +608,9 @@ model LinkedInAccount {
   // When the connection requests the account received were last read, and how many LinkedIn said wait (.plan/my-network-invitations.md).
   invitationsReadAt     DateTime?
   invitationsTotal      Int?
+  // When the connections of the account were last read, and how many LinkedIn said it has (.plan/my-connections.md).
+  connectionsReadAt     DateTime?
+  connectionsTotal      Int?
   // When the profile was first asked for (by the first visit of the page or the button); null means "never asked", which is
   // what lets the first visit start the read once (.plan/account-profile-backend.md).
   profileAskedAt        DateTime?
@@ -628,6 +632,7 @@ model LinkedInAccount {
   conversations    LinkedInConversation[]
   replies          LinkedInReply[]
   invitations      LinkedInInvitation[]
+  connections      LinkedInConnection[]
   profile          LinkedInAccountProfile?
   profileVisits    LinkedInPageVisit[]
   postDrafts       PostDraft[]
@@ -872,6 +877,10 @@ model SpiderSession {
   invitationImport  InvitationImport?
   // The connection requests this run was asked to answer.
   invitations       LinkedInInvitation[]
+  // Present for a finished `linkedin-connections` run whose connections are stored (.plan/my-connections.md).
+  connectionImport  ConnectionImport?
+  // The connection this run was asked to remove.
+  connections       LinkedInConnection[]
 
   @@index([userId, startedAt])
   @@index([linkedInAccountId, startedAt])
@@ -1247,6 +1256,74 @@ model LinkedInInvitation {
 
 // A finished `linkedin-invitations` run that waits to be stored; the same shape and lifecycle as MessageImport. It holds no names.
 model InvitationImport {
+  sessionId     String              @id
+  session       SpiderSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  status        MessageImportStatus @default(PENDING)
+  attempts      Int                 @default(0)
+  nextAttemptAt DateTime            @default(now())
+  claimedUntil  DateTime?
+  // An error class, never page content.
+  lastError     String?
+  createdAt     DateTime            @default(now())
+  importedAt    DateTime?
+
+  @@index([status, nextAttemptAt])
+}
+
+enum LinkedInConnectionStatus {
+  // On the list of the account at the last read.
+  CONNECTED
+  // Remove was asked for, in a run that is going.
+  REMOVING
+  // Remove was pressed and the connection left the list.
+  REMOVED
+  // Not on the list any more (removed by the other side or on LinkedIn), or it was not there when the removal ran.
+  GONE
+  // Remove was pressed and the page did not say what came of it.
+  UNKNOWN
+  // The run ended without removing it; the sentence is in `failure`.
+  FAILED
+}
+
+// A connection of an account, as the `linkedin-connections` task read it (.plan/my-connections.md). Holds what the member made public
+// (name, headline, photo address) and the day they connected, kept for the owner and deleted with the account; there is no retention
+// policy yet (an open item in MEMORY.md). `slug` is the part of the member's profile address after /in/.
+model LinkedInConnection {
+  id          String                   @id @default(uuid(7))
+  userId      String
+  user        User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId   String
+  account     LinkedInAccount          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  slug        String
+  name        String
+  headline    String
+  // The day they connected, when the page said it in words that could be read.
+  connectedOn DateTime?
+  photoUrl    String?
+  // LinkedIn's own number of the member, to open its message window.
+  messageUrn  String?
+  // Where it was in the last read that listed it, so the page keeps LinkedIn's order (most recent first).
+  position    Int                      @default(0)
+  status      LinkedInConnectionStatus @default(CONNECTED)
+  // The run that was asked to remove it; the run may be deleted before the connection.
+  sessionId   String?
+  session     SpiderSession?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  // A fixed sentence the owner can read, set when the run ended without removing it.
+  failure     String?
+  seenAt      DateTime                 @default(now())
+  startedAt   DateTime?
+  removedAt   DateTime?
+  goneAt      DateTime?
+  createdAt   DateTime                 @default(now())
+
+  @@unique([accountId, slug])
+  @@index([accountId, status])
+  @@index([sessionId])
+  @@index([status, startedAt])
+}
+
+// A finished `linkedin-connections` run that waits to be stored; the same shape and lifecycle as InvitationImport. It holds no names.
+model ConnectionImport {
   sessionId     String              @id
   session       SpiderSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   status        MessageImportStatus @default(PENDING)

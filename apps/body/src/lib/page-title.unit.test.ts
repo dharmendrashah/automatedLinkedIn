@@ -33,6 +33,7 @@ describe('titleFor', () => {
       expect(titleFor('/network')).toBe('My network')
       expect(titleFor('/network/0198-account')).toBe('My network')
       expect(titleFor('/accounts/0198-id')).toBe('Account profile')
+      expect(titleFor('/accounts/0198-id/connections')).toBe('Connections')
       expect(titleFor('/posting/0198-account')).toBe('Write a post')
       expect(titleFor('/posting/0198-account/0198-draft')).toBe('Write a post')
       expect(titleFor('/workflows/0198-id')).toBe('Workflow')

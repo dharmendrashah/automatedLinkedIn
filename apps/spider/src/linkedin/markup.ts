@@ -1,3 +1,5 @@
+import { CONNECTION_SLUG_PATTERN } from '@automatedLinkedIn/contracts'
+
 import { type OverlaySpec } from '../browsing/overlay'
 
 // How today's LinkedIn marks itself up (seen on a real feed, 2026-10-19): the one place to fix when it changes.
@@ -109,4 +111,32 @@ export const invitationButton = (id: string, action: 'ACCEPT' | 'IGNORE') => {
    }
 
    return `[componentkey="urn:li:invitation:${id}"] button[aria-label^="${action === 'ACCEPT' ? 'Accept ' : 'Ignore an invitation'}"]`
+}
+
+// The connections of the account, on /mynetwork/invite-connect/connections/ (reached from the profile's "N connections" link; heading
+// "115 connections", a sort control and a search box above a list that loads ten more rows each time it is scrolled to the end).
+// Recorded 2026-10-27 on one account, English: each row is named `ConnectionCard_<batch>-<slug>` after the member's profile address
+// and holds a photo link, a name link with the headline under the name, a line "Connected on October 27, 2026", a Message link to
+// /messaging/compose/?profileUrn=... and a button with three dots that opens a menu. The menu item "Remove connection" opens a dialog
+// whose confirm button carries the same `data-view-name` as the menu item (so the dialog is named in the selector); a toast says
+// "Connection removed." and the heading drops by one. Other languages, sort orders and accounts are not recorded.
+export const CONNECTIONS_PATH = '/mynetwork/invite-connect/connections/'
+export const CONNECTION_ROW = '[componentkey^="ConnectionCard_"]'
+export const CONNECTIONS_HEADER = '[componentkey="ConnectionsPage_ConnectionsListHeader"]'
+// The photo link and the name link both carry this; the name link is the one that holds the lines of text.
+export const CONNECTION_PROFILE = 'a[data-view-name="connections-profile"][href*="/in/"]'
+export const CONNECTION_MESSAGE = '[data-view-name="message-button"] a[href*="/messaging/compose/"]'
+export const CONNECTION_MENU_ITEM = '[role="menu"] [role="menuitem"][data-view-name="connections-remove"]'
+export const CONNECTION_REMOVE_CONFIRM = 'dialog[data-testid="dialog"] button[data-view-name="connections-remove"]'
+export const CONNECTION_REMOVE_CANCEL =
+   'dialog[data-testid="dialog"] button[data-view-name="connections-cancel-removed"]'
+
+// The three dots of one row, from the member's profile address (the characters the contract allows, so nothing else can reach a
+// selector). Only the end of the row's own name is matched: the batch number in front changes as the list loads.
+export const connectionMenuButton = (slug: string) => {
+   if (!CONNECTION_SLUG_PATTERN.test(slug)) {
+      throw new Error('Not a profile address')
+   }
+
+   return `[componentkey^="ConnectionCard_"][componentkey$="-${slug}"] button[data-view-name="connections-remove-connection-dropdown"]`
 }

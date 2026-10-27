@@ -8,6 +8,7 @@ import {
    accountProfile,
    browse,
    companyPage,
+   connections,
    icp,
    jobs,
    label,
@@ -38,6 +39,7 @@ export type AppRouter = typeof appRouter
 export const appRouter = router({
    me,
    network,
+   connections,
    accountProfile,
    browse,
    companyPage,

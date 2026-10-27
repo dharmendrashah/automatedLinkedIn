@@ -167,6 +167,7 @@ export const AccountProfile = () => {
             sample ? 'This is sample data. Remove ?sample= from the address.' : (state.data?.blocker ?? undefined)
          }
          reading={reading}
+         connectionsTo={`/accounts/${id}/connections`}
          onTestLogin={() => actions.testLogin({ id })}
          onVisit={() => actions.visit({ id })}
          onRead={() => read.mutate({ accountId: id })}

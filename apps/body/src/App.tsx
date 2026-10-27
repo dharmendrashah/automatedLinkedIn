@@ -34,6 +34,8 @@ const Unibox = lazy(() => import('./pages/Unibox').then(({ Unibox: page }) => ({
 const AccountProfile = lazy(() =>
    import('./pages/AccountProfile').then(({ AccountProfile: page }) => ({ default: page }))
 )
+// The connections of an account carry a long list, and are only opened from the account's page.
+const Connections = lazy(() => import('./pages/Connections').then(({ Connections: page }) => ({ default: page })))
 // The post canvas carries the blocks, the preview and the schedule dialog, and is only opened after an account is picked.
 const PostingCanvas = lazy(() =>
    import('./pages/PostingCanvas').then(({ PostingCanvas: page }) => ({ default: page }))
@@ -86,6 +88,14 @@ const App = () => (
             element={
                <Suspense fallback={null}>
                   <AccountProfile />
+               </Suspense>
+            }
+         />
+         <Route
+            path="/accounts/:accountId/connections"
+            element={
+               <Suspense fallback={null}>
+                  <Connections />
                </Suspense>
             }
          />
