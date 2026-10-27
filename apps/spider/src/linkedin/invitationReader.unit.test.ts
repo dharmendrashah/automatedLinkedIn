@@ -112,11 +112,32 @@ describe('parseInvitations', () => {
       expect(invitations[0]?.photoUrl).toBeUndefined()
    })
 
-   it('should find nothing on a page that draws no request', () => {
+   it('should find nothing on a page that draws no request and does not say there are none', () => {
       expect(parseInvitations('<html><body><button><span>All (0)</span></button></body></html>')).toEqual({
          invitations: [],
          rows: 0,
+         empty: false,
          total: 0,
       })
+   })
+
+   it('should take the list’s own words as an empty list, and not the suggestions under it for requests', () => {
+      const suggestions =
+         '<div role="listitem" componentkey="auto-component-3c918c5a"><a href="https://www.linkedin.com/in/someone/">Someone</a></div>'
+
+      expect(
+         parseInvitations(
+            invitationsPage([], {
+               none: true,
+               extra: suggestions,
+            })
+         )
+      ).toMatchObject({
+         invitations: [],
+         rows: 0,
+         empty: true,
+      })
+      expect(parseInvitations(invitationsPage([ADA], { none: true })).empty).toBe(false)
+      expect(parseInvitations('<div><p>No new invitations</p></div>').empty).toBe(false)
    })
 })

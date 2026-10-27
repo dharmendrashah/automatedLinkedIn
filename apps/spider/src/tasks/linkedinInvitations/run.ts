@@ -111,7 +111,7 @@ export const runInvitations = async (
       for (let look = 0; look < READY_LOOKS; look += 1) {
          const page = parseInvitations(await hands.html())
 
-         if (page.rows > 0 || page.total === 0) {
+         if (page.rows > 0 || page.empty || page.total === 0) {
             return true
          }
 
@@ -152,6 +152,11 @@ export const runInvitations = async (
          unreadable ||= page.rows > page.invitations.length
          page.invitations.forEach(invitation => seen.set(invitation.id, seen.get(invitation.id) ?? invitation))
          stalled = seen.size > before ? 0 : stalled + 1
+
+         // The page says there is none: nothing to scroll for.
+         if (page.empty) {
+            break
+         }
 
          if (total !== undefined && seen.size >= total) {
             break

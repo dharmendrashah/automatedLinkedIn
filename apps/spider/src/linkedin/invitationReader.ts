@@ -2,7 +2,14 @@ import { type HTMLElement, parse } from 'node-html-parser'
 
 import { type Invitation } from '@automatedLinkedIn/contracts'
 
-import { INVITATION_KEY, INVITATION_NAME, INVITATION_NOTE, INVITATION_REPLY, INVITATION_ROW } from './markup'
+import {
+   INVITATIONS_LIST,
+   INVITATION_KEY,
+   INVITATION_NAME,
+   INVITATION_NOTE,
+   INVITATION_REPLY,
+   INVITATION_ROW,
+} from './markup'
 import { shown } from './messageReader'
 
 // Everything here reads the markup of LinkedIn's connection requests (.plan/my-network-invitations.md) and nothing else: it holds
@@ -101,8 +108,18 @@ const totalOf = (root: HTMLElement) => {
    return undefined
 }
 
+// What the list says when there is no request: "No new invitations", a paragraph inside the same list that holds the requests
+// (seen on /mynetwork/invitation-manager/, dharmendrashaheagle+linkedin, 2026-10-27; English only). That account showed a single
+// "Focused (0)" dropdown instead of the chips, so the chips are not the way to tell an empty list.
+const NONE = /^No new invitations$/i
+
+const emptyOf = (root: HTMLElement) =>
+   root
+      .querySelectorAll(INVITATIONS_LIST)
+      .some(list => list.querySelectorAll('p').some(line => NONE.test(line.text.trim())))
+
 // The requests the page draws now, in its order, each once. `rows` counts every row the page drew, so a row that could not be read
-// shows as the difference.
+// shows as the difference. `empty` is the page's own word that there are none.
 export const parseInvitations = (html: string) => {
    const root = parse(html)
    const rows = root.querySelectorAll(INVITATION_ROW)
@@ -123,6 +140,7 @@ export const parseInvitations = (html: string) => {
    return {
       invitations,
       rows: rows.length,
+      empty: rows.length === 0 && emptyOf(root),
       ...(total !== undefined && { total }),
    }
 }

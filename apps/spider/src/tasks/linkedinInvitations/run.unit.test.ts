@@ -21,6 +21,8 @@ type Page = {
    // The address the page is at once it opened.
    at?: string
    all?: number
+   // The list says "No new invitations".
+   none?: boolean
    // How many rows the page draws at first, and how many more each scroll adds (a long list loads as it is scrolled).
    chunk?: number
    // Requests whose button does not land, and requests that stay on the page after the click.
@@ -72,7 +74,10 @@ const setup = (page: Page = {}) => {
          .filter(({ id }) => !gone.has(id))
          .slice(0, chunk === Infinity ? undefined : chunk * (1 + scrolls))
 
-      return invitationsPage(shown, { all: page.all })
+      return invitationsPage(shown, {
+         all: page.all,
+         none: page.none,
+      })
    }
 
    const browser = {
@@ -378,6 +383,44 @@ describe('runInvitations', () => {
          complete: true,
          invitations: [],
       })
+   })
+
+   it('should take the list’s own words that there is none as an empty list, without scrolling for more', async () => {
+      const { run, file, browser } = setup({
+         rows: [],
+         none: true,
+      })
+
+      await expect(run()).resolves.toEqual({
+         outcome: 'DONE',
+         read: 0,
+         asked: 0,
+         answered: 0,
+      })
+      expect(file()).toMatchObject({
+         complete: true,
+         invitations: [],
+      })
+      expect(browser.scrollOver).not.toHaveBeenCalled()
+   })
+
+   it('should call every request asked for gone on a page that says there is none, and click nothing', async () => {
+      const { run, clicks, context, file } = setup({
+         rows: [],
+         none: true,
+      })
+
+      await expect(
+         run([
+            {
+               id: person(1).id,
+               action: 'ACCEPT',
+            },
+         ])
+      ).resolves.toMatchObject({ outcome: 'PARTIAL' })
+      expect(clicks).toEqual([])
+      expect(context.markAttempt).not.toHaveBeenCalled()
+      expect(file().outcomes[0]?.outcome).toBe('GONE')
    })
 
    it('should scroll a long list for more, and say it is not complete when it holds more than it keeps', async () => {

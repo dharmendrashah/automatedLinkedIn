@@ -49,9 +49,11 @@ ${note ? noteMarkup(first, note) : ''}</div>`
 type Page = {
    // The number in the "All (N)" chip above the list; none leaves the chips out.
    all?: number
+   // The list says "No new invitations" (seen on an account with none, 2026-10-27).
+   none?: boolean
    // Anything else the page holds, such as the card that confirms an answer.
    extra?: string
 }
 
-export const invitationsPage = (rows: FixtureInvitation[], { all, extra = '' }: Page = {}) =>
-   `<html><body>${all === undefined ? '' : `<div><button><span>All (${all})</span></button><button><span>Verified (${all})</span></button></div>`}${extra}<div role="list" data-testid="lazy-column">${rows.map(invitationRow).join('')}</div></body></html>`
+export const invitationsPage = (rows: FixtureInvitation[], { all, none, extra = '' }: Page = {}) =>
+   `<html><body>${all === undefined ? '' : `<div><button><span>All (${all})</span></button><button><span>Verified (${all})</span></button></div>`}${extra}<div role="list" data-testid="lazy-column">${none ? '<div><p>No new invitations</p></div>' : ''}${rows.map(invitationRow).join('')}</div></body></html>`

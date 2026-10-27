@@ -94,6 +94,8 @@ export const POST_PREVIEW_REMOVE = 'button[data-view-name="share-detour-preview-
 // invitation to connect from <Name>"). The page's empty state and its layout on other accounts are not recorded.
 export const INVITATIONS_PATH = '/mynetwork/invitation-manager/'
 export const INVITATION_ROW = '[role="listitem"][componentkey^="urn:li:invitation:"]'
+// The list that holds the requests, or the words that there are none.
+export const INVITATIONS_LIST = '[data-testid="lazy-column"]'
 export const INVITATION_KEY = /^urn:li:invitation:(\d{15,25})$/
 export const INVITATION_NAME = 'a[aria-label^="View "] strong'
 export const INVITATION_NOTE = '[data-testid="expandable-text-box"]'
