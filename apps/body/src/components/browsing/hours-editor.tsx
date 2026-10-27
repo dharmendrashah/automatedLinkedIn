@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { type BrowseMode, type WorkingHours } from './types'
 
@@ -34,14 +34,22 @@ type Props = {
    proxyTimeZone: string | undefined
    saveLabel?: string
    onSave: (hours: WorkingHours) => void
+   // Told when there are changes not saved yet, so the caller can ask before closing.
+   onDirtyChange?: (dirty: boolean) => void
 }
 
 // Working days, hours and time zone. What they mean is written out as the owner types, and hours that cannot hold the daily
 // limit cannot be saved.
-export const HoursEditor = ({ mode, hours, proxyTimeZone, saveLabel = 'Save hours', onSave }: Props) => {
+export const HoursEditor = ({ mode, hours, proxyTimeZone, saveLabel = 'Save hours', onSave, onDirtyChange }: Props) => {
    const [draft, setDraft] = useState(hours)
    const problem = hoursProblem(mode, draft)
    const changed = JSON.stringify(draft) !== JSON.stringify(hours)
+
+   useEffect(() => {
+      onDirtyChange?.(changed)
+
+      return () => onDirtyChange?.(false)
+   }, [changed, onDirtyChange])
    const zones = [...new Set([draft.timeZone, proxyTimeZone, ...COMMON_ZONES])].filter(
       (zone): zone is string => typeof zone === 'string'
    )

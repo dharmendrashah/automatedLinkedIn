@@ -45,30 +45,5 @@ export const countBuckets = (accounts: AccountBrowse[]) => {
    return counts
 }
 
-export const sortByUse = (accounts: AccountBrowse[]) => [...accounts].sort((a, b) => shareOf(b) - shareOf(a))
-
 export const needAttention = (accounts: AccountBrowse[]) =>
    accounts.filter(({ overLimitDays14 }) => overLimitDays14 >= ATTENTION_DAYS)
-
-export type ClientGroup = {
-   label: string | null
-   accounts: AccountBrowse[]
-   usedSeconds: number
-}
-
-// Named clients in alphabetical order, accounts with no client last.
-export const clientGroups = (accounts: AccountBrowse[]): ClientGroup[] => {
-   const groups = new Map<string | null, AccountBrowse[]>()
-
-   accounts.forEach(account => {
-      groups.set(account.clientLabel, [...(groups.get(account.clientLabel) ?? []), account])
-   })
-
-   return [...groups.entries()]
-      .map(([label, items]) => ({
-         label,
-         accounts: items,
-         usedSeconds: items.reduce((sum, { usedSeconds }) => sum + usedSeconds, 0),
-      }))
-      .sort((a, b) => (a.label === null ? 1 : b.label === null ? -1 : a.label.localeCompare(b.label)))
-}
