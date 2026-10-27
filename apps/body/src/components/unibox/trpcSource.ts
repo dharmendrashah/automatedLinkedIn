@@ -9,7 +9,7 @@ import {
 } from './types'
 
 import { type RouterOutputs, type trpc } from '../../trpc/trpc'
-import { type SendResult, type UniboxData, type UniboxSource } from './source'
+import { type SendEvents, type SendResult, type UniboxData, type UniboxSource } from './source'
 import { type Upload } from './upload'
 
 // The part of the tRPC client the Unibox uses, as the client of the app gives it (`trpc.useUtils().client`).
@@ -97,6 +97,14 @@ const replyOf = (reply: NonNullable<WireConversation['reply']>): Pick<UniboxConv
             at: since,
             since,
             replyId: reply.id,
+            ...(reply.state === 'QUEUED' &&
+               reply.wait && {
+                  wait: {
+                     reason: reply.wait.reason,
+                     until: reply.wait.until,
+                     zone: reply.wait.zone,
+                  },
+               }),
          },
       }
    }
@@ -139,9 +147,11 @@ const groups = (ids: string[]) =>
    )
 
 // How a reply is followed: brain is asked every 2 seconds, for as long as it can have the reply in flight (brain ends one that is
-// older than 15 minutes as unsure).
+// older than 15 minutes as unsure). A reply that is queued is not in flight: it may wait for hours (the account's working hours), so it
+// is asked about less often and never gives up while it is queued.
 const POLL_MS = 2000
 const POLL_TIMES = 460
+const QUEUED_POLL_MS = 10_000
 
 const sleep = (ms: number) =>
    new Promise<void>(resolve => {
@@ -162,12 +172,34 @@ type Deps = {
 }
 
 export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }: Deps = {}): UniboxSource => {
-   // Asks brain where a reply is until it ends: SENT, or a sentence for one that did not go.
-   const follow = async (replyId: string): Promise<SendResult> => {
-      for (let polls = 0; polls < POLL_TIMES; polls += 1) {
-         await wait(POLL_MS)
+   // Asks brain where a reply is until it ends: SENT, or a sentence for one that did not go. `onWaiting` hears why a queued reply has not
+   // started and from when it can, and then, once it starts, that it waits no more.
+   const follow = async (replyId: string, onWaiting?: SendEvents['waiting']): Promise<SendResult> => {
+      let queued = false
+
+      for (let polls = 0; polls < POLL_TIMES; ) {
+         await wait(queued ? QUEUED_POLL_MS : POLL_MS)
 
          const reply = await client.unibox.reply.query({ id: replyId }).catch(() => undefined)
+
+         queued = reply?.state === 'QUEUED'
+
+         if (reply?.state === 'QUEUED') {
+            onWaiting?.(
+               reply.waitReason
+                  ? {
+                       reason: reply.waitReason,
+                       until: reply.waitUntil,
+                       zone: reply.waitZone,
+                    }
+                  : undefined
+            )
+
+            continue
+         }
+
+         polls += 1
+         onWaiting?.(undefined)
 
          if (reply?.state === 'SENT') {
             return { ok: true }
@@ -280,7 +312,7 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
 
          events?.started?.(started.id)
 
-         return follow(started.id)
+         return follow(started.id, events?.waiting)
       },
 
       follow,

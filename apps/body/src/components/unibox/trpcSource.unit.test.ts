@@ -249,7 +249,15 @@ describe('createTrpcSource actions', () => {
 
 describe('createTrpcSource.send', () => {
    const wait = vi.fn(async () => undefined)
-   const replies = (...states: Array<{ state: string; failure?: string | null }>) => {
+   const replies = (
+      ...states: Array<{
+         state: string
+         failure?: string | null
+         waitReason?: string | null
+         waitUntil?: string | null
+         waitZone?: string | null
+      }>
+   ) => {
       const query = vi.fn()
 
       for (const state of states) {
@@ -413,6 +421,47 @@ describe('createTrpcSource.send', () => {
       expect(mutate).not.toHaveBeenCalled()
    })
 
+   it('should keep following a reply that is queued for the account to be ready, say when it can start, and clear that once it starts', async () => {
+      const waiting = {
+         state: 'QUEUED',
+         waitReason: "Waiting for the account's next slot.",
+         waitUntil: '2026-10-28T17:53:00.000Z',
+         waitZone: 'Europe/Berlin',
+      }
+      // Far more polls than a reply may be in flight: waiting in the queue is not being lost.
+      const query = vi.fn()
+
+      for (let poll = 0; poll < 600; poll += 1) {
+         query.mockResolvedValueOnce({ id: 'r1', ...waiting })
+      }
+
+      query.mockResolvedValueOnce({ id: 'r1', state: 'SENDING' }).mockResolvedValueOnce({ id: 'r1', state: 'SENT' })
+
+      const onWaiting = vi.fn()
+      const { client } = fake({ reply: { query } })
+
+      await expect(createTrpcSource(client, { wait }).follow?.('r1', onWaiting)).resolves.toEqual({ ok: true })
+
+      expect(onWaiting).toHaveBeenCalledWith({
+         reason: "Waiting for the account's next slot.",
+         until: '2026-10-28T17:53:00.000Z',
+         zone: 'Europe/Berlin',
+      })
+      expect(onWaiting).toHaveBeenLastCalledWith(undefined)
+   })
+
+   it('should pass the wait on from a reply sent here, and say a reply that is queued with no time yet waits without one', async () => {
+      const onWaiting = vi.fn()
+      const { client } = fake({
+         send: { mutate: vi.fn().mockResolvedValue({ id: 'r1' }) },
+         reply: { query: replies({ state: 'QUEUED' }, { state: 'SENT' }) },
+      })
+
+      await createTrpcSource(client, { wait }).send({} as never, 'Hi', [], 'c1', { waiting: onWaiting })
+
+      expect(onWaiting).toHaveBeenCalledWith(undefined)
+   })
+
    it('should say when the reply started, and follow a reply brain already has, as the one just sent', async () => {
       const started = vi.fn()
       const { client } = fake({
@@ -437,6 +486,7 @@ describe('createTrpcSource.send', () => {
          files: [{ kind: 'FILE', name: 'cv.pdf', bytes: 9 }],
          startedAt: '2026-10-22T09:30:00.000Z',
          failure: null,
+         wait: null,
       }
       const { client } = fake({
          conversations: {
@@ -446,7 +496,18 @@ describe('createTrpcSource.send', () => {
                   conversation({ reply: { ...reply, state: 'SENDING' } }),
                   conversation({ id: 'c2', reply: { ...reply, state: 'UNKNOWN' } }),
                   conversation({ id: 'c3', reply: { ...reply, state: 'FAILED', failure: 'Nope.' } }),
-                  conversation({ id: 'c4', reply: { ...reply, state: 'QUEUED' } }),
+                  conversation({
+                     id: 'c4',
+                     reply: {
+                        ...reply,
+                        state: 'QUEUED',
+                        wait: {
+                           reason: "Waiting for the account's working hours.",
+                           until: '2026-10-29T07:10:00.000Z',
+                           zone: 'Europe/Berlin',
+                        },
+                     },
+                  }),
                ]),
          },
       })
@@ -461,7 +522,16 @@ describe('createTrpcSource.send', () => {
       })
       expect(sending).not.toHaveProperty('failed')
       // A reply waiting its turn behind another is on its way too: the page keeps following it.
-      expect(queued?.sending).toMatchObject({ replyId: 'r1', text: 'Tomorrow works.' })
+      expect(queued?.sending).toMatchObject({
+         replyId: 'r1',
+         text: 'Tomorrow works.',
+         wait: {
+            reason: "Waiting for the account's working hours.",
+            until: '2026-10-29T07:10:00.000Z',
+            zone: 'Europe/Berlin',
+         },
+      })
+      expect(sending?.sending).not.toHaveProperty('wait')
       expect(queued).not.toHaveProperty('failed')
       expect(unknown?.failed).toMatchObject({ unsure: true, replyId: 'r1', text: 'Tomorrow works.' })
       expect(failed?.failed).toMatchObject({ reason: 'Nope.', replyId: 'r1' })

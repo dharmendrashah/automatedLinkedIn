@@ -10,7 +10,7 @@ import { LinkedInReplyService, REPLY_LIMITS } from './linkedInReply.service'
 import { PrismaService } from './prisma.service'
 import { SpiderSessionService } from './spiderSession.service'
 import { TaskService } from './task.service'
-import { TaskBusyError, TaskRefusedError, TaskUnavailableError } from './taskErrors'
+import { BrowseBudgetError, TaskBusyError, TaskRefusedError, TaskUnavailableError } from './taskErrors'
 import { UserService } from './user.service'
 
 // Needs PostgreSQL. The task itself is not started: `TaskService.request` is replaced by a stand-in that saves what the service
@@ -318,6 +318,78 @@ describe('LinkedInReplyService (database)', () => {
          })
       })
 
+      describe('when the account has no browsing time now', () => {
+         const until = () => new Date(Date.now() + 25 * 60_000)
+         const resting = (when: Date) => new BrowseBudgetError('Resting.', 'GAP', when, 'at 17:53', 'Europe/Berlin')
+
+         it('should keep the reply queued and say why and from when, never failing it', async () => {
+            const when = until()
+
+            vi.mocked(TaskService.request).mockRejectedValueOnce(resting(when))
+
+            const waiting = await LinkedInReplyService.send(userId, conversationId, 'Hello')
+
+            await expect(startedFor(waiting?.id)).resolves.toMatchObject({
+               state: 'QUEUED',
+               failure: null,
+               waitReason: "Waiting for the account's next slot.",
+               waitUntil: when,
+               waitZone: 'Europe/Berlin',
+            })
+            await expect(LinkedInReplyService.get(userId, waiting?.id ?? '')).resolves.toMatchObject({
+               state: 'QUEUED',
+               waitUntil: when,
+            })
+         })
+
+         it('should not ask again before the time it gave, then start the reply and clear the wait', async () => {
+            const when = until()
+
+            vi.mocked(TaskService.request).mockRejectedValueOnce(resting(when))
+
+            const waiting = await LinkedInReplyService.send(userId, conversationId, 'Hello')
+            const asked = vi.mocked(TaskService.request).mock.calls.length
+
+            await LinkedInReplyService.dispatchWaiting()
+
+            expect(vi.mocked(TaskService.request).mock.calls).toHaveLength(asked)
+
+            await LinkedInReplyService.dispatchWaiting(when.getTime() + 1000)
+
+            await expect(startedFor(waiting?.id)).resolves.toMatchObject({
+               state: 'SENDING',
+               waitReason: null,
+               waitUntil: null,
+               waitZone: null,
+            })
+         })
+
+         it('should keep a second reply behind the first, and end one only a quarter of an hour after its time, not after it was asked', async () => {
+            const when = until()
+
+            vi.mocked(TaskService.request).mockRejectedValueOnce(resting(when))
+
+            const first = await LinkedInReplyService.send(userId, conversationId, 'One')
+            const second = await LinkedInReplyService.send(userId, conversationId, 'Two')
+
+            await PrismaService.client.linkedInReply.updateMany({
+               where: { userId },
+               data: { createdAt: new Date(Date.now() - 3 * 60 * 60_000) },
+            })
+
+            await expect(LinkedInReplyService.dispatchWaiting()).resolves.toMatchObject({
+               started: 0,
+               expired: 0,
+            })
+            expect((await startedFor(second?.id)).state).toBe('QUEUED')
+
+            await expect(
+               LinkedInReplyService.dispatchWaiting(when.getTime() + REPLY_LIMITS.queuedMs + 1000)
+            ).resolves.toMatchObject({ expired: 2 })
+            expect((await startedFor(first?.id)).state).toBe('FAILED')
+         })
+      })
+
       it('should end a reply that waited too long as failed, with nothing sent', async () => {
          await LinkedInReplyService.send(userId, conversationId, 'Going')
 
@@ -514,6 +586,49 @@ describe('LinkedInReplyService (database)', () => {
                },
             ],
          })
+      })
+
+      it('should keep a reply with a photo and audio queued, with the wait, when the account has no browsing time, and leave its files where they are', async () => {
+         vi.spyOn(UploadFiles, 'verify').mockResolvedValue([
+            {
+               name: 'photo.png',
+               bytes: 5,
+            },
+            {
+               name: 'note.m4a',
+               bytes: 7,
+            },
+         ])
+
+         const when = new Date(Date.now() + 25 * 60_000)
+
+         vi.mocked(TaskService.request).mockRejectedValueOnce(
+            new BrowseBudgetError('Resting.', 'GAP', when, 'at 17:53', 'Europe/Berlin')
+         )
+
+         const sent = await LinkedInReplyService.send(userId, conversationId, '', UPLOAD)
+
+         await expect(
+            PrismaService.client.linkedInReply.findUniqueOrThrow({ where: { id: sent?.id ?? '' } })
+         ).resolves.toMatchObject({
+            state: 'QUEUED',
+            failure: null,
+            uploadId: UPLOAD,
+            waitUntil: when,
+            attachments: [
+               {
+                  name: 'photo.png',
+                  kind: 'IMAGE',
+                  bytes: 5,
+               },
+               {
+                  name: 'note.m4a',
+                  kind: 'AUDIO',
+                  bytes: 7,
+               },
+            ],
+         })
+         await expect(LinkedInReplyService.keepFiles()).resolves.toBe(0)
       })
 
       it('should refuse the reply, with the sentence of the store, when a file is not what its name says it is', async () => {

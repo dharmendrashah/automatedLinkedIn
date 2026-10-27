@@ -45,6 +45,9 @@ type Extra = {
    failure?: string
    dismissedAt?: Date
    attachments?: object[]
+   waitReason?: string
+   waitUntil?: Date
+   waitZone?: string
 }
 
 const reply = (
@@ -109,6 +112,7 @@ describe('latestReplies (database)', () => {
          ],
          startedAt: sending.createdAt,
          failure: null,
+         wait: null,
       })
    })
 
@@ -120,6 +124,27 @@ describe('latestReplies (database)', () => {
          id: waiting.id,
          state: 'QUEUED',
          text: 'QUEUED 0.1',
+         wait: null,
+      })
+   })
+
+   it('should say why a queued reply waits and from when, and still show one asked more than a day ago', async () => {
+      const { id } = await conversation(userId, accountId)
+      const until = new Date(Date.now() + 20 * HOUR)
+
+      await reply(id, 'QUEUED', 30, {
+         waitReason: "Waiting for the account's working hours.",
+         waitUntil: until,
+         waitZone: 'Europe/Berlin',
+      })
+
+      expect((await latestReplies(userId)).get(id)).toMatchObject({
+         state: 'QUEUED',
+         wait: {
+            reason: "Waiting for the account's working hours.",
+            until,
+            zone: 'Europe/Berlin',
+         },
       })
    })
 

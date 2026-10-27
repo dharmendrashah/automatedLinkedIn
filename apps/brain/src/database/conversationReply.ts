@@ -12,6 +12,8 @@ export type ConversationReply = {
    files: Array<{ name: string; kind: string; bytes?: number }>
    startedAt: Date
    failure: string | null
+   // Why a queued reply has not started and the earliest it can, when brain knows.
+   wait: { reason: string; until: Date; zone: string | null } | null
 }
 
 const filesOf = (stored: unknown): ConversationReply['files'] =>
@@ -32,12 +34,13 @@ const filesOf = (stored: unknown): ConversationReply['files'] =>
       : []
 
 // The newest reply of each conversation of the owner in the last day, by conversation id. A reply that went, one that was dismissed
-// and a failure followed by a newer reply say nothing: only the newest counts.
+// and a failure followed by a newer reply say nothing: only the newest counts. A reply still queued is shown however long ago it was asked,
+// since it can wait for the account's working hours.
 export const latestReplies = async (userId: string) => {
    const rows = await PrismaService.client.linkedInReply.findMany({
       where: {
          userId,
-         createdAt: { gte: new Date(Date.now() - WINDOW_MS) },
+         OR: [{ createdAt: { gte: new Date(Date.now() - WINDOW_MS) } }, { state: 'QUEUED' }],
       },
       orderBy: { createdAt: 'desc' },
       distinct: ['conversationId'],
@@ -50,6 +53,9 @@ export const latestReplies = async (userId: string) => {
          failure: true,
          createdAt: true,
          dismissedAt: true,
+         waitReason: true,
+         waitUntil: true,
+         waitZone: true,
       },
    })
    const replies = new Map<string, ConversationReply>()
@@ -66,6 +72,14 @@ export const latestReplies = async (userId: string) => {
          files: filesOf(row.attachments),
          startedAt: row.createdAt,
          failure: row.failure,
+         wait:
+            row.state === 'QUEUED' && row.waitReason && row.waitUntil
+               ? {
+                    reason: row.waitReason,
+                    until: row.waitUntil,
+                    zone: row.waitZone,
+                 }
+               : null,
       })
    }
 

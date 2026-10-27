@@ -3,9 +3,10 @@ import { KeptFiles, UploadFiles, UploadRefused } from 'core'
 import { kindOfName, safeFileName } from '@automatedLinkedIn/contracts'
 
 import { REPLY_TASK } from './linkedInReply.hooks'
+import { budgetWait } from './postPublication.rules'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
-import { TaskBusyError, TaskRefusedError, TaskUnavailableError } from './taskErrors'
+import { BrowseBudgetError, TaskBusyError, TaskRefusedError, TaskUnavailableError } from './taskErrors'
 
 // Unverified against LinkedIn's own limits; kept in one place (.plan/unibox-send.md, Q2).
 export const REPLY_LIMITS = {
@@ -18,7 +19,7 @@ export const REPLY_LIMITS = {
    maxChars: 4000,
    // The task's own limit is 10 minutes (files upload through a proxy); a reply still sending after this long was lost with its run.
    staleMs: 15 * 60 * 1000,
-   // A queued reply that has not started by then ends as failed: nothing was typed.
+   // A queued reply that has not started this long after its time (when it was asked, or when its wait said it could) ends as failed.
    queuedMs: 15 * 60 * 1000,
 } as const
 
@@ -108,7 +109,8 @@ export class LinkedInReplyService {
 
    // Starts the oldest queued reply of the account when nothing blocks it: no reply is sending, and the last one started more than
    // the quiet time ago. Resolves to whether a reply was started. A reply whose run cannot be asked for yet (the task is still running
-   // or not announced) stays queued; one that can never start ends as failed with the sentence of the refusal.
+   // or not announced, or the account has no browsing time now) stays queued and says when it can start; one that can never start ends
+   // as failed with the sentence of the refusal.
    public static async dispatchNext(accountId: string, now = Date.now()) {
       const db = PrismaService.client
       const busy = await db.linkedInReply.findFirst({
@@ -135,6 +137,9 @@ export class LinkedInReplyService {
             text: true,
             attachments: true,
             uploadId: true,
+            waitReason: true,
+            waitUntil: true,
+            waitZone: true,
             conversation: {
                select: {
                   linkedInId: true,
@@ -145,6 +150,17 @@ export class LinkedInReplyService {
       })
 
       if (!next) {
+         return false
+      }
+
+      // Told it must wait, and not yet time: not asked again, and the replies behind it say the same.
+      if (next.waitUntil && next.waitUntil.getTime() > now) {
+         await this.noteWait(accountId, {
+            reason: next.waitReason,
+            until: next.waitUntil,
+            zone: next.waitZone,
+         })
+
          return false
       }
 
@@ -175,6 +191,9 @@ export class LinkedInReplyService {
                      state: 'SENDING',
                      sessionId,
                      startedAt: new Date(),
+                     waitReason: null,
+                     waitUntil: null,
+                     waitZone: null,
                   },
                })
 
@@ -186,6 +205,18 @@ export class LinkedInReplyService {
 
          return true
       } catch (error) {
+         // The account has no browsing time now (resting between two sessions, outside its working hours): the reply keeps its place and
+         // says when it can start. The owner never has to send it again.
+         if (error instanceof BrowseBudgetError) {
+            await this.noteWait(accountId, {
+               reason: budgetWait(error.reason),
+               until: error.until,
+               zone: error.zone ?? null,
+            })
+
+            return false
+         }
+
          // Someone else took it, or the account is busy: it keeps its place.
          if (
             error instanceof ReplyTaken ||
@@ -218,10 +249,17 @@ export class LinkedInReplyService {
    // What the reply-send job does: gives every account with a queued reply its turn, and ends the replies that waited too long.
    public static async dispatchWaiting(now = Date.now()) {
       const db = PrismaService.client
+      const late = new Date(now - REPLY_LIMITS.queuedMs)
       const expired = await db.linkedInReply.updateMany({
          where: {
             state: 'QUEUED',
-            createdAt: { lt: new Date(now - REPLY_LIMITS.queuedMs) },
+            OR: [
+               {
+                  waitUntil: null,
+                  createdAt: { lt: late },
+               },
+               { waitUntil: { lt: late } },
+            ],
          },
          data: {
             state: 'FAILED',
@@ -246,6 +284,23 @@ export class LinkedInReplyService {
          started,
          expired: expired.count,
       }
+   }
+
+   // Saves why the queued replies of an account have not started and the earliest they may, for the page. Only the ones that do not say it
+   // already are written, since the job asks every few seconds.
+   private static async noteWait(accountId: string, wait: { reason: string | null; until: Date; zone: string | null }) {
+      await PrismaService.client.linkedInReply.updateMany({
+         where: {
+            accountId,
+            state: 'QUEUED',
+            OR: [{ waitUntil: null }, { waitUntil: { not: wait.until } }],
+         },
+         data: {
+            waitReason: wait.reason,
+            waitUntil: wait.until,
+            waitZone: wait.zone,
+         },
+      })
    }
 
    // The name and kind of each file of a reply, as the task is told them.
@@ -321,6 +376,9 @@ export class LinkedInReplyService {
             state: true,
             failure: true,
             sentAt: true,
+            waitReason: true,
+            waitUntil: true,
+            waitZone: true,
          },
       })
    }

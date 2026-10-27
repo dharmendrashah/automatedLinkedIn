@@ -1,3 +1,4 @@
+import { type Waiting } from '../posting/publication'
 import { type Attachment, type UniboxConversation, type UniboxMessage } from './types'
 
 export type Action =
@@ -11,6 +12,8 @@ export type Action =
    | { type: 'PROGRESS'; id: string; percent: number }
    // The reply is on its way: brain has it (its id), from when.
    | { type: 'STARTED'; id: string; replyId: string; since: number }
+   // Brain says why the reply is queued and from when it can start, or (no `wait`) that it is not waiting any more.
+   | { type: 'WAITING'; id: string; wait: Waiting | undefined }
    // LinkedIn took the reply. The message is shown when it is stored; until then the reply stays as it is, marked done.
    | { type: 'SENT'; id: string }
    // The wait for the stored message is over. When it did not come (`stored` false) the reply is shown as a message of ours until the
@@ -110,6 +113,23 @@ export const reduce = (state: UniboxConversation[], action: Action): UniboxConve
                  }
                : c
          )
+      case 'WAITING':
+         return change(state, [action.id], c => {
+            const { sending } = c
+            const same =
+               sending?.wait?.reason === action.wait?.reason &&
+               sending?.wait?.until === action.wait?.until &&
+               sending?.wait?.zone === action.wait?.zone
+
+            if (!sending || same) {
+               return c
+            }
+
+            return {
+               ...c,
+               sending: action.wait ? { ...sending, wait: action.wait } : without(sending, 'wait'),
+            }
+         })
       case 'SENT':
          return change(state, [action.id], c =>
             c.sending && !c.sending.done
