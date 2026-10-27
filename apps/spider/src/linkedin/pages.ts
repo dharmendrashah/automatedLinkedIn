@@ -58,7 +58,7 @@ const DRAWN = 'section[aria-label="Primary content"] p, [data-testid="dialog"] p
 // How often a chip is tried before the walk goes on without it.
 const CHIP_TRIES = 2
 
-// What the two tasks that walk the profile (the capture and the reading) do the same way: open the account's own profile, open a page
+// What the task that walks the profile does for each page: open the account's own profile, open a page
 // of it, scroll a page so its lazy parts are drawn, and go through the chips of Interests.
 export const createPages = (
    context: PageContext,

@@ -25,7 +25,7 @@ import {
    topSkillsMarkup,
 } from '../../linkedin/profileFixture'
 import { VisitError } from '../defineTask'
-import { DETAIL_PAGES } from './capture'
+import { DETAIL_PAGES } from './detailPages'
 import { BUDGET_MS, readProfile } from './read'
 
 const BASE = 'https://www.linkedin.com'

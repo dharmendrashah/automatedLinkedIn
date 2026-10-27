@@ -329,6 +329,51 @@ export const servicesMarkup = (services: string[]) =>
 export const openToWorkMarkup = (audience: string, titles: string) =>
    `<section data-testid="carousel"><ul data-testid="carousel-children-container"><li data-testid="carousel-child-container"><div><a href="${ME}/"><div><div><p><span><strong>Open to work \u00b7 ${audience}</strong></span></p></div><div><p><span>${titles}</span></p></div><div><p><span>Show details</span></p></div></div></a><button data-view-name="profile-edit-open-to" aria-label="Edit"><span></span></button></div></li><li data-testid="carousel-child-container"><div><a href="${ME}/opportunities/hiring-opportunities/onboarding/"><div><p><strong>Share that you\u2019re hiring</strong>and attract candidates.</p><div><p><span>Get started</span></p></div></div></a></div></li></ul></section>`
 
+// The same main page as LinkedIn serves some accounts (staging, 2026-10-27, run of `linkedin-profile`): no `data-view-name` anywhere, so
+// the cards are told apart by the `componentkey` of the photo, the addresses of their links and the order of their paragraphs.
+export const plainTopCardMarkup = ({
+   name,
+   verified,
+   pronouns,
+   headline,
+   places,
+   location,
+   connections,
+}: FixtureTopCard) =>
+   `<div><div><div><div role="button"><figure><img alt="Cover photo" src="${PIC}/profile-displaybackgroundimage-shrink_200_800/x"></figure></div></div>
+<a href="${ME}/" componentkey="topcard-logo-image-referencekey"><div componentkey="topcard-logo-image-referencekey" aria-label="Profile photo"><div><figure><img src="${PIC}/profile-displayphoto-shrink_100_100/x"></figure></div></div></a>
+<div><div><div><div><div componentkey="name-block"><h2>${name}</h2>${verified ? '<span role="img" aria-label="Verified"></span>' : ''}</div>${pronouns ? `<p>${pronouns}</p>` : ''}<div><div><a href="https://www.linkedin.com/trust/verification/"><div><p>Verify in 2 minutes</p></div></a></div></div></div>
+<p>${headline}</p>${places ? `<p>${places}</p>` : ''}<div><p>${location ?? ''}</p><p>·</p><p><a href="${ME}/overlay/contact-info/">Contact info</a></p></div></div></div>
+${connections ? `<div><a href="https://www.linkedin.com/mynetwork/invite-connect/connections/"><p>${connections} connections</p></a></div>` : ''}</div></div></div></div>`
+
+export const plainAboutMarkup = (text: string) =>
+   `<div><div><div><h2>About</h2><div><a href="${ME}/edit/forms/summary/new/" aria-label="Edit about"><span></span></a></div></div><div><p><span data-testid="expandable-text-box">${text}<button data-testid="expandable-text-button">…<span>more</span></button></span></p></div></div></div>`
+
+const plainInsight = (path: string, text: string, extra = '') =>
+   `<a href="https://www.linkedin.com/analytics/${path}"><div><div><p>${text}</p><p>Something to do.</p>${extra}</div></div></a>`
+
+export const plainInsightsMarkup = (views: string, impressions: string, search: string) => {
+   const links = `${plainInsight('profile-views/', views)}${plainInsight('creator/content/?timeRange=past_7_days', impressions, '<p>Past 7 days</p>')}${plainInsight('search-appearances/', search)}`
+
+   return `<div><div><h2>Analytics</h2><div><p>Private to you</p></div></div><div><div>${links}</div><div>${links}</div></div></div>`
+}
+
+export const plainPeopleYouMayKnowMarkup = (people: FixturePerson[]) =>
+   `<div><div><h2>People you may know</h2><p>From your school</p></div><div>${people
+      .map(
+         ({ name, degree, headline, slug }) =>
+            `<div><div><a href="https://www.linkedin.com/in/${slug}/"><div><figure><img alt="" src="${PIC}/profile-displayphoto-scale_100_100/${slug}"></figure><div><div><div><p><span><a href="https://www.linkedin.com/in/${slug}/">${name}<span></span><span role="img" aria-label="Verified"></span></a></span></p></div><p>· ${degree}</p></div><div><p><span>${headline}</span></p></div></div></div></a><div><a componentkey="ConnectButtonstate:invitation:urn:li:member:1_connect" aria-label="Invite ${name} to connect" href="/preload/custom-invite/?vanityName=${slug}"><span>Connect</span></a></div></div></div><hr role="presentation">`
+      )
+      .join('')}</div></div>`
+
+export const plainPagesYouMightLikeMarkup = (pages: FixturePage[]) =>
+   `<div><div><h2>You might like</h2><p>Pages for you</p></div><div>${pages
+      .map(
+         ({ name, what, followers, slug, kind = 'company', mutual }) =>
+            `<div><div componentkey="card"><a href="https://www.linkedin.com/${kind}/${slug}/"><div><figure><img alt="" src="${PIC}/company-logo_100_100/${slug}"></figure><div><div><div><p>${name}</p></div><div><p><span>${what}</span></p></div><p>${followers}</p></div></div></div></a><div>${mutual ? `<a href="${ME}/"><div><figure><img alt="" src="${PIC}/profile-displayphoto-scale_100_100/me"></figure><div><p><span>${mutual}</span></p></div></div></a>` : ''}<div><button aria-label="Follow ${name}"><span></span></button></div></div></div></div><hr role="presentation">`
+      )
+      .join('')}</div></div>`
+
 // The profile page as drawn: the top card and the cards below it, each as the page marks it.
 export const profilePage = (...cards: string[]) =>
    `<html lang="en"><body><div id="root"><section aria-label="Primary content">${cards.join('')}</section></div></body></html>`
