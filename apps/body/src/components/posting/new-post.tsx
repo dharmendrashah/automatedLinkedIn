@@ -1,17 +1,18 @@
 import { Mark } from '@/components/account-profile/mark'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { readableError } from '@/lib/trpc-error'
 import { Lightbulb, SquarePen } from 'lucide-react'
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
 import { type Account } from '../accounts/types'
 
 import { trpc } from '../../trpc'
 import { identityOf } from './accounts'
-import { Combobox, type Option } from './combobox'
+import { type Option, OptionList } from './combobox'
 import { blocksOf } from './draft'
 import { type Labels, STARTERS, type Starter } from './landing'
 
@@ -25,16 +26,18 @@ type Props = {
 const hintOf = (account: Account, client: string | null | undefined) =>
    [client, account.status === 'ACTIVE' ? undefined : 'not signed in'].filter(Boolean).join(' · ') || undefined
 
-// The one way to start a post, for the toolbar: an account, then "Write a post" or an idea. Any account can start a draft; the canvas
-// says what a signed-out one cannot do. With one account there is nothing to pick. With several the owner picks (never guessed, so a
-// post is not started under another client's name).
+// What was asked for while the account is still to be chosen.
+type Pending = { kind: 'write' } | { kind: 'idea'; starter: Starter }
+
+// The one way to start a post, for the toolbar: "Write a post" or an idea, always enabled. Any account can start a draft; the canvas
+// says what a signed-out one cannot do. With one account, or a list narrowed to one, it goes straight on. With several it asks which
+// account first (never guessed, so a post is not started under another client's name).
 export const NewPost = ({ accounts, labels, preselected }: Props) => {
    const navigate = useNavigate()
    const utils = trpc.useUtils()
-   const [picked, setPicked] = useState('')
+   const [pending, setPending] = useState<Pending | null>(null)
    const only = accounts.length === 1 ? accounts[0] : undefined
-   const accountId = only?.id ?? [picked, preselected].find(id => accounts.some(account => account.id === id)) ?? ''
-   const account = accounts.find(({ id }) => id === accountId)
+   const directId = only?.id ?? accounts.find(({ id }) => id === preselected)?.id
    const save = trpc.postDraft.save.useMutation({
       onSuccess: saved => {
          void utils.postDraft.list.invalidate()
@@ -47,15 +50,21 @@ export const NewPost = ({ accounts, labels, preselected }: Props) => {
       label: identityOf(item, null).name,
       hint: hintOf(item, labels.get(item.id)),
    }))
-   const start = ({ text }: Starter) =>
+   const run = (action: Pending, accountId: string) => {
+      if (action.kind === 'write') {
+         void navigate(`/posting/${accountId}`)
+         return
+      }
       save.mutate({
          accountId,
-         blocks: blocksOf(text, undefined),
+         blocks: blocksOf(action.starter.text, undefined),
          audience: 'ANYONE',
          comments: 'ANYONE',
          plannedAt: null,
          plannedZone: null,
       })
+   }
+   const ask = (action: Pending) => (directId ? run(action, directId) : setPending(action))
 
    return (
       <>
@@ -68,28 +77,15 @@ export const NewPost = ({ accounts, labels, preselected }: Props) => {
                />
                <span dir="auto">{identityOf(only, null).name}</span>
             </span>
-         ) : (
-            <Combobox
-               options={options}
-               value={accountId}
-               onChange={setPicked}
-               placeholder="Choose the account"
-               label="Post as"
-               className="w-60"
-            />
-         )}
+         ) : null}
          <DropdownMenu>
             <DropdownMenuTrigger asChild>
                <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={!account || save.isPending}
-                  title={
-                     account
-                        ? 'Opens a draft with a few lines to fill in. Nothing is posted.'
-                        : 'Choose the account first.'
-                  }
+                  disabled={save.isPending}
+                  title="Opens a draft with a few lines to fill in. Nothing is posted."
                >
                   <Lightbulb />
                   Ideas
@@ -97,25 +93,34 @@ export const NewPost = ({ accounts, labels, preselected }: Props) => {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
                {STARTERS.map(starter => (
-                  <DropdownMenuItem key={starter.id} onSelect={() => start(starter)}>
+                  <DropdownMenuItem key={starter.id} onSelect={() => ask({ kind: 'idea', starter })}>
                      {starter.label}
                   </DropdownMenuItem>
                ))}
             </DropdownMenuContent>
          </DropdownMenu>
-         {account ? (
-            <Button asChild size="sm">
-               <Link to={`/posting/${account.id}`}>
-                  <SquarePen />
-                  Write a post
-               </Link>
-            </Button>
-         ) : (
-            <Button size="sm" disabled title="Choose the account first.">
-               <SquarePen />
-               Write a post
-            </Button>
-         )}
+         <Button type="button" size="sm" onClick={() => ask({ kind: 'write' })}>
+            <SquarePen />
+            Write a post
+         </Button>
+         <Dialog open={pending !== null} onOpenChange={open => (open ? undefined : setPending(null))}>
+            <DialogContent className="gap-3">
+               <DialogHeader>
+                  <DialogTitle>Which account is this post for?</DialogTitle>
+                  <DialogDescription>Nothing is posted. Next you write it on the canvas.</DialogDescription>
+               </DialogHeader>
+               <div className="rounded-md border">
+                  <OptionList
+                     options={options}
+                     value=""
+                     onPick={accountId => {
+                        if (pending) run(pending, accountId)
+                        setPending(null)
+                     }}
+                  />
+               </div>
+            </DialogContent>
+         </Dialog>
       </>
    )
 }
