@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { type NetworkRequest, type NetworkSnapshot } from './types'
+import { type AccountRead, type NetworkRequest, type NetworkSnapshot } from './types'
 
 import {
+   blockedMessage,
    detailText,
    emptyView,
    holdText,
    isBusy,
    moreOnLinkedIn,
    readLine,
+   skippedText,
    stateBadge,
    stateSentence,
    usageText,
@@ -20,6 +22,7 @@ const ago = (ms: number) => new Date(NOW.getTime() - ms).toISOString()
 
 const request = (overrides: Partial<NetworkRequest>): NetworkRequest => ({
    id: '1',
+   accountId: 'one',
    slug: 'one',
    name: 'One',
    headline: '',
@@ -27,12 +30,19 @@ const request = (overrides: Partial<NetworkRequest>): NetworkRequest => ({
    ...overrides,
 })
 
-const snapshot = (overrides: Partial<NetworkSnapshot>): NetworkSnapshot => ({
-   requests: [],
+const account = (overrides: Partial<AccountRead> = {}): AccountRead => ({
+   accountId: 'one',
    total: 0,
    readAt: null,
    reading: false,
    answeredToday: 0,
+   ...overrides,
+})
+
+const snapshot = (overrides: Partial<NetworkSnapshot>): NetworkSnapshot => ({
+   requests: [],
+   accounts: [account()],
+   cut: false,
    ...overrides,
 })
 
@@ -111,7 +121,7 @@ describe('holdText', () => {
 describe('isBusy', () => {
    it('should look again while a read or an answer is in progress, and not otherwise', () => {
       expect(isBusy(undefined)).toBe(false)
-      expect(isBusy(snapshot({ reading: true }))).toBe(true)
+      expect(isBusy(snapshot({ accounts: [account(), account({ accountId: 'two', reading: true })] }))).toBe(true)
       expect(isBusy(snapshot({ requests: [request({ state: 'QUEUED' })] }))).toBe(true)
       expect(isBusy(snapshot({ requests: [request({}), request({ state: 'ACCEPTED' })] }))).toBe(false)
    })
@@ -119,9 +129,19 @@ describe('isBusy', () => {
 
 describe('readLine', () => {
    it('should say when the list was last read, that it is being read, or that it never was', () => {
-      expect(readLine(snapshot({ reading: true, readAt: ago(1000) }), NOW)).toBe('Reading from LinkedIn…')
-      expect(readLine(snapshot({ readAt: ago(12 * 60_000) }), NOW)).toBe('Last read 12 minutes ago')
-      expect(readLine(snapshot({}), NOW)).toBe('Nothing read yet')
+      expect(readLine([account({ reading: true, readAt: ago(1000) })], NOW)).toBe('Reading from LinkedIn…')
+      expect(readLine([account({ readAt: ago(12 * 60_000) })], NOW)).toBe('Last read 12 minutes ago')
+      expect(readLine([account()], NOW)).toBe('Nothing read yet')
+   })
+
+   it('should say how many accounts are being read, how many never were, and how old the oldest read is', () => {
+      const old = account({ readAt: ago(3 * 60 * 60_000) })
+      const fresh = account({ readAt: ago(60_000) })
+
+      expect(readLine([old, account({ reading: true }), fresh], NOW)).toBe('Reading 1 of 3 accounts…')
+      expect(readLine([old, account(), fresh], NOW)).toBe('1 of 3 accounts not read yet')
+      expect(readLine([fresh, old], NOW)).toBe('Oldest read 3 hours ago')
+      expect(readLine([], NOW)).toBe('')
    })
 })
 
@@ -135,11 +155,43 @@ describe('usageText and waitingCount', () => {
 })
 
 describe('moreOnLinkedIn', () => {
-   it('should say so only when LinkedIn counts more than was read', () => {
+   it('should say so only when LinkedIn counts more than was read, in all the accounts, or when brain cut the list', () => {
       const requests = [request({}), request({ id: '2' })]
+      const counted = (...totals: number[]) => totals.map((total, index) => account({ accountId: `a${index}`, total }))
 
-      expect(moreOnLinkedIn({ requests, total: 2 })).toBeUndefined()
-      expect(moreOnLinkedIn({ requests, total: 8 })).toBe('Showing 2 of the 8 requests on LinkedIn.')
+      expect(moreOnLinkedIn({ requests, accounts: counted(2), cut: false })).toBeUndefined()
+      expect(moreOnLinkedIn({ requests, accounts: counted(8), cut: false })).toBe(
+         'Showing 2 of the 8 requests on LinkedIn.'
+      )
+      expect(moreOnLinkedIn({ requests, accounts: counted(1, 4), cut: false })).toBe(
+         'Showing 2 of the 5 requests on LinkedIn.'
+      )
+      expect(moreOnLinkedIn({ requests, accounts: counted(2), cut: true })).toBe(
+         'Too many to show at once. Pick fewer accounts to see the rest.'
+      )
+   })
+})
+
+describe('blockedMessage and skippedText', () => {
+   it('should say the sentence for one account, and how many for several', () => {
+      expect(blockedMessage(['It is outside working hours.'])).toBe('It is outside working hours.')
+      expect(blockedMessage(['Resting.', 'Outside hours.'])).toBe(
+         '2 accounts may not browse now. The first says: Resting.'
+      )
+   })
+
+   it('should say how many accounts a read left out and why, each sentence once', () => {
+      expect(skippedText([])).toBe('')
+      expect(skippedText([{ accountId: 'a', reason: 'Not signed in.', budget: false }])).toBe(
+         '1 account was left out. Not signed in.'
+      )
+      expect(
+         skippedText([
+            { accountId: 'a', reason: 'Not signed in.', budget: false },
+            { accountId: 'b', reason: 'Not signed in.', budget: false },
+            { accountId: 'c', reason: 'Busy.', budget: false },
+         ])
+      ).toBe('3 accounts were left out. Not signed in. Busy.')
    })
 })
 

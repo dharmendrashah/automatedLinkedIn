@@ -7,6 +7,8 @@ export type RequestState = 'WAITING' | 'QUEUED' | 'ACCEPTED' | 'IGNORED' | 'GONE
 export type NetworkRequest = {
    // Brain's own id for the request; LinkedIn's number never reaches the page.
    id: string
+   // The account that received it.
+   accountId: string
    slug: string
    name: string
    headline: string
@@ -23,9 +25,10 @@ export type NetworkRequest = {
    failure?: string
 }
 
-export type NetworkSnapshot = {
-   requests: NetworkRequest[]
-   // How many LinkedIn says are waiting (its own heading), which can be more than were read.
+// How one account stands.
+export type AccountRead = {
+   accountId: string
+   // How many LinkedIn says are waiting (its own count), which can be more than were read.
    total: number
    readAt: string | null
    reading: boolean
@@ -33,6 +36,21 @@ export type NetworkSnapshot = {
    answeredToday: number
    // The account cannot be read: LinkedIn asked it to sign in again.
    problem?: 'SIGNED_OUT'
+}
+
+// The requests of the accounts that were asked for, one list for all of them, and how each account stands.
+export type NetworkSnapshot = {
+   requests: NetworkRequest[]
+   accounts: AccountRead[]
+   // The list was cut at brain's limits, so it shows less than there is.
+   cut: boolean
+}
+
+// What a read asked for many accounts: the ones that were asked, and the ones left out with the sentence why. `budget` is the refusal
+// the owner may go past with Start anyway.
+export type ReadResult = {
+   started: string[]
+   skipped: Array<{ accountId: string; reason: string; budget: boolean }>
 }
 
 export type AnswerAsk = {

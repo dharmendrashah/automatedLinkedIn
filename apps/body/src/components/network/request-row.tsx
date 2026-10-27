@@ -15,6 +15,8 @@ import { canChoose } from './selection'
 
 type Props = {
    request: NetworkRequest
+   // The account that received it, shown when the page shows more than one account.
+   account?: { name: string; imageUrl?: string }
    // The answer waiting its few seconds in this browser, which can still be undone.
    held: Held | undefined
    chosen: boolean
@@ -57,7 +59,7 @@ const Note = ({ text }: { text: string }) => {
 
 // One request: who it is from, what they wrote, and the two answers on the right. A request that is over wears how it ended
 // instead of the buttons, and one whose answer is waiting its few seconds counts them down with an Undo.
-export const RequestRow = ({ request, held, chosen, fullReason, now, onChoose, onAnswer, onUndo }: Props) => {
+export const RequestRow = ({ request, account, held, chosen, fullReason, now, onChoose, onAnswer, onUndo }: Props) => {
    const badge = stateBadge(request, now)
    const detail = detailText(request, now)
    const over = request.state !== 'WAITING' && request.state !== 'QUEUED'
@@ -109,6 +111,15 @@ export const RequestRow = ({ request, held, chosen, fullReason, now, onChoose, o
                </p>
             ) : null}
             {request.note ? <Note text={request.note} /> : null}
+            {account ? (
+               <p className="text-muted-foreground flex items-center gap-1.5 pt-1 text-xs">
+                  <span>To</span>
+                  <Mark name={account.name} imageUrl={account.imageUrl} className="size-4 text-[8px]" />
+                  <span className="truncate font-medium" dir="auto">
+                     {account.name}
+                  </span>
+               </p>
+            ) : null}
             {detail ? (
                <p className="pt-1 text-sm" role="status">
                   {detail}

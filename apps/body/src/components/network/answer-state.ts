@@ -1,4 +1,4 @@
-import { type Held, type NetworkRequest, type NetworkSnapshot } from './types'
+import { type AccountRead, type Held, type NetworkRequest, type NetworkSnapshot, type ReadResult } from './types'
 
 import { timeAgo } from '../../lib/time-ago'
 import { type Filter } from './rows'
@@ -135,15 +135,29 @@ export const holdText = (held: Held, now: Date) => {
 
 // Whether the page should look again soon: a read or an answer is in progress.
 export const isBusy = (snapshot: NetworkSnapshot | undefined) =>
-   snapshot !== undefined && (snapshot.reading || snapshot.requests.some(({ state }) => state === 'QUEUED'))
+   snapshot !== undefined &&
+   (snapshot.accounts.some(({ reading }) => reading) || snapshot.requests.some(({ state }) => state === 'QUEUED'))
 
-// "Reading from LinkedIn…", "Last read 12 minutes ago", "Nothing read yet".
-export const readLine = (snapshot: Pick<NetworkSnapshot, 'readAt' | 'reading'>, now: Date) => {
-   if (snapshot.reading) {
-      return 'Reading from LinkedIn…'
+// "Reading from LinkedIn…", "Last read 12 minutes ago", "Nothing read yet"; for several accounts how many are being read, or how long ago
+// the oldest read was (the one that is wrong for the most accounts), or how many were never read.
+export const readLine = (accounts: Array<Pick<AccountRead, 'readAt' | 'reading'>>, now: Date) => {
+   const many = accounts.length > 1
+   const reading = accounts.filter(account => account.reading).length
+
+   if (reading > 0) {
+      return many ? `Reading ${reading} of ${accounts.length} accounts…` : 'Reading from LinkedIn…'
    }
 
-   return snapshot.readAt ? `Last read ${timeAgo(snapshot.readAt, now)}` : 'Nothing read yet'
+   const read = accounts.flatMap(({ readAt }) => (readAt ? [readAt] : []))
+   const never = accounts.length - read.length
+
+   if (never > 0) {
+      return many ? `${never} of ${accounts.length} accounts not read yet` : 'Nothing read yet'
+   }
+
+   const [oldest] = [...read].sort()
+
+   return oldest ? `${many ? 'Oldest read' : 'Last read'} ${timeAgo(oldest, now)}` : ''
 }
 
 // "2 of 50 answers used today".
@@ -153,9 +167,31 @@ export const usageText = (answeredToday: number) => `${answeredToday} of ${NETWO
 export const waitingCount = (requests: NetworkRequest[]) =>
    requests.filter(({ state }) => state === 'WAITING' || state === 'QUEUED').length
 
-// Said when LinkedIn counts more requests than the page could read.
-export const moreOnLinkedIn = (snapshot: Pick<NetworkSnapshot, 'total' | 'requests'>) => {
-   const waiting = waitingCount(snapshot.requests)
+// Said when LinkedIn counts more requests than the page could read, or when brain cut the list.
+export const moreOnLinkedIn = (snapshot: Pick<NetworkSnapshot, 'accounts' | 'requests' | 'cut'>) => {
+   if (snapshot.cut) {
+      return 'Too many to show at once. Pick fewer accounts to see the rest.'
+   }
 
-   return snapshot.total > waiting ? `Showing ${waiting} of the ${snapshot.total} requests on LinkedIn.` : undefined
+   const waiting = waitingCount(snapshot.requests)
+   const total = snapshot.accounts.reduce((sum, account) => sum + account.total, 0)
+
+   return total > waiting ? `Showing ${waiting} of the ${total} requests on LinkedIn.` : undefined
+}
+
+// What the Start anyway dialog says when the browse budget refused: the sentence of brain for one account, and for several how many
+// and the first sentence.
+export const blockedMessage = (reasons: string[]) => {
+   const [first = ''] = reasons
+
+   return reasons.length > 1 ? `${reasons.length} accounts may not browse now. The first says: ${first}` : first
+}
+
+// What a read says of the accounts it left out (for a reason other than the budget): how many, and the different sentences.
+export const skippedText = (skipped: ReadResult['skipped']) => {
+   const reasons = [...new Set(skipped.map(({ reason }) => reason))].slice(0, 2)
+
+   return skipped.length === 0
+      ? ''
+      : `${skipped.length} ${skipped.length === 1 ? 'account was' : 'accounts were'} left out. ${reasons.join(' ')}`
 }

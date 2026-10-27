@@ -3,13 +3,16 @@ import { skipToken, useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import { type Answer, type AnswerAsk, type AskOptions, type Held } from './types'
+import { type Answer, type AnswerAsk, type Held } from './types'
 
-import { isBusy } from './answer-state'
+import { blockedMessage, isBusy, skippedText } from './answer-state'
 import { NETWORK_LIMITS } from './rules'
+import { answersByAccount } from './selection'
 import { NetworkRefusal, type NetworkSource } from './source'
 
 const POLL_MS = 1500
+
+type Ask = AnswerAsk & { accountId: string }
 
 type Batch = {
    ids: string[]
@@ -24,13 +27,14 @@ type Refused = {
 const sentence = (action: Answer, count: number, name: string) =>
    `${action === 'ACCEPT' ? 'Accepting' : 'Ignoring'} ${count === 1 ? name : `${count} people`}`
 
-// Everything the page does with one account's requests: the list (looked at again while something is in progress), a read, and
-// the answers. An answer, single or in bulk, waits NETWORK_LIMITS.undoMs here, where it can still be undone, before it is asked
-// of the source; leaving the page cancels what is still waiting, so nothing is sent behind the owner's back.
-export const useNetwork = (source: NetworkSource, accountId: string | undefined) => {
+// Everything the page does with the requests of the accounts it shows: the list (looked at again while something is in progress),
+// a read of some or all of them, and the answers. An answer, single or in bulk, waits NETWORK_LIMITS.undoMs here, where it can still
+// be undone, before it is asked of the source, one run for each account it touches; leaving the page cancels what is still waiting,
+// so nothing is sent behind the owner's back.
+export const useNetwork = (source: NetworkSource, accountIds: string[]) => {
    const query = useQuery({
-      queryKey: ['network', source.key, accountId],
-      queryFn: accountId ? () => source.load(accountId) : skipToken,
+      queryKey: ['network', source.key, accountIds.join(',')],
+      queryFn: accountIds.length > 0 ? () => source.load(accountIds) : skipToken,
       refetchInterval: current => (isBusy(current.state.data) ? POLL_MS : false),
    })
    const { refetch } = query
@@ -51,23 +55,64 @@ export const useNetwork = (source: NetworkSource, accountId: string | undefined)
       }
    }, [])
 
-   // A refusal because of the browse budget opens the Start anyway dialog, which asks again with `startAnyway`; any other
-   // refusal or failure is told as it is.
-   const attempt = async (work: (options: AskOptions) => Promise<void>, startAnyway = false) => {
-      try {
-         await work({ startAnyway })
-         await refetch()
-      } catch (error) {
-         if (!startAnyway && error instanceof NetworkRefusal && error.budget) {
-            setRefused({
-               message: error.message,
-               go: () => void attempt(work, true),
-            })
+   const fail = (error: unknown) =>
+      toast.error(error instanceof Error ? readableError(error) : 'Something went wrong. Try again.')
 
-            return
+   // Asks for a read of these accounts. The ones the source left out are told in a sentence; the ones the browse budget refused open
+   // the Start anyway dialog, which asks again for just those with `startAnyway`.
+   const askRead = async (ids: string[], startAnyway = false): Promise<void> => {
+      try {
+         const { skipped } = await source.refresh(ids, { startAnyway })
+         const blocked = skipped.filter(({ budget }) => budget)
+         const others = skipped.filter(({ budget }) => !budget)
+
+         await refetch()
+
+         if (others.length > 0) {
+            toast(skippedText(others))
          }
 
-         toast.error(error instanceof Error ? readableError(error) : 'Something went wrong. Try again.')
+         if (blocked.length > 0 && !startAnyway) {
+            setRefused({
+               message: blockedMessage(blocked.map(({ reason }) => reason)),
+               go: () =>
+                  void askRead(
+                     blocked.map(({ accountId }) => accountId),
+                     true
+                  ),
+            })
+         }
+      } catch (error) {
+         fail(error)
+      }
+   }
+
+   // Asks for the answers of each account in turn, so one that is refused never stops the others. A refusal because of the browse
+   // budget opens the Start anyway dialog for the accounts it touched; any other refusal or failure is told as it is.
+   const askAnswers = async (groups: ReturnType<typeof answersByAccount>, startAnyway = false): Promise<void> => {
+      const blocked: typeof groups = []
+      const reasons: string[] = []
+
+      for (const group of groups) {
+         try {
+            await source.answer(group.accountId, group.asks, { startAnyway })
+         } catch (error) {
+            if (!startAnyway && error instanceof NetworkRefusal && error.budget) {
+               blocked.push(group)
+               reasons.push(error.message)
+            } else {
+               fail(error)
+            }
+         }
+      }
+
+      await refetch()
+
+      if (blocked.length > 0) {
+         setRefused({
+            message: blockedMessage(reasons),
+            go: () => void askAnswers(blocked, true),
+         })
       }
    }
 
@@ -85,10 +130,10 @@ export const useNetwork = (source: NetworkSource, accountId: string | undefined)
       }
    }
 
-   const answer = (asks: AnswerAsk[], firstName: string) => {
+   const answer = (asks: Ask[], firstName: string) => {
       const [first] = asks
 
-      if (!accountId || !first) {
+      if (!first) {
          return
       }
 
@@ -114,7 +159,7 @@ export const useNetwork = (source: NetworkSource, accountId: string | undefined)
          timer: setTimeout(() => {
             holds.current.delete(key)
             release(ids)
-            void attempt(options => source.answer(accountId, asks, options))
+            void askAnswers(answersByAccount(asks))
          }, NETWORK_LIMITS.undoMs),
       })
       toast(sentence(first.action, asks.length, firstName), {
@@ -129,11 +174,10 @@ export const useNetwork = (source: NetworkSource, accountId: string | undefined)
 
    return {
       snapshot: query.data,
-      isPending: query.isPending && accountId !== undefined,
+      isPending: query.isPending && accountIds.length > 0,
       error: query.error,
-      reading: query.data?.reading === true,
       holding,
-      read: () => (accountId ? attempt(options => source.refresh(accountId, options)) : Promise.resolve()),
+      read: askRead,
       answer,
       undo,
       // The dialog that asks whether to go past a budget refusal.

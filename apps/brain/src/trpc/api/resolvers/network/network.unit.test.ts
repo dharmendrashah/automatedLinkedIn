@@ -31,7 +31,7 @@ vi.mock('database', () => ({
    ConflictError: class ConflictError extends Error {},
    LinkedInInvitationService: {
       waiting: mocks.waiting,
-      snapshot: mocks.snapshot,
+      list: mocks.snapshot,
       refresh: mocks.refresh,
       answer: mocks.answer,
    },
@@ -81,8 +81,8 @@ describe('network resolvers', () => {
       mocks.answer.mockResolvedValue({ started: 1 })
 
       await caller().waiting({ accountIds: ['a1'] })
-      await caller().list({ accountId: 'a1' })
-      await caller().refresh({ accountId: 'a1' })
+      await caller().list({ accountIds: ['a1', 'a2'] })
+      await caller().refresh({ accountIds: ['a1', 'a2'] })
       await caller().answer({
          accountId: 'a1',
          answers: [
@@ -95,8 +95,8 @@ describe('network resolvers', () => {
       })
 
       expect(mocks.waiting).toHaveBeenCalledWith('u1', ['a1'])
-      expect(mocks.snapshot).toHaveBeenCalledWith('u1', 'a1')
-      expect(mocks.refresh).toHaveBeenCalledWith('u1', 'a1', undefined)
+      expect(mocks.snapshot).toHaveBeenCalledWith('u1', ['a1', 'a2'])
+      expect(mocks.refresh).toHaveBeenCalledWith('u1', ['a1', 'a2'], undefined)
       expect(mocks.answer).toHaveBeenCalledWith(
          'u1',
          'a1',
@@ -115,8 +115,8 @@ describe('network resolvers', () => {
       mocks.refresh.mockResolvedValue(null)
       mocks.answer.mockResolvedValue(null)
 
-      await expect(caller().list({ accountId: 'other' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
-      await expect(caller().refresh({ accountId: 'other' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      await expect(caller().list({ accountIds: ['other'] })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      await expect(caller().refresh({ accountIds: ['other'] })).rejects.toMatchObject({ code: 'NOT_FOUND' })
       await expect(
          caller().answer({
             accountId: 'other',
@@ -130,12 +130,52 @@ describe('network resolvers', () => {
       ).rejects.toMatchObject({ code: 'NOT_FOUND' })
    })
 
-   it('should tell a refusal as a sentence the owner can read, keeping its cause for the page to tell a budget refusal', async () => {
+   it('should hand back the accounts that were skipped, with the sentence and whether the owner may go past it', async () => {
+      const result = {
+         started: ['a1'],
+         skipped: [
+            {
+               accountId: 'a2',
+               reason: 'This account is outside its working hours.',
+               budget: true,
+            },
+         ],
+      }
+
+      mocks.refresh.mockResolvedValue(result)
+
+      await expect(
+         caller().refresh({
+            accountIds: ['a1', 'a2'],
+            startAnyway: true,
+         })
+      ).resolves.toEqual(result)
+      expect(mocks.refresh).toHaveBeenCalledWith('u1', ['a1', 'a2'], true)
+   })
+
+   it('should accept no account, and no more than a hundred', async () => {
+      await expect(caller().list({ accountIds: [] })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+      await expect(
+         caller().refresh({ accountIds: Array.from({ length: 101 }, (_, index) => `a${index}`) })
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+   })
+
+   it('should tell a refusal to answer as a sentence the owner can read, keeping its cause for the page to tell a budget refusal', async () => {
       const refusal = new mocks.TaskRefusedError('This account is outside its working hours.')
 
-      mocks.refresh.mockRejectedValue(refusal)
+      mocks.answer.mockRejectedValue(refusal)
 
-      await expect(caller().refresh({ accountId: 'a1' })).rejects.toMatchObject({
+      await expect(
+         caller().answer({
+            accountId: 'a1',
+            answers: [
+               {
+                  id: 'r1',
+                  action: 'ACCEPT',
+               },
+            ],
+         })
+      ).rejects.toMatchObject({
          code: 'PRECONDITION_FAILED',
          message: 'This account is outside its working hours.',
          cause: refusal,

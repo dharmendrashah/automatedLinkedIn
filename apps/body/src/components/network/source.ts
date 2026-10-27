@@ -1,4 +1,4 @@
-import { type AnswerAsk, type AskOptions, type NetworkSnapshot } from './types'
+import { type AnswerAsk, type AskOptions, type NetworkSnapshot, type ReadResult } from './types'
 
 // Why an ask was refused, in the owner's words. A `budget` refusal is the one the owner may go past with Start anyway.
 export class NetworkRefusal extends Error {
@@ -16,11 +16,12 @@ export class NetworkRefusal extends Error {
 export type NetworkSource = {
    // Tells one source from another, so what the page remembers of one is never shown for another.
    key: string
-   load: (accountId: string) => Promise<NetworkSnapshot>
+   load: (accountIds: string[]) => Promise<NetworkSnapshot>
    // How many requests wait for each account.
    waiting: (accountIds: string[]) => Promise<Record<string, number>>
-   // Starts a read of LinkedIn; the snapshot says `reading` until it is over.
-   refresh: (accountId: string, options: AskOptions) => Promise<void>
-   // Asks for the answers; the snapshot shows them QUEUED and then settled.
+   // Starts a read of LinkedIn for each account that can be read; says which were asked and which were left out. An account is
+   // `reading` in the snapshot until its read is over.
+   refresh: (accountIds: string[], options: AskOptions) => Promise<ReadResult>
+   // Asks for the answers of one account; the snapshot shows them QUEUED and then settled.
    answer: (accountId: string, asks: AnswerAsk[], options: AskOptions) => Promise<void>
 }

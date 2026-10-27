@@ -5,6 +5,8 @@ type Props = {
    // The first column is a "choose all" only on the Waiting view.
    selectable: boolean
    chosenCount: number
+   // On how many accounts the chosen requests are; said when it is more than one.
+   chosenAccounts: number
    // How many can be chosen at once now: the run's share, or fewer when the list or the day is shorter.
    room: number
    text: string
@@ -22,6 +24,7 @@ type Props = {
 export const ListHeader = ({
    selectable,
    chosenCount,
+   chosenAccounts,
    room,
    text,
    usage,
@@ -47,7 +50,9 @@ export const ListHeader = ({
          <span className="text-muted-foreground">{text}</span>
       ) : (
          <>
-            <span className="font-medium">{chosenCount} chosen</span>
+            <span className="font-medium">
+               {chosenCount} chosen{chosenAccounts > 1 ? ` on ${chosenAccounts} accounts` : ''}
+            </span>
             {limit ? <span className="text-muted-foreground text-xs">{limit}</span> : null}
             <Button variant="ghost" size="sm" onClick={onClear}>
                Clear

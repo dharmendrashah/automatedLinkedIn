@@ -1,5 +1,6 @@
 import { StartAnywayDialog } from '@/components/accounts/start-anyway-dialog'
 import { AccountPicker } from '@/components/network/account-picker'
+import { pickedFrom, shownAccounts } from '@/components/network/accounts-pick'
 import { emptyView, isBusy, moreOnLinkedIn, readLine, usageText } from '@/components/network/answer-state'
 import { ConfirmIgnoreDialog } from '@/components/network/confirm-ignore-dialog'
 import { ListHeader } from '@/components/network/list-header'
@@ -8,14 +9,22 @@ import { RequestRow } from '@/components/network/request-row'
 import { type Filter, countsOf, visibleRequests } from '@/components/network/rows'
 import { answersLeftToday, selectionCap } from '@/components/network/rules'
 import { type Scenario, createSampleSource, scenarioOf } from '@/components/network/sample-source'
-import { canChoose, firstWaiting, fullReason, stillChosen, toggleChoice } from '@/components/network/selection'
+import {
+   type CapOf,
+   canChoose,
+   chosenCounts,
+   firstWaiting,
+   fullReason,
+   stillChosen,
+   toggleChoice,
+} from '@/components/network/selection'
 import { type NetworkSource } from '@/components/network/source'
 import { Toolbar } from '@/components/network/toolbar'
 import { createTrpcSource } from '@/components/network/trpc-source'
 import { useNetwork } from '@/components/network/use-network'
 import { useNow } from '@/components/network/use-now'
 import { PageStatus } from '@/components/page-status'
-import { ineligibleReason } from '@/components/posting/accounts'
+import { identityOf, ineligibleReason } from '@/components/posting/accounts'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { readableError } from '@/lib/trpc-error'
@@ -36,7 +45,7 @@ import { type ReactNode, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 
 import { type Account } from '@/components/accounts/types'
-import { type AnswerAsk } from '@/components/network/types'
+import { type Answer } from '@/components/network/types'
 
 import { trpc } from '../trpc'
 
@@ -79,14 +88,17 @@ const Skeletons = () => (
 
 type RequestsProps = {
    source: NetworkSource
-   accountId: string
+   // The accounts shown, in the order of the account list.
+   accounts: Account[]
    // The account drop-down, which lives in the same row as the read.
    picker: ReactNode
 }
 
-// One account's requests: the account and the read on top, the four views and the search, and the list with its header.
-const Requests = ({ source, accountId, picker }: RequestsProps) => {
-   const network = useNetwork(source, accountId)
+// The requests of the accounts shown, in one list: the accounts and the read on top, the four views and the search, and the list with
+// its header. With several accounts each row says which account it is for, and the limits stay per account.
+const Requests = ({ source, accounts, picker }: RequestsProps) => {
+   const ids = useMemo(() => accounts.map(({ id }) => id), [accounts])
+   const network = useNetwork(source, ids)
    const now = useNow(500)
    const [filter, setFilter] = useState<Filter>('WAITING')
    const [query, setQuery] = useState('')
@@ -95,30 +107,54 @@ const Requests = ({ source, accountId, picker }: RequestsProps) => {
 
    const { snapshot, holding } = network
    const requests = useMemo(() => snapshot?.requests ?? [], [snapshot])
+   const reads = useMemo(() => snapshot?.accounts ?? [], [snapshot])
+   const readOf = useMemo(() => new Map(reads.map(read => [read.accountId, read])), [reads])
+   const capOf: CapOf = useMemo(
+      () => accountId => {
+         const read = readOf.get(accountId)
+
+         return read === undefined || read.problem ? 0 : selectionCap(read.answeredToday)
+      },
+      [readOf]
+   )
+   const many = accounts.length > 1
    const counts = useMemo(() => countsOf(requests), [requests])
-   const answeredToday = snapshot?.answeredToday ?? 0
-   const cap = selectionCap(answeredToday)
-   const chosen = useMemo(() => stillChosen(chosenIds, requests, cap), [chosenIds, requests, cap])
+   const chosen = useMemo(() => stillChosen(chosenIds, requests, capOf), [chosenIds, requests, capOf])
+   const used = useMemo(() => chosenCounts(chosen, requests), [chosen, requests])
    const shown = useMemo(() => visibleRequests(requests, filter, query, now), [requests, filter, query, now])
    const choosable = shown.filter(request => canChoose(request) && holding[request.id] === undefined)
-   const everRead = snapshot?.readAt !== undefined
+   const everRead = reads.some(({ readAt }) => readAt !== null)
+   const reading = reads.length > 0 && reads.every(read => read.reading)
    const searching = query.trim() !== ''
-   const asks = (action: AnswerAsk['action'], ids: string[]): AnswerAsk[] => ids.map(id => ({ id, action }))
-   const nameOf = (id: string) => requests.find(request => request.id === id)?.name ?? 'this person'
+   const accountOf = (accountId: string) => accounts.find(({ id }) => id === accountId)
+   const reasonFor = (accountId: string) =>
+      fullReason(
+         used.get(accountId) ?? 0,
+         capOf(accountId),
+         answersLeftToday(readOf.get(accountId)?.answeredToday ?? 0)
+      )
+   const limit = [...used.keys()].map(reasonFor).find(reason => reason !== undefined)
 
-   const answer = (action: AnswerAsk['action'], ids: string[]) => {
-      const [first] = ids
+   const answer = (action: Answer, answered: string[]) => {
+      const asks = answered.flatMap(id => {
+         const request = requests.find(other => other.id === id)
 
-      if (first !== undefined) {
-         network.answer(asks(action, ids), (nameOf(first).split(' ')[0] ?? '').trim() || 'this person')
+         return request ? [{ accountId: request.accountId, id, action }] : []
+      })
+      const first = requests.find(({ id }) => id === answered[0])
+
+      if (first) {
+         network.answer(asks, first.name.split(' ')[0]?.trim() || 'this person')
          setChosen([])
       }
    }
 
+   const readAll = () => void network.read(ids.filter(id => readOf.get(id)?.reading !== true))
+
    const read = (
-      <Button variant="outline" size="sm" onClick={() => void network.read()} disabled={network.reading}>
-         {network.reading ? <Loader2 className="animate-spin" aria-hidden /> : <RefreshCw aria-hidden />}
-         Read from LinkedIn
+      <Button variant="outline" size="sm" onClick={readAll} disabled={reading}>
+         {reading ? <Loader2 className="animate-spin" aria-hidden /> : <RefreshCw aria-hidden />}
+         {many ? `Read ${accounts.length} accounts` : 'Read from LinkedIn'}
       </Button>
    )
 
@@ -128,10 +164,10 @@ const Requests = ({ source, accountId, picker }: RequestsProps) => {
          <div className="flex items-center gap-3">
             {snapshot ? (
                <span className="text-muted-foreground text-sm" role="status">
-                  {readLine(snapshot, now)}
+                  {readLine(reads, now)}
                </span>
             ) : null}
-            {snapshot && !snapshot.problem ? read : null}
+            {snapshot && !reads.every(({ problem }) => problem) ? read : null}
          </div>
       </div>
    )
@@ -158,15 +194,15 @@ const Requests = ({ source, accountId, picker }: RequestsProps) => {
       )
    }
 
-   if (snapshot.problem === 'SIGNED_OUT') {
+   if (reads.length > 0 && reads.every(({ problem }) => problem)) {
       return (
          <div className="grid gap-4">
             {top}
             <div className="bg-card rounded-xl border">
                <EmptyState
                   icon={ShieldAlert}
-                  title="LinkedIn asked this account to sign in"
-                  text="Its requests cannot be read or answered until it is signed in again."
+                  title={many ? 'LinkedIn asked these accounts to sign in' : 'LinkedIn asked this account to sign in'}
+                  text="Their requests cannot be read or answered until they are signed in again."
                   action={<ToAccounts label="Open accounts" />}
                />
             </div>
@@ -175,11 +211,12 @@ const Requests = ({ source, accountId, picker }: RequestsProps) => {
    }
 
    const view = emptyView(filter, searching, everRead)
-   const limit = fullReason(chosen.length, cap, answersLeftToday(answeredToday))
+   const room = firstWaiting(choosable, capOf).length
    const more = filter === 'WAITING' && !searching ? moreOnLinkedIn(snapshot) : undefined
    const base = searching
       ? `${shown.length} ${shown.length === 1 ? 'match' : 'matches'}`
       : `${counts[filter]} ${WORDS[filter]}`
+   const single = readOf.get(accounts[0]?.id ?? '')
 
    return (
       <div className="grid gap-4">
@@ -194,38 +231,45 @@ const Requests = ({ source, accountId, picker }: RequestsProps) => {
             }}
             counts={counts}
          />
-         <div className="bg-card overflow-hidden rounded-xl border" aria-busy={network.reading}>
+         <div className="bg-card overflow-hidden rounded-xl border" aria-busy={reads.some(({ reading }) => reading)}>
             {shown.length > 0 ? (
                <>
                   <ListHeader
                      selectable={filter === 'WAITING' && choosable.length > 0}
                      chosenCount={chosen.length}
-                     room={Math.min(cap, choosable.length)}
+                     chosenAccounts={used.size}
+                     room={room}
                      text={more ? `${base} · ${more}` : base}
-                     usage={usageText(answeredToday)}
+                     usage={many ? 'The limits are for each account' : usageText(single?.answeredToday ?? 0)}
                      limit={limit}
-                     onToggleAll={() => setChosen(chosen.length > 0 ? [] : firstWaiting(choosable, cap))}
+                     onToggleAll={() => setChosen(chosen.length > 0 ? [] : firstWaiting(choosable, capOf))}
                      onClear={() => setChosen([])}
                      onAccept={() => answer('ACCEPT', chosen)}
                      onIgnore={() => (chosen.length === 1 ? answer('IGNORE', chosen) : setConfirming(true))}
                   />
                   <ul className="divide-y">
-                     {shown.map(request => (
-                        <RequestRow
-                           key={request.id}
-                           request={request}
-                           held={holding[request.id]}
-                           chosen={chosen.includes(request.id)}
-                           fullReason={limit}
-                           now={now}
-                           onChoose={() => setChosen(toggleChoice(chosen, request.id, cap))}
-                           onAnswer={action => answer(action, [request.id])}
-                           onUndo={() => network.undo(request.id)}
-                        />
-                     ))}
+                     {shown.map(request => {
+                        const owner = many ? accountOf(request.accountId) : undefined
+                        const who = owner ? identityOf(owner, null) : undefined
+
+                        return (
+                           <RequestRow
+                              key={request.id}
+                              request={request}
+                              account={who ? { name: who.name, imageUrl: who.imageUrl } : undefined}
+                              held={holding[request.id]}
+                              chosen={chosen.includes(request.id)}
+                              fullReason={reasonFor(request.accountId)}
+                              now={now}
+                              onChoose={() => setChosen(toggleChoice(chosen, request, requests, capOf))}
+                              onAnswer={action => answer(action, [request.id])}
+                              onUndo={() => network.undo(request.id)}
+                           />
+                        )
+                     })}
                   </ul>
                </>
-            ) : network.reading && !everRead ? (
+            ) : reads.some(({ reading }) => reading) && !everRead ? (
                <Skeletons />
             ) : (
                <EmptyState
@@ -234,18 +278,9 @@ const Requests = ({ source, accountId, picker }: RequestsProps) => {
                   text={view.text}
                   action={
                      view.read ? (
-                        <Button
-                           size="sm"
-                           variant="outline"
-                           onClick={() => void network.read()}
-                           disabled={network.reading}
-                        >
-                           {network.reading ? (
-                              <Loader2 className="animate-spin" aria-hidden />
-                           ) : (
-                              <RefreshCw aria-hidden />
-                           )}
-                           Read requests from LinkedIn
+                        <Button size="sm" variant="outline" onClick={readAll} disabled={reading}>
+                           {reading ? <Loader2 className="animate-spin" aria-hidden /> : <RefreshCw aria-hidden />}
+                           {many ? 'Read the requests of these accounts' : 'Read requests from LinkedIn'}
                         </Button>
                      ) : undefined
                   }
@@ -270,18 +305,24 @@ const Requests = ({ source, accountId, picker }: RequestsProps) => {
    )
 }
 
-const messageFor = (accounts: Account[]) =>
+const messageFor = (accounts: Account[], anyUsable: boolean) =>
    accounts.length === 0
       ? {
            title: 'No LinkedIn account yet',
            text: 'Add an account first. Its connection requests show up here.',
         }
-      : {
-           title: 'No account is signed in',
-           text: 'Its requests can only be read for an account that is signed in. Fix one on the accounts page.',
-        }
+      : anyUsable
+        ? {
+             title: 'None of those accounts can be read',
+             text: 'Pick other accounts, or fix these on the accounts page.',
+          }
+        : {
+             title: 'No account is signed in',
+             text: 'Requests can only be read for an account that is signed in. Fix one on the accounts page.',
+          }
 
-// "My network": the connection requests one LinkedIn account received, to accept or ignore one by one or several at once.
+// "My network": the connection requests of the owner's accounts, all of them in one list or the ones picked, to read from LinkedIn and
+// to accept or ignore one by one or several at once.
 export const Network = () => {
    const { accountId } = useParams()
    const navigate = useNavigate()
@@ -311,40 +352,47 @@ export const Network = () => {
       return <p className="text-destructive px-4 text-sm lg:px-6">{readableError(accounts.error)}</p>
    }
 
-   const usable = accounts.data.filter(account => ineligibleReason(account.status) === undefined)
-   const current = usable.find(account => account.id === accountId) ?? usable[0]
-   const nothing = messageFor(accounts.data)
+   const usableIds = accounts.data.filter(({ status }) => ineligibleReason(status) === undefined).map(({ id }) => id)
+   const picked = accountId ? [accountId] : pickedFrom(params.get('accounts'))
+   const shownIds = shownAccounts(usableIds, picked)
+   const shown = accounts.data.filter(({ id }) => shownIds.includes(id))
+   const nothing = messageFor(accounts.data, usableIds.length > 0)
+   const withParams = (change: (copy: URLSearchParams) => void) => {
+      const copy = new URLSearchParams(params)
+
+      change(copy)
+
+      return copy
+   }
    const chooseScenario = (next: Scenario | undefined) =>
       setParams(
-         previous => {
-            const copy = new URLSearchParams(previous)
-
-            if (next) {
-               copy.set('sample', next)
-            } else {
-               copy.delete('sample')
-            }
-
-            return copy
-         },
+         withParams(copy => (next ? copy.set('sample', next) : copy.delete('sample'))),
          { replace: true }
       )
+   // The accounts the owner narrowed it to go in the address; none means all of them.
+   const pickAccounts = (next: string[]) =>
+      void navigate({
+         pathname: '/network',
+         search: withParams(copy =>
+            next.length > 0 ? copy.set('accounts', next.join(',')) : copy.delete('accounts')
+         ).toString(),
+      })
 
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
          <h2 className="sr-only">Connection requests</h2>
          {scenario ? <SampleBanner scenario={scenario} onScenario={chooseScenario} /> : null}
-         {current ? (
+         {shown.length > 0 ? (
             <Requests
-               key={`${source.key}-${current.id}`}
+               key={source.key}
                source={source}
-               accountId={current.id}
+               accounts={shown}
                picker={
                   <AccountPicker
                      accounts={accounts.data}
-                     selectedId={current.id}
+                     shown={shownIds}
                      waiting={waiting.data ?? {}}
-                     onPick={id => void navigate(`/network/${id}${params.size > 0 ? `?${params.toString()}` : ''}`)}
+                     onChange={pickAccounts}
                   />
                }
             />

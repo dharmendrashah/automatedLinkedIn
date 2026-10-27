@@ -187,6 +187,21 @@ describe('runInvitations', () => {
       expect(context.visit).toHaveBeenCalledWith(LIST)
    })
 
+   it('should keep the loaded page open for 5 seconds as the last thing it does, and not on a sign-in page', async () => {
+      const read = setup()
+      const never = setup({ rows: [] })
+      const signedOut = setup({ at: `${BASE}/uas/login` })
+
+      await read.run()
+      await never.run()
+      await signedOut.run()
+
+      expect(read.calls.at(-1)).toBe('pause 5000')
+      expect(read.attached['invitations.json']).toBeDefined()
+      expect(never.calls.at(-1)).toBe('pause 5000')
+      expect(signedOut.calls).not.toContain('pause 5000')
+   })
+
    it('should accept and ignore in the order asked, once each, after asking markAttempt once before the first click', async () => {
       const { run, calls, clicks, file, context } = setup()
 

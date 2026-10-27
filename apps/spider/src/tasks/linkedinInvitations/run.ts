@@ -57,6 +57,8 @@ const END_AFTER = 2
 const CONFIRM_LOOKS = 12
 const TOP_SCROLLS = 15
 const TOP_PIXELS = 1500
+// The page stays open this long once it has been read and answered, so the last picture and the video end on a settled page.
+const END_PAUSE_MS = 5000
 
 const PAUSES = {
    // The page drawing after it opened, and between two looks at it.
@@ -311,6 +313,7 @@ export const runInvitations = async (
 
       if (!(await settled())) {
          log('The page drew no connection requests')
+         await pause(END_PAUSE_MS)
 
          return { outcome: 'NOT_DRAWN' }
       }
@@ -335,6 +338,7 @@ export const runInvitations = async (
       }
 
       handOver()
+      await pause(END_PAUSE_MS)
 
       return verdict()
    } catch (error) {

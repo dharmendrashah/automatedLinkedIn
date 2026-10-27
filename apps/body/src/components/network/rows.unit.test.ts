@@ -7,6 +7,7 @@ import { countsOf, filterOf, profileUrl, visibleRequests } from './rows'
 const request = (id: string, state: RequestState, name = `Person ${id}`, headline = 'Engineer', mutual?: string) =>
    ({
       id,
+      accountId: 'account-1',
       slug: `person-${id}`,
       name,
       headline,
