@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { ineligibleReason, identityOf } from './accounts'
+import { accountName, identityOf, ineligibleReason } from './accounts'
+
+describe('accountName', () => {
+   it('should name an account by its LinkedIn name, else its email, and say when it was removed', () => {
+      expect(accountName({ email: 'a@b.co', displayName: 'Ada', imageUrl: null })).toBe('Ada')
+      expect(accountName({ email: 'a@b.co', displayName: null, imageUrl: null })).toBe('a@b.co')
+      expect(accountName(undefined)).toBe('Account removed')
+   })
+})
 
 describe('identityOf', () => {
    const account = {

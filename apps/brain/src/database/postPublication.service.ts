@@ -13,6 +13,7 @@ import {
 } from '@automatedLinkedIn/contracts'
 
 import { POST_TASK } from './linkedInPost.hooks'
+import { PostDraftService } from './postDraft.service'
 import { keysOf, ownsKeys } from './postFileKeys'
 import { POST_LIMITS, WAIT, budgetWait, contentProblem, limitProblem } from './postPublication.rules'
 import { PrismaService } from './prisma.service'
@@ -135,7 +136,7 @@ export class PostPublicationService {
 
       const at = plannedAt?.getTime() ?? now
 
-      await this.checkPost(userId, draft.accountId, parsed.data, at, now)
+      await this.checkPost(userId, draft.accountId, parsed.data, at, now, plannedAt === undefined)
 
       const created = await db.$transaction(async tx => {
          const { count } = await tx.postDraft.deleteMany({
@@ -198,7 +199,7 @@ export class PostPublicationService {
          throw new TaskRefusedError('A file of this post is not yours. Attach it again.')
       }
 
-      await this.checkPost(userId, accountId, blocks, now, now)
+      await this.checkPost(userId, accountId, blocks, now, now, true)
 
       const created = await PrismaService.client.postPublication.create({
          data: {
@@ -253,8 +254,16 @@ export class PostPublicationService {
       )
    }
 
-   // Why this account cannot take this post at `at`, as a sentence; nothing when it can.
-   private static async checkPost(userId: string, accountId: string, blocks: PostBlock[], at: number, now: number) {
+   // Why this account cannot take this post at `at`, as a sentence; nothing when it can. A planned post needs no session yet: the
+   // account is checked again when its time comes (`linkedInPost.hooks.ts`), and the post then ends as not posted.
+   private static async checkPost(
+      userId: string,
+      accountId: string,
+      blocks: PostBlock[],
+      at: number,
+      now: number,
+      needsSession: boolean
+   ) {
       const problem = contentProblem(blocks)
 
       if (problem) {
@@ -269,7 +278,7 @@ export class PostPublicationService {
          select: { status: true },
       })
 
-      if (account?.status !== 'ACTIVE') {
+      if (!account || (needsSession && account.status !== 'ACTIVE')) {
          throw new TaskRefusedError('Posting needs an account that is signed in. Run Test login first.')
       }
 
@@ -405,6 +414,36 @@ export class PostPublicationService {
          })
 
          return { id: draft.id }
+      })
+   }
+
+   // A new draft of the same account with the words and the two settings of a post, in any state. Files are not copied (a posted
+   // post's may be deleted already) and neither is the time. Null when the post is not the owner's.
+   public static async duplicate(userId: string, id: string) {
+      const row = await PrismaService.client.postPublication.findFirst({
+         where: {
+            id,
+            userId,
+         },
+      })
+
+      if (!row) {
+         return null
+      }
+
+      const blocks = (blocksOf(row) ?? []).filter(block => block.type === 'TEXT')
+
+      if (joinedText(blocks) === '') {
+         throw new TaskRefusedError('This post has no words to copy.')
+      }
+
+      return PostDraftService.save(userId, {
+         accountId: row.accountId,
+         blocks,
+         audience: row.audience,
+         comments: row.comments,
+         plannedAt: null,
+         plannedZone: null,
       })
    }
 

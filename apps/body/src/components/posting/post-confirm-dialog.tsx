@@ -24,12 +24,25 @@ type Props = {
    comments: PostVisibility
    // When it is planned for, for the plan.
    plannedText: string | undefined
+   // Said before a plan is saved when the post may not go, such as an account that is not signed in.
+   warning?: string | undefined
    onConfirm: () => void
    onCancel: () => void
 }
 
 // Posting is real: the dialog says so, with the account, the words and the attachment, before anything is sent.
-export const PostConfirmDialog = ({ mode, account, words, attachment, audience, comments, plannedText, onConfirm, onCancel }: Props) => (
+export const PostConfirmDialog = ({
+   mode,
+   account,
+   words,
+   attachment,
+   audience,
+   comments,
+   plannedText,
+   warning,
+   onConfirm,
+   onCancel,
+}: Props) => (
    <AlertDialog open={mode !== undefined} onOpenChange={open => (open ? undefined : onCancel())}>
       <AlertDialogContent>
          <AlertDialogHeader>
@@ -46,6 +59,7 @@ export const PostConfirmDialog = ({ mode, account, words, attachment, audience, 
                      {attachment ? <span className="text-muted-foreground block text-xs">{attachment}</span> : null}
                   </p>
                   <p>Once it is posted, it is deleted on LinkedIn, not here.</p>
+                  {warning ? <p className="text-destructive">{warning}</p> : null}
                </div>
             </AlertDialogDescription>
          </AlertDialogHeader>

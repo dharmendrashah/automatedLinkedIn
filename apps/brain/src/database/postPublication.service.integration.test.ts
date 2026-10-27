@@ -296,6 +296,18 @@ describe('PostPublicationService (database)', () => {
          expect(requested).toEqual([])
       })
 
+      it('should plan a post for an account that is not signed in, since only the time it goes needs a session', async () => {
+         await PrismaService.client.linkedInAccount.update({
+            where: { id: accountId },
+            data: { status: 'PENDING' },
+         })
+
+         const saved = await draft([words('Later, from a broken account')], new Date(Date.now() + 3 * HOUR))
+
+         await expect(PostPublicationService.schedule(userId, saved.id)).resolves.toMatchObject({ state: 'SCHEDULED' })
+         expect(requested).toEqual([])
+      })
+
       it('should refuse a draft with no time, one that is not ahead, and one that breaks the limits at its time', async () => {
          const none = await draft([words('No time')])
          const past = await draft([words('Past')], new Date(Date.now() + 10 * 1000))
@@ -514,6 +526,47 @@ describe('PostPublicationService (database)', () => {
          await expect(PostPublicationService.backToDraft(userId, sending.id)).resolves.toBeNull()
          await expect(PostPublicationService.backToDraft(userId, posted.id)).resolves.toBeNull()
          await expect(PostPublicationService.backToDraft(otherUserId, sending.id)).resolves.toBeNull()
+      })
+   })
+
+   describe('duplicate', () => {
+      it('should copy the words and settings of a post, in any state, into a new draft without its files or time', async () => {
+         const posted = await publication({
+            state: 'POSTED',
+            blocks: [words('Hello world'), photo()],
+            audience: 'CONNECTIONS',
+            comments: 'CONNECTIONS',
+            scheduledAt: new Date(Date.now() - HOUR),
+            plannedZone: 'Asia/Kolkata',
+         })
+         const copy = await PostPublicationService.duplicate(userId, posted.id)
+         const saved = await PrismaService.client.postDraft.findUniqueOrThrow({ where: { id: copy?.id ?? '' } })
+
+         expect(saved).toMatchObject({
+            accountId,
+            audience: 'CONNECTIONS',
+            comments: 'CONNECTIONS',
+            plannedAt: null,
+            plannedZone: null,
+         })
+         expect(saved.blocks).toMatchObject([
+            {
+               type: 'TEXT',
+               text: 'Hello world',
+            },
+         ])
+         await expect(PrismaService.client.postPublication.count({ where: { id: posted.id } })).resolves.toBe(1)
+      })
+
+      it("should answer null for a post that is not the owner's, and refuse one without words", async () => {
+         const mine = await publication({ state: 'POSTED' })
+         const silent = await publication({
+            state: 'POSTED',
+            blocks: [photo()],
+         })
+
+         await expect(PostPublicationService.duplicate(otherUserId, mine.id)).resolves.toBeNull()
+         await expect(PostPublicationService.duplicate(userId, silent.id)).rejects.toBeInstanceOf(TaskRefusedError)
       })
    })
 

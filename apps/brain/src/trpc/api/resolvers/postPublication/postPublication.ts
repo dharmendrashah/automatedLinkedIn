@@ -5,7 +5,7 @@ import { PostPublicationService } from 'database'
 
 import { ownerProcedure, router } from 'trpc'
 
-import { orRefused, present } from '../owned'
+import { orConflict, orRefused, present } from '../owned'
 
 const draftId = z.object({ draftId: z.string().min(1).max(64) })
 const byId = z.object({ id: z.string().min(1).max(64) })
@@ -48,4 +48,11 @@ export const postPublication = router({
 
       return draft
    }),
+
+   // A new draft of the same account with the words and settings of a post in any state; its files and time are not copied.
+   duplicate: ownerProcedure
+      .input(byId)
+      .mutation(async ({ ctx, input }) =>
+         present(await orRefused(orConflict(PostPublicationService.duplicate(ctx.user.id, input.id))), 'Post not found')
+      ),
 })

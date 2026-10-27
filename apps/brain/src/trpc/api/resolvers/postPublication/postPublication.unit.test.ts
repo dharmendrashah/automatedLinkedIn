@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
    publish: vi.fn(),
    schedule: vi.fn(),
    backToDraft: vi.fn(),
+   duplicate: vi.fn(),
    TaskRefusedError: class TaskRefusedError extends Error {},
    ConflictError: class ConflictError extends Error {},
 }))
@@ -22,6 +23,7 @@ vi.mock('database', () => ({
       publish: mocks.publish,
       schedule: mocks.schedule,
       backToDraft: mocks.backToDraft,
+      duplicate: mocks.duplicate,
    },
    TaskRefusedError: mocks.TaskRefusedError,
    ConflictError: mocks.ConflictError,
@@ -118,5 +120,18 @@ describe('postPublication router', () => {
       await expect(caller(authed()).postPublication.backToDraft({ id: 'p1' })).resolves.toEqual({ id: 'd9' })
       await expect(caller(authed()).postPublication.backToDraft({ id: 'p2' })).rejects.toMatchObject(conflict)
       expect(mocks.backToDraft).toHaveBeenCalledWith('u1', 'p1')
+   })
+
+   it('should copy a post into a draft of the owner, and answer a missing post as not found and a full draft list as a conflict', async () => {
+      mocks.duplicate.mockResolvedValueOnce({ id: 'd2' })
+      mocks.duplicate.mockResolvedValueOnce(null)
+      mocks.duplicate.mockRejectedValueOnce(
+         new mocks.ConflictError('You have 200 drafts. Delete one to start another.')
+      )
+
+      await expect(caller(authed()).postPublication.duplicate({ id: 'p1' })).resolves.toMatchObject({ id: 'd2' })
+      await expect(caller(authed()).postPublication.duplicate({ id: 'x' })).rejects.toMatchObject(notFound)
+      await expect(caller(authed()).postPublication.duplicate({ id: 'p1' })).rejects.toMatchObject(conflict)
+      expect(mocks.duplicate).toHaveBeenCalledWith('u1', 'p1')
    })
 })
