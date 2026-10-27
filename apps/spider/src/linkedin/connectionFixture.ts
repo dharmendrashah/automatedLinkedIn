@@ -15,21 +15,45 @@ export type FixtureConnection = {
    noMessage?: boolean
    // The batch of ten the row was loaded in (the page's own key carries it).
    batch?: number
+   // The layout with no `data-view-name` at all (tripti.verma, 2026-10-27): absolute links, a bare Message link.
+   plain?: boolean
 }
 
 const PROFILE = 'https://www.linkedin.com/in/'
 
-export const connectionRow = ({
+const plainRow = ({
    slug,
    name,
    headline,
+   connected,
+   urn,
+   noMessage,
+   batch,
+}: Required<Omit<FixtureConnection, 'photo' | 'plain'>>) =>
+   `<div componentkey="ConnectionCard_${batch}-${slug}"><a tabindex="0" href="${PROFILE}${slug}/" componentkey="ConnectionCardProfileImage_${batch}-${slug}"><figure componentkey="ConnectionCardProfileImage_${batch}-${slug}"><span data-dynamic-icon-loading=""></span></figure></a><div><div><a tabindex="0" href="${PROFILE}${slug}/" componentkey="0a6f1c52-name-${slug}"><div componentkey="0a6f1c52-name-${slug}"><p>${name}</p>${headline ? `<div><p><span>${headline}</span></p></div>` : ''}</div></a>${connected ? `<p>${connected}</p>` : ''}</div></div><div><div><div data-display-contents="true">${noMessage ? '' : `<a aria-disabled="false" href="/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3A${urn}&amp;recipient=${urn}&amp;interop=msgOverlay" componentkey="53e6d420-message-${slug}" aria-label="Send a message to ${name}"><span><span>Message</span></span></a>`}</div><button type="button" componentkey="384c2311-menu-${slug}" aria-label="More actions for ${name}"><span><span data-dynamic-icon-loading=""></span></span></button></div></div></div>`
+
+export const connectionRow = ({
+   slug,
+   name,
+   headline = '',
    connected = 'Connected on October 27, 2026',
    photo,
    urn = 'ACoAAfixture',
-   noMessage,
+   noMessage = false,
    batch = 0,
+   plain = false,
 }: FixtureConnection) =>
-   `<div data-view-name="connections-list"><div componentkey="ConnectionCard_${batch}-${slug}">
+   plain
+      ? plainRow({
+           slug,
+           name,
+           headline,
+           connected,
+           urn,
+           noMessage,
+           batch,
+        })
+      : `<div data-view-name="connections-list"><div componentkey="ConnectionCard_${batch}-${slug}">
 <a data-view-name="connections-profile" componentkey="ConnectionCardProfileImage_${batch}-${slug}" href="${PROFILE}${slug}/"><figure data-view-name="connections-profile"><svg></svg>${photo ? `<img src="${photo}">` : ''}</figure></a>
 <div><div><a data-view-name="connections-profile" componentkey="name-${slug}" href="${PROFILE}${slug}/"><div componentkey="name-${slug}"><p>${name}</p>${headline ? `<div><p><span>${headline}</span></p></div>` : ''}</div></a>
 ${connected ? `<p>${connected}</p>` : ''}</div></div>
@@ -50,5 +74,10 @@ export const connectionsPage = (rows: FixtureConnection[], { total, extra = '' }
 export const REMOVE_MENU =
    '<div role="menu"><div role="menuitem" data-view-name="connections-remove" componentkey="menu-item"><div><div><p>Remove connection</p></div></div></div></div>'
 
-export const removeDialog = (firstName: string) =>
-   `<dialog data-testid="dialog"><button aria-label="Dismiss"><span></span></button><div><div data-testid="dialog-content"><div><h2>Remove Connection</h2><hr role="presentation"><p>Are you sure you want to remove ${firstName} as a connection?</p><hr role="presentation"><div><button data-view-name="connections-cancel-removed"><span><span>Cancel</span></span></button><button data-view-name="connections-remove"><span><span>Remove connection</span></span></button></div></div></div></div></dialog>`
+// The same without the attributes the second layout lacks. Its real menu and dialog were not seen (unverified), so this is only what
+// the reader relies on: a menu item and dialog buttons that say their words.
+export const PLAIN_REMOVE_MENU =
+   '<div role="menu"><div role="menuitem" componentkey="menu-item"><div><div><p>Remove connection</p></div></div></div></div>'
+
+export const removeDialog = (firstName: string, plain = false) =>
+   `<dialog data-testid="dialog"><button aria-label="Dismiss"><span></span></button><div><div data-testid="dialog-content"><div><h2>Remove Connection</h2><hr role="presentation"><p>Are you sure you want to remove ${firstName} as a connection?</p><hr role="presentation"><div><button${plain ? '' : ' data-view-name="connections-cancel-removed"'}><span><span>Cancel</span></span></button><button${plain ? '' : ' data-view-name="connections-remove"'}><span><span>Remove connection</span></span></button></div></div></div></div></dialog>`

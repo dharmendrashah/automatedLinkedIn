@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { connectionsFileSchema } from '@automatedLinkedIn/contracts'
 
-import { type FixtureConnection, REMOVE_MENU, connectionsPage, removeDialog } from '../../linkedin/connectionFixture'
+import {
+   type FixtureConnection,
+   PLAIN_REMOVE_MENU,
+   REMOVE_MENU,
+   connectionsPage,
+   removeDialog,
+} from '../../linkedin/connectionFixture'
 import { runConnections } from './run'
 
 const BASE = 'https://www.linkedin.com'
@@ -27,6 +33,10 @@ type Page = {
    chunk?: number
    // The three dots of a row that do not open a menu, and the name the dialog gives instead of the row's own.
    noMenu?: string[]
+   // The dots are pressed but the menu never draws.
+   shut?: boolean
+   // The menu and the dialog of the layout with no data-view-name.
+   plain?: boolean
    dialogName?: string
    // The row stays after Remove is pressed, and no toast shows.
    stays?: boolean
@@ -70,7 +80,7 @@ const setup = (page: Page = {}) => {
 
       return connectionsPage(shown, {
          ...(total !== undefined && { total: total - gone.size }),
-         extra: `${menuFor ? REMOVE_MENU : ''}${row ? removeDialog(page.dialogName ?? row.name.split(' ')[0] ?? '') : ''}${toast ? TOAST : ''}`,
+         extra: `${menuFor ? (page.plain ? PLAIN_REMOVE_MENU : REMOVE_MENU) : ''}${row ? removeDialog(page.dialogName ?? row.name.split(' ')[0] ?? '', page.plain) : ''}${toast ? TOAST : ''}`,
       })
    }
 
@@ -97,10 +107,8 @@ const setup = (page: Page = {}) => {
       clickLink: vi.fn(async () => undefined),
       back: vi.fn(async () => at),
       press: vi.fn(async () => ''),
-      clickNth: vi.fn(async (selector: string) => {
-         const [, slug = ''] =
-            /-([A-Za-z0-9_%-]+)"\] button\[data-view-name="connections-remove-connection-dropdown"\]$/.exec(selector) ??
-            []
+      clickNth: vi.fn(async (selector: string, index: number) => {
+         const [, slug = ''] = /-([A-Za-z0-9_%-]+)"\] button\[aria-label\^="More actions for"\]$/.exec(selector) ?? []
 
          if (slug) {
             calls.push(`menu ${slug}`)
@@ -109,12 +117,12 @@ const setup = (page: Page = {}) => {
                return false
             }
 
-            menuFor = slug
+            menuFor = page.shut ? undefined : slug
 
             return true
          }
 
-         if (selector.includes('role="menuitem"')) {
+         if (selector === '[role="menuitem"]') {
             calls.push('item')
             dialogFor = menuFor
             menuFor = undefined
@@ -122,14 +130,15 @@ const setup = (page: Page = {}) => {
             return dialogFor !== undefined
          }
 
-         if (selector.includes('connections-cancel-removed')) {
+         // The dialog's buttons in the order it draws them: Dismiss, Cancel, Remove connection.
+         if (selector === 'dialog button' && index === 1) {
             calls.push('cancel')
             dialogFor = undefined
 
             return true
          }
 
-         if (selector.includes('dialog') && selector.includes('connections-remove')) {
+         if (selector === 'dialog button' && index === 2) {
             calls.push('confirm')
             clicks.push(`remove ${dialogFor ?? ''}`)
 
@@ -204,6 +213,37 @@ describe('runConnections', () => {
       expect(clicks).toEqual([])
       expect(context.markAttempt).not.toHaveBeenCalled()
       expect(context.visit).toHaveBeenCalledWith(LIST)
+   })
+
+   it('should read a page made in the layout with no data-view-name just the same', async () => {
+      const { run, file } = setup({
+         rows: many(3).map(row => ({
+            ...row,
+            plain: true,
+         })),
+      })
+
+      await expect(run()).resolves.toEqual({
+         outcome: 'DONE',
+         read: 3,
+      })
+      expect(file().connections.map(({ slug }) => slug)).toEqual(['person-1', 'person-2', 'person-3'])
+   })
+
+   it('should keep the page when a row could not be read, so its shape can be studied, and not otherwise', async () => {
+      const broken = setup({ rows: [person(1, { name: '' }), person(2)] })
+
+      await expect(broken.run()).resolves.toMatchObject({
+         outcome: 'PARTIAL',
+         read: 1,
+      })
+      expect(broken.attached['connections-page.html']).toContain('ConnectionCard_0-person-1')
+
+      const fine = setup()
+
+      await fine.run()
+
+      expect(fine.attached['connections-page.html']).toBeUndefined()
    })
 
    it('should scroll a long list until it has every connection the heading counts, then stop', async () => {
@@ -361,6 +401,28 @@ describe('runConnections', () => {
          })
          expect(clicks).toEqual([])
          expect(calls).not.toContain('markAttempt')
+      })
+
+      it('should find the menu and the dialog by their words when the page has no data-view-name, and press Remove once', async () => {
+         const { run, clicks, calls } = setup({ plain: true })
+
+         await expect(run('person-2')).resolves.toMatchObject({
+            outcome: 'DONE',
+            removal: 'REMOVED',
+         })
+         expect(clicks).toEqual(['remove person-2'])
+         expect(calls.filter(call => call === 'confirm')).toHaveLength(1)
+      })
+
+      it('should keep the page it saw, and press nothing, when the menu does not draw', async () => {
+         const { run, clicks, attached } = setup({ shut: true })
+
+         await expect(run('person-2')).resolves.toMatchObject({
+            outcome: 'PARTIAL',
+            removal: 'NOT_CLICKED',
+         })
+         expect(clicks).toEqual([])
+         expect(attached['removal-menu.html']).toContain('ConnectionCard_0-person-2')
       })
 
       it('should press nothing when the command was started before, and say it is not sure', async () => {

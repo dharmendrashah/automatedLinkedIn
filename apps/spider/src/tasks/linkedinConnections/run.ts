@@ -1,4 +1,4 @@
-import { parse } from 'node-html-parser'
+import { type HTMLElement, parse } from 'node-html-parser'
 
 import {
    CONNECTIONS_CONTRACT_VERSION,
@@ -11,13 +11,16 @@ import {
 import { describeError } from '../../browsing/errors'
 import { handsOf } from '../../browsing/hands'
 import { createReader } from '../../browsing/reader'
+import { compactHtml } from '../../browsing/snapshot'
 import { parseConnections } from '../../linkedin/connectionReader'
 import {
+   CANCEL_WORDS,
    CONNECTIONS_PATH,
+   CONNECTION_DIALOG_BUTTON,
+   CONNECTION_DIALOG_TEXT,
    CONNECTION_MENU_ITEM,
-   CONNECTION_REMOVE_CANCEL,
-   CONNECTION_REMOVE_CONFIRM,
    CONNECTION_ROW,
+   REMOVE_WORDS,
    connectionMenuButton,
 } from '../../linkedin/markup'
 import { PACE } from '../../linkedin/pace'
@@ -79,6 +82,15 @@ const PAUSES = {
 } as const
 
 const ASKS = /^Are you sure you want to remove (.+) as a connection\?$/
+
+const wordsOf = (element: HTMLElement) => element.text.replace(/\s+/g, ' ').trim()
+
+// Where the first element of `selector` that says exactly `words` stands among those the page lists, the number `clickNth` takes;
+// -1 when none does.
+const positionOf = (html: string, selector: string, words: string) =>
+   parse(html)
+      .querySelectorAll(selector)
+      .findIndex(element => wordsOf(element) === words)
 
 // Reads the connections of the account as the member sees them on the page that lists them all, and removes the one asked for, at a
 // person's pace (.plan/my-connections.md). Names and headlines never reach the log; they go only into `connections.json`. Remove is
@@ -185,6 +197,11 @@ export const runConnections = async (
          }
       }
 
+      // Rows that could not be read are the page's shape changing: the page is kept to read it afterwards.
+      if (unreadable) {
+         attach('connections-page.html', compactHtml(await hands.html()), 'text/html')
+      }
+
       session.signedIn((await hands.inspect()).url)
 
       const connections = [...seen.values()].slice(0, MAX_CONNECTIONS)
@@ -209,12 +226,28 @@ export const runConnections = async (
       return false
    }
 
-   const hasSelector = (selector: string) => (html: string) => parse(html).querySelector(selector) !== null
+   // Looks at the page until an element of `selector` says `words`, and gives its position; -1 when none did in time.
+   const lookFor = async (selector: string, words: string, times: number) => {
+      for (let look = 0; look < times; look += 1) {
+         const at = positionOf(await hands.html(), selector, words)
+
+         if (at >= 0) {
+            return at
+         }
+
+         await reader.wait(PAUSES.look)
+      }
+
+      return -1
+   }
+
+   // A step that did not show as it should: the page is kept to read what LinkedIn drew instead.
+   const keepPage = async (name: string) => attach(`${name}.html`, compactHtml(await hands.html()), 'text/html')
 
    // What the dialog asks about: the first name it puts in "Are you sure you want to remove <name> as a connection?".
    const askedAbout = (html: string) => {
-      for (const line of parse(html).querySelectorAll('dialog[data-testid="dialog"] p')) {
-         const [, name] = ASKS.exec(line.text.replace(/\s+/g, ' ').trim()) ?? []
+      for (const line of parse(html).querySelectorAll(CONNECTION_DIALOG_TEXT)) {
+         const [, name] = ASKS.exec(wordsOf(line)) ?? []
 
          if (name) {
             return name
@@ -226,7 +259,9 @@ export const runConnections = async (
 
    // Closes what was opened and leaves the list as it was, so the run ends on a normal page.
    const closeDialog = async () => {
-      if (!(await hands.clickNth(CONNECTION_REMOVE_CANCEL, 0, '', false))) {
+      const cancel = positionOf(await hands.html(), CONNECTION_DIALOG_BUTTON, CANCEL_WORDS)
+
+      if (cancel < 0 || !(await hands.clickNth(CONNECTION_DIALOG_BUTTON, cancel, '', false))) {
          await hands.press('Escape')
       }
    }
@@ -242,8 +277,11 @@ export const runConnections = async (
          return 'NOT_CLICKED'
       }
 
-      if (!(await looks(hasSelector(CONNECTION_MENU_ITEM), MENU_LOOKS))) {
+      const item = await lookFor(CONNECTION_MENU_ITEM, REMOVE_WORDS, MENU_LOOKS)
+
+      if (item < 0) {
          log('The menu of a row did not open')
+         await keepPage('removal-menu')
          await hands.press('Escape')
 
          return 'NOT_CLICKED'
@@ -251,24 +289,28 @@ export const runConnections = async (
 
       await reader.wait(PAUSES.step)
 
-      if (!(await hands.clickNth(CONNECTION_MENU_ITEM, 0, '', false))) {
+      if (!(await hands.clickNth(CONNECTION_MENU_ITEM, item, '', false))) {
          log('The menu item could not be pressed')
+         await keepPage('removal-menu')
          await hands.press('Escape')
 
          return 'NOT_CLICKED'
       }
 
-      if (!(await looks(hasSelector(CONNECTION_REMOVE_CONFIRM), MENU_LOOKS))) {
+      if ((await lookFor(CONNECTION_DIALOG_BUTTON, REMOVE_WORDS, MENU_LOOKS)) < 0) {
          log('The dialog of a removal did not open')
+         await keepPage('removal-dialog')
 
          return 'NOT_CLICKED'
       }
 
       // The dialog must name the person of the row, or nothing is removed.
       const [first] = connection.name.split(' ')
+      const dialog = await hands.html()
 
-      if (askedAbout(await hands.html()) !== first) {
+      if (askedAbout(dialog) !== first) {
          log('The dialog did not name the person that was asked for')
+         await keepPage('removal-dialog')
          await closeDialog()
 
          return 'NOT_CLICKED'
@@ -285,7 +327,9 @@ export const runConnections = async (
          return 'NOT_CLICKED'
       }
 
-      if (!(await hands.clickNth(CONNECTION_REMOVE_CONFIRM, 0, '', false))) {
+      const confirm = positionOf(await hands.html(), CONNECTION_DIALOG_BUTTON, REMOVE_WORDS)
+
+      if (confirm < 0 || !(await hands.clickNth(CONNECTION_DIALOG_BUTTON, confirm, '', false))) {
          log('The confirm button could not be pressed')
          await closeDialog()
 

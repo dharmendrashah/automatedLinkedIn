@@ -120,16 +120,23 @@ export const invitationButton = (id: string, action: 'ACCEPT' | 'IGNORE') => {
 // /messaging/compose/?profileUrn=... and a button with three dots that opens a menu. The menu item "Remove connection" opens a dialog
 // whose confirm button carries the same `data-view-name` as the menu item (so the dialog is named in the selector); a toast says
 // "Connection removed." and the heading drops by one. Other languages, sort orders and accounts are not recorded.
+// A second layout (tripti.verma, page document of 2026-10-27, run b12552e8): the same rows and `componentkey` names but no
+// `data-view-name` anywhere, absolute profile links, a Message link with no wrapper, and three dots named by their `aria-label`
+// "More actions for <name>". So the row's own anchors are the ones every layout has: profile and compose links, and that label.
+// The menu and the dialog of a removal were only recorded in the first layout and are unverified in the second.
 export const CONNECTIONS_PATH = '/mynetwork/invite-connect/connections/'
 export const CONNECTION_ROW = '[componentkey^="ConnectionCard_"]'
 export const CONNECTIONS_HEADER = '[componentkey="ConnectionsPage_ConnectionsListHeader"]'
-// The photo link and the name link both carry this; the name link is the one that holds the lines of text.
-export const CONNECTION_PROFILE = 'a[data-view-name="connections-profile"][href*="/in/"]'
-export const CONNECTION_MESSAGE = '[data-view-name="message-button"] a[href*="/messaging/compose/"]'
-export const CONNECTION_MENU_ITEM = '[role="menu"] [role="menuitem"][data-view-name="connections-remove"]'
-export const CONNECTION_REMOVE_CONFIRM = 'dialog[data-testid="dialog"] button[data-view-name="connections-remove"]'
-export const CONNECTION_REMOVE_CANCEL =
-   'dialog[data-testid="dialog"] button[data-view-name="connections-cancel-removed"]'
+// The photo link and the name link both match; the name link is the one that holds the lines of text.
+export const CONNECTION_PROFILE = 'a[href*="/in/"]'
+export const CONNECTION_MESSAGE = 'a[href*="/messaging/compose/"]'
+// The menu item and the dialog's buttons carry `data-view-name` in the first layout only, so they are found by the words they show
+// (English; another language finds nothing, and nothing is pressed).
+export const CONNECTION_MENU_ITEM = '[role="menuitem"]'
+export const CONNECTION_DIALOG_TEXT = 'dialog p'
+export const CONNECTION_DIALOG_BUTTON = 'dialog button'
+export const REMOVE_WORDS = 'Remove connection'
+export const CANCEL_WORDS = 'Cancel'
 
 // The three dots of one row, from the member's profile address (the characters the contract allows, so nothing else can reach a
 // selector). Only the end of the row's own name is matched: the batch number in front changes as the list loads.
@@ -138,5 +145,5 @@ export const connectionMenuButton = (slug: string) => {
       throw new Error('Not a profile address')
    }
 
-   return `[componentkey^="ConnectionCard_"][componentkey$="-${slug}"] button[data-view-name="connections-remove-connection-dropdown"]`
+   return `[componentkey^="ConnectionCard_"][componentkey$="-${slug}"] button[aria-label^="More actions for"]`
 }

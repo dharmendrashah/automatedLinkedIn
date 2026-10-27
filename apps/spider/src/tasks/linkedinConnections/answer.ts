@@ -42,10 +42,24 @@ export const answerFor = (result: ConnectionsResult): TaskOutcome => {
 
          const removal =
             result.removal === 'GONE'
-               ? ' The connection was no longer on the list, so nothing was removed.'
+               ? 'The connection was no longer on the list, so nothing was removed.'
                : result.removal === 'NOT_CLICKED'
-                 ? ' LinkedIn did not show the steps of a removal as expected, so nothing was removed.'
-                 : ''
+                 ? 'LinkedIn did not show the steps of a removal as expected, so nothing was removed.'
+                 : undefined
+
+         // The owner asked for a removal and it did not happen: that is a failure, whatever else was read on the way. The file the run
+         // handed over still settles the list (the verdict stays PARTIAL for brain).
+         if (removal) {
+            return {
+               status: 'FAILED',
+               verdict: result.outcome,
+               message: removal,
+               report: {
+                  headline: `${read}. ${removal}`,
+                  sections: [],
+               },
+            }
+         }
 
          return {
             status: 'SUCCEEDED',
@@ -53,10 +67,10 @@ export const answerFor = (result: ConnectionsResult): TaskOutcome => {
             message:
                result.outcome === 'DONE'
                   ? 'Read the connections.'
-                  : `Read the connections, but not everything was done.${removal}`,
+                  : 'Read the connections, but not everything was done.',
             commitSession: true,
             report: {
-               headline: `${read}.${removal}`,
+               headline: `${read}.`,
                sections: [],
             },
          }

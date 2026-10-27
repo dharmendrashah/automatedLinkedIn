@@ -68,6 +68,31 @@ describe('parseConnections', () => {
       })
    })
 
+   it('should read a row of the layout with no data-view-name, as the recorded page of 2026-10-27 was made', () => {
+      const page = parseConnections(
+         connectionsPage(
+            [
+               person(1, {
+                  plain: true,
+                  urn: 'ACoAAplain',
+               }),
+            ],
+            { total: 114 }
+         )
+      )
+
+      expect(page.total).toBe(114)
+      expect(page.connections).toEqual([
+         {
+            slug: 'person-1',
+            name: 'Person Number1',
+            headline: 'Works at Company 1',
+            connectedOn: '2026-10-27',
+            messageUrn: 'urn:li:fsd_profile:ACoAAplain',
+         },
+      ])
+   })
+
    it('should keep a slug as the page writes it, percent signs included, and read each person once', () => {
       const page = parseConnections(
          connectionsPage([

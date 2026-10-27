@@ -38,7 +38,7 @@ describe('answerFor', () => {
       })
    })
 
-   it('should call a run that did not do everything partial and still succeed, saying nothing was removed when it was not', () => {
+   it('should call a read that did not reach the end partly done, and still succeed', () => {
       expect(
          answerFor({
             outcome: 'PARTIAL',
@@ -47,8 +47,12 @@ describe('answerFor', () => {
       ).toMatchObject({
          status: 'SUCCEEDED',
          verdict: 'PARTIAL',
+         message: 'Read the connections, but not everything was done.',
+         commitSession: true,
       })
+   })
 
+   it('should fail when a removal was asked for and nothing was removed, keeping the verdict brain settles the list by', () => {
       for (const removal of ['GONE', 'NOT_CLICKED'] as const) {
          const answer = answerFor({
             outcome: 'PARTIAL',
@@ -57,10 +61,11 @@ describe('answerFor', () => {
          })
 
          expect(answer).toMatchObject({
-            status: 'SUCCEEDED',
+            status: 'FAILED',
             verdict: 'PARTIAL',
          })
          expect(answer.message).toContain('nothing was removed')
+         expect(answer.report?.headline).toContain('Read 12 connections.')
       }
    })
 
