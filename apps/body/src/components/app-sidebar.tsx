@@ -25,6 +25,7 @@ import {
    Target,
    Timer,
    UserCircle,
+   UserPlus,
    Users,
    Video,
    Wallet,
@@ -41,6 +42,7 @@ import { trpc } from '../trpc'
 const navMain: NavItem[] = [
    { title: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
    { title: 'Unibox', to: '/unibox', icon: Inbox },
+   { title: 'My network', to: '/network', icon: UserPlus },
    { title: 'Write a post', to: '/posting', icon: SquarePen },
    { title: 'LinkedIn accounts', to: '/accounts', icon: Briefcase },
    { title: 'LinkedIn profiles', to: '/profiles', icon: Users },

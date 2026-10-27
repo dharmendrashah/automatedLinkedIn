@@ -32,6 +32,7 @@ model User {
   spiderSessions    SpiderSession[]
   conversations     LinkedInConversation[]
   replies           LinkedInReply[]
+  invitations       LinkedInInvitation[]
   accountProfiles   LinkedInAccountProfile[]
   profileVisits     LinkedInPageVisit[]
   postDrafts        PostDraft[]
@@ -601,6 +602,9 @@ model LinkedInAccount {
   // is pending (.plan/messages-resume.md). `messagesResumeUntil` is not used any more: the read says itself when it is finished.
   messagesResumeSkip    Int?
   messagesResumeUntil   Int?
+  // When the connection requests the account received were last read, and how many LinkedIn said wait (.plan/my-network-invitations.md).
+  invitationsReadAt     DateTime?
+  invitationsTotal      Int?
   // When the profile was first asked for (by the first visit of the page or the button); null means "never asked", which is
   // what lets the first visit start the read once (.plan/account-profile-backend.md).
   profileAskedAt        DateTime?
@@ -621,6 +625,7 @@ model LinkedInAccount {
   spiderSessions   SpiderSession[]
   conversations    LinkedInConversation[]
   replies          LinkedInReply[]
+  invitations      LinkedInInvitation[]
   profile          LinkedInAccountProfile?
   profileVisits    LinkedInPageVisit[]
   postDrafts       PostDraft[]
@@ -861,6 +866,10 @@ model SpiderSession {
   messageImport     MessageImport?
   // Present for a finished `linkedin-profile` run whose profile is stored (.plan/account-profile-backend.md).
   profileImport     ProfileImport?
+  // Present for a finished `linkedin-invitations` run whose requests are stored (.plan/my-network-invitations.md).
+  invitationImport  InvitationImport?
+  // The connection requests this run was asked to answer.
+  invitations       LinkedInInvitation[]
 
   @@index([userId, startedAt])
   @@index([linkedInAccountId, startedAt])
@@ -1169,6 +1178,80 @@ model LinkedInReply {
   @@index([accountId, startedAt])
   @@index([conversationId, createdAt])
   @@index([state, createdAt])
+}
+
+enum LinkedInInvitationStatus {
+  // Waits for the owner.
+  PENDING
+  // Asked for, in a run that is going.
+  QUEUED
+  ACCEPTED
+  IGNORED
+  // Not on LinkedIn any more (withdrawn, or answered elsewhere).
+  GONE
+  // The run ended without clicking it; the sentence is in `failure`.
+  FAILED
+  // It was clicked and LinkedIn did not show whether it took.
+  UNKNOWN
+}
+
+enum LinkedInInvitationAction {
+  ACCEPT
+  IGNORE
+}
+
+// A connection request an account received, as the `linkedin-invitations` task read it (.plan/my-network-invitations.md). Holds
+// what the sender made public or wrote to the owner (name, headline, note, photo address), kept for the owner and deleted with the
+// account; there is no retention policy yet (an open item in MEMORY.md). `linkedInId` is LinkedIn's own number for the request and
+// never reaches the browser: the page uses `id`.
+model LinkedInInvitation {
+  id         String                    @id @default(uuid(7))
+  userId     String
+  user       User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId  String
+  account    LinkedInAccount           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  linkedInId String
+  slug       String
+  name       String
+  headline   String
+  mutual     String?
+  note       String?
+  photoUrl   String?
+  // Where it was in the last read that listed it, so the page keeps LinkedIn's order.
+  position   Int                       @default(0)
+  status     LinkedInInvitationStatus  @default(PENDING)
+  action     LinkedInInvitationAction?
+  // The run that was asked to answer it; the run may be deleted before the request.
+  sessionId  String?
+  session    SpiderSession?            @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  // A fixed sentence the owner can read, set when the run ended without answering it.
+  failure    String?
+  seenAt     DateTime                  @default(now())
+  startedAt  DateTime?
+  answeredAt DateTime?
+  goneAt     DateTime?
+  createdAt  DateTime                  @default(now())
+
+  @@unique([accountId, linkedInId])
+  @@index([accountId, status])
+  @@index([sessionId])
+  @@index([status, startedAt])
+}
+
+// A finished `linkedin-invitations` run that waits to be stored; the same shape and lifecycle as MessageImport. It holds no names.
+model InvitationImport {
+  sessionId     String              @id
+  session       SpiderSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  status        MessageImportStatus @default(PENDING)
+  attempts      Int                 @default(0)
+  nextAttemptAt DateTime            @default(now())
+  claimedUntil  DateTime?
+  // An error class, never page content.
+  lastError     String?
+  createdAt     DateTime            @default(now())
+  importedAt    DateTime?
+
+  @@index([status, nextAttemptAt])
 }
 
 // A post the owner is writing for one of their own LinkedIn accounts (.plan/posting-page.md). It is always a draft: nothing sends

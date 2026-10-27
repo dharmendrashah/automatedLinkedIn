@@ -56,6 +56,9 @@ export { AccountProfileService, type ProfileState } from './accountProfile.servi
 export { REPLY_TASK } from './linkedInReply.hooks'
 export { LinkedInReplyService, REPLY_LIMITS } from './linkedInReply.service'
 export { MessageImportService } from './messageImport.service'
+export { INVITATIONS_TASK } from './linkedInInvitation.hooks'
+export { type InvitationList, type InvitationRefresh, LinkedInInvitationService } from './linkedInInvitation.service'
+export { InvitationImportService } from './invitationImport.service'
 export { ProfileImportService } from './profileImport.service'
 export { MessagesRefresh, type RefreshResult } from './messagesRefresh'
 export {

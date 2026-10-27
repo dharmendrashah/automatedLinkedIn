@@ -30,6 +30,8 @@ describe('titleFor', () => {
 
    it('should not put a conversation or a workflow id in the title, and name a workflow page apart from the list', () => {
       expect(titleFor('/unibox/2-abc')).toBe('Unibox')
+      expect(titleFor('/network')).toBe('My network')
+      expect(titleFor('/network/0198-account')).toBe('My network')
       expect(titleFor('/accounts/0198-id')).toBe('Account profile')
       expect(titleFor('/posting/0198-account')).toBe('Write a post')
       expect(titleFor('/posting/0198-account/0198-draft')).toBe('Write a post')
