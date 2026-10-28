@@ -33,8 +33,8 @@ surface on your laptop instead of in the cloud.
 ### Spider (not deployed yet)
 
 `deploy/components/spider` is a Kustomize [Component](https://kubectl.docs.kubernetes.io/guides/config_management/components/)
-with `spider-api` (the Fastify API, internal only, `ClusterIP`) and `spider-worker` (the Camoufox
-worker, no `Service`: it only consumes RabbitMQ). It renders cleanly
+with `spider-api` (the Fastify API, internal only, `ClusterIP`). The Camoufox worker is not here any more: it runs
+as a Cloud Run job, one execution per task (`infra/cloud-run`, `deploy/scripts/spider-job.sh`). It renders cleanly
 (`kubectl kustomize --load-restrictor LoadRestrictionsNone deploy/overlays/staging` after adding it
 to that overlay's `components:` list) but **no overlay includes it yet** — see the comment at the
 top of `deploy/overlays/staging/kustomization.yaml` for the two things that must happen first

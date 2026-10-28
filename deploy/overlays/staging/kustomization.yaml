@@ -8,8 +8,8 @@ resources:
   - dns/cronjob.yaml
   - idle-shutdown/idle-shutdown.yaml
 
-# Deployed 2026-10-12: node pool has GKE_METADATA mode and spider-worker's GSA binding (deploy/gcp-setup.md);
-# one spider-worker replica fits the node with the current workloads (.plan/spider-staging-deploy.md).
+# Deployed 2026-10-12: node pool has GKE_METADATA mode (deploy/gcp-setup.md). The spider worker is not here: it runs as a
+# Cloud Run job (infra/cloud-run, .plan/spider-worker-cloud-run.md).
 components:
   - ../../components/spider
 
@@ -29,9 +29,6 @@ images:
   # Pinned to the commit tag by the deploy job like the others; `staging` is only the fallback for a local render.
   - name: automatedlinkedin-spider
     newName: ghcr.io/dharmendrashah/automatedlinkedin-spider
-    newTag: staging
-  - name: automatedlinkedin-spider-worker
-    newName: ghcr.io/dharmendrashah/automatedlinkedin-spider-worker
     newTag: staging
 
 configMapGenerator:
@@ -85,13 +82,12 @@ secretGenerator:
 patches:
   - path: ingress.patch.yaml
 
-  # brain and body come from GHCR; the authentik image is public. spider-api/spider-worker are listed here too,
-  # ready for when the spider component above is included (a target naming a Deployment that does not exist
-  # yet is not an error, as long as the regex still matches at least one that does).
+  # brain and body come from GHCR; the authentik image is public. spider-api is listed here too, for the spider component
+  # above (a target naming a Deployment that does not exist yet is not an error, as long as the regex still matches one).
   - path: imagepullsecret.patch.yaml
     target:
       kind: Deployment
-      name: (brain|brain-worker|body|spider-api|spider-worker)
+      name: (brain|brain-worker|body|spider-api)
 
   # One Spot node, so every workload must tolerate the Spot taint and stay single-replica.
   - path: spot-toleration.patch.yaml

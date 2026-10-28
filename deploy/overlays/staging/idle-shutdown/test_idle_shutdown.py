@@ -102,7 +102,7 @@ class FakeOpener:
 
 class ScopeTests(unittest.TestCase):
     def test_the_checker_never_reads_authentik_pods(self):
-        self.assertEqual(ids.ACTIVITY_APPS, ("brain", "brain-worker", "spider-api", "spider-worker"))
+        self.assertEqual(ids.ACTIVITY_APPS, ("brain", "brain-worker", "spider-api"))
         self.assertFalse(any("authentik" in app for app in ids.ACTIVITY_APPS))
 
 
@@ -188,13 +188,12 @@ class ActivityTests(unittest.TestCase):
             JOB_WAITING,
         ]
 
-        self.assertEqual(ids.count_activity("spider-worker", lines), 4)
         self.assertEqual(ids.count_activity("spider-api", lines), 4)
 
     def test_spider_idle_polling_is_not_activity(self):
         lines = ["spider worker is waiting for tasks", '{"req":{"url":"/health"}}']
 
-        self.assertEqual(ids.count_activity("spider-worker", lines), 0)
+        self.assertEqual(ids.count_activity("spider-api", lines), 0)
 
 
 class DecideTests(unittest.TestCase):
@@ -255,7 +254,7 @@ class RunTests(unittest.TestCase):
     def test_an_expired_deploy_lock_does_not_block(self):
         old = (NOW - dt.timedelta(minutes=50)).isoformat()
         lock = (NOW - dt.timedelta(minutes=1)).isoformat()
-        kube = FakeKube({"brain": [], "spider-api": [], "spider-worker": []}, state={"last_active": old, "deploy_lock_until": lock})
+        kube = FakeKube({"brain": [], "spider-api": []}, state={"last_active": old, "deploy_lock_until": lock})
 
         self.assertEqual(ids.run(ids.Config.from_env(BASE_ENV), kube, FakePools(), NOW), "would-shutdown")
 
@@ -271,7 +270,7 @@ class RunTests(unittest.TestCase):
             self.assertEqual(pools.calls, [])
 
     def test_activity_is_recorded_and_no_shutdown_happens(self):
-        kube = FakeKube({"brain": ['{"msg":"request completed"}'], "spider-api": [], "spider-worker": []})
+        kube = FakeKube({"brain": ['{"msg":"request completed"}'], "spider-api": []})
         pools = FakePools()
 
         result = ids.run(ids.Config.from_env({**BASE_ENV, "SMART_SHUTDOWN_MODE": "enforce"}), kube, pools, NOW)
@@ -282,7 +281,7 @@ class RunTests(unittest.TestCase):
 
     def test_a_running_spider_job_keeps_the_pool_on(self):
         old = (NOW - dt.timedelta(minutes=50)).isoformat()
-        kube = FakeKube({"brain": [], "spider-api": [], "spider-worker": [JOB_HEARTBEAT]}, state={"last_active": old})
+        kube = FakeKube({"brain": [], "spider-api": [JOB_HEARTBEAT]}, state={"last_active": old})
         pools = FakePools()
 
         self.assertEqual(ids.run(ids.Config.from_env({**BASE_ENV, "SMART_SHUTDOWN_MODE": "enforce"}), kube, pools, NOW), "active")
@@ -290,7 +289,7 @@ class RunTests(unittest.TestCase):
 
     def test_dry_run_reports_the_shutdown_but_changes_nothing(self):
         old = (NOW - dt.timedelta(minutes=50)).isoformat()
-        kube = FakeKube({"brain": [], "spider-api": [], "spider-worker": []}, state={"last_active": old})
+        kube = FakeKube({"brain": [], "spider-api": []}, state={"last_active": old})
         pools = FakePools()
 
         self.assertEqual(ids.run(ids.Config.from_env(BASE_ENV), kube, pools, NOW), "would-shutdown")
@@ -298,14 +297,14 @@ class RunTests(unittest.TestCase):
 
     def test_enforce_scales_the_node_pool_to_zero_once_idle(self):
         old = (NOW - dt.timedelta(minutes=50)).isoformat()
-        kube = FakeKube({"brain": [], "spider-api": [], "spider-worker": []}, state={"last_active": old})
+        kube = FakeKube({"brain": [], "spider-api": []}, state={"last_active": old})
         pools = FakePools()
 
         self.assertEqual(ids.run(ids.Config.from_env({**BASE_ENV, "SMART_SHUTDOWN_MODE": "enforce"}), kube, pools, NOW), "shutdown")
         self.assertEqual(pools.calls, [("automate-linkedin-511215", "asia-south1-b", "staging-asia", "big-pool", 0)])
 
     def test_first_run_never_shuts_down(self):
-        kube = FakeKube({"brain": [], "spider-api": [], "spider-worker": []})
+        kube = FakeKube({"brain": [], "spider-api": []})
         pools = FakePools()
 
         self.assertEqual(ids.run(ids.Config.from_env({**BASE_ENV, "SMART_SHUTDOWN_MODE": "enforce"}), kube, pools, NOW), "idle")
