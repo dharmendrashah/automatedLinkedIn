@@ -2,6 +2,7 @@ import { Photo } from '@/components/photo'
 import { Card } from '@/components/ui/card'
 import { BadgeCheck, ExternalLink } from 'lucide-react'
 import { type ReactNode } from 'react'
+import { Link } from 'react-router'
 
 import type { AccountProfile } from '@automatedLinkedIn/contracts'
 
@@ -13,16 +14,16 @@ type Props = {
    profile: AccountProfile
    // What the app can do with this account (its status, and the buttons), shown under the profile's own details.
    strip: ReactNode
+   // The page of the account's connections, which the count of connections opens.
+   connectionsTo: string
 }
 
 // The top of the profile: cover, photo, name, headline, where, and how many follow and are connected.
-export const ProfileHeader = ({ profile, strip }: Props) => {
+export const ProfileHeader = ({ profile, strip, connectionsTo }: Props) => {
    const { name, verified, pronouns, headline, location, followers, connections } = profile
    const address = linkedInHref(profile.profileUrl)
-   const counts = [
-      followers === undefined ? undefined : `${fullCount(followers)} followers`,
-      connections === undefined ? undefined : `${connections} connections`,
-   ].filter(Boolean)
+   const followersText = followers === undefined ? undefined : `${fullCount(followers)} followers`
+   const connectionsText = connections === undefined ? undefined : `${connections} connections`
 
    return (
       <Card className="gap-0 overflow-hidden py-0">
@@ -60,7 +61,17 @@ export const ProfileHeader = ({ profile, strip }: Props) => {
                      </a>
                   ) : null}
                </p>
-               {counts.length > 0 ? <p className="text-primary text-sm font-medium">{counts.join(' · ')}</p> : null}
+               {followersText || connectionsText ? (
+                  <p className="text-primary text-sm font-medium">
+                     {followersText}
+                     {followersText && connectionsText ? ' · ' : null}
+                     {connectionsText ? (
+                        <Link to={connectionsTo} className="hover:underline">
+                           {connectionsText}
+                        </Link>
+                     ) : null}
+                  </p>
+               ) : null}
             </div>
          </div>
          <div className="border-t px-6 py-3">{strip}</div>
