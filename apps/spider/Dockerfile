@@ -71,5 +71,9 @@ WORKDIR /app
 COPY --from=worker-build /out/package.json ./
 COPY --from=worker-build /out/node_modules ./node_modules
 COPY --from=worker-build /repo/apps/spider/dist ./dist
+# The api stage has these two lines; without them the worker answers every run with the build "unknown".
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+ENV GIT_SHA=${GIT_SHA} BUILD_TIME=${BUILD_TIME}
 USER node
 CMD ["node", "dist/src/worker.js"]
