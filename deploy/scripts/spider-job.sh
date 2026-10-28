@@ -55,15 +55,32 @@ printf '%s' "$key" \
 
 pulumi up --yes
 
-state="$(gcloud run jobs describe "$JOB" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" \
-  --format='value(terminalCondition.state)')"
-image="$(gcloud run jobs describe "$JOB" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" \
-  --format='value(template.template.containers[0].image)')"
+# The job reports Ready a moment after the update, so the check is repeated for a few minutes.
+JOB_CHECK_TRIES="${JOB_CHECK_TRIES:-30}"
+JOB_CHECK_WAIT="${JOB_CHECK_WAIT:-10}"
 
-if [ "$state" != "CONDITION_SUCCEEDED" ]; then
-  echo "the spider job is not ready ($state)" >&2
+# Reads one value from the JSON the job describes as: the Ready condition's status, or the image of the job's container.
+json_value() {
+  python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"
+}
+READY='next((c["status"] for c in d.get("status", {}).get("conditions", []) if c.get("type") == "Ready"), "")'
+IMAGE='d["spec"]["template"]["spec"]["template"]["spec"]["containers"][0]["image"]'
+
+ready=""
+for _ in $(seq 1 "$JOB_CHECK_TRIES"); do
+  job="$(gcloud run jobs describe "$JOB" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format=json)"
+  ready="$(printf '%s' "$job" | json_value "$READY")"
+  if [ "$ready" = True ]; then
+    break
+  fi
+  sleep "$JOB_CHECK_WAIT"
+done
+
+if [ "$ready" != True ]; then
+  echo "the spider job is not ready (Ready=$ready)" >&2
   exit 1
 fi
+image="$(printf '%s' "$job" | json_value "$IMAGE")"
 if [ "${image##*:}" != "$TAG" ]; then
   echo "the spider job runs ${image##*:}, not $TAG" >&2
   exit 1

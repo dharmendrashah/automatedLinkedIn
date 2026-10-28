@@ -34,10 +34,13 @@ if [ "$1" = secrets ] && [ "$2" = versions ] && [ "$3" = add ]; then
 fi
 if [ "$1" = run ] && [ "$2" = jobs ] && [ "$3" = describe ]; then
   echo "gcloud run jobs describe" >> "$CALLS"
-  case "$*" in
-    *terminalCondition*) echo "$JOB_STATE" ;;
-    *containers*) echo "$JOB_IMAGE" ;;
-  esac
+  # Reads a counter file, so a test can say how many checks report not ready before the job is ready.
+  tries_file="$JOB_DIR/describe-count"
+  count="$(cat "$tries_file" 2>/dev/null || echo 0)"
+  echo $((count + 1)) > "$tries_file"
+  ready="$JOB_READY"
+  if [ "$count" -lt "${JOB_NOT_READY_TIMES:-0}" ]; then ready=False; fi
+  printf '%s' "{\"status\":{\"conditions\":[{\"type\":\"Ready\",\"status\":\"$ready\"}]},\"spec\":{\"template\":{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"image\":\"$JOB_IMAGE\"}]}}}}}}"
   exit 0
 fi
 echo "unexpected gcloud $*" >&2
@@ -55,7 +58,8 @@ EOF
 run_script() {
   local dir="$1" state="$2" image="$3"
   : > "$dir/calls.log"
-  env PATH="$dir/bin:$PATH" CALLS="$dir/calls.log" SECRET_DIR="$dir/log" JOB_STATE="$state" JOB_IMAGE="$image" \
+  env PATH="$dir/bin:$PATH" CALLS="$dir/calls.log" SECRET_DIR="$dir/log" JOB_DIR="$dir" JOB_READY="$state" JOB_IMAGE="$image" \
+    JOB_NOT_READY_TIMES="${NOT_READY_TIMES:-0}" JOB_CHECK_TRIES=3 JOB_CHECK_WAIT=0 \
     GCP_PROJECT_ID=test-project GCP_REGION=asia-south1 SECRETS_FILE="$dir/secrets.env" \
     PULUMI_CONFIG_PASSPHRASE=unused \
     bash "$script" sha-abc1234 > "$dir/out.log" 2>&1
@@ -63,7 +67,7 @@ run_script() {
 
 # 1. The order: the containers and the address first, then the values, then the full apply, then the check.
 dir="$(setup order)"
-run_script "$dir" CONDITION_SUCCEEDED "asia-south1-docker.pkg.dev/test-project/spider/spider-worker:sha-abc1234" \
+run_script "$dir" True "asia-south1-docker.pkg.dev/test-project/spider/spider-worker:sha-abc1234" \
   || { fail "order: the script failed"; cat "$dir/out.log" >&2; }
 expected_order="pulumi login gs://test-project-pulumi-state
 pulumi stack select staging
@@ -73,7 +77,6 @@ pulumi stack output rabbitmqInternalAddress --stack staging
 gcloud secrets versions add spider-worker-rabbitmq-url
 gcloud secrets versions add spider-worker-linkedin-cred-enc-key
 pulumi up --yes
-gcloud run jobs describe
 gcloud run jobs describe"
 if [ "$(cat "$dir/calls.log")" != "$expected_order" ]; then
   fail "order: calls were"
@@ -93,10 +96,15 @@ if grep -q "s3cret-pass\|cHFhWkdDbEgva3F4Tkxt" "$dir/calls.log"; then
   fail "args: a secret value reached a command line"
 fi
 
-# 4. The secrets file can be given relative to the repository root, as the workflow gives it.
+# 4. A job that takes a moment to become ready is checked again, and passes once it is ready.
+dir="$(setup slow-ready)"
+NOT_READY_TIMES=2 run_script "$dir" True "asia-south1-docker.pkg.dev/test-project/spider/spider-worker:sha-abc1234" \
+  || { fail "slow-ready: the deploy failed for a job that became ready"; cat "$dir/out.log" >&2; }
+
+# 5. The secrets file can be given relative to the repository root, as the workflow gives it.
 dir="$(setup relative)"
 : > "$dir/calls.log"
-if ! (cd "$dir" && env PATH="$dir/bin:$PATH" CALLS="$dir/calls.log" SECRET_DIR="$dir/log" JOB_STATE=CONDITION_SUCCEEDED \
+if ! (cd "$dir" && env PATH="$dir/bin:$PATH" CALLS="$dir/calls.log" SECRET_DIR="$dir/log" JOB_DIR="$dir" JOB_READY=True \
   JOB_IMAGE="asia-south1-docker.pkg.dev/test-project/spider/spider-worker:sha-abc1234" GCP_PROJECT_ID=test-project \
   GCP_REGION=asia-south1 SECRETS_FILE=secrets.env PULUMI_CONFIG_PASSPHRASE=unused bash "$script" sha-abc1234 > out.log 2>&1); then
   fail "relative: the script failed with a relative secrets path"
@@ -106,16 +114,16 @@ if [ "$(cat "$dir/log/spider-worker-linkedin-cred-enc-key" 2>/dev/null)" != "cHF
   fail "relative: the key was not read from the relative path"
 fi
 
-# 5. A job that is not ready fails the deploy.
+# 6. A job that is not ready fails the deploy.
 dir="$(setup not-ready)"
-if run_script "$dir" CONDITION_RECONCILING "asia-south1-docker.pkg.dev/test-project/spider/spider-worker:sha-abc1234"; then
+if run_script "$dir" False "asia-south1-docker.pkg.dev/test-project/spider/spider-worker:sha-abc1234"; then
   fail "not-ready: the deploy passed with a job that is not ready"
 fi
 grep -q "not ready" "$dir/out.log" || fail "not-ready: no message says why"
 
-# 6. A job on another image fails the deploy, so an old image is never reported as the new one.
+# 7. A job on another image fails the deploy, so an old image is never reported as the new one.
 dir="$(setup wrong-image)"
-if run_script "$dir" CONDITION_SUCCEEDED "asia-south1-docker.pkg.dev/test-project/spider/spider-worker:sha-0000000"; then
+if run_script "$dir" True "asia-south1-docker.pkg.dev/test-project/spider/spider-worker:sha-0000000"; then
   fail "wrong-image: the deploy passed with another image"
 fi
 grep -q "not sha-abc1234" "$dir/out.log" || fail "wrong-image: no message says which image it runs"
