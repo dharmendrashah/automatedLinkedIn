@@ -5,7 +5,8 @@ logged real activity for IDLE_MINUTES, the staging node pool is scaled to zero, 
 
 What counts as activity:
   brain, brain-worker         any request, result or job line, except health checks and known retry noise
-  spider-api, spider-worker   only the job lines "spider job started / still running / waiting / finished"
+  spider-api                  only the job lines "spider job started / still running / waiting / finished"
+  Cloud Run spider job        every execution that has not completed yet (CLOUD_RUN_JOB, .plan/spider-worker-cloud-run.md)
 Authentik pods are neither read nor waited for: sign-ins only count once they reach brain.
 
 The checker does nothing while a deploy holds the lock (deploy_lock_until in the state ConfigMap), and it only acts
@@ -29,6 +30,7 @@ Exit status is 0 after a completed run and 1 on any error. Errors never shut any
 import datetime as dt
 import json
 import os
+import re
 import ssl
 import sys
 import urllib.error
@@ -39,6 +41,11 @@ from typing import Optional
 
 ACTIVITY_APPS = ("brain", "brain-worker", "spider-api", "spider-worker")
 SPIDER_APPS = ("spider-api", "spider-worker")
+# A task may run for 30 minutes, so an execution still running is at most this old; older pages are not read.
+RUN_WINDOW_MINUTES = 60
+RUN_PAGE_SIZE = 100
+CLOUD_RUN_BASE = "https://run.googleapis.com/v2"
+JOB_NAME = re.compile(r"^projects/[^/]+/locations/[^/]+/jobs/[^/]+$")
 JOB_MARKERS = ("spider job started", "spider job still running", "spider job waiting", "spider job finished")
 NOISE_MARKERS = (
     "/health",
@@ -94,6 +101,7 @@ class Config:
     cluster: str
     location: str
     node_pool: str
+    cloud_run_job: str
 
     @classmethod
     def from_env(cls, env: dict) -> "Config":
@@ -115,9 +123,12 @@ class Config:
             cluster=env.get("GKE_CLUSTER", "").strip(),
             location=env.get("GKE_LOCATION", "").strip(),
             node_pool=env.get("GKE_NODE_POOL", "").strip(),
+            cloud_run_job=env.get("CLOUD_RUN_JOB", "").strip(),
         )
         if not config.node_pool:
             raise ConfigError("GKE_NODE_POOL is required")
+        if config.cloud_run_job and not JOB_NAME.match(config.cloud_run_job):
+            raise ConfigError("CLOUD_RUN_JOB must be projects/<project>/locations/<region>/jobs/<job>")
         if config.mode == "enforce" and not all([config.project, config.cluster, config.location]):
             raise ConfigError("enforce mode needs GCP_PROJECT, GKE_CLUSTER and GKE_LOCATION")
         return config
@@ -279,7 +290,52 @@ class NodePools:
             raise RuntimeError(f"resizing node pool {node_pool} to {count} failed with HTTP {status}: {raw[:200]!r}")
 
 
-def run(config: Config, kube, pools, now: dt.datetime) -> str:
+def older_than(item: dict, moment: dt.datetime) -> bool:
+    created = item.get("createTime")
+
+    # An execution without a time is treated as recent, so its page is read.
+    return bool(created) and dt.datetime.fromisoformat(created) < moment
+
+
+class CloudRunExecutions:
+    """Counts the spider job's executions that have not completed, with the checker's own Workload Identity token."""
+
+    def __init__(self, http: HttpClient, token: str, base: str = CLOUD_RUN_BASE) -> None:
+        self.http = http
+        self.token = token
+        self.base = base
+
+    def running(self, job: str, now: dt.datetime) -> int:
+        window_start = now - dt.timedelta(minutes=RUN_WINDOW_MINUTES)
+        running = 0
+        page_token = None
+
+        while True:
+            query = {"pageSize": RUN_PAGE_SIZE}
+            if page_token:
+                query["pageToken"] = page_token
+            status, raw = self.http.request(
+                "GET",
+                f"{self.base}/{job}/executions?{urllib.parse.urlencode(query)}",
+                {"Authorization": f"Bearer {self.token}", "Accept": "application/json"},
+            )
+            # No job, so no execution can be running.
+            if status == 404:
+                return 0
+            if status != 200:
+                raise RuntimeError(f"listing executions of the spider job failed with HTTP {status}")
+
+            body = json.loads(raw)
+            items = body.get("executions", [])
+            running += sum(1 for item in items if "completionTime" not in item)
+            page_token = body.get("nextPageToken")
+
+            # Newest first: once a page is all older than the window, no later page can hold a running execution.
+            if not page_token or all(older_than(item, window_start) for item in items):
+                return running
+
+
+def run(config: Config, kube, pools, now: dt.datetime, runs=None) -> str:
     if not config.enabled:
         return "disabled"
 
@@ -299,6 +355,9 @@ def run(config: Config, kube, pools, now: dt.datetime) -> str:
     except PodNotReady:
         # A service is still starting (for example brain running its migrations). Its quiet logs are not idleness.
         return "pods-starting"
+
+    if config.cloud_run_job:
+        activity += runs.running(config.cloud_run_job, now)
 
     last_active = parse_time(kube.read_state(config.namespace, LAST_ACTIVE_KEY))
     decision = decide(now, last_active, activity, config.idle_minutes)
@@ -339,7 +398,13 @@ def main() -> int:
         pools = None
         if config.mode == "enforce":
             pools = NodePools(HttpClient(urllib.request.build_opener()), metadata_token(HttpClient(urllib.request.build_opener())))
-        result = run(config, kube, pools, dt.datetime.now(dt.timezone.utc))
+        runs = None
+        if config.cloud_run_job:
+            runs = CloudRunExecutions(
+                HttpClient(urllib.request.build_opener()),
+                metadata_token(HttpClient(urllib.request.build_opener())),
+            )
+        result = run(config, kube, pools, dt.datetime.now(dt.timezone.utc), runs)
         print(f"smart shutdown ({config.mode}, idle limit {config.idle_minutes} min): {result}", flush=True)
         return 0
     except (ConfigError, RuntimeError, OSError, ValueError, KeyError) as error:
