@@ -11,9 +11,10 @@ export const POST_BLOCK =
    '[data-view-name="feed-full-update"], [componentkey^="expanded"][id$="FeedType_MAIN_FEED_RELEVANCE"]'
 
 // What a click must never land on, even inside a link: buttons and menus, and the Follow actions that sit inside the
-// whole-row links of the recommendations.
+// whole-row links of the recommendations. The selection checkbox of a message row sits inside the row's link: a click on its
+// label ticks the row instead of opening it (seen on 2026-10-28; the label is not an input).
 export const NEVER_CLICK =
-   'button, [role="button"], [role="menuitem"], input, select, textarea, summary, [data-view-name="edge-creation-follow-action"], [data-view-name="relationship-building-button"]'
+   'button, [role="button"], [role="menuitem"], input, select, textarea, summary, [data-view-name="edge-creation-follow-action"], [data-view-name="relationship-building-button"], [class*="msg-selectable-entity__checkbox"]'
 
 // The windows that open over the feed (a post's image opens one, with the post and its comments beside it).
 // The feed's video players hold hidden `role="dialog"` panels, so only an open one counts; the post window is a native `<dialog open>`.

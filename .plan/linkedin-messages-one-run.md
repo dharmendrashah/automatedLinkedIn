@@ -27,7 +27,11 @@ Requested by the user on 2026-10-29 (not yet locked as a plan):
 
 ## Proposed approach (defaults, open for change)
 
+
+1. **Click (done 2026-10-29, see "Confirmed cause").** Never click the row's checkbox or any element that selects (checkbox, label of a checkbox, the selection area). Click the row's text area, not a random point of the whole link. If a click does not open the conversation, do not reload the page; press the same row once more from the list, then go on with the next row.
+
 1. **Click.** Never click the row's checkbox or any element that selects (checkbox, label of a checkbox, the selection area). Click the row's text area, not a random point of the whole link. If a click does not open the conversation, do not reload the page; press the same row once more from the list, then go on with the next row.
+
 2. **Whole inbox in one run.** No batch of 50 for the first read. The first read goes to the end of the list. Its time limit is raised to fit the inbox (about 30 s a conversation, so the limit is set from the number of rows seen), and the budget rule (no new conversation after the budget) keeps the same meaning.
 3. **New messages only.** After the first read, the daily sweep and every other run start at the top, leave rows whose hash brain knows alone (the sweep passes `known` today it does not), read changed rows, and stop after 3 known rows in a row (as now). For a changed conversation, the thread is scrolled only until it reaches the newest message brain already holds (its `linkedInId`), not to the first message.
 4. **Speed.** Shorter pauses between conversations for incremental runs. The first full read keeps the human pacing.
@@ -38,6 +42,14 @@ Requested by the user on 2026-10-29 (not yet locked as a plan):
 - Whole inbox in one run: yes (Q1).
 - Daily sweep leaves rows brain knows alone: yes. Done in brain (`messagesInput`, sweep branch passes `known`; tests updated).
 - Changed conversation: only the new messages (Q2).
+- Live read with snapshots on tripti.verma to confirm the checkbox markup: yes (Q4). Run by the user with `pnpm record` on 2026-10-29 (run `966875f2`, DONE, 633.7 s): 18 conversations, the whole list ("Everything the list holds was gone through: Yes"), 3 "The page stayed on the conversation before" reloads (rows 2, 6 and 6 again, plus one "did not open" on row 6). Limit was 50, so one run covered the inbox.
+
+## Confirmed cause of the wrong click (2026-10-29)
+
+- Each row holds `div.msg-selectable-entity__checkbox-container` with an `input[type=checkbox]` and a `label.msg-selectable-entity__checkbox-label`, inside the row's link (checked in the kept `files/inbox.html`: all 10 checkboxes of the page are inside a row link).
+- `NEVER_CLICK` named `input` but not the label, so a click on the label ticked the row and the page did not open the conversation.
+- Real-browser probe on the kept inbox page (200 click spots on the first three rows): before the fix 20 of 200 spots were on the checkbox; after the fix 0 of 200, all 200 on the row's text.
+- Fix: `NEVER_CLICK` takes `[class*="msg-selectable-entity__checkbox"]` (PR, branch `fix/messages-row-checkbox-click`); regression test in `markup.unit.test.ts` (fails without the fix).
 - Live read with snapshots on tripti.verma to confirm the checkbox markup: yes (Q4). Not run yet; it needs the devtools, which are interactive, so it is the next step.
 
 ## Open questions (answered above; Q3 pace still open)
