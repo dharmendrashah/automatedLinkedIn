@@ -3,6 +3,7 @@ import { type Prisma } from 'generated/prisma/client'
 import { type TaskResult, type TaskTrigger } from '@automatedLinkedIn/contracts'
 
 import { linkedInBrowseHooks } from './linkedInBrowse.hooks'
+import { CONNECTIONS_TASK, linkedInConnectionHooks } from './linkedInConnection.hooks'
 import { INVITATIONS_TASK, linkedInInvitationHooks } from './linkedInInvitation.hooks'
 import { linkedInLoginHooks } from './linkedInLogin.hooks'
 import { MESSAGES_TASK, linkedInMessagesHooks } from './linkedInMessages.hooks'
@@ -47,5 +48,6 @@ export const TASK_HOOKS: Record<string, TaskHooks> = {
    [VIEW_COMPANY_TASK]: linkedInVisitHooks,
    [REPLY_TASK]: linkedInReplyHooks,
    [INVITATIONS_TASK]: linkedInInvitationHooks,
+   [CONNECTIONS_TASK]: linkedInConnectionHooks,
    [POST_TASK]: linkedInPostHooks,
 }

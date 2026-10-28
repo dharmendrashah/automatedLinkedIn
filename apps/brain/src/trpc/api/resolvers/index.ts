@@ -1,5 +1,6 @@
 export { accountProfile } from './accountProfile/accountProfile'
 export { browse } from './browse/browse'
+export { connections } from './connections/connections'
 export { icp } from './icp/icp'
 export { jobs } from './jobs/jobs'
 export { label } from './label/label'

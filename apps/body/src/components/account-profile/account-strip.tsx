@@ -1,7 +1,8 @@
 import { TestButton } from '@/components/test-button'
 import { Button } from '@/components/ui/button'
 import { timeAgo } from '@/lib/time-ago'
-import { FileText, ScanEye, ScanSearch, Settings2 } from 'lucide-react'
+import { FileText, ScanEye, ScanSearch, Settings2, Users } from 'lucide-react'
+import { Link } from 'react-router'
 
 import { type Account } from '../accounts/types'
 
@@ -19,6 +20,8 @@ type Props = {
    // Why the profile cannot be read now (the server's sentence), or undefined when it can; and whether a read is going on.
    readBlocker: string | undefined
    reading: boolean
+   // The page of the account's connections.
+   connectionsTo: string
    onTestLogin: () => void
    onVisit: () => void
    onRead: () => void
@@ -35,6 +38,7 @@ export const AccountStrip = ({
    visiting,
    readBlocker,
    reading,
+   connectionsTo,
    onTestLogin,
    onVisit,
    onRead,
@@ -67,6 +71,12 @@ export const AccountStrip = ({
             busy={reading}
             onClick={onRead}
          />
+         <Button asChild variant="outline" size="sm">
+            <Link to={connectionsTo}>
+               <Users />
+               Connections
+            </Link>
+         </Button>
          <Button variant="outline" size="sm" onClick={onSettings}>
             <Settings2 />
             Account settings

@@ -47,4 +47,8 @@ Open questions: none.
 
 ## Outcome
 
+<<<<<<< HEAD
+Filled in when done.
+=======
 Shipped fixes 1, 2 and 4 as planned; lint, ts:check, unit tests and build pass. Not run on staging yet. Follow-up: fix 3 (feed reader for the layout without `data-view-name`) after new recordings.
+>>>>>>> fix/spider-browse-oom
