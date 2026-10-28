@@ -1,0 +1,16 @@
+{
+   "name": "@automatedLinkedIn/cloud-run",
+   "private": true,
+   "main": "bin/index.js",
+   "scripts": {
+      "build": "tsc -p tsconfig.json"
+   },
+   "dependencies": {
+      "@pulumi/gcp": "10.2.0",
+      "@pulumi/pulumi": "3.272.0"
+   },
+   "devDependencies": {
+      "@types/node": "26.6.5",
+      "typescript": "6.0.3"
+   }
+}

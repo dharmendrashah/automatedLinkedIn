@@ -1,0 +1,9 @@
+encryptionsalt: v1:E2OkxIzPJJs=:v1:jOaIKPzIY3FwReQ1:sx0yYNneQa7Oqm4ljIumgX9tPdbA5A==
+config:
+  gcp:project: automate-linkedin-511215
+  gcp:region: asia-south1
+  automatedlinkedin-cloud-run:bucket: automate-linkedin-511215-spider
+  automatedlinkedin-cloud-run:allowedHosts: linkedin.com,deviceandbrowserinfo.com,pixelscan.net
+  automatedlinkedin-cloud-run:robotsExemptHosts: linkedin.com
+  automatedlinkedin-cloud-run:rabbitmqAddress: 10.160.0.200
+  automatedlinkedin-cloud-run:brainServiceAccount: brain-recording-links@automate-linkedin-511215.iam.gserviceaccount.com
