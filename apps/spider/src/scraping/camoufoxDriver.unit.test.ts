@@ -240,6 +240,12 @@ describe('CamoufoxDriver', () => {
       expect(mocks.camoufox).toHaveBeenCalledWith(expect.objectContaining(prefs))
    })
 
+   it('should keep the browser open on SIGTERM, so a deploy does not cut off the run in progress', async () => {
+      await driver.open()
+
+      expect(mocks.camoufox).toHaveBeenCalledWith(expect.objectContaining({ handleSIGTERM: false }))
+   })
+
    it('should not let a video play by itself, which ran the worker out of memory on a feed', async () => {
       await driver.open()
 

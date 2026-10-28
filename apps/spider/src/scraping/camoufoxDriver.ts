@@ -73,6 +73,9 @@ export const buildCamoufoxOptions = (
 ) => ({
    headless,
    humanize: HUMANIZE_MAX_S,
+   // Playwright closes every browser the moment the process gets SIGTERM, which cut a run in progress off at a deploy (staging,
+   // 2026-10-28) while the worker waits up to SPIDER_SHUTDOWN_GRACE_MS for it. The worker's own handler decides when to stop.
+   handleSIGTERM: false,
    // A copy: Camoufox writes its own prefs into this object.
    firefox_user_prefs: { ...MEMORY_PREFS },
    fingerprint,
