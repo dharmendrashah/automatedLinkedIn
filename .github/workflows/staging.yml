@@ -38,9 +38,11 @@ on:
       - 'LICENSE'
       - '**/*.example.env'
 
+# Runs queue up instead of cancelling each other: a cancelled deploy can leave the Pulumi stack locked (spider-job.sh clears a
+# stale lock, but a run that is queued is cleaner than one that is killed in the middle of an apply).
 concurrency:
   group: staging-images
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -156,7 +158,7 @@ jobs:
   deploy:
     needs: publish
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     environment: staging
     permissions:
       contents: read
@@ -278,7 +280,7 @@ jobs:
 
       - name: Install the Pulumi CLI
         run: |
-          curl -fsSL -o "$RUNNER_TEMP/pulumi.tar.gz" https://get.pulumi.com/releases/sdk/pulumi-v3.272.0-linux-x64.tar.gz
+          curl -fsSL --retry 5 --retry-delay 10 -o "$RUNNER_TEMP/pulumi.tar.gz" https://get.pulumi.com/releases/sdk/pulumi-v3.272.0-linux-x64.tar.gz
           tar -xzf "$RUNNER_TEMP/pulumi.tar.gz" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/pulumi" >> "$GITHUB_PATH"
 
