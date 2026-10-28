@@ -74,6 +74,15 @@ Requested by the user on 2026-10-29 (not yet locked as a plan):
 - Real browser on the captured inbox page (structure only in the fixture).
 - One live run on tripti.verma after the deploy: DONE, time per conversation recorded.
 
+## Built (2026-10-29, branch `feat/messages-whole-inbox-new-only`, stacked on #126 and #127)
+
+- Whole inbox in one run: brain asks a spider of version 4 for `limit 500` in the first read (no batches, no daily cap for that read); the spider's budget is 90 minutes and its time limit 100 minutes. An older spider keeps batches of 50. The resume place (`messagesResumeSkip`) stays as the fallback for a run that stops at the budget.
+- Daily sweep leaves known rows alone (#126), and a sweep and every later read also send `latest`.
+- New-only: brain sends `latest`, the newest stored message of each of the 100 known conversations, as two short keys (`shortKey` in `packages/contracts/src/messages.ts`, FNV-1a, 8 hex characters; the same in brain and the spider). The spider reads a changed conversation only down to that message: the messages after it are the new ones, and the conversation is not marked complete. A message that is no longer on the page makes it read to the top, as before.
+- Input: `latest` (strict, max 100, version 4 only). Brain sends it only when the catalog announces version 4, so an older spider never gets it.
+- Tests: contracts `shortKey` (3); spider read (3 new: only the new messages, none when the newest is still the newest, full read when the known message is gone; budget 90 minutes); brain input for v4, later reads, sweep and an older spider. Real browser: `read.e2e.test.ts` passes with `--testTimeout=120000` (its exact-result assertion was out of date and is now `toMatchObject`).
+- Not done yet: the pace (Q3, not asked). Not run live: a whole-inbox read and a new-only read after the deploy of version 4. Risk: a run of an hour or more in one browser (the `linkedin-browse` out-of-memory kills on staging were about 6 minutes in; watch the memory of the first long messages run).
+
 ## Outcome
 
 Filled in when done.

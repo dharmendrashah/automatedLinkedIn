@@ -13,6 +13,19 @@ export const MESSAGES_FINISHED_LABEL = 'Everything the list holds was gone throu
 // keeps it per conversation and hands it back in `known`, so the same page always gives the same value.
 export const ROW_HASH_PATTERN = /^[0-9a-f]{8}$/
 
+// The same 8 hex characters for the same text in every package (FNV-1a, 32 bit): the id of a conversation or a message, handed to
+// the spider as a key so a list of them stays short. Two texts can share a key; among the newest hundred that is not a concern.
+export const shortKey = (text: string) => {
+   let hash = 0x811c9dc5
+
+   for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index)
+      hash = Math.imul(hash, 0x01000193)
+   }
+
+   return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
 const personSchema = z.strictObject({
    name: z.string().min(1).max(300),
    profileUrl: z.string().max(500).optional(),

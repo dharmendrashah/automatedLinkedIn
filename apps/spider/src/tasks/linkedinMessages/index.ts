@@ -18,7 +18,7 @@ type Options = {
 export const createLinkedinMessages = ({ baseUrl }: Options) =>
    defineTask({
       name: TASK_NAME,
-      version: 3,
+      version: 4,
       title: 'LinkedIn messages',
       description:
          'Opens the conversations of the account, newest first, and reads every message with its sender into a file of the run. Opening a conversation marks it read.',
@@ -27,7 +27,7 @@ export const createLinkedinMessages = ({ baseUrl }: Options) =>
             .number()
             .int()
             .min(1)
-            .max(50)
+            .max(500)
             .default(50)
             .describe('How many conversations to read, newest activity first.'),
          skip: z
@@ -55,6 +55,18 @@ export const createLinkedinMessages = ({ baseUrl }: Options) =>
             .max(20)
             .optional()
             .describe('Stop after this many rows in a row that were left alone, as everything below is older.'),
+         latest: z
+            .array(
+               z.strictObject({
+                  conversation: z.string().regex(ROW_HASH_PATTERN),
+                  message: z.string().regex(ROW_HASH_PATTERN),
+               })
+            )
+            .max(100)
+            .default([])
+            .describe(
+               'The newest message the platform holds of some known conversations (short keys): a changed one is read only down to it.'
+            ),
       }),
       needs: {
          proxy: 'required',
@@ -87,8 +99,8 @@ export const createLinkedinMessages = ({ baseUrl }: Options) =>
          cooldownMs: 0,
          oneAtATime: 'account',
       },
-      // The reading begins no new conversation after 20 minutes (see read.ts); the rest is room for the one in progress.
-      limits: { timeoutMs: 25 * 60 * 1000 },
+      // The reading begins no new conversation after 90 minutes (see read.ts); the rest is room for the one in progress.
+      limits: { timeoutMs: 100 * 60 * 1000 },
       run: async (context, input) => {
          // A failure of the task is an answer, not a crash: a crash is run again, and a reading of twenty minutes must not be.
          try {

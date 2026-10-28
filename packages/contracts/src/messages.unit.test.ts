@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { type MessagesFile, messagesFileSchema } from './messages'
+import { type MessagesFile, messagesFileSchema, shortKey } from './messages'
 
 const file: MessagesFile = {
    contract: 1,
@@ -166,5 +166,22 @@ describe('messagesFileSchema', () => {
       expect(messagesFileSchema.safeParse(withMessage({ direction: 'BOTH' })).success).toBe(false)
       expect(messagesFileSchema.safeParse(withMessage({ date: '25/01/2024' })).success).toBe(false)
       expect(messagesFileSchema.safeParse(withMessage({ time: '5:18 PM' })).success).toBe(false)
+   })
+})
+
+describe('shortKey', () => {
+   it('gives the same 8 hex characters for the same text, in every package', () => {
+      expect(shortKey('urn:li:msg_message:(a,b)')).toMatch(/^[0-9a-f]{8}$/)
+      expect(shortKey('urn:li:msg_message:(a,b)')).toBe(shortKey('urn:li:msg_message:(a,b)'))
+   })
+
+   it('gives different values for different texts of a feed of messages', () => {
+      const ids = Array.from({ length: 200 }, (_, n) => `2-${n}-conversation-id`)
+
+      expect(new Set(ids.map(shortKey)).size).toBe(ids.length)
+   })
+
+   it('gives a value that does not change with the release, so a stored key still matches', () => {
+      expect(shortKey('')).toBe('811c9dc5')
    })
 })
