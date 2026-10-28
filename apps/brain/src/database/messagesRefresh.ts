@@ -1,3 +1,5 @@
+import { shortKey } from '@automatedLinkedIn/contracts'
+
 import { MESSAGES_TASK } from './linkedInMessages.hooks'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
@@ -14,6 +16,9 @@ const SWEEP = 20
 const SWEEP_EVERY_MS = 24 * 60 * 60 * 1000
 // The version of the messages task that takes `known` and `stopAfterKnown`; an older spider refuses them.
 const ROW_READ_VERSION = 3
+// The version that takes `latest` and a whole inbox in one run (its limit goes up to WHOLE_INBOX).
+const WHOLE_READ_VERSION = 4
+const WHOLE_INBOX = 500
 
 export type MessagesAccount = {
    id: string
@@ -22,11 +27,11 @@ export type MessagesAccount = {
    messagesSweptAt: Date | null
 }
 
-const spiderReadsRows = async () =>
-   ((await TaskService.catalog()).find(({ task }) => task === MESSAGES_TASK)?.version ?? 0) >= ROW_READ_VERSION
+const spiderVersion = async () => (await TaskService.catalog()).find(({ task }) => task === MESSAGES_TASK)?.version ?? 0
 
-// What brain has of the account's newest conversations, by the hash of their rows.
-const knownRows = async (accountId: string) => {
+// What brain has of the account's newest conversations: the hash of each row, and the short keys of the conversation and of its
+// newest message (the spider reads a changed one only down to that message).
+const knownAndLatest = async (accountId: string) => {
    const rows = await PrismaService.client.linkedInConversation.findMany({
       where: {
          accountId,
@@ -39,10 +44,30 @@ const knownRows = async (accountId: string) => {
          },
       },
       take: KNOWN,
-      select: { rowHash: true },
+      select: {
+         rowHash: true,
+         linkedInId: true,
+         messages: {
+            orderBy: [{ sentAt: 'desc' }, { position: 'desc' }],
+            take: 1,
+            select: { linkedInId: true },
+         },
+      },
    })
 
-   return rows.flatMap(({ rowHash }) => (rowHash ? [rowHash] : []))
+   return {
+      known: rows.flatMap(({ rowHash }) => (rowHash ? [rowHash] : [])),
+      latest: rows.flatMap(({ linkedInId, messages }) =>
+         messages?.[0]
+            ? [
+                 {
+                    conversation: shortKey(linkedInId),
+                    message: shortKey(messages[0].linkedInId),
+                 },
+              ]
+            : []
+      ),
+   }
 }
 
 // A sweep is due once a day for an account whose first read is done and that has nothing pending.
@@ -51,19 +76,25 @@ export const sweepDue = (account: MessagesAccount, now: Date) =>
    account.messagesResumeSkip === null &&
    (account.messagesSweptAt === null || now.getTime() - account.messagesSweptAt.getTime() >= SWEEP_EVERY_MS)
 
-// The first read (no `messagesBackfilledAt` yet) goes on from the place it reached, through the whole inbox, leaving the rows brain
-// has alone. Later reads start at the top and stop at the first rows they know; one left unfinished goes on from where it stopped.
+// The first read goes on from the place it reached, through the whole inbox, leaving the rows brain has alone: one run for a spider
+// that takes WHOLE_INBOX conversations, batches for an older one. Later reads start at the top and stop at the first rows they know;
+// one left unfinished goes on from where it stopped.
 export const messagesInput = async (account: MessagesAccount, { sweep = false }: { sweep?: boolean } = {}) => {
    const first = account.messagesBackfilledAt === null
+   const version = await spiderVersion()
 
-   if (!(await spiderReadsRows())) {
+   if (version < ROW_READ_VERSION) {
       return { limit: first ? BATCH : SWEEP }
    }
+
+   const whole = version >= WHOLE_READ_VERSION
+   const { known, latest } = await knownAndLatest(account.id)
 
    if (sweep) {
       return {
          limit: SWEEP,
-         known: await knownRows(account.id),
+         known,
+         ...(whole && { latest }),
       }
    }
 
@@ -71,8 +102,9 @@ export const messagesInput = async (account: MessagesAccount, { sweep = false }:
 
    return {
       ...(skip > 0 && { skip }),
-      limit: BATCH,
-      known: await knownRows(account.id),
+      limit: first && whole ? WHOLE_INBOX : BATCH,
+      known,
+      ...(whole && { latest }),
       ...(!first && { stopAfterKnown: STOP_AFTER_KNOWN }),
    }
 }

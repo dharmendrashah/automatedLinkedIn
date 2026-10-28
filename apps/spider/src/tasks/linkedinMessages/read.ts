@@ -1,4 +1,4 @@
-import { type Conversation, type MessagesFile, messagesFileSchema } from '@automatedLinkedIn/contracts'
+import { type Conversation, type MessagesFile, messagesFileSchema, shortKey } from '@automatedLinkedIn/contracts'
 
 import { StepFailed } from '../../browsing/errors'
 import { handsOf } from '../../browsing/hands'
@@ -32,6 +32,9 @@ export type MessagesInput = {
    known: string[]
    // Stop after this many rows in a row that were left alone: the list is newest first, so what is below did not change either.
    stopAfterKnown?: number
+   // The newest message brain holds of some of the known conversations, by their short keys (`shortKey` of the conversation id and
+   // of the message id). A conversation of the list that has one is read only down to that message: the messages after it are new.
+   latest?: Array<{ conversation: string; message: string }>
    // Keep the pages with the run, to study how they are built.
    snapshots: boolean
 }
@@ -58,7 +61,7 @@ type Deps = {
 }
 
 // No new conversation is begun after this much of the run; the time limit of the task is longer, so the one in progress can end.
-export const BUDGET_MS = 20 * 60 * 1000
+export const BUDGET_MS = 90 * 60 * 1000
 // After this many conversations in a row that came to nothing the run stops: something is wrong.
 const MAX_FAILURES_IN_A_ROW = 3
 // How many times the list is looked at and scrolled before a row is given up.
@@ -115,6 +118,7 @@ export const readMessages = async (
       baseUrl,
    })
    const keep = createKeep(context, input.snapshots)
+   const latest = new Map((input.latest ?? []).map(({ conversation, message }) => [conversation, message]))
    const conversations: Conversation[] = []
    const seen = new Set<string>()
    const known = new Set(input.known)
@@ -212,8 +216,28 @@ export const readMessages = async (
    }
 
    // Scrolls up the open conversation until its first message is loaded, or it holds as many as are kept.
-   const readThread = async () => {
+   // Down to the message `stopAt` when the platform holds it already: then only the messages after it are read, and the thread is not
+   // complete. Otherwise up to its first message.
+   const readThread = async (stopAt?: string) => {
+      const after = (page: ReturnType<typeof parseThread>) => {
+         const at = stopAt === undefined ? -1 : page.messages.findIndex(message => shortKey(message.id) === stopAt)
+
+         return at < 0
+            ? undefined
+            : {
+                 ...page,
+                 messages: page.messages.slice(at + 1),
+              }
+      }
       let thread = parseThread(await hands.html(), today())
+      const known = after(thread)
+
+      if (known) {
+         return {
+            thread: known,
+            complete: false,
+         }
+      }
 
       for (
          let scrolls = 0, stuck = 0;
@@ -225,6 +249,15 @@ export const readMessages = async (
 
          await reader.wait(PAUSES.older)
          thread = parseThread(await hands.html(), today())
+
+         const reached = after(thread)
+
+         if (reached) {
+            return {
+               thread: reached,
+               complete: false,
+            }
+         }
 
          // At the top with nothing new, three times in a row: the first message has been reached (older ones load a moment after the scroll).
          stuck = !moved && thread.messages.length === before ? stuck + 1 : 0
@@ -290,7 +323,7 @@ export const readMessages = async (
       log(`Opened conversation ${index + 1}`)
       await keep('thread')
 
-      const { thread, complete } = await readThread()
+      const { thread, complete } = await readThread(latest.get(shortKey(id)))
       // The page is still on the conversation, so the addresses of its pictures are fresh.
       const messages = await keepPictures(
          thread.messages,

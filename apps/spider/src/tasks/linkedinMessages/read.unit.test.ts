@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { type MessagesFile, messagesFileSchema } from '@automatedLinkedIn/contracts'
+import { type MessagesFile, messagesFileSchema, shortKey } from '@automatedLinkedIn/contracts'
 
 import { INBOX_LIST, INBOX_ROW, THREAD_PANE } from '../../linkedin/markup'
 import { rowHash } from '../../linkedin/messageReader'
@@ -10,6 +10,8 @@ import { BUDGET_MS, type MessagesInput, readMessages } from './read'
 const BASE = 'https://www.linkedin.com'
 const MESSAGING = `${BASE}/messaging/`
 const threadUrl = (index: number) => `${BASE}/messaging/thread/thread-${index}/`
+// The id a message of the page is read by: the urn its event carries (see `messagingFixture`).
+const messageUrn = (id: string) => `urn:li:msg_message:(urn:li:fsd_profile:me,${id})`
 // The hash of the row the page shows at this place (see `setup`).
 const hashOf = (index: number) =>
    rowHash({
@@ -526,11 +528,11 @@ describe('readMessages', () => {
    })
 
    it('should stop beginning conversations when its time is up, and say it read part', async () => {
-      const { read, file } = setup({ pauseMs: 6 * 60_000 })
+      const { read, file } = setup({ pauseMs: 30 * 60_000 })
 
       const result = await read({ limit: 10 })
 
-      expect(BUDGET_MS).toBe(20 * 60 * 1000)
+      expect(BUDGET_MS).toBe(90 * 60 * 1000)
       expect(result.outcome).toBe('PARTIAL')
       expect(result.conversations).toBeGreaterThan(0)
       expect(result.conversations).toBeLessThan(10)
@@ -592,5 +594,73 @@ describe('readMessages', () => {
 
       expect(browser.clickNth.mock.calls[0]?.[0]).toBe(INBOX_ROW)
       expect(browser.clickNth.mock.calls[0]?.[2]).toContain('button')
+   })
+
+   it('should read a conversation it already has only down to the newest message it holds, and keep the messages after it', async () => {
+      const { read, file } = setup({
+         conversations: 3,
+         messages: 12,
+      })
+
+      await read({
+         limit: 1,
+         latest: [
+            {
+               conversation: shortKey('thread-0'),
+               message: shortKey(messageUrn('2-c0-m9')),
+            },
+         ],
+      })
+
+      const [conversation] = messagesFileSchema.parse(file()).conversations
+
+      expect(conversation?.messages.map(message => message.id)).toEqual([
+         messageUrn('2-c0-m10'),
+         messageUrn('2-c0-m11'),
+      ])
+      expect(conversation?.complete).toBe(false)
+   })
+
+   it('should hand over no message when the newest one it holds is still the newest', async () => {
+      const { read, file } = setup({
+         conversations: 3,
+         messages: 12,
+      })
+
+      await read({
+         limit: 1,
+         latest: [
+            {
+               conversation: shortKey('thread-0'),
+               message: shortKey(messageUrn('2-c0-m11')),
+            },
+         ],
+      })
+
+      const [conversation] = messagesFileSchema.parse(file()).conversations
+
+      expect(conversation?.messages).toEqual([])
+   })
+
+   it('should read to the first message when the newest one it holds is not on the page any more', async () => {
+      const { read, file } = setup({
+         conversations: 3,
+         messages: 12,
+      })
+
+      await read({
+         limit: 1,
+         latest: [
+            {
+               conversation: shortKey('thread-0'),
+               message: shortKey('2-c0-gone'),
+            },
+         ],
+      })
+
+      const [conversation] = messagesFileSchema.parse(file()).conversations
+
+      expect(conversation?.messages).toHaveLength(12)
+      expect(conversation?.complete).toBe(true)
    })
 })

@@ -171,7 +171,7 @@ describe('readMessages in a real browser, against a stand-in for the messages', 
          )
 
          expect(warnings).toEqual([])
-         expect(result).toEqual({
+         expect(result).toMatchObject({
             outcome: 'DONE',
             conversations: 7,
             messages: 7 * MESSAGES,

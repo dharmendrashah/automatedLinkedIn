@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { shortKey } from '@automatedLinkedIn/contracts'
+
 import { MessagesRefresh, messagesInput, sweepDue } from './messagesRefresh'
 import { TaskRefusedError, TaskUnavailableError } from './taskErrors'
 
@@ -268,5 +270,79 @@ describe('MessagesRefresh.request', () => {
          },
       ])
       expect(JSON.stringify(result)).not.toContain('database said no')
+   })
+})
+
+describe('messagesInput for a spider that reads a changed conversation down to its newest message', () => {
+   const newest = 'urn:li:msg_message:(urn:li:fsd_profile:me,2-c1-m9)'
+   const latest = [
+      {
+         conversation: shortKey('thread-1'),
+         message: shortKey(newest),
+      },
+   ]
+
+   beforeEach(() => {
+      vi.resetAllMocks()
+      announce(4)
+      mocks.findConversations.mockResolvedValue([
+         {
+            rowHash: 'aaaaaaaa',
+            linkedInId: 'thread-1',
+            messages: [{ linkedInId: newest }],
+         },
+         {
+            rowHash: 'bbbbbbbb',
+            linkedInId: 'thread-2',
+            messages: [],
+         },
+      ])
+   })
+
+   it('should walk the whole inbox in one run the first time, with the newest message of each known conversation', async () => {
+      await expect(messagesInput(account)).resolves.toEqual({
+         limit: 500,
+         known: ['aaaaaaaa', 'bbbbbbbb'],
+         latest,
+      })
+   })
+
+   it('should stop a later read at the first rows it knows, and say which message each conversation ends at', async () => {
+      await expect(
+         messagesInput({
+            ...account,
+            messagesBackfilledAt: DONE,
+         })
+      ).resolves.toEqual({
+         limit: 50,
+         known: ['aaaaaaaa', 'bbbbbbbb'],
+         latest,
+         stopAfterKnown: 3,
+      })
+   })
+
+   it('should send the same keys in a sweep', async () => {
+      await expect(
+         messagesInput(
+            {
+               ...account,
+               messagesBackfilledAt: DONE,
+            },
+            { sweep: true }
+         )
+      ).resolves.toEqual({
+         limit: 20,
+         known: ['aaaaaaaa', 'bbbbbbbb'],
+         latest,
+      })
+   })
+
+   it('should send an older spider the batches and the rows only, as before', async () => {
+      announce(3)
+
+      await expect(messagesInput(account)).resolves.toEqual({
+         limit: 50,
+         known: ['aaaaaaaa', 'bbbbbbbb'],
+      })
    })
 })
