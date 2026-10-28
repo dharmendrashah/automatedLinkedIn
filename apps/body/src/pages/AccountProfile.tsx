@@ -241,7 +241,7 @@ export const AccountProfile = () => {
                )}
             >
                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
-                  <ProfileHeader profile={profile} strip={strip} />
+                  <ProfileHeader profile={profile} strip={strip} connectionsTo={`/accounts/${id}/connections`} />
                   <OpenToWork openToWork={profile.openToWork} />
                   <AboutCard about={profile.about} topSkills={profile.topSkills} />
                   <ContactCard contact={profile.contact} />
