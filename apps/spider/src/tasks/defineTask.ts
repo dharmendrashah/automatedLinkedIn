@@ -60,6 +60,9 @@ export interface TaskContext {
    // A file of the run that is not one of the standard ones, with the run's secrets masked.
    attach: (name: string, content: string, contentType: string) => void
    pause: (ms: number) => Promise<void>
+   // For a run with an account: signs the account in again in this browser, the way the run does at its start, and waits and
+   // scrolls as a person does after a sign-in. Resolves to whether it worked. A task asks at most once; absent with no account.
+   signInAgain?: () => Promise<boolean>
    // For a step that must never be done twice (sending a message): resolves to true the first time it is asked for this run, and
    // to false when the same command is delivered again after the step may already have been taken. Asked just before the step.
    // Where nothing is kept between deliveries (the local devtools) it is always true.

@@ -56,6 +56,19 @@ export const createVisits = ({ hands, reader, overlay, session, log, keep }: Dep
       await keep('profile')
    }
 
+   // A profile of the feed, opened by its address and not by a click, when the feed shows no post a walk can read.
+   const openProfileByAddress = async (address: string) => {
+      const landed = await session.open(address)
+
+      if (!PROFILE_PAGE.test(new URL(landed).pathname)) {
+         throw new StepFailed('The address of the profile did not open a profile.')
+      }
+
+      log('Opened a profile by its address')
+      await reader.dwell(STAYS.profile)
+      await keep('profile')
+   }
+
    // Opens the post in the window its image opens (no address changes), reads its comments beside it, and closes it again.
    const readInWindow = async ({ image }: FeedPost) => {
       if (!image) {
@@ -76,6 +89,7 @@ export const createVisits = ({ hands, reader, overlay, session, log, keep }: Dep
    return {
       openPost,
       openProfile,
+      openProfileByAddress,
       readInWindow,
    }
 }

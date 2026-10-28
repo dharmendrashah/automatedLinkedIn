@@ -634,6 +634,26 @@ const execute = async (
    const download = deps.uploads?.download
    const fetchFiles =
       download && ((uploadId: string, names: string[]) => fetchUploads(download, command.user_id, uploadId, names))
+   const { reauth } = deps
+   const signInAgain =
+      account && reauth
+         ? async () => {
+              const validated = await reauth.validator.validate(browser, {
+                 email: account.email,
+                 credentials: account.credentials,
+                 ...(device?.locale && { language: device.locale }),
+              })
+
+              if (validated?.outcome !== 'VALID') {
+                 return false
+              }
+
+              await pause(AFTER_SIGN_IN_WAIT_MS)
+              await browser.scrollBy(AFTER_SIGN_IN_SCROLL_PX)
+
+              return true
+           }
+         : undefined
    const context: TaskContext = {
       browser,
       ...(account && { account }),
@@ -646,6 +666,7 @@ const execute = async (
                .catch(() => undefined)
          },
       }),
+      ...(signInAgain && { signInAgain }),
       visit,
       log: message => recorder?.log('spider', 'info', message),
       warn: message => recorder?.log('spider', 'warn', message),

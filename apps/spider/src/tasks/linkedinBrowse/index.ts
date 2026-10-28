@@ -26,6 +26,11 @@ const ANSWERS: Record<BrowseOutcome | 'ERROR', TaskOutcome> = {
       verdict: 'ERROR',
       message: 'The visit could not open a post or a profile from the feed.',
    },
+   NO_FEED: {
+      status: 'FAILED',
+      verdict: 'ERROR',
+      message: 'The feed showed no post and no profile to open.',
+   },
    ERROR: {
       status: 'FAILED',
       verdict: 'ERROR',

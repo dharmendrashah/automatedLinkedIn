@@ -1,7 +1,10 @@
-import { type InspectedElement, type PageInspection } from '../scraping/driver'
+import { type InspectedBlock, type InspectedElement, type PageInspection } from '../scraping/driver'
 
-// A post a person wrote has an action bar; the rows of "Recommended for you" and the banners do not.
+// A post a person wrote has an action bar; the rows of "Recommended for you" and the banners do not. Only the older layout marks
+// its own blocks (`OLDER_POST`); a post of the current layout is every item of the main feed, so it needs no action bar.
 const ACTION_BAR = 'reaction-button'
+const OLDER_POST = 'feed-full-update'
+
 // Promoted posts and calls to action: opening them is an ad click.
 const PROMOTED = ['feed-call-to-action', 'feed-promo-image-click', 'feed-actor-sub-description-cta']
 
@@ -112,6 +115,35 @@ export const authorOnPage = (links: InspectedElement[], baseUrl: string, own?: s
    })
 }
 
+// The profiles a page links to, in page order: never the account's own, a company, a post or a profile listed twice. A walk that
+// cannot read the feed opens the first few of them by their addresses.
+export const profilesOnPage = (links: InspectedElement[], baseUrl: string, own: string | undefined, limit: number) => {
+   const { origin } = new URL(baseUrl)
+   const found: string[] = []
+
+   for (const link of links) {
+      if (found.length >= limit) {
+         break
+      }
+
+      if (!link.href || link.href === own || found.includes(link.href)) {
+         continue
+      }
+
+      try {
+         const { origin: at, pathname } = new URL(link.href)
+
+         if (at === origin && /^\/in\/[^/]+\/?$/.test(pathname) && !pathname.startsWith('/in/me/')) {
+            found.push(link.href)
+         }
+      } catch {
+         continue
+      }
+   }
+
+   return found
+}
+
 // The big image of a post: a link back to the feed (not the reactions count, the article card or the send link, which are
 // small or marked), where a click opens the post in a window.
 export const imageOf = (links: InspectedElement[], baseUrl: string) => {
@@ -141,7 +173,10 @@ export const imageOf = (links: InspectedElement[], baseUrl: string) => {
    })
 }
 
-const eligible = (marks: string[]) => marks.includes(ACTION_BAR) && !PROMOTED.some(mark => marks.includes(mark))
+const eligible = ({ marks, promoted }: InspectedBlock) =>
+   !promoted &&
+   !PROMOTED.some(mark => marks.includes(mark)) &&
+   (!marks.includes(OLDER_POST) || marks.includes(ACTION_BAR))
 
 // What the feed shows right now: the account's own profile, and the posts that can be opened, in page order.
 export const readFeed = (
@@ -158,7 +193,7 @@ export const readFeed = (
       const key = url ?? header?.href
 
       // A post that is neither known by its id nor by its author cannot be opened any way.
-      if (!key || !eligible(block.marks)) {
+      if (!key || !eligible(block)) {
          continue
       }
 
