@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { type InspectedBlock, type InspectedElement, type PageInspection } from '../scraping/driver'
-import { authorOf, authorOnPage, imageOf, postAddress, readFeed } from './feedReader'
+import { currentFeedBlocks } from './feedFixture'
+import { authorOf, authorOnPage, imageOf, postAddress, profilesOnPage, readFeed } from './feedReader'
 import { DIALOG, NEVER_CLICK, POST_BLOCK } from './markup'
 
 const BASE = 'https://www.linkedin.com'
@@ -31,10 +32,14 @@ const actor = (href: string, over: Partial<InspectedElement> = {}) =>
       ...over,
    })
 
-// A post as the real feed marks it: its id in a component key, an action bar, and its author link.
+// The marks of a post of the older layout: its own data-view-name, and what else it carries.
+const legacy = (...marks: string[]) => ['feed-full-update', ...marks]
+
+// A post of the older layout as the real feed marked it: its id in a component key, an action bar, and its author link.
 const post = (id: string, author: string, over: Partial<InspectedBlock> = {}): InspectedBlock => ({
    keys: [`translatable-commentary-FeTranslationUrn(contentUrnUgcPostUrn=(userGeneratedContentId=${id})), x=y`],
-   marks: ['feed-commentary', 'reaction-button', 'feed-actor'],
+   marks: ['feed-full-update', 'feed-commentary', 'reaction-button', 'feed-actor'],
+   promoted: false,
    links: [actor(`${BASE}/in/${author}/`)],
    ...over,
 })
@@ -122,6 +127,33 @@ describe('authorOnPage', () => {
    })
 })
 
+describe('profilesOnPage', () => {
+   it('should take the first profiles of the page: not the own one, not a company, a post or a repeat', () => {
+      const links = [
+         link(`${BASE}/in/me-slug/`),
+         link(`${BASE}/in/ada/`),
+         link(`${BASE}/company/acme/`),
+         link(`${BASE}/in/ada/`),
+         link(`${BASE}/in/me/`),
+         link('https://evil.example/in/x/'),
+         link(`${BASE}/feed/update/urn:li:ugcPost:7000000000000000001/`),
+         link(`${BASE}/in/linus/`),
+         link(`${BASE}/in/ken/`),
+         link(`${BASE}/in/barbara/`),
+      ]
+
+      expect(profilesOnPage(links, BASE, `${BASE}/in/me-slug/`, 3)).toEqual([
+         `${BASE}/in/ada/`,
+         `${BASE}/in/linus/`,
+         `${BASE}/in/ken/`,
+      ])
+   })
+
+   it('should answer nothing when the page links to no profile', () => {
+      expect(profilesOnPage([link(`${BASE}/feed/`)], BASE, undefined, 3)).toEqual([])
+   })
+})
+
 describe('imageOf', () => {
    const big = {
       x: 300,
@@ -191,10 +223,10 @@ describe('readFeed', () => {
       const { posts } = readFeed(
          feed([
             // "Recommended for you": rows of people to follow, no action bar.
-            post('7000000000000000010', 'rec', { marks: ['edge-creation-follow-action', 'feed-call-to-action'] }),
-            post('7000000000000000011', 'promo', { marks: ['reaction-button', 'feed-call-to-action'] }),
-            post('7000000000000000012', 'ad', { marks: ['reaction-button', 'feed-actor-sub-description-cta'] }),
-            post('7000000000000000013', 'banner', { marks: ['feed-promo-image-click'] }),
+            post('7000000000000000010', 'rec', { marks: legacy('edge-creation-follow-action', 'feed-call-to-action') }),
+            post('7000000000000000011', 'promo', { marks: legacy('reaction-button', 'feed-call-to-action') }),
+            post('7000000000000000012', 'ad', { marks: legacy('reaction-button', 'feed-actor-sub-description-cta') }),
+            post('7000000000000000013', 'banner', { marks: legacy('feed-promo-image-click') }),
             post('7000000000000000014', 'noid', { keys: ['auto-component-1'] }),
             post('7000000000000000015', 'real'),
          ]),
@@ -279,6 +311,35 @@ describe('readFeed', () => {
       expect(seen(withImage(300, { covered: true }))).toBe(false)
    })
 
+   it('should read the current layout from its structure, with no action bar and no data-view-name', () => {
+      const { posts } = readFeed(feed(currentFeedBlocks()), BASE)
+
+      // Twelve posts on the page, one of them the ad: eleven are read, in page order, each by its author.
+      expect(posts).toHaveLength(11)
+      expect(posts[0]).toMatchObject({
+         key: `${BASE}/in/sample-member/`,
+         authorHref: `${BASE}/in/sample-member/`,
+         image: { href: `${BASE}/feed/` },
+      })
+      expect(posts.every(({ authorHref }) => authorHref !== undefined)).toBe(true)
+   })
+
+   it('should leave out a promoted post in either layout, by its ad label', () => {
+      const [ad] = currentFeedBlocks().slice(1, 2)
+
+      expect(readFeed(feed([ad!]), BASE).posts).toEqual([])
+      expect(readFeed(feed([post('7000000000000000070', 'ad', { promoted: true })]), BASE).posts).toEqual([])
+   })
+
+   it('should leave out an older-layout block without an action bar, which is a row of people to follow', () => {
+      const { posts } = readFeed(
+         feed([post('7000000000000000071', 'row', { marks: legacy('edge-creation-follow-action') })]),
+         BASE
+      )
+
+      expect(posts).toEqual([])
+   })
+
    it('should leave out a block that has neither an id nor an author link', () => {
       const { posts } = readFeed(
          feed([
@@ -310,6 +371,7 @@ describe('readFeed', () => {
       expect(DIALOG).toContain(':not([aria-hidden="true"])')
       expect(NEVER_CLICK).toContain('button')
       expect(NEVER_CLICK).toContain('[data-view-name="edge-creation-follow-action"]')
-      expect(POST_BLOCK).toBe('[data-view-name="feed-full-update"]')
+      expect(POST_BLOCK).toContain('[data-view-name="feed-full-update"]')
+      expect(POST_BLOCK).toContain('[componentkey^="expanded"][id$="FeedType_MAIN_FEED_RELEVANCE"]')
    })
 })

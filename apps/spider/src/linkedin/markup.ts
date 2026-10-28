@@ -2,10 +2,13 @@ import { CONNECTION_SLUG_PATTERN } from '@automatedLinkedIn/contracts'
 
 import { type OverlaySpec } from '../browsing/overlay'
 
-// How today's LinkedIn marks itself up (seen on a real feed, 2026-10-19): the one place to fix when it changes.
+// How today's LinkedIn marks itself up: the one place to fix when it changes. The feed has two layouts. The older one (2026-10-19)
+// marks its posts with data-view-name; the current one (seen 2026-10-27, on a feed of 2026-10-28) has no data-view-name, and its
+// posts are the items of the main feed, each with a component key starting `expanded` and an id ending in its feed type.
 
 // A post is one of these blocks, its pages are found by address, and its author is the one link that leads to a member or a company.
-export const POST_BLOCK = '[data-view-name="feed-full-update"]'
+export const POST_BLOCK =
+   '[data-view-name="feed-full-update"], [componentkey^="expanded"][id$="FeedType_MAIN_FEED_RELEVANCE"]'
 
 // What a click must never land on, even inside a link: buttons and menus, and the Follow actions that sit inside the
 // whole-row links of the recommendations.

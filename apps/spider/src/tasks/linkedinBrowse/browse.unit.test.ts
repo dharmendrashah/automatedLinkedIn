@@ -36,22 +36,26 @@ const element = (href: string, over: Partial<InspectedElement> = {}): InspectedE
 // A post as the real feed marks it up; the rest of the blocks are what a feed also holds.
 const post = (n: number): InspectedBlock => ({
    keys: [`commentary-(userGeneratedContentId=${idOf(n)})`],
-   marks: ['feed-commentary', 'reaction-button', 'feed-actor'],
+   marks: ['feed-full-update', 'feed-commentary', 'reaction-button', 'feed-actor'],
+   promoted: false,
    links: [element(authorUrl(n), { view: 'feed-actor' })],
 })
 const recommendations: InspectedBlock = {
    keys: [`row-(userGeneratedContentId=${idOf(901)})`],
-   marks: ['edge-creation-follow-action', 'feed-call-to-action'],
+   marks: ['feed-full-update', 'edge-creation-follow-action', 'feed-call-to-action'],
+   promoted: false,
    links: [element(`${BASE}/in/recommended/`, { view: 'feed-actor' })],
 }
 const promoted: InspectedBlock = {
    keys: [`ad-(userGeneratedContentId=${idOf(902)})`],
-   marks: ['reaction-button', 'feed-call-to-action'],
+   marks: ['feed-full-update', 'reaction-button', 'feed-call-to-action'],
+   promoted: true,
    links: [element(`${BASE}/company/advertiser/`, { view: 'feed-actor' })],
 }
 const ownPost: InspectedBlock = {
    keys: [`mine-(userGeneratedContentId=${idOf(903)})`],
-   marks: ['reaction-button'],
+   marks: ['feed-full-update', 'reaction-button'],
+   promoted: false,
    links: [element(OWN, { view: 'feed-actor' })],
 }
 
@@ -89,6 +93,8 @@ type Options = {
    // Where going back leads, when it is not to the page before.
    backTo?: string
    pauseMs?: (ms: number) => number
+   // The profile links the feed page holds besides the posts (the sidebar and the like), by address.
+   profiles?: string[]
 }
 
 const setup = (options: Options = {}) => {
@@ -143,15 +149,19 @@ const setup = (options: Options = {}) => {
       }
 
       return url === FEED
-         ? inspection(url, [
-              recommendations,
-              promoted,
-              ...[...posts.map(post), ...(showOwn ? [ownPost] : [])].map((block, index) => ({
-                 ...block,
-                 keys: noIds ? [] : block.keys,
-                 links: options.images ? [...block.links, imageOf(index)] : block.links,
-              })),
-           ])
+         ? inspection(
+              url,
+              [
+                 recommendations,
+                 promoted,
+                 ...[...posts.map(post), ...(showOwn ? [ownPost] : [])].map((block, index) => ({
+                    ...block,
+                    keys: noIds ? [] : block.keys,
+                    links: options.images ? [...block.links, imageOf(index)] : block.links,
+                 })),
+              ],
+              (options.profiles ?? []).map(href => element(href))
+           )
          : inspection(url, [])
    }
 
@@ -175,6 +185,7 @@ const setup = (options: Options = {}) => {
                             {
                                keys: [],
                                marks: [],
+                               promoted: false,
                                links: [],
                             },
                          ]
@@ -255,6 +266,22 @@ const setup = (options: Options = {}) => {
 
 // Every draw is the same: 0 plans five posts opened by address, .4 six profiles, .99 eight posts and the author of each.
 const always = (value: number) => () => value
+
+// LinkedIn asks for a sign-in on the first `times` addresses that `when` matches, as it can in the middle of a visit.
+const askForSignIn = (context: ReturnType<typeof setup>['context'], when: (url: string) => boolean, times: number) => {
+   const visit = context.visit.getMockImplementation()!
+   let asked = 0
+
+   context.visit.mockImplementation(async (url: string) => {
+      if (when(url) && asked < times) {
+         asked += 1
+
+         return visit(LOGIN)
+      }
+
+      return visit(url)
+   })
+}
 
 describe('browseLinkedin', () => {
    it('should read the feed for two minutes, then open five posts by their address and come back from each', async () => {
@@ -385,15 +412,15 @@ describe('browseLinkedin', () => {
          }),
       ]
       const passed = setup()
+      const passedPage = inspection(FEED, [
+         {
+            ...post(1),
+            links: header(-600),
+         },
+      ])
 
-      passed.context.browser.inspect.mockResolvedValueOnce(
-         inspection(FEED, [
-            {
-               ...post(1),
-               links: header(-600),
-            },
-         ])
-      )
+      // The first look is the feed check; the second is the first look after the read.
+      passed.context.browser.inspect.mockResolvedValueOnce(passedPage).mockResolvedValueOnce(passedPage)
 
       await expect(passed.browse(always(0))).resolves.toBe('DONE')
 
@@ -405,15 +432,14 @@ describe('browseLinkedin', () => {
       expect(passed.urls()[1]).toBe(postUrl(1))
 
       const ahead = setup()
+      const aheadPage = inspection(FEED, [
+         {
+            ...post(1),
+            links: header(1500),
+         },
+      ])
 
-      ahead.context.browser.inspect.mockResolvedValueOnce(
-         inspection(FEED, [
-            {
-               ...post(1),
-               links: header(1500),
-            },
-         ])
-      )
+      ahead.context.browser.inspect.mockResolvedValueOnce(aheadPage).mockResolvedValueOnce(aheadPage)
 
       await ahead.browse(always(0))
 
@@ -443,6 +469,68 @@ describe('browseLinkedin', () => {
       context.browser.clickLink.mockImplementation(async () => `${BASE}/checkpoint/challenge/x`)
 
       await expect(browse(always(0.4))).resolves.toBe('SIGNED_OUT')
+   })
+
+   it('should end with an error sentence when the feed shows no post and no profile to open, and say so', async () => {
+      const { browse, urls, context } = setup({
+         posts: [],
+         showOwn: false,
+      })
+
+      await expect(browse(always(0))).resolves.toBe('NO_FEED')
+
+      expect(urls()).toEqual([FEED])
+      expect(context.warn).toHaveBeenCalledWith('The feed showed no post and no profile to open.')
+   })
+
+   it('should open up to three profiles of the feed by their addresses when the feed shows no post, and say done', async () => {
+      const profiles = [1, 2, 3, 4].map(n => `${BASE}/in/profile-${n}/`)
+      const { browse, urls, clicked, context } = setup({
+         posts: [],
+         showOwn: false,
+         profiles,
+      })
+
+      await expect(browse(always(0))).resolves.toBe('DONE')
+
+      expect(urls()).toEqual([FEED, profiles[0], FEED, profiles[1], FEED, profiles[2], FEED])
+      expect(clicked()).toEqual([])
+      expect(context.warn).not.toHaveBeenCalled()
+   })
+
+   it('should sign the account in again once when LinkedIn asks in the middle of the visit, then go on from the target it was on', async () => {
+      const { browse, urls, context } = setup()
+      const signInAgain = vi.fn(async () => true)
+
+      Object.assign(context, { signInAgain })
+      askForSignIn(context, url => url === postUrl(1), 1)
+
+      await expect(browse(always(0))).resolves.toBe('DONE')
+
+      expect(signInAgain).toHaveBeenCalledTimes(1)
+      expect(urls()).toEqual([FEED, postUrl(1), FEED, postUrl(2), postUrl(3), postUrl(4), postUrl(5), FEED])
+   })
+
+   it('should answer signed out when LinkedIn asks for a sign-in again after the account was signed in again', async () => {
+      const { browse, context } = setup()
+      const signInAgain = vi.fn(async () => true)
+
+      Object.assign(context, { signInAgain })
+      askForSignIn(context, url => url.includes('/feed/update/'), Infinity)
+
+      await expect(browse(always(0))).resolves.toBe('SIGNED_OUT')
+      expect(signInAgain).toHaveBeenCalledTimes(1)
+   })
+
+   it('should answer signed out, without a second try, when signing in again does not work', async () => {
+      const { browse, context } = setup()
+      const signInAgain = vi.fn(async () => false)
+
+      Object.assign(context, { signInAgain })
+      askForSignIn(context, url => url === postUrl(1), 1)
+
+      await expect(browse(always(0))).resolves.toBe('SIGNED_OUT')
+      expect(signInAgain).toHaveBeenCalledTimes(1)
    })
 
    it('should stop after four targets in a row that came to nothing, and say nothing could be opened', async () => {
@@ -475,16 +563,6 @@ describe('browseLinkedin', () => {
 
       expect(urls().filter(url => url.includes('/feed/update/'))).toEqual([postUrl(1), postUrl(2)])
       expect(clicked()).toHaveLength(3)
-   })
-
-   it('should end with nothing opened when the feed shows no post of a person', async () => {
-      const { browse, context } = setup({
-         posts: [],
-         showOwn: false,
-      })
-
-      await expect(browse(always(0))).resolves.toBe('NO_CYCLE')
-      expect(context.warn).toHaveBeenCalledWith('The feed showed no post to open')
    })
 
    it('should begin no new target once the time is used, and still be done with what it opened', async () => {

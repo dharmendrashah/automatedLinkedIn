@@ -1705,7 +1705,7 @@ describe('the feed and the sign-in before a task that uses an account', () => {
                  }
          }),
       }
-      const taskRun = vi.fn(async (): Promise<TaskOutcome> => ({
+      const taskRun = vi.fn(async (_context?: unknown): Promise<TaskOutcome> => ({
          status: 'SUCCEEDED',
          verdict: 'GOOD',
          message: 'ok',
@@ -1814,6 +1814,53 @@ describe('the feed and the sign-in before a task that uses an account', () => {
          })
       }
    )
+
+   it('should let the task sign the account in again during its run, and wait and scroll only when that worked', async () => {
+      const { run, validator, taskRun, session, deps } = prepare(FEED)
+      const answers: boolean[] = []
+
+      taskRun.mockImplementationOnce(async (context?: unknown) => {
+         const { signInAgain } = context as { signInAgain?: () => Promise<boolean> }
+
+         answers.push((await signInAgain?.()) === true)
+
+         return {
+            status: 'SUCCEEDED',
+            verdict: 'GOOD',
+            message: 'ok',
+         }
+      })
+
+      await run(accountCommand)
+
+      expect(answers).toEqual([true])
+      expect(validator.validate).toHaveBeenCalledOnce()
+      expect(deps.pause).toHaveBeenCalledWith(5000)
+      expect(session.scrollBy).toHaveBeenCalledOnce()
+   })
+
+   it('should answer false, and neither wait nor scroll, when signing in again does not work', async () => {
+      const { run, taskRun, session, deps } = prepare(FEED, 'NEEDS_REAUTH')
+      const answers: boolean[] = []
+
+      taskRun.mockImplementationOnce(async (context?: unknown) => {
+         const { signInAgain } = context as { signInAgain?: () => Promise<boolean> }
+
+         answers.push((await signInAgain?.()) === true)
+
+         return {
+            status: 'FAILED',
+            verdict: 'GOOD',
+            message: 'no',
+         }
+      })
+
+      await run(accountCommand)
+
+      expect(answers).toEqual([false])
+      expect(deps.pause).not.toHaveBeenCalledWith(5000)
+      expect(session.scrollBy).not.toHaveBeenCalled()
+   })
 
    it('should not do any of this for a run with no account', async () => {
       const { run, validator, session } = prepare(LOGIN)

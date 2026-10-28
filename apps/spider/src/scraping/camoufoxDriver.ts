@@ -351,6 +351,8 @@ class CamoufoxSession implements DetectionSession {
                return {
                   keys: Array.from(keys),
                   marks: Array.from(marks),
+                  // The ad label of a sponsored post; the layout without data-view-names has no other mark for it.
+                  promoted: (element.textContent ?? '').includes('Promoted by'),
                   links: Array.from(element.querySelectorAll('a[href]'))
                      .slice(0, 40)
                      .map(read)

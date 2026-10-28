@@ -115,6 +115,8 @@ export type InspectedBlock = {
    keys: string[]
    // The data-view-name values found inside it.
    marks: string[]
+   // The block carries the ad label of a sponsored post.
+   promoted: boolean
    links: InspectedElement[]
 }
 
