@@ -203,7 +203,7 @@ jobs:
         run: |
           tag="sha-$(git rev-parse --short HEAD)"
           repo="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
-          for image in brain brain-migrate body spider spider-worker; do
+          for image in brain brain-migrate body spider; do
             kustomize edit set image "automatedlinkedin-$image=$repo-$image:$tag"
           done
 

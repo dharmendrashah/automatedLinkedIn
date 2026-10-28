@@ -118,51 +118,11 @@ gcloud resource-manager org-policies describe \
   constraints/iam.disableServiceAccountKeyCreation --effective --project="$PROJECT_ID"
 ```
 
-## GKE Workload Identity for the spider worker (not done yet)
+## The spider worker's Google access (no Kubernetes binding)
 
-This is a different mechanism from the WIF setup above: that one lets **GitHub Actions**
-impersonate a service account to run `kubectl`/`kustomize` against the cluster. This one lets a
-**pod inside the cluster** (`spider-worker`) reach Google Cloud Storage with no mounted key file.
-`deploy/components/spider` already ships the Kubernetes `ServiceAccount` (`spider-worker`); these
-are the commands to bind it, not run as part of this change (see
-`deploy/overlays/staging/kustomization.yaml` for why the component is not deployed yet).
-
-```sh
-export PROJECT_ID=automate-linkedin-511215
-export BUCKET=automate-linkedin-511215-spider
-export SA_NAME=spider-worker-gcs
-export SA_EMAIL="$SA_NAME@$PROJECT_ID.iam.gserviceaccount.com"
-export CLUSTER=staging-asia
-export LOCATION=asia-south1-b
-
-# One-time per cluster: turns on the feature that lets a KSA impersonate a GSA with no key.
-gcloud container clusters update "$CLUSTER" --location="$LOCATION" \
-  --workload-pool="$PROJECT_ID.svc.id.goog"
-
-gcloud iam service-accounts create "$SA_NAME" \
-  --display-name="spider-worker GCS access"
-
-# Scoped to the one bucket (roles/storage.objectAdmin), not a project-wide role.
-gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" \
-  --member="serviceAccount:$SA_EMAIL" \
-  --role="roles/storage.objectAdmin"
-
-# Lets the Kubernetes ServiceAccount automatedlinkedin/spider-worker impersonate it.
-gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
-  --role="roles/iam.workloadIdentityUser" \
-  --member="serviceAccount:$PROJECT_ID.svc.id.goog[automatedlinkedin/spider-worker]"
-```
-
-Then annotate the Kubernetes `ServiceAccount` with the GSA email — either patch it live
-(`kubectl -n automatedlinkedin annotate serviceaccount spider-worker
-iam.gke.io/gcp-service-account=$SA_EMAIL`) or add the annotation to
-`deploy/components/spider/spider-worker.serviceaccount.yaml` directly, since it is the same value
-in every environment that uses this project's GCP account.
-
-| Error | Cause |
-| --- | --- |
-| `permission denied` reaching GCS from the pod | The cluster does not have Workload Identity enabled, the binding is missing, or the `ServiceAccount` has no `iam.gke.io/gcp-service-account` annotation. |
-| `storage.googleapis.com/... 403` for a single object | The bucket binding covers the bucket but not objects created before it (rare; usually not an issue for `objectAdmin`). |
+The spider worker is a Cloud Run job now (see [Spider worker on Cloud Run](#spider-worker-on-cloud-run-staging-not-applied-yet)),
+and the job runs as `spider-worker-gcs` directly. The Kubernetes `ServiceAccount` and Workload Identity binding this section
+used to describe went with the worker's manifests, so there is nothing to bind.
 
 ## Session recordings (not done yet)
 

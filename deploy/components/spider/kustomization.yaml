@@ -12,9 +12,6 @@ labels:
 resources:
   - spider-api.deployment.yaml
   - spider-api.service.yaml
-  - spider-worker.serviceaccount.yaml
-  - spider-worker.deployment.yaml
-  - spider-worker.service.yaml
 
 configMapGenerator:
   - name: app-config

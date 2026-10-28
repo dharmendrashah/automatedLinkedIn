@@ -1,7 +1,7 @@
 # Smart shutdown: stops the staging node pool after IDLE_MINUTES without activity in the brain,
-# spider-api and spider-worker logs. Runs in dry-run mode until SMART_SHUTDOWN_MODE is set to enforce.
+# spider-api logs (the spider job is read from Cloud Run). Runs in dry-run mode until SMART_SHUTDOWN_MODE is set to enforce.
 # Smart shutdown: stops the staging node pool after IDLE_MINUTES without activity in the brain,
-# spider-api and spider-worker logs. Runs in dry-run mode until SMART_SHUTDOWN_MODE is set to enforce.
+# spider-api logs (the spider job is read from Cloud Run). Runs in dry-run mode until SMART_SHUTDOWN_MODE is set to enforce.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

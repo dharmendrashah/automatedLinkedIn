@@ -39,8 +39,8 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Optional
 
-ACTIVITY_APPS = ("brain", "brain-worker", "spider-api", "spider-worker")
-SPIDER_APPS = ("spider-api", "spider-worker")
+ACTIVITY_APPS = ("brain", "brain-worker", "spider-api")
+SPIDER_APPS = ("spider-api",)
 # A task may run for 30 minutes, so an execution still running is at most this old; older pages are not read.
 RUN_WINDOW_MINUTES = 60
 RUN_PAGE_SIZE = 100
