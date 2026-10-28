@@ -96,7 +96,9 @@ const job = new gcp.cloudrunv2.Job(
          parallelism: 1,
          template: {
             serviceAccount: workerServiceAccount,
-            timeout: '1800s',
+            // A whole inbox of messages can take up to 100 minutes (apps/spider linkedinMessages); each task keeps its own limit inside the
+            // worker, so this is the backstop for a hung execution only.
+            timeout: '6600s',
             maxRetries: 0,
             executionEnvironment: 'EXECUTION_ENVIRONMENT_GEN2',
             vpcAccess: {
