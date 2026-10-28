@@ -486,7 +486,7 @@ describe('AccountDailyJob', () => {
       expect(mocks.countSessions).not.toHaveBeenCalled()
    })
 
-   it('should sweep the newest 20 once a day, whatever their rows say, and write down that it did', async () => {
+   it('should sweep the newest 20 once a day, leaving the rows brain knows alone, and write down that it did', async () => {
       mocks.findMany.mockResolvedValue([
          account({
             nextMessagesAt: EARLIER,
@@ -496,7 +496,9 @@ describe('AccountDailyJob', () => {
 
       await run()
 
-      expect(mocks.requestTask).toHaveBeenCalledWith(expect.objectContaining({ input: { limit: 20 } }))
+      expect(mocks.requestTask).toHaveBeenCalledWith(
+         expect.objectContaining({ input: expect.objectContaining({ limit: 20 }) })
+      )
       expect(mocks.updateAccount).toHaveBeenCalledWith({
          where: { id: 'acc1' },
          data: { messagesSweptAt: NOW },

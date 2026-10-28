@@ -61,7 +61,10 @@ export const messagesInput = async (account: MessagesAccount, { sweep = false }:
    }
 
    if (sweep) {
-      return { limit: SWEEP }
+      return {
+         limit: SWEEP,
+         known: await knownRows(account.id),
+      }
    }
 
    const skip = account.messagesResumeSkip ?? 0
