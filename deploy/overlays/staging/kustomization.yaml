@@ -73,6 +73,9 @@ configMapGenerator:
       - GKE_CLUSTER=staging-asia
       - GKE_LOCATION=asia-south1-b
       - GKE_NODE_POOL=big-pool
+      # The spider job (infra/cloud-run). The checker counts its running executions as activity, so the node pool stays on while a
+      # run needs RabbitMQ. Set together with the grant on the job (roles/run.viewer for staging-power, infra/cloud-run).
+      - CLOUD_RUN_JOB=projects/automate-linkedin-511215/locations/asia-south1/jobs/spider-worker
 
 secretGenerator:
   - name: app-secrets
