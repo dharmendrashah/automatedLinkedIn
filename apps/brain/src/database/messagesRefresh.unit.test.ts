@@ -102,7 +102,7 @@ describe('messagesInput', () => {
       })
    })
 
-   it('should read the newest 20 whatever their rows say when it is a sweep', async () => {
+   it('should leave the rows brain knows alone in a sweep too, as the other reads do', async () => {
       await expect(
          messagesInput(
             {
@@ -111,8 +111,11 @@ describe('messagesInput', () => {
             },
             { sweep: true }
          )
-      ).resolves.toEqual({ limit: 20 })
-      expect(mocks.findConversations).not.toHaveBeenCalled()
+      ).resolves.toEqual({
+         limit: 20,
+         known: ['aaaaaaaa', 'bbbbbbbb'],
+      })
+      expect(mocks.findConversations).toHaveBeenCalled()
    })
 
    it('should send an older spider the input it knows, without asking the database', async () => {
