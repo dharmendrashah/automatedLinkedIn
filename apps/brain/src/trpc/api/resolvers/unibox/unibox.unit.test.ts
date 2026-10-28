@@ -17,11 +17,13 @@ const mocks = vi.hoisted(() => ({
    uploadForm: vi.fn(),
    dismiss: vi.fn(),
    reply: vi.fn(),
+   recipients: vi.fn(),
    TaskRefusedError: class TaskRefusedError extends Error {},
 }))
 
 vi.mock('database', () => ({
    MAX_IDS: 500,
+   LinkedInConnectionService: { recipients: mocks.recipients },
    LinkedInConversationService: {
       accounts: mocks.accounts,
       list: mocks.list,
@@ -95,6 +97,17 @@ describe('unibox router', () => {
       expect(mocks.list).toHaveBeenNthCalledWith(1, 'u1', ['a1'])
       expect(mocks.list).toHaveBeenNthCalledWith(2, 'u1', undefined)
       expect(mocks.accounts).toHaveBeenCalledWith('u1')
+   })
+
+   it('should search the connections of the signed-in owner only, and refuse a search too long', async () => {
+      mocks.recipients.mockResolvedValue([])
+
+      await expect(caller().recipients({ query: ' ada ' })).resolves.toEqual([])
+      await caller().recipients({})
+
+      expect(mocks.recipients).toHaveBeenNthCalledWith(1, 'u1', 'ada')
+      expect(mocks.recipients).toHaveBeenNthCalledWith(2, 'u1', '')
+      await expect(caller().recipients({ query: 'x'.repeat(201) })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
    })
 
    it('should answer a conversation that is not the owner as not found', async () => {

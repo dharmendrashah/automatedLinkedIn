@@ -192,6 +192,59 @@ describe('LinkedInConnectionService (database)', () => {
       expect(await LinkedInConnectionService.list(userId, otherAccountId)).toBeNull()
    })
 
+   it('should list the connections of all the owner’s accounts for New message, with their conversation and the do-not-contact mark', async () => {
+      await read([1, 2, 3, 4], { total: 4 })
+      await PrismaService.client.linkedInConnection.updateMany({
+         where: {
+            accountId,
+            slug: person(4).slug,
+         },
+         data: { status: 'REMOVED' },
+      })
+      await PrismaService.client.linkedInConversation.create({
+         data: {
+            userId,
+            accountId,
+            linkedInId: '2-one',
+            title: 'Person 1',
+            kind: 'DIRECT',
+            participants: [
+               {
+                  name: 'Person 1',
+                  profileUrl: 'https://www.linkedin.com/in/person-1/',
+               },
+            ],
+            unread: false,
+            complete: true,
+         },
+      })
+      await PrismaService.client.suppression.create({
+         data: {
+            userId,
+            slug: person(3).slug,
+         },
+      })
+
+      const all = await LinkedInConnectionService.recipients(userId, '')
+
+      expect(all.map(({ slug }) => slug).sort()).toEqual(['person-1', 'person-2', 'person-3'])
+      expect(all.every(item => item.accountId === accountId)).toBe(true)
+      expect(all.find(({ slug }) => slug === 'person-1')?.conversationId).toEqual(expect.any(String))
+      expect(all.find(({ slug }) => slug === 'person-2')).toEqual({
+         accountId,
+         slug: 'person-2',
+         name: 'Person 2',
+         headline: 'Works at 2',
+      })
+      expect(all.find(({ slug }) => slug === 'person-3')?.blocked).toBe('DO_NOT_CONTACT')
+      expect((await LinkedInConnectionService.recipients(userId, 'works 2')).map(({ slug }) => slug)).toEqual([
+         'person-2',
+      ])
+      expect(await LinkedInConnectionService.recipients(otherUserId, '')).toEqual([])
+
+      await PrismaService.client.suppression.deleteMany({ where: { userId } })
+   })
+
    it('should ask for a read of an account that is signed in, say so when it is not, and answer like a missing account for someone else’s', async () => {
       await expect(LinkedInConnectionService.refresh(userId, accountId)).resolves.toEqual({ started: true })
       expect(requested).toEqual([

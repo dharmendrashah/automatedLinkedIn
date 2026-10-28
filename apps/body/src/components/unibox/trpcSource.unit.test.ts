@@ -546,4 +546,16 @@ describe('createTrpcSource.send', () => {
 
       expect(mutate).toHaveBeenCalledWith({ id: 'r1' })
    })
+
+   it('should search the stored connections of all accounts, and not offer to start a conversation yet', async () => {
+      const person = { accountId: 'a1', slug: 'ada', name: 'Ada', headline: 'Countess', conversationId: 'c1' }
+      const query = vi.fn().mockResolvedValue([person])
+      const { client } = fake({ recipients: { query } })
+      const source = createTrpcSource(client)
+
+      await expect(source.recipients?.('ada')).resolves.toEqual([person])
+      expect(query).toHaveBeenCalledWith({ query: 'ada' })
+      expect((await source.load()).canStart).toBe(false)
+      expect(source.start).toBeUndefined()
+   })
 })

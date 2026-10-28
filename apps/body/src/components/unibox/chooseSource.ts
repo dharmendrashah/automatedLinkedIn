@@ -15,10 +15,15 @@ export const withDevFile = (file: UniboxSource, real: UniboxSource, hasFile: () 
       mark: (ids, change) => active.mark(ids, change),
       open: id => active.open(id),
       refresh: accountIds => active.refresh(accountIds),
-      fileLink: (messageId, index) => (active.fileLink ? active.fileLink(messageId, index) : Promise.reject(new Error('No file'))),
+      fileLink: (messageId, index) =>
+         active.fileLink ? active.fileLink(messageId, index) : Promise.reject(new Error('No file')),
       send: (account, text, attachments, conversationId, events) =>
          active.send(account, text, attachments, conversationId, events),
       follow: replyId => (active.follow ? active.follow(replyId) : Promise.reject(new Error('Nothing to follow'))),
       dismissReply: replyId => active.dismissReply?.(replyId) ?? Promise.resolve(),
+      recipients: query => active.recipients?.(query) ?? Promise.resolve([]),
+      start: (account, slug, text, events) =>
+         active.start?.(account, slug, text, events) ??
+         Promise.resolve({ ok: false, reason: 'A new conversation cannot be started from here.' }),
    }
 }

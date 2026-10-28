@@ -177,7 +177,7 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
    const follow = async (replyId: string, onWaiting?: SendEvents['waiting']): Promise<SendResult> => {
       let queued = false
 
-      for (let polls = 0; polls < POLL_TIMES; ) {
+      for (let polls = 0; polls < POLL_TIMES;) {
          await wait(queued ? QUEUED_POLL_MS : POLL_MS)
 
          const reply = await client.unibox.reply.query({ id: replyId }).catch(() => undefined)
@@ -240,6 +240,7 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
             conversations: conversations.map(conversationOf),
             sample: false,
             canSend: true,
+            canStart: false,
             canRefresh: true,
          }
       },
@@ -259,6 +260,9 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
       refresh: accountIds => client.unibox.refresh.mutate(accountIds ? { accountIds } : {}),
 
       fileLink: async (messageId, index) => (await client.unibox.fileLink.query({ messageId, index })).url,
+
+      // Starting a conversation waits for brain and the spider task (.plan/message-connections.md); the list is real already.
+      recipients: query => client.unibox.recipients.query({ query }),
 
       send: async (_account, text, attachments, conversationId, events) => {
          // A link is only text on the page; there is nothing of it to upload.

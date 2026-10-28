@@ -31,6 +31,7 @@ import {
    RefreshCw,
    RotateCw,
    Search,
+   SquarePen,
    Users,
    X,
 } from 'lucide-react'
@@ -63,7 +64,68 @@ type Props = {
    // Read the messages again from LinkedIn, for the accounts shown; absent when there is nothing to read.
    onRefresh: (() => void) | undefined
    onReload: () => void
+   // Opens the New message view; absent when a first message cannot be written from here.
+   onCompose: (() => void) | undefined
+   // The compose button and the search sit in the rail of views instead (a wide page).
+   inRail: boolean
 }
+
+type ComposeProps = {
+   onCompose: () => void
+   // With its words, as the first thing of the rail; an icon in the toolbar.
+   wide?: boolean
+}
+
+export const ComposeButton = ({ onCompose, wide = false }: ComposeProps) => (
+   <Button
+      size={wide ? 'default' : 'icon'}
+      className={wide ? 'w-full justify-start' : 'shrink-0'}
+      onClick={onCompose}
+      title="New message (C)"
+      aria-label={wide ? undefined : 'New message'}
+   >
+      <SquarePen />
+      {wide ? 'New message' : null}
+   </Button>
+)
+
+type SearchProps = {
+   query: string
+   onQuery: (query: string) => void
+   searchRef: RefObject<HTMLInputElement | null>
+}
+
+export const SearchBox = ({ query, onQuery, searchRef }: SearchProps) => (
+   <div className="relative min-w-0 flex-1">
+      <Search
+         className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+         aria-hidden
+      />
+      <Input
+         ref={searchRef}
+         type="search"
+         value={query}
+         onChange={event => onQuery(event.target.value)}
+         placeholder="Search"
+         aria-label="Search people, accounts and messages"
+         className="h-9 pr-8 pl-8 [&::-webkit-search-cancel-button]:hidden"
+      />
+      {query ? (
+         <button
+            type="button"
+            onClick={() => onQuery('')}
+            aria-label="Clear the search"
+            className="absolute top-1/2 right-2 -translate-y-1/2 rounded-sm text-muted-foreground hover:text-foreground"
+         >
+            <X className="size-4" />
+         </button>
+      ) : (
+         <kbd className="pointer-events-none absolute top-1/2 right-2 hidden -translate-y-1/2 rounded border bg-muted px-1 font-sans text-[10px] text-muted-foreground sm:block">
+            /
+         </kbd>
+      )}
+   </div>
+)
 
 // Search, the accounts shown, how the list is ordered, and the actions that apply to the whole list. What is filtered is always said,
 // in words and with a way to clear it, so a list is never empty without a reason the owner can see.
@@ -88,6 +150,8 @@ export const Toolbar = ({
    onHelp,
    onRefresh,
    onReload,
+   onCompose,
+   inRail,
 }: Props) => {
    const [confirm, setConfirm] = useState(false)
    const filteredAccounts = picker.selection !== undefined
@@ -95,35 +159,13 @@ export const Toolbar = ({
    return (
       <div className="space-y-2 border-b bg-card px-3 py-2">
          <div className="flex items-center gap-2">
-            <div className="relative min-w-0 flex-1">
-               <Search
-                  className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden
-               />
-               <Input
-                  ref={searchRef}
-                  type="search"
-                  value={query}
-                  onChange={event => onQuery(event.target.value)}
-                  placeholder="Search people, accounts and messages"
-                  aria-label="Search the conversations"
-                  className="h-9 pr-14 pl-8 [&::-webkit-search-cancel-button]:hidden"
-               />
-               {query ? (
-                  <button
-                     type="button"
-                     onClick={() => onQuery('')}
-                     aria-label="Clear the search"
-                     className="absolute top-1/2 right-2 -translate-y-1/2 rounded-sm text-muted-foreground hover:text-foreground"
-                  >
-                     <X className="size-4" />
-                  </button>
-               ) : (
-                  <kbd className="pointer-events-none absolute top-1/2 right-2 hidden -translate-y-1/2 rounded border bg-muted px-1 font-sans text-[10px] text-muted-foreground sm:block">
-                     /
-                  </kbd>
-               )}
-            </div>
+            {inRail ? null : (
+               <>
+                  {onCompose ? <ComposeButton onCompose={onCompose} /> : null}
+                  <SearchBox query={query} onQuery={onQuery} searchRef={searchRef} />
+               </>
+            )}
+            {inRail ? <span className="min-w-0 flex-1 truncate text-sm font-medium">{viewLabel(view)}</span> : null}
             <Popover>
                <PopoverTrigger asChild>
                   <Button variant={filteredAccounts ? 'secondary' : 'outline'} size="sm" className="max-w-48">

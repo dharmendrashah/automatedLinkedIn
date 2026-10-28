@@ -1,5 +1,6 @@
-import { type Waiting } from '../posting/publication'
 import { type Attachment, type UniboxConversation, type UniboxMessage } from './types'
+
+import { type Waiting } from '../posting/publication'
 
 export type Action =
    | { type: 'READ'; ids: string[] }
@@ -7,6 +8,12 @@ export type Action =
    | { type: 'DONE'; ids: string[]; now: number }
    | { type: 'UNDONE'; ids: string[] }
    | { type: 'SEND'; id: string; text: string; attachments: Attachment[]; now: number }
+   // A first message to a connection: the conversation not begun yet enters the list (see newMessage.ts).
+   | { type: 'START'; conversation: UniboxConversation }
+   // A conversation not begun yet that the owner left without writing: it goes.
+   | { type: 'DISCARD'; id: string }
+   // The first message is stored: the real conversation takes the place of the stand-in.
+   | { type: 'REPLACE'; id: string; conversation: UniboxConversation }
    | { type: 'UNDO_SEND'; id: string }
    // How much of the files of the reply is uploaded, in percent.
    | { type: 'PROGRESS'; id: string; percent: number }
@@ -54,6 +61,19 @@ const without = <T extends object, K extends keyof T>(value: T, key: K): Omit<T,
    return rest
 }
 
+// A stand-in of a first message with nothing in it: no message, none on its way, none that failed.
+const bare = (conversation: UniboxConversation) =>
+   conversation.starting !== undefined &&
+   conversation.messages.length === 0 &&
+   !conversation.sending &&
+   !conversation.failed
+
+const dropped = (state: UniboxConversation[], id: string) => {
+   const target = state.find(conversation => conversation.id === id)
+
+   return target && bare(target) ? state.filter(conversation => conversation.id !== id) : state
+}
+
 // What the owner does to the conversations, and what arrives. The reply is held as "sending" first, so it can be undone, and only
 // a "sent" puts it in the conversation. Reading changes nothing but the unread mark.
 export const reduce = (state: UniboxConversation[], action: Action): UniboxConversation[] => {
@@ -85,6 +105,20 @@ export const reduce = (state: UniboxConversation[], action: Action): UniboxConve
                     },
                  }
          )
+      }
+      case 'START':
+         return state.some(conversation => conversation.id === action.conversation.id)
+            ? state
+            : [action.conversation, ...state]
+      case 'DISCARD':
+         return dropped(state, action.id)
+      case 'REPLACE': {
+         // The real conversation may already be in the list (a reload brought it): then only the stand-in goes.
+         const rest = state.filter(conversation => conversation.id !== action.id)
+
+         return rest.some(conversation => conversation.id === action.conversation.id)
+            ? rest
+            : [action.conversation, ...rest]
       }
       case 'UNDO_SEND':
          return change(state, [action.id], c => (c.sending ? without(c, 'sending') : c))

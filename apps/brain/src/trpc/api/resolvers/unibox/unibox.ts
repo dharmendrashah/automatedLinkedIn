@@ -1,7 +1,14 @@
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
-import { LinkedInConversationService, LinkedInReplyService, MAX_IDS, MessagesRefresh, REPLY_LIMITS } from 'database'
+import {
+   LinkedInConnectionService,
+   LinkedInConversationService,
+   LinkedInReplyService,
+   MAX_IDS,
+   MessagesRefresh,
+   REPLY_LIMITS,
+} from 'database'
 
 import { MAX_ATTACHMENT_BYTES, UPLOAD_ID } from '@automatedLinkedIn/contracts'
 
@@ -17,6 +24,11 @@ const ids = z.array(id).min(1).max(MAX_IDS)
 // ctx.user.id, so a foreign id answers like a missing one. See .plan/unibox-backend.md.
 export const unibox = router({
    accounts: ownerProcedure.query(({ ctx }) => LinkedInConversationService.accounts(ctx.user.id)),
+
+   // New message: the stored connections of all the owner's accounts that match the words, with their conversation and do-not-contact mark.
+   recipients: ownerProcedure
+      .input(z.object({ query: z.string().trim().max(200).default('') }))
+      .query(({ ctx, input }) => LinkedInConnectionService.recipients(ctx.user.id, input.query)),
 
    // The newest conversations (3,000 at most) with their latest messages.
    conversations: ownerProcedure
