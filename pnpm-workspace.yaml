@@ -8,6 +8,7 @@ allowBuilds:
   prisma: true
   '@swc/core': true
   esbuild: true
+  protobufjs: true
 minimumReleaseAgeExclude:
   - dotenv@18.0.7
   - express@5.3.0

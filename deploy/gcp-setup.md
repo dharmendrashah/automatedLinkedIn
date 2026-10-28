@@ -362,3 +362,48 @@ it. Two things only an operator can do before staging shows its results:
 
 The test runs headless on staging (`SPIDER_HEADLESS=true`), which some detectors treat differently from a real display. The
 report does not record the display mode, so compare with a local run before drawing conclusions from one result.
+
+## Spider worker on Cloud Run (staging, not applied yet)
+
+The worker runs as a Cloud Run job, one execution per task (`.plan/spider-worker-cloud-run.md`). Pulumi manages the job, its
+network and secrets in `infra/cloud-run` (state in a bucket, below). Kubernetes stays in `deploy/`.
+
+One-time steps, already run on 2026-10-28:
+
+```sh
+export PROJECT_ID=automate-linkedin-511215
+export SA_EMAIL="github-actions-staging@$PROJECT_ID.iam.gserviceaccount.com"
+
+# State bucket: regional, versioned, uniform access, public access blocked.
+gcloud storage buckets create "gs://$PROJECT_ID-pulumi-state" --project "$PROJECT_ID" --location asia-south1 \
+  --uniform-bucket-level-access --public-access-prevention
+gcloud storage buckets update "gs://$PROJECT_ID-pulumi-state" --versioning
+gcloud storage buckets add-iam-policy-binding "gs://$PROJECT_ID-pulumi-state" --member="serviceAccount:$SA_EMAIL" \
+  --role=roles/storage.admin
+
+# Roles the CI deploy account needs for the Cloud Run side (project level).
+for role in roles/run.admin roles/secretmanager.admin roles/secretmanager.secretVersionAdder \
+  roles/artifactregistry.admin roles/compute.addressAdmin roles/compute.networkUser roles/serviceusage.serviceUsageConsumer; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$SA_EMAIL" --role="$role" --condition=None
+done
+# It starts the job's runtime account, so it needs actAs on that account only.
+gcloud iam service-accounts add-iam-policy-binding "spider-worker-gcs@$PROJECT_ID.iam.gserviceaccount.com" \
+  --member="serviceAccount:$SA_EMAIL" --role=roles/iam.serviceAccountUser --project "$PROJECT_ID"
+
+# Pulumi passphrase: generated locally, stored as the GitHub secret PULUMI_CONFIG_PASSPHRASE, and kept in a 600 file on the
+# operator's machine. GitHub never returns a secret's value, so keep that copy: without it an encrypted state cannot be read.
+mkdir -p ~/.config/automatedlinkedin && (umask 077; openssl rand -base64 32 > ~/.config/automatedlinkedin/pulumi-passphrase)
+gh secret set PULUMI_CONFIG_PASSPHRASE < ~/.config/automatedlinkedin/pulumi-passphrase
+```
+
+Pulumi itself: `pulumi login gs://$PROJECT_ID-pulumi-state`, then `pulumi stack select staging` in `infra/cloud-run` (the
+first time `pulumi stack init staging`). Run it with `PULUMI_CONFIG_PASSPHRASE_FILE` pointing at the local copy, or with
+`PULUMI_CONFIG_PASSPHRASE` in CI. The adopted resources (the `spider` repository, the `spiderJobLauncher` role) are imported,
+not created, so they are not created twice. A deleted custom role keeps its name for several days.
+
+Pulumi needs Google credentials for the bucket and the provider: application default credentials, or the workload identity in
+CI. A stale local login shows as `invalid_rapt`; run `gcloud auth application-default login` again.
+
+The job's secret values are written by the CD with `gcloud secrets versions add` (never through Pulumi state). The spike's
+temporary resources (`spike-spider-worker`, the `spike-*` secrets and the `spiderJobLauncher` binding on the spike job) are
+removed once the real job exists.

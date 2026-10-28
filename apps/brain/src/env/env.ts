@@ -108,17 +108,16 @@ export class Environment {
             default: 'http://spider-api:3002/health',
             devDefault: 'http://localhost:3002/health',
          }),
-         STATUS_URL_SPIDER_WORKER: string({
-            desc: 'Health address of the spider worker, which also reports cloud storage. Empty: both are left out',
-            example: 'http://spider-worker:3003/health',
-            default: 'http://spider-worker:3003/health',
-            devDefault: 'http://localhost:3003/health',
-         }),
          STATUS_URL_BRAIN_WORKER: string({
             desc: 'Health address of the brain worker. Empty: the module is left out',
             example: 'http://brain-worker:3004/health',
             default: 'http://brain-worker:3004/health',
             devDefault: 'http://localhost:3004/health',
+         }),
+         CLOUD_RUN_JOB: string({
+            desc: 'Cloud Run job that runs the spider worker once per task, as projects/<project>/locations/<region>/jobs/<job>. Empty: brain starts nothing and tasks wait for a worker that runs elsewhere',
+            example: 'projects/my-project/locations/asia-south1/jobs/spider-worker',
+            default: '',
          }),
          WORKER_ROLES: string({
             desc: 'What the brain worker process does, comma separated: consumers (apply results from the queues) and jobs (scheduled work). Run jobs in one replica only',

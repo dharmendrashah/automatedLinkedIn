@@ -111,9 +111,9 @@ export class Environment {
             choices: ['true', 'virtual'] as const,
             default: 'true',
          }),
-         SPIDER_WORKER_HEALTH_PORT: port({
-            desc: 'Port of the worker health endpoint that the Service status page reads. Worker only',
-            default: 3003,
+         SPIDER_RUN_ONCE: bool({
+            desc: 'Once mode for a Cloud Run job: take one task, run it, answer, and exit (an empty queue exits at once). Off: keep taking tasks until stopped. Worker only',
+            default: false,
          }),
          GIT_SHA: string({
             desc: 'Git commit the image was built from, reported by GET /health',

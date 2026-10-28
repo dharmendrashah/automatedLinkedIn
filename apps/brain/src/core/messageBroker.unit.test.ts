@@ -229,5 +229,25 @@ describe('MessageBroker', () => {
 
          expect(connection.createConfirmChannel).toHaveBeenCalledTimes(2)
       })
+
+      it('should count the messages waiting in a queue on a channel it closes afterwards', async () => {
+         const channel = Object.assign(channelOf(), {
+            assertExchange: vi.fn(),
+            assertQueue: vi.fn(),
+            bindQueue: vi.fn(),
+            checkQueue: vi.fn().mockResolvedValue({
+               queue: 'tasks.run',
+               messageCount: 4,
+               consumerCount: 0,
+            }),
+         })
+
+         mocks.connect.mockResolvedValue(connectionWith([channel]))
+
+         await expect(MessageBroker.readyCount('tasks.run')).resolves.toBe(4)
+
+         expect(channel.checkQueue).toHaveBeenCalledWith('tasks.run')
+         expect(channel.close).toHaveBeenCalled()
+      })
    })
 })

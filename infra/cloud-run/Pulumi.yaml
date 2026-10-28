@@ -1,0 +1,4 @@
+name: automatedlinkedin-cloud-run
+description: The spider worker on Cloud Run (a job per task), its network and secrets. Kubernetes stays in deploy/.
+main: bin/index.js
+runtime: nodejs

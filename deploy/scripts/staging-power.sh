@@ -70,7 +70,7 @@ refresh_dns() {
 }
 
 wait_for_apps() {
-  for target in deploy/brain deploy/brain-worker deploy/body deploy/spider-api deploy/spider-worker statefulset/rabbitmq; do
+  for target in deploy/brain deploy/brain-worker deploy/body deploy/spider-api statefulset/rabbitmq; do
     # The deploy job wakes the node before it applies the manifests, so a workload that this very deploy creates (a new one)
     # is not on the cluster yet; the deploy waits for it after applying.
     if ! kubectl -n "$NAMESPACE" get "$target" > /dev/null 2>&1; then
@@ -93,32 +93,35 @@ wake() {
   echo "staging is awake"
 }
 
-case "${1:-}" in
-  sleep)
-    resize 0
-    echo "staging is asleep"
-    ;;
-  wake)
-    wake
-    ;;
-  ensure-awake)
-    if [ "$(nodes)" -eq 0 ]; then
+# Runs the command only when the script is executed, so a test can source the functions above.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  case "${1:-}" in
+    sleep)
+      resize 0
+      echo "staging is asleep"
+      ;;
+    wake)
       wake
-    else
-      echo "staging is already awake"
-    fi
-    ;;
-  lock)
-    minutes="${2:?lock needs a number of minutes}"
-    set_state deploy_lock_until "$(date -u -d "+${minutes} minutes" +%Y-%m-%dT%H:%M:%S+00:00)"
-    echo "smart shutdown is held for ${minutes} minutes"
-    ;;
-  unlock)
-    set_state deploy_lock_until "1970-01-01T00:00:00+00:00"
-    echo "smart shutdown lock released"
-    ;;
-  *)
-    echo "usage: staging-power.sh sleep|wake|ensure-awake|lock MINUTES|unlock" >&2
-    exit 2
-    ;;
-esac
+      ;;
+    ensure-awake)
+      if [ "$(nodes)" -eq 0 ]; then
+        wake
+      else
+        echo "staging is already awake"
+      fi
+      ;;
+    lock)
+      minutes="${2:?lock needs a number of minutes}"
+      set_state deploy_lock_until "$(date -u -d "+${minutes} minutes" +%Y-%m-%dT%H:%M:%S+00:00)"
+      echo "smart shutdown is held for ${minutes} minutes"
+      ;;
+    unlock)
+      set_state deploy_lock_until "1970-01-01T00:00:00+00:00"
+      echo "smart shutdown lock released"
+      ;;
+    *)
+      echo "usage: staging-power.sh sleep|wake|ensure-awake|lock MINUTES|unlock" >&2
+      exit 2
+      ;;
+  esac
+fi

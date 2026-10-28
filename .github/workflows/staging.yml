@@ -8,8 +8,9 @@ name: Staging images
 #   -spider         the spider API (apps/spider Dockerfile's `api` target)
 #   -spider-worker  the Camoufox worker (apps/spider Dockerfile's `worker` target)
 #
-# -spider and -spider-worker are built and pushed here so the images exist in GHCR, but the staging overlay
-# does not deploy them yet (deploy/overlays/staging/kustomization.yaml explains why and how to turn it on).
+# -spider is built and pushed to GHCR, but the staging overlay does not deploy it (deploy/overlays/staging/kustomization.yaml).
+# -spider-worker is pushed to GHCR and to Artifact Registry: the Cloud Run job (infra/cloud-run) runs that copy, and the
+# deploy job applies it with deploy/scripts/spider-job.sh, failing unless the job is ready on this commit's image.
 #
 # Configure these repository variables before the first run:
 #   STAGING_API_URL   https://api.staging.<domain>
@@ -21,6 +22,7 @@ name: Staging images
 #   STAGING_CONFIG_ENV   full contents of deploy/overlays/staging/config.env
 #   STAGING_SECRETS_ENV  full contents of deploy/overlays/staging/secrets.env
 #   CF_API_TOKEN         Cloudflare token with Zone -> DNS -> Edit on elitale.com (keeps staging DNS current)
+#   PULUMI_CONFIG_PASSPHRASE  passphrase of the Pulumi state in gs://<project>-pulumi-state (deploy/gcp-setup.md)
 #
 # GCP authentication is keyless (Workload Identity Federation), so there is no
 # service account key to store or rotate. See deploy/README.md.
@@ -97,6 +99,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: google-github-actions/auth@v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Log in to Artifact Registry
+        run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+
       - id: meta
         uses: docker/metadata-action@v6.2.0
         with:
@@ -106,6 +116,22 @@ jobs:
             type=raw,value=staging
             type=sha
 
+      # The worker is also tagged in Artifact Registry under the commit's tag, which the Cloud Run job pins (spider-job.sh).
+      - id: tags
+        env:
+          META_TAGS: ${{ steps.meta.outputs.tags }}
+          SUFFIX: ${{ matrix.suffix }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          {
+            echo "tags<<TAGS"
+            echo "$META_TAGS"
+            if [ "$SUFFIX" = spider-worker ]; then
+              echo "asia-south1-docker.pkg.dev/$GCP_PROJECT_ID/spider/spider-worker:sha-$(git rev-parse --short HEAD)"
+            fi
+            echo "TAGS"
+          } >> "$GITHUB_OUTPUT"
+
       - uses: docker/build-push-action@v7.4.0
         with:
           context: .
@@ -113,7 +139,7 @@ jobs:
           target: ${{ matrix.target }}
           push: true
           platforms: linux/amd64
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.tags.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             GIT_SHA=${{ github.sha }}
@@ -130,7 +156,7 @@ jobs:
   deploy:
     needs: publish
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     environment: staging
     permissions:
       contents: read
@@ -243,7 +269,32 @@ jobs:
           kubectl -n automatedlinkedin rollout status deploy/authentik-server --timeout=5m
           kubectl -n automatedlinkedin rollout status deploy/authentik-worker --timeout=5m
           kubectl -n automatedlinkedin rollout status deploy/spider-api --timeout=5m
-          kubectl -n automatedlinkedin rollout status deploy/spider-worker --timeout=5m
+
+      # The spider worker runs as a Cloud Run job now. It is deployed after the apply, and this step fails unless the job is
+      # ready on this commit's image (deploy/scripts/spider-job.sh; .plan/spider-worker-cloud-run.md).
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install the Pulumi CLI
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/pulumi.tar.gz" https://get.pulumi.com/releases/sdk/pulumi-v3.272.0-linux-x64.tar.gz
+          tar -xzf "$RUNNER_TEMP/pulumi.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/pulumi" >> "$GITHUB_PATH"
+
+      - name: Build the infra code
+        working-directory: infra/cloud-run
+        run: |
+          npm ci
+          npm run build
+
+      - name: Deploy the spider job
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: asia-south1
+          SECRETS_FILE: deploy/overlays/staging/secrets.env
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+        run: ./deploy/scripts/spider-job.sh "sha-$(git rev-parse --short HEAD)"
 
       - name: Release the smart-shutdown lock
         if: always()

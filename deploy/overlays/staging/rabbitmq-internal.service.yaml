@@ -1,0 +1,21 @@
+# RabbitMQ for the spider worker's Cloud Run job, which reaches it through the VPC (.plan/spider-worker-cloud-run.md).
+# The address is reserved by infra/cloud-run (Pulumi). Not in kustomization.yaml yet: the cutover adds it, once the job is
+# ready. Applying it earlier would move the current internal load balancer (created by hand during the spike) to the reserved
+# address before the job's RABBITMQ_URL points there.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-internal
+  labels:
+    app.kubernetes.io/name: rabbitmq
+  annotations:
+    networking.gke.io/load-balancer-type: "Internal"
+spec:
+  type: LoadBalancer
+  loadBalancerIP: "10.160.0.200"
+  selector:
+    app.kubernetes.io/name: rabbitmq
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: amqp

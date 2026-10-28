@@ -1,6 +1,9 @@
-import { REASONS, type StatusModule, dead, live, unknown } from './types'
+import { type CheckResult, REASONS, type StatusModule, dead, live, unknown } from './types'
 
-import { httpCheck, smtpCheck, workerReport } from './checks'
+import { httpCheck, smtpCheck } from './checks'
+
+// What brain reads about the spider worker's Cloud Run job (see CloudRunJob.reading in core).
+export type SpiderJobReading = { found: false } | { found: true; ready: boolean; lastRunFailedAt: Date | null }
 
 export type StatusConfig = {
    // An empty address or null removes that module: the deployment does not have it.
@@ -8,7 +11,10 @@ export type StatusConfig = {
    signInUrl: string
    brainWorkerUrl: string
    spiderApiUrl: string
-   spiderWorkerUrl: string
+   // Null where the deployment runs no spider job: the module then says so.
+   spiderWorker: (() => Promise<SpiderJobReading>) | null
+   // Null where the deployment has no bucket: cloud storage is left out.
+   bucketIsReachable: (() => Promise<boolean>) | null
    smtp: { host: string; port: number; tls: boolean } | null
    ipInfoToken: string
    databaseIsHealthy: () => Promise<boolean>
@@ -31,6 +37,39 @@ const fromBoolean = (check: () => Promise<boolean>) => async () => {
 // A lookup of a fixed public address, so no user data leaves. Once a minute keeps it far from any quota.
 const IPINFO_URL = 'https://api.ipinfo.io/lite/8.8.8.8'
 const IPINFO_TTL_MS = 60_000
+
+// The job is asked at most this often, however many people open the page.
+const JOB_TTL_MS = 30_000
+
+// A failed run counts against the job for this long. Cloud Run has no separate "failed to start" state, so a crashed run looks the
+// same; after the hour the page is Live again while the job is ready.
+const FAILED_RUN_WINDOW_MS = 60 * 60 * 1000
+
+// Live means the job can start a run for a task now: it is ready, and no run failed in the last hour.
+const spiderWorkerCheck = (read: (() => Promise<SpiderJobReading>) | null) => async (): Promise<CheckResult> => {
+   if (!read) {
+      return unknown(REASONS.notSetUp)
+   }
+
+   try {
+      const job = await read()
+
+      if (!job.found) {
+         return dead(REASONS.noJob)
+      }
+
+      if (!job.ready) {
+         return dead(REASONS.notReady)
+      }
+
+      const failedRecently =
+         job.lastRunFailedAt !== null && Date.now() - job.lastRunFailedAt.getTime() < FAILED_RUN_WINDOW_MS
+
+      return failedRecently ? dead(REASONS.lastRunFailed) : live()
+   } catch {
+      return unknown(REASONS.cannotAskGoogle)
+   }
+}
 
 // Every module that needs a check of its own. Anything else running in the cluster is found by discovery, with no code.
 // `workload` names the Kubernetes workload a module covers, so discovery does not add a second card for it.
@@ -102,43 +141,24 @@ export const buildModules = (config: StatusConfig): StatusModule[] => {
       },
    ]
 
-   if (config.spiderWorkerUrl) {
-      // The worker is the one with Google credentials and no web address of its own, so one report tells both.
-      const report = workerReport(config.spiderWorkerUrl)
+   modules.push({
+      key: 'spiderWorker',
+      group: SPIDER,
+      name: 'Spider worker',
+      description:
+         'The browser that checks LinkedIn accounts. Live means it is ready to start a run when a task is asked for',
+      ttlMs: JOB_TTL_MS,
+      check: spiderWorkerCheck(config.spiderWorker),
+   })
 
-      modules.push(
-         {
-            key: 'spiderWorker',
-            group: SPIDER,
-            name: 'Spider worker',
-            description: 'The browser that checks LinkedIn accounts. Live means it is connected and waiting for work',
-            workload: 'spider-worker',
-            check: async () => {
-               const read = await report()
-
-               if (!read.reachable) {
-                  return dead(read.reason)
-               }
-
-               return read.broker === 'up' && read.consuming ? live() : dead(REASONS.error)
-            },
-         },
-         {
-            key: 'storage',
-            group: SPIDER,
-            name: 'Cloud storage',
-            description: 'Where the spider keeps sessions and recordings',
-            check: async () => {
-               const read = await report()
-
-               if (!read.reachable) {
-                  return unknown(REASONS.workerUnreachable)
-               }
-
-               return read.storage === 'up' ? live() : dead(REASONS.error)
-            },
-         }
-      )
+   if (config.bucketIsReachable !== null) {
+      modules.push({
+         key: 'storage',
+         group: SPIDER,
+         name: 'Cloud storage',
+         description: 'Where the spider keeps sessions and recordings',
+         check: fromBoolean(config.bucketIsReachable),
+      })
    }
 
    modules.push({

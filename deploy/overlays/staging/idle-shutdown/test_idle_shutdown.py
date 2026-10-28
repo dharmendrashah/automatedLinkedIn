@@ -25,6 +25,7 @@ JOB_START = "spider job started: Task 0d9f"
 JOB_HEARTBEAT = "spider job still running: Task 0d9f"
 JOB_END = "spider job finished: Task 0d9f"
 JOB_WAITING = "spider job waiting: Task 0d9f (its account is in use)"
+JOB = "projects/automate-linkedin-511215/locations/asia-south1/jobs/spider-worker"
 
 
 class FakeKube:
@@ -60,6 +61,16 @@ class FakePools:
 
     def set_size(self, project, location, cluster, node_pool, count):
         self.calls.append((project, location, cluster, node_pool, count))
+
+
+class FakeRuns:
+    def __init__(self, running=0):
+        self.running_count = running
+        self.calls = []
+
+    def running(self, job, now):
+        self.calls.append((job, now))
+        return self.running_count
 
 
 class FakeOpener:
@@ -122,6 +133,14 @@ class ConfigTests(unittest.TestCase):
     def test_always_needs_the_node_pool_name(self):
         with self.assertRaises(ids.ConfigError):
             ids.Config.from_env({**BASE_ENV, "GKE_NODE_POOL": ""})
+
+
+    def test_cloud_run_job_is_off_by_default(self):
+        self.assertEqual(ids.Config.from_env(BASE_ENV).cloud_run_job, "")
+
+    def test_rejects_a_cloud_run_job_that_is_not_a_job_name(self):
+        with self.assertRaises(ids.ConfigError):
+            ids.Config.from_env({**BASE_ENV, "CLOUD_RUN_JOB": "spider-worker"})
 
 
 class ActivityTests(unittest.TestCase):
@@ -291,6 +310,88 @@ class RunTests(unittest.TestCase):
 
         self.assertEqual(ids.run(ids.Config.from_env({**BASE_ENV, "SMART_SHUTDOWN_MODE": "enforce"}), kube, pools, NOW), "idle")
         self.assertEqual(pools.calls, [])
+
+
+    def test_a_running_cloud_run_execution_keeps_the_pool_on(self):
+        kube = FakeKube({"brain": []}, state={"last_active": (NOW - dt.timedelta(minutes=50)).isoformat()})
+        pools = FakePools()
+        runs = FakeRuns(running=1)
+        config = ids.Config.from_env({**BASE_ENV, "SMART_SHUTDOWN_MODE": "enforce", "CLOUD_RUN_JOB": JOB})
+
+        self.assertEqual(ids.run(config, kube, pools, NOW, runs), "active")
+        self.assertEqual(pools.calls, [])
+        self.assertEqual(kube.writes, [("last_active", NOW.isoformat())])
+        self.assertEqual(runs.calls, [(JOB, NOW)])
+
+    def test_without_a_cloud_run_job_the_executions_are_not_read(self):
+        kube = FakeKube({"brain": []}, state={"last_active": (NOW - dt.timedelta(minutes=50)).isoformat()})
+        runs = FakeRuns(running=1)
+
+        self.assertEqual(ids.run(ids.Config.from_env(BASE_ENV), kube, FakePools(), NOW, runs), "would-shutdown")
+        self.assertEqual(runs.calls, [])
+
+
+class CloudRunExecutionTests(unittest.TestCase):
+    def reader(self, responses):
+        opener = FakeOpener(responses)
+
+        return ids.CloudRunExecutions(ids.HttpClient(opener), token="tok"), opener
+
+    def execution(self, name, created, done=False):
+        item = {
+            "name": f"{JOB}/executions/{name}",
+            "createTime": created.isoformat().replace("+00:00", "Z"),
+        }
+
+        if done:
+            item["completionTime"] = (created + dt.timedelta(minutes=5)).isoformat().replace("+00:00", "Z")
+
+        return item
+
+    def test_counts_only_the_executions_without_a_completion_time(self):
+        page = {
+            "executions": [
+                self.execution("a", NOW - dt.timedelta(minutes=5)),
+                self.execution("b", NOW - dt.timedelta(minutes=10), done=True),
+            ]
+        }
+        reader, opener = self.reader([(200, json.dumps(page).encode())])
+
+        self.assertEqual(reader.running(JOB, NOW), 1)
+        self.assertEqual(opener.requests[0].full_url, f"https://run.googleapis.com/v2/{JOB}/executions?pageSize=100")
+        self.assertEqual(opener.requests[0].get_header("Authorization"), "Bearer tok")
+
+    def test_reads_the_next_page_while_a_page_still_holds_a_recent_execution(self):
+        first = {
+            "executions": [self.execution("recent", NOW - dt.timedelta(minutes=5))],
+            "nextPageToken": "page-2",
+        }
+        second = {"executions": [self.execution("older", NOW - dt.timedelta(hours=3), done=True)]}
+        reader, opener = self.reader([(200, json.dumps(first).encode()), (200, json.dumps(second).encode())])
+
+        self.assertEqual(reader.running(JOB, NOW), 1)
+        self.assertIn("pageToken=page-2", opener.requests[1].full_url)
+
+    def test_stops_at_a_page_whose_executions_are_all_older_than_the_window(self):
+        page = {
+            "executions": [self.execution("old", NOW - dt.timedelta(hours=3), done=True)],
+            "nextPageToken": "page-2",
+        }
+        reader, opener = self.reader([(200, json.dumps(page).encode())])
+
+        self.assertEqual(reader.running(JOB, NOW), 0)
+        self.assertEqual(len(opener.requests), 1)
+
+    def test_a_job_that_does_not_exist_has_no_running_executions(self):
+        reader, _ = self.reader([(404, b"not found")])
+
+        self.assertEqual(reader.running(JOB, NOW), 0)
+
+    def test_any_other_error_stops_the_checker_so_it_decides_nothing(self):
+        reader, _ = self.reader([(403, b"permission denied")])
+
+        with self.assertRaises(RuntimeError):
+            reader.running(JOB, NOW)
 
 
 class NodePoolRequestTests(unittest.TestCase):

@@ -2,7 +2,7 @@ import { type Mock, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TASK_DEAD_QUEUE, type TaskCommand } from '@automatedLinkedIn/contracts'
 
-import { answerDeadTasks } from './deadLetters'
+import { answerDeadTasks, drainDeadTasks } from './deadLetters'
 
 const command: TaskCommand = {
    contract: 1,
@@ -81,5 +81,54 @@ describe('answerDeadTasks', () => {
       expect(answer).not.toHaveBeenCalled()
       expect(channel.ack).toHaveBeenCalledWith(dead)
       expect(JSON.stringify(log.error.mock.calls)).not.toContain('secret-value')
+   })
+})
+
+describe('drainDeadTasks', () => {
+   let channel: { get: Mock; ack: Mock; nack: Mock }
+   let log: { info: Mock; error: Mock }
+   let answer: Mock<(task: TaskCommand) => Promise<void>>
+
+   beforeEach(() => {
+      channel = {
+         get: vi.fn(),
+         ack: vi.fn(),
+         nack: vi.fn(),
+      }
+      log = {
+         info: vi.fn(),
+         error: vi.fn(),
+      }
+      answer = vi.fn().mockResolvedValue(undefined)
+   })
+
+   it('should answer every dead task until the queue is empty, acknowledging each one', async () => {
+      const first = message(command)
+      const second = message({
+         ...command,
+         task_id: '6f1f4f2a-0c58-4b4e-9d4b-9b8f5b0f6a22',
+      })
+      channel.get.mockResolvedValueOnce(first).mockResolvedValueOnce(second).mockResolvedValueOnce(false)
+
+      await drainDeadTasks(channel as never, answer, log)
+
+      expect(channel.get).toHaveBeenCalledWith(TASK_DEAD_QUEUE, { noAck: false })
+      expect(answer.mock.calls.map(([task]) => task.task_id)).toEqual([
+         command.task_id,
+         '6f1f4f2a-0c58-4b4e-9d4b-9b8f5b0f6a22',
+      ])
+      expect(channel.ack.mock.calls.map(([msg]) => msg)).toEqual([first, second])
+   })
+
+   it('should stop at the first task whose answer cannot be sent, and put it back', async () => {
+      const dead = message(command)
+      channel.get.mockResolvedValueOnce(dead).mockResolvedValueOnce(message(command))
+      answer.mockRejectedValue(new Error('broker down'))
+
+      await drainDeadTasks(channel as never, answer, log)
+
+      expect(channel.nack).toHaveBeenCalledWith(dead, false, true)
+      expect(channel.get).toHaveBeenCalledTimes(1)
+      expect(channel.ack).not.toHaveBeenCalled()
    })
 })

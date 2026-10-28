@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
    retention: vi.fn(),
    accountDue: vi.fn(),
    dispatchWaiting: vi.fn(),
+   startSpiderJobs: vi.fn(),
 }))
 
 vi.mock('database', () => ({
@@ -17,6 +18,8 @@ vi.mock('database', () => ({
    AccountDailyJob: { runDue: mocks.accountDue },
    LinkedInReplyService: { dispatchWaiting: mocks.dispatchWaiting },
 }))
+
+vi.mock('core', () => ({ CloudRunJob: { start: mocks.startSpiderJobs } }))
 
 vi.mock('env', () => ({
    MINDCASE_API_KEY: '',
@@ -39,6 +42,7 @@ const item = {
 describe('worker jobs', () => {
    beforeEach(() => {
       vi.resetAllMocks()
+      mocks.startSpiderJobs.mockResolvedValue({ started: 0 })
    })
 
    it('should register proxy scoring, hourly, first a minute after the start', () => {
@@ -95,20 +99,23 @@ describe('worker jobs', () => {
       expect(mocks.dispatchDue).toHaveBeenCalledWith(context.signal)
    })
 
-   it('should report what it published or gave up', async () => {
+   it('should start the spider jobs that waiting tasks need, after publishing, and report them', async () => {
       mocks.dispatchDue.mockResolvedValue({
          published: 2,
-         retried: 1,
-         gaveUp: 1,
+         retried: 0,
+         gaveUp: 0,
       })
+      mocks.startSpiderJobs.mockResolvedValue({ started: 1 })
 
       await expect(taskDispatch.run(context)).resolves.toEqual({
-         summary: '2 published, 1 given up',
+         summary: '2 published, 0 given up, 1 spider job(s) started',
          counts: {
             published: 2,
-            gaveUp: 1,
+            gaveUp: 0,
+            started: 1,
          },
       })
+      expect(mocks.startSpiderJobs).toHaveBeenCalledTimes(1)
    })
 
    it('should report nothing for an empty table or for retries only, so a broker outage is not a log line a run', async () => {
@@ -117,6 +124,7 @@ describe('worker jobs', () => {
          retried: 4,
          gaveUp: 0,
       })
+      mocks.startSpiderJobs.mockResolvedValue({ started: 0 })
 
       await expect(taskDispatch.run(context)).resolves.toBeUndefined()
    })

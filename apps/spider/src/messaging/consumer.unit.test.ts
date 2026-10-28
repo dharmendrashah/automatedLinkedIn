@@ -1,7 +1,7 @@
 import { type Mock, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AccountBusyError, ShutdownError } from '../scraping/errors'
-import { MAX_RETRIES, consumeQueue, consumeTasks } from './consumer'
+import { MAX_RETRIES, consumeOnce, consumeQueue, consumeTasks } from './consumer'
 import { TASK_QUEUE } from './topology'
 
 const command = {
@@ -525,5 +525,96 @@ describe('consumeTasks', () => {
          expect(republish).toHaveBeenCalledWith(msg, 2)
          expect(channel.ack).toHaveBeenCalledWith(msg)
       })
+   })
+})
+
+describe('consumeOnce', () => {
+   type Item = { task_id: string }
+
+   const onceChannel = (...messages: unknown[]) => ({
+      get: vi.fn(async () => messages.shift() ?? false),
+      consume: vi.fn(),
+      prefetch: vi.fn(),
+      cancel: vi.fn(),
+      ack: vi.fn(),
+      nack: vi.fn(),
+   })
+
+   const spec = (handler: (item: Item) => Promise<void>) => ({
+      queue: TASK_QUEUE,
+      parse: (content: Buffer) => JSON.parse(content.toString()) as Item,
+      label: (item: Item) => `Task ${item.task_id}`,
+      handler,
+   })
+
+   let republish: Mock<(message: unknown, retries: number) => Promise<void>>
+   let sleep: Mock<(ms: number) => Promise<void>>
+   let options: {
+      republish: typeof republish
+      sleep: typeof sleep
+      busyDelayMs: number
+      backoffMs: number[]
+      log: { info: Mock; error: Mock }
+   }
+
+   beforeEach(() => {
+      republish = vi.fn<(message: unknown, retries: number) => Promise<void>>().mockResolvedValue(undefined)
+      sleep = vi.fn<(ms: number) => Promise<void>>().mockResolvedValue(undefined)
+      options = {
+         republish,
+         sleep,
+         busyDelayMs: 7,
+         backoffMs: [10, 20, 30],
+         log: {
+            info: vi.fn(),
+            error: vi.fn(),
+         },
+      }
+   })
+
+   it('should return empty and run nothing when the queue has no message', async () => {
+      const channel = onceChannel()
+      const handler = vi.fn()
+
+      await expect(consumeOnce(channel as never, spec(handler), options)).resolves.toBe('empty')
+
+      expect(handler).not.toHaveBeenCalled()
+      expect(channel.ack).not.toHaveBeenCalled()
+      expect(channel.consume).not.toHaveBeenCalled()
+   })
+
+   it('should run one message, acknowledge it after the handler finishes, and take no second message', async () => {
+      const first = message({ task_id: 'one' })
+      const channel = onceChannel(first, message({ task_id: 'two' }))
+      const handler = vi.fn().mockResolvedValue(undefined)
+
+      await expect(consumeOnce(channel as never, spec(handler), options)).resolves.toBe('taken')
+
+      expect(handler).toHaveBeenCalledWith({ task_id: 'one' })
+      expect(channel.ack).toHaveBeenCalledWith(first)
+      expect(channel.get).toHaveBeenCalledTimes(1)
+      expect(channel.consume).not.toHaveBeenCalled()
+   })
+
+   it('should hand a busy account back after the wait, with its retry counter kept', async () => {
+      const msg = message({ task_id: 'busy' }, 2)
+      const channel = onceChannel(msg)
+
+      await consumeOnce(channel as never, spec(vi.fn().mockRejectedValue(new AccountBusyError())), options)
+
+      expect(sleep).toHaveBeenCalledWith(7)
+      expect(republish).toHaveBeenCalledWith(msg, 2)
+      expect(channel.ack).toHaveBeenCalledWith(msg)
+   })
+
+   it('should put the message straight back in the queue when the worker is stopping', async () => {
+      const msg = message({ task_id: 'stopped' }, 1)
+      const channel = onceChannel(msg)
+
+      await consumeOnce(channel as never, spec(vi.fn().mockRejectedValue(new ShutdownError())), options)
+
+      expect(channel.nack).toHaveBeenCalledWith(msg, false, true)
+      expect(republish).not.toHaveBeenCalled()
+      expect(channel.ack).not.toHaveBeenCalled()
    })
 })
