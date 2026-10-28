@@ -1,4 +1,4 @@
-import { type Channel, type ConsumeMessage } from 'amqplib'
+import { type Channel, type Message } from 'amqplib'
 
 import { type ScrapeTaskCommand } from '../types'
 
@@ -12,7 +12,7 @@ type Log = { info: (message: string) => void; error: (message: string) => void }
 
 export type ConsumerOptions = {
    // Publishes a copy of the message with its retry counter set to `retries`.
-   republish: (message: ConsumeMessage, retries: number) => Promise<void>
+   republish: (message: Message, retries: number) => Promise<void>
    log?: Log
    sleep?: (ms: number) => Promise<void>
    backoffMs?: number[]
@@ -36,7 +36,7 @@ const BUSY_DELAY_MS = 10_000
 // mistaken for idle work. Only real jobs write these lines, not the polling of an empty queue.
 const HEARTBEAT_MS = 60_000
 
-const readRetries = (message: ConsumeMessage) => {
+const readRetries = (message: Message) => {
    const value: unknown = message.properties.headers?.[RETRIES_HEADER]
 
    return typeof value === 'number' ? value : 0
@@ -57,15 +57,19 @@ export type QueueSpec<T> = {
 
 type ConsumerChannel = Pick<Channel, 'prefetch' | 'consume' | 'cancel' | 'ack' | 'nack'>
 
-// Takes one message at a time and acknowledges it only after the handler has finished, so a crash
+type HandlerChannel = Pick<Channel, 'ack' | 'nack'>
+
+type OnceChannel = HandlerChannel & Pick<Channel, 'get'>
+
+// Runs one message through the queue's rules. The handler is acknowledged only after it has finished, so a crash
 // mid-task makes the broker deliver it again.
 //
 // RabbitMQ gives no delay or limit to nack-with-requeue (a failing task would spin), so a failure is
 // retried by publishing a copy with a counter after a back-off. While it waits, this worker takes no
 // other message, which is the same as running one task at a time.
-export const consumeQueue = async <T>(
-   channel: ConsumerChannel,
-   { queue, parse, label, handler, onExhausted }: QueueSpec<T>,
+const createHandler = <T>(
+   channel: HandlerChannel,
+   { parse, label, handler, onExhausted }: QueueSpec<T>,
    {
       republish,
       log = console,
@@ -76,7 +80,6 @@ export const consumeQueue = async <T>(
       now = Date.now,
    }: ConsumerOptions
 ) => {
-   let inFlight: Promise<void> = Promise.resolve()
    // Jobs waiting for their account, with when their waiting line was last logged.
    const waiting = new Map<string, number>()
 
@@ -91,7 +94,7 @@ export const consumeQueue = async <T>(
 
    // Publishes a copy after a wait, then drops the original. If the copy cannot be published the original goes
    // back to the queue rather than being lost.
-   const requeue = async (message: ConsumeMessage, delayMs: number, retries: number) => {
+   const requeue = async (message: Message, delayMs: number, retries: number) => {
       try {
          await sleep(delayMs)
          await republish(message, retries)
@@ -101,7 +104,7 @@ export const consumeQueue = async <T>(
       }
    }
 
-   const giveUp = async (message: ConsumeMessage, item: T, reason: string) => {
+   const giveUp = async (message: Message, item: T, reason: string) => {
       if (!onExhausted) {
          channel.nack(message, false, false)
 
@@ -116,7 +119,7 @@ export const consumeQueue = async <T>(
       }
    }
 
-   const retry = async (message: ConsumeMessage, item: T, reason: string) => {
+   const retry = async (message: Message, item: T, reason: string) => {
       const retries = readRetries(message)
 
       if (retries >= MAX_RETRIES) {
@@ -154,7 +157,7 @@ export const consumeQueue = async <T>(
       }
    }
 
-   const handle = async (message: ConsumeMessage) => {
+   return async (message: Message) => {
       let item: T
 
       try {
@@ -197,11 +200,17 @@ export const consumeQueue = async <T>(
 
       await retry(message, item, error instanceof Error ? error.message : 'unknown error')
    }
+}
+
+// Long-running mode: takes one message at a time and keeps taking them until stopped.
+export const consumeQueue = async <T>(channel: ConsumerChannel, spec: QueueSpec<T>, options: ConsumerOptions) => {
+   const handle = createHandler(channel, spec, options)
+   let inFlight: Promise<void> = Promise.resolve()
 
    await channel.prefetch(1)
 
    const { consumerTag } = await channel.consume(
-      queue,
+      spec.queue,
       message => {
          if (message) {
             inFlight = handle(message)
@@ -216,6 +225,20 @@ export const consumeQueue = async <T>(
          await inFlight
       },
    }
+}
+
+// Once mode: takes at most one message, handles it exactly as consumeQueue would, and returns. Nothing stays
+// subscribed afterwards, so the process can leave.
+export const consumeOnce = async <T>(channel: OnceChannel, spec: QueueSpec<T>, options: ConsumerOptions) => {
+   const message = await channel.get(spec.queue, { noAck: false })
+
+   if (!message) {
+      return 'empty' as const
+   }
+
+   await createHandler(channel, spec, options)(message)
+
+   return 'taken' as const
 }
 
 export const consumeTasks = (channel: ConsumerChannel, handler: TaskHandler, options: ConsumerOptions) =>

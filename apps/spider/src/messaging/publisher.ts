@@ -1,4 +1,4 @@
-import { type ConfirmChannel, type ConsumeMessage } from 'amqplib'
+import { type ConfirmChannel, type Message } from 'amqplib'
 
 import {
    TASK_KEY as RUN_KEY,
@@ -40,14 +40,14 @@ export const publishResult = (channel: Publisher, result: ScrapeTaskResult) =>
    publish(channel, RESULT_KEY, Buffer.from(JSON.stringify(result)), result.task_id)
 
 // A retry is the same task body published again with a counter, so the original can be acknowledged.
-export const republishTask = (channel: Publisher, message: ConsumeMessage, retries: number) =>
+export const republishTask = (channel: Publisher, message: Message, retries: number) =>
    publish(channel, TASK_KEY, message.content, String(message.properties.messageId), { [RETRIES_HEADER]: retries })
 
 // The answer to a task of the standard contract (.plan/spider-task-framework.md).
 export const publishRunResult = (channel: Publisher, result: TaskResult) =>
    publish(channel, TASK_DONE_KEY, Buffer.from(JSON.stringify(result)), result.task_id)
 
-export const republishRun = (channel: Publisher, message: ConsumeMessage, retries: number) =>
+export const republishRun = (channel: Publisher, message: Message, retries: number) =>
    publish(channel, RUN_KEY, message.content, String(message.properties.messageId), { [RETRIES_HEADER]: retries })
 
 // Every task this worker can run, in one message: brain keeps the latest.

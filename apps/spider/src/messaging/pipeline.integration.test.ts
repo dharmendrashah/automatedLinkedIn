@@ -21,8 +21,9 @@ import { processTask } from '../scraping/processTask'
 import { openCredentials } from '../tasks/credentials'
 import { defineTask } from '../tasks/defineTask'
 import { exhaustedResult, runTask } from '../tasks/runner'
+import { parseCommand } from '../types/schema'
 import { Broker } from './broker'
-import { MAX_RETRIES, type TaskHandler, consumeQueue, consumeTasks } from './consumer'
+import { MAX_RETRIES, type TaskHandler, consumeOnce, consumeQueue, consumeTasks } from './consumer'
 import { publishResult, publishRunResult, publishTask, republishRun, republishTask } from './publisher'
 import { DEAD_QUEUE, EXCHANGE, RESULT_QUEUE, TASK_KEY, TASK_QUEUE, assertTopology } from './topology'
 
@@ -431,5 +432,58 @@ describe('task pipeline on a real RabbitMQ', () => {
 
       await next(DEAD_QUEUE, ({ properties }) => properties.messageId === id)
       await consumer.stop()
+   })
+
+   it('should take one task in once mode, leave the rest waiting, and find nothing when the queue is empty', async () => {
+      const first = command()
+      const second = command()
+      const publisher = await broker.publishChannel()
+      const worker = await broker.consumeChannel()
+      const handler = (task: ScrapeTaskCommand) =>
+         processTask(task, {
+            engine: {
+               run: async () => ({
+                  records: [],
+                  cookies: [],
+               }),
+            },
+            store: { put: async () => undefined },
+            accountLock: freeAccount,
+            publishResult: async result => publishResult(await broker.publishChannel(), result),
+         })
+      const once = () =>
+         consumeOnce(
+            worker,
+            {
+               queue: TASK_QUEUE,
+               parse: content => parseCommand(JSON.parse(content.toString())),
+               label: task => `Task ${task.task_id}`,
+               handler,
+            },
+            {
+               republish: async (message, retries) => republishTask(await broker.publishChannel(), message, retries),
+               backoffMs: [20, 20, 20],
+               busyDelayMs: 20,
+               log: {
+                  info: () => undefined,
+                  error: () => undefined,
+               },
+            }
+         )
+
+      await publishTask(publisher, first)
+      await publishTask(publisher, second)
+
+      await expect(once()).resolves.toBe('taken')
+
+      const message = await next(RESULT_QUEUE, ({ properties }) => properties.messageId === first.task_id)
+
+      expect(JSON.parse(message.content.toString())).toMatchObject({ status: 'SUCCESS' })
+      expect(await worker.checkQueue(TASK_QUEUE)).toMatchObject({ messageCount: 1 })
+
+      await expect(once()).resolves.toBe('taken')
+      await expect(once()).resolves.toBe('empty')
+
+      await worker.close()
    })
 })
