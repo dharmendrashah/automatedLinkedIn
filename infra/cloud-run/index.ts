@@ -168,20 +168,13 @@ new gcp.cloudrunv2.JobIamMember('brain-launches-spider-worker', {
 })
 
 // The smart shutdown checker (deploy/overlays/staging/idle-shutdown) acts as staging-power. It only reads the job's executions, so
-// it can keep the node pool on while a run is going (.plan/spider-worker-cloud-run.md, step 7).
-const watcherRole = new gcp.projects.IAMCustomRole('spiderJobWatcher', {
-   roleId: 'spiderJobWatcher',
-   title: 'Spider job watcher',
-   description: 'List the executions of the spider worker Cloud Run job (smart shutdown)',
-   permissions: ['run.executions.list'],
-   stage: 'GA',
-})
-
+// it can keep the node pool on while a run is going (.plan/spider-worker-cloud-run.md, step 7). The predefined read-only
+// roles/run.viewer, on this one job, instead of a custom role: CI cannot create custom roles.
 new gcp.cloudrunv2.JobIamMember('smart-shutdown-watches-spider-worker', {
    project,
    location: region,
    name: job.name,
-   role: watcherRole.name,
+   role: 'roles/run.viewer',
    member: `serviceAccount:staging-power@${project}.iam.gserviceaccount.com`,
 })
 
