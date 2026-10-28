@@ -75,6 +75,16 @@ export class UploadFiles {
       return UploadFiles.storage.bucket(SPIDER_GCS_BUCKET)
    }
 
+   // Whether brain can read the bucket: one object listed under uploads/, the prefix brain already reads with its own rights.
+   public static async reachable() {
+      await UploadFiles.bucket().getFiles({
+         prefix: 'uploads/',
+         maxResults: 1,
+      })
+
+      return true
+   }
+
    public static async list(userId: string, uploadId: string): Promise<StoredFile[]> {
       const prefix = prefixOf(userId, uploadId)
       const [files] = await UploadFiles.bucket().getFiles({ prefix })

@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 
+import { CloudRunJob } from 'core'
+
 import { type Prisma } from 'generated/prisma/client'
 
 import {
@@ -235,6 +237,9 @@ export class TaskService {
          // The task is saved: the worker publishes it.
          console.error(`Could not publish the task ${task} right away: ${(error as Error).name}`)
       }
+
+      // Starts a spider job for it. The task-dispatch job asks again within seconds if this start fails.
+      CloudRunJob.start()
 
       return { id }
    }

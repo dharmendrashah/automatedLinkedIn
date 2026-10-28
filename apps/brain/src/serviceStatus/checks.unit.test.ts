@@ -1,7 +1,7 @@
 import { type Server, createServer } from 'node:net'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { httpCheck, smtpCheck, workerReport } from './checks'
+import { httpCheck, smtpCheck } from './checks'
 
 const fetchMock = vi.fn()
 
@@ -68,87 +68,6 @@ describe('httpCheck', () => {
 
       expect(fetchMock.mock.calls[0][1].headers).toEqual({ authorization: 'Bearer SECRET' })
       expect(JSON.stringify(result)).not.toMatch(/SECRET|10\.0\.0\.5/)
-   })
-})
-
-describe('workerReport', () => {
-   const report = {
-      broker: 'up',
-      consuming: true,
-      storage: 'up',
-   }
-
-   it('should read what the worker says about itself', async () => {
-      fetchMock.mockResolvedValue(answer(200, report))
-
-      await expect(workerReport('http://spider-worker:3003/health')()).resolves.toEqual({
-         reachable: true,
-         ...report,
-      })
-   })
-
-   it('should still read the report of a worker that says it is not well (503)', async () => {
-      fetchMock.mockResolvedValue(
-         answer(503, {
-            broker: 'down',
-            consuming: false,
-            storage: 'up',
-         })
-      )
-
-      await expect(workerReport('http://x/health')()).resolves.toMatchObject({
-         reachable: true,
-         broker: 'down',
-         consuming: false,
-      })
-   })
-
-   it.each([
-      ['a refused connection', () => fetchMock.mockRejectedValue(new TypeError('fetch failed')), 'Not answering'],
-      ['a timeout', () => fetchMock.mockRejectedValue(timeout()), 'Timed out'],
-      [
-         'an answer that is not a report',
-         () => fetchMock.mockResolvedValue(answer(200, { hello: 'world' })),
-         'Reports an error',
-      ],
-      [
-         'an answer that is not JSON',
-         () =>
-            fetchMock.mockResolvedValue({
-               ok: true,
-               status: 200,
-               json: async () => Promise.reject(new Error('x')),
-            }),
-         'Reports an error',
-      ],
-   ])('should say the worker is not reachable on %s', async (_name, arrange, reason) => {
-      arrange()
-
-      await expect(workerReport('http://x/health')()).resolves.toEqual({
-         reachable: false,
-         reason,
-      })
-   })
-
-   it('should ask the worker once for two callers that arrive together', async () => {
-      fetchMock.mockResolvedValue(answer(200, report))
-
-      const read = workerReport('http://x/health')
-
-      await Promise.all([read(), read()])
-
-      expect(fetchMock).toHaveBeenCalledTimes(1)
-   })
-
-   it('should ask again once the first answer is in', async () => {
-      fetchMock.mockResolvedValue(answer(200, report))
-
-      const read = workerReport('http://x/health')
-
-      await read()
-      await read()
-
-      expect(fetchMock).toHaveBeenCalledTimes(2)
    })
 })
 

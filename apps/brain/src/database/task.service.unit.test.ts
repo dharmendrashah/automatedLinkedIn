@@ -30,7 +30,10 @@ const mocks = vi.hoisted(() => ({
    createDispatch: vi.fn(),
    reserve: vi.fn(),
    settle: vi.fn(),
+   startSpiderJobs: vi.fn(),
 }))
+
+vi.mock('core', () => ({ CloudRunJob: { start: mocks.startSpiderJobs } }))
 
 vi.mock('./browseBudget.service', () => ({
    BrowseBudgetService: {
@@ -164,6 +167,7 @@ describe('TaskService', () => {
       mocks.startTask.mockResolvedValue(undefined)
       mocks.fail.mockResolvedValue(undefined)
       mocks.dispatch.mockResolvedValue({ outcome: 'published' })
+      mocks.startSpiderJobs.mockResolvedValue({ started: 0 })
       mocks.deleteExpired.mockResolvedValue(undefined)
       mocks.createDispatch.mockResolvedValue({})
       mocks.transaction.mockImplementation(async (work: (client: unknown) => Promise<unknown>) => work(tx))
@@ -271,6 +275,7 @@ describe('TaskService', () => {
          )
          expect(mocks.createDispatch).toHaveBeenCalledWith({ data: { sessionId: id } })
          expect(mocks.dispatch).toHaveBeenCalledWith(id)
+         expect(mocks.startSpiderJobs).toHaveBeenCalledTimes(1)
          expect(mocks.createDispatch.mock.invocationCallOrder[0]).toBeLessThan(
             mocks.dispatch.mock.invocationCallOrder[0]
          )
@@ -488,6 +493,14 @@ describe('TaskService', () => {
          expect(mocks.startTask).toHaveBeenCalledTimes(1)
          expect(mocks.createDispatch).toHaveBeenCalledTimes(1)
          expect(mocks.fail).not.toHaveBeenCalled()
+      })
+
+      it('should still ask for a spider job when the publish failed, since the task waits for one', async () => {
+         mocks.dispatch.mockRejectedValue(new Error('nack from broker'))
+
+         await ask()
+
+         expect(mocks.startSpiderJobs).toHaveBeenCalledTimes(1)
       })
 
       it('should save nothing when any step of the transaction fails', async () => {

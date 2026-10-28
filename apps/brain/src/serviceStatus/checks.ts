@@ -1,6 +1,5 @@
 import { connect as netConnect } from 'node:net'
 import { connect as tlsConnect } from 'node:tls'
-import { z } from 'zod'
 
 import { CHECK_TIMEOUT_MS, type CheckResult, REASONS, dead, live } from './types'
 
@@ -19,59 +18,6 @@ export const httpCheck = (url: string, headers?: Record<string, string>) => asyn
       return response.ok ? live() : dead(REASONS.error)
    } catch (error) {
       return failure(error)
-   }
-}
-
-const reportSchema = z.object({
-   broker: z.enum(['up', 'down']),
-   consuming: z.boolean(),
-   storage: z.enum(['up', 'down']),
-})
-
-export type WorkerReport = ({ reachable: true } & z.infer<typeof reportSchema>) | { reachable: false; reason: string }
-
-// What the spider worker says about itself. Two modules (the worker and cloud storage) read it, and callers that arrive
-// together share one request.
-export const workerReport = (url: string) => {
-   let pending: Promise<WorkerReport> | undefined
-
-   const read = async (): Promise<WorkerReport> => {
-      const unreadable: WorkerReport = {
-         reachable: false,
-         reason: REASONS.error,
-      }
-      let response: Response
-
-      try {
-         response = await fetch(url, { signal: AbortSignal.timeout(CHECK_TIMEOUT_MS) })
-      } catch (error) {
-         return {
-            reachable: false,
-            reason: failure(error).reason as string,
-         }
-      }
-
-      try {
-         // A worker that is not well answers 503 with the same report, which says what is wrong.
-         const parsed = reportSchema.safeParse(await response.json())
-
-         return parsed.success
-            ? {
-                 reachable: true,
-                 ...parsed.data,
-              }
-            : unreadable
-      } catch {
-         return unreadable
-      }
-   }
-
-   return () => {
-      pending ??= read().finally(() => {
-         pending = undefined
-      })
-
-      return pending
    }
 }
 

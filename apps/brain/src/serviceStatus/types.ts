@@ -13,7 +13,11 @@ export const REASONS = {
    cannotAskKubernetes: 'Could not ask Kubernetes',
    noPodReady: 'No pod is ready',
    switchedOff: 'Switched off',
-   workerUnreachable: 'Cannot be checked while the spider worker is not answering',
+   notSetUp: 'Not set up in this deployment',
+   noJob: 'The Cloud Run job does not exist',
+   notReady: 'The Cloud Run job is not ready',
+   lastRunFailed: 'The last run failed',
+   cannotAskGoogle: 'Could not ask Google Cloud',
 } as const
 
 export type StatusModule = {

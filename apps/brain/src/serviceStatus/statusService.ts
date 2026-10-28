@@ -1,14 +1,15 @@
-import { MessageBroker } from 'core'
+import { CloudRunJob, MessageBroker, UploadFiles } from 'core'
 
 import {
    AUTHENTIK_EMAIL__HOST,
    AUTHENTIK_EMAIL__PORT,
    AUTHENTIK_EMAIL__USE_SSL,
+   CLOUD_RUN_JOB,
    IPINFO_TOKEN,
+   SPIDER_GCS_BUCKET,
    STATUS_URL_BRAIN_WORKER,
    STATUS_URL_SIGN_IN,
    STATUS_URL_SPIDER_API,
-   STATUS_URL_SPIDER_WORKER,
    STATUS_URL_WEBSITE,
 } from 'env'
 
@@ -30,7 +31,8 @@ export class StatusService {
             signInUrl: STATUS_URL_SIGN_IN,
             brainWorkerUrl: STATUS_URL_BRAIN_WORKER,
             spiderApiUrl: STATUS_URL_SPIDER_API,
-            spiderWorkerUrl: STATUS_URL_SPIDER_WORKER,
+            spiderWorker: CLOUD_RUN_JOB ? () => CloudRunJob.reading() : null,
+            bucketIsReachable: SPIDER_GCS_BUCKET ? () => UploadFiles.reachable() : null,
             smtp: AUTHENTIK_EMAIL__HOST
                ? {
                     host: AUTHENTIK_EMAIL__HOST,

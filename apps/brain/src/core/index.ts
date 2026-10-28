@@ -2,6 +2,7 @@ export { AbuseIpDbError, AbuseIpDbService, type AbuseDetail, type AbuseIpDbResul
 export { CryptoService } from './crypto.service'
 export { toCsv } from './csv'
 export { dailyTime, timezoneOfCountry } from './dailyTime'
+export { CloudRunJob } from './cloudRunJob'
 export { CSV_MAX_ROWS, itemsCsv } from './itemCsv'
 export { HttpServer } from './httpServer'
 export { KeptFiles } from './keptFiles'

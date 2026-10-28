@@ -2,6 +2,8 @@ import { type ChannelModel, type ConfirmChannel, connect } from 'amqplib'
 
 import { RABBITMQ_URL } from 'env'
 
+import { assertAccountTopology } from '@automatedLinkedIn/contracts'
+
 // How long an unreachable broker may stall a caller, such as the /health probe.
 const CONNECT_TIMEOUT_MS = 3000
 
@@ -61,6 +63,25 @@ export class MessageBroker {
    // A channel of its own, for a consumer that must not share a prefetch with anything else.
    public static async channel() {
       return (await this.connection()).createChannel()
+   }
+
+   // Messages waiting in a queue, not counting the ones a consumer holds. A failed check closes its channel, so it gets one of its own.
+   public static async readyCount(queue: string) {
+      const channel = await this.channel()
+
+      try {
+         await assertAccountTopology(channel)
+
+         const { messageCount } = await channel.checkQueue(queue)
+
+         return messageCount
+      } finally {
+         try {
+            await channel.close()
+         } catch {
+            // Already closed by a failed check; nothing left to release.
+         }
+      }
    }
 
    // Like `channel()`, but a consumer can also republish and wait until the broker has the copy.

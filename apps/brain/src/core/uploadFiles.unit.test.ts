@@ -206,4 +206,22 @@ describe('UploadFiles', () => {
          },
       ])
    })
+
+   it('should check the bucket by listing one object under uploads/, the prefix brain already reads', async () => {
+      const UploadFiles = await load()
+
+      await expect(UploadFiles.reachable()).resolves.toBe(true)
+      expect(mocks.getFiles).toHaveBeenCalledWith({
+         prefix: 'uploads/',
+         maxResults: 1,
+      })
+   })
+
+   it('should fail the check when the bucket cannot be listed', async () => {
+      const UploadFiles = await load()
+
+      mocks.getFiles.mockRejectedValue(new Error('denied'))
+
+      await expect(UploadFiles.reachable()).rejects.toThrow('denied')
+   })
 })

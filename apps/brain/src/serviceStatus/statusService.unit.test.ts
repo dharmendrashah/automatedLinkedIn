@@ -8,13 +8,18 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('database', () => ({ PrismaService: { isHealthy: mocks.databaseHealthy } }))
-vi.mock('core', () => ({ MessageBroker: { isHealthy: mocks.brokerHealthy } }))
+vi.mock('core', () => ({
+   MessageBroker: { isHealthy: mocks.brokerHealthy },
+   CloudRunJob: { reading: vi.fn() },
+   UploadFiles: { reachable: vi.fn() },
+}))
 vi.mock('env', () => ({
    STATUS_URL_WEBSITE: 'http://body:80/health',
    STATUS_URL_SIGN_IN: '',
    STATUS_URL_BRAIN_WORKER: '',
    STATUS_URL_SPIDER_API: '',
-   STATUS_URL_SPIDER_WORKER: '',
+   CLOUD_RUN_JOB: '',
+   SPIDER_GCS_BUCKET: '',
    AUTHENTIK_EMAIL__HOST: '',
    AUTHENTIK_EMAIL__PORT: 465,
    AUTHENTIK_EMAIL__USE_SSL: true,
@@ -46,6 +51,7 @@ describe('StatusService', () => {
          ['api', 'live'],
          ['database', 'live'],
          ['queue', 'dead'],
+         ['spiderWorker', 'unknown'],
          ['proxyLookup', 'live'],
       ])
       expect(overall).toBe('dead')
