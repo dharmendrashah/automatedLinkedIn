@@ -5,6 +5,7 @@ import { KeptFiles, UploadFiles, UploadRefused } from 'core'
 
 import { type TaskResult } from '@automatedLinkedIn/contracts'
 
+import { LinkedInConversationService } from './linkedInConversation.service'
 import { linkedInReplyHooks } from './linkedInReply.hooks'
 import { LinkedInReplyService, REPLY_LIMITS } from './linkedInReply.service'
 import { PrismaService } from './prisma.service'
@@ -896,6 +897,62 @@ describe('LinkedInReplyService (database)', () => {
          await expect(
             PrismaService.client.linkedInReply.findUniqueOrThrow({ where: { id: started?.id ?? '' } })
          ).resolves.toMatchObject({ conversationId: null })
+      })
+
+      it('should list a first message on its way as a conversation of its own, so a reload still shows it, and stop once it went', async () => {
+         await connect('grace')
+
+         const started = await LinkedInReplyService.start(userId, accountId, 'grace', 'Hello')
+         const pending = async () =>
+            (await LinkedInConversationService.list(userId)).find(({ id }) => id === `new:${accountId}:grace`)
+
+         await expect(pending()).resolves.toMatchObject({
+            accountId,
+            kind: 'DIRECT',
+            title: 'grace Name',
+            participants: [
+               {
+                  name: 'grace Name',
+                  profileUrl: 'https://www.linkedin.com/in/grace/',
+               },
+            ],
+            starting: 'grace',
+            messages: [],
+            reply: {
+               id: started?.id,
+               state: 'SENDING',
+               text: 'Hello',
+            },
+         })
+         expect((await LinkedInConversationService.list(otherUserId)).map(({ id }) => id)).not.toContain(
+            `new:${accountId}:grace`
+         )
+
+         await finish(await sessionOf(started?.id), 'SENT')
+
+         await expect(pending()).resolves.toBeUndefined()
+      })
+
+      it('should keep listing a first message that did not go until the owner dismisses it', async () => {
+         await connect('grace')
+
+         const started = await LinkedInReplyService.start(userId, accountId, 'grace', 'Hello')
+
+         await finish(await sessionOf(started?.id), 'FAILED', 'LinkedIn did not send the message.')
+
+         const listed = async () =>
+            (await LinkedInConversationService.list(userId)).find(({ id }) => id === `new:${accountId}:grace`)
+
+         await expect(listed()).resolves.toMatchObject({
+            reply: {
+               state: 'FAILED',
+               failure: 'LinkedIn did not send the message.',
+            },
+         })
+
+         await LinkedInReplyService.dismiss(userId, started?.id ?? '')
+
+         await expect(listed()).resolves.toBeUndefined()
       })
    })
 })

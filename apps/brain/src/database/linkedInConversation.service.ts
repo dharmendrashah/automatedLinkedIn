@@ -5,7 +5,7 @@ import { type Prisma } from 'generated/prisma/client'
 import { type MessagesFile, keptPrefix, sentKey } from '@automatedLinkedIn/contracts'
 
 import { summaryOf, timelineOf } from './conversationImport'
-import { type ConversationReply, latestReplies } from './conversationReply'
+import { type ConversationReply, latestReplies, pendingFirstMessages } from './conversationReply'
 import { PrismaService } from './prisma.service'
 import { settleUnsureReplies, words } from './replySettle'
 
@@ -187,6 +187,31 @@ const conversationOut = (row: ConversationRow, messages: MessageRow[], reply?: C
 
 export type ConversationView = ReturnType<typeof conversationOut>
 
+// A first message with no conversation yet, as the conversation the page shows for it. Its id is the page's own for a conversation not
+// begun (`new:<account>:<slug>`), and `starting` says it is one, so the page sends again from it as a first message.
+const pendingOut = ({ accountId, slug, name, reply }: Awaited<ReturnType<typeof pendingFirstMessages>>[number]) => ({
+   id: `new:${accountId}:${slug}`,
+   accountId,
+   kind: 'DIRECT' as const,
+   title: name,
+   participants: [
+      {
+         name,
+         profileUrl: `https://www.linkedin.com/in/${slug}/`,
+      },
+   ],
+   unread: false,
+   complete: true,
+   messageCount: 0,
+   lastMessageAt: null,
+   waitingSince: null,
+   lastReplyAt: null,
+   done: false,
+   messages: [] as ConversationView['messages'],
+   reply,
+   starting: slug,
+})
+
 // A conversation the owner may see: theirs, and of an account that is still theirs, so nothing of an account that went is ever shown.
 const owned = (userId: string) => ({
    userId,
@@ -223,9 +248,12 @@ export class LinkedInConversationService {
          },
       })
 
-      const replies = await latestReplies(userId)
+      const [replies, pending] = await Promise.all([latestReplies(userId), pendingFirstMessages(userId, accountIds)])
 
-      return rows.map(({ messages, ...row }) => conversationOut(row, messages.toReversed(), replies.get(row.id)))
+      return [
+         ...pending.map(pendingOut),
+         ...rows.map(({ messages, ...row }) => conversationOut(row, messages.toReversed(), replies.get(row.id))),
+      ]
    }
 
    // One conversation with its newest messages (at most 500), oldest first; null for one that is not the owner's.

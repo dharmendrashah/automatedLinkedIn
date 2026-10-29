@@ -490,25 +490,23 @@ describe('createTrpcSource.send', () => {
       }
       const { client } = fake({
          conversations: {
-            query: vi
-               .fn()
-               .mockResolvedValue([
-                  conversation({ reply: { ...reply, state: 'SENDING' } }),
-                  conversation({ id: 'c2', reply: { ...reply, state: 'UNKNOWN' } }),
-                  conversation({ id: 'c3', reply: { ...reply, state: 'FAILED', failure: 'Nope.' } }),
-                  conversation({
-                     id: 'c4',
-                     reply: {
-                        ...reply,
-                        state: 'QUEUED',
-                        wait: {
-                           reason: "Waiting for the account's working hours.",
-                           until: '2026-10-29T07:10:00.000Z',
-                           zone: 'Europe/Berlin',
-                        },
+            query: vi.fn().mockResolvedValue([
+               conversation({ reply: { ...reply, state: 'SENDING' } }),
+               conversation({ id: 'c2', reply: { ...reply, state: 'UNKNOWN' } }),
+               conversation({ id: 'c3', reply: { ...reply, state: 'FAILED', failure: 'Nope.' } }),
+               conversation({
+                  id: 'c4',
+                  reply: {
+                     ...reply,
+                     state: 'QUEUED',
+                     wait: {
+                        reason: "Waiting for the account's working hours.",
+                        until: '2026-10-29T07:10:00.000Z',
+                        zone: 'Europe/Berlin',
                      },
-                  }),
-               ]),
+                  },
+               }),
+            ]),
          },
       })
       const [sending, unknown, failed, queued] = (await createTrpcSource(client).load()).conversations
@@ -577,6 +575,48 @@ describe('createTrpcSource.send', () => {
       })
       expect(mutate).toHaveBeenCalledWith({ accountId: 'a1', slug: 'ada-l', text: 'Hello' })
       expect(started).toHaveBeenCalledWith('r7')
+   })
+
+   it('should bring back a first message brain still has after a reload, and follow it to the conversation brain links to it', async () => {
+      const pending = conversation({
+         id: 'new:a1:ada-l',
+         participants: [{ name: 'Ada Lovelace', profileUrl: 'https://www.linkedin.com/in/ada-l/' }],
+         unread: false,
+         complete: true,
+         messageCount: 0,
+         lastMessageAt: null,
+         waitingSince: null,
+         lastReplyAt: null,
+         messages: [],
+         starting: 'ada-l',
+         reply: {
+            id: 'r9',
+            state: 'QUEUED',
+            text: 'Hello',
+            files: [],
+            startedAt: '2026-10-29T09:30:00.000Z',
+            failure: null,
+            wait: null,
+         },
+      })
+      const replies = [
+         { id: 'r9', state: 'SENT', conversationId: null },
+         { id: 'r9', state: 'SENT', conversationId: 'c42' },
+      ]
+      const { client } = fake({
+         conversations: { query: vi.fn().mockResolvedValue([pending]) },
+         reply: { query: vi.fn(async () => replies.shift()) },
+      })
+      const source = createTrpcSource(client, { wait: async () => undefined })
+      const [first] = (await source.load()).conversations
+
+      expect(first).toMatchObject({
+         id: 'new:a1:ada-l',
+         starting: { slug: 'ada-l' },
+         messages: [],
+         sending: { replyId: 'r9', text: 'Hello' },
+      })
+      await expect(source.follow?.('r9')).resolves.toEqual({ ok: true, conversationId: 'c42' })
    })
 
    it("should say brain's sentence when a first message is refused, and send it as sent with no conversation when none is linked in time", async () => {

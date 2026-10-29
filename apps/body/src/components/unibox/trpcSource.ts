@@ -138,6 +138,8 @@ const conversationOf = (conversation: WireConversation): UniboxConversation => {
       // Closed by the owner with nothing after it: done as of its last message.
       ...(conversation.done && conversation.lastMessageAt && { doneAt: localClock(conversation.lastMessageAt) }),
       ...(conversation.reply && replyOf(conversation.reply)),
+      // A first message brain has with no conversation yet: the stand-in it was written in.
+      ...('starting' in conversation && { starting: { slug: conversation.starting } }),
    }
 }
 
@@ -175,6 +177,25 @@ type Deps = {
 }
 
 export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }: Deps = {}): UniboxSource => {
+   // A first message that went: the conversation brain links to it is waited for, so the page can show the stored one; none in time
+   // still counts as sent.
+   const linked = async (replyId: string): Promise<SendResult> => {
+      for (let tries = 0; tries < LINK_TIMES; tries += 1) {
+         await wait(LINK_POLL_MS)
+
+         const reply = await client.unibox.reply.query({ id: replyId }).catch(() => undefined)
+
+         if (reply?.conversationId) {
+            return {
+               ok: true,
+               conversationId: reply.conversationId,
+            }
+         }
+      }
+
+      return { ok: true }
+   }
+
    // Asks brain where a reply is until it ends: SENT, or a sentence for one that did not go. `onWaiting` hears why a queued reply has not
    // started and from when it can, and then, once it starts, that it waits no more.
    const follow = async (replyId: string, onWaiting?: SendEvents['waiting']): Promise<SendResult> => {
@@ -205,7 +226,16 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
          onWaiting?.(undefined)
 
          if (reply?.state === 'SENT') {
-            return { ok: true }
+            if (reply.conversationId === null) {
+               return linked(replyId)
+            }
+
+            return reply.conversationId
+               ? {
+                    ok: true,
+                    conversationId: reply.conversationId,
+                 }
+               : { ok: true }
          }
 
          if (reply?.state === 'FAILED') {
@@ -267,8 +297,7 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
       // Starting a conversation waits for brain and the spider task (.plan/message-connections.md); the list is real already.
       recipients: query => client.unibox.recipients.query({ query }),
 
-      // A message from New message: brain goes on in the conversation the account has with the person, or begins one. Once it went, the
-      // conversation brain links to it is waited for, so the page can show the stored one; none in time still counts as sent.
+      // A message from New message: brain goes on in the conversation the account has with the person, or begins one.
       start: async (account, slug, text, events) => {
          const started = await client.unibox.start
             .mutate({
@@ -287,26 +316,7 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
 
          events?.started?.(started.id)
 
-         const result = await follow(started.id, events?.waiting)
-
-         if (!result.ok) {
-            return result
-         }
-
-         for (let tries = 0; tries < LINK_TIMES; tries += 1) {
-            const reply = await client.unibox.reply.query({ id: started.id }).catch(() => undefined)
-
-            if (reply?.conversationId) {
-               return {
-                  ok: true,
-                  conversationId: reply.conversationId,
-               }
-            }
-
-            await wait(LINK_POLL_MS)
-         }
-
-         return { ok: true }
+         return follow(started.id, events?.waiting)
       },
 
       send: async (_account, text, attachments, conversationId, events) => {
