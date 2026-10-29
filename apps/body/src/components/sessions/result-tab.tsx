@@ -41,8 +41,8 @@ export const ResultTab = ({ session }: { session: SessionDetail }) => {
 
          {session.workerBuild ? (
             <p className="text-muted-foreground text-xs">
-               Run by worker build <span className="font-mono">{session.workerBuild}</span>. The spider picks a new browser
-               fingerprint every time, so two runs of one task can differ.
+               Run by worker build <span className="font-mono">{session.workerBuild}</span>. An account's tasks always
+               use that account's own browser device; only a run without an account gets a new one.
             </p>
          ) : null}
       </div>
