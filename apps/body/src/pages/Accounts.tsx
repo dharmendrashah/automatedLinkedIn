@@ -5,6 +5,7 @@ import { AccountsToolbar } from '@/components/accounts/accounts-toolbar'
 import { AddAccountDialog } from '@/components/accounts/add-account-dialog'
 import { readAddress, writeAddress } from '@/components/accounts/address'
 import { COLUMNS, columnsFrom, columnsToText } from '@/components/accounts/columns'
+import { readyCounts } from '@/components/accounts/loading'
 import { NeedsProxyNotice } from '@/components/accounts/needs-proxy-notice'
 import { OverLimitNote, SummaryBanner } from '@/components/accounts/summary-banner'
 import { dayProgress, progressSentence } from '@/components/accounts/today'
@@ -39,6 +40,8 @@ import { trpc } from '../trpc'
 
 // A visit takes a few minutes; look again until the newest one has an answer.
 const VISIT_POLL_MS = 3000
+// While an account is getting ready its bar moves by itself; once a minute is enough to see it.
+const READY_POLL_MS = 60_000
 const SEARCH_WAIT_MS = 250
 
 const groupFrom = (raw: string | null) => raw === '1'
@@ -51,7 +54,12 @@ export const Accounts = () => {
    const utils = trpc.useUtils()
    const list = trpc.linkedInAccount.list.useQuery(undefined, {
       retry: false,
-      refetchInterval: query => (query.state.data?.some(visitRunning) ? VISIT_POLL_MS : false),
+      refetchInterval: query =>
+         query.state.data?.some(visitRunning)
+            ? VISIT_POLL_MS
+            : query.state.data?.some(({ loading }) => loading !== null && loading.percent < 100)
+              ? READY_POLL_MS
+              : false,
    })
    const accountsWithProxy = useAccountsWithProxy()
    const actions = useAccountActions()
@@ -98,6 +106,7 @@ export const Accounts = () => {
       Intl.DateTimeFormat().resolvedOptions().timeZone
    )
    const summary = summaryOf(rows, progress)
+   const ready = list.data ? readyCounts(list.data) : undefined
    const filtered = tools && (q.trim() !== '' || address.client !== '' || address.chip !== 'all')
    const columnIds = COLUMNS.map(({ id }) => id).filter(id => columns.includes(id))
 
@@ -184,6 +193,13 @@ export const Accounts = () => {
          ) : (
             <>
                {summary ? <SummaryBanner summary={summary} onFix={nav.openAccount} /> : null}
+               {ready && ready.loading + ready.needsYou > 0 ? (
+                  <p className="text-muted-foreground text-sm" role="status">
+                     Getting your LinkedIn ready: {ready.ready} ready, {ready.loading} getting ready
+                     {ready.needsYou > 0 ? `, ${ready.needsYou} need you` : ''}. We only read; nothing is posted, sent
+                     or accepted.
+                  </p>
+               ) : null}
                {browsing.byId ? <OverLimitNote accounts={[...browsing.byId.values()]} /> : null}
 
                {tools ? (

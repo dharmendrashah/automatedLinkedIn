@@ -1,5 +1,7 @@
 import { dailyTime, timezoneOfCountry } from 'core'
 
+import { PROFILE_TRIES } from './accountLoading'
+import { FirstDayUsedService } from './firstDayUsed.service'
 import { type JobItemInput } from './jobRun.service'
 import { VISIT_TASK } from './linkedInAccount.service'
 import { LinkedInAccountValidationService } from './linkedInAccountValidation.service'
@@ -23,6 +25,7 @@ const MAX_FIRST_READS_A_DAY = 5
 const RECENT_SIGN_IN_MS = 12 * 60 * 60 * 1000
 // Before each first-day read the job waits a random time up to this, so new accounts do not all start at the same minute.
 const FIRST_READ_SPREAD_MS = 20 * 60 * 1000
+const STALLED_MS = 3 * DAY_MS
 
 type Due = Awaited<ReturnType<typeof findDue>>[number]
 type Field =
@@ -73,7 +76,7 @@ const findDue = (now: Date) => {
             {
                status: 'ACTIVE',
                OR: [
-                  { profileAskedAt: null },
+                  { profile: { is: null } },
                   { invitationsReadAt: null },
                   { connectionsReadAt: null },
                   ...due('nextConnectionsAt'),
@@ -94,7 +97,8 @@ const findDue = (now: Date) => {
          nextConnectionsAt: true,
          nextProfileAt: true,
          firstSignedInAt: true,
-         profileAskedAt: true,
+         profile: { select: { accountId: true } },
+         email: true,
          invitationsReadAt: true,
          connectionsReadAt: true,
          messagesReadAt: true,
@@ -176,7 +180,7 @@ const FIRST_READS = [
       action: 'profile-read',
       task: PROFILE_TASK,
       what: 'the first read of the own profile',
-      done: (account: Due) => account.profileAskedAt !== null,
+      done: (account: Due, profileGivenUp: boolean) => account.profile !== null || profileGivenUp,
    },
    {
       action: 'invitations-read',
@@ -381,11 +385,23 @@ export class AccountDailyJob {
                kind: 'letGo',
                reason: 'Not signed in successfully in the last day',
             }
-            // The first day's reads may start outside working hours for 24 hours after the first good sign-in.
+            // The first day's reads may start outside working hours for 24 hours after the first good sign-in, unless the same login
+            // already had its first day in the last 30 days (removed and added again).
             const firstDay =
-               account.firstSignedInAt !== null && now.getTime() - account.firstSignedInAt.getTime() <= DAY_MS
+               account.firstSignedInAt !== null &&
+               now.getTime() - account.firstSignedInAt.getTime() <= DAY_MS &&
+               !(await FirstDayUsedService.used(account.userId, account.email, now))
             const spread = () => new Date(now.getTime() + Math.floor(random() * FIRST_READ_SPREAD_MS))
-            const toDo = FIRST_READS.filter(read => !read.done(account))
+            // The own profile counts once it is kept; after three reads that did not keep it, it is the owner's to press.
+            const profileGivenUp =
+               account.profile === null &&
+               (await PrismaService.client.spiderSession.count({
+                  where: {
+                     linkedInAccountId: account.id,
+                     task: PROFILE_TASK,
+                  },
+               })) >= PROFILE_TRIES
+            const toDo = FIRST_READS.filter(read => !read.done(account, profileGivenUp))
 
             if (toDo.length > 0 && signedInToday) {
                const tried = await triedToday(
@@ -418,6 +434,17 @@ export class AccountDailyJob {
                      if (read.task === INVITATIONS_TASK) {
                         await move(account, 'nextInvitationsAt', next(false))
                      }
+                  }
+
+                  // For the operator: an account still not ready days after its first sign-in.
+                  if (account.firstSignedInAt && now.getTime() - account.firstSignedInAt.getTime() > STALLED_MS) {
+                     result.items.push({
+                        userId: account.userId,
+                        accountId: account.id,
+                        action: 'getting-ready',
+                        result: 'SKIPPED',
+                        reason: 'Still not ready 3 days after the first sign-in',
+                     })
                   }
 
                   continue
@@ -496,7 +523,7 @@ export class AccountDailyJob {
             await repeat(
                'nextProfileAt',
                30,
-               account.profileAskedAt !== null,
+               account.profile !== null,
                () => askFor(account, PROFILE_TASK, 'the monthly read of the own profile'),
                'profile-read'
             )

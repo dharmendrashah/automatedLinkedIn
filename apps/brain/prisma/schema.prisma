@@ -35,6 +35,7 @@ model User {
   invitations       LinkedInInvitation[]
   connections       LinkedInConnection[]
   accountProfiles   LinkedInAccountProfile[]
+  firstDaysUsed     FirstDayUsed[]
   profileVisits     LinkedInPageVisit[]
   postDrafts        PostDraft[]
   postPublications  PostPublication[]
@@ -1065,6 +1066,18 @@ model ProfileImport {
   importedAt    DateTime?
 
   @@index([status, nextAttemptAt])
+}
+
+// A LinkedIn login whose account was deleted after its first day (.plan/first-day-reads.md): kept 30 days so the same login added again
+// gets its first reads but not a second night allowance. Only a hash of the lowercased login, never the login itself.
+model FirstDayUsed {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loginHash String
+  usedAt    DateTime @default(now())
+
+  @@id([userId, loginHash])
+  @@index([usedAt])
 }
 
 // The latest profile read for an account, as the contract `accountProfileSchema` has it. One row per account: a new read replaces

@@ -63,6 +63,16 @@ describe('AccountDailyJob (database)', () => {
          invitationsReadAt: new Date('2026-10-18T20:00:00Z'),
          connectionsReadAt: new Date('2026-10-18T20:00:00Z'),
       })
+
+      await PrismaService.client.linkedInAccountProfile.create({
+         data: {
+            accountId: due.id,
+            userId: user.id,
+            data: {},
+            capturedAt: new Date('2026-10-18T20:00:00Z'),
+            sessionId: 'read-1',
+         },
+      })
       // Signed in and never read: its first reads come before its visit.
       const unread = await create(user.id, {
          status: 'ACTIVE',

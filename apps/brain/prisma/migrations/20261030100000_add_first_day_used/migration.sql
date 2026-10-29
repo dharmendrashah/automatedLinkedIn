@@ -1,0 +1,14 @@
+-- CreateTable
+CREATE TABLE "FirstDayUsed" (
+    "userId" TEXT NOT NULL,
+    "loginHash" TEXT NOT NULL,
+    "usedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "FirstDayUsed_pkey" PRIMARY KEY ("userId","loginHash")
+);
+
+-- CreateIndex
+CREATE INDEX "FirstDayUsed_usedAt_idx" ON "FirstDayUsed"("usedAt");
+
+-- AddForeignKey
+ALTER TABLE "FirstDayUsed" ADD CONSTRAINT "FirstDayUsed_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => {
       requestCheck,
       requestTask: vi.fn(),
       validation: { request: requestCheck },
+      firstDayUsed: vi.fn(),
    }
 })
 
@@ -37,6 +38,7 @@ vi.mock('./prisma.service', () => ({
    },
 }))
 vi.mock('./linkedInAccountValidation.service', () => ({ LinkedInAccountValidationService: mocks.validation }))
+vi.mock('./firstDayUsed.service', () => ({ FirstDayUsedService: { used: mocks.firstDayUsed } }))
 vi.mock('./task.service', () => ({
    TaskService: {
       request: mocks.requestTask,
@@ -76,6 +78,8 @@ const account = (extra: Record<string, unknown> = {}) => ({
    lastVerifiedAt: new Date('2026-10-18T20:00:00Z'),
    // The first reads are done and the repeats are not due, so the other tests stay about their own jobs.
    firstSignedInAt: new Date('2026-10-01T09:00:00Z'),
+   email: 'ada@work.com',
+   profile: { accountId: 'acc1' },
    profileAskedAt: EARLIER,
    invitationsReadAt: EARLIER,
    connectionsReadAt: EARLIER,
@@ -136,6 +140,7 @@ describe('AccountDailyJob, the first day of a new account', () => {
          nextMessagesAt: null,
          nextInvitationsAt: null,
          messagesBackfilledAt: null,
+         profile: null,
          profileAskedAt: null,
          invitationsReadAt: null,
          connectionsReadAt: null,
@@ -180,7 +185,7 @@ describe('AccountDailyJob, the first day of a new account', () => {
    })
 
    it('should go on with the requests, then the connections, and start the daily read of the requests tomorrow', async () => {
-      mocks.findMany.mockResolvedValue([fresh({ profileAskedAt: EARLIER })])
+      mocks.findMany.mockResolvedValue([fresh({ profile: { accountId: 'acc1' } })])
 
       await run()
 
@@ -195,7 +200,7 @@ describe('AccountDailyJob, the first day of a new account', () => {
       mocks.requestTask.mockClear()
       mocks.findMany.mockResolvedValue([
          fresh({
-            profileAskedAt: EARLIER,
+            profile: { accountId: 'acc1' },
             invitationsReadAt: EARLIER,
          }),
       ])
@@ -209,6 +214,47 @@ describe('AccountDailyJob, the first day of a new account', () => {
             firstDay: true,
          }),
       ])
+   })
+
+   it('should ask for the own profile again on a later day while it is not kept, and leave it to the owner after three reads', async () => {
+      mocks.findMany.mockResolvedValue([fresh({ profileAskedAt: EARLIER })])
+      mocks.countSessions.mockResolvedValue(2)
+
+      await run()
+
+      expect(asked()).toEqual([expect.objectContaining({ task: 'linkedin-profile' })])
+
+      mocks.requestTask.mockClear()
+      mocks.countSessions.mockResolvedValue(3)
+
+      await run()
+
+      expect(asked()).toEqual([expect.objectContaining({ task: 'linkedin-invitations' })])
+   })
+
+   it('should give a login removed and added again its first reads, but not outside working hours', async () => {
+      mocks.findMany.mockResolvedValue([fresh()])
+      mocks.firstDayUsed.mockResolvedValue(true)
+
+      await run()
+
+      expect(mocks.firstDayUsed).toHaveBeenCalledWith('u1', 'ada@work.com', NOW)
+      expect(asked()).toEqual([expect.objectContaining({ task: 'linkedin-profile' })])
+      expect(asked()[0]).not.toHaveProperty('firstDay')
+   })
+
+   it('should tell the monitor about an account still not ready three days after its first sign-in', async () => {
+      mocks.findMany.mockResolvedValue([fresh({ firstSignedInAt: new Date('2026-10-15T09:00:00Z') })])
+
+      const { items } = await run()
+
+      expect(items).toContainEqual({
+         userId: 'u1',
+         accountId: 'acc1',
+         action: 'getting-ready',
+         result: 'SKIPPED',
+         reason: 'Still not ready 3 days after the first sign-in',
+      })
    })
 
    it('should leave a read tried today that did not finish for tomorrow, and go on with the next', async () => {

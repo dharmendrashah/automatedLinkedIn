@@ -22,8 +22,7 @@ import { type Account } from './types'
 
 import { type SampleKind } from '../browsing/sample'
 import { BrowsingParts, Part } from './drawer-browsing'
-import { FirstReads } from './first-reads'
-import { firstReadsDone, firstReadsText } from './firstReads'
+import { GettingReady } from './getting-ready'
 import { SecretCode } from './secret-code'
 import { StatusBadge } from './status-badge'
 import { type ItemState, progressText } from './today'
@@ -100,11 +99,11 @@ const Body = ({
          </DrawerHeader>
          <div className="overflow-y-auto px-4 pb-6">
             <Accordion type="multiple" defaultValue={['first', 'checklist', 'state', 'today', 'limit']}>
-               {firstReadsDone(account) ? null : (
-                  <Part value="first" title="First reads" summary={firstReadsText(account)}>
-                     <FirstReads account={account} />
+               {account.loading && account.loading.percent < 100 ? (
+                  <Part value="first" title="Getting your LinkedIn ready" summary={`${account.loading.percent} %`}>
+                     <GettingReady loading={account.loading} status={account.status} full />
                   </Part>
-               )}
+               ) : null}
                <Part value="checklist" title="Today's checklist" summary={states ? progressText(states) : undefined}>
                   <TodayChecklist
                      account={account}

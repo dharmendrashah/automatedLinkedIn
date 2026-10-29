@@ -1,5 +1,6 @@
 import { Prisma } from 'generated/prisma/client'
 
+import { FirstDayUsedService } from './firstDayUsed.service'
 import { JobRunService } from './jobRun.service'
 import { PrismaService } from './prisma.service'
 
@@ -108,6 +109,7 @@ export class RetentionService {
          ))`
       // The cron monitor's history of job runs (.plan/cron-monitor.md).
       const jobRuns = await JobRunService.cleanup(now)
+      const firstDaysUsed = await FirstDayUsedService.sweep(now)
 
       return {
          items: items.count,
@@ -122,6 +124,7 @@ export class RetentionService {
          snapshots,
          pages,
          jobRuns,
+         firstDaysUsed,
       }
    }
 }

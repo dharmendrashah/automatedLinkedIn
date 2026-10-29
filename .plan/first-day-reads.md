@@ -1,8 +1,8 @@
 # First day of a new account: read its profile, connections, messages and connection requests
 
-- Status: phase 1 done; phase 2 (profile loading and progress bar) draft
+- Status: done (phase 1 and phase 2; staging run left to the owner)
 - Created: 2026-10-30
-- Locked by user: phase 1 yes, 2026-10-30; phase 2 no
+- Locked by user: phase 1 yes, 2026-10-30; phase 2 yes, 2026-10-30
 
 ## Goal
 
@@ -113,7 +113,7 @@ Open questions (must be empty before locking):
 - `pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build`; brain integration tests for `accountDailyJob` (in the daytime, see the working-hours gotcha in `MEMORY.md`).
 - Staging: add an account, sign in, watch `/jobs` and Sessions through the day: one task at a time, in order, inside working hours, and the four "done" fields set.
 
-## Phase 2: Profile loading and progress bar (draft, 2026-10-30)
+## Phase 2: Profile loading and progress bar (locked 2026-10-30)
 
 Same PR (#134). The first-day reads are shown to the owner as "Profile loading": a progress bar from 0 to 100 % on the LinkedIn accounts page, and, once the own profile is read, the account's LinkedIn name and picture in its row.
 
@@ -191,12 +191,12 @@ Open questions (must be empty before locking):
 
 ### Phase 2 approach
 
-- [ ] Brain, test first: `loadingOf(account)` (one server-side function): the five steps with done, reading, waiting or did not finish, the percentage with the messages estimate, the ready labels; older accounts with only `lastVerifiedAt`; empty reads reach 100 %; a not-ACTIVE account carries its problem. Sent with `linkedInAccount.list`.
-- [ ] Brain, test first: the own profile counts as done only when stored, retried once a day up to 3 times; a sign-in problem stops the first reads and the night allowance.
-- [ ] Brain, test first: `FirstDayUsed` (migration, additive), written when an account is deleted after its first sign-in, read before the night allowance, swept after 30 days.
-- [ ] Brain: `/jobs` flags accounts whose loading has not moved in 3 working days; a test that each first read's estimate fits the background share of each browsing mode.
-- [ ] Page, test first: the colour of a percentage, the words under the bar, the summary line; then the row (picture, name, email, bar, words, ready labels, green tick at 100 %) and the drawer (the same bar and steps instead of "First reads"); refresh at most once a minute while loading.
-- [ ] Definition of done, `MEMORY.md`, PR #134 updated.
+- [x] Brain, test first: `loadingOf(account)` (one server-side function): the five steps with done, reading, waiting or did not finish, the percentage with the messages estimate, the ready labels; older accounts with only `lastVerifiedAt`; empty reads reach 100 %; a not-ACTIVE account carries its problem. Sent with `linkedInAccount.list`.
+- [x] Brain, test first: the own profile counts as done only when stored, retried once a day up to 3 times; a sign-in problem stops the first reads and the night allowance.
+- [x] Brain, test first: `FirstDayUsed` (migration, additive), written when an account is deleted after its first sign-in, read before the night allowance, swept after 30 days.
+- [x] Brain: `/jobs` flags accounts whose loading has not moved in 3 working days; a test that each first read's estimate fits the background share of each browsing mode.
+- [x] Page, test first: the colour of a percentage, the words under the bar, the summary line; then the row (picture, name, email, bar, words, ready labels, green tick at 100 %) and the drawer (the same bar and steps instead of "First reads"); refresh at most once a minute while loading.
+- [x] Definition of done, `MEMORY.md`, PR #134 updated. A real first day on staging is left to the owner.
 
 ## Outcome
 
@@ -212,3 +212,13 @@ Shipped on branch `feat/first-day-reads`:
 Deviations: the first-day status shows what is done and what is to come, not the time the next one starts (the time depends on the budget answer at the moment it is asked).
 
 Not verified: a real first day on staging. Local integration: the RabbitMQ queue-count test fails while a local worker runs (known); `accountProfile.service.integration.test.ts` failed once in a full run and passed on the rerun (it imports every pending profile import of the shared test database, so leftovers of other files can change it).
+
+Phase 2 (same branch and PR #134):
+
+- `accountLoading.ts` (`loadingOf`, pure) and `accountLoading.service.ts` (`loadingsOf`, four queries for all accounts): `linkedInAccount.list` gives each account `loading` (percent, the five steps as DONE, READING, WAITING, NOT_FINISHED or GIVEN_UP, conversations read, ready for workflows, ready for the Unibox). Messages grow as `40 × n / (n + 150)`, at most 39 until the inbox is read.
+- The own profile counts once stored (`LinkedInAccountProfile`), not once asked; the job asks it again on a later day up to `PROFILE_TRIES = 3`, then leaves it to the owner (GIVEN_UP).
+- `FirstDayUsed` (migration `20261030100000_add_first_day_used`, SHA-256 of the lowercased login, kept 30 days, swept by retention): written when an account that had its first sign-in is deleted; the job gives that login no night allowance.
+- The monitor: `getting-ready` items for an account still not ready 3 days after its first sign-in.
+- Page: the row shows the LinkedIn picture and name over the login and the bar with one line under it (`getting-ready.tsx`, `loading.ts`: tones light red, light grey, yellow, blue, green; words for reading, not finished, given up, messages so far, what is next; a greyed bar and "Waits..." for a paused or signed-out account); "Ready" with a tick at 100 %. The drawer shows the steps, their weights and the trust line instead of "First reads". The accounts page says "Getting your LinkedIn ready: N ready, N getting ready, N need you" and refreshes once a minute while a bar moves.
+
+Phase 2 deviations: "stalled" is 3 calendar days, not working days; the budget arithmetic was checked by hand (the four first reads estimate 120 to 600 seconds each, far under 40 % of SAFE's 90 minutes) rather than in a test, because the estimates live in the spider's task definitions, which brain does not import. The "Ready for workflows" warning in the workflow account picker stays out of scope.
