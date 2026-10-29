@@ -100,7 +100,7 @@ const Body = ({
          <div className="overflow-y-auto px-4 pb-6">
             <Accordion type="multiple" defaultValue={['first', 'checklist', 'state', 'today', 'limit']}>
                {account.loading && account.loading.percent < 100 ? (
-                  <Part value="first" title="Getting your LinkedIn ready" summary={`${account.loading.percent} %`}>
+                  <Part value="first" title="Getting your LinkedIn ready" summary={`${account.loading.percent}%`}>
                      <GettingReady loading={account.loading} status={account.status} full />
                   </Part>
                ) : null}

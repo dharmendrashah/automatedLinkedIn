@@ -55,7 +55,7 @@ export const readyLine = (loading: Loading, status: AccountStatus) => {
    }
 
    if (notFinished) {
-      return `Your ${NAMES[notFinished.step]} did not finish. It is tried again tomorrow.`
+      return `Your ${NAMES[notFinished.step]} did not finish. It will be tried again tomorrow.`
    }
 
    const next = steps.find(item => item.state === 'WAITING')

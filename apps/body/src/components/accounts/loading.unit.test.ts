@@ -34,7 +34,7 @@ describe('readyLine', () => {
    it('should say what is read now, what did not finish, and how far the messages are, in that order', () => {
       expect(readyLine(loading(30, ['DONE', 'DONE', 'READING']), 'ACTIVE')).toBe('Reading your connections now.')
       expect(readyLine(loading(30, ['DONE', 'NOT_FINISHED']), 'ACTIVE')).toBe(
-         'Your profile did not finish. It is tried again tomorrow.'
+         'Your profile did not finish. It will be tried again tomorrow.'
       )
       expect(readyLine(loading(30, ['DONE', 'GIVEN_UP']), 'ACTIVE')).toBe(
          'Your profile could not be read. Press Read profile on the account page.'

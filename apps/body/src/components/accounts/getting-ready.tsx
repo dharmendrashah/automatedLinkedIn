@@ -1,4 +1,6 @@
-import { CircleCheck } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { ChevronDown, CircleCheck } from 'lucide-react'
+import { useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -26,7 +28,7 @@ const STATE_WORDS: Record<Loading['steps'][number]['state'], string> = {
    DONE: 'Done',
    READING: 'Reading now',
    WAITING: 'To come',
-   NOT_FINISHED: 'Did not finish, tried again tomorrow',
+   NOT_FINISHED: 'Did not finish, will be tried again tomorrow',
    GIVEN_UP: 'Press Read profile',
 }
 
@@ -39,6 +41,8 @@ type Props = {
 
 // "Getting your LinkedIn ready": the bar, one line of what happens, and what the account can be used for already.
 export const GettingReady = ({ loading, status, full = false }: Props) => {
+   const [details, setDetails] = useState(false)
+
    if (loading.percent >= 100 && !full) {
       return (
          <span className="text-success inline-flex items-center gap-1 text-xs">
@@ -70,7 +74,7 @@ export const GettingReady = ({ loading, status, full = false }: Props) => {
                />
             </div>
             <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-               {loading.percent >= 100 ? 'Ready' : `Getting ready ${loading.percent} %`}
+               {loading.percent >= 100 ? 'Ready' : `Getting ready ${loading.percent}%`}
             </span>
          </div>
          <p className="text-muted-foreground text-xs">{readyLine(loading, status)}</p>
@@ -81,12 +85,24 @@ export const GettingReady = ({ loading, status, full = false }: Props) => {
             </p>
          ) : null}
          {full ? (
+            <Button
+               variant="link"
+               size="sm"
+               className="h-auto justify-self-start p-0 text-xs"
+               aria-expanded={details}
+               onClick={() => setDetails(open => !open)}
+            >
+               {details ? 'Hide details' : 'Show details'}
+               <ChevronDown className={cn('size-3 transition-transform', details && 'rotate-180')} aria-hidden />
+            </Button>
+         ) : null}
+         {full && details ? (
             <>
                <ul className="grid gap-1 text-sm">
                   {loading.steps.map(({ step, weight, state }) => (
                      <li key={step} className="flex items-center justify-between gap-2">
                         <span>
-                           {STEP_NAMES[step]} <span className="text-muted-foreground text-xs">({weight} %)</span>
+                           {STEP_NAMES[step]} <span className="text-muted-foreground text-xs">({weight}%)</span>
                         </span>
                         <span className={cn('text-xs', state === 'DONE' ? 'text-success' : 'text-muted-foreground')}>
                            {STATE_WORDS[state]}
