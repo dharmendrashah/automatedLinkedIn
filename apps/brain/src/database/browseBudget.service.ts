@@ -128,13 +128,15 @@ export class BrowseBudgetService {
          now?: Date
          // The owner starts it despite the refusal (a manual request only): the time is booked all the same.
          override?: boolean
+         // A first-day read the account job asks for: it may start outside working hours (automatic requests only).
+         firstDay?: boolean
       }
    ) {
       if (!BROWSE_BUDGET) {
          return
       }
 
-      const { accountId, sessionId, budget, trigger, now = new Date(), override = false } = input
+      const { accountId, sessionId, budget, trigger, now = new Date(), override = false, firstDay = false } = input
       const klass = classOf(budget, trigger)
 
       await tx.$queryRaw`SELECT "id" FROM "LinkedInAccount" WHERE "id" = ${accountId} FOR UPDATE`
@@ -188,6 +190,7 @@ export class BrowseBudgetService {
          estimateSeconds: budget.estimate_s,
          lastEndedAt: ended.length > 0 ? new Date(Math.max(...ended.map(time => time.getTime()))) : null,
          inFlight: fresh.some(({ settledAt }) => !settledAt),
+         anyHour: firstDay && trigger === 'automatic',
       })
 
       if (!verdict.ok && !(override && trigger === 'manual')) {

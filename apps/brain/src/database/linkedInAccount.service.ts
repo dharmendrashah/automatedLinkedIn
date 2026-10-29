@@ -56,6 +56,11 @@ const metadataSelect = {
    // The name and picture LinkedIn showed for the account; null until its messages were read.
    displayName: true,
    imageUrl: true,
+   // When each first read was done (.plan/first-day-reads.md); null while it is still to come.
+   profileAskedAt: true,
+   invitationsReadAt: true,
+   connectionsReadAt: true,
+   messagesBackfilledAt: true,
    createdAt: true,
    updatedAt: true,
 } satisfies Prisma.LinkedInAccountSelect

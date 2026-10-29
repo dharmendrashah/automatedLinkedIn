@@ -91,7 +91,7 @@ export const linkedInLoginHooks: TaskHooks = {
                  statusMessage: result.message,
               }
 
-      await tx.linkedInAccount.updateMany({
+      const { count } = await tx.linkedInAccount.updateMany({
          where: {
             id: session.linkedInAccountId,
             validationId: session.id,
@@ -103,5 +103,16 @@ export const linkedInLoginHooks: TaskHooks = {
             validationId: null,
          },
       })
+
+      // The first good sign-in starts the account's first day of reads (.plan/first-day-reads.md).
+      if (count > 0 && result.verdict === 'VALID') {
+         await tx.linkedInAccount.updateMany({
+            where: {
+               id: session.linkedInAccountId,
+               firstSignedInAt: null,
+            },
+            data: { firstSignedInAt: now },
+         })
+      }
    },
 }

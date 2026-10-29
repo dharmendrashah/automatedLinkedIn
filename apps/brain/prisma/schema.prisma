@@ -593,6 +593,13 @@ model LinkedInAccount {
   nextMessagesAt        DateTime?
   // The daily automatic read of the connection requests, at a random time of the account's day (.plan/my-network-daily-read.md).
   nextInvitationsAt     DateTime?
+  // A new account's first reads (.plan/first-day-reads.md): when its first sign-in was good (the first day's reads may start outside
+  // working hours for 24 hours after it), when the next first-day read may be asked, and when connections (weekly) and the own
+  // profile (monthly) are read again.
+  firstSignedInAt       DateTime?
+  nextFirstReadAt       DateTime?
+  nextConnectionsAt     DateTime?
+  nextProfileAt         DateTime?
   // The name and picture LinkedIn showed for the account when its messages were last read; shown in the Unibox.
   displayName           String?
   imageUrl              String?

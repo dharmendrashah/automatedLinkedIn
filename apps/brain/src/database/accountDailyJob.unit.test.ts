@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => {
       updateMany: vi.fn(),
       updateAccount: vi.fn(),
       countSessions: vi.fn(),
+      findSessions: vi.fn(),
       findConversations: vi.fn(),
       catalog: vi.fn(),
       requestCheck,
@@ -27,7 +28,10 @@ vi.mock('./prisma.service', () => ({
             updateMany: mocks.updateMany,
             update: mocks.updateAccount,
          },
-         spiderSession: { count: mocks.countSessions },
+         spiderSession: {
+            count: mocks.countSessions,
+            findMany: mocks.findSessions,
+         },
          linkedInConversation: { findMany: mocks.findConversations },
       },
    },
@@ -70,6 +74,14 @@ const account = (extra: Record<string, unknown> = {}) => ({
    messagesSweptAt: NOW,
    messagesResumeSkip: null,
    lastVerifiedAt: new Date('2026-10-18T20:00:00Z'),
+   // The first reads are done and the repeats are not due, so the other tests stay about their own jobs.
+   firstSignedInAt: new Date('2026-10-01T09:00:00Z'),
+   profileAskedAt: EARLIER,
+   invitationsReadAt: EARLIER,
+   connectionsReadAt: EARLIER,
+   nextFirstReadAt: null,
+   nextConnectionsAt: LATER,
+   nextProfileAt: LATER,
    proxyServers: [
       {
          detectedCountryCode: 'IN',
@@ -89,8 +101,213 @@ const announce = (version: number) =>
          version,
       },
    ])
-const movedTo = (field: 'nextCheckAt' | 'nextBrowseAt' | 'nextMessagesAt' | 'nextInvitationsAt') =>
-   mocks.updateMany.mock.calls.filter(([{ data }]) => field in data).map(([{ data }]) => data[field])
+const movedTo = (
+   field:
+      | 'nextCheckAt'
+      | 'nextBrowseAt'
+      | 'nextMessagesAt'
+      | 'nextInvitationsAt'
+      | 'nextFirstReadAt'
+      | 'nextConnectionsAt'
+      | 'nextProfileAt'
+) => mocks.updateMany.mock.calls.filter(([{ data }]) => field in data).map(([{ data }]) => data[field])
+
+describe('AccountDailyJob, the first day of a new account', () => {
+   beforeEach(() => {
+      vi.resetAllMocks()
+      vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      mocks.updateMany.mockResolvedValue({ count: 1 })
+      mocks.updateAccount.mockResolvedValue({})
+      mocks.countSessions.mockResolvedValue(0)
+      mocks.findSessions.mockResolvedValue([])
+      mocks.findConversations.mockResolvedValue([])
+      announce(3)
+      mocks.requestCheck.mockResolvedValue(true)
+      mocks.requestTask.mockResolvedValue({ id: 's1' })
+   })
+
+   // Signed in for the first time an hour ago; nothing read yet.
+   const fresh = (extra: Record<string, unknown> = {}) =>
+      account({
+         firstSignedInAt: new Date('2026-10-19T09:00:00Z'),
+         lastVerifiedAt: new Date('2026-10-19T09:00:00Z'),
+         nextCheckAt: LATER,
+         nextBrowseAt: null,
+         nextMessagesAt: null,
+         nextInvitationsAt: null,
+         messagesBackfilledAt: null,
+         profileAskedAt: null,
+         invitationsReadAt: null,
+         connectionsReadAt: null,
+         nextConnectionsAt: null,
+         nextProfileAt: null,
+         nextFirstReadAt: EARLIER,
+         ...extra,
+      })
+   const asked = () => mocks.requestTask.mock.calls.map(([options]) => options)
+
+   it('should first wait a random moment, then ask for the own profile alone, allowed outside working hours on the first day', async () => {
+      mocks.findMany.mockResolvedValue([fresh({ nextFirstReadAt: null })])
+
+      await expect(AccountDailyJob.runDue(NOW, () => 0.5)).resolves.toMatchObject({ firstReads: 0 })
+      expect(mocks.requestTask).not.toHaveBeenCalled()
+      expect(movedTo('nextFirstReadAt')).toEqual([new Date('2026-10-19T10:10:00Z')])
+
+      mocks.updateMany.mockClear()
+      mocks.findMany.mockResolvedValue([fresh()])
+
+      await expect(run()).resolves.toMatchObject({
+         firstReads: 1,
+         items: [
+            {
+               action: 'profile-read',
+               result: 'ASKED',
+               sessionId: 's1',
+            },
+         ],
+      })
+      expect(asked()).toEqual([
+         {
+            userId: 'u1',
+            task: 'linkedin-profile',
+            accountId: 'acc1',
+            trigger: 'automatic',
+            firstDay: true,
+         },
+      ])
+      expect(movedTo('nextFirstReadAt')).toEqual([NOW])
+      expect(movedTo('nextBrowseAt')).toEqual([])
+   })
+
+   it('should go on with the requests, then the connections, and start the daily read of the requests tomorrow', async () => {
+      mocks.findMany.mockResolvedValue([fresh({ profileAskedAt: EARLIER })])
+
+      await run()
+
+      expect(asked()).toEqual([
+         expect.objectContaining({
+            task: 'linkedin-invitations',
+            input: { answers: [] },
+         }),
+      ])
+      expect(movedTo('nextInvitationsAt')).toEqual([TOMORROW_8_IN_INDIA])
+
+      mocks.requestTask.mockClear()
+      mocks.findMany.mockResolvedValue([
+         fresh({
+            profileAskedAt: EARLIER,
+            invitationsReadAt: EARLIER,
+         }),
+      ])
+
+      await run()
+
+      expect(asked()).toEqual([
+         expect.objectContaining({
+            task: 'linkedin-connections',
+            input: {},
+            firstDay: true,
+         }),
+      ])
+   })
+
+   it('should leave a read tried today that did not finish for tomorrow, and go on with the next', async () => {
+      mocks.findMany.mockResolvedValue([fresh()])
+      mocks.findSessions.mockResolvedValue([{ task: 'linkedin-profile' }])
+
+      await run()
+
+      expect(asked()).toEqual([expect.objectContaining({ task: 'linkedin-invitations' })])
+   })
+
+   it('should start the first read of the messages at once when the other first reads were tried', async () => {
+      mocks.findMany.mockResolvedValue([fresh()])
+      mocks.findSessions.mockResolvedValue([
+         { task: 'linkedin-profile' },
+         { task: 'linkedin-invitations' },
+         { task: 'linkedin-connections' },
+      ])
+
+      await expect(run()).resolves.toMatchObject({ reads: 1 })
+      expect(asked()).toContainEqual(
+         expect.objectContaining({
+            task: 'linkedin-messages',
+            firstDay: true,
+         })
+      )
+   })
+
+   it('should not let the reads of an account signed in long ago go outside working hours', async () => {
+      mocks.findMany.mockResolvedValue([fresh({ firstSignedInAt: null })])
+
+      await run()
+
+      expect(asked()).toEqual([expect.not.objectContaining({ firstDay: true })])
+   })
+
+   it('should keep the time of a first read that was refused, and ask nothing else of the account meanwhile', async () => {
+      mocks.findMany.mockResolvedValue([fresh()])
+      mocks.requestTask.mockRejectedValue(new TaskRefusedError('This account is resting between two sessions.'))
+
+      await expect(run()).resolves.toMatchObject({
+         firstReads: 0,
+         items: [
+            {
+               action: 'profile-read',
+               result: 'SKIPPED',
+               reason: 'This account is resting between two sessions.',
+            },
+         ],
+      })
+      expect(mocks.requestTask).toHaveBeenCalledTimes(1)
+      expect(movedTo('nextFirstReadAt')).toEqual([])
+   })
+
+   it('should ask for nothing until the first sign-in is good', async () => {
+      mocks.findMany.mockResolvedValue([fresh({ status: 'NEEDS_REAUTH' })])
+
+      await run()
+
+      expect(mocks.requestTask).not.toHaveBeenCalled()
+   })
+
+   it('should read the connections again a week and the own profile a month after, at a random time', async () => {
+      mocks.findMany.mockResolvedValue([
+         account({
+            nextConnectionsAt: null,
+            nextProfileAt: null,
+         }),
+      ])
+
+      await run()
+
+      expect(movedTo('nextConnectionsAt')).toEqual([new Date('2026-10-26T02:30:00Z')])
+      expect(movedTo('nextProfileAt')).toEqual([new Date('2026-11-18T02:30:00Z')])
+
+      mocks.updateMany.mockClear()
+      mocks.requestTask.mockClear()
+      mocks.findMany.mockResolvedValue([
+         account({
+            nextCheckAt: LATER,
+            nextBrowseAt: LATER,
+            nextConnectionsAt: EARLIER,
+         }),
+      ])
+
+      await expect(run()).resolves.toMatchObject({
+         repeatReads: 1,
+         items: [
+            {
+               action: 'connections-read',
+               result: 'ASKED',
+            },
+         ],
+      })
+      expect(asked()).toEqual([expect.objectContaining({ task: 'linkedin-connections' })])
+      expect(asked()[0]).not.toHaveProperty('firstDay')
+      expect(movedTo('nextConnectionsAt')).toEqual([new Date('2026-10-26T02:30:00Z')])
+   })
+})
 
 describe('AccountDailyJob, the connection requests', () => {
    beforeEach(() => {
