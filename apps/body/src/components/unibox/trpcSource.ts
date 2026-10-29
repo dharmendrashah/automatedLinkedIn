@@ -152,6 +152,9 @@ const groups = (ids: string[]) =>
 const POLL_MS = 2000
 const POLL_TIMES = 460
 const QUEUED_POLL_MS = 10_000
+// A first message is linked to its conversation once its run's conversation is stored (the import runs every 30 s): about 90 s of looks.
+const LINK_POLL_MS = 4000
+const LINK_TIMES = 22
 
 const sleep = (ms: number) =>
    new Promise<void>(resolve => {
@@ -177,7 +180,7 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
    const follow = async (replyId: string, onWaiting?: SendEvents['waiting']): Promise<SendResult> => {
       let queued = false
 
-      for (let polls = 0; polls < POLL_TIMES; ) {
+      for (let polls = 0; polls < POLL_TIMES;) {
          await wait(queued ? QUEUED_POLL_MS : POLL_MS)
 
          const reply = await client.unibox.reply.query({ id: replyId }).catch(() => undefined)
@@ -240,6 +243,7 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
             conversations: conversations.map(conversationOf),
             sample: false,
             canSend: true,
+            canStart: true,
             canRefresh: true,
          }
       },
@@ -259,6 +263,51 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
       refresh: accountIds => client.unibox.refresh.mutate(accountIds ? { accountIds } : {}),
 
       fileLink: async (messageId, index) => (await client.unibox.fileLink.query({ messageId, index })).url,
+
+      // Starting a conversation waits for brain and the spider task (.plan/message-connections.md); the list is real already.
+      recipients: query => client.unibox.recipients.query({ query }),
+
+      // A message from New message: brain goes on in the conversation the account has with the person, or begins one. Once it went, the
+      // conversation brain links to it is waited for, so the page can show the stored one; none in time still counts as sent.
+      start: async (account, slug, text, events) => {
+         const started = await client.unibox.start
+            .mutate({
+               accountId: account.id,
+               slug,
+               text,
+            })
+            .catch((error: unknown) => refusalOf(error))
+
+         if (typeof started === 'string') {
+            return {
+               ok: false,
+               reason: started,
+            }
+         }
+
+         events?.started?.(started.id)
+
+         const result = await follow(started.id, events?.waiting)
+
+         if (!result.ok) {
+            return result
+         }
+
+         for (let tries = 0; tries < LINK_TIMES; tries += 1) {
+            const reply = await client.unibox.reply.query({ id: started.id }).catch(() => undefined)
+
+            if (reply?.conversationId) {
+               return {
+                  ok: true,
+                  conversationId: reply.conversationId,
+               }
+            }
+
+            await wait(LINK_POLL_MS)
+         }
+
+         return { ok: true }
+      },
 
       send: async (_account, text, attachments, conversationId, events) => {
          // A link is only text on the page; there is nothing of it to upload.

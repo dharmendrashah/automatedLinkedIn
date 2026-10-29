@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 
 import { cn } from '@/lib/utils'
 
-import { type Attachment, type UniboxAccount } from '../components/unibox/types'
+import { type Attachment, type Recipient, type UniboxAccount } from '../components/unibox/types'
 
 import { type AccountSet, parseSets, setMatching } from '../components/unibox/accountSets'
 import { type Address, parseAddress, toAddress } from '../components/unibox/address'
@@ -19,6 +19,8 @@ import { DetailsPanel } from '../components/unibox/details-panel'
 import { type Drafts, parseDrafts, setDraft } from '../components/unibox/drafts'
 import { buildIndex, countsOf, filterRows, nextToReply, otherAccountsOf, sortRows } from '../components/unibox/inbox'
 import { commandFor, escapeStep, isTyping } from '../components/unibox/keyboard'
+import { NewMessage } from '../components/unibox/new-message'
+import { draftConversation, isPlaceholder } from '../components/unibox/newMessage'
 import { EmptyList, HelpDialog, NoConversation, SampleBanner } from '../components/unibox/notices'
 import { Palette, type PaletteItem, SelectionBar } from '../components/unibox/palette'
 import { loadRealSample } from '../components/unibox/sample/real'
@@ -31,7 +33,7 @@ import { KEYS, readJson, writeJson } from '../components/unibox/storage'
 import { firstName } from '../components/unibox/templates'
 import { Thread } from '../components/unibox/thread'
 import { agoOf, sameDay } from '../components/unibox/time'
-import { Toolbar } from '../components/unibox/toolbar'
+import { ComposeButton, SearchBox, Toolbar } from '../components/unibox/toolbar'
 import { createTrpcSource } from '../components/unibox/trpcSource'
 import { createUpload } from '../components/unibox/upload'
 import { UNDO_MS, useUnibox } from '../components/unibox/use-unibox'
@@ -59,10 +61,17 @@ const FRAME =
 
 type Api = ReturnType<typeof useUnibox>
 
+// The width from which the views get their own rail (72rem, as the old container query).
+const RAIL_FROM_PX = 1152
+
 type BoardProps = {
    accounts: UniboxAccount[]
    sample: boolean
    canSend: boolean
+   // Whether a first message can be sent to a connection not talked to yet.
+   canStart: boolean
+   // The search of the connections New message lists; absent when there is none.
+   loadRecipients: ((query: string) => Promise<Recipient[]>) | undefined
    // Asks for the messages to be read again; absent when the data has nothing to read.
    onRefresh: ((accountIds?: string[]) => void) | undefined
    // Opens a kept file of a message.
@@ -72,12 +81,22 @@ type BoardProps = {
    api: Api
 }
 
-const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, api }: BoardProps) => {
+const Board = ({
+   accounts,
+   sample,
+   canSend,
+   canStart,
+   loadRecipients,
+   onRefresh,
+   onOpenFile,
+   onFileUrl,
+   api,
+}: BoardProps) => {
    const { conversations, flying, dispatch, load, send, undo, retry } = api
    const { pathname, search } = useLocation()
    const navigate = useNavigate()
    const address = useMemo(() => parseAddress(pathname, search), [pathname, search])
-   const { view, sort, conversationId } = address
+   const { view, sort, conversationId, compose } = address
    const [query, setQuery] = useState(address.query)
    const deferredQuery = useDeferredValue(query)
    const [now, setNow] = useState(() => Date.now())
@@ -93,19 +112,48 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, ap
    const [helpOpen, setHelpOpen] = useState(false)
    const searchRef = useRef<HTMLInputElement>(null)
    const composerRef = useRef<HTMLTextAreaElement>(null)
+   const gridRef = useRef<HTMLDivElement>(null)
+   // Wide enough for the rail of views; measured, so the one search box is rendered in one place only.
+   const [wide, setWide] = useState(false)
    const anchor = useRef<string | undefined>(undefined)
    const keepUnread = useRef<string | undefined>(undefined)
+   // Moves the pane from a first message's stand-in to the stored conversation, only when the owner is still looking at the stand-in.
+   const moveTo = useRef<(from: string, to: string) => void>(() => undefined)
 
+   // Going to a conversation, to none, or to the New message view changes the right pane; any other change keeps what is open.
    const go = useCallback(
       (patch: Partial<Address>, replace = true) =>
-         navigate(toAddress({ conversationId, view, sort, query, ...patch }), { replace }),
-      [navigate, conversationId, view, sort, query]
+         navigate(
+            toAddress({
+               view,
+               sort,
+               query,
+               ...('conversationId' in patch || 'compose' in patch ? {} : { conversationId, compose }),
+               ...patch,
+            }),
+            { replace }
+         ),
+      [navigate, conversationId, compose, view, sort, query]
    )
 
    useEffect(() => {
       const timer = setInterval(() => setNow(Date.now()), 60_000)
 
       return () => clearInterval(timer)
+   }, [])
+
+   useEffect(() => {
+      const grid = gridRef.current
+
+      if (!grid || typeof ResizeObserver === 'undefined') {
+         return undefined
+      }
+
+      const observer = new ResizeObserver(([entry]) => setWide((entry?.contentRect.width ?? 0) >= RAIL_FROM_PX))
+
+      observer.observe(grid)
+
+      return () => observer.disconnect()
    }, [])
 
    // The address follows the search box, never the other way round, so back and forward do not rewrite what was typed.
@@ -148,6 +196,19 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, ap
          void load(activeId)
       }
    }, [activeId, activePartial, load])
+
+   // A conversation opened from New message and left without a word goes from the list again.
+   const lastOpen = useRef<string | undefined>(undefined)
+
+   useEffect(() => {
+      const left = lastOpen.current
+
+      lastOpen.current = conversationId
+
+      if (left && left !== conversationId && isPlaceholder(left) && !drafts[left]?.trim()) {
+         dispatch({ type: 'DISCARD', id: left })
+      }
+   }, [conversationId, drafts, dispatch])
 
    const shared = useMemo(() => {
       const names = new Map<string, number>()
@@ -311,6 +372,16 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, ap
       go({ view: 'NEEDS_REPLY', sort: 'WAITING', query: '', conversationId: first?.conversation.id }, false)
    }
 
+   // Takes a reply back and puts its words in the box again.
+   const takeBack = (id: string) => {
+      const words = undo(id)
+
+      if (words !== undefined) {
+         setDrafts(current => setDraft(current, id, words))
+         go({ conversationId: id }, false)
+      }
+   }
+
    const handleSend = (text: string, attachments: Attachment[]) => {
       if (!active) {
          return
@@ -319,20 +390,14 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, ap
       const id = active.conversation.id
       const next = view === 'NEEDS_REPLY' ? nextToReply(rows, id) : undefined
 
-      send(id, text, attachments)
+      // A first message: the stored conversation takes the place of the stand-in, and the pane follows it.
+      send(id, text, attachments, active.conversation.starting ? stored => moveTo.current(id, stored) : undefined)
       setDrafts(current => setDraft(current, id, ''))
       toast(`Sending to ${active.conversation.contact.name}`, {
          duration: UNDO_MS,
          action: {
             label: 'Undo',
-            onClick: () => {
-               const words = undo(id)
-
-               if (words !== undefined) {
-                  setDrafts(current => setDraft(current, id, words))
-                  go({ conversationId: id }, false)
-               }
-            },
+            onClick: () => takeBack(id),
          },
       })
 
@@ -340,6 +405,31 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, ap
          go({ conversationId: next })
       }
    }
+
+   // A connection picked in New message: their conversation with that account opens, or a new one to write the first message in.
+   const openPerson = (person: Recipient) => {
+      if (person.conversationId && index.byId.has(person.conversationId)) {
+         go({ conversationId: person.conversationId }, false)
+
+         return
+      }
+
+      const from = accounts.find(item => item.id === person.accountId)
+
+      if (!from) {
+         toast.error('The account of this connection is not known.')
+
+         return
+      }
+
+      const draft = draftConversation(from, person)
+
+      dispatch({ type: 'START', conversation: draft })
+      go({ conversationId: draft.id }, false)
+   }
+
+   const openCompose = () => go({ compose: {} }, false)
+   const canCompose = loadRecipients !== undefined
 
    const dismissFailed = () => {
       if (active?.conversation.failed) {
@@ -362,13 +452,17 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, ap
    }
 
    const leaveComposer = () => {
-      composerRef.current?.blur()
+      if (document.activeElement instanceof HTMLElement) {
+         document.activeElement.blur()
+      }
+
       document.querySelector<HTMLElement>('[data-unibox-list]')?.focus()
    }
 
    const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-         if (event.defaultPrevented) {
+         // The New message dialog closes itself.
+         if (event.defaultPrevented || compose) {
             return
          }
 
@@ -436,6 +530,9 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, ap
          case 'SEARCH':
             searchRef.current?.focus()
             break
+         case 'COMPOSE':
+            if (canCompose) openCompose()
+            break
          case 'HELP':
             setHelpOpen(true)
             break
@@ -446,6 +543,11 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, ap
 
    useEffect(() => {
       latestKey.current = onKey
+      moveTo.current = (from, to) => {
+         if (conversationId === from) {
+            go({ conversationId: to })
+         }
+      }
    })
 
    useEffect(() => {
@@ -482,6 +584,15 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, ap
          label: `Show ${viewLabel(next)}`,
          run: () => go({ view: next, conversationId: undefined }),
       })),
+      ...(canCompose
+         ? [
+              {
+                 id: 'compose',
+                 label: 'New message',
+                 run: openCompose,
+              },
+           ]
+         : []),
       {
          id: 'needs',
          label: 'Start with what waited longest',
@@ -547,10 +658,24 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, ap
                      now={new Date(now)}
                   />
                </div>
-               <div className="grid min-h-0 flex-1 @3xl/main:grid-cols-[minmax(20rem,26rem)_minmax(0,1fr)] @6xl/main:grid-cols-[13rem_minmax(20rem,26rem)_minmax(0,1fr)]">
-                  <div className="hidden overflow-y-auto border-r bg-card @6xl/main:block">
-                     <ViewsList counts={counts} active={view} onChange={next => go({ view: next })} />
-                  </div>
+               <div
+                  ref={gridRef}
+                  className={cn(
+                     'grid min-h-0 flex-1',
+                     wide
+                        ? 'grid-cols-[13rem_minmax(20rem,26rem)_minmax(0,1fr)]'
+                        : '@3xl/main:grid-cols-[minmax(20rem,26rem)_minmax(0,1fr)]'
+                  )}
+               >
+                  {wide ? (
+                     <div className="flex min-h-0 flex-col overflow-y-auto border-r bg-card">
+                        <div className="grid gap-2 border-b p-2">
+                           {canCompose ? <ComposeButton wide onCompose={openCompose} /> : null}
+                           <SearchBox query={query} onQuery={changeQuery} searchRef={searchRef} />
+                        </div>
+                        <ViewsList counts={counts} active={view} onChange={next => go({ view: next })} />
+                     </div>
+                  ) : null}
                   <div
                      className={cn(
                         'min-h-0 flex-col border-r bg-card',
@@ -585,10 +710,14 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, ap
                         onHelp={() => setHelpOpen(true)}
                         onRefresh={onRefresh ? () => onRefresh(accountIds ? [...accountIds] : undefined) : undefined}
                         onReload={api.reload}
+                        onCompose={canCompose ? openCompose : undefined}
+                        inRail={wide}
                      />
-                     <div className="border-b @6xl/main:hidden">
-                        <ViewsList row counts={counts} active={view} onChange={next => go({ view: next })} />
-                     </div>
+                     {wide ? null : (
+                        <div className="border-b">
+                           <ViewsList row counts={counts} active={view} onChange={next => go({ view: next })} />
+                        </div>
+                     )}
                      {selection.all || selection.ids.size > 0 ? (
                         <SelectionBar
                            selection={selection}
@@ -640,13 +769,7 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, ap
                            onToggleDetails={() => setDetailsOpen(current => !current)}
                            onMarkUnread={markUnread}
                            onDone={doneAndNext}
-                           onUndoSend={() => {
-                              const words = undo(active.conversation.id)
-
-                              if (words !== undefined) {
-                                 setDrafts(current => setDraft(current, active.conversation.id, words))
-                              }
-                           }}
+                           onUndoSend={() => takeBack(active.conversation.id)}
                            canUndo={!flying.has(active.conversation.id)}
                            onRetry={() => retry(active.conversation.id)}
                            onDismissFailed={dismissFailed}
@@ -693,6 +816,15 @@ const Board = ({ accounts, sample, canSend, onRefresh, onOpenFile, onFileUrl, ap
             findAccounts={findAccounts}
          />
          <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+         {compose && loadRecipients ? (
+            <NewMessage
+               initialQuery={compose.to ?? ''}
+               load={loadRecipients}
+               canStart={canStart}
+               onPick={openPerson}
+               onClose={() => go({ conversationId: undefined })}
+            />
+         ) : null}
       </SharedProvider>
    )
 }
@@ -701,11 +833,13 @@ export const Unibox = () => {
    const { client } = trpc.useUtils()
    const source = useMemo(() => {
       const upload = createUpload({ form: input => client.unibox.uploadForm.mutate(input) })
+      // The dev messages file only when the address asks for it (`?sample`): it holds an account that may no longer exist.
+      const sample = new URLSearchParams(window.location.search).has('sample')
 
       return withDevFile(
          fileSource,
          createTrpcSource(client, { upload }),
-         async () => (await loadRealSample()) !== undefined
+         async () => sample && (await loadRealSample()) !== undefined
       )
    }, [client])
    const onSaveError = useCallback(() => toast.error('A change could not be kept. Reload to see what is saved.'), [])
@@ -774,6 +908,8 @@ export const Unibox = () => {
          accounts={loaded.accounts}
          sample={loaded.sample}
          canSend={loaded.canSend}
+         canStart={loaded.canStart}
+         loadRecipients={source.recipients}
          onRefresh={loaded.canRefresh ? refresh : undefined}
          onOpenFile={openFile}
          onFileUrl={source.fileLink ? fileUrl : undefined}

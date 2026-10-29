@@ -89,21 +89,11 @@ describe('removeBlocker', () => {
 
 describe('messageAction', () => {
    it('should open the conversation in the Unibox when there is one', () => {
-      expect(messageAction({ conversationId: '2-abc==', messageUrn: 'urn:li:fsd_profile:ACoAA1' })).toEqual({
-         kind: 'UNIBOX',
-         to: '/unibox/2-abc%3D%3D',
-      })
+      expect(messageAction({ conversationId: '2-abc==', slug: 'ada-l' }, 'a1')).toBe('/unibox/2-abc%3D%3D')
    })
 
-   it('should open LinkedIn’s own message window when there is no conversation yet', () => {
-      expect(messageAction({ messageUrn: 'urn:li:fsd_profile:ACoAA1' })).toEqual({
-         kind: 'LINKEDIN',
-         href: 'https://www.linkedin.com/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3AACoAA1',
-      })
-   })
-
-   it('should offer nothing when there is neither', () => {
-      expect(messageAction({})).toEqual({ kind: 'NONE' })
+   it('should open New message for the person when there is no conversation yet', () => {
+      expect(messageAction({ slug: 'ada-l' }, 'a 1')).toBe('/unibox/new?account=a+1&to=ada-l')
    })
 })
 

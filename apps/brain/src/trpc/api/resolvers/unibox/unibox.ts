@@ -1,9 +1,16 @@
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
-import { LinkedInConversationService, LinkedInReplyService, MAX_IDS, MessagesRefresh, REPLY_LIMITS } from 'database'
+import {
+   LinkedInConnectionService,
+   LinkedInConversationService,
+   LinkedInReplyService,
+   MAX_IDS,
+   MessagesRefresh,
+   REPLY_LIMITS,
+} from 'database'
 
-import { MAX_ATTACHMENT_BYTES, UPLOAD_ID } from '@automatedLinkedIn/contracts'
+import { MAX_ATTACHMENT_BYTES, UPLOAD_ID, connectionSlugSchema } from '@automatedLinkedIn/contracts'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -17,6 +24,11 @@ const ids = z.array(id).min(1).max(MAX_IDS)
 // ctx.user.id, so a foreign id answers like a missing one. See .plan/unibox-backend.md.
 export const unibox = router({
    accounts: ownerProcedure.query(({ ctx }) => LinkedInConversationService.accounts(ctx.user.id)),
+
+   // New message: the stored connections of all the owner's accounts that match the words, with their conversation and do-not-contact mark.
+   recipients: ownerProcedure
+      .input(z.object({ query: z.string().trim().max(200).default('') }))
+      .query(({ ctx, input }) => LinkedInConnectionService.recipients(ctx.user.id, input.query)),
 
    // The newest conversations (3,000 at most) with their latest messages.
    conversations: ownerProcedure
@@ -106,6 +118,24 @@ export const unibox = router({
          orRefused(
             LinkedInReplyService.send(ctx.user.id, input.conversationId, input.text, input.uploadId).then(sent =>
                present(sent, 'Conversation not found')
+            )
+         )
+      ),
+
+   // A message to a connection from New message (.plan/message-connections.md): it goes on in the conversation the account has with the
+   // person, or begins one. Answers at once with the message to follow, like `send`. Refused with a sentence when it cannot go now.
+   start: ownerProcedure
+      .input(
+         z.object({
+            accountId: id,
+            slug: connectionSlugSchema,
+            text: z.string().trim().min(1).max(REPLY_LIMITS.maxChars),
+         })
+      )
+      .mutation(async ({ ctx, input }) =>
+         orRefused(
+            LinkedInReplyService.start(ctx.user.id, input.accountId, input.slug, input.text).then(started =>
+               present(started, 'Connection not found')
             )
          )
       ),

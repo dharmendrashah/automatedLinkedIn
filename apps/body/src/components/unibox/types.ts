@@ -1,6 +1,5 @@
 // What the Unibox shows. The shapes follow `messages.json` (packages/contracts/src/messages.ts), with the account the conversation
 // belongs to, the state the owner gives it here, and a time (epoch milliseconds) on every message so they can be ordered and aged.
-
 import { type Waiting } from '../posting/publication'
 
 export type AccountState = 'ACTIVE' | 'PAUSED' | 'DISCONNECTED' | 'RESTRICTED'
@@ -49,6 +48,18 @@ export type UniboxMessage = {
    attachments: Attachment[]
 }
 
+// A connection of one of the accounts (.plan/message-connections.md). `conversationId` says that account already talks to this person;
+// `blocked` says why they cannot be written to.
+export type Recipient = {
+   accountId: string
+   slug: string
+   name: string
+   headline: string
+   imageUrl?: string
+   conversationId?: string
+   blocked?: 'DO_NOT_CONTACT'
+}
+
 export type UniboxConversation = {
    id: string
    accountId: string
@@ -59,6 +70,8 @@ export type UniboxConversation = {
    // False when only part of the conversation was read: older messages are missing.
    complete: boolean
    messages: UniboxMessage[]
+   // Set on the stand-in of a first message (the person's profile slug) until LinkedIn has the conversation and it is stored.
+   starting?: { slug: string }
    // How many messages the conversation has, when `messages` holds only the latest ones (the list); the rest load when it opens.
    messageCount?: number
    // What the whole conversation says, kept by the server for when `messages` is only the latest few.

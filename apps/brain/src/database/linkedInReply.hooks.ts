@@ -2,6 +2,8 @@ import { TaskRefusedError } from './taskErrors'
 import { type TaskHooks } from './taskHooks'
 
 export const REPLY_TASK = 'linkedin-reply'
+// A first message to a connection (.plan/message-connections.md); its row and verdicts are a reply's, so it shares these hooks.
+export const MESSAGE_TASK = 'linkedin-message'
 
 // The answers after which nothing was typed or sent: ours that say so, and the runner's that end a task before it starts. Any
 // other answer (a timeout, a crash, a lost proxy) may have come after send was pressed, so the reply is unsure.
@@ -9,6 +11,9 @@ const NOT_SENT = new Set([
    'FAILED',
    'NO_COMPOSER',
    'WRONG_THREAD',
+   'NO_MESSAGE_BUTTON',
+   'WRONG_RECIPIENT',
+   'NOT_AVAILABLE',
    'SIGNED_OUT',
    'ERROR',
    'UNKNOWN_TASK',

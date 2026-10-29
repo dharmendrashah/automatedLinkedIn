@@ -187,6 +187,12 @@ const conversationOut = (row: ConversationRow, messages: MessageRow[], reply?: C
 
 export type ConversationView = ReturnType<typeof conversationOut>
 
+// A conversation the owner may see: theirs, and of an account that is still theirs, so nothing of an account that went is ever shown.
+const owned = (userId: string) => ({
+   userId,
+   account: { userId },
+})
+
 // The conversations of the owner's accounts, as the spider read them, and the owner's marks on them. Every call is scoped to the
 // owner, so a foreign id is answered like a missing one. See .plan/unibox-backend.md.
 export class LinkedInConversationService {
@@ -194,7 +200,7 @@ export class LinkedInConversationService {
    public static async list(userId: string, accountIds?: string[]) {
       const rows = await PrismaService.client.linkedInConversation.findMany({
          where: {
-            userId,
+            ...owned(userId),
             ...(accountIds && { accountId: { in: accountIds } }),
          },
          orderBy: [
@@ -227,7 +233,7 @@ export class LinkedInConversationService {
       const row = await PrismaService.client.linkedInConversation.findFirst({
          where: {
             id,
-            userId,
+            ...owned(userId),
          },
          select: {
             ...conversationSelect,
@@ -259,7 +265,7 @@ export class LinkedInConversationService {
       const message = await PrismaService.client.linkedInMessage.findFirst({
          where: {
             id: messageId,
-            conversation: { userId },
+            conversation: owned(userId),
          },
          select: { attachments: true },
       })
@@ -275,7 +281,7 @@ export class LinkedInConversationService {
    public static async setUnread(userId: string, ids: string[], unread: boolean) {
       const { count } = await PrismaService.client.linkedInConversation.updateMany({
          where: {
-            userId,
+            ...owned(userId),
             id: { in: ids },
             unread: !unread,
          },
@@ -294,7 +300,7 @@ export class LinkedInConversationService {
       if (!done) {
          const { count } = await PrismaService.client.linkedInConversation.updateMany({
             where: {
-               userId,
+               ...owned(userId),
                id: { in: ids },
             },
             data: {
@@ -307,9 +313,10 @@ export class LinkedInConversationService {
       }
 
       return PrismaService.client.$executeRaw`
-         UPDATE "LinkedInConversation"
-         SET "doneAt" = now(), "doneMessageCount" = "messageCount"
-         WHERE "userId" = ${userId} AND "id" = ANY(${ids}::text[])`
+         UPDATE "LinkedInConversation" AS c
+         SET "doneAt" = now(), "doneMessageCount" = c."messageCount"
+         FROM "LinkedInAccount" AS a
+         WHERE c."userId" = ${userId} AND c."id" = ANY(${ids}::text[]) AND a."id" = c."accountId" AND a."userId" = ${userId}`
    }
 
    // Stores what a run read for one account: new conversations and messages are added, ones already there are left as they
@@ -507,7 +514,7 @@ export class LinkedInConversationService {
          PrismaService.client.linkedInConversation.groupBy({
             by: ['accountId'],
             where: {
-               userId,
+               ...owned(userId),
                unread: true,
             },
             _count: { _all: true },

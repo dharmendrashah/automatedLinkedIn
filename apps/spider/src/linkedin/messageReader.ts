@@ -3,7 +3,16 @@ import { createHash } from 'node:crypto'
 
 import { type Message } from '@automatedLinkedIn/contracts'
 
-import { COMPOSER, INBOX_ROW, SEND_BUTTON } from './markup'
+import {
+   COMPOSER,
+   INBOX_ROW,
+   MESSAGE_WINDOW,
+   MESSAGE_WINDOW_TITLE,
+   PROFILE_MESSAGE,
+   SEND_BUTTON,
+   WINDOW_PROFILE_CARD,
+   WINDOW_RECIPIENT,
+} from './markup'
 import { parseClock, parseDay } from './when'
 
 type Person = Message['sender']
@@ -188,11 +197,12 @@ export const parseThread = (html: string, today: Date) => {
 }
 
 // The place to write in the open conversation: whether there is one, what is typed in it, and whether its send button can be
-// pressed (it is disabled while the box is empty).
-export const parseComposer = (html: string) => {
-   const root = parse(html)
-   const box = root.querySelector(COMPOSER)
-   const send = root.querySelector(SEND_BUTTON)
+// pressed (it is disabled while the box is empty). `scope` keeps the look inside one part of the page (the window a profile opens).
+export const parseComposer = (html: string, scope?: string) => {
+   const page = parse(html)
+   const root = scope ? page.querySelector(scope) : page
+   const box = root?.querySelector(COMPOSER) ?? null
+   const send = root?.querySelector(SEND_BUTTON) ?? null
 
    return {
       present: box !== null && send !== null,
@@ -219,6 +229,28 @@ export const newestIsOurs = (messages: Message[], text: string, before?: { id: s
 
 // The markup of the place to write, with whatever is attached to it (empty when the page has none), to tell when it stops changing.
 export const composerHtml = (html: string) => parse(html).querySelector('form.msg-form')?.outerHTML ?? ''
+
+// Whether a profile shows its own Message link (a connection's profile does; recorded 2026-10-27).
+export const hasProfileMessage = (html: string) => parse(html).querySelector(PROFILE_MESSAGE) !== null
+
+// The window a profile's Message link opens: the person it is with, the messages it shows and its box. Only the window is read, so a
+// message list elsewhere on the page never counts. A New message window (a person never written to) names its recipients by chips
+// ("Remove <name>") and links to the person's profile from a card.
+export const parseMessageWindow = (html: string, today: Date) => {
+   const window = parse(html).querySelector(MESSAGE_WINDOW)
+   const inside = window?.outerHTML ?? ''
+
+   return {
+      open: window !== null,
+      title: shown(window?.querySelector(MESSAGE_WINDOW_TITLE) ?? null),
+      recipients: (window?.querySelectorAll(WINDOW_RECIPIENT) ?? []).map(chip =>
+         clean((chip.getAttribute('aria-label') ?? '').replace(/^Remove /, ''))
+      ),
+      profiles: (window?.querySelectorAll(WINDOW_PROFILE_CARD) ?? []).flatMap(link => link.getAttribute('href') ?? []),
+      messages: window ? parseThread(inside, today).messages : [],
+      composer: parseComposer(inside),
+   }
+}
 
 // What a row of the list is known by without opening it: its title and its last words, not its time, which changes with the clock
 // for a conversation that did not change. Two identical last words from one person give the same value (.plan/messages-first-sync-and-new-only.md).

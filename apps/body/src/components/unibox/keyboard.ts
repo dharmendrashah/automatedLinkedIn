@@ -7,7 +7,7 @@ export type Key = {
 }
 
 export type Command =
-   'NEXT' | 'PREVIOUS' | 'OPEN' | 'REPLY' | 'DONE' | 'UNREAD' | 'SELECT' | 'SEARCH' | 'HELP' | 'PALETTE'
+   'NEXT' | 'PREVIOUS' | 'OPEN' | 'REPLY' | 'DONE' | 'UNREAD' | 'SELECT' | 'SEARCH' | 'COMPOSE' | 'HELP' | 'PALETTE'
 
 const SINGLE: Record<string, Command> = {
    j: 'NEXT',
@@ -19,6 +19,7 @@ const SINGLE: Record<string, Command> = {
    e: 'DONE',
    u: 'UNREAD',
    x: 'SELECT',
+   c: 'COMPOSE',
    '/': 'SEARCH',
    '?': 'HELP',
 }

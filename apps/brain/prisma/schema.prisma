@@ -1161,8 +1161,12 @@ model LinkedInReply {
   user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   accountId      String
   account        LinkedInAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  conversationId String
-  conversation   LinkedInConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  // Empty for a first message to a connection (.plan/message-connections.md) until the run's conversation is stored.
+  conversationId String?
+  conversation   LinkedInConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  // A first message: the connection's profile address after /in/ and their name, as the task is told them.
+  recipientSlug  String?
+  recipientName  String?
   // May be empty when the reply is files only.
   text           String
   // The files that go with it (name, kind, bytes). They wait under uploads/ until the reply ends, then are moved for good to
@@ -1194,6 +1198,7 @@ model LinkedInReply {
   @@index([accountId, startedAt])
   @@index([conversationId, createdAt])
   @@index([state, createdAt])
+  @@index([accountId, recipientSlug])
 }
 
 enum LinkedInInvitationStatus {

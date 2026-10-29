@@ -2,14 +2,16 @@ import { describe, expect, it } from 'vitest'
 
 import {
    composerHtml,
+   hasProfileMessage,
    newestIsOurs,
    parseComposer,
    parseInbox,
+   parseMessageWindow,
    parseOwner,
    parseThread,
    rowHash,
 } from './messageReader'
-import { inboxMarkup, threadMarkup } from './messagingFixture'
+import { inboxMarkup, profileMarkup, threadMarkup } from './messagingFixture'
 
 // Thursday, 22 October 2026.
 const today = new Date(Date.UTC(2026, 9, 22, 12, 0, 0))
@@ -313,6 +315,113 @@ describe('parseComposer', () => {
          canSend: false,
       })
       expect(parseComposer('<html><body></body></html>').present).toBe(false)
+   })
+
+   it('should look only inside the part of the page it is told to', () => {
+      expect(parseComposer(thread({ typed: 'Hi' }), '.msg-thread').typed).toBe('Hi')
+      expect(parseComposer(thread({ typed: 'Hi' }), '.nowhere').present).toBe(false)
+   })
+})
+
+describe('hasProfileMessage', () => {
+   it("should find the profile's own Message link, and not another person's under People also viewed", () => {
+      expect(hasProfileMessage(profileMarkup())).toBe(true)
+      expect(hasProfileMessage(profileMarkup({ messageLink: false }))).toBe(false)
+   })
+
+   it('should find it in the layout without view names too', () => {
+      expect(hasProfileMessage(profileMarkup({ plain: true }))).toBe(true)
+      expect(
+         hasProfileMessage(
+            profileMarkup({
+               plain: true,
+               messageLink: false,
+            })
+         )
+      ).toBe(false)
+   })
+})
+
+describe('parseMessageWindow', () => {
+   const withWindow = (typed?: string) =>
+      profileMarkup({
+         window: {
+            title: 'Ada Lovelace',
+            messages: [
+               {
+                  id: '2-w1',
+                  from: 'THEM',
+                  name: 'Ada Lovelace',
+                  profile: ADA,
+                  time: '9:00 AM',
+                  day: 'Today',
+                  text: 'Hello',
+               },
+            ],
+            composer: {
+               typed,
+               sendDisabled: typed === undefined,
+            },
+         },
+      })
+
+   it('should read the name, the messages and the box of the window a profile opens', () => {
+      const window = parseMessageWindow(withWindow('Hi Ada'), today)
+
+      expect(window).toMatchObject({
+         open: true,
+         title: 'Ada Lovelace',
+         composer: {
+            present: true,
+            typed: 'Hi Ada',
+            canSend: true,
+         },
+      })
+      expect(window.messages.map(({ text, direction }) => [direction, text])).toEqual([['THEM', 'Hello']])
+   })
+
+   it('should say no window is open on a profile without one', () => {
+      expect(parseMessageWindow(profileMarkup(), today)).toEqual({
+         open: false,
+         title: '',
+         recipients: [],
+         profiles: [],
+         messages: [],
+         composer: {
+            present: false,
+            typed: '',
+            canSend: false,
+         },
+      })
+   })
+
+   it('should read who a New message window is for: the name of each recipient chip and the profile its card links to', () => {
+      const compose = (recipients: string[]) =>
+         parseMessageWindow(
+            profileMarkup({
+               plain: true,
+               window: {
+                  title: 'Ada Lovelace',
+                  messages: [],
+                  composer: {},
+                  compose: {
+                     recipients,
+                     profile: '/in/ada-l/',
+                  },
+               },
+            }),
+            today
+         )
+
+      expect(compose(['Ada L.'])).toMatchObject({
+         title: 'New message',
+         recipients: ['Ada L.'],
+         profiles: ['/in/ada-l/'],
+         messages: [],
+         composer: { present: true },
+      })
+      expect(compose(['Ada L.', 'Grace H.']).recipients).toEqual(['Ada L.', 'Grace H.'])
+      expect(parseMessageWindow(withWindow(), today).recipients).toEqual([])
    })
 })
 

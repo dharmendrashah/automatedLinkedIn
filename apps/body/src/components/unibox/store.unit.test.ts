@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { type UniboxConversation } from './types'
 
+import { draftConversation } from './newMessage'
 import { statusOf } from './status'
 import { reduce } from './store'
 
@@ -192,5 +193,50 @@ describe('opened', () => {
       expect(of(next).messages.map(message => message.id)).toEqual(['m0', 'm1', 'm2'])
       expect(of(next)).toMatchObject({ unread: false, doneAt: 5, waitingSince: 90, messageCount: 3 })
       expect(of(next, 'c2')).toBe(other)
+   })
+})
+
+describe('a first message', () => {
+   const stand = draftConversation(
+      { id: 'a1', name: 'Me', handle: 'me@x.test', headline: '', state: 'ACTIVE' },
+      { accountId: 'a1', slug: 'grace-h', name: 'Grace', headline: '' }
+   )
+   const opened = reduce(start, { type: 'START', conversation: stand })
+   const started = reduce(opened, { type: 'SEND', id: stand.id, text: 'Hello', attachments: [], now: 10 })
+
+   it('should enter the list once, and be sent like a reply', () => {
+      expect(opened).toHaveLength(3)
+      expect(reduce(opened, { type: 'START', conversation: stand })).toBe(opened)
+      expect(of(started, stand.id).sending?.text).toBe('Hello')
+   })
+
+   it('should stay open when its message is taken back or its failure dismissed', () => {
+      expect(of(reduce(started, { type: 'UNDO_SEND', id: stand.id }), stand.id).sending).toBeUndefined()
+
+      const failed = reduce(started, { type: 'FAIL', id: stand.id, reason: 'No.' })
+
+      expect(statusOf(of(failed, stand.id))).toBe('FAILED')
+      expect(of(reduce(failed, { type: 'DISMISS_FAILED', id: stand.id }), stand.id).failed).toBeUndefined()
+   })
+
+   it('should go when left with nothing in it, and only then', () => {
+      expect(reduce(opened, { type: 'DISCARD', id: stand.id })).toEqual(start)
+      expect(reduce(started, { type: 'DISCARD', id: stand.id })).toBe(started)
+      expect(reduce(start, { type: 'DISCARD', id: 'c1' })).toBe(start)
+   })
+
+   it('should be sent again from a failure, as a reply is', () => {
+      const failed = reduce(started, { type: 'FAIL', id: stand.id, reason: 'No.' })
+      const again = reduce(failed, { type: 'SEND', id: stand.id, text: 'Hello', attachments: [], now: 20 })
+
+      expect(statusOf(of(again, stand.id))).toBe('REPLYING')
+   })
+
+   it('should give way to the stored conversation, also when a reload already brought it', () => {
+      const real = base({ id: 'real', messages: [] })
+      const replaced = reduce(started, { type: 'REPLACE', id: stand.id, conversation: real })
+
+      expect(replaced.map(conversation => conversation.id)).toEqual(['real', 'c1', 'c2'])
+      expect(reduce([...started, real], { type: 'REPLACE', id: stand.id, conversation: real })).toHaveLength(3)
    })
 })

@@ -9,12 +9,15 @@ const source = (name: string): UniboxSource => ({
       conversations: [],
       sample: name === 'file',
       canSend: true,
+      canStart: name === 'file',
       canRefresh: name === 'real',
    })),
    mark: vi.fn(async () => undefined),
    open: vi.fn(async () => undefined),
    refresh: vi.fn(async () => ({ started: 0, skipped: [] })),
    send: vi.fn(async () => ({ ok: true as const })),
+   recipients: vi.fn(async () => []),
+   start: vi.fn(async () => ({ ok: true as const, conversationId: 'c9' })),
 })
 
 describe('withDevFile', () => {
@@ -53,5 +56,24 @@ describe('withDevFile', () => {
 
       expect(real.refresh).toHaveBeenCalledWith(['a1'])
       expect(real.send).toHaveBeenCalled()
+   })
+
+   it('should send a first message and the search for a person to the source that showed the data, and refuse when it cannot', async () => {
+      const file = source('file')
+      const chosen = withDevFile(file, source('real'), async () => true)
+
+      await chosen.load()
+      await chosen.recipients?.('gra')
+
+      await expect(chosen.start?.({} as never, 'grace', 'Hi')).resolves.toEqual({ ok: true, conversationId: 'c9' })
+      expect(file.recipients).toHaveBeenCalledWith('gra')
+
+      const bare: UniboxSource = { ...source('real'), recipients: undefined, start: undefined }
+      const plain = withDevFile(source('file'), bare, async () => false)
+
+      await plain.load()
+
+      await expect(plain.recipients?.('')).resolves.toEqual([])
+      await expect(plain.start?.({} as never, 'grace', 'Hi')).resolves.toMatchObject({ ok: false })
    })
 })

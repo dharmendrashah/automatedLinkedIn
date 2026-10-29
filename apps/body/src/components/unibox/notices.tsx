@@ -102,6 +102,7 @@ const SHORTCUTS: [string, string][] = [
    ['K or Up', 'Previous conversation'],
    ['Enter', 'Open the conversation'],
    ['R', 'Reply'],
+   ['C', 'Write a new message to a connection'],
    ['E', 'Done, and go to the next that needs a reply'],
    ['U', 'Mark unread'],
    ['X', 'Select the conversation'],

@@ -93,8 +93,8 @@ type Row = {
    failure: string | null
 }
 
-const viewOf = (row: Row, conversations: Map<string, string>): ConnectionView => {
-   const conversationId = conversations.get(keyOf(row.slug))
+const viewOf = (row: Row, conversationOf: (slug: string) => string | undefined): ConnectionView => {
+   const conversationId = conversationOf(row.slug)
 
    return {
       id: row.id,
@@ -123,6 +123,23 @@ const keyOf = (slug: string) => {
 
 const SLUG = /\/in\/([^/?#]+)/
 
+// One person of one account.
+const pairKey = (accountId: string, slug: string) => `${accountId}\u0000${keyOf(slug)}`
+
+// How many connections New message gets back for one search; the page orders them.
+const RECIPIENTS_LIMIT = 200
+
+// A connection of one of the owner's accounts, as New message lists it.
+export type RecipientView = {
+   accountId: string
+   slug: string
+   name: string
+   headline: string
+   imageUrl?: string
+   conversationId?: string
+   blocked?: 'DO_NOT_CONTACT'
+}
+
 const ownAccount = (userId: string, accountId: string) =>
    PrismaService.client.linkedInAccount.findFirst({
       where: {
@@ -143,12 +160,13 @@ const COUNTED: ConnectionStatus[] = ['REMOVING', 'REMOVED', 'UNKNOWN']
 // and a removal (.plan/my-connections.md). Every call is scoped to the owner, so a foreign account or connection answers like a missing
 // one (null).
 export class LinkedInConnectionService {
-   // The Unibox conversation of the account with each person it has one with, by the person's profile address.
-   private static async conversationsOf(userId: string, accountId: string) {
+   // The Unibox conversation each account has with each person it has one with, by `pairKey`. Only accounts still the owner's count.
+   private static async conversationsOf(userId: string, accountIds: string[]) {
       const rows = await PrismaService.client.linkedInConversation.findMany({
          where: {
             userId,
-            accountId,
+            accountId: { in: accountIds },
+            account: { userId },
             kind: 'DIRECT',
          },
          orderBy: {
@@ -159,23 +177,126 @@ export class LinkedInConnectionService {
          },
          select: {
             id: true,
+            accountId: true,
             participants: true,
          },
       })
       const found = new Map<string, string>()
 
-      for (const { id, participants } of rows) {
+      for (const { id, accountId, participants } of rows) {
          for (const person of Array.isArray(participants) ? (participants as unknown[]) : []) {
             const { profileUrl } = (person ?? {}) as { profileUrl?: unknown }
             const [, slug] = SLUG.exec(typeof profileUrl === 'string' ? profileUrl : '') ?? []
 
-            if (slug && !found.has(keyOf(slug))) {
-               found.set(keyOf(slug), id)
+            if (slug && !found.has(pairKey(accountId, slug))) {
+               found.set(pairKey(accountId, slug), id)
             }
          }
       }
 
+      // A conversation begun by a first message names the person by LinkedIn's member id, not their profile address; the message knows them.
+      const begun = await PrismaService.client.linkedInReply.findMany({
+         where: {
+            userId,
+            accountId: { in: accountIds },
+            recipientSlug: { not: null },
+            conversationId: { not: null },
+         },
+         orderBy: { createdAt: 'desc' },
+         select: {
+            accountId: true,
+            recipientSlug: true,
+            conversationId: true,
+         },
+      })
+
+      for (const { accountId, recipientSlug, conversationId } of begun) {
+         if (recipientSlug && conversationId && !found.has(pairKey(accountId, recipientSlug))) {
+            found.set(pairKey(accountId, recipientSlug), conversationId)
+         }
+      }
+
       return found
+   }
+
+   // The conversation one account of the owner has with one connection, when it has one.
+   public static async conversationWith(userId: string, accountId: string, slug: string) {
+      return (await this.conversationsOf(userId, [accountId])).get(pairKey(accountId, slug))
+   }
+
+   // The connections of every account of the owner that match all the words (in the name, title or profile name), for New message:
+   // with the conversation the account has with each, and the do-not-contact mark. Removed and gone connections are left out.
+   public static async recipients(userId: string, query: string): Promise<RecipientView[]> {
+      const db = PrismaService.client
+      const words = query.trim().split(/\s+/).filter(Boolean).slice(0, 5)
+      const rows = await db.linkedInConnection.findMany({
+         where: {
+            userId,
+            account: { userId },
+            status: { notIn: ['REMOVED', 'GONE'] },
+            AND: words.map(word => ({
+               OR: [
+                  {
+                     name: {
+                        contains: word,
+                        mode: 'insensitive' as const,
+                     },
+                  },
+                  {
+                     headline: {
+                        contains: word,
+                        mode: 'insensitive' as const,
+                     },
+                  },
+                  {
+                     slug: {
+                        contains: word,
+                        mode: 'insensitive' as const,
+                     },
+                  },
+               ],
+            })),
+         },
+         orderBy: [{ accountId: 'asc' }, { position: 'asc' }],
+         take: RECIPIENTS_LIMIT,
+         select: {
+            accountId: true,
+            slug: true,
+            name: true,
+            headline: true,
+            photoUrl: true,
+         },
+      })
+
+      if (rows.length === 0) {
+         return []
+      }
+
+      const [conversations, suppressed] = await Promise.all([
+         this.conversationsOf(userId, [...new Set(rows.map(({ accountId }) => accountId))]),
+         db.suppression.findMany({
+            where: {
+               userId,
+               slug: { in: [...new Set(rows.flatMap(({ slug }) => [slug, keyOf(slug)]))] },
+            },
+            select: { slug: true },
+         }),
+      ])
+      const blocked = new Set(suppressed.map(({ slug }) => keyOf(slug)))
+
+      return rows.map(row => {
+         const conversationId = conversations.get(pairKey(row.accountId, row.slug))
+
+         return {
+            accountId: row.accountId,
+            slug: row.slug,
+            name: row.name,
+            headline: row.headline,
+            ...(row.photoUrl && { imageUrl: row.photoUrl }),
+            ...(conversationId && { conversationId }),
+            ...(blocked.has(keyOf(row.slug)) && { blocked: 'DO_NOT_CONTACT' as const }),
+         }
+      })
    }
 
    // What the page shows for the account it asked for: the connections on its list in LinkedIn's order, then the newest that are over,
@@ -238,7 +359,7 @@ export class LinkedInConnectionService {
                _count: { select: { connections: true } },
             },
          }),
-         this.conversationsOf(userId, accountId),
+         this.conversationsOf(userId, [accountId]),
       ])
       // A read, not a removal: the run is going, or its file waits to be stored. A removal run shows as a REMOVING row instead.
       const running = session?.status === 'IN_PROGRESS' && Date.now() - session.startedAt.getTime() < READING_STALE_MS
@@ -260,7 +381,7 @@ export class LinkedInConnectionService {
             ...(account.status !== 'ACTIVE' && { problem: 'SIGNED_OUT' as const }),
          },
          connections: [...open.slice(0, OPEN_LIMIT), ...over.slice(0, OVER_LIMIT)].map(row =>
-            viewOf(row, conversations)
+            viewOf(row, slug => conversations.get(pairKey(accountId, slug)))
          ),
          cut: open.length > OPEN_LIMIT || over.length > OVER_LIMIT,
       }

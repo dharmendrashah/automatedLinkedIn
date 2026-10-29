@@ -65,6 +65,57 @@ export const threadMarkup = ({ title, profile, messages, composer }: FixtureThre
       .map(message)
       .join('')}</ul></div>${composerMarkup(composer)}</div>`
 
+// The window a profile's Message link opens over the profile (recorded 2026-10-27): its header names the person, and it holds the same
+// message list and box as a conversation page. For a person never written to (recorded 2026-10-29, run 9b220f05) it is a compose
+// window instead: the header says "New message", a chip per recipient ("Remove <name>") and a card linking to the person's profile.
+export const messageWindowMarkup = ({
+   title,
+   messages,
+   composer,
+   compose,
+}: FixtureThread & { compose?: { recipients: string[]; profile: string } }) =>
+   `<div class="msg-convo-wrapper msg-overlay-conversation-bubble" role="dialog" aria-label="Messaging" data-view-name="message-overlay-conversation-bubble-item">
+<header class="msg-overlay-conversation-bubble-header"><h2 class="pr1 msg-overlay-bubble-header__title truncate">${
+      compose ? ' New message ' : `<a href="/in/ACoAAfixture/"><span class="t-14 t-bold"> ${title} </span></a>`
+   }</h2>
+<button class="msg-overlay-bubble-header__control">Close your conversation</button></header>${
+      compose
+         ? `<div class="msg-connections-typeahead-container"><section class="msg-connections-typeahead__top-fixed-section"><div class="scrollable msg-connections-typeahead__added-recipients">${compose.recipients
+              .map(
+                 name =>
+                    `<button class="artdeco-pill artdeco-pill--dismiss" aria-label="Remove ${name}" type="button"><span class="artdeco-pill__text">${name}</span></button>`
+              )
+              .join(
+                 ''
+              )}<input class="msg-connections-typeahead__search-field" role="combobox" type="text"></div></section></div>
+<div class="msg-s-profile-card msg-s-profile-card-one-to-one"><a class="ember-view" href="${compose.profile}"><span>${title}</span></a></div>`
+         : ''
+   }
+<div class="msg-s-message-list msg-s-message-list--scroll-buffer"><ul class="msg-s-message-list-content"><li class="msg-s-message-list__top-of-list"></li><li class="msg-s-message-list__loader"></li>${messages
+      .map(message)
+      .join('')}</ul></div>${composerMarkup(composer)}</div>`
+
+// A person's profile as far as a first message needs it: the profile's own Message link (three times, none named), a Message link of
+// another person under "People also viewed" (named "Message <name>"), and the window when it is open. `plain` is the layout without any
+// `data-view-name` (recorded 2026-10-29, dharmendrashaheagle, run 1ababab2).
+export const profileMarkup = ({
+   messageLink = true,
+   plain = false,
+   window,
+}: {
+   messageLink?: boolean
+   plain?: boolean
+   window?: Parameters<typeof messageWindowMarkup>[0]
+} = {}) => {
+   const view = (name: string) => (plain ? '' : ` data-view-name="${name}"`)
+   const link = `<div${view('profile-primary-message')}><a href="/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3AACoAAfixture" componentkey="k"><span>Message</span></a></div>`
+
+   return `<main><div${view('profile-sticky-header')}>${messageLink ? link : ''}</div>
+<section${view('profile-top-card')}><h2>Profile</h2>${messageLink ? `${link}${link}` : '<button>Connect</button>'}</section>
+<div${view('profile-browsemap-compose-message-button')}><a aria-label="Message Someone Else" href="/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3AACoAAother">Message</a></div></main>
+<aside class="msg-overlay-list-bubble msg-overlay-list-bubble--is-minimized"></aside>${window ? messageWindowMarkup(window) : ''}`
+}
+
 const row = ({ title, when, snippet, unread, placeholder }: FixtureRow) =>
    placeholder
       ? '<li class="ember-view msg-conversation-listitem msg-conversations-container__convo-item"></li>'

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { type Attachment, type UniboxAccount, type UniboxConversation } from './types'
 
 import { waitForStored } from './afterSent'
-import { type SendResult, type UniboxSource } from './source'
+import { type SendEvents, type SendResult, type UniboxSource } from './source'
 import { type Action, reduce } from './store'
 
 // How long a reply can still be taken back before it goes.
@@ -12,7 +12,14 @@ export const UNDO_MS = 5000
 type Loaded =
    | { status: 'loading' }
    | { status: 'error' }
-   | { status: 'ready'; accounts: UniboxAccount[]; sample: boolean; canSend: boolean; canRefresh: boolean }
+   | {
+        status: 'ready'
+        accounts: UniboxAccount[]
+        sample: boolean
+        canSend: boolean
+        canStart: boolean
+        canRefresh: boolean
+     }
 
 // The conversations and what happens to them. A reply is held for UNDO_MS (so it can be undone), then sent through the source;
 // it ends as a message in the conversation, or as a failure that keeps its text and can be retried.
@@ -31,6 +38,8 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
    const opened = useRef(new Set<string>())
    // The replies brain has that this page is following, by reply id, so one is followed once.
    const following = useRef(new Set<string>())
+   // Who to tell when a first message is stored, by the id of its stand-in.
+   const movers = useRef(new Map<string, (id: string) => void>())
 
    // The change is made at once on the page and kept with the data behind it.
    const dispatch = useCallback(
@@ -107,6 +116,22 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
 
          dispatch({ type: 'SENT', id })
 
+         // A first message: the conversation is new, so it is the stored one that takes the place of the stand-in.
+         if (conversation?.starting) {
+            const real = result.conversationId ? await waitForStored(source, result.conversationId, 0) : undefined
+
+            if (real) {
+               dispatch({ type: 'REPLACE', id, conversation: real })
+               movers.current.get(id)?.(real.id)
+            } else {
+               dispatch({ type: 'FINISHED', id, now: Date.now(), stored: false })
+            }
+
+            movers.current.delete(id)
+
+            return
+         }
+
          const stored = await waitForStored(source, id, before)
 
          if (stored) {
@@ -153,6 +178,7 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
                accounts: data.accounts,
                sample: data.sample,
                canSend: data.canSend,
+               canStart: data.canStart,
                canRefresh: data.canRefresh,
             })
 
@@ -188,19 +214,36 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
          setFlying(set => new Set(set).add(id))
 
          let startedId: string | undefined
-         const result: SendResult = account
-            ? await source
-                 .send(account, text, attachments, id, {
-                    progress: percent => dispatch({ type: 'PROGRESS', id, percent }),
-                    started: replyId => {
-                       startedId = replyId
-                       following.current.add(replyId)
-                       dispatch({ type: 'STARTED', id, replyId, since: Date.now() })
-                    },
-                    waiting: wait => dispatch({ type: 'WAITING', id, wait }),
-                 })
-                 .catch(() => ({ ok: false as const, reason: 'The reply could not be sent. Try again.' }))
-            : { ok: false as const, reason: 'The account of this conversation is not known.' }
+         const events: SendEvents = {
+            progress: percent => dispatch({ type: 'PROGRESS', id, percent }),
+            started: replyId => {
+               startedId = replyId
+               following.current.add(replyId)
+               dispatch({ type: 'STARTED', id, replyId, since: Date.now() })
+            },
+            waiting: wait => dispatch({ type: 'WAITING', id, wait }),
+         }
+         const answer = async (): Promise<SendResult> => {
+            if (!account) {
+               return { ok: false, reason: 'The account of this conversation is not known.' }
+            }
+
+            if (conversation?.starting) {
+               if (attachments.length > 0) {
+                  return { ok: false, reason: 'Files can be sent once the conversation has begun. Send words first.' }
+               }
+
+               return source.start
+                  ? source.start(account, conversation.starting.slug, text, events)
+                  : { ok: false, reason: 'A new conversation cannot be started from here.' }
+            }
+
+            return source.send(account, text, attachments, id, events)
+         }
+         const result: SendResult = await answer().catch(() => ({
+            ok: false as const,
+            reason: 'The reply could not be sent. Try again.',
+         }))
 
          if (startedId) {
             following.current.delete(startedId)
@@ -211,22 +254,35 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
       [dispatch, source, conclude]
    )
 
-   const send = useCallback(
+   // Holds the reply for the time it can be taken back, then sends it.
+   const hold = useCallback(
       (id: string, text: string, attachments: Attachment[]) => {
-         if (timers.current.has(id)) {
-            return
-         }
-
-         dispatch({ type: 'SEND', id, text, attachments, now: Date.now() })
          timers.current.set(
             id,
             setTimeout(() => {
                timers.current.delete(id)
-               void settle(id, text.trim(), attachments)
+               void settle(id, text, attachments)
             }, UNDO_MS)
          )
       },
-      [dispatch, settle]
+      [settle]
+   )
+
+   // `onStored` hears the id of the real conversation once a first message (sent from a stand-in) is stored.
+   const send = useCallback(
+      (id: string, text: string, attachments: Attachment[], onStored?: (id: string) => void) => {
+         if (timers.current.has(id)) {
+            return
+         }
+
+         if (onStored) {
+            movers.current.set(id, onStored)
+         }
+
+         dispatch({ type: 'SEND', id, text, attachments, now: Date.now() })
+         hold(id, text.trim(), attachments)
+      },
+      [dispatch, hold]
    )
 
    // Takes the reply back, and gives its words back so they can be put in the composer again.
@@ -240,6 +296,7 @@ export const useUnibox = (source: UniboxSource, onSaveError: () => void) => {
 
          clearTimeout(timer)
          timers.current.delete(id)
+         movers.current.delete(id)
 
          const text = latest.current.conversations.find(item => item.id === id)?.sending?.text
 

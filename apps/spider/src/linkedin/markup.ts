@@ -58,6 +58,23 @@ export const FILE_INPUT = 'input.msg-form__attachment-upload-input[accept*=".pdf
 // The button after the beacon at the bottom of the list, for a page that does not load more by itself.
 export const LOAD_MORE = '[data-test-msg-cross-pillar-visible-beacon] + button'
 
+// A first message to a connection, from their profile (recorded 2026-10-27, tripti.verma, English, devtools session steps 22 and 23).
+// The profile's own Message link sits in the page three times (sticky header, top card) and is never named; the Message links of other
+// people ("People also viewed") are named "Message <name>". A second layout with no `data-view-name` at all (2026-10-29,
+// dharmendrashaheagle, run 1ababab2) keeps exactly that difference, so the link is found by it. Pressing it opens LinkedIn's message
+// window over the profile without changing the address: a dialog with the person's name in its header and the same message list and
+// box as a conversation page. It holds no conversation id.
+// Not seen: the window in the second layout, a profile that is not a connection, a person never written to.
+export const PROFILE_MESSAGE = 'a[href*="/messaging/compose/"]:not([aria-label])'
+export const MESSAGE_WINDOW = '[data-view-name="message-overlay-conversation-bubble-item"]'
+export const MESSAGE_WINDOW_TITLE = 'h2.msg-overlay-bubble-header__title'
+export const WINDOW_COMPOSER = `${MESSAGE_WINDOW} ${COMPOSER}`
+export const WINDOW_SEND_BUTTON = `${MESSAGE_WINDOW} ${SEND_BUTTON}`
+// For a person never written to the window is a compose window titled "New message" (2026-10-29, dharmendrashaheagle, run 9b220f05):
+// one chip per recipient named "Remove <name>", and a card that links to the person's profile.
+export const WINDOW_RECIPIENT = '.msg-connections-typeahead__added-recipients button[aria-label^="Remove "]'
+export const WINDOW_PROFILE_CARD = '.msg-s-profile-card a[href*="/in/"]'
+
 // The page where a post is written, the box its words go in (a rich-text editor; real key presses reach it) and the button that
 // sends it, which is greyed until there are words and while it sends; recorded 2026-10-25.
 export const POST_COMPOSE_PATH = '/sharing/compose'

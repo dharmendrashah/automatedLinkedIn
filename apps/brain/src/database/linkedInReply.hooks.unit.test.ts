@@ -106,4 +106,33 @@ describe('linkedin-reply hooks', () => {
          expect(await run('FAILED')).not.toHaveBeenCalled()
       })
    })
+
+   it('should say a first message did not go when the message task stopped before typing', async () => {
+      for (const verdict of ['NO_MESSAGE_BUTTON', 'WRONG_RECIPIENT', 'NOT_AVAILABLE']) {
+         const updateMany = vi.fn()
+         const createMany = vi.fn()
+
+         await linkedInReplyHooks.onResult?.(
+            {
+               id: 's1',
+               userId: 'u1',
+               linkedInAccountId: 'acc1',
+            },
+            {
+               verdict,
+               message: 'Nothing was typed.',
+            } as TaskResult,
+            {
+               linkedInReply: { updateMany },
+               linkedInAccount: { updateMany: vi.fn() },
+               messageImport: { createMany },
+            } as unknown as Prisma.TransactionClient
+         )
+
+         expect(updateMany).toHaveBeenCalledWith(
+            expect.objectContaining({ data: expect.objectContaining({ state: 'FAILED' }) })
+         )
+         expect(createMany).not.toHaveBeenCalled()
+      }
+   })
 })

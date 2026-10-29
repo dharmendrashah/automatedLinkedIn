@@ -543,6 +543,32 @@ describe('LinkedInConversationService (database)', () => {
       ])
    })
 
+   it('should never show the conversations of an account that is no longer the owner’s', async () => {
+      const moved = await account(otherUserId)
+
+      await LinkedInConversationService.store(
+         {
+            userId,
+            accountId: moved.id,
+         },
+         file({
+            id: '2-moved',
+            title: 'Moved',
+         })
+      )
+
+      const row = await PrismaService.client.linkedInConversation.findFirstOrThrow({
+         where: { accountId: moved.id },
+         select: { id: true },
+      })
+
+      expect((await LinkedInConversationService.list(userId)).some(item => item.id === row.id)).toBe(false)
+      await expect(LinkedInConversationService.get(userId, row.id)).resolves.toBeNull()
+      await expect(LinkedInConversationService.setUnread(userId, [row.id], false)).resolves.toBe(0)
+      await expect(LinkedInConversationService.setDone(userId, [row.id], true)).resolves.toBe(0)
+      expect((await LinkedInConversationService.accounts(userId)).some(item => item.id === moved.id)).toBe(false)
+   })
+
    it('should delete the conversations with the account', async () => {
       await PrismaService.client.linkedInAccount.delete({ where: { id: accountId } })
 
