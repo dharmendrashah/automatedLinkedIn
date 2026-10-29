@@ -29,6 +29,11 @@ Open questions: none.
       `posts/post-engagement.tsx`.
 - [x] Not changed (not third-party): post composer previews and uploads (`blob:` and signed bucket links), kept message pictures
       (signed), session recordings (signed), takeover screenshots (`data:`).
+- [x] Audit (2026-10-30, every `img`, `video`, `audio`, `source`, `iframe`, `AvatarImage`, `window.open` and media `href` in
+      body and `packages/ui`): the Unibox chat window draws only avatars (through `Photo`); message pictures, videos, audio and
+      documents are local (`blob:`) or kept in the private bucket and opened by a signed link, so they stay direct. The one gap was
+      the post's non-image media link: a `video`, `audio`, `document` or `pdf` link now opens through `/cdn` (no fallback is
+      possible on a link); any other kind opens where it is.
 
 ## Edge cases and risks
 

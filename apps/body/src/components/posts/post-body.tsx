@@ -1,4 +1,5 @@
 import { Picture } from '@/components/details/detail-parts'
+import { cdnUrlOf } from '@/lib/cdn'
 import { useMediaSource } from '@/lib/use-media-source'
 import { MessageSquare, Repeat2, ThumbsUp } from 'lucide-react'
 import { useState } from 'react'
@@ -55,12 +56,20 @@ const PostImage = ({ url }: { url: string }) => {
    ) : null
 }
 
+// Files open through the file cache; any other kind (a page, a playlist) opens where it is.
+const FILE_MEDIA = /video|audio|document|pdf/
+
 export const PostMedia = ({ media, articleUrl }: { media: Media; articleUrl: string | null }) => (
    <>
       {media?.type?.toLowerCase().includes('image') ? (
          <PostImage url={media.url} />
       ) : media ? (
-         <a className="text-sm underline" href={media.url} target="_blank" rel="noreferrer noopener">
+         <a
+            className="text-sm underline"
+            href={FILE_MEDIA.test(media.type?.toLowerCase() ?? '') ? cdnUrlOf(media.url) : media.url}
+            target="_blank"
+            rel="noreferrer noopener"
+         >
             Open the {media.type ?? 'media'}
          </a>
       ) : null}
