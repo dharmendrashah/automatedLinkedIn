@@ -44,28 +44,28 @@ describe('nextCheckText, once a day', () => {
    })
 })
 
-describe('nextCheckText, every 2 hours', () => {
+describe('nextCheckText, messages', () => {
+   const intro = 'Messages are read automatically every 30 minutes, every 2 hours at night.'
+
    it('should say how long until the earliest read', () => {
-      expect(nextCheckText([at('2026-10-27T13:20:00Z')], NOW, 'EVERY_2_HOURS', 'UTC')).toBe(
-         'Messages are read automatically every 2 hours. Next read: in about 1 hour 20 minutes.'
+      expect(nextCheckText([at('2026-10-27T13:20:00Z')], NOW, 'MESSAGES', 'UTC')).toBe(
+         `${intro} Next read: in about 1 hour 20 minutes.`
       )
-      expect(nextCheckText([at('2026-10-27T12:35:00Z')], NOW, 'EVERY_2_HOURS', 'UTC')).toBe(
-         'Messages are read automatically every 2 hours. Next read: in about 35 minutes.'
+      expect(nextCheckText([at('2026-10-27T12:35:00Z')], NOW, 'MESSAGES', 'UTC')).toBe(
+         `${intro} Next read: in about 35 minutes.`
       )
-      expect(nextCheckText([at('2026-10-27T14:00:00Z')], NOW, 'EVERY_2_HOURS', 'UTC')).toBe(
-         'Messages are read automatically every 2 hours. Next read: in about 2 hours.'
+      expect(nextCheckText([at('2026-10-27T14:00:00Z')], NOW, 'MESSAGES', 'UTC')).toBe(
+         `${intro} Next read: in about 2 hours.`
       )
-      expect(nextCheckText([at('2026-10-27T12:00:30Z')], NOW, 'EVERY_2_HOURS', 'UTC')).toBe(
-         'Messages are read automatically every 2 hours. Next read: in less than a minute.'
+      expect(nextCheckText([at('2026-10-27T12:00:30Z')], NOW, 'MESSAGES', 'UTC')).toBe(
+         `${intro} Next read: in less than a minute.`
       )
    })
 
    it('should take the earliest of the accounts, and say a read is due when the time has passed', () => {
-      expect(nextCheckText([at('2026-10-27T13:20:00Z'), at('2026-10-27T12:10:00Z')], NOW, 'EVERY_2_HOURS')).toBe(
-         'Messages are read automatically every 2 hours. Next read: in about 10 minutes. It is the earliest of 2 accounts.'
+      expect(nextCheckText([at('2026-10-27T13:20:00Z'), at('2026-10-27T12:10:00Z')], NOW, 'MESSAGES')).toBe(
+         `${intro} Next read: in about 10 minutes. It is the earliest of 2 accounts.`
       )
-      expect(nextCheckText([at('2026-10-27T11:00:00Z')], NOW, 'EVERY_2_HOURS')).toBe(
-         'Messages are read automatically every 2 hours. Next read: due now.'
-      )
+      expect(nextCheckText([at('2026-10-27T11:00:00Z')], NOW, 'MESSAGES')).toBe(`${intro} Next read: due now.`)
    })
 })

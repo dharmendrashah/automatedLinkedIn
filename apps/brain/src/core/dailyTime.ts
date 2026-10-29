@@ -112,3 +112,19 @@ export const dailyTime = (
 
    return atClock(clock.year, clock.month, clock.day + (useToday ? 0 : 1), minute, timeZone)
 }
+
+const DAY_READ_EVERY_MS = 30 * 60_000
+const NIGHT_READ_EVERY_MS = 2 * 60 * 60_000
+
+// The next message read: 30 minutes on between 08:00 and 22:00 in `timeZone`, 2 hours on at night but never past 08:00.
+export const nextMessagesTime = (now: Date, timeZone: string) => {
+   const { minute } = clockIn(now, timeZone)
+
+   if (minute >= DAY_START_MINUTE && minute < DAY_END_MINUTE) {
+      return new Date(now.getTime() + DAY_READ_EVERY_MS)
+   }
+
+   const untilMorningMs = ((DAY_START_MINUTE - minute + 24 * 60) % (24 * 60)) * 60_000
+
+   return new Date(now.getTime() + Math.min(NIGHT_READ_EVERY_MS, untilMorningMs))
+}

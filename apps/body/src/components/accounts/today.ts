@@ -22,7 +22,7 @@ export const ITEMS: { item: ItemName; title: string; short: string; helper: stri
       item: 'messages',
       title: 'Check messages',
       short: 'Messages',
-      helper: 'Reads new conversations every 2 hours. Nothing is sent or accepted.',
+      helper: 'Reads new conversations every 30 minutes, every 2 hours at night. Nothing is sent or accepted.',
    },
    {
       item: 'network',
@@ -33,7 +33,8 @@ export const ITEMS: { item: ItemName; title: string; short: string; helper: stri
 ]
 
 const NO_ANSWER_MS = 30 * 60 * 1000
-const MESSAGES_EVERY_MS = 2 * 60 * 60 * 1000
+// Two night gaps (reads are 2 hours apart at night), so a read is never called late overnight.
+const MESSAGES_LATE_AFTER_MS = 4 * 60 * 60 * 1000
 const SIGNED_IN_DAY_MS = 24 * 60 * 60 * 1000
 const SIGNED_IN_COUNTS_MS = 12 * 60 * 60 * 1000
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -318,18 +319,18 @@ export const itemState = (facts: ItemFacts, ctx: Context): ItemState => {
       const ago = agoText(lastAt, now)
       const first = ctx.firstRead ? ' The first read of the messages still goes on, in batches.' : ''
 
-      return now.getTime() - lastAt.getTime() > 2 * MESSAGES_EVERY_MS
+      return now.getTime() - lastAt.getTime() > MESSAGES_LATE_AFTER_MS
          ? make(
               'LATE',
               `Messages late: read ${ago}`,
-              `The messages are read every 2 hours; the last read was ${ago}.${first}`,
+              `The messages are read every 30 minutes, every 2 hours at night; the last read was ${ago}.${first}`,
               nextWords,
               true
            )
          : make(
               'ON_SCHEDULE',
               `Messages read ${ago}`,
-              `The messages are read every 2 hours; the last read was ${ago}.${first}`,
+              `The messages are read every 30 minutes, every 2 hours at night; the last read was ${ago}.${first}`,
               nextWords,
               true
            )
@@ -360,7 +361,7 @@ export const itemState = (facts: ItemFacts, ctx: Context): ItemState => {
 }
 
 // How many of the four checks are done: a good run today, a sign-in in the last 12 hours for the login, and messages read on schedule
-// (they run every 2 hours, so they are never "done today", only on schedule or late).
+// (they run every 30 minutes, so they are never "done today", only on schedule or late).
 export const checksDone = (states: ItemState[]) =>
    states.filter(({ kind }) => kind === 'DONE' || kind === 'COUNTED' || kind === 'ON_SCHEDULE').length
 

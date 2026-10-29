@@ -1,7 +1,7 @@
 export { AbuseIpDbError, AbuseIpDbService, type AbuseDetail, type AbuseIpDbResult } from './abuseIpDb.service'
 export { CryptoService } from './crypto.service'
 export { toCsv } from './csv'
-export { dailyTime, timezoneOfCountry } from './dailyTime'
+export { dailyTime, nextMessagesTime, timezoneOfCountry } from './dailyTime'
 export { CdnFetchError, type CdnFetchFailure } from './cdnFetch'
 export { CdnFiles, type StoredCdnFile } from './cdnFiles'
 export { parseRemoteUrl, publicUrlOf, urlHash } from './cdnUrl'

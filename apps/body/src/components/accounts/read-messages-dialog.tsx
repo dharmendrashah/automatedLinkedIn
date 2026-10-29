@@ -26,7 +26,7 @@ export const ReadMessagesDialog = ({ account, onConfirm, onCancel }: Props) => (
             <AlertDialogTitle>Check the messages of {account?.email} now?</AlertDialogTitle>
             <AlertDialogDescription>
                Nothing is sent or accepted. Checking messages marks them as read on LinkedIn, and the other person sees
-               it. The account does this by itself every 2 hours.
+               it. The account does this by itself every 30 minutes, and every 2 hours at night.
             </AlertDialogDescription>
          </AlertDialogHeader>
          <AlertDialogFooter>
