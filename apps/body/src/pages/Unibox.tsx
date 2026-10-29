@@ -718,7 +718,7 @@ const Board = ({
                      times={accounts
                         .filter(account => account.state === 'ACTIVE' && (!accountIds || accountIds.has(account.id)))
                         .map(({ nextReadAt }) => nextReadAt)}
-                     rhythm="EVERY_2_HOURS"
+                     rhythm="MESSAGES"
                      now={new Date(now)}
                   />
                </div>

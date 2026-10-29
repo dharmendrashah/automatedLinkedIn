@@ -1,4 +1,4 @@
-import { dailyTime, timezoneOfCountry } from 'core'
+import { dailyTime, nextMessagesTime, timezoneOfCountry } from 'core'
 
 import { PROFILE_TRIES } from './accountLoading'
 import { FirstDayUsedService } from './firstDayUsed.service'
@@ -17,8 +17,6 @@ import { TaskRefusedError } from './taskErrors'
 // One run never takes more accounts than this; the rest wait for the next pass.
 const MAX_PER_RUN = 100
 const DAY_MS = 24 * 60 * 60 * 1000
-// The messages are read this often (12 times a day), not once a day like the check and the visit.
-const MESSAGES_EVERY_MS = 2 * 60 * 60 * 1000
 // The first read of an account goes through the inbox in batches, at most this many a day (.plan/messages-first-sync-and-new-only.md).
 const MAX_FIRST_READS_A_DAY = 5
 // A good sign-in this recent (the owner's own check, say) counts as the day's check.
@@ -268,8 +266,8 @@ const requestMessages = async (account: Due, now: Date, firstDay = false): Promi
 }
 
 // Once a day per account, each at its own random time (.plan/account-daily-check.md): the sign-in check, and a visit when the
-// account signed in fine within the last day. The messages (.plan/unibox-backend.md) are read every 2 hours on the same terms
-// (.plan/unibox-read-every-2h.md). The brain worker calls `runDue` every few minutes; a check or visit that
+// account signed in fine within the last day. The messages (.plan/unibox-backend.md) are read every 30 minutes by day and every
+// 2 hours at night on the same terms (.plan/unibox-read-every-30m.md). The brain worker calls `runDue` every few minutes; a check or visit that
 // cannot be queued now keeps its time and is tried on the next pass.
 export class AccountDailyJob {
    private static running = false
@@ -472,7 +470,7 @@ export class AccountDailyJob {
                   signedInToday
                      ? requestMessages(account, now, firstDay && account.messagesBackfilledAt === null)
                      : notSignedIn,
-               () => new Date(now.getTime() + MESSAGES_EVERY_MS)
+               () => nextMessagesTime(now, timezone)
             )
 
             if (read) {

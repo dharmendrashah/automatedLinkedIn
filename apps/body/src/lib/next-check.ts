@@ -1,8 +1,8 @@
 // The line that says when an automatic read happens next, for My network (the connection requests are read once a day) and for the Unibox
-// (the messages are read every 2 hours). Each account has its own time, so the line gives the earliest one of the accounts shown.
+// (the messages are read every 30 minutes, every 2 hours at night). Each account has its own time, so the line gives the earliest one of the accounts shown.
 // Pure: the time zone is the browser's unless one is given.
 
-export type Rhythm = 'DAILY' | 'EVERY_2_HOURS'
+export type Rhythm = 'DAILY' | 'MESSAGES'
 
 const MINUTE_MS = 60 * 1000
 const HOUR_MS = 60 * MINUTE_MS
@@ -74,7 +74,7 @@ const inText = (ms: number) => {
 
 // The sentence for the accounts shown: how often they are read, and when the next read is. `times` has one entry for each account
 // shown that is signed in (null when its time is not drawn yet). Once a day each account has its own time, so for several accounts the
-// line gives the earliest and the latest; every 2 hours it gives the earliest.
+// line gives the earliest and the latest; for the messages it gives the earliest.
 export const nextCheckText = (
    times: Array<string | null | undefined>,
    now: Date,
@@ -82,7 +82,9 @@ export const nextCheckText = (
    timeZone?: string
 ) => {
    const intro =
-      rhythm === 'DAILY' ? 'Read automatically once a day.' : 'Messages are read automatically every 2 hours.'
+      rhythm === 'DAILY'
+         ? 'Read automatically once a day.'
+         : 'Messages are read automatically every 30 minutes, every 2 hours at night.'
    const noun = rhythm === 'DAILY' ? 'check' : 'read'
    const known = times.flatMap(time => (time ? [new Date(time)] : [])).sort((a, b) => a.getTime() - b.getTime())
    const first = known[0]

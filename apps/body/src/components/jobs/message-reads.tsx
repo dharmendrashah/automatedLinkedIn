@@ -24,8 +24,8 @@ export const MessageReads = ({ now }: { now: number }) => {
       <div className="grid gap-3">
          <p className="text-muted-foreground text-sm">
             {reads.data
-               ? `${rows.length} active accounts have their messages read about every 2 hours. ${overdue} overdue.`
-               : 'Each active account has its messages read about every 2 hours.'}
+               ? `${rows.length} active accounts have their messages read about every 30 minutes (every 2 hours at night). ${overdue} overdue.`
+               : 'Each active account has its messages read about every 30 minutes (every 2 hours at night).'}
          </p>
          {reads.isPending ? <Skeleton className="h-24 w-full" /> : null}
          {reads.error ? <p className="text-destructive text-sm">{reads.error.message}</p> : null}

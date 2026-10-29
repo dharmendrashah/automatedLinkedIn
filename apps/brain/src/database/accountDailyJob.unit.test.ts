@@ -47,10 +47,11 @@ vi.mock('./task.service', () => ({
 }))
 // The real time helpers without the rest of `core`, whose modules read the environment (DATABASE_URL) when they load.
 vi.mock('core', async () => {
-   const { dailyTime, timezoneOfCountry } = await import('../core/dailyTime')
+   const { dailyTime, nextMessagesTime, timezoneOfCountry } = await import('../core/dailyTime')
 
    return {
       dailyTime,
+      nextMessagesTime,
       timezoneOfCountry,
    }
 })
@@ -60,7 +61,8 @@ const NOW = new Date('2026-10-19T10:00:00Z')
 const EARLIER = new Date('2026-10-19T09:00:00Z')
 const LATER = new Date('2026-10-20T09:00:00Z')
 const TOMORROW_8_IN_INDIA = new Date('2026-10-20T02:30:00Z')
-const IN_2_HOURS = new Date('2026-10-19T12:00:00Z')
+// 15:30 in India: daytime, so the next message read is 30 minutes on.
+const IN_30_MINUTES = new Date('2026-10-19T10:30:00Z')
 
 const account = (extra: Record<string, unknown> = {}) => ({
    id: 'acc1',
@@ -652,7 +654,7 @@ describe('AccountDailyJob', () => {
             known: ['aaaaaaaa'],
          },
       })
-      expect(movedTo('nextMessagesAt')).toEqual([IN_2_HOURS])
+      expect(movedTo('nextMessagesAt')).toEqual([IN_30_MINUTES])
 
       mocks.requestTask.mockClear()
       mocks.findMany.mockResolvedValue([account({ nextMessagesAt: EARLIER })])
@@ -792,7 +794,7 @@ describe('AccountDailyJob', () => {
 
       await expect(run()).resolves.toMatchObject({ reads: 0 })
       expect(mocks.requestTask).not.toHaveBeenCalledWith(expect.objectContaining({ task: 'linkedin-messages' }))
-      expect(movedTo('nextMessagesAt')).toEqual([IN_2_HOURS])
+      expect(movedTo('nextMessagesAt')).toEqual([IN_30_MINUTES])
 
       mocks.updateMany.mockClear()
       mocks.findMany.mockResolvedValue([account({ nextMessagesAt: EARLIER })])

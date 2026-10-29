@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { dailyTime, timezoneOfCountry } from './dailyTime'
+import { dailyTime, nextMessagesTime, timezoneOfCountry } from './dailyTime'
 
 // 15:30 in India.
 const NOW = new Date('2026-10-19T10:00:00Z')
@@ -42,5 +42,18 @@ describe('timezoneOfCountry', () => {
       expect(timezoneOfCountry('de')).toBe('Europe/Berlin')
       expect(timezoneOfCountry('ZZ')).toBe('UTC')
       expect(timezoneOfCountry(null)).toBe('UTC')
+   })
+})
+
+describe('nextMessagesTime', () => {
+   // India is UTC+05:30.
+   it.each([
+      ['by day, 30 minutes on', '2026-10-19T10:00:00Z', '2026-10-19T10:30:00Z'],
+      ['at 21:59, still 30 minutes on', '2026-10-19T16:29:00Z', '2026-10-19T16:59:00Z'],
+      ['at 22:00, 2 hours on', '2026-10-19T16:30:00Z', '2026-10-19T18:30:00Z'],
+      ['at 07:00, not past 08:00', '2026-10-20T01:30:00Z', '2026-10-20T02:30:00Z'],
+      ['at 08:00, 30 minutes on', '2026-10-20T02:30:00Z', '2026-10-20T03:00:00Z'],
+   ])('should read %s', (_, now, next) => {
+      expect(nextMessagesTime(new Date(now), 'Asia/Kolkata')).toEqual(new Date(next))
    })
 })
