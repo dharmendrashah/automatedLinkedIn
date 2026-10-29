@@ -61,32 +61,92 @@ export const latestReplies = async (userId: string) => {
    const replies = new Map<string, ConversationReply>()
 
    for (const row of rows) {
-      // A first message waiting for its conversation is shown by the page's own stand-in.
-      if (
-         !row.conversationId ||
-         row.state === 'SENT' ||
-         (row.state !== 'SENDING' && row.state !== 'QUEUED' && row.dismissedAt !== null)
-      ) {
+      // A first message waiting for its conversation is listed on its own (`pendingFirstMessages`).
+      if (!row.conversationId || !shown(row)) {
          continue
       }
 
-      replies.set(row.conversationId, {
-         id: row.id,
-         state: row.state,
-         text: row.text,
-         files: filesOf(row.attachments),
-         startedAt: row.createdAt,
-         failure: row.failure,
-         wait:
-            row.state === 'QUEUED' && row.waitReason && row.waitUntil
-               ? {
-                    reason: row.waitReason,
-                    until: row.waitUntil,
-                    zone: row.waitZone,
-                 }
-               : null,
-      })
+      replies.set(row.conversationId, viewOf(row))
    }
 
    return replies
+}
+
+type Row = {
+   id: string
+   state: 'QUEUED' | 'SENDING' | 'SENT' | 'FAILED' | 'UNKNOWN'
+   text: string
+   attachments: unknown
+   failure: string | null
+   createdAt: Date
+   dismissedAt: Date | null
+   waitReason: string | null
+   waitUntil: Date | null
+   waitZone: string | null
+}
+
+// On its way, or one that did not go and was not dismissed; one that went says nothing.
+const shown = (row: Row): row is Row & { state: ConversationReply['state'] } =>
+   row.state !== 'SENT' && (row.state === 'SENDING' || row.state === 'QUEUED' || row.dismissedAt === null)
+
+const viewOf = (row: Row & { state: ConversationReply['state'] }): ConversationReply => ({
+   id: row.id,
+   state: row.state,
+   text: row.text,
+   files: filesOf(row.attachments),
+   startedAt: row.createdAt,
+   failure: row.failure,
+   wait:
+      row.state === 'QUEUED' && row.waitReason && row.waitUntil
+         ? {
+              reason: row.waitReason,
+              until: row.waitUntil,
+              zone: row.waitZone,
+           }
+         : null,
+})
+
+// The owner's first messages to connections that have no conversation yet (.plan/message-connections.md): the newest one to each person,
+// on its way or not gone, so the page shows it after a reload until its conversation is stored or the owner dismisses it.
+export const pendingFirstMessages = async (userId: string, accountIds?: string[]) => {
+   const rows = await PrismaService.client.linkedInReply.findMany({
+      where: {
+         userId,
+         account: { userId },
+         ...(accountIds && { accountId: { in: accountIds } }),
+         conversationId: null,
+         recipientSlug: { not: null },
+         OR: [{ createdAt: { gte: new Date(Date.now() - WINDOW_MS) } }, { state: 'QUEUED' }],
+      },
+      orderBy: { createdAt: 'desc' },
+      distinct: ['accountId', 'recipientSlug'],
+      select: {
+         id: true,
+         accountId: true,
+         recipientSlug: true,
+         recipientName: true,
+         state: true,
+         text: true,
+         attachments: true,
+         failure: true,
+         createdAt: true,
+         dismissedAt: true,
+         waitReason: true,
+         waitUntil: true,
+         waitZone: true,
+      },
+   })
+
+   return rows.flatMap(row =>
+      row.recipientSlug && shown(row)
+         ? [
+              {
+                 accountId: row.accountId,
+                 slug: row.recipientSlug,
+                 name: row.recipientName ?? row.recipientSlug,
+                 reply: viewOf(row),
+              },
+           ]
+         : []
+   )
 }
