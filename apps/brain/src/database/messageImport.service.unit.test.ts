@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
    findSession: vi.fn(),
    updateMany: vi.fn(),
    store: vi.fn(),
+   linkStored: vi.fn(),
 }))
 
 vi.mock('./prisma.service', () => ({
@@ -20,6 +21,8 @@ vi.mock('./prisma.service', () => ({
 }))
 
 vi.mock('./linkedInConversation.service', () => ({ LinkedInConversationService: { store: mocks.store } }))
+
+vi.mock('./linkedInReply.service', () => ({ LinkedInReplyService: { linkStored: mocks.linkStored } }))
 
 vi.mock('core', () => ({ MessageFiles: { read: vi.fn() } }))
 
@@ -78,6 +81,8 @@ describe('MessageImportService.run', () => {
          },
          expect.objectContaining({ part: 1 })
       )
+      // A first message's run is linked to the conversations it stored.
+      expect(mocks.linkStored).toHaveBeenCalledWith('s1', 'acc1', ['2-0', '2-0'])
       expect(mocks.updateMany).toHaveBeenCalledWith({
          where: { sessionId: 's1' },
          data: expect.objectContaining({
