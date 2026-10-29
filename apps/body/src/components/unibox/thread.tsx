@@ -10,17 +10,7 @@ import {
    AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import {
-   ArrowDown,
-   ArrowLeft,
-   Check,
-   CircleAlert,
-   CornerUpLeft,
-   Info,
-   MailOpen,
-   PanelRight,
-   Users,
-} from 'lucide-react'
+import { ArrowDown, ArrowLeft, Check, CircleAlert, CornerUpLeft, Info, MailOpen, PanelRight, Users } from 'lucide-react'
 import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -29,6 +19,7 @@ import { AvatarPair } from './account-avatar'
 import { AccountChip } from './account-chip'
 import { type Row } from './inbox'
 import { MessageBubble } from './message-bubble'
+import { PersonCard } from './person-card'
 import { SendingBubble } from './sending-bubble'
 import { useShared } from './shared'
 import { lastReplyAt } from './status'
@@ -43,6 +34,8 @@ type Props = {
    detailsOpen: boolean
    onBack: () => void
    onToggleDetails: () => void
+   // Opens the person's drawer by profile name; absent where there is none (the sample).
+   onPerson?: (slug: string) => void
    onMarkUnread: () => void
    onDone: () => void
    onUndoSend: () => void
@@ -62,6 +55,7 @@ export const Thread = ({
    detailsOpen,
    onBack,
    onToggleDetails,
+   onPerson,
    onMarkUnread,
    onDone,
    onUndoSend,
@@ -108,21 +102,37 @@ export const Thread = ({
                >
                   <ArrowLeft />
                </Button>
-               <AvatarPair
-                  contact={conversation.contact.name}
-                  contactImage={conversation.contact.imageUrl}
-                  account={account}
-                  direction={row.preview.from}
-               />
-               <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">
-                  {conversation.contact.name}
-                  {conversation.kind === 'GROUP' ? (
-                     <span className="font-normal text-muted-foreground">
-                        {' '}
-                        and {conversation.participants.length - 1} more
-                     </span>
-                  ) : null}
-               </h2>
+               {conversation.contactSlug && onPerson && conversation.kind === 'DIRECT' ? (
+                  <div className="min-w-0 flex-1">
+                     <PersonCard slug={conversation.contactSlug} accountId={conversation.accountId} onOpen={onPerson}>
+                        <AvatarPair
+                           contact={conversation.contact.name}
+                           contactImage={conversation.contact.imageUrl}
+                           account={account}
+                           direction={row.preview.from}
+                        />
+                        <h2 className="min-w-0 truncate text-sm font-semibold">{conversation.contact.name}</h2>
+                     </PersonCard>
+                  </div>
+               ) : (
+                  <>
+                     <AvatarPair
+                        contact={conversation.contact.name}
+                        contactImage={conversation.contact.imageUrl}
+                        account={account}
+                        direction={row.preview.from}
+                     />
+                     <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">
+                        {conversation.contact.name}
+                        {conversation.kind === 'GROUP' ? (
+                           <span className="font-normal text-muted-foreground">
+                              {' '}
+                              and {conversation.participants.length - 1} more
+                           </span>
+                        ) : null}
+                     </h2>
+                  </>
+               )}
                <Button
                   variant="ghost"
                   size="icon-sm"
@@ -258,8 +268,8 @@ export const Thread = ({
                         <p className="text-xs">{conversation.failed.reason}</p>
                         {conversation.failed.unsure ? (
                            <p className="text-xs">
-                              It is checked again at the next read of this conversation, within about ten minutes, and this
-                              goes away when the message is found.
+                              It is checked again at the next read of this conversation, within about ten minutes, and
+                              this goes away when the message is found.
                            </p>
                         ) : null}
                         <p className="mt-1 truncate text-xs opacity-80">
@@ -267,8 +277,8 @@ export const Thread = ({
                         </p>
                         {filesLost ? (
                            <p className="mt-1 text-xs">
-                              Its files were not kept on this page. Dismiss it to get the words back, then attach the files
-                              again.
+                              Its files were not kept on this page. Dismiss it to get the words back, then attach the
+                              files again.
                            </p>
                         ) : null}
                         <div className="mt-2 flex gap-2">

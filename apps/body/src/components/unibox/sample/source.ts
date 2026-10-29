@@ -71,7 +71,11 @@ export const createSampleSource = ({ now = Date.now, loadReal, wait = sleep, siz
       mark: async () => undefined,
       open: async id => started.get(id),
       refresh: async () => ({ started: 0, skipped: [] }),
-      recipients: async query => sampleRecipients(accountIds, shown, startedIds, query),
+      recipients: async search => sampleRecipients(accountIds, shown, startedIds, search),
+      recipient: async (accountId, slug) =>
+         sampleRecipients(accountIds, shown, startedIds, { query: '' }).people.find(
+            person => person.accountId === accountId && person.slug === slug
+         ) ?? null,
       start: async (account, slug, text) => {
          await wait(700 + Math.random() * 700)
 
@@ -85,7 +89,9 @@ export const createSampleSource = ({ now = Date.now, loadReal, wait = sleep, siz
             return { ok: false, reason: 'The sample message failed on purpose: its text holds /fail.' }
          }
 
-         const person = sampleRecipients([account.id], shown, startedIds, '').find(item => item.slug === slug)
+         const person = sampleRecipients([account.id], shown, startedIds, { query: '' }).people.find(
+            item => item.slug === slug
+         )
 
          if (!person || person.blocked) {
             return { ok: false, reason: 'This person cannot be written to.' }

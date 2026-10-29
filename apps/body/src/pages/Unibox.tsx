@@ -1,3 +1,5 @@
+import { DetailDrawers } from '@/components/details/detail-drawers'
+import { useDetailDrawer } from '@/components/details/use-detail-drawer'
 import { NextCheckLine } from '@/components/next-check-line'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
@@ -8,7 +10,13 @@ import { toast } from 'sonner'
 
 import { cn } from '@/lib/utils'
 
-import { type Attachment, type Recipient, type UniboxAccount } from '../components/unibox/types'
+import {
+   type Attachment,
+   type Recipient,
+   type RecipientPage,
+   type RecipientSearch,
+   type UniboxAccount,
+} from '../components/unibox/types'
 
 import { type AccountSet, parseSets, setMatching } from '../components/unibox/accountSets'
 import { type Address, parseAddress, toAddress } from '../components/unibox/address'
@@ -20,7 +28,7 @@ import { type Drafts, parseDrafts, setDraft } from '../components/unibox/drafts'
 import { buildIndex, countsOf, filterRows, nextToReply, otherAccountsOf, sortRows } from '../components/unibox/inbox'
 import { commandFor, escapeStep, isTyping } from '../components/unibox/keyboard'
 import { NewMessage } from '../components/unibox/new-message'
-import { draftConversation, isPlaceholder } from '../components/unibox/newMessage'
+import { directOutcome, draftConversation, isPlaceholder, startingAccounts } from '../components/unibox/newMessage'
 import { EmptyList, HelpDialog, NoConversation, SampleBanner } from '../components/unibox/notices'
 import { Palette, type PaletteItem, SelectionBar } from '../components/unibox/palette'
 import { loadRealSample } from '../components/unibox/sample/real'
@@ -71,7 +79,9 @@ type BoardProps = {
    // Whether a first message can be sent to a connection not talked to yet.
    canStart: boolean
    // The search of the connections New message lists; absent when there is none.
-   loadRecipients: ((query: string) => Promise<Recipient[]>) | undefined
+   loadRecipients: ((search: RecipientSearch) => Promise<RecipientPage>) | undefined
+   // One connection of one account, for an address that names them (Message on a Connections page).
+   findRecipient: ((accountId: string, slug: string) => Promise<Recipient | null>) | undefined
    // Asks for the messages to be read again; absent when the data has nothing to read.
    onRefresh: ((accountIds?: string[]) => void) | undefined
    // Opens a kept file of a message.
@@ -87,6 +97,7 @@ const Board = ({
    canSend,
    canStart,
    loadRecipients,
+   findRecipient,
    onRefresh,
    onOpenFile,
    onFileUrl,
@@ -110,6 +121,12 @@ const Board = ({
    const [detailsOpen, setDetailsOpen] = useState(false)
    const [paletteOpen, setPaletteOpen] = useState(false)
    const [helpOpen, setHelpOpen] = useState(false)
+   // The accounts New message was last narrowed to in this tab ('ALL' when the owner chose every account).
+   const [composeAccounts, setComposeAccounts] = useState<ReadonlySet<string> | 'ALL'>()
+   // The composer takes the focus once the conversation opened from a Connections page shows.
+   const focusComposer = useRef(false)
+   const personDrawer = useDetailDrawer()
+   const showPerson = (slug: string) => personDrawer.show('person', slug)
    const searchRef = useRef<HTMLInputElement>(null)
    const composerRef = useRef<HTMLTextAreaElement>(null)
    const gridRef = useRef<HTMLDivElement>(null)
@@ -407,9 +424,9 @@ const Board = ({
    }
 
    // A connection picked in New message: their conversation with that account opens, or a new one to write the first message in.
-   const openPerson = (person: Recipient) => {
+   const openPerson = (person: Recipient, replace = false) => {
       if (person.conversationId && index.byId.has(person.conversationId)) {
-         go({ conversationId: person.conversationId }, false)
+         go({ conversationId: person.conversationId }, replace)
 
          return
       }
@@ -425,8 +442,55 @@ const Board = ({
       const draft = draftConversation(from, person)
 
       dispatch({ type: 'START', conversation: draft })
-      go({ conversationId: draft.id }, false)
+      go({ conversationId: draft.id }, replace)
    }
+
+   // Message on a Connections page names the account and the person: their chat opens at once, with the composer ready, and the address
+   // becomes the conversation's. A person not found, or on the do-not-contact list, opens New message with their name searched.
+   const direct = compose?.accountId && compose.to ? { accountId: compose.accountId, to: compose.to } : undefined
+   const directKey = direct ? `${direct.accountId}\u0000${direct.to}` : undefined
+   const openDirect = useRef<(found: Recipient | null | 'failed') => void>(() => undefined)
+
+   useEffect(() => {
+      openDirect.current = found => {
+         const accountName = accounts.find(item => item.id === direct?.accountId)?.name ?? 'this account'
+         const outcome = directOutcome(found, direct?.to ?? '', accountName)
+
+         if ('message' in outcome) {
+            toast.error(outcome.message)
+            go({ compose: { to: outcome.search } })
+
+            return
+         }
+
+         focusComposer.current = true
+         openPerson(outcome.open, true)
+      }
+   })
+
+   useEffect(() => {
+      if (!directKey || !findRecipient) {
+         return undefined
+      }
+
+      let current = true
+      const [accountId = '', to = ''] = directKey.split('\u0000')
+
+      findRecipient(accountId, to)
+         .then(person => current && openDirect.current(person))
+         .catch(() => current && openDirect.current('failed'))
+
+      return () => {
+         current = false
+      }
+   }, [directKey, findRecipient])
+
+   useEffect(() => {
+      if (focusComposer.current && activeId) {
+         focusComposer.current = false
+         composerRef.current?.focus()
+      }
+   }, [activeId])
 
    const openCompose = () => go({ compose: {} }, false)
    const canCompose = loadRecipients !== undefined
@@ -767,6 +831,7 @@ const Board = ({
                            detailsOpen={detailsOpen}
                            onBack={() => go({ conversationId: undefined })}
                            onToggleDetails={() => setDetailsOpen(current => !current)}
+                           {...(!sample && { onPerson: showPerson })}
                            onMarkUnread={markUnread}
                            onDone={doneAndNext}
                            onUndoSend={() => takeBack(active.conversation.id)}
@@ -790,6 +855,13 @@ const Board = ({
                               textareaRef={composerRef}
                            />
                         </Thread>
+                     ) : direct ? (
+                        <p
+                           role="status"
+                           className="flex h-full items-center justify-center text-sm text-muted-foreground"
+                        >
+                           Opening the chat...
+                        </p>
                      ) : (
                         <NoConversation needCount={counts.NEEDS_REPLY} />
                      )}
@@ -804,10 +876,17 @@ const Board = ({
                   The person, the account and the same person in other accounts.
                </SheetDescription>
                {active ? (
-                  <DetailsPanel row={active} index={index} onOpen={open} onClose={() => setDetailsOpen(false)} />
+                  <DetailsPanel
+                     row={active}
+                     index={index}
+                     onOpen={open}
+                     onClose={() => setDetailsOpen(false)}
+                     {...(!sample && { onPerson: showPerson })}
+                  />
                ) : null}
             </SheetContent>
          </Sheet>
+         {sample ? null : <DetailDrawers kind="person" order={[]} docked confirmRead />}
          <Palette
             open={paletteOpen}
             onOpenChange={setPaletteOpen}
@@ -816,12 +895,24 @@ const Board = ({
             findAccounts={findAccounts}
          />
          <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
-         {compose && loadRecipients ? (
+         {compose && !direct && loadRecipients ? (
             <NewMessage
                initialQuery={compose.to ?? ''}
                load={loadRecipients}
                canStart={canStart}
-               onPick={openPerson}
+               accounts={accounts}
+               startAccounts={startingAccounts({
+                  last: composeAccounts,
+                  picked: accountIds,
+                  open: active?.conversation.accountId,
+               })}
+               onAccounts={next => setComposeAccounts(next ?? 'ALL')}
+               picker={{
+                  unread: unreadByAccount,
+                  sets,
+                  onSets: setSets,
+               }}
+               onPick={person => openPerson(person)}
                onClose={() => go({ conversationId: undefined })}
             />
          ) : null}
@@ -910,6 +1001,7 @@ export const Unibox = () => {
          canSend={loaded.canSend}
          canStart={loaded.canStart}
          loadRecipients={source.recipients}
+         findRecipient={source.recipient}
          onRefresh={loaded.canRefresh ? refresh : undefined}
          onOpenFile={openFile}
          onFileUrl={source.fileLink ? fileUrl : undefined}

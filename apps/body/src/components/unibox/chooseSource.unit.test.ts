@@ -16,7 +16,8 @@ const source = (name: string): UniboxSource => ({
    open: vi.fn(async () => undefined),
    refresh: vi.fn(async () => ({ started: 0, skipped: [] })),
    send: vi.fn(async () => ({ ok: true as const })),
-   recipients: vi.fn(async () => []),
+   recipients: vi.fn(async () => ({ people: [], total: 0 })),
+   recipient: vi.fn(async () => null),
    start: vi.fn(async () => ({ ok: true as const, conversationId: 'c9' })),
 })
 
@@ -63,17 +64,20 @@ describe('withDevFile', () => {
       const chosen = withDevFile(file, source('real'), async () => true)
 
       await chosen.load()
-      await chosen.recipients?.('gra')
+      await chosen.recipients?.({ query: 'gra' })
+      await chosen.recipient?.('a1', 'grace')
 
       await expect(chosen.start?.({} as never, 'grace', 'Hi')).resolves.toEqual({ ok: true, conversationId: 'c9' })
-      expect(file.recipients).toHaveBeenCalledWith('gra')
+      expect(file.recipients).toHaveBeenCalledWith({ query: 'gra' })
+      expect(file.recipient).toHaveBeenCalledWith('a1', 'grace')
 
-      const bare: UniboxSource = { ...source('real'), recipients: undefined, start: undefined }
+      const bare: UniboxSource = { ...source('real'), recipients: undefined, recipient: undefined, start: undefined }
       const plain = withDevFile(source('file'), bare, async () => false)
 
       await plain.load()
 
-      await expect(plain.recipients?.('')).resolves.toEqual([])
+      await expect(plain.recipients?.({ query: '' })).resolves.toEqual({ people: [], total: 0 })
+      await expect(plain.recipient?.('a1', 'grace')).resolves.toBeNull()
       await expect(plain.start?.({} as never, 'grace', 'Hi')).resolves.toMatchObject({ ok: false })
    })
 })

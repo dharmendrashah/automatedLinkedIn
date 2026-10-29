@@ -1,16 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
-import { type Recipient, type UniboxAccount, type UniboxConversation } from './types'
+import { type Recipient, type UniboxAccount } from './types'
 
-import { buildIndex } from './inbox'
 import {
-   connectionEntries,
+   alsoTalking,
+   countLine,
+   directOutcome,
    draftConversation,
    isPlaceholder,
    noRecipients,
    notActiveReason,
    placeholderId,
    recipientBlock,
+   startingAccounts,
 } from './newMessage'
 import { statusOf } from './status'
 
@@ -27,18 +29,8 @@ const person = (slug: string, over: Partial<Recipient> = {}): Recipient => ({
    accountId: 'a1',
    name: slug.toUpperCase(),
    headline: '',
+   status: 'NEVER',
    ...over,
-})
-
-const talk = (id: string, direction: 'ME' | 'THEM', at: number): UniboxConversation => ({
-   id,
-   accountId: 'a1',
-   contact: { name: id },
-   participants: [],
-   kind: 'DIRECT',
-   unread: false,
-   complete: true,
-   messages: [{ id: `${id}-m`, direction, sender: id, at, when: '', text: `last of ${id}`, attachments: [] }],
 })
 
 describe('draftConversation', () => {
@@ -62,34 +54,72 @@ describe('draftConversation', () => {
    })
 })
 
-describe('connectionEntries', () => {
-   const index = buildIndex(
-      [account('ACTIVE')],
-      [talk('waits', 'THEM', 100), talk('newer', 'ME', 300), talk('older', 'ME', 200)],
-      new Set()
-   )
+describe('alsoTalking', () => {
+   const now = Date.parse('2026-10-30T12:00:00Z')
+   const names = new Map([
+      ['a2', 'Sushi Shreechand'],
+      ['a3', 'Dharmendra Soni'],
+   ])
+   const nameOf = (id: string) => names.get(id)
 
-   it('should put the ones to answer first, then the latest talked to, then the new ones by name, and do-not-contact last', () => {
-      const entries = connectionEntries(
-         [
-            person('zed'),
-            person('blocked', { blocked: 'DO_NOT_CONTACT' }),
-            person('older', { conversationId: 'older' }),
-            person('amy'),
-            person('waits', { conversationId: 'waits' }),
-            person('newer', { conversationId: 'newer' }),
-         ],
-         index.byId
+   it('should name the other account that talks with the person, and when it last did', () => {
+      expect(alsoTalking(person('x', { alsoWith: [{ accountId: 'a2', at: now - 3 * 86_400_000 }] }), nameOf, now)).toBe(
+         'Also talking from Sushi Shreechand, 3d ago'
       )
-
-      expect(entries.map(entry => entry.person.slug)).toEqual(['waits', 'newer', 'older', 'amy', 'zed', 'blocked'])
-      expect(entries.map(entry => entry.state)).toEqual(['NEEDS_REPLY', 'WAITING', 'WAITING', 'NEW', 'NEW', 'BLOCKED'])
-      expect(entries[0]?.last).toMatchObject({ at: 100, text: 'last of waits', mine: false })
-      expect(entries[3]?.last).toBeUndefined()
+      expect(alsoTalking(person('x', { alsoWith: [{ accountId: 'a2' }] }), nameOf, now)).toBe(
+         'Also talking from Sushi Shreechand'
+      )
    })
 
-   it('should call a person new when the conversation it names is not on the page', () => {
-      expect(connectionEntries([person('gone', { conversationId: 'missing' })], index.byId)[0]?.state).toBe('NEW')
+   it('should count the others when there are several, and say nothing when none', () => {
+      expect(
+         alsoTalking(
+            person('x', { alsoWith: [{ accountId: 'a2' }, { accountId: 'a3' }, { accountId: 'gone' }] }),
+            nameOf,
+            now
+         )
+      ).toBe('Also talking from Sushi Shreechand and 2 other accounts')
+      expect(alsoTalking(person('x'), nameOf, now)).toBeUndefined()
+   })
+})
+
+describe('countLine', () => {
+   it('should say how many there are, and that only the first are shown when the list is cut', () => {
+      expect(countLine(1, 1)).toBe('1 person')
+      expect(countLine(12, 12)).toBe('12 people')
+      expect(countLine(200, 1240)).toBe('1,240 people. The first 200 are shown; type a name to find anyone.')
+   })
+})
+
+describe('startingAccounts', () => {
+   it('should start on the last choice, then the accounts the Unibox shows, then the open conversation, else every account', () => {
+      const picked = new Set(['a1'])
+
+      expect(startingAccounts({ last: new Set(['a3']), picked, open: 'a2' })).toEqual(new Set(['a3']))
+      expect(startingAccounts({ last: undefined, picked, open: 'a2' })).toEqual(picked)
+      expect(startingAccounts({ last: undefined, picked: undefined, open: 'a2' })).toEqual(new Set(['a2']))
+      expect(startingAccounts({ last: undefined, picked: undefined })).toBeUndefined()
+   })
+
+   it('should keep every account when that was the last choice', () => {
+      expect(startingAccounts({ last: 'ALL', picked: new Set(['a1']), open: 'a2' })).toBeUndefined()
+   })
+})
+
+describe('directOutcome', () => {
+   it('should open the person found, and send anyone else to New message with a sentence', () => {
+      const grace = person('grace-h', { name: 'Grace Hopper' })
+
+      expect(directOutcome(grace, 'grace-h', 'Tripti')).toEqual({ open: grace })
+      expect(directOutcome(null, 'grace-h', 'Tripti')).toEqual({
+         message: 'This person is not a connection of Tripti any more, or its connections were not read yet.',
+         search: 'grace-h',
+      })
+      expect(directOutcome({ ...grace, blocked: 'DO_NOT_CONTACT' }, 'grace-h', 'Tripti')).toEqual({
+         message: 'Grace Hopper is on your do-not-contact list.',
+         search: 'Grace Hopper',
+      })
+      expect(directOutcome('failed', 'grace-h', 'Tripti')).toMatchObject({ search: 'grace-h' })
    })
 })
 
@@ -111,8 +141,12 @@ describe('recipientBlock', () => {
 })
 
 describe('noRecipients', () => {
-   it('should tell a search that found nobody from no connections read at all', () => {
-      expect(noRecipients('gra')).toMatch(/No connection matches/)
-      expect(noRecipients('  ')).toMatch(/Read the connections/)
+   it('should tell a search or filter that found nobody from no connections read at all', () => {
+      expect(noRecipients({ query: 'gra' })).toMatch(/No connection matches/)
+      expect(noRecipients({ query: '  ' })).toMatch(/Read the connections/)
+      expect(noRecipients({ query: '', status: 'NEEDS_REPLY' })).toBe(
+         'No one is waiting for your reply on these accounts.'
+      )
+      expect(noRecipients({ query: '', accountIds: ['a1'] })).toBe('No connection of these accounts matches.')
    })
 })

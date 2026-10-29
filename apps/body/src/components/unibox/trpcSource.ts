@@ -3,6 +3,7 @@ import { TRPCClientError } from '@trpc/client'
 import {
    type AccountState,
    type Attachment,
+   type Recipient,
    type UniboxAccount,
    type UniboxConversation,
    type UniboxMessage,
@@ -19,6 +20,7 @@ type Wire = RouterOutputs['unibox']
 type WireAccount = Wire['accounts'][number]
 type WireConversation = Wire['conversations'][number]
 type WireMessage = WireConversation['messages'][number]
+type WireRecipient = Wire['recipients']['people'][number]
 
 // Brain's own limit of ids in one call.
 const MAX_IDS = 500
@@ -54,6 +56,23 @@ const accountOf = (account: WireAccount): UniboxAccount => ({
    ...(account.messagesReadAt && { lastReadAt: localClock(account.messagesReadAt) }),
    ...(account.nextMessagesAt && { nextReadAt: account.nextMessagesAt }),
    ...(account.imageUrl && { imageUrl: account.imageUrl }),
+})
+
+const recipientOf = ({ lastAt, lastText, lastMine, alsoWith, ...person }: WireRecipient): Recipient => ({
+   ...person,
+   ...(lastAt && {
+      last: {
+         at: localClock(lastAt),
+         text: lastText ?? '',
+         mine: lastMine === true,
+      },
+   }),
+   ...(alsoWith && {
+      alsoWith: alsoWith.map(other => ({
+         accountId: other.accountId,
+         ...(other.at && { at: localClock(other.at) }),
+      })),
+   }),
 })
 
 const KINDS: Attachment['kind'][] = ['IMAGE', 'VIDEO', 'AUDIO', 'FILE', 'LINK']
@@ -139,7 +158,9 @@ const conversationOf = (conversation: WireConversation): UniboxConversation => {
       ...(conversation.done && conversation.lastMessageAt && { doneAt: localClock(conversation.lastMessageAt) }),
       ...(conversation.reply && replyOf(conversation.reply)),
       // A first message brain has with no conversation yet: the stand-in it was written in.
-      ...('starting' in conversation && { starting: { slug: conversation.starting } }),
+      ...('starting' in conversation &&
+         typeof conversation.starting === 'string' && { starting: { slug: conversation.starting } }),
+      ...(conversation.contactSlug && { contactSlug: conversation.contactSlug }),
    }
 }
 
@@ -295,7 +316,20 @@ export const createTrpcSource = (client: UniboxClient, { upload, wait = sleep }:
       fileLink: async (messageId, index) => (await client.unibox.fileLink.query({ messageId, index })).url,
 
       // Starting a conversation waits for brain and the spider task (.plan/message-connections.md); the list is real already.
-      recipients: query => client.unibox.recipients.query({ query }),
+      recipients: async search => {
+         const { people, total } = await client.unibox.recipients.query(search)
+
+         return {
+            people: people.map(recipientOf),
+            total,
+         }
+      },
+
+      recipient: async (accountId, slug) => {
+         const found = await client.unibox.recipient.query({ accountId, slug })
+
+         return found ? recipientOf(found) : null
+      },
 
       // A message from New message: brain goes on in the conversation the account has with the person, or begins one.
       start: async (account, slug, text, events) => {

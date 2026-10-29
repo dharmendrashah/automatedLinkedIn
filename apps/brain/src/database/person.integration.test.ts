@@ -191,4 +191,101 @@ describe('PersonService (database)', () => {
       expect(await PersonService.detail(userId, 'ada')).toBeNull()
       await expect(PersonService.readFull(userId, 'bob')).rejects.toBeInstanceOf(ConflictError)
    })
+
+   it('should show a connection or a person the owner talks with, read their full profile, and keep it while they are one', async () => {
+      const otherId = (await UserService.create({ email: `${randomUUID()}@elitale.com` })).id
+      const account = await PrismaService.client.linkedInAccount.create({
+         data: {
+            userId,
+            email: `${randomUUID()}@example.com`,
+            secret: 'x',
+            secretIv: 'x',
+            secretTag: 'x',
+         },
+      })
+
+      await PrismaService.client.linkedInConnection.create({
+         data: {
+            userId,
+            accountId: account.id,
+            slug: 'carol',
+            name: 'Carol Shaw',
+            headline: 'Founder at Acme',
+            photoUrl: 'https://media.licdn.com/dms/image/carol',
+            connectedOn: new Date('2026-10-01T00:00:00Z'),
+         },
+      })
+      await PrismaService.client.linkedInConversation.create({
+         data: {
+            userId,
+            accountId: account.id,
+            linkedInId: '2-dave',
+            title: 'Dave Cutler',
+            kind: 'DIRECT',
+            participants: [
+               {
+                  name: 'Dave Cutler',
+                  profileUrl: 'https://www.linkedin.com/in/dave/',
+               },
+            ],
+            contactProfileUrl: 'https://www.linkedin.com/in/dave/',
+            unread: false,
+            complete: true,
+         },
+      })
+
+      expect(await PersonService.detail(userId, 'carol')).toMatchObject({
+         url: 'https://www.linkedin.com/in/carol/',
+         member: null,
+         profile: null,
+         snapshot: null,
+         connections: [
+            {
+               accountId: account.id,
+               accountName: account.email,
+               name: 'Carol Shaw',
+               headline: 'Founder at Acme',
+               photoUrl: 'https://media.licdn.com/dms/image/carol',
+               connectedOn: '2026-10-01',
+            },
+         ],
+      })
+      expect(await PersonService.detail(userId, 'dave')).toMatchObject({
+         url: 'https://www.linkedin.com/in/dave/',
+         connections: [],
+         conversations: [
+            {
+               accountId: account.id,
+               name: 'Dave Cutler',
+            },
+         ],
+      })
+      expect(await PersonService.detail(otherId, 'carol')).toBeNull()
+      expect(await PersonService.detail(userId, 'nobody')).toBeNull()
+
+      expect((await PersonService.readFull(userId, 'carol'))?.read?.status).toBe('QUEUED')
+      await workReads(userId, fakeReader())
+      expect((await PersonService.detail(userId, 'carol'))?.read).toMatchObject({ status: 'DONE' })
+      await RetentionService.run()
+
+      expect((await PersonService.detail(userId, 'carol'))?.snapshot?.name).toBe('Ada Lovelace')
+
+      await PrismaService.client.linkedInConnection.updateMany({
+         where: { slug: 'carol' },
+         data: { status: 'REMOVED' },
+      })
+      await RetentionService.run()
+
+      expect(
+         await PrismaService.client.personSnapshot.count({
+            where: {
+               userId,
+               slug: 'carol',
+            },
+         })
+      ).toBe(0)
+      expect(await PersonService.detail(userId, 'carol')).toBeNull()
+
+      await PrismaService.client.user.delete({ where: { id: otherId } })
+   })
 })

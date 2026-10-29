@@ -5,6 +5,7 @@ import { PRICE_MICROS } from '@automatedLinkedIn/contracts'
 import { ConflictError } from './conflict'
 import { DataReadService } from './dataRead.service'
 import { LinkedInProfileService } from './linkedInProfile.service'
+import { connectionsOf, conversationsWith, profileUrlOf } from './personContacts'
 import { PrismaService } from './prisma.service'
 import { WorkflowListService } from './workflowList.service'
 
@@ -19,9 +20,9 @@ const whereSlug = (userId: string, slug: string) => ({
 })
 
 export class PersonService {
-   // null when the person is in neither /profiles nor a list of the owner.
+   // null when the person is in no /profiles row, no list, no connection and no conversation of the owner.
    public static async detail(userId: string, slug: string) {
-      const [profile, member, suppressed, snapshot] = await Promise.all([
+      const [profile, member, suppressed, snapshot, connections, conversations] = await Promise.all([
          LinkedInProfileService.bySlug(userId, slug),
          WorkflowListService.memberBySlug(userId, slug),
          PrismaService.client.suppression.findUnique({
@@ -35,8 +36,13 @@ export class PersonService {
                fetchedAt: true,
             },
          }),
+         connectionsOf(userId, slug),
+         conversationsWith(userId, slug),
       ])
-      const url = profile?.url ?? member?.url
+      const url =
+         profile?.url ??
+         member?.url ??
+         (connections.length > 0 || conversations.length > 0 ? profileUrlOf(slug) : undefined)
 
       if (!url) {
          return null
@@ -49,6 +55,9 @@ export class PersonService {
          url,
          profile,
          member,
+         // The owner's accounts connected to them, and the conversations the accounts have with them (Unibox).
+         connections,
+         conversations,
          suppressed: suppressed !== null,
          snapshot:
             full && snapshot

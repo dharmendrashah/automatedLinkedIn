@@ -15,6 +15,8 @@ type Props = {
    index: Index
    onOpen: (id: string) => void
    onClose: () => void
+   // Opens the person's drawer by profile name; absent where there is none.
+   onPerson?: (slug: string) => void
 }
 
 const safeHref = (url: string | undefined) => {
@@ -28,7 +30,7 @@ const safeHref = (url: string | undefined) => {
 }
 
 // The side of a conversation: the person, the account that has it, and the same person in the other accounts.
-export const DetailsPanel = ({ row, index, onOpen, onClose }: Props) => {
+export const DetailsPanel = ({ row, index, onOpen, onClose, onPerson }: Props) => {
    const { now } = useShared()
    const { conversation, account } = row
    const others = otherAccountsOf(index, conversation)
@@ -52,7 +54,17 @@ export const DetailsPanel = ({ row, index, onOpen, onClose }: Props) => {
                   {conversation.participants.map(person => (
                      <li key={`${person.name}-${person.profileUrl ?? ''}`} className="flex items-center gap-2">
                         <ContactAvatar name={person.name} imageUrl={person.imageUrl} size="sm" />
-                        <span className="truncate">{person.name}</span>
+                        {conversation.kind === 'DIRECT' && conversation.contactSlug && onPerson ? (
+                           <button
+                              type="button"
+                              onClick={() => onPerson(conversation.contactSlug ?? '')}
+                              className="truncate text-left hover:underline"
+                           >
+                              {person.name}
+                           </button>
+                        ) : (
+                           <span className="truncate">{person.name}</span>
+                        )}
                      </li>
                   ))}
                </ul>

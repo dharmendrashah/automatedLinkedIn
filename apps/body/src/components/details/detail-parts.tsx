@@ -1,3 +1,13 @@
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -36,7 +46,13 @@ export const Picture = ({
    const shape = cn('bg-muted size-24 border-4 border-background', square ? 'rounded-xl' : 'rounded-full')
 
    return image && !broken ? (
-      <img src={image} alt="" referrerPolicy="no-referrer" className={cn(shape, 'object-cover', className)} onError={() => setBroken(true)} />
+      <img
+         src={image}
+         alt=""
+         referrerPolicy="no-referrer"
+         className={cn(shape, 'object-cover', className)}
+         onError={() => setBroken(true)}
+      />
    ) : (
       <span className={cn(shape, 'text-muted-foreground grid place-items-center text-2xl font-semibold', className)}>
          {initialsOf(name)}
@@ -61,25 +77,52 @@ type ReadProps = {
    pending: boolean
    error: { message: string } | null
    onRead: () => void
+   // When set, the first press asks this before anything is paid.
+   confirm?: string
 }
 
 // The paid read: the price on the button, "Reading…" while the worker has it, when it was last read, and why it did
 // not work.
-export const ReadButton = ({ what, priceMicros, readAt, read, pending, error, onRead }: ReadProps) => {
+export const ReadButton = ({ what, priceMicros, readAt, read, pending, error, onRead, confirm }: ReadProps) => {
    const reading = isReading(read)
+   const [asking, setAsking] = useState(false)
+   const label = `${readAt ? 'Read again' : `Read ${what}`} · about ${money(priceMicros)}`
 
    return (
       <>
-         <Button variant="outline" size="sm" disabled={pending || reading} onClick={onRead}>
+         <Button
+            variant="outline"
+            size="sm"
+            disabled={pending || reading}
+            onClick={() => (confirm ? setAsking(true) : onRead())}
+         >
             {pending || reading ? <Loader2 className="animate-spin" /> : readAt ? <RefreshCw /> : <FileSearch />}
-            {reading ? `Reading the ${what}…` : `${readAt ? 'Read again' : `Read ${what}`} · about ${money(priceMicros)}`}
+            {reading ? `Reading the ${what}…` : label}
          </Button>
+         {confirm ? (
+            <AlertDialog open={asking} onOpenChange={setAsking}>
+               <AlertDialogContent>
+                  <AlertDialogHeader>
+                     <AlertDialogTitle>{label}?</AlertDialogTitle>
+                     <AlertDialogDescription>{confirm}</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                     <AlertDialogCancel>Cancel</AlertDialogCancel>
+                     <AlertDialogAction onClick={onRead}>Read</AlertDialogAction>
+                  </AlertDialogFooter>
+               </AlertDialogContent>
+            </AlertDialog>
+         ) : null}
          {reading ? (
-            <p className="text-muted-foreground basis-full text-xs">This can take a few minutes. You can close this and come back.</p>
+            <p className="text-muted-foreground basis-full text-xs">
+               This can take a few minutes. You can close this and come back.
+            </p>
          ) : readAt ? (
             <p className="text-muted-foreground basis-full text-xs">Read {new Date(readAt).toLocaleDateString()}.</p>
          ) : null}
-         {read?.status === 'FAILED' && read.message ? <p className="text-destructive basis-full text-sm">{read.message}</p> : null}
+         {read?.status === 'FAILED' && read.message ? (
+            <p className="text-destructive basis-full text-sm">{read.message}</p>
+         ) : null}
          {error ? <p className="text-destructive basis-full text-sm">{readableError(error)}</p> : null}
       </>
    )

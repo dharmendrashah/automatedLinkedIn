@@ -199,7 +199,7 @@ describe('opened', () => {
 describe('a first message', () => {
    const stand = draftConversation(
       { id: 'a1', name: 'Me', handle: 'me@x.test', headline: '', state: 'ACTIVE' },
-      { accountId: 'a1', slug: 'grace-h', name: 'Grace', headline: '' }
+      { accountId: 'a1', slug: 'grace-h', name: 'Grace', headline: '', status: 'NEVER' }
    )
    const opened = reduce(start, { type: 'START', conversation: stand })
    const started = reduce(opened, { type: 'SEND', id: stand.id, text: 'Hello', attachments: [], now: 10 })

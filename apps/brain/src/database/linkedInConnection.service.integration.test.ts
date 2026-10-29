@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { CONNECTIONS_CONTRACT_VERSION, CONNECTION_LIMITS, type ConnectionsFile } from '@automatedLinkedIn/contracts'
 
@@ -225,8 +225,9 @@ describe('LinkedInConnectionService (database)', () => {
          },
       })
 
-      const all = await LinkedInConnectionService.recipients(userId, '')
+      const { people: all, total } = await LinkedInConnectionService.recipients(userId, { query: '' })
 
+      expect(total).toBe(3)
       expect(all.map(({ slug }) => slug).sort()).toEqual(['person-1', 'person-2', 'person-3'])
       expect(all.every(item => item.accountId === accountId)).toBe(true)
       expect(all.find(({ slug }) => slug === 'person-1')?.conversationId).toEqual(expect.any(String))
@@ -235,12 +236,16 @@ describe('LinkedInConnectionService (database)', () => {
          slug: 'person-2',
          name: 'Person 2',
          headline: 'Works at 2',
+         status: 'NEVER',
       })
       expect(all.find(({ slug }) => slug === 'person-3')?.blocked).toBe('DO_NOT_CONTACT')
-      expect((await LinkedInConnectionService.recipients(userId, 'works 2')).map(({ slug }) => slug)).toEqual([
-         'person-2',
-      ])
-      expect(await LinkedInConnectionService.recipients(otherUserId, '')).toEqual([])
+      expect(
+         (await LinkedInConnectionService.recipients(userId, { query: 'works 2' })).people.map(({ slug }) => slug)
+      ).toEqual(['person-2'])
+      expect(await LinkedInConnectionService.recipients(otherUserId, { query: '' })).toEqual({
+         people: [],
+         total: 0,
+      })
 
       await PrismaService.client.suppression.deleteMany({ where: { userId } })
    })
@@ -279,13 +284,199 @@ describe('LinkedInConnectionService (database)', () => {
       })
 
       expect(
-         (await LinkedInConnectionService.recipients(userId, '')).map(({ conversationId }) => conversationId)
+         (await LinkedInConnectionService.recipients(userId, { query: '' })).people.map(
+            ({ conversationId }) => conversationId
+         )
       ).toEqual([begun.id])
       await expect(LinkedInConnectionService.conversationWith(userId, accountId, person(1).slug)).resolves.toBe(
          begun.id
       )
 
       await PrismaService.client.linkedInReply.deleteMany({ where: { userId } })
+   })
+
+   describe('New message: where each person stands', () => {
+      let secondAccountId: string
+
+      // A conversation of one account with one person; `last` is who wrote last, `done` when the owner closed it after that.
+      const talk = async (
+         account: string,
+         n: number,
+         last: 'ME' | 'THEM',
+         at: string,
+         { done = false, text = `Last words with ${n}` } = {}
+      ) => {
+         const conversation = await PrismaService.client.linkedInConversation.create({
+            data: {
+               userId,
+               accountId: account,
+               linkedInId: `2-${account}-${n}`,
+               title: `Person ${n}`,
+               kind: 'DIRECT',
+               participants: [
+                  {
+                     name: `Person ${n}`,
+                     profileUrl: `https://www.linkedin.com/in/person-${n}/`,
+                  },
+               ],
+               unread: false,
+               complete: true,
+               messageCount: 1,
+               lastMessageAt: new Date(at),
+               lastDirection: last,
+               ...(last === 'THEM' && { waitingSince: new Date(at) }),
+               ...(done && { doneMessageCount: 1 }),
+            },
+         })
+
+         await PrismaService.client.linkedInMessage.create({
+            data: {
+               conversationId: conversation.id,
+               linkedInId: `m-${n}`,
+               direction: last,
+               senderName: last === 'ME' ? 'Me' : `Person ${n}`,
+               sentAt: new Date(at),
+               whenText: at,
+               text,
+               attachments: [],
+               position: 0,
+            },
+         })
+
+         return conversation.id
+      }
+
+      const statuses = async (options: Parameters<typeof LinkedInConnectionService.recipients>[1]) =>
+         (await LinkedInConnectionService.recipients(userId, options)).people.map(
+            ({ slug, status, blocked }) => `${slug}:${status}${blocked ? ':blocked' : ''}`
+         )
+
+      beforeAll(async () => {
+         secondAccountId = (await makeAccount(userId)).id
+      })
+
+      beforeEach(async () => {
+         // person-9 and person-1 need a reply (9 newer), 2 waits on them, 3 was closed, 4 and 5 never messaged, 6 is do-not-contact.
+         await read([1, 2, 3, 4, 5, 6, 9], { total: 7 })
+         await talk(accountId, 1, 'THEM', '2026-10-20T10:00:00Z')
+         await talk(accountId, 9, 'THEM', '2026-10-25T10:00:00Z', { text: 'x'.repeat(500) })
+         await talk(accountId, 2, 'ME', '2026-10-28T10:00:00Z')
+         await talk(accountId, 3, 'THEM', '2026-10-29T10:00:00Z', { done: true })
+         await PrismaService.client.suppression.create({
+            data: {
+               userId,
+               slug: person(6).slug,
+            },
+         })
+         // The second account knows person 4 too, and talks with person 2.
+         await PrismaService.client.linkedInConnection.createMany({
+            data: [2, 4].map(n => ({
+               userId,
+               accountId: secondAccountId,
+               slug: person(n).slug,
+               name: person(n).name,
+               headline: person(n).headline,
+            })),
+         })
+         await talk(secondAccountId, 2, 'THEM', '2026-10-27T10:00:00Z')
+      })
+
+      afterEach(async () => {
+         await PrismaService.client.suppression.deleteMany({ where: { userId } })
+         await PrismaService.client.linkedInConnection.deleteMany({ where: { accountId: secondAccountId } })
+      })
+
+      it('should say where each person stands and put the ones to answer first, then the latest talked to, then the rest by name, do-not-contact last', async () => {
+         await expect(
+            statuses({
+               query: '',
+               accountIds: [accountId],
+            })
+         ).resolves.toEqual([
+            'person-9:NEEDS_REPLY',
+            'person-1:NEEDS_REPLY',
+            'person-3:TALKED',
+            'person-2:WAITING',
+            'person-4:NEVER',
+            'person-5:NEVER',
+            'person-6:NEVER:blocked',
+         ])
+
+         const { people } = await LinkedInConnectionService.recipients(userId, { query: 'Person 9' })
+
+         expect(people[0]).toMatchObject({
+            lastAt: '2026-10-25T10:00:00.000Z',
+            lastMine: false,
+            lastText: 'x'.repeat(200),
+         })
+      })
+
+      it('should keep only the accounts and the standing asked for, and count them all before the limit', async () => {
+         await expect(
+            statuses({
+               query: '',
+               status: 'NEEDS_REPLY',
+            })
+         ).resolves.toEqual(['person-2:NEEDS_REPLY', 'person-9:NEEDS_REPLY', 'person-1:NEEDS_REPLY'])
+         await expect(
+            statuses({
+               query: '',
+               accountIds: [secondAccountId],
+            })
+         ).resolves.toEqual(['person-2:NEEDS_REPLY', 'person-4:NEVER'])
+         await expect(
+            LinkedInConnectionService.recipients(userId, {
+               query: '',
+               status: 'NEVER',
+            })
+         ).resolves.toMatchObject({ total: 4 })
+         await expect(
+            LinkedInConnectionService.recipients(otherUserId, {
+               query: '',
+               accountIds: [accountId],
+            })
+         ).resolves.toEqual({
+            people: [],
+            total: 0,
+         })
+      })
+
+      it('should say when another account of the owner talks with the same person', async () => {
+         const { people } = await LinkedInConnectionService.recipients(userId, { query: 'Person 2' })
+         const mine = people.find(item => item.accountId === accountId)
+
+         expect(mine?.alsoWith).toEqual([
+            {
+               accountId: secondAccountId,
+               at: '2026-10-27T10:00:00.000Z',
+            },
+         ])
+         expect(people.find(item => item.accountId === secondAccountId)?.alsoWith).toEqual([
+            {
+               accountId,
+               at: '2026-10-28T10:00:00.000Z',
+            },
+         ])
+         const { people: four } = await LinkedInConnectionService.recipients(userId, { query: 'Person 4' })
+
+         expect(four).toHaveLength(2)
+         expect(four.every(item => item.alsoWith === undefined)).toBe(true)
+      })
+
+      it('should find one person of one account exactly, never a near match or someone else’s', async () => {
+         await read([1, 2, 3, 4, 5, 6, 9, 10], { total: 8 })
+
+         await expect(LinkedInConnectionService.recipient(userId, accountId, 'person-1')).resolves.toMatchObject({
+            slug: 'person-1',
+            status: 'NEEDS_REPLY',
+         })
+         const upper = await LinkedInConnectionService.recipient(userId, accountId, 'PERSON-1')
+
+         expect(upper?.slug).toBe('person-1')
+         await expect(LinkedInConnectionService.recipient(userId, accountId, 'person')).resolves.toBeNull()
+         await expect(LinkedInConnectionService.recipient(userId, secondAccountId, 'person-1')).resolves.toBeNull()
+         await expect(LinkedInConnectionService.recipient(otherUserId, accountId, 'person-1')).resolves.toBeNull()
+      })
    })
 
    it('should ask for a read of an account that is signed in, say so when it is not, and answer like a missing account for someone else’s', async () => {

@@ -21,7 +21,8 @@ export const withDevFile = (file: UniboxSource, real: UniboxSource, hasFile: () 
          active.send(account, text, attachments, conversationId, events),
       follow: replyId => (active.follow ? active.follow(replyId) : Promise.reject(new Error('Nothing to follow'))),
       dismissReply: replyId => active.dismissReply?.(replyId) ?? Promise.resolve(),
-      recipients: query => active.recipients?.(query) ?? Promise.resolve([]),
+      recipients: search => active.recipients?.(search) ?? Promise.resolve({ people: [], total: 0 }),
+      recipient: (accountId, slug) => active.recipient?.(accountId, slug) ?? Promise.resolve(null),
       start: (account, slug, text, events) =>
          active.start?.(account, slug, text, events) ??
          Promise.resolve({ ok: false, reason: 'A new conversation cannot be started from here.' }),

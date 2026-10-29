@@ -569,6 +569,104 @@ describe('LinkedInConversationService (database)', () => {
       expect((await LinkedInConversationService.accounts(userId)).some(item => item.id === moved.id)).toBe(false)
    })
 
+   it('should give a person with no picture the one of the connection, by profile name or the first message, and keep a picture the read gave', async () => {
+      const photo = (n: string) => `https://media.licdn.com/dms/image/${n}`
+      const grace = {
+         name: 'Grace Hopper',
+         profileUrl: 'https://www.linkedin.com/in/grace-h/',
+      }
+      const member = {
+         name: 'Alan Turing',
+         profileUrl: 'https://www.linkedin.com/in/ACoAAturing',
+      }
+
+      await LinkedInConversationService.store(
+         owner,
+         file({
+            id: '2-grace',
+            title: grace.name,
+            participants: [grace],
+         })
+      )
+      await LinkedInConversationService.store(
+         owner,
+         file({
+            id: '2-alan',
+            title: member.name,
+            participants: [member],
+         })
+      )
+      await PrismaService.client.linkedInConnection.createMany({
+         data: [
+            ['grace-h', photo('grace')],
+            ['alan-t', photo('alan')],
+            ['ada', photo('other-ada')],
+         ].map(([slug, photoUrl]) => ({
+            userId,
+            accountId,
+            slug: slug ?? '',
+            name: slug ?? '',
+            headline: '',
+            photoUrl,
+         })),
+      })
+
+      const alan = await PrismaService.client.linkedInConversation.findFirstOrThrow({
+         where: {
+            accountId,
+            linkedInId: '2-alan',
+         },
+      })
+
+      await PrismaService.client.linkedInReply.create({
+         data: {
+            userId,
+            accountId,
+            conversationId: alan.id,
+            text: 'Hello',
+            state: 'SENT',
+            recipientSlug: 'alan-t',
+            recipientName: member.name,
+         },
+      })
+
+      const listed = await LinkedInConversationService.list(userId)
+      const byTitle = (title: string) => listed.find(item => item.title === title)
+
+      expect(byTitle(grace.name)).toMatchObject({
+         contactSlug: 'grace-h',
+         participants: [
+            {
+               ...grace,
+               imageUrl: photo('grace'),
+            },
+         ],
+      })
+      expect(byTitle(member.name)).toMatchObject({
+         contactSlug: 'alan-t',
+         participants: [
+            {
+               ...member,
+               imageUrl: photo('alan'),
+            },
+         ],
+      })
+      expect(byTitle(ADA.name)?.participants).toEqual([ADA])
+      await expect(LinkedInConversationService.get(userId, alan.id)).resolves.toMatchObject({
+         contactSlug: 'alan-t',
+         participants: [{ imageUrl: photo('alan') }],
+      })
+      // Another owner's connection with the same name lends nothing.
+      expect(
+         (await LinkedInConversationService.list(otherUserId)).every(
+            item => !item.participants.some(person => person.imageUrl === photo('grace'))
+         )
+      ).toBe(true)
+
+      await PrismaService.client.linkedInReply.deleteMany({ where: { userId } })
+      await PrismaService.client.linkedInConnection.deleteMany({ where: { userId } })
+   })
+
    it('should delete the conversations with the account', async () => {
       await PrismaService.client.linkedInAccount.delete({ where: { id: accountId } })
 
