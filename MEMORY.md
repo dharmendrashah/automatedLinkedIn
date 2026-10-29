@@ -218,6 +218,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-29: First live send of `linkedin-message` (devtools, dharmendrashaheagle, run `33edab8c`): SENT in 33 s, Send pressed once, and the new conversation was handed over from `/messaging/` with LinkedIn's conversation id. Its `messages.json` has no `account` (this layout's top bar lacks `img.global-nav__me-photo`, which `parseOwner` reads); the importer takes the account from the session, so nothing breaks.
+
 - 2026-10-29: Third live run of `linkedin-message` (run `9b220f05`) showed the window for a person never written to: a "New message" compose window with a recipient chip (`aria-label="Remove <name>"`) and a card linking to `/in/<slug>/`. The name check refused it (nothing typed); `windowIsFor` now accepts exactly one recipient matched by the card's profile or the chip's name. Not yet sent live.
 
 - 2026-10-29: First live run of `linkedin-message` (devtools, dharmendrashaheagle, run `1ababab2`) ended `NO_MESSAGE_BUTTON` with nothing typed: that account's profile page has no `data-view-name` at all. The profile's own Message link is unnamed in both layouts and other people's are `aria-label="Message <name>"`, so `PROFILE_MESSAGE` is `a[href*="/messaging/compose/"]:not([aria-label])` now. The message window has not been seen in that layout yet.
