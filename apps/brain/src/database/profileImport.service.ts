@@ -124,6 +124,14 @@ export class ProfileImportService {
                   },
                   update: row,
                })
+               // The Unibox and the account chips show the account by these.
+               await PrismaService.client.linkedInAccount.update({
+                  where: { id: session.linkedInAccountId },
+                  data: {
+                     displayName: profile.name,
+                     ...(profile.imageUrl && { imageUrl: profile.imageUrl }),
+                  },
+               })
             }
          }
 

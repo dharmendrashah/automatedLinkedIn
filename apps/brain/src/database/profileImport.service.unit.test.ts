@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
    findSession: vi.fn(),
    findProfile: vi.fn(),
    upsertProfile: vi.fn(),
+   updateAccount: vi.fn(),
    updateMany: vi.fn(),
 }))
 
@@ -19,6 +20,7 @@ vi.mock('./prisma.service', () => ({
             findUnique: mocks.findProfile,
             upsert: mocks.upsertProfile,
          },
+         linkedInAccount: { update: mocks.updateAccount },
          profileImport: { updateMany: mocks.updateMany },
       },
    },
@@ -26,12 +28,13 @@ vi.mock('./prisma.service', () => ({
 
 vi.mock('core', () => ({ MessageFiles: { read: vi.fn() } }))
 
-const file = (capturedAt = '2026-10-24T12:00:00.000Z') =>
+const file = (capturedAt = '2026-10-24T12:00:00.000Z', imageUrl?: string) =>
    JSON.stringify({
       contract: 1,
       captured_at: capturedAt,
       profileUrl: 'https://www.linkedin.com/in/sample-person/',
       name: 'Sample Person',
+      ...(imageUrl && { imageUrl }),
       verified: false,
       topSkills: [],
       services: [],
@@ -123,6 +126,25 @@ describe('ProfileImportService.run', () => {
       })
    })
 
+   it('should give the account the name and picture of its profile, and keep the picture it has when the read had none', async () => {
+      mocks.findSession.mockResolvedValue(session())
+
+      await ProfileImportService.run('s1', 0, async () => file(undefined, 'https://media.licdn.com/dms/image/me'))
+      await ProfileImportService.run('s1', 0, async () => file())
+
+      expect(mocks.updateAccount).toHaveBeenNthCalledWith(1, {
+         where: { id: 'acc1' },
+         data: {
+            displayName: 'Sample Person',
+            imageUrl: 'https://media.licdn.com/dms/image/me',
+         },
+      })
+      expect(mocks.updateAccount).toHaveBeenNthCalledWith(2, {
+         where: { id: 'acc1' },
+         data: { displayName: 'Sample Person' },
+      })
+   })
+
    it('should keep a stored profile when the run was only partial, and store it when nothing is stored yet', async () => {
       mocks.findSession.mockResolvedValue(session('PARTIAL'))
       mocks.findProfile.mockResolvedValueOnce({ capturedAt: new Date('2026-10-01T00:00:00Z') })
@@ -140,6 +162,7 @@ describe('ProfileImportService.run', () => {
 
       await expect(ProfileImportService.run('s1', 0, async () => file())).resolves.toBe('done')
       expect(mocks.upsertProfile).not.toHaveBeenCalled()
+      expect(mocks.updateAccount).not.toHaveBeenCalled()
    })
 
    it('should finish a run that has no profile file without reading anything', async () => {
