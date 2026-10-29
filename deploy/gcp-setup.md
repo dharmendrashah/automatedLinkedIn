@@ -307,6 +307,61 @@ for b in "$BUCKET" "$DEV_BUCKET"; do gcloud storage buckets update "gs://$b" --c
 | A file of a draft shows "Uploading" and then a sentence with Try again | The signed form was refused, the bucket refused the post (CORS or the grant), or the check after it failed; the sentence says which of the checks it was. |
 | A photo of a reloaded draft stays on "Loading…" | Brain could not sign a read link for `posts/`; it needs the signing service account and the grant above. |
 
+## Public file cache bucket (applied 2026-10-30)
+
+`GET /cdn?url=...` on brain copies a remote file into `gs://automate-linkedin-511215-cdn/cache/...` and redirects to its public
+address (`.plan/cdn-public-endpoint.md`). It is a separate bucket so the spider bucket (login sessions) stays private. Anyone can
+read one file by its address; nobody can list the bucket.
+
+```sh
+export PROJECT_ID=automate-linkedin-511215
+export CDN_BUCKET="$PROJECT_ID-cdn"
+export SIGNER_EMAIL="brain-recording-links@$PROJECT_ID.iam.gserviceaccount.com"
+
+# No --public-access-prevention flag: on create it is a switch that enforces it; left out it stays "inherited".
+gcloud storage buckets create "gs://$CDN_BUCKET" --project="$PROJECT_ID" --location=asia-south1 \
+  --default-storage-class=STANDARD --uniform-bucket-level-access --soft-delete-duration=0
+
+gcloud storage buckets add-iam-policy-binding "gs://$CDN_BUCKET" \
+  --member="serviceAccount:$SIGNER_EMAIL" --role=roles/storage.objectCreator
+gcloud storage buckets add-iam-policy-binding "gs://$CDN_BUCKET" \
+  --member="serviceAccount:$SIGNER_EMAIL" --role=roles/storage.objectViewer
+
+cat > /tmp/cdn-cors.json <<EOF
+[{"origin": ["https://app.staging.elitale.com", "http://localhost:3000", "http://localhost:5173"], "method": ["GET", "HEAD"], "responseHeader": ["Content-Type", "Content-Length", "Range", "Accept-Ranges", "Cache-Control", "ETag"], "maxAgeSeconds": 86400}]
+EOF
+gcloud storage buckets update "gs://$CDN_BUCKET" --cors-file=/tmp/cdn-cors.json
+
+# The organisation enforces domain restricted sharing (iam.allowedPolicyMemberDomains), which refuses allUsers with
+# "412 ... do not belong to a permitted customer". The exception is scoped to resources carrying one tag; only this bucket has it.
+gcloud services enable cloudresourcemanager.googleapis.com orgpolicy.googleapis.com --project="$PROJECT_ID"
+gcloud resource-manager tags keys create public-access --parent="projects/$PROJECT_ID"
+gcloud resource-manager tags values create allowed --parent="$PROJECT_ID/public-access"
+gcloud resource-manager tags bindings create --tag-value="$PROJECT_ID/public-access/allowed" \
+  --parent="//storage.googleapis.com/projects/_/buckets/$CDN_BUCKET" --location=asia-south1
+
+# Tag ids from the two create commands above; C049im8al is the elitale.com customer (gcloud organizations list).
+cat > /tmp/domain-policy.yaml <<EOF
+name: projects/$PROJECT_ID/policies/iam.allowedPolicyMemberDomains
+spec:
+  rules:
+  - condition:
+      expression: "resource.matchTagId('tagKeys/281476601844341', 'tagValues/281481935939009')"
+    allowAll: true
+  - values:
+      allowedValues:
+      - C049im8al
+EOF
+gcloud org-policies set-policy /tmp/domain-policy.yaml
+
+# A few minutes after the policy, so it has applied.
+gcloud storage buckets add-iam-policy-binding "gs://$CDN_BUCKET" \
+  --member=allUsers --role=roles/storage.legacyObjectReader
+```
+
+Never put the `public-access=allowed` tag on another bucket: every resource carrying it can be granted to anyone. Brain reads the
+bucket name from `CDN_GCS_BUCKET`.
+
 ## Browser tests (staging prerequisites, not applied)
 
 A proxy's browser test (`.plan/spider-browser-test.md`) opens two public bot detection pages through the proxy and records

@@ -120,6 +120,8 @@ services:
       # (see apps/brain/.env.example).
       SPIDER_GCS_BUCKET: ${SPIDER_GCS_BUCKET:-}
       SESSION_RECORDING_RETENTION_DAYS: ${SESSION_RECORDING_RETENTION_DAYS:-7}
+      # Public bucket of GET /cdn. Empty: /cdn answers 503.
+      CDN_GCS_BUCKET: ${CDN_GCS_BUCKET:-}
       # The Service status page connects to the mail server authentik uses and reads its greeting (nothing is sent).
       # The other modules are found by their service names, which are the defaults.
       <<: *mail-server

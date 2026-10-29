@@ -1444,3 +1444,24 @@ model PostPublication {
   @@index([state, scheduledAt])
   @@index([runId, nodeId])
 }
+
+enum CdnFileStatus {
+  SAVED
+  // One call is fetching it; another call may take it over once it is stale.
+  PENDING
+  DELETED
+}
+
+// A copy of a public remote file kept in the public cdn bucket (.plan/cdn-public-endpoint.md). `hash` is the MD5 of `path`, the
+// normalised remote URL. `bucketUrl` (gs://<bucket>/<key>) never changes once set, so a redirect a browser cached stays right.
+model CdnFile {
+  id          String        @id @default(uuid(7))
+  hash        String        @unique
+  path        String
+  status      CdnFileStatus @default(SAVED)
+  bucketUrl   String?
+  contentType String?
+  size        Int?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
