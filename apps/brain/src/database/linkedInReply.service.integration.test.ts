@@ -740,4 +740,162 @@ describe('LinkedInReplyService (database)', () => {
          await expect(LinkedInReplyService.keepFiles()).resolves.toBe(1)
       })
    })
+
+   describe('a first message to a connection', () => {
+      const connect = (slug: string, over: Record<string, unknown> = {}) =>
+         PrismaService.client.linkedInConnection.create({
+            data: {
+               userId,
+               accountId,
+               slug,
+               name: `${slug} Name`,
+               headline: '',
+               ...over,
+            },
+         })
+
+      beforeEach(async () => {
+         await PrismaService.client.linkedInConnection.deleteMany({ where: { userId } })
+         await PrismaService.client.suppression.deleteMany({ where: { userId } })
+         await PrismaService.client.linkedInConversation.deleteMany({
+            where: {
+               accountId,
+               linkedInId: { not: '2-ada' },
+            },
+         })
+      })
+
+      it('should queue the first message with the person, and start the message task with what it needs', async () => {
+         await connect('grace')
+
+         const started = await LinkedInReplyService.start(userId, accountId, 'grace', '  Hello Grace  ')
+
+         expect(started).toEqual({ id: expect.any(String) })
+         expect(requested).toEqual([
+            {
+               task: 'linkedin-message',
+               input: {
+                  slug: 'grace',
+                  name: 'grace Name',
+                  text: 'Hello Grace',
+               },
+            },
+         ])
+         await expect(
+            PrismaService.client.linkedInReply.findUniqueOrThrow({ where: { id: started?.id ?? '' } })
+         ).resolves.toMatchObject({
+            state: 'SENDING',
+            conversationId: null,
+            recipientSlug: 'grace',
+            recipientName: 'grace Name',
+         })
+      })
+
+      it('should go on in the conversation the account already has with the person, as a reply', async () => {
+         await connect('ada')
+         await PrismaService.client.linkedInConversation.update({
+            where: { id: conversationId },
+            data: {
+               participants: [
+                  {
+                     name: 'Ada',
+                     profileUrl: 'https://www.linkedin.com/in/ada/',
+                  },
+               ],
+            },
+         })
+
+         await LinkedInReplyService.start(userId, accountId, 'ada', 'Hi again')
+
+         expect(requested.map(({ task }) => task)).toEqual(['linkedin-reply'])
+         expect(requested[0]?.input).toMatchObject({
+            thread: '2-ada',
+            text: 'Hi again',
+         })
+
+         await PrismaService.client.linkedInConversation.update({
+            where: { id: conversationId },
+            data: { participants: [] },
+         })
+      })
+
+      it('should answer like a missing person for one who is not a connection, is gone, or is of another owner', async () => {
+         await connect('gone', { status: 'REMOVED' })
+
+         await expect(LinkedInReplyService.start(userId, accountId, 'nobody', 'Hi')).resolves.toBeNull()
+         await expect(LinkedInReplyService.start(userId, accountId, 'gone', 'Hi')).resolves.toBeNull()
+         await expect(LinkedInReplyService.start(otherUserId, accountId, 'gone', 'Hi')).resolves.toBeNull()
+         expect(requested).toEqual([])
+      })
+
+      it('should refuse a person on the do-not-contact list, and a second first message while one is on its way', async () => {
+         await connect('dana')
+         await connect('grace')
+         await PrismaService.client.suppression.create({
+            data: {
+               userId,
+               slug: 'dana',
+            },
+         })
+
+         await expect(LinkedInReplyService.start(userId, accountId, 'dana', 'Hi')).rejects.toThrow(/do-not-contact/)
+
+         await LinkedInReplyService.start(userId, accountId, 'grace', 'One')
+
+         await expect(LinkedInReplyService.start(userId, accountId, 'grace', 'Two')).rejects.toThrow(/on its way/)
+         expect(requested).toHaveLength(1)
+      })
+
+      it('should stop at the first messages of the day', async () => {
+         await connect('grace')
+         await PrismaService.client.linkedInReply.createMany({
+            data: Array.from({ length: REPLY_LIMITS.firstPerDay }, (_, index) => ({
+               userId,
+               accountId,
+               text: 'Hi',
+               state: 'SENT' as const,
+               recipientSlug: `someone-${index}`,
+               recipientName: 'Someone',
+               sessionId: randomUUID(),
+            })),
+         })
+
+         await expect(LinkedInReplyService.start(userId, accountId, 'grace', 'Hi')).rejects.toThrow(/first messages/)
+      })
+
+      it('should link the first message to the conversation its run stored, and the person to it for New message', async () => {
+         await connect('grace')
+
+         const started = await LinkedInReplyService.start(userId, accountId, 'grace', 'Hello')
+         const sessionId = await sessionOf(started?.id)
+         const stored = await conversation(userId, accountId, '2-grace')
+
+         await finish(sessionId, 'SENT')
+         await LinkedInReplyService.linkStored(sessionId, accountId, ['2-grace'])
+
+         await expect(
+            PrismaService.client.linkedInReply.findUniqueOrThrow({ where: { id: started?.id ?? '' } })
+         ).resolves.toMatchObject({
+            state: 'SENT',
+            conversationId: stored.id,
+         })
+         expect((await LinkedInReplyService.get(userId, started?.id ?? ''))?.conversationId).toBe(stored.id)
+      })
+
+      it('should link nothing when the run stored no conversation or several', async () => {
+         await connect('grace')
+
+         const started = await LinkedInReplyService.start(userId, accountId, 'grace', 'Hello')
+         const sessionId = await sessionOf(started?.id)
+
+         await conversation(userId, accountId, '2-one')
+         await conversation(userId, accountId, '2-two')
+         await LinkedInReplyService.linkStored(sessionId, accountId, [])
+         await LinkedInReplyService.linkStored(sessionId, accountId, ['2-one', '2-two'])
+
+         await expect(
+            PrismaService.client.linkedInReply.findUniqueOrThrow({ where: { id: started?.id ?? '' } })
+         ).resolves.toMatchObject({ conversationId: null })
+      })
+   })
 })

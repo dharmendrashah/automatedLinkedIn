@@ -20,7 +20,7 @@ type Props = {
 // opens the conversation in the Unibox, or LinkedIn's own window for a person with no conversation yet; nothing is sent from here.
 export const ConnectionRow = ({ row, account, now, onRemove }: Props) => {
    const state = stateOf(row, now)
-   const message = messageAction(row)
+   const message = messageAction(row, account.accountId)
    const blocker = removeBlocker(row, account)
    const connected = connectedLine(row.connectedOn)
    const over = row.state === 'REMOVED' || row.state === 'GONE'
@@ -63,26 +63,19 @@ export const ConnectionRow = ({ row, account, now, onRemove }: Props) => {
          </div>
          {over ? null : (
             <div className="flex items-center gap-2">
-               {message.kind === 'UNIBOX' ? (
-                  <Button asChild variant="outline" size="sm">
-                     <Link to={message.to} title="Opens the conversation in the Unibox.">
-                        <MessageSquare aria-hidden />
-                        Message
-                     </Link>
-                  </Button>
-               ) : message.kind === 'LINKEDIN' ? (
-                  <Button asChild variant="outline" size="sm">
-                     <a
-                        href={message.href}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        title="No conversation with this person yet. Opens LinkedIn's own message window in a new tab; nothing is sent from here."
-                     >
-                        <MessageSquare aria-hidden />
-                        Message on LinkedIn
-                     </a>
-                  </Button>
-               ) : null}
+               <Button asChild variant="outline" size="sm">
+                  <Link
+                     to={message}
+                     title={
+                        row.conversationId
+                           ? 'Opens the conversation in the Unibox.'
+                           : 'Opens New message in the Unibox to write the first message.'
+                     }
+                  >
+                     <MessageSquare aria-hidden />
+                     Message
+                  </Link>
+               </Button>
                <Button
                   variant="outline"
                   size="sm"

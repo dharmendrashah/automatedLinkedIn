@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
    fileLink: vi.fn(),
    request: vi.fn(),
    send: vi.fn(),
+   start: vi.fn(),
    uploadForm: vi.fn(),
    dismiss: vi.fn(),
    reply: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock('database', () => ({
    MessagesRefresh: { request: mocks.request },
    LinkedInReplyService: {
       send: mocks.send,
+      start: mocks.start,
       uploadForm: mocks.uploadForm,
       dismiss: mocks.dismiss,
       get: mocks.reply,
@@ -188,6 +190,52 @@ describe('unibox router', () => {
       })
       expect(mocks.request).toHaveBeenCalledWith('u1', ['a1', 'a2'])
       await expect(caller().refresh({})).rejects.toMatchObject({ code: 'NOT_FOUND' })
+   })
+
+   it('should start a trimmed message to a connection for the owner, say not found for one that is not theirs, and the reason for a refusal', async () => {
+      mocks.start.mockResolvedValueOnce({ id: 'r9' })
+      mocks.start.mockResolvedValueOnce(null)
+      mocks.start.mockRejectedValueOnce(
+         new mocks.TaskRefusedError('This person is on your do-not-contact list, so nothing was sent.')
+      )
+
+      const input = {
+         accountId: 'a1',
+         slug: 'ada-l',
+         text: '  Hello Ada  ',
+      }
+
+      await expect(caller().start(input)).resolves.toEqual({ id: 'r9' })
+      expect(mocks.start).toHaveBeenCalledWith('u1', 'a1', 'ada-l', 'Hello Ada')
+      await expect(caller().start(input)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      await expect(caller().start(input)).rejects.toMatchObject({
+         code: 'PRECONDITION_FAILED',
+         message: 'This person is on your do-not-contact list, so nothing was sent.',
+      })
+   })
+
+   it('should refuse a message with no words, too many, or a profile address that is not one', async () => {
+      for (const input of [
+         {
+            accountId: 'a1',
+            slug: 'ada-l',
+            text: '  ',
+         },
+         {
+            accountId: 'a1',
+            slug: 'ada-l',
+            text: 'x'.repeat(4001),
+         },
+         {
+            accountId: 'a1',
+            slug: '../ada',
+            text: 'Hi',
+         },
+      ]) {
+         await expect(caller().start(input)).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+      }
+
+      expect(mocks.start).not.toHaveBeenCalled()
    })
 
    it('should send a trimmed reply for the owner and answer with its id', async () => {

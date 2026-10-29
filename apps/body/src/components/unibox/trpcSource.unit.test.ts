@@ -555,7 +555,53 @@ describe('createTrpcSource.send', () => {
 
       await expect(source.recipients?.('ada')).resolves.toEqual([person])
       expect(query).toHaveBeenCalledWith({ query: 'ada' })
-      expect((await source.load()).canStart).toBe(false)
-      expect(source.start).toBeUndefined()
+      expect((await source.load()).canStart).toBe(true)
+   })
+
+   it('should start a first message with brain, follow it until it went, and wait for the conversation brain links to it', async () => {
+      const mutate = vi.fn().mockResolvedValue({ id: 'r7' })
+      const replies = [
+         { id: 'r7', state: 'SENDING', conversationId: null },
+         { id: 'r7', state: 'SENT', conversationId: null },
+         { id: 'r7', state: 'SENT', conversationId: null },
+         { id: 'r7', state: 'SENT', conversationId: 'c42' },
+      ]
+      const query = vi.fn(async () => replies.shift() ?? { id: 'r7', state: 'SENT', conversationId: 'c42' })
+      const { client } = fake({ start: { mutate }, reply: { query } })
+      const started = vi.fn()
+      const source = createTrpcSource(client, { wait: async () => undefined })
+
+      await expect(source.start?.(account() as never, 'ada-l', 'Hello', { started })).resolves.toEqual({
+         ok: true,
+         conversationId: 'c42',
+      })
+      expect(mutate).toHaveBeenCalledWith({ accountId: 'a1', slug: 'ada-l', text: 'Hello' })
+      expect(started).toHaveBeenCalledWith('r7')
+   })
+
+   it("should say brain's sentence when a first message is refused, and send it as sent with no conversation when none is linked in time", async () => {
+      const refused = fake({
+         start: {
+            mutate: vi.fn().mockRejectedValue(
+               new TRPCClientError('This person is on your do-not-contact list, so nothing was sent.', {
+                  result: { error: { message: 'x', code: -32003, data: { code: 'PRECONDITION_FAILED' } } },
+               })
+            ),
+         },
+      })
+
+      await expect(createTrpcSource(refused.client).start?.(account() as never, 'ada-l', 'Hi')).resolves.toEqual({
+         ok: false,
+         reason: 'This person is on your do-not-contact list, so nothing was sent.',
+      })
+
+      const never = fake({
+         start: { mutate: vi.fn().mockResolvedValue({ id: 'r8' }) },
+         reply: { query: vi.fn().mockResolvedValue({ id: 'r8', state: 'SENT', conversationId: null }) },
+      })
+
+      await expect(
+         createTrpcSource(never.client, { wait: async () => undefined }).start?.(account() as never, 'ada-l', 'Hi')
+      ).resolves.toEqual({ ok: true })
    })
 })

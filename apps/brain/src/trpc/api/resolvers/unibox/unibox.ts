@@ -10,7 +10,7 @@ import {
    REPLY_LIMITS,
 } from 'database'
 
-import { MAX_ATTACHMENT_BYTES, UPLOAD_ID } from '@automatedLinkedIn/contracts'
+import { MAX_ATTACHMENT_BYTES, UPLOAD_ID, connectionSlugSchema } from '@automatedLinkedIn/contracts'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -118,6 +118,24 @@ export const unibox = router({
          orRefused(
             LinkedInReplyService.send(ctx.user.id, input.conversationId, input.text, input.uploadId).then(sent =>
                present(sent, 'Conversation not found')
+            )
+         )
+      ),
+
+   // A message to a connection from New message (.plan/message-connections.md): it goes on in the conversation the account has with the
+   // person, or begins one. Answers at once with the message to follow, like `send`. Refused with a sentence when it cannot go now.
+   start: ownerProcedure
+      .input(
+         z.object({
+            accountId: id,
+            slug: connectionSlugSchema,
+            text: z.string().trim().min(1).max(REPLY_LIMITS.maxChars),
+         })
+      )
+      .mutation(async ({ ctx, input }) =>
+         orRefused(
+            LinkedInReplyService.start(ctx.user.id, input.accountId, input.slug, input.text).then(started =>
+               present(started, 'Connection not found')
             )
          )
       ),

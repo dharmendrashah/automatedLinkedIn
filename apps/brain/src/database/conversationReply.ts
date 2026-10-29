@@ -61,7 +61,12 @@ export const latestReplies = async (userId: string) => {
    const replies = new Map<string, ConversationReply>()
 
    for (const row of rows) {
-      if (row.state === 'SENT' || (row.state !== 'SENDING' && row.state !== 'QUEUED' && row.dismissedAt !== null)) {
+      // A first message waiting for its conversation is shown by the page's own stand-in.
+      if (
+         !row.conversationId ||
+         row.state === 'SENT' ||
+         (row.state !== 'SENDING' && row.state !== 'QUEUED' && row.dismissedAt !== null)
+      ) {
          continue
       }
 

@@ -218,6 +218,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-29: New message can start a conversation on real data (`.plan/message-connections.md`; migration `20261029160000_add_first_message`, additive, apply with `db:migrate:deploy`; the spider worker must be restarted so brain sees `linkedin-message`). A first message is a `LinkedInReply` row with no conversation and `recipientSlug`/`recipientName`; `unibox.start` queues it (or continues an existing conversation), `dispatchNext` runs `linkedin-message`, and the message importer links it to the conversation its run stored. LinkedIn names a person in a conversation begun this way by member id (`/in/ACoAA...`), so connection-to-conversation lookups also go through these rows. Limits: 15 first messages a day per account inside the 40 replies; one on its way per person. Not run through the app yet.
+
 - 2026-10-29: First live send of `linkedin-message` (devtools, dharmendrashaheagle, run `33edab8c`): SENT in 33 s, Send pressed once, and the new conversation was handed over from `/messaging/` with LinkedIn's conversation id. Its `messages.json` has no `account` (this layout's top bar lacks `img.global-nav__me-photo`, which `parseOwner` reads); the importer takes the account from the session, so nothing breaks.
 
 - 2026-10-29: Third live run of `linkedin-message` (run `9b220f05`) showed the window for a person never written to: a "New message" compose window with a recipient chip (`aria-label="Remove <name>"`) and a card linking to `/in/<slug>/`. The name check refused it (nothing typed); `windowIsFor` now accepts exactly one recipient matched by the card's profile or the chip's name. Not yet sent live.

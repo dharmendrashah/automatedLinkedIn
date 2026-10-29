@@ -85,28 +85,11 @@ export const removeBlocker = (
    return account.removeLeft > 0 ? undefined : 'This account has used its removals for today.'
 }
 
-export type MessageAction =
-   // The conversation the account already has with this person, in the Unibox.
-   | { kind: 'UNIBOX'; to: string }
-   // LinkedIn's own message window, for a person the account has no conversation with yet. Nothing is sent from here.
-   | { kind: 'LINKEDIN'; href: string }
-   | { kind: 'NONE' }
-
-export const messageAction = (row: Pick<ConnectionItem, 'conversationId' | 'messageUrn'>): MessageAction => {
-   if (row.conversationId) {
-      return {
-         kind: 'UNIBOX',
-         to: `/unibox/${encodeURIComponent(row.conversationId)}`,
-      }
-   }
-
-   return row.messageUrn
-      ? {
-           kind: 'LINKEDIN',
-           href: `https://www.linkedin.com/messaging/compose/?profileUrn=${encodeURIComponent(row.messageUrn)}`,
-        }
-      : { kind: 'NONE' }
-}
+// Where Message on a connection leads: the conversation the account has with the person in the Unibox, or New message ready for them.
+export const messageAction = (row: Pick<ConnectionItem, 'conversationId' | 'slug'>, accountId: string) =>
+   row.conversationId
+      ? `/unibox/${encodeURIComponent(row.conversationId)}`
+      : `/unibox/new?${new URLSearchParams({ account: accountId, to: row.slug }).toString()}`
 
 // "Connected Oct 27, 2026". The day is a calendar day, so it is written in UTC and never moved by the viewer's zone.
 export const connectedLine = (day: string | undefined, locale?: string) =>

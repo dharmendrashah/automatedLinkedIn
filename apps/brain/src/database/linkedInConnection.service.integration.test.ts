@@ -245,6 +245,49 @@ describe('LinkedInConnectionService (database)', () => {
       await PrismaService.client.suppression.deleteMany({ where: { userId } })
    })
 
+   it('should find the conversation a first message began, though LinkedIn names the person in it by member id', async () => {
+      await read([1], { total: 1 })
+
+      const begun = await PrismaService.client.linkedInConversation.create({
+         data: {
+            userId,
+            accountId,
+            linkedInId: '2-begun',
+            title: 'Person 1',
+            kind: 'DIRECT',
+            participants: [
+               {
+                  name: 'Person 1',
+                  profileUrl: 'https://www.linkedin.com/in/ACoAAmember',
+               },
+            ],
+            unread: false,
+            complete: false,
+         },
+      })
+
+      await PrismaService.client.linkedInReply.create({
+         data: {
+            userId,
+            accountId,
+            conversationId: begun.id,
+            text: 'Hello',
+            state: 'SENT',
+            recipientSlug: person(1).slug,
+            recipientName: person(1).name,
+         },
+      })
+
+      expect(
+         (await LinkedInConnectionService.recipients(userId, '')).map(({ conversationId }) => conversationId)
+      ).toEqual([begun.id])
+      await expect(LinkedInConnectionService.conversationWith(userId, accountId, person(1).slug)).resolves.toBe(
+         begun.id
+      )
+
+      await PrismaService.client.linkedInReply.deleteMany({ where: { userId } })
+   })
+
    it('should ask for a read of an account that is signed in, say so when it is not, and answer like a missing account for someone else’s', async () => {
       await expect(LinkedInConnectionService.refresh(userId, accountId)).resolves.toEqual({ started: true })
       expect(requested).toEqual([

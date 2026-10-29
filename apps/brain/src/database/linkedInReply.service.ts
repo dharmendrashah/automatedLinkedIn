@@ -2,7 +2,8 @@ import { KeptFiles, UploadFiles, UploadRefused } from 'core'
 
 import { kindOfName, safeFileName } from '@automatedLinkedIn/contracts'
 
-import { REPLY_TASK } from './linkedInReply.hooks'
+import { LinkedInConnectionService } from './linkedInConnection.service'
+import { MESSAGE_TASK, REPLY_TASK } from './linkedInReply.hooks'
 import { budgetWait } from './postPublication.rules'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
@@ -13,6 +14,8 @@ export const REPLY_LIMITS = {
    // Replies one account sends in 24 hours, and the quiet time between the starts of two.
    perDay: 40,
    gapMs: 30_000,
+   // Of those, first messages to connections never written to (.plan/message-connections.md, unverified against LinkedIn's own).
+   firstPerDay: 15,
    // The most replies that may wait their turn on one account (.plan/reply-queue.md).
    queued: 5,
    // The most characters of a reply: the command that carries it may not pass 8 KB as JSON (the task limits it the same).
@@ -107,6 +110,142 @@ export class LinkedInReplyService {
       return { id: reply.id }
    }
 
+   // A message to a connection of the owner's account, from New message: it goes on in the conversation the account already has with the
+   // person, or is the first message of a new one (task `linkedin-message`). Null when the person is not a connection of that account of
+   // the owner. Throws TaskRefusedError with a sentence when it cannot be sent now.
+   public static async start(userId: string, accountId: string, slug: string, text: string) {
+      const db = PrismaService.client
+      const connection = await db.linkedInConnection.findFirst({
+         where: {
+            userId,
+            accountId,
+            slug,
+            account: { userId },
+            status: { notIn: ['REMOVED', 'GONE'] },
+         },
+         select: { name: true },
+      })
+
+      if (!connection) {
+         return null
+      }
+
+      const existing = await LinkedInConnectionService.conversationWith(userId, accountId, slug)
+
+      if (existing) {
+         return this.send(userId, existing, text)
+      }
+
+      const suppressed = await db.suppression.findFirst({
+         where: {
+            userId,
+            slug: { in: [slug, slug.toLowerCase()] },
+         },
+         select: { id: true },
+      })
+
+      if (suppressed) {
+         throw new TaskRefusedError('This person is on your do-not-contact list, so nothing was sent.')
+      }
+
+      const account = await db.linkedInAccount.findUnique({
+         where: { id: accountId },
+         select: { status: true },
+      })
+
+      if (account?.status !== 'ACTIVE') {
+         throw new TaskRefusedError('Writing needs an account that is signed in. Run Test login first.')
+      }
+
+      await this.checkLimits(accountId)
+
+      // The account row is locked, so two first messages to one person asked at the same time cannot both be saved.
+      const reply = await db.$transaction(async tx => {
+         await tx.$queryRaw`SELECT "id" FROM "LinkedInAccount" WHERE "id" = ${accountId} FOR UPDATE`
+
+         const [today, onItsWay] = await Promise.all([
+            tx.linkedInReply.count({
+               where: {
+                  accountId,
+                  recipientSlug: { not: null },
+                  state: { in: ['QUEUED', 'SENDING', 'SENT', 'UNKNOWN'] },
+                  createdAt: { gte: new Date(Date.now() - DAY_MS) },
+               },
+            }),
+            tx.linkedInReply.count({
+               where: {
+                  accountId,
+                  recipientSlug: slug,
+                  state: { in: ['QUEUED', 'SENDING'] },
+               },
+            }),
+         ])
+
+         if (today >= REPLY_LIMITS.firstPerDay) {
+            throw new TaskRefusedError(
+               `This account has sent ${REPLY_LIMITS.firstPerDay} first messages in 24 hours. Try again later.`
+            )
+         }
+
+         if (onItsWay > 0) {
+            throw new TaskRefusedError('A message to this person is already on its way. Wait for it to go.')
+         }
+
+         return tx.linkedInReply.create({
+            data: {
+               userId,
+               accountId,
+               text: text.trim(),
+               state: 'QUEUED',
+               recipientSlug: slug,
+               recipientName: connection.name,
+            },
+            select: { id: true },
+         })
+      })
+
+      await this.dispatchNext(accountId).catch((error: unknown) => {
+         console.error(`Could not start the queued replies of account ${accountId}: ${(error as Error).message}`)
+      })
+
+      return { id: reply.id }
+   }
+
+   // A first message's run stored the conversation it began: the message is linked to it, so the page and New message find it. Only a run
+   // that stored exactly one conversation is linked, since that one is surely it. Resolves to how many messages were linked.
+   public static async linkStored(sessionId: string, accountId: string, linkedInIds: string[]) {
+      const [only] = linkedInIds
+
+      if (linkedInIds.length !== 1 || only === undefined) {
+         return 0
+      }
+
+      const conversation = await PrismaService.client.linkedInConversation.findUnique({
+         where: {
+            accountId_linkedInId: {
+               accountId,
+               linkedInId: only,
+            },
+         },
+         select: { id: true },
+      })
+
+      if (!conversation) {
+         return 0
+      }
+
+      const { count } = await PrismaService.client.linkedInReply.updateMany({
+         where: {
+            sessionId,
+            accountId,
+            conversationId: null,
+         },
+         data: { conversationId: conversation.id },
+      })
+
+      return count
+   }
+
    // Starts the oldest queued reply of the account when nothing blocks it: no reply is sending, and the last one started more than
    // the quiet time ago. Resolves to whether a reply was started. A reply whose run cannot be asked for yet (the task is still running
    // or not announced, or the account has no browsing time now) stays queued and says when it can start; one that can never start ends
@@ -140,6 +279,8 @@ export class LinkedInReplyService {
             waitReason: true,
             waitUntil: true,
             waitZone: true,
+            recipientSlug: true,
+            recipientName: true,
             conversation: {
                select: {
                   linkedInId: true,
@@ -165,22 +306,35 @@ export class LinkedInReplyService {
       }
 
       const files = this.namedFiles(next.attachments)
+      // A reply goes in its conversation; a first message has none yet and is written from the person's profile.
+      const command = next.conversation
+         ? {
+              task: REPLY_TASK,
+              input: {
+                 thread: next.conversation.linkedInId,
+                 title: next.conversation.title,
+                 text: next.text,
+                 ...(next.uploadId && {
+                    uploadId: next.uploadId,
+                    files,
+                 }),
+              },
+           }
+         : {
+              task: MESSAGE_TASK,
+              input: {
+                 slug: next.recipientSlug ?? '',
+                 name: next.recipientName ?? '',
+                 text: next.text,
+              },
+           }
 
       try {
          await TaskService.request({
             userId: next.userId,
-            task: REPLY_TASK,
+            ...command,
             accountId,
             trigger: 'manual',
-            input: {
-               thread: next.conversation.linkedInId,
-               title: next.conversation.title,
-               text: next.text,
-               ...(next.uploadId && {
-                  uploadId: next.uploadId,
-                  files,
-               }),
-            },
             onStart: async (sessionId, tx) => {
                const { count } = await tx.linkedInReply.updateMany({
                   where: {

@@ -3,6 +3,7 @@ import { MessageFiles } from 'core'
 import { messagesFileSchema } from '@automatedLinkedIn/contracts'
 
 import { LinkedInConversationService } from './linkedInConversation.service'
+import { LinkedInReplyService } from './linkedInReply.service'
 import { PrismaService } from './prisma.service'
 
 // A finished `linkedin-messages` run is stored by the worker, outside the transaction that finished it (a hook makes no network
@@ -98,6 +99,8 @@ export class MessageImportService {
             .filter(({ name }) => MESSAGES_FILE.test(name))
             .sort((a, b) => partOf(a.name) - partOf(b.name))
 
+         const stored: string[] = []
+
          for (const { path } of parts) {
             const file = messagesFileSchema.parse(JSON.parse(await read(path)))
 
@@ -108,7 +111,11 @@ export class MessageImportService {
                },
                file
             )
+            stored.push(...file.conversations.map(({ id }) => id))
          }
+
+         // A first message's run hands over the conversation it began; the message is linked to it.
+         await LinkedInReplyService.linkStored(sessionId, session.linkedInAccountId, stored)
 
          await PrismaService.client.messageImport.updateMany({
             where: { sessionId },

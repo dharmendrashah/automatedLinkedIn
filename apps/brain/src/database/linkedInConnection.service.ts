@@ -194,7 +194,34 @@ export class LinkedInConnectionService {
          }
       }
 
+      // A conversation begun by a first message names the person by LinkedIn's member id, not their profile address; the message knows them.
+      const begun = await PrismaService.client.linkedInReply.findMany({
+         where: {
+            userId,
+            accountId: { in: accountIds },
+            recipientSlug: { not: null },
+            conversationId: { not: null },
+         },
+         orderBy: { createdAt: 'desc' },
+         select: {
+            accountId: true,
+            recipientSlug: true,
+            conversationId: true,
+         },
+      })
+
+      for (const { accountId, recipientSlug, conversationId } of begun) {
+         if (recipientSlug && conversationId && !found.has(pairKey(accountId, recipientSlug))) {
+            found.set(pairKey(accountId, recipientSlug), conversationId)
+         }
+      }
+
       return found
+   }
+
+   // The conversation one account of the owner has with one connection, when it has one.
+   public static async conversationWith(userId: string, accountId: string, slug: string) {
+      return (await this.conversationsOf(userId, [accountId])).get(pairKey(accountId, slug))
    }
 
    // The connections of every account of the owner that match all the words (in the name, title or profile name), for New message:
