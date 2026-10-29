@@ -19,12 +19,17 @@ const mocks = vi.hoisted(() => ({
    dismiss: vi.fn(),
    reply: vi.fn(),
    recipients: vi.fn(),
+   recipient: vi.fn(),
    TaskRefusedError: class TaskRefusedError extends Error {},
 }))
 
 vi.mock('database', () => ({
    MAX_IDS: 500,
-   LinkedInConnectionService: { recipients: mocks.recipients },
+   RECIPIENT_STATUSES: ['NEEDS_REPLY', 'WAITING', 'TALKED', 'NEVER'],
+   LinkedInConnectionService: {
+      recipients: mocks.recipients,
+      recipient: mocks.recipient,
+   },
    LinkedInConversationService: {
       accounts: mocks.accounts,
       list: mocks.list,
@@ -101,15 +106,47 @@ describe('unibox router', () => {
       expect(mocks.accounts).toHaveBeenCalledWith('u1')
    })
 
-   it('should search the connections of the signed-in owner only, and refuse a search too long', async () => {
-      mocks.recipients.mockResolvedValue([])
+   it('should search the connections of the signed-in owner only, with the accounts and standing asked for, and refuse a search too long', async () => {
+      mocks.recipients.mockResolvedValue({
+         people: [],
+         total: 0,
+      })
 
-      await expect(caller().recipients({ query: ' ada ' })).resolves.toEqual([])
-      await caller().recipients({})
+      await expect(caller().recipients({ query: ' ada ' })).resolves.toEqual({
+         people: [],
+         total: 0,
+      })
+      await caller().recipients({
+         accountIds: ['a1'],
+         status: 'NEEDS_REPLY',
+      })
 
-      expect(mocks.recipients).toHaveBeenNthCalledWith(1, 'u1', 'ada')
-      expect(mocks.recipients).toHaveBeenNthCalledWith(2, 'u1', '')
+      expect(mocks.recipients).toHaveBeenNthCalledWith(1, 'u1', { query: 'ada' })
+      expect(mocks.recipients).toHaveBeenNthCalledWith(2, 'u1', {
+         query: '',
+         accountIds: ['a1'],
+         status: 'NEEDS_REPLY',
+      })
       await expect(caller().recipients({ query: 'x'.repeat(201) })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+      await expect(caller().recipients({ status: 'LATER' as never })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+   })
+
+   it('should find one connection of one account for the owner, and answer null when it is none', async () => {
+      mocks.recipient.mockResolvedValueOnce(null)
+
+      await expect(
+         caller().recipient({
+            accountId: 'a1',
+            slug: 'grace-h',
+         })
+      ).resolves.toBeNull()
+      expect(mocks.recipient).toHaveBeenCalledWith('u1', 'a1', 'grace-h')
+      await expect(
+         caller().recipient({
+            accountId: 'a1',
+            slug: 'not a slug',
+         })
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
    })
 
    it('should answer a conversation that is not the owner as not found', async () => {

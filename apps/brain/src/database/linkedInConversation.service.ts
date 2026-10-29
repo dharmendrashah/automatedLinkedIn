@@ -5,6 +5,7 @@ import { type Prisma } from 'generated/prisma/client'
 import { type MessagesFile, keptPrefix, sentKey } from '@automatedLinkedIn/contracts'
 
 import { summaryOf, timelineOf } from './conversationImport'
+import { withPeople } from './conversationPeople'
 import { type ConversationReply, latestReplies, pendingFirstMessages } from './conversationReply'
 import { PrismaService } from './prisma.service'
 import { settleUnsureReplies, words } from './replySettle'
@@ -199,7 +200,7 @@ const pendingOut = ({ accountId, slug, name, reply }: Awaited<ReturnType<typeof 
          name,
          profileUrl: `https://www.linkedin.com/in/${slug}/`,
       },
-   ],
+   ] satisfies Person[] as Person[],
    unread: false,
    complete: true,
    messageCount: 0,
@@ -250,10 +251,10 @@ export class LinkedInConversationService {
 
       const [replies, pending] = await Promise.all([latestReplies(userId), pendingFirstMessages(userId, accountIds)])
 
-      return [
+      return withPeople(userId, [
          ...pending.map(pendingOut),
          ...rows.map(({ messages, ...row }) => conversationOut(row, messages.toReversed(), replies.get(row.id))),
-      ]
+      ])
    }
 
    // One conversation with its newest messages (at most 500), oldest first; null for one that is not the owner's.
@@ -279,9 +280,10 @@ export class LinkedInConversationService {
 
       const { messages, ...rest } = row
       const replies = await latestReplies(userId)
+      const [shown] = await withPeople(userId, [conversationOut(rest, messages.toReversed(), replies.get(row.id))])
 
       return {
-         ...conversationOut(rest, messages.toReversed(), replies.get(row.id)),
+         ...shown,
          // True when older messages were stored but not sent.
          truncated: row.messageCount > messages.length,
       }

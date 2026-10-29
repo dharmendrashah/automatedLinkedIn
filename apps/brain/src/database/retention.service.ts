@@ -70,7 +70,8 @@ export class RetentionService {
       // A finished read keeps the link it read; the result itself lives in the snapshot.
       const readCutoff = daysBefore(now, RETENTION.itemsDays)
       const reads = await db.dataRead.deleteMany({ where: { finishedAt: { lt: readCutoff } } })
-      // A full profile is kept only while the person is in one of the owner's lists or in /profiles.
+      // A full profile is kept only while the person is in one of the owner's lists, in /profiles, a connection of one of the owner's
+      // accounts, or in a conversation of one.
       const snapshots = await db.$executeRaw`
          DELETE FROM "PersonSnapshot" s
          WHERE NOT EXISTS (
@@ -80,6 +81,19 @@ export class RetentionService {
          AND NOT EXISTS (
             SELECT 1 FROM "LinkedInProfile" p
             WHERE p."userId" = s."userId" AND p."slug" = s."slug" AND p."archivedAt" IS NULL
+         )
+         AND NOT EXISTS (
+            SELECT 1 FROM "LinkedInConnection" c
+            WHERE c."userId" = s."userId" AND c."slug" = s."slug" AND c."status" NOT IN ('REMOVED', 'GONE')
+         )
+         AND NOT EXISTS (
+            SELECT 1 FROM "LinkedInConversation" v
+            WHERE v."userId" = s."userId"
+            AND v."contactProfileUrl" IN ('https://www.linkedin.com/in/' || s."slug" || '/', 'https://www.linkedin.com/in/' || s."slug")
+         )
+         AND NOT EXISTS (
+            SELECT 1 FROM "LinkedInReply" r
+            WHERE r."userId" = s."userId" AND r."recipientSlug" = s."slug" AND r."conversationId" IS NOT NULL
          )`
       // A company page or post is kept only while it is in /companies or /posts and not archived.
       const pages = await db.$executeRaw`

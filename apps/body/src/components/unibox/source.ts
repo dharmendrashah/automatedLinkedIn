@@ -1,4 +1,11 @@
-import { type Attachment, type Recipient, type UniboxAccount, type UniboxConversation } from './types'
+import {
+   type Attachment,
+   type Recipient,
+   type RecipientPage,
+   type RecipientSearch,
+   type UniboxAccount,
+   type UniboxConversation,
+} from './types'
 
 import { type Waiting } from '../posting/publication'
 
@@ -53,9 +60,11 @@ export type UniboxSource = {
    fileLink?: (messageId: string, index: number) => Promise<string>
    // Follows a reply brain has until it ends, as `send` does after it started it; for a reply that was on its way when the page loaded.
    follow?: (replyId: string, onWaiting?: SendEvents['waiting']) => Promise<SendResult>
-   // New message (.plan/message-connections.md); both are absent for a source that cannot, and the page then offers no New message.
-   // `recipients` lists the connections of all the accounts matching the words (people already talked to included).
-   recipients?: (query: string) => Promise<Recipient[]>
+   // New message (.plan/new-message-popup-filters.md); `recipients` and `start` are absent for a source that cannot, and the page then
+   // offers no New message. `recipients` searches the connections of the accounts asked for (people already talked to included);
+   // `recipient` finds one connection of one account exactly (Message on a Connections page), or null.
+   recipients?: (search: RecipientSearch) => Promise<RecipientPage>
+   recipient?: (accountId: string, slug: string) => Promise<Recipient | null>
    start?: (account: UniboxAccount, slug: string, text: string, events?: SendEvents) => Promise<SendResult>
    // Keeps that the owner dismissed a reply that did not go, so it is not shown after a reload.
    dismissReply?: (replyId: string) => Promise<void>

@@ -7,6 +7,7 @@ import {
    LinkedInReplyService,
    MAX_IDS,
    MessagesRefresh,
+   RECIPIENT_STATUSES,
    REPLY_LIMITS,
 } from 'database'
 
@@ -25,10 +26,27 @@ const ids = z.array(id).min(1).max(MAX_IDS)
 export const unibox = router({
    accounts: ownerProcedure.query(({ ctx }) => LinkedInConversationService.accounts(ctx.user.id)),
 
-   // New message: the stored connections of all the owner's accounts that match the words, with their conversation and do-not-contact mark.
+   // New message: the stored connections of the owner's accounts that match the words, where each account stands with each person,
+   // filtered and ordered before the limit, with how many matched.
    recipients: ownerProcedure
-      .input(z.object({ query: z.string().trim().max(200).default('') }))
-      .query(({ ctx, input }) => LinkedInConnectionService.recipients(ctx.user.id, input.query)),
+      .input(
+         z.object({
+            query: z.string().trim().max(200).default(''),
+            accountIds: z.array(id).max(MAX_IDS).optional(),
+            status: z.enum(RECIPIENT_STATUSES).optional(),
+         })
+      )
+      .query(({ ctx, input }) => LinkedInConnectionService.recipients(ctx.user.id, input)),
+
+   // One connection of one account, by its exact profile name (Message on a Connections page); null when it is not one.
+   recipient: ownerProcedure
+      .input(
+         z.object({
+            accountId: id,
+            slug: connectionSlugSchema,
+         })
+      )
+      .query(({ ctx, input }) => LinkedInConnectionService.recipient(ctx.user.id, input.accountId, input.slug)),
 
    // The newest conversations (3,000 at most) with their latest messages.
    conversations: ownerProcedure

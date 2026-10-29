@@ -4,6 +4,7 @@ import { type DataReadKind, type PageKind, type Prisma } from 'generated/prisma/
 
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
+import { connectionsOf, conversationsWith } from './personContacts'
 import { PersonSnapshotService } from './personSnapshot.service'
 import { PrismaService } from './prisma.service'
 
@@ -30,9 +31,10 @@ const whereSlug = (userId: string, slug: string) => ({
    },
 })
 
-// A person is read only while they are in /profiles or a list and may be contacted.
+// A person is read only while they are in /profiles, a list, a connection of the owner's accounts or one of their conversations, and
+// may be contacted.
 const personWanted = async (userId: string, slug: string) => {
-   const [profile, member, suppressed] = await Promise.all([
+   const [profile, member, suppressed, connections, conversations] = await Promise.all([
       PrismaService.client.linkedInProfile.findUnique({
          where: whereSlug(userId, slug),
          select: { archivedAt: true },
@@ -48,9 +50,14 @@ const personWanted = async (userId: string, slug: string) => {
          where: whereSlug(userId, slug),
          select: { id: true },
       }),
+      connectionsOf(userId, slug),
+      conversationsWith(userId, slug),
    ])
 
-   return !suppressed && Boolean(member || (profile && !profile.archivedAt))
+   return (
+      !suppressed &&
+      Boolean(member || (profile && !profile.archivedAt) || connections.length > 0 || conversations.length > 0)
+   )
 }
 
 const companyWanted = async (userId: string, slug: string) => {

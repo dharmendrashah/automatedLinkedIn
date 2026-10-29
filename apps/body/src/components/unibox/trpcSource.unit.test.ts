@@ -545,15 +545,80 @@ describe('createTrpcSource.send', () => {
       expect(mutate).toHaveBeenCalledWith({ id: 'r1' })
    })
 
-   it('should search the stored connections of all accounts, and not offer to start a conversation yet', async () => {
-      const person = { accountId: 'a1', slug: 'ada', name: 'Ada', headline: 'Countess', conversationId: 'c1' }
-      const query = vi.fn().mockResolvedValue([person])
-      const { client } = fake({ recipients: { query } })
+   it('should search the connections with the accounts and standing asked for, and give the times as LinkedIn showed them', async () => {
+      const wire = {
+         accountId: 'a1',
+         slug: 'ada',
+         name: 'Ada',
+         headline: 'Countess',
+         conversationId: 'c1',
+         status: 'WAITING',
+         lastAt: '2026-10-22T09:20:00.000Z',
+         lastText: 'Are you free?',
+         lastMine: true,
+         alsoWith: [
+            { accountId: 'a2', at: '2026-10-21T08:00:00.000Z' },
+            { accountId: 'a3', at: null },
+         ],
+      }
+      const query = vi
+         .fn()
+         .mockResolvedValue({
+            people: [
+               wire,
+               {
+                  ...wire,
+                  slug: 'bob',
+                  status: 'NEVER',
+                  lastAt: undefined,
+                  lastText: undefined,
+                  lastMine: undefined,
+                  alsoWith: undefined,
+                  conversationId: undefined,
+               },
+            ],
+            total: 7,
+         })
+      const exact = vi.fn().mockResolvedValueOnce(wire).mockResolvedValueOnce(null)
+      const { client } = fake({ recipients: { query }, recipient: { query: exact } })
       const source = createTrpcSource(client)
+      const page = await source.recipients?.({ query: 'ada', accountIds: ['a1'], status: 'WAITING' })
 
-      await expect(source.recipients?.('ada')).resolves.toEqual([person])
-      expect(query).toHaveBeenCalledWith({ query: 'ada' })
+      expect(query).toHaveBeenCalledWith({ query: 'ada', accountIds: ['a1'], status: 'WAITING' })
+      expect(page?.total).toBe(7)
+      expect(page?.people[0]).toEqual({
+         accountId: 'a1',
+         slug: 'ada',
+         name: 'Ada',
+         headline: 'Countess',
+         conversationId: 'c1',
+         status: 'WAITING',
+         last: { at: localClock('2026-10-22T09:20:00.000Z'), text: 'Are you free?', mine: true },
+         alsoWith: [{ accountId: 'a2', at: localClock('2026-10-21T08:00:00.000Z') }, { accountId: 'a3' }],
+      })
+      expect(page?.people[1]).toEqual({
+         accountId: 'a1',
+         slug: 'bob',
+         name: 'Ada',
+         headline: 'Countess',
+         status: 'NEVER',
+      })
+      await expect(source.recipient?.('a1', 'ada')).resolves.toMatchObject({ slug: 'ada', status: 'WAITING' })
+      await expect(source.recipient?.('a1', 'zed')).resolves.toBeNull()
+      expect(exact).toHaveBeenCalledWith({ accountId: 'a1', slug: 'ada' })
       expect((await source.load()).canStart).toBe(true)
+   })
+
+   it('should keep the profile name brain gives for the person of a conversation', async () => {
+      const { client } = fake({
+         conversations: {
+            query: vi.fn().mockResolvedValue([conversation({ contactSlug: 'ada' }), conversation({ id: 'c2' })]),
+         },
+      })
+      const [first, second] = (await createTrpcSource(client).load()).conversations
+
+      expect(first?.contactSlug).toBe('ada')
+      expect(second).not.toHaveProperty('contactSlug')
    })
 
    it('should start a first message with brain, follow it until it went, and wait for the conversation brain links to it', async () => {

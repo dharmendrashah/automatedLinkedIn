@@ -5,21 +5,22 @@ import { Button } from '@/components/ui/button'
 import { DrawerDescription, DrawerTitle } from '@/components/ui/drawer'
 import { ExternalLink } from 'lucide-react'
 
-import { About, Education, Experience, Fit, Skills, WhyFound } from './person-sections'
-import { Workspace } from './person-workspace'
 import { type PersonDetail } from './types'
 
 import { trpc } from '../../trpc'
+import { About, Education, Experience, Fit, Skills, WhyFound } from './person-sections'
+import { Workspace } from './person-workspace'
 
 // The top card, laid out like a LinkedIn profile: photo, name, headline, role, place and reach.
-const Header = ({ person }: { person: PersonDetail }) => {
+const Header = ({ person, confirmRead }: { person: PersonDetail; confirmRead: boolean }) => {
    const utils = trpc.useUtils()
    const read = trpc.person.readFull.useMutation({
       onSuccess: data => utils.person.detail.setData({ slug: person.slug }, data),
    })
-   const { member, profile, snapshot } = person
-   const name = snapshot?.name ?? member?.name ?? profile?.fullName ?? person.slug
-   const headline = snapshot?.headline ?? member?.headline ?? profile?.headline
+   const { member, profile, snapshot, connections } = person
+   const [connection] = connections
+   const name = snapshot?.name ?? member?.name ?? profile?.fullName ?? connection?.name ?? person.slug
+   const headline = snapshot?.headline ?? member?.headline ?? profile?.headline ?? connection?.headline
    const [current] = snapshot?.experience ?? []
    const title = current?.title ?? member?.title
    const company = current?.company ?? member?.company ?? profile?.company
@@ -33,7 +34,7 @@ const Header = ({ person }: { person: PersonDetail }) => {
 
    return (
       <Cover>
-         <Picture name={name} image={snapshot?.photo ?? null} />
+         <Picture name={name} image={snapshot?.photo ?? connection?.photoUrl ?? null} />
          <div className="grid gap-1">
             <DrawerTitle className="text-xl">{name}</DrawerTitle>
             {headline ? <DrawerDescription className="text-foreground text-sm">{headline}</DrawerDescription> : null}
@@ -63,6 +64,9 @@ const Header = ({ person }: { person: PersonDetail }) => {
                   pending={read.isPending}
                   error={read.error}
                   onRead={() => read.mutate({ slug: person.slug })}
+                  {...(confirmRead && {
+                     confirm: `It adds ${firstNameOf(name)}'s about, experience, education and skills, and is paid from your wallet.`,
+                  })}
                />
             )}
          </div>
@@ -70,8 +74,31 @@ const Header = ({ person }: { person: PersonDetail }) => {
    )
 }
 
-// One person, like their LinkedIn profile, so a lead can be judged without leaving the table.
-export const PersonView = ({ slug }: { slug: string }) => {
+const firstNameOf = (name: string) => name.split(/\s+/)[0] ?? name
+
+// How the owner's accounts know the person: connected since when, and the conversations they have.
+const Accounts = ({ person }: { person: PersonDetail }) =>
+   person.connections.length > 0 || person.conversations.length > 0 ? (
+      <section className="grid gap-1.5 rounded-xl border p-4 text-sm" aria-label="Your accounts">
+         <h3 className="font-semibold">Your accounts</h3>
+         <ul className="grid gap-1">
+            {person.connections.map(item => (
+               <li key={`c-${item.accountId}`}>
+                  Connected to <span className="font-medium">{item.accountName}</span>
+                  {item.connectedOn ? ` since ${new Date(item.connectedOn).toLocaleDateString()}` : ''}
+               </li>
+            ))}
+            {person.conversations.map(item => (
+               <li key={`m-${item.id}`}>
+                  Talking from <span className="font-medium">{item.accountName}</span>
+               </li>
+            ))}
+         </ul>
+      </section>
+   ) : null
+
+// One person, like their LinkedIn profile, so a lead can be judged without leaving the table. `confirmRead` asks before the paid read.
+export const PersonView = ({ slug, confirmRead = false }: { slug: string; confirmRead?: boolean }) => {
    const detail = trpc.person.detail.useQuery(
       { slug },
       {
@@ -89,7 +116,8 @@ export const PersonView = ({ slug }: { slug: string }) => {
 
    return (
       <div className="grid gap-3">
-         <Header person={person} />
+         <Header person={person} confirmRead={confirmRead} />
+         <Accounts person={person} />
          {member && (member.score !== null || member.state !== 'UNSCORED' || member.matched.length > 0) ? (
             <Fit member={member} />
          ) : null}

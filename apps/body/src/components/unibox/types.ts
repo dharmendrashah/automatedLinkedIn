@@ -48,8 +48,12 @@ export type UniboxMessage = {
    attachments: Attachment[]
 }
 
-// A connection of one of the accounts (.plan/message-connections.md). `conversationId` says that account already talks to this person;
-// `blocked` says why they cannot be written to.
+// Where an account stands with a connection: their message waits for the owner, the owner's waits for them, talked before (closed or
+// done), or never written to.
+export type RecipientStatus = 'NEEDS_REPLY' | 'WAITING' | 'TALKED' | 'NEVER'
+
+// A connection of one of the accounts (.plan/new-message-popup-filters.md). `conversationId` says that account already talks to this
+// person; `blocked` says why they cannot be written to; `alsoWith` names the owner's other accounts that talk with them too.
 export type Recipient = {
    accountId: string
    slug: string
@@ -58,7 +62,20 @@ export type Recipient = {
    imageUrl?: string
    conversationId?: string
    blocked?: 'DO_NOT_CONTACT'
+   status: RecipientStatus
+   last?: { at: number; text: string; mine: boolean }
+   alsoWith?: Array<{ accountId: string; at?: number }>
 }
+
+export type RecipientSearch = {
+   query: string
+   // undefined means every account.
+   accountIds?: string[]
+   status?: RecipientStatus
+}
+
+// The people a search shows (at most 200, the ones to answer first) and how many matched in all.
+export type RecipientPage = { people: Recipient[]; total: number }
 
 export type UniboxConversation = {
    id: string
@@ -72,6 +89,8 @@ export type UniboxConversation = {
    messages: UniboxMessage[]
    // Set on the stand-in of a first message (the person's profile slug) until LinkedIn has the conversation and it is stored.
    starting?: { slug: string }
+   // The person's profile name, for their drawer, when it is known (one-to-one conversations).
+   contactSlug?: string
    // How many messages the conversation has, when `messages` holds only the latest ones (the list); the rest load when it opens.
    messageCount?: number
    // What the whole conversation says, kept by the server for when `messages` is only the latest few.
