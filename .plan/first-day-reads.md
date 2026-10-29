@@ -1,8 +1,8 @@
 # First day of a new account: read its profile, connections, messages and connection requests
 
-- Status: done (staging run left to the owner)
+- Status: phase 1 done; phase 2 (profile loading and progress bar) draft
 - Created: 2026-10-30
-- Locked by user: yes, 2026-10-30
+- Locked by user: phase 1 yes, 2026-10-30; phase 2 no
 
 ## Goal
 
@@ -112,6 +112,91 @@ Open questions (must be empty before locking):
 
 - `pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build`; brain integration tests for `accountDailyJob` (in the daytime, see the working-hours gotcha in `MEMORY.md`).
 - Staging: add an account, sign in, watch `/jobs` and Sessions through the day: one task at a time, in order, inside working hours, and the four "done" fields set.
+
+## Phase 2: Profile loading and progress bar (draft, 2026-10-30)
+
+Same PR (#134). The first-day reads are shown to the owner as "Profile loading": a progress bar from 0 to 100 % on the LinkedIn accounts page, and, once the own profile is read, the account's LinkedIn name and picture in its row.
+
+### Weights (from the owner, 2026-10-30)
+
+| Step | Weight | Done when (from data that exists) |
+| --- | --- | --- |
+| Account sign-in | 10 % | the first good sign-in (`firstSignedInAt`, or `lastVerifiedAt` for accounts older than this change) |
+| Own profile | 10 % | the profile is stored (`LinkedInAccountProfile` row), not only asked (`profileAskedAt`) |
+| Connections | 20 % | `connectionsReadAt` |
+| Connection requests | 20 % | `invitationsReadAt` |
+| Messages | 40 % | `messagesBackfilledAt` (the whole inbox read once) |
+
+The percentage is the sum of the steps that are done. Steps are counted as done once and never go back: a later weekly or monthly read, a sign-out or a failed read do not lower it.
+
+### What the row shows
+
+- Before the profile is read: the login email, as today, and the bar.
+- After the profile is read: the LinkedIn picture and name (from PR #131 the profile read sets `displayName` and `imageUrl`), the email under it, and the bar.
+- The bar: a thin bar with the percentage in words next to it ("Profile loading 50 %") and, on hover or focus, the five steps with done, running, waiting (with why and when) or failed. At 100 % the bar shows once as "Profile loaded" in green and then is no longer shown (open question 4).
+- Colour by progress, going red, white, yellow, blue, green: 0 to 19 % red, 20 to 39 % white (with a grey border so it shows on a white page), 40 to 59 % yellow, 60 to 99 % blue, 100 % green. The words and the percentage always say the same, so the colour is never the only signal (colour-blind owners, screen readers: `role="progressbar"`, `aria-valuenow`).
+- The same bar and steps replace the "First reads" list in the account drawer (one way to show it, not two).
+
+### What makes it move, and what stops it
+
+- Running: the step whose task is in progress shows "Reading..."; the page already refreshes the accounts list, so the bar moves without a reload (check the refresh rate; at most once a minute).
+- Waiting: a step that the budget, working hours, the rest between sessions or a missing proxy holds shows why and from when, in the account's words ("Goes on tomorrow at 09:10").
+- Failed: a step tried today that did not finish shows "Did not finish, tried again tomorrow" with a button to try now where the page already has one (Read profile, Read connections, Read requests, Read messages).
+- Stuck at 0 %: sign-in failed (wrong password, two-step key, checkpoint): the bar is red at 0 % and says the sign-in problem (the status badge already does); nothing else is read until a sign-in works.
+- Paused account: the bar stays where it is and says "Paused".
+- Messages are the biggest step and can take days: within it, the bar does not move until the whole inbox is read (no partial count exists today; open question 2).
+
+### Phase 2 requirements
+
+Confirmed (2026-10-30):
+
+- Name "Profile loading"; a progress bar 0 to 100 %; weights 10 sign-in, 10 own profile, 20 connections, 20 connection requests, 40 messages.
+- Shown on the LinkedIn accounts page; once the profile is read, the account's name and picture with the bar.
+- Colours from red to white to yellow to blue to green as it grows.
+- In the same PR (#134).
+
+Open questions (must be empty before locking): see below, after the reviewers.
+
+### Review (2026-10-30: Agency Owner, Founder, Platform Admin, GTM Engineer), ranked
+
+Taken into the plan (proposed; confirm with the lock):
+
+1. **Health wins over the bar** (all four): an account that is signed out, needs its code, is paused, restricted or has no proxy shows that problem in words with one action ("LinkedIn wants your code again. Enter it."), not "loading 70 %"; the bar stays below, greyed, at its value. A real failure looks different from loading: an icon, the words, no colour ramp.
+2. **Own profile done means stored, and it is retried** (three, a real bug in phase 1): the job asks the profile read again once a day, up to 3 times, while no profile is stored (not only while `profileAskedAt` is null); after 3 it shows "Did not finish. Press Read profile." Otherwise a failed read leaves the bar at 90 % for good.
+3. **Ready labels** (GTM Engineer): under the bar, "Ready for workflows" once the own profile and connections are read, and "Ready for the Unibox" once the messages are read; what the account can be used for, not only a number.
+4. **Say the step and the reason in words under the bar**, not only on hover (works on a phone): "Reading connections now", "Messages: 340 conversations read so far, goes on tomorrow", "Waiting for working hours, goes on tomorrow". The reason and the day, never a clock time we cannot promise.
+5. **Empty accounts reach 100 %**: a read that finds no connections, no requests or an empty inbox still marks its step done; one test per step.
+6. **A summary line on the accounts page**: "4 loaded, 1 loading, 1 needs you", and the accounts that need the owner first.
+7. **"Loaded" stays as a small green tick**, instead of a green bar that shows once and hides (no per-browser memory, the same for every member of the team).
+8. **"Reading..." ends**: a step whose run is older than the task's time limit shows as did not finish, not "Reading..." forever.
+9. **One line of trust under the bar**: "We only read. Nothing is posted, sent or accepted. It uses the account's browsing time, no credits."
+10. **Refresh at most once a minute** while a bar is moving; on opening the page otherwise.
+11. **Checks for the operator** (Platform Admin): on `/jobs`, accounts whose bar has not moved in 3 working days, with the reason; the arithmetic that each first read fits the background share of each browsing mode (connections about 25 minutes against 40 % of SAFE), with a test.
+12. **A sign-in problem during the first day** stops the remaining first-day reads and ends the night allowance (the job already asks only for ACTIVE accounts and the allowance needs ACTIVE; a test proves it).
+
+Left out, with the reason:
+
+- A warning in the workflow account picker ("still loading"): useful, but another screen; later.
+- Try-now buttons inside the hover: the drawer and the account page already have the Read buttons; the words point there.
+- Deletion while a read runs and erased people coming back with the weekly read: existing behaviour of every read today, not new here; noted in `MEMORY.md` as open items for their own plan.
+
+Open questions (must be empty before locking):
+
+- None. Answered 2026-10-30:
+  1. **Colours**: softer tones of the same ramp: light red (0 to 19 %), light grey (20 to 39 %), yellow (40 to 59 %), blue (60 to 99 %), green (100 %). A real problem is shown apart (icon and words), not by the ramp.
+  2. **Messages**: the bar moves inside the step by the conversations stored so far, as an estimate that grows toward the step's end but never reaches it until the whole inbox is read: `40 % × n / (n + 150)` for `n` stored conversations (100 conversations show about 16 of the 40, 600 about 32), shown as "about"; the words say "340 conversations read so far". Exactly 40 when `messagesBackfilledAt` is set.
+  3. **Re-added account**: the login is remembered for 30 days after the account is deleted (owner and a SHA-256 hash of the lowercased login email, additive table `FirstDayUsed`, swept by retention after 30 days); an account added again with the same login in that time gets the first reads but no night allowance.
+  4. **Proxy at night**: no extra limit per proxy; each account has its own proxy or proxies (owner, 2026-10-30).
+  5. **Name**: "Getting your LinkedIn ready" on the page (the plan and code may still say first-day reads).
+
+### Phase 2 approach
+
+- [ ] Brain, test first: `loadingOf(account)` (one server-side function): the five steps with done, reading, waiting or did not finish, the percentage with the messages estimate, the ready labels; older accounts with only `lastVerifiedAt`; empty reads reach 100 %; a not-ACTIVE account carries its problem. Sent with `linkedInAccount.list`.
+- [ ] Brain, test first: the own profile counts as done only when stored, retried once a day up to 3 times; a sign-in problem stops the first reads and the night allowance.
+- [ ] Brain, test first: `FirstDayUsed` (migration, additive), written when an account is deleted after its first sign-in, read before the night allowance, swept after 30 days.
+- [ ] Brain: `/jobs` flags accounts whose loading has not moved in 3 working days; a test that each first read's estimate fits the background share of each browsing mode.
+- [ ] Page, test first: the colour of a percentage, the words under the bar, the summary line; then the row (picture, name, email, bar, words, ready labels, green tick at 100 %) and the drawer (the same bar and steps instead of "First reads"); refresh at most once a minute while loading.
+- [ ] Definition of done, `MEMORY.md`, PR #134 updated.
 
 ## Outcome
 
