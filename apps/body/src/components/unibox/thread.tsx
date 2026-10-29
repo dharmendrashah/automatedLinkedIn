@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { ArrowDown, ArrowLeft, Check, CircleAlert, CornerUpLeft, Info, MailOpen, PanelRight, Users } from 'lucide-react'
-import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -69,6 +69,9 @@ export const Thread = ({
    // A reply loaded from brain after a reload has the names of its files and no files, so it cannot be sent again as it is.
    const filesLost = conversation.failed?.attachments.some(({ kind, file }) => kind !== 'LINK' && !file) ?? false
    const scroller = useRef<HTMLDivElement>(null)
+   const content = useRef<HTMLDivElement>(null)
+   // Stays on the newest message while the conversation draws (days and pictures grow after the first paint), until the owner scrolls up.
+   const pinned = useRef(true)
    const [away, setAway] = useState(false)
    const days = useMemo(() => buildThread(conversation.messages, now), [conversation.messages, now])
    const firstMine = conversation.messages.find(message => message.direction === 'ME')
@@ -79,8 +82,27 @@ export const Thread = ({
 
    // A conversation opens on its newest message; a new message or a reply brings the view to the bottom again.
    useLayoutEffect(() => {
+      pinned.current = true
       scroller.current?.scrollTo({ top: scroller.current.scrollHeight })
    }, [conversation.id, count, conversation.sending])
+
+   useEffect(() => {
+      const inner = content.current
+
+      if (!inner || typeof ResizeObserver === 'undefined') {
+         return undefined
+      }
+
+      const observer = new ResizeObserver(() => {
+         if (pinned.current) {
+            scroller.current?.scrollTo({ top: scroller.current.scrollHeight })
+         }
+      })
+
+      observer.observe(inner)
+
+      return () => observer.disconnect()
+   }, [])
 
    const toBottom = () => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: 'smooth' })
    const toLastOwn = () =>
@@ -197,124 +219,128 @@ export const Thread = ({
                ref={scroller}
                onScroll={event => {
                   const el = event.currentTarget
+                  const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
 
-                  setAway(el.scrollHeight - el.scrollTop - el.clientHeight > 400)
+                  pinned.current = fromBottom < 24
+                  setAway(fromBottom > 400)
                }}
-               className="h-full overflow-y-auto px-3 py-4"
+               className="h-full overflow-y-auto px-3 py-4 [overflow-anchor:none]"
                aria-live="off"
             >
-               {conversation.complete ? null : (
-                  <p className="mx-auto mb-4 flex max-w-md items-center justify-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-center text-xs text-muted-foreground">
-                     <Info className="size-3.5 shrink-0" aria-hidden />
-                     Only part of this conversation was read. Older messages are not shown.
-                  </p>
-               )}
-               {days.length === 0 ? (
-                  <p className="py-10 text-center text-sm text-muted-foreground">
-                     No messages in this conversation yet.
-                  </p>
-               ) : null}
-               {days.map(day => (
-                  <div key={day.at} className="[contain-intrinsic-size:auto_160px] [content-visibility:auto]">
-                     <div className="sticky top-0 z-10 my-3 flex justify-center">
-                        <span className="rounded-full border bg-card px-3 py-0.5 text-[11px] font-medium text-muted-foreground shadow-xs">
-                           {day.label}
-                        </span>
+               <div ref={content}>
+                  {conversation.complete ? null : (
+                     <p className="mx-auto mb-4 flex max-w-md items-center justify-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-center text-xs text-muted-foreground">
+                        <Info className="size-3.5 shrink-0" aria-hidden />
+                        Only part of this conversation was read. Older messages are not shown.
+                     </p>
+                  )}
+                  {days.length === 0 ? (
+                     <p className="py-10 text-center text-sm text-muted-foreground">
+                        No messages in this conversation yet.
+                     </p>
+                  ) : null}
+                  {days.map(day => (
+                     <div key={day.at} className="[contain-intrinsic-size:auto_160px] [content-visibility:auto]">
+                        <div className="sticky top-0 z-10 my-3 flex justify-center">
+                           <span className="rounded-full border bg-card px-3 py-0.5 text-[11px] font-medium text-muted-foreground shadow-xs">
+                              {day.label}
+                           </span>
+                        </div>
+                        {day.groups.map(group => (
+                           <div key={group.messages[0]?.id ?? group.at} className="mb-3">
+                              <p
+                                 className={cn(
+                                    'mb-1 px-1 text-[11px] text-muted-foreground',
+                                    group.direction === 'ME' && 'text-right'
+                                 )}
+                              >
+                                 {group.direction === 'ME' ? 'You' : group.sender} · {formatFull(group.at)}
+                              </p>
+                              <div className="flex flex-col gap-1">
+                                 {group.messages.map(message => (
+                                    <div key={message.id} id={`msg-${message.id}`}>
+                                       {message.at === newFrom ? (
+                                          <div
+                                             role="separator"
+                                             className="my-2 flex items-center gap-2 text-[11px] font-medium text-primary"
+                                          >
+                                             <span className="h-px flex-1 bg-primary/40" />
+                                             New messages
+                                             <span className="h-px flex-1 bg-primary/40" />
+                                          </div>
+                                       ) : null}
+                                       <MessageBubble message={message} tokens={tokens} />
+                                    </div>
+                                 ))}
+                              </div>
+                           </div>
+                        ))}
                      </div>
-                     {day.groups.map(group => (
-                        <div key={group.messages[0]?.id ?? group.at} className="mb-3">
-                           <p
-                              className={cn(
-                                 'mb-1 px-1 text-[11px] text-muted-foreground',
-                                 group.direction === 'ME' && 'text-right'
-                              )}
-                           >
-                              {group.direction === 'ME' ? 'You' : group.sender} · {formatFull(group.at)}
+                  ))}
+                  {conversation.sending ? (
+                     <SendingBubble sending={conversation.sending} now={now} canUndo={canUndo} onUndo={onUndoSend} />
+                  ) : null}
+                  {conversation.failed ? (
+                     <div
+                        role="alert"
+                        className="mx-auto mb-3 flex max-w-lg items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                     >
+                        <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+                        <div className="min-w-0 flex-1">
+                           <p className="font-medium">
+                              {conversation.failed.unsure ? 'The reply may have been sent.' : 'The reply did not go.'}
                            </p>
-                           <div className="flex flex-col gap-1">
-                              {group.messages.map(message => (
-                                 <div key={message.id} id={`msg-${message.id}`}>
-                                    {message.at === newFrom ? (
-                                       <div
-                                          role="separator"
-                                          className="my-2 flex items-center gap-2 text-[11px] font-medium text-primary"
-                                       >
-                                          <span className="h-px flex-1 bg-primary/40" />
-                                          New messages
-                                          <span className="h-px flex-1 bg-primary/40" />
-                                       </div>
-                                    ) : null}
-                                    <MessageBubble message={message} tokens={tokens} />
-                                 </div>
-                              ))}
+                           <p className="text-xs">{conversation.failed.reason}</p>
+                           {conversation.failed.unsure ? (
+                              <p className="text-xs">
+                                 It is checked again at the next read of this conversation, within about ten minutes,
+                                 and this goes away when the message is found.
+                              </p>
+                           ) : null}
+                           <p className="mt-1 truncate text-xs opacity-80">
+                              Your reply is kept: {conversation.failed.text || 'an attachment'}
+                           </p>
+                           {filesLost ? (
+                              <p className="mt-1 text-xs">
+                                 Its files were not kept on this page. Dismiss it to get the words back, then attach the
+                                 files again.
+                              </p>
+                           ) : null}
+                           <div className="mt-2 flex gap-2">
+                              {filesLost ? null : conversation.failed.unsure ? (
+                                 <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                       <Button variant="outline" size="xs">
+                                          Send again
+                                       </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                       <AlertDialogHeader>
+                                          <AlertDialogTitle>It may have been sent</AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                             Check on LinkedIn first. Sending again could put the same message in the
+                                             conversation twice.
+                                          </AlertDialogDescription>
+                                       </AlertDialogHeader>
+                                       <AlertDialogFooter>
+                                          <AlertDialogCancel>Do not send</AlertDialogCancel>
+                                          <AlertDialogAction onClick={onRetry}>Send again</AlertDialogAction>
+                                       </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                 </AlertDialog>
+                              ) : (
+                                 <Button variant="outline" size="xs" onClick={onRetry}>
+                                    Retry
+                                 </Button>
+                              )}
+                              <Button variant="ghost" size="xs" onClick={onDismissFailed}>
+                                 Dismiss
+                              </Button>
                            </div>
                         </div>
-                     ))}
-                  </div>
-               ))}
-               {conversation.sending ? (
-                  <SendingBubble sending={conversation.sending} now={now} canUndo={canUndo} onUndo={onUndoSend} />
-               ) : null}
-               {conversation.failed ? (
-                  <div
-                     role="alert"
-                     className="mx-auto mb-3 flex max-w-lg items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-                  >
-                     <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-                     <div className="min-w-0 flex-1">
-                        <p className="font-medium">
-                           {conversation.failed.unsure ? 'The reply may have been sent.' : 'The reply did not go.'}
-                        </p>
-                        <p className="text-xs">{conversation.failed.reason}</p>
-                        {conversation.failed.unsure ? (
-                           <p className="text-xs">
-                              It is checked again at the next read of this conversation, within about ten minutes, and
-                              this goes away when the message is found.
-                           </p>
-                        ) : null}
-                        <p className="mt-1 truncate text-xs opacity-80">
-                           Your reply is kept: {conversation.failed.text || 'an attachment'}
-                        </p>
-                        {filesLost ? (
-                           <p className="mt-1 text-xs">
-                              Its files were not kept on this page. Dismiss it to get the words back, then attach the
-                              files again.
-                           </p>
-                        ) : null}
-                        <div className="mt-2 flex gap-2">
-                           {filesLost ? null : conversation.failed.unsure ? (
-                              <AlertDialog>
-                                 <AlertDialogTrigger asChild>
-                                    <Button variant="outline" size="xs">
-                                       Send again
-                                    </Button>
-                                 </AlertDialogTrigger>
-                                 <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                       <AlertDialogTitle>It may have been sent</AlertDialogTitle>
-                                       <AlertDialogDescription>
-                                          Check on LinkedIn first. Sending again could put the same message in the
-                                          conversation twice.
-                                       </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                       <AlertDialogCancel>Do not send</AlertDialogCancel>
-                                       <AlertDialogAction onClick={onRetry}>Send again</AlertDialogAction>
-                                    </AlertDialogFooter>
-                                 </AlertDialogContent>
-                              </AlertDialog>
-                           ) : (
-                              <Button variant="outline" size="xs" onClick={onRetry}>
-                                 Retry
-                              </Button>
-                           )}
-                           <Button variant="ghost" size="xs" onClick={onDismissFailed}>
-                              Dismiss
-                           </Button>
-                        </div>
                      </div>
-                  </div>
-               ) : null}
+                  ) : null}
+               </div>
             </div>
             {away ? (
                <div className="absolute right-3 bottom-3 flex flex-col items-end gap-1.5">
