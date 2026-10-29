@@ -1,5 +1,4 @@
-import { useState } from 'react'
-
+import { useMediaSource } from '@/lib/use-media-source'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -9,21 +8,21 @@ type Props = {
 }
 
 // A picture over the initials: the initials show while it loads, and stay when it cannot be loaded (an address that expired).
-// Only https addresses are used, and the page that shows it is never named to the image host.
+// Only https addresses are used, loaded through the file cache, and the page that shows it is never named to the image host.
 export const Photo = ({ url, className = 'rounded-full' }: Props) => {
-   const [failed, setFailed] = useState<string>()
+   const { src, onError } = useMediaSource(url?.startsWith('https://') ? url : undefined)
 
-   if (!url?.startsWith('https://') || failed === url) {
+   if (!src) {
       return null
    }
 
    return (
       <img
-         src={url}
+         src={src}
          alt=""
          loading="lazy"
          referrerPolicy="no-referrer"
-         onError={() => setFailed(url)}
+         onError={onError}
          className={cn('absolute inset-0 size-full object-cover', className)}
       />
    )

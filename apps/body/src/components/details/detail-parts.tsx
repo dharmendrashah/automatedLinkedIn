@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { Skeleton } from '@/components/ui/skeleton'
 import { readableError } from '@/lib/trpc-error'
+import { useMediaSource } from '@/lib/use-media-source'
 import { FileSearch, Loader2, RefreshCw } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 
@@ -42,16 +43,16 @@ export const Picture = ({
    square?: boolean
    className?: string
 }) => {
-   const [broken, setBroken] = useState(false)
+   const { src, onError } = useMediaSource(image)
    const shape = cn('bg-muted size-24 border-4 border-background', square ? 'rounded-xl' : 'rounded-full')
 
-   return image && !broken ? (
+   return src ? (
       <img
-         src={image}
+         src={src}
          alt=""
          referrerPolicy="no-referrer"
          className={cn(shape, 'object-cover', className)}
-         onError={() => setBroken(true)}
+         onError={onError}
       />
    ) : (
       <span className={cn(shape, 'text-muted-foreground grid place-items-center text-2xl font-semibold', className)}>

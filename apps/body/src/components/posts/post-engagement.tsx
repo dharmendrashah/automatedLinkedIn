@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { readableError } from '@/lib/trpc-error'
+import { useMediaSource } from '@/lib/use-media-source'
 import { Loader2, MessageSquare, ThumbsUp, UserPlus } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 
@@ -134,6 +135,7 @@ const useAddToList = (slug: string) => {
 // Who engaged: opens their drawer when they are in a list, LinkedIn otherwise, and can be added to the chosen list.
 const Person = ({ who, badges, children, shared }: { who: PersonLine; badges: ReactNode; children?: ReactNode; shared: Shared }) => {
    const add = useAddToList(shared.slug)
+   const photo = useMediaSource(who.photo)
    const name = who.name ?? who.slug ?? 'Someone'
    const nameNode = who.slug && who.listName ? (
       <button type="button" className="text-left text-sm font-medium hover:underline" onClick={() => shared.onPerson(who.slug ?? '')}>
@@ -151,7 +153,14 @@ const Person = ({ who, badges, children, shared }: { who: PersonLine; badges: Re
    return (
       <li className="flex gap-3 rounded-md p-2">
          <Avatar className="size-9">
-            {who.photo ? <AvatarImage src={who.photo} alt="" referrerPolicy="no-referrer" /> : null}
+            {photo.src ? (
+               <AvatarImage
+                  src={photo.src}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  onLoadingStatusChange={status => status === 'error' && photo.onError()}
+               />
+            ) : null}
             <AvatarFallback className="text-xs">{initials(name)}</AvatarFallback>
          </Avatar>
          <div className="grid min-w-0 flex-1 gap-1">
