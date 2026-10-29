@@ -1,22 +1,15 @@
-import { type Conversation, type MessagesFile, type ReplyFile, messagesFileSchema } from '@automatedLinkedIn/contracts'
+import { type ReplyFile } from '@automatedLinkedIn/contracts'
 
 import { describeError } from '../../browsing/errors'
 import { handsOf } from '../../browsing/hands'
 import { createReader } from '../../browsing/reader'
 import { COMPOSER, FILE_INPUT, IMAGE_INPUT, MESSAGING_PATH, SEND_BUTTON, THREAD_ID } from '../../linkedin/markup'
-import {
-   composerHtml,
-   newestIsOurs,
-   parseComposer,
-   parseOwner,
-   parseThread,
-   toContractMessages,
-} from '../../linkedin/messageReader'
+import { BOX_PAUSES, SEND_REQUEST, createMessageBox, handOverPage } from '../../linkedin/messageBox'
+import { composerHtml, parseComposer, parseThread } from '../../linkedin/messageReader'
 import { PACE } from '../../linkedin/pace'
 import { SignedOut, createSession } from '../../linkedin/session'
 import { type AnswerWatch } from '../../scraping/driver'
 import { type TaskContext } from '../defineTask'
-import { fileName, partsOf } from '../linkedinMessages/messagesFile'
 import { type Fetched } from '../uploads'
 
 type Context = Pick<TaskContext, 'browser' | 'visit' | 'pause' | 'log' | 'warn' | 'attach' | 'markAttempt' | 'uploads'>
@@ -48,26 +41,13 @@ type Deps = {
    today?: () => Date
 }
 
-// How many times the page is looked at for the message after send was pressed; a look that cannot read the page counts, and the
-// next one is tried (a page that is moving cannot always be read).
-const LOOKS = 10
-// The request the page makes to send a message, which LinkedIn answers whether or not the page draws the message in time (run
-// 87852d9b, 2026-10-23: createMessage answered 200, and the message showed in the video).
-const SEND_REQUEST = ['voyagerMessagingDashMessengerMessages', 'action=createMessage']
-const accepted = (status: number) => status >= 200 && status < 300
-const refused = (status: number) => status >= 400 && status < 500
-// How many times the page is looked at for its conversation and box, and the box's send button for being enabled: through a slow
-// proxy the page can take half a minute to draw and come alive (runs 4f14fb23, 21fbcec3 and 896e63b8, 2026-10-23).
+// How many times the page is looked at for its conversation and box: through a slow proxy the page can take half a minute to draw
+// and come alive (runs 4f14fb23, 21fbcec3 and 896e63b8, 2026-10-23).
 const READY_LOOKS = 20
-const ENABLE_LOOKS = 8
 // How many times the box is looked at while files upload (about three minutes), and how many looks in a row it must be unchanged
 // before the upload counts as done: the markup of an upload that is going on keeps changing (recorded: not yet; unverified).
 const UPLOAD_LOOKS = 120
 const STABLE_LOOKS = 3
-// How many times the page is scrolled a little to bring the send button into view (run 896e63b8: a notice at the top pushed the
-// box to the edge of the window and the button below it).
-const REVEAL_SCROLLS = 4
-const REVEAL_PIXELS = [150, 300] as const
 
 const PAUSES = {
    // The conversation loading after the page opened.
@@ -75,9 +55,7 @@ const PAUSES = {
    // Between the steps of writing, as a person looks over what they wrote.
    click: [600, 1400],
    typed: [800, 2000],
-   // The message arriving after send, and between two looks for it.
-   sent: [1200, 2400],
-   look: [900, 1600],
+   look: BOX_PAUSES.look,
 } as const
 
 // Writes one reply in a conversation as the signed-in member does: opens its page, checks it is the conversation asked for,
@@ -89,7 +67,7 @@ export const sendReply = async (
    input: ReplyInput,
    { random = Math.random, now = Date.now, today = () => new Date() }: Deps = {}
 ): Promise<ReplyResult> => {
-   const { browser, visit, pause, log, warn, attach, markAttempt } = context
+   const { browser, visit, pause, log, warn, markAttempt } = context
    const hands = handsOf(browser)
    const reader = createReader({
       hands,
@@ -105,46 +83,23 @@ export const sendReply = async (
       log,
       baseUrl,
    })
-
-   // Empties the box of what was typed, so no draft is left on the account's page; it is no help when it cannot.
-   const clearBox = async () => {
-      await hands.press('ControlOrMeta+A')
-      await hands.press('Delete')
-   }
-
-   // What the page shows of the conversation, handed over as the contract's file, so the importer sees the new message.
-   const handOver = (html: string) => {
-      const { title, kind, participants, messages } = parseThread(html, today())
-      const owner = parseOwner(html)
-      const conversation: Conversation = {
+   const box = createMessageBox({
+      hands,
+      reader,
+      log,
+      box: COMPOSER,
+      send: SEND_BUTTON,
+      messagesOf: html => parseThread(html, today()).messages,
+   })
+   const clearBox = box.clear
+   const handOverSafely = (html: string) =>
+      handOverPage(html, {
+         context,
          id: input.thread,
-         title: title || input.title,
-         kind,
-         participants,
-         unread: false,
-         lastActivity: '',
-         complete: false,
-         messages: toContractMessages(messages),
-      }
-      const parts: MessagesFile[] = partsOf([conversation], new Date(now()).toISOString()).map(part => ({
-         ...part,
-         ...(owner && { account: owner }),
-      }))
-
-      for (const part of parts) {
-         attach(fileName(part.part), JSON.stringify(messagesFileSchema.parse(part), null, 1), 'application/json')
-      }
-   }
-
-   // The verdict never depends on this: the message was looked for and decided on before, so a page that cannot be handed over
-   // costs the importer the new message (the next read finds it), never a reply that went.
-   const handOverSafely = (html: string) => {
-      try {
-         handOver(html)
-      } catch {
-         warn('The page could not be handed over.')
-      }
-   }
+         title: input.title,
+         today: today(),
+         now: new Date(now()),
+      })
 
    // The page as it is once the conversation has its name and its box; as it is after the last look when it never gets them.
    const settled = async () => {
@@ -160,40 +115,6 @@ export const sendReply = async (
       }
 
       return html
-   }
-
-   // Whether the send button comes alive once the words are typed (it is disabled until the page has taken them in).
-   const sendEnabled = async () => {
-      for (let look = 0; look < ENABLE_LOOKS; look += 1) {
-         if (parseComposer(await hands.html()).canSend) {
-            return true
-         }
-
-         await reader.wait(PAUSES.look)
-      }
-
-      return false
-   }
-
-   // Presses the send button; the page is scrolled a little first when the button is below the edge of the window.
-   const pressSend = async () => {
-      for (let scrolls = 0; scrolls <= REVEAL_SCROLLS; scrolls += 1) {
-         if (await hands.clickSelector(SEND_BUTTON)) {
-            return true
-         }
-
-         if (scrolls < REVEAL_SCROLLS) {
-            const pixels = reader.span(REVEAL_PIXELS)
-
-            if (!(await hands.scrollOver(COMPOSER, pixels))) {
-               await hands.scrollBy(pixels)
-            }
-
-            await reader.wait(PAUSES.look)
-         }
-      }
-
-      return false
    }
 
    // Whether the box stops changing after files were given to it, which is when they have uploaded.
@@ -217,56 +138,11 @@ export const sendReply = async (
       return false
    }
 
-   // After send was pressed: looks for the message, and says what it saw. The page decides first; when it never shows the message,
-   // LinkedIn's own answer to the send request does (accepted: it went; refused: it did not; anything else: not known).
+   // After send was pressed: what the shared box saw, as the reply's verdict. Whatever the page showed is handed over.
    const confirm = async (answers: AnswerWatch): Promise<ReplyResult> => {
-      await reader.wait(PAUSES.sent)
+      const { outcome, html } = await box.confirm(answers, input.text, before)
 
-      let html = ''
-
-      for (let look = 0; look < LOOKS; look += 1) {
-         try {
-            html = await hands.html()
-
-            if (newestIsOurs(parseThread(html, today()).messages, input.text, before)) {
-               handOverSafely(html)
-
-               return { outcome: 'SENT' }
-            }
-         } catch {
-            // A look that cannot read the page is a look lost, not the end of the confirmation.
-         }
-
-         await reader.wait(PAUSES.look)
-      }
-
-      const statuses = answers.statuses()
-
-      if (statuses.some(accepted)) {
-         log('LinkedIn accepted the message; the page did not show it')
-
-         if (html !== '') {
-            handOverSafely(html)
-         }
-
-         return { outcome: 'SENT' }
-      }
-
-      // The box is tidied on a best effort: it must not change what is known about the send.
-      if (statuses.length > 0 && statuses.every(refused)) {
-         log('LinkedIn refused the message')
-         await clearBox().catch(() => undefined)
-
-         return {
-            outcome: 'FAILED',
-            why: 'NOT_SENT',
-         }
-      }
-
-      // The words still in the box mean send did nothing; an empty box and no message means it may have gone.
-      if (html !== '' && parseComposer(html).typed !== '') {
-         await clearBox().catch(() => undefined)
-
+      if (outcome === 'NOT_SENT') {
          return {
             outcome: 'FAILED',
             why: 'NOT_SENT',
@@ -277,7 +153,7 @@ export const sendReply = async (
          handOverSafely(html)
       }
 
-      return { outcome: 'UNKNOWN' }
+      return { outcome }
    }
 
    let fetched: Fetched | undefined
@@ -407,7 +283,7 @@ export const sendReply = async (
 
       await reader.wait(PAUSES.typed)
 
-      if (!(await sendEnabled())) {
+      if (!(await box.sendEnabled())) {
          log('The send button stayed disabled')
          await clearBox()
 
@@ -422,7 +298,7 @@ export const sendReply = async (
 
       answers = watch
 
-      if (!(await pressSend())) {
+      if (!(await box.press())) {
          log('The send button could not be clicked')
          await clearBox()
 

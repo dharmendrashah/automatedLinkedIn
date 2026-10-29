@@ -65,6 +65,30 @@ export const threadMarkup = ({ title, profile, messages, composer }: FixtureThre
       .map(message)
       .join('')}</ul></div>${composerMarkup(composer)}</div>`
 
+// The window a profile's Message link opens over the profile (recorded 2026-10-27): its header names the person, and it holds the same
+// message list and box as a conversation page.
+export const messageWindowMarkup = ({ title, messages, composer }: FixtureThread) =>
+   `<div class="msg-convo-wrapper msg-overlay-conversation-bubble" role="dialog" aria-label="Messaging" data-view-name="message-overlay-conversation-bubble-item">
+<header class="msg-overlay-conversation-bubble-header"><h2 class="pr1 msg-overlay-bubble-header__title truncate"><a href="/in/ACoAAfixture/"><span class="t-14 t-bold"> ${title} </span></a></h2>
+<button class="msg-overlay-bubble-header__control">Close your conversation</button></header>
+<div class="msg-s-message-list msg-s-message-list--scroll-buffer"><ul class="msg-s-message-list-content"><li class="msg-s-message-list__top-of-list"></li><li class="msg-s-message-list__loader"></li>${messages
+      .map(message)
+      .join('')}</ul></div>${composerMarkup(composer)}</div>`
+
+// A person's profile as far as a first message needs it: the profile's own Message link twice (sticky header and top card), a
+// Message link of another person under "People also viewed", and the window when it is open.
+export const profileMarkup = ({
+   messageLink = true,
+   window,
+}: { messageLink?: boolean; window?: FixtureThread } = {}) => {
+   const link = `<div data-view-name="profile-primary-message"><a href="/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3AACoAAfixture" componentkey="k"><span>Message</span></a></div>`
+
+   return `<main><div data-view-name="profile-sticky-header">${messageLink ? link : ''}</div>
+<section data-view-name="profile-top-card"><h2>Profile</h2>${messageLink ? link : '<button>Connect</button>'}</section>
+<div data-view-name="profile-browsemap-compose-message-button"><a aria-label="Message Someone Else" href="/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3AACoAAother">Message</a></div></main>
+<aside class="msg-overlay-list-bubble msg-overlay-list-bubble--is-minimized"></aside>${window ? messageWindowMarkup(window) : ''}`
+}
+
 const row = ({ title, when, snippet, unread, placeholder }: FixtureRow) =>
    placeholder
       ? '<li class="ember-view msg-conversation-listitem msg-conversations-container__convo-item"></li>'
