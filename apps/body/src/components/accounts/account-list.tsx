@@ -1,3 +1,4 @@
+import { Photo } from '@/components/photo'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -13,6 +14,7 @@ import { meterText } from '../browsing/format'
 import { limitSecondsOf } from '../browsing/modes'
 import { BrowsingMeter } from './browsing-meter'
 import { type ColumnId } from './columns'
+import { GettingReady } from './getting-ready'
 import { StatusBadge } from './status-badge'
 import { TodayCell } from './today-cell'
 import { type Group, type Row } from './toolbar'
@@ -20,6 +22,13 @@ import { hoursNowText, whyText } from './verdict'
 import { VisitSummary } from './visit-summary'
 
 const formatDate = (value: string | Date | null) => (value ? new Date(value).toLocaleDateString() : '—')
+
+const initialsOf = (name: string) =>
+   name
+      .split(/\s+/)
+      .slice(0, 2)
+      .map(part => part.charAt(0).toUpperCase())
+      .join('')
 
 // A click on these opens nothing: they do their own job.
 const OWN_CLICK = 'button, a, input, [role="checkbox"], [role="menuitem"]'
@@ -97,16 +106,29 @@ const AccountRow = ({
             </TableCell>
          ) : null}
          <TableCell className="align-top font-medium">
-            <div className="flex flex-wrap items-center gap-2">
-               <button
-                  type="button"
-                  className="focus-visible:ring-ring/50 rounded-sm text-left underline-offset-4 outline-none hover:underline focus-visible:ring-[3px]"
-                  aria-label={`Open details of ${account.email}`}
-                  onClick={() => onOpen(account.id)}
-               >
-                  {account.email}
-               </button>
-               {client ? <Badge variant="outline">{client}</Badge> : null}
+            <div className="flex items-start gap-2">
+               {account.displayName ? (
+                  <span className="bg-muted text-muted-foreground relative grid size-8 shrink-0 place-items-center overflow-hidden rounded-full text-xs font-semibold">
+                     {initialsOf(account.displayName)}
+                     <Photo url={account.imageUrl ?? undefined} />
+                  </span>
+               ) : null}
+               <div className="grid min-w-0 gap-0.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                     <button
+                        type="button"
+                        className="focus-visible:ring-ring/50 rounded-sm text-left underline-offset-4 outline-none hover:underline focus-visible:ring-[3px]"
+                        aria-label={`Open details of ${account.email}`}
+                        onClick={() => onOpen(account.id)}
+                     >
+                        {account.displayName ?? account.email}
+                     </button>
+                     {client ? <Badge variant="outline">{client}</Badge> : null}
+                  </div>
+                  {account.displayName ? (
+                     <span className="text-muted-foreground text-xs font-normal">{account.email}</span>
+                  ) : null}
+               </div>
             </div>
             <Link
                to={`/accounts/${account.id}`}
@@ -115,6 +137,11 @@ const AccountRow = ({
                <UserRound className="size-3" aria-hidden />
                Profile
             </Link>
+            {account.loading ? (
+               <div className="mt-2 font-normal">
+                  <GettingReady loading={account.loading} status={account.status} />
+               </div>
+            ) : null}
          </TableCell>
          <TableCell className="align-top">
             <div className="grid max-w-64 gap-1">

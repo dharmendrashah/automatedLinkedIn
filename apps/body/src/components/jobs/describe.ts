@@ -64,6 +64,8 @@ export const ITEM_RESULT: Record<RunDetail['items'][number]['result'], { label: 
 const ACTIONS: Record<string, string> = {
    'messages-read': 'Message read',
    'invitations-read': 'Connection requests read',
+   'profile-read': 'Own profile read',
+   'connections-read': 'Connections read',
    visit: 'Daily visit',
    'sign-in-check': 'Sign-in check',
    'proxy-score': 'Proxy score',

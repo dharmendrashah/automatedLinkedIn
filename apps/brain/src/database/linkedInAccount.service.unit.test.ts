@@ -18,10 +18,13 @@ const mocks = vi.hoisted(() => ({
    removeFiles: vi.fn(),
    removeDraftFiles: vi.fn(),
    postService: { removeFilesOfAccount: vi.fn() },
+   rememberLogin: vi.fn(),
 }))
 
 vi.mock('./postDraft.service', () => ({ PostDraftService: { removeFilesOfAccount: mocks.removeDraftFiles } }))
 vi.mock('./postPublication.service', () => ({ PostPublicationService: mocks.postService }))
+vi.mock('./accountLoading.service', () => ({ loadingsOf: async () => new Map() }))
+vi.mock('./firstDayUsed.service', () => ({ FirstDayUsedService: { remember: mocks.rememberLogin } }))
 
 vi.mock('core', () => ({
    CryptoService: {

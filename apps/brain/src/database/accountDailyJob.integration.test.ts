@@ -59,6 +59,25 @@ describe('AccountDailyJob (database)', () => {
          lastVerifiedAt: new Date('2026-10-18T20:00:00Z'),
          nextCheckAt: new Date('2026-10-19T09:00:00Z'),
          nextBrowseAt: new Date('2026-10-19T09:30:00Z'),
+         profileAskedAt: new Date('2026-10-18T20:00:00Z'),
+         invitationsReadAt: new Date('2026-10-18T20:00:00Z'),
+         connectionsReadAt: new Date('2026-10-18T20:00:00Z'),
+      })
+
+      await PrismaService.client.linkedInAccountProfile.create({
+         data: {
+            accountId: due.id,
+            userId: user.id,
+            data: {},
+            capturedAt: new Date('2026-10-18T20:00:00Z'),
+            sessionId: 'read-1',
+         },
+      })
+      // Signed in and never read: its first reads come before its visit.
+      const unread = await create(user.id, {
+         status: 'ACTIVE',
+         lastVerifiedAt: new Date('2026-10-19T09:00:00Z'),
+         firstSignedInAt: new Date('2026-10-19T09:00:00Z'),
       })
       const fresh = await create(user.id, { status: 'ACTIVE' })
       const paused = await create(user.id, {
@@ -86,9 +105,16 @@ describe('AccountDailyJob (database)', () => {
             id: true,
             nextCheckAt: true,
             nextBrowseAt: true,
+            nextFirstReadAt: true,
          },
       })
       const byId = new Map(rows.map(row => [row.id, row]))
+
+      expect(visited).not.toEqual(expect.arrayContaining([unread.id]))
+      expect(byId.get(unread.id)).toMatchObject({
+         nextFirstReadAt: NOW,
+         nextBrowseAt: null,
+      })
 
       // No proxy country, so UTC: tomorrow at 08:00 for what was sent, a minute from now for a first time.
       expect(byId.get(due.id)).toMatchObject({

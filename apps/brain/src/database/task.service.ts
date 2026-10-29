@@ -57,6 +57,8 @@ type RequestOptions = {
    confirmed?: boolean
    // The owner was told the account may not browse now and starts it anyway. Only a manual request can; the time is still booked.
    startAnyway?: boolean
+   // One of a new account's first-day reads, asked by the account job only: it may start outside working hours.
+   firstDay?: boolean
    // Saved in the same transaction as the session, so the caller's own row and the run exist together or not at all.
    onStart?: (sessionId: string, tx: Prisma.TransactionClient) => Promise<void>
 }
@@ -198,6 +200,7 @@ export class TaskService {
             budget: definition.budget ?? DEFAULT_BUDGET,
             trigger,
             ...(options.startAnyway && trigger === 'manual' && { override: true }),
+            ...(options.firstDay && trigger === 'automatic' && { firstDay: true }),
          })
          await TASK_HOOKS[task]?.onRequest?.(
             {

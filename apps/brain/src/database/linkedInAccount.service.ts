@@ -2,6 +2,8 @@ import { CryptoService, KeptFiles } from 'core'
 
 import { type Prisma } from 'generated/prisma/client'
 
+import { loadingsOf } from './accountLoading.service'
+import { FirstDayUsedService } from './firstDayUsed.service'
 import { PostDraftService } from './postDraft.service'
 import { PostPublicationService } from './postPublication.service'
 import { PrismaService } from './prisma.service'
@@ -56,6 +58,11 @@ const metadataSelect = {
    // The name and picture LinkedIn showed for the account; null until its messages were read.
    displayName: true,
    imageUrl: true,
+   // For "Getting your LinkedIn ready" (.plan/first-day-reads.md); the list turns them into `loading`.
+   firstSignedInAt: true,
+   invitationsReadAt: true,
+   connectionsReadAt: true,
+   messagesBackfilledAt: true,
    createdAt: true,
    updatedAt: true,
 } satisfies Prisma.LinkedInAccountSelect
@@ -164,12 +171,14 @@ export class LinkedInAccountService {
             finishedAt: true,
          },
       })
+      const loadings = await loadingsOf(userId, accounts)
 
       return accounts.map(account => {
          const found = visits.find(({ linkedInAccountId }) => linkedInAccountId === account.id)
 
          return {
             ...account,
+            loading: loadings.get(account.id) ?? null,
             lastVisit: found
                ? {
                     id: found.id,
@@ -307,9 +316,25 @@ export class LinkedInAccountService {
    // Removing an account is the one time its conversations and kept files are deleted (.plan/unibox-keep-messages-and-files.md). The
    // files go first, so that a failure leaves the account in place to try again and never leaves files behind.
    public static async deleteForUser(userId: string, id: string) {
+      const row = await PrismaService.client.linkedInAccount.findFirst({
+         where: {
+            id,
+            userId,
+         },
+         select: {
+            email: true,
+            firstSignedInAt: true,
+         },
+      })
+
       await KeptFiles.removeAccount(userId, id)
       await PostDraftService.removeFilesOfAccount(userId, id)
       await PostPublicationService.removeFilesOfAccount(userId, id)
+
+      // The same login added again gets its first reads, but not a second night allowance.
+      if (row?.firstSignedInAt) {
+         await FirstDayUsedService.remember(userId, row.email)
+      }
 
       const { count } = await PrismaService.client.linkedInAccount.deleteMany({
          where: {

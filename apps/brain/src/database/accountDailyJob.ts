@@ -1,10 +1,14 @@
 import { dailyTime, timezoneOfCountry } from 'core'
 
+import { PROFILE_TRIES } from './accountLoading'
+import { FirstDayUsedService } from './firstDayUsed.service'
 import { type JobItemInput } from './jobRun.service'
 import { VISIT_TASK } from './linkedInAccount.service'
 import { LinkedInAccountValidationService } from './linkedInAccountValidation.service'
+import { CONNECTIONS_TASK } from './linkedInConnection.hooks'
 import { INVITATIONS_TASK } from './linkedInInvitation.hooks'
 import { MESSAGES_TASK } from './linkedInMessages.hooks'
+import { PROFILE_TASK } from './linkedInProfile.hooks'
 import { messagesInput, sweepDue } from './messagesRefresh'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
@@ -19,9 +23,19 @@ const MESSAGES_EVERY_MS = 2 * 60 * 60 * 1000
 const MAX_FIRST_READS_A_DAY = 5
 // A good sign-in this recent (the owner's own check, say) counts as the day's check.
 const RECENT_SIGN_IN_MS = 12 * 60 * 60 * 1000
+// Before each first-day read the job waits a random time up to this, so new accounts do not all start at the same minute.
+const FIRST_READ_SPREAD_MS = 20 * 60 * 1000
+const STALLED_MS = 3 * DAY_MS
 
 type Due = Awaited<ReturnType<typeof findDue>>[number]
-type Field = 'nextCheckAt' | 'nextBrowseAt' | 'nextMessagesAt' | 'nextInvitationsAt'
+type Field =
+   | 'nextCheckAt'
+   | 'nextBrowseAt'
+   | 'nextMessagesAt'
+   | 'nextInvitationsAt'
+   | 'nextFirstReadAt'
+   | 'nextConnectionsAt'
+   | 'nextProfileAt'
 // Asked for: the task is queued. Let go: the time moves on without a task, for a fixed reason. Retry: it could not be queued now,
 // so the time stays and the next pass tries again.
 type Attempt =
@@ -58,6 +72,17 @@ const findDue = (now: Date) => {
                status: 'ACTIVE',
                OR: due('nextInvitationsAt'),
             },
+            // A first read still to do, or the weekly and monthly reads after it (.plan/first-day-reads.md).
+            {
+               status: 'ACTIVE',
+               OR: [
+                  { profile: { is: null } },
+                  { invitationsReadAt: null },
+                  { connectionsReadAt: null },
+                  ...due('nextConnectionsAt'),
+                  ...due('nextProfileAt'),
+               ],
+            },
          ],
       },
       select: {
@@ -68,6 +93,14 @@ const findDue = (now: Date) => {
          nextBrowseAt: true,
          nextMessagesAt: true,
          nextInvitationsAt: true,
+         nextFirstReadAt: true,
+         nextConnectionsAt: true,
+         nextProfileAt: true,
+         firstSignedInAt: true,
+         profile: { select: { accountId: true } },
+         email: true,
+         invitationsReadAt: true,
+         connectionsReadAt: true,
          messagesReadAt: true,
          messagesBackfilledAt: true,
          messagesSweptAt: true,
@@ -100,13 +133,27 @@ const move = (account: Due, field: Field, to: Date) =>
       data: { [field]: to },
    })
 
-const requestVisit = async ({ id, userId }: Due): Promise<Attempt> => {
+const requestVisit = (account: Due) => askFor(account, VISIT_TASK, 'the daily visit')
+
+const requestInvitations = (account: Due, firstDay = false) =>
+   askFor(account, INVITATIONS_TASK, 'the read of the connection requests', { answers: [] }, firstDay)
+
+// Asks for one task of the account in the background. A refusal (busy, budget, working hours) keeps the time for the next pass.
+const askFor = async (
+   { id, userId }: Due,
+   task: string,
+   what: string,
+   input?: Record<string, unknown>,
+   firstDay = false
+): Promise<Attempt> => {
    try {
       const { id: sessionId } = await TaskService.request({
          userId,
-         task: VISIT_TASK,
+         task,
          accountId: id,
          trigger: 'automatic',
+         ...(input && { input }),
+         ...(firstDay && { firstDay: true }),
       })
 
       return {
@@ -115,7 +162,7 @@ const requestVisit = async ({ id, userId }: Due): Promise<Attempt> => {
       }
    } catch (error) {
       if (!(error instanceof TaskRefusedError)) {
-         console.error(`Could not request the daily visit of account ${id}: ${(error as Error).message}`)
+         console.error(`Could not request ${what} of account ${id}: ${(error as Error).message}`)
       }
 
       return {
@@ -125,35 +172,47 @@ const requestVisit = async ({ id, userId }: Due): Promise<Attempt> => {
    }
 }
 
-const requestInvitations = async ({ id, userId }: Due): Promise<Attempt> => {
-   try {
-      const { id: sessionId } = await TaskService.request({
-         userId,
-         task: INVITATIONS_TASK,
-         accountId: id,
-         trigger: 'automatic',
-         input: { answers: [] },
-      })
+// A new account's first reads, in this order (.plan/first-day-reads.md): its own profile, the connection requests, the connections.
+// The first read of the messages follows through the usual 2-hour read. Each is done once the account has it; one tried in the last
+// day that did not finish is left for tomorrow, so a failing read is not asked every pass.
+const FIRST_READS = [
+   {
+      action: 'profile-read',
+      task: PROFILE_TASK,
+      what: 'the first read of the own profile',
+      done: (account: Due, profileGivenUp: boolean) => account.profile !== null || profileGivenUp,
+   },
+   {
+      action: 'invitations-read',
+      task: INVITATIONS_TASK,
+      what: 'the first read of the connection requests',
+      input: { answers: [] },
+      done: (account: Due) => account.invitationsReadAt !== null,
+   },
+   {
+      action: 'connections-read',
+      task: CONNECTIONS_TASK,
+      what: 'the first read of the connections',
+      input: {},
+      done: (account: Due) => account.connectionsReadAt !== null,
+   },
+] as const
 
-      return {
-         kind: 'asked',
-         sessionId,
-      }
-   } catch (error) {
-      if (!(error instanceof TaskRefusedError)) {
-         console.error(
-            `Could not request the daily read of the connection requests of account ${id}: ${(error as Error).message}`
-         )
-      }
+const triedToday = async (account: Due, tasks: string[], now: Date) =>
+   new Set(
+      (
+         await PrismaService.client.spiderSession.findMany({
+            where: {
+               linkedInAccountId: account.id,
+               task: { in: tasks },
+               startedAt: { gte: new Date(now.getTime() - DAY_MS) },
+            },
+            select: { task: true },
+         })
+      ).map(({ task }) => task)
+   )
 
-      return {
-         kind: 'retry',
-         reason: error instanceof TaskRefusedError ? error.message : NOT_QUEUED,
-      }
-   }
-}
-
-const requestMessages = async (account: Due, now: Date): Promise<Attempt> => {
+const requestMessages = async (account: Due, now: Date, firstDay = false): Promise<Attempt> => {
    const { id, userId } = account
 
    try {
@@ -182,6 +241,7 @@ const requestMessages = async (account: Due, now: Date): Promise<Attempt> => {
          accountId: id,
          trigger: 'automatic',
          input: await messagesInput(account, { sweep }),
+         ...(firstDay && { firstDay: true }),
       })
 
       if (sweep) {
@@ -221,6 +281,8 @@ export class AccountDailyJob {
          visits: 0,
          reads: 0,
          invitationReads: 0,
+         firstReads: 0,
+         repeatReads: 0,
          drawn: 0,
          items: [] as JobItemInput[],
       }
@@ -239,9 +301,9 @@ export class AccountDailyJob {
          for (const account of due) {
             const timezone = timezoneOf(account)
             const next = (today: boolean) => dailyTime(now, timezone, { today }, random)
-            // Sends one daily run when due; a first time is only drawn, for later today. `every` sets the next time without a draw.
+            // Sends one daily run when due; a first time is only drawn, for later today. `after` sets the next time without a draw.
             // Returns whether a task was asked for. Every account that was due leaves an item, asked or why not.
-            const daily = async (field: Field, action: string, send: () => Promise<Attempt>, every?: number) => {
+            const daily = async (field: Field, action: string, send: () => Promise<Attempt>, after?: () => Date) => {
                const at = account[field]
 
                if (!at) {
@@ -285,7 +347,7 @@ export class AccountDailyJob {
                           reason: attempt.reason,
                        }
                )
-               await move(account, field, every ? new Date(now.getTime() + every) : next(false))
+               await move(account, field, after ? after() : next(false))
 
                return attempt.kind === 'asked'
             }
@@ -323,6 +385,77 @@ export class AccountDailyJob {
                kind: 'letGo',
                reason: 'Not signed in successfully in the last day',
             }
+            // The first day's reads may start outside working hours for 24 hours after the first good sign-in, unless the same login
+            // already had its first day in the last 30 days (removed and added again).
+            const firstDay =
+               account.firstSignedInAt !== null &&
+               now.getTime() - account.firstSignedInAt.getTime() <= DAY_MS &&
+               !(await FirstDayUsedService.used(account.userId, account.email, now))
+            const spread = () => new Date(now.getTime() + Math.floor(random() * FIRST_READ_SPREAD_MS))
+            // The own profile counts once it is kept; after three reads that did not keep it, it is the owner's to press.
+            const profileGivenUp =
+               account.profile === null &&
+               (await PrismaService.client.spiderSession.count({
+                  where: {
+                     linkedInAccountId: account.id,
+                     task: PROFILE_TASK,
+                  },
+               })) >= PROFILE_TRIES
+            const toDo = FIRST_READS.filter(read => !read.done(account, profileGivenUp))
+
+            if (toDo.length > 0 && signedInToday) {
+               const tried = await triedToday(
+                  account,
+                  toDo.map(({ task }) => task),
+                  now
+               )
+               const read = toDo.find(({ task }) => !tried.has(task))
+
+               // The first reads come before anything else of the account; the others wait until each was tried once.
+               if (read) {
+                  if (!account.nextFirstReadAt) {
+                     await move(account, 'nextFirstReadAt', spread())
+                     result.drawn += 1
+
+                     continue
+                  }
+
+                  const asked = await daily(
+                     'nextFirstReadAt',
+                     read.action,
+                     () => askFor(account, read.task, read.what, 'input' in read ? read.input : undefined, firstDay),
+                     spread
+                  )
+
+                  if (asked) {
+                     result.firstReads += 1
+
+                     // Read today: the daily read of the requests starts tomorrow.
+                     if (read.task === INVITATIONS_TASK) {
+                        await move(account, 'nextInvitationsAt', next(false))
+                     }
+                  }
+
+                  // For the operator: an account still not ready days after its first sign-in.
+                  if (account.firstSignedInAt && now.getTime() - account.firstSignedInAt.getTime() > STALLED_MS) {
+                     result.items.push({
+                        userId: account.userId,
+                        accountId: account.id,
+                        action: 'getting-ready',
+                        result: 'SKIPPED',
+                        reason: 'Still not ready 3 days after the first sign-in',
+                     })
+                  }
+
+                  continue
+               }
+            }
+
+            // The first read of the messages, as soon as the other first reads were tried, not at a time drawn for later.
+            if (signedInToday && account.nextMessagesAt === null && account.messagesBackfilledAt === null) {
+               await move(account, 'nextMessagesAt', now)
+               account.nextMessagesAt = now
+            }
 
             const visited = await daily('nextBrowseAt', 'visit', async () =>
                signedInToday ? requestVisit(account) : notSignedIn
@@ -335,8 +468,11 @@ export class AccountDailyJob {
             const read = await daily(
                'nextMessagesAt',
                'messages-read',
-               async () => (signedInToday ? requestMessages(account, now) : notSignedIn),
-               MESSAGES_EVERY_MS
+               async () =>
+                  signedInToday
+                     ? requestMessages(account, now, firstDay && account.messagesBackfilledAt === null)
+                     : notSignedIn,
+               () => new Date(now.getTime() + MESSAGES_EVERY_MS)
             )
 
             if (read) {
@@ -350,6 +486,47 @@ export class AccountDailyJob {
             if (invitations) {
                result.invitationReads += 1
             }
+
+            // After the first read, the connections again once a week and the own profile once a month, each at a random time.
+            const repeat = async (
+               field: 'nextConnectionsAt' | 'nextProfileAt',
+               days: number,
+               done: boolean,
+               ask: () => Promise<Attempt>,
+               action: string
+            ) => {
+               const later = () => new Date(next(false).getTime() + (days - 1) * DAY_MS)
+
+               if (!done) {
+                  return
+               }
+
+               if (!account[field]) {
+                  await move(account, field, later())
+                  result.drawn += 1
+
+                  return
+               }
+
+               if (await daily(field, action, async () => (signedInToday ? ask() : notSignedIn), later)) {
+                  result.repeatReads += 1
+               }
+            }
+
+            await repeat(
+               'nextConnectionsAt',
+               7,
+               account.connectionsReadAt !== null,
+               () => askFor(account, CONNECTIONS_TASK, 'the weekly read of the connections', {}),
+               'connections-read'
+            )
+            await repeat(
+               'nextProfileAt',
+               30,
+               account.profile !== null,
+               () => askFor(account, PROFILE_TASK, 'the monthly read of the own profile'),
+               'profile-read'
+            )
          }
       } finally {
          AccountDailyJob.running = false

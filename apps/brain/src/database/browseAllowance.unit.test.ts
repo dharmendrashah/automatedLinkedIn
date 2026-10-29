@@ -57,6 +57,43 @@ describe('allowance', () => {
       })
    })
 
+   it('should let a first-day read through outside the office, but never right after another session or over the day', () => {
+      const night = {
+         now: at('2026-10-24T22:00:00Z'),
+         anyHour: true,
+         klass: 'BACKGROUND' as const,
+      }
+
+      expect(ask(night)).toEqual({ ok: true })
+      expect(
+         ask({
+            ...night,
+            inFlight: true,
+         })
+      ).toMatchObject({
+         ok: false,
+         reason: 'GAP',
+      })
+      expect(
+         ask({
+            ...night,
+            usedSeconds: CAP,
+         })
+      ).toMatchObject({
+         ok: false,
+         reason: 'DAY_FULL',
+      })
+      expect(
+         ask({
+            ...night,
+            backgroundSeconds: CAP,
+         })
+      ).toMatchObject({
+         ok: false,
+         reason: 'BACKGROUND_FULL',
+      })
+   })
+
    it('should release the day evenly: only a burst at the start, the line grows with the office window', () => {
       const start = { now: at('2026-10-21T09:00:00Z') }
 

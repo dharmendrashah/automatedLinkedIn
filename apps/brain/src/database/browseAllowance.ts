@@ -23,6 +23,8 @@ export type AllowanceInput = {
    estimateSeconds: number
    lastEndedAt: Date | null
    inFlight: boolean
+   // A first-day read of a new account (.plan/first-day-reads.md): it may start outside the office; the gap and the day still hold.
+   anyHour?: boolean
 }
 
 export type Allowance = { ok: true } | { ok: false; reason: AllowanceReason; until: Date }
@@ -138,7 +140,7 @@ export const allowance = (input: AllowanceInput): Allowance => {
    const today = partsOf(now, office.timeZone)
    const open = worksOn(office, today.weekday) && today.minute >= office.startMinute && today.minute < office.endMinute
 
-   if (!open) {
+   if (!open && !input.anyHour) {
       return refuse('OUTSIDE_OFFICE', nextOfficeStart(now, office))
    }
 
@@ -156,6 +158,11 @@ export const allowance = (input: AllowanceInput): Allowance => {
 
    if (klass === 'BACKGROUND' && backgroundSeconds + estimateSeconds > capSeconds * BACKGROUND_SHARE) {
       return refuse('BACKGROUND_FULL', nextOfficeStart(now, office))
+   }
+
+   // The even release is measured against the office window, so it only applies inside it.
+   if (!open) {
+      return { ok: true }
    }
 
    const opened = localToDate(today.year, today.month, today.day, office.startMinute, office.timeZone)

@@ -35,6 +35,7 @@ model User {
   invitations       LinkedInInvitation[]
   connections       LinkedInConnection[]
   accountProfiles   LinkedInAccountProfile[]
+  firstDaysUsed     FirstDayUsed[]
   profileVisits     LinkedInPageVisit[]
   postDrafts        PostDraft[]
   postPublications  PostPublication[]
@@ -593,6 +594,13 @@ model LinkedInAccount {
   nextMessagesAt        DateTime?
   // The daily automatic read of the connection requests, at a random time of the account's day (.plan/my-network-daily-read.md).
   nextInvitationsAt     DateTime?
+  // A new account's first reads (.plan/first-day-reads.md): when its first sign-in was good (the first day's reads may start outside
+  // working hours for 24 hours after it), when the next first-day read may be asked, and when connections (weekly) and the own
+  // profile (monthly) are read again.
+  firstSignedInAt       DateTime?
+  nextFirstReadAt       DateTime?
+  nextConnectionsAt     DateTime?
+  nextProfileAt         DateTime?
   // The name and picture LinkedIn showed for the account when its messages were last read; shown in the Unibox.
   displayName           String?
   imageUrl              String?
@@ -1058,6 +1066,18 @@ model ProfileImport {
   importedAt    DateTime?
 
   @@index([status, nextAttemptAt])
+}
+
+// A LinkedIn login whose account was deleted after its first day (.plan/first-day-reads.md): kept 30 days so the same login added again
+// gets its first reads but not a second night allowance. Only a hash of the lowercased login, never the login itself.
+model FirstDayUsed {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loginHash String
+  usedAt    DateTime @default(now())
+
+  @@id([userId, loginHash])
+  @@index([usedAt])
 }
 
 // The latest profile read for an account, as the contract `accountProfileSchema` has it. One row per account: a new read replaces

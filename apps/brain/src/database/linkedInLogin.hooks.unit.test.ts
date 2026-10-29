@@ -161,6 +161,22 @@ describe('linkedin-login hooks', () => {
                validationId: null,
             },
          })
+         // The first good sign-in is noted once, for the first day's reads.
+         expect(mocks.updateManyAccounts).toHaveBeenLastCalledWith({
+            where: {
+               id: 'acc1',
+               firstSignedInAt: null,
+            },
+            data: { firstSignedInAt: expect.any(Date) },
+         })
+      })
+
+      it('should note no first sign-in when the answer was for another check', async () => {
+         mocks.updateManyAccounts.mockResolvedValue({ count: 0 })
+
+         await linkedInLoginHooks.onResult?.(session, result(), tx)
+
+         expect(mocks.updateManyAccounts).toHaveBeenCalledTimes(1)
       })
 
       it.each([
