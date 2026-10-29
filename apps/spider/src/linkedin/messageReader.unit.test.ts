@@ -384,6 +384,8 @@ describe('parseMessageWindow', () => {
       expect(parseMessageWindow(profileMarkup(), today)).toEqual({
          open: false,
          title: '',
+         recipients: [],
+         profiles: [],
          messages: [],
          composer: {
             present: false,
@@ -391,6 +393,35 @@ describe('parseMessageWindow', () => {
             canSend: false,
          },
       })
+   })
+
+   it('should read who a New message window is for: the name of each recipient chip and the profile its card links to', () => {
+      const compose = (recipients: string[]) =>
+         parseMessageWindow(
+            profileMarkup({
+               plain: true,
+               window: {
+                  title: 'Ada Lovelace',
+                  messages: [],
+                  composer: {},
+                  compose: {
+                     recipients,
+                     profile: '/in/ada-l/',
+                  },
+               },
+            }),
+            today
+         )
+
+      expect(compose(['Ada L.'])).toMatchObject({
+         title: 'New message',
+         recipients: ['Ada L.'],
+         profiles: ['/in/ada-l/'],
+         messages: [],
+         composer: { present: true },
+      })
+      expect(compose(['Ada L.', 'Grace H.']).recipients).toEqual(['Ada L.', 'Grace H.'])
+      expect(parseMessageWindow(withWindow(), today).recipients).toEqual([])
    })
 })
 

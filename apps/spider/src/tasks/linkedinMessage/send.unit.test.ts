@@ -30,6 +30,8 @@ type Page = {
    inboxTitle?: string
    inboxOurs?: boolean
    attempted?: boolean
+   // The window is a New message window (a person never written to) with these recipient chips and a card linking to this profile.
+   compose?: { recipients: string[]; profile: string }
 }
 
 const ours = (id: string): FixtureMessage => ({
@@ -66,6 +68,7 @@ const setup = (page: Page = {}) => {
          ...(open && {
             window: {
                title,
+               ...(page.compose && { compose: page.compose }),
                messages: [...history, ...(pressed > 0 && appears ? [ours('2-sent')] : [])],
                ...(composer && {
                   composer: {
@@ -250,6 +253,53 @@ describe('sendMessage', () => {
       await expect(run()).resolves.toEqual({ outcome: 'WRONG_RECIPIENT' })
       expect(typedNothing(calls)).toBe(true)
       expect(markAttempt).not.toHaveBeenCalled()
+   })
+
+   it('should write in a New message window that is for this one person, by the profile its card links to or the name of its chip', async () => {
+      for (const compose of [
+         {
+            recipients: ['A. L.'],
+            profile: `/in/${SLUG}/`,
+         },
+         {
+            recipients: ['Ada L.'],
+            profile: '/in/someone-else/',
+         },
+      ]) {
+         const { run, calls } = setup({
+            title: 'New message',
+            compose,
+         })
+
+         await expect(run()).resolves.toEqual({ outcome: 'SENT' })
+         expect(calls.filter(call => call === 'press send')).toHaveLength(1)
+      }
+   })
+
+   it('should type nothing in a New message window for another person or for several', async () => {
+      for (const compose of [
+         {
+            recipients: ['Grace H.'],
+            profile: '/in/grace/',
+         },
+         {
+            recipients: ['Ada L.', 'Grace H.'],
+            profile: `/in/${SLUG}/`,
+         },
+         {
+            recipients: [],
+            profile: `/in/${SLUG}/`,
+         },
+      ]) {
+         const { run, calls, markAttempt } = setup({
+            title: 'New message',
+            compose,
+         })
+
+         await expect(run()).resolves.toEqual({ outcome: 'WRONG_RECIPIENT' })
+         expect(typedNothing(calls)).toBe(true)
+         expect(markAttempt).not.toHaveBeenCalled()
+      }
    })
 
    it('should say the profile is not available when the address leads elsewhere', async () => {

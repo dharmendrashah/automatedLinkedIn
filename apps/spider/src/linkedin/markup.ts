@@ -70,6 +70,10 @@ export const MESSAGE_WINDOW = '[data-view-name="message-overlay-conversation-bub
 export const MESSAGE_WINDOW_TITLE = 'h2.msg-overlay-bubble-header__title'
 export const WINDOW_COMPOSER = `${MESSAGE_WINDOW} ${COMPOSER}`
 export const WINDOW_SEND_BUTTON = `${MESSAGE_WINDOW} ${SEND_BUTTON}`
+// For a person never written to the window is a compose window titled "New message" (2026-10-29, dharmendrashaheagle, run 9b220f05):
+// one chip per recipient named "Remove <name>", and a card that links to the person's profile.
+export const WINDOW_RECIPIENT = '.msg-connections-typeahead__added-recipients button[aria-label^="Remove "]'
+export const WINDOW_PROFILE_CARD = '.msg-s-profile-card a[href*="/in/"]'
 
 // The page where a post is written, the box its words go in (a rich-text editor; real key presses reach it) and the button that
 // sends it, which is greyed until there are words and while it sends; recorded 2026-10-25.

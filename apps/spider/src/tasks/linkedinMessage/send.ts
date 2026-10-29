@@ -66,6 +66,34 @@ export const sameName = (shown: string, name: string) => {
    )
 }
 
+const slugKey = (slug: string) => {
+   try {
+      return decodeURIComponent(slug).toLowerCase()
+   } catch {
+      return slug.toLowerCase()
+   }
+}
+
+// Whether the window is with the person asked for and nobody else. A conversation window names them in its title. A New message window
+// (a person never written to) must hold exactly one recipient, and its card must link to their profile or its chip must name them.
+export const windowIsFor = (
+   window: { title: string; recipients: string[]; profiles: string[] },
+   { slug, name }: Pick<MessageInput, 'slug' | 'name'>
+) => {
+   if (window.recipients.length === 0) {
+      return sameName(window.title, name)
+   }
+
+   const [only] = window.recipients
+
+   return (
+      window.recipients.length === 1 &&
+      only !== undefined &&
+      (window.profiles.some(href => slugKey(/\/in\/([^/?#]+)/.exec(href)?.[1] ?? '') === slugKey(slug)) ||
+         sameName(only, name))
+   )
+}
+
 // Writes a first message to a connection as the member does (.plan/message-connections.md): opens their profile, presses its Message
 // link, checks the window that opens is with them, types the words at a person's pace and presses send. Earlier messages in the window
 // are a conversation brain did not know of; the owner chose to send there too. After a send the newest conversation of /messaging/ is
@@ -172,7 +200,7 @@ export const sendMessage = async (
          return { outcome: 'NO_COMPOSER' }
       }
 
-      if (!sameName(opened.title, input.name)) {
+      if (!windowIsFor(opened, input)) {
          log('The message window is with someone else')
 
          return { outcome: 'WRONG_RECIPIENT' }

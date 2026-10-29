@@ -3,7 +3,16 @@ import { createHash } from 'node:crypto'
 
 import { type Message } from '@automatedLinkedIn/contracts'
 
-import { COMPOSER, INBOX_ROW, MESSAGE_WINDOW, MESSAGE_WINDOW_TITLE, PROFILE_MESSAGE, SEND_BUTTON } from './markup'
+import {
+   COMPOSER,
+   INBOX_ROW,
+   MESSAGE_WINDOW,
+   MESSAGE_WINDOW_TITLE,
+   PROFILE_MESSAGE,
+   SEND_BUTTON,
+   WINDOW_PROFILE_CARD,
+   WINDOW_RECIPIENT,
+} from './markup'
 import { parseClock, parseDay } from './when'
 
 type Person = Message['sender']
@@ -225,7 +234,8 @@ export const composerHtml = (html: string) => parse(html).querySelector('form.ms
 export const hasProfileMessage = (html: string) => parse(html).querySelector(PROFILE_MESSAGE) !== null
 
 // The window a profile's Message link opens: the person it is with, the messages it shows and its box. Only the window is read, so a
-// message list elsewhere on the page never counts.
+// message list elsewhere on the page never counts. A New message window (a person never written to) names its recipients by chips
+// ("Remove <name>") and links to the person's profile from a card.
 export const parseMessageWindow = (html: string, today: Date) => {
    const window = parse(html).querySelector(MESSAGE_WINDOW)
    const inside = window?.outerHTML ?? ''
@@ -233,6 +243,10 @@ export const parseMessageWindow = (html: string, today: Date) => {
    return {
       open: window !== null,
       title: shown(window?.querySelector(MESSAGE_WINDOW_TITLE) ?? null),
+      recipients: (window?.querySelectorAll(WINDOW_RECIPIENT) ?? []).map(chip =>
+         clean((chip.getAttribute('aria-label') ?? '').replace(/^Remove /, ''))
+      ),
+      profiles: (window?.querySelectorAll(WINDOW_PROFILE_CARD) ?? []).flatMap(link => link.getAttribute('href') ?? []),
       messages: window ? parseThread(inside, today).messages : [],
       composer: parseComposer(inside),
    }
