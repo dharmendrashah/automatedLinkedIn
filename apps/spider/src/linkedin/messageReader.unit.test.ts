@@ -328,6 +328,18 @@ describe('hasProfileMessage', () => {
       expect(hasProfileMessage(profileMarkup())).toBe(true)
       expect(hasProfileMessage(profileMarkup({ messageLink: false }))).toBe(false)
    })
+
+   it('should find it in the layout without view names too', () => {
+      expect(hasProfileMessage(profileMarkup({ plain: true }))).toBe(true)
+      expect(
+         hasProfileMessage(
+            profileMarkup({
+               plain: true,
+               messageLink: false,
+            })
+         )
+      ).toBe(false)
+   })
 })
 
 describe('parseMessageWindow', () => {

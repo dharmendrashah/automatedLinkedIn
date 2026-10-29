@@ -86,6 +86,7 @@ Re-locked 2026-10-29 on recorded evidence (`session-2026-10-27T22-34-49-239Z`, s
 - A command delivered again after `markAttempt` answers `UNKNOWN` without typing.
 - The typing, sending and confirming of `linkedin-reply` move to one shared module used by both; the reply tests run green before and after.
 - Unverified: a person never written to (the recording had a conversation), the layout of a profile without `data-view-name`, a profile that is not a connection, other languages, whether `/messaging/` always opens the conversation just written to.
+- First live run (2026-10-29, devtools, dharmendrashaheagle, run `1ababab2`, a 1st-degree connection): `NO_MESSAGE_BUTTON`, nothing typed. That account's profile page has no `data-view-name` at all, so the first selector found nothing though the page showed Message. In both layouts the profile's own Message link (three copies) has no `aria-label`, while other people's are named "Message <name>", so `PROFILE_MESSAGE` is now `a[href*="/messaging/compose/"]:not([aria-label])` (checked on both kept pages: 3 links, one person). Risk: on a profile that is not a connection an unnamed Message link might open InMail; brain only asks for stored connections.
 
 ## Requirements
 

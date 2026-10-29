@@ -75,17 +75,20 @@ export const messageWindowMarkup = ({ title, messages, composer }: FixtureThread
       .map(message)
       .join('')}</ul></div>${composerMarkup(composer)}</div>`
 
-// A person's profile as far as a first message needs it: the profile's own Message link twice (sticky header and top card), a
-// Message link of another person under "People also viewed", and the window when it is open.
+// A person's profile as far as a first message needs it: the profile's own Message link (three times, none named), a Message link of
+// another person under "People also viewed" (named "Message <name>"), and the window when it is open. `plain` is the layout without any
+// `data-view-name` (recorded 2026-10-29, dharmendrashaheagle, run 1ababab2).
 export const profileMarkup = ({
    messageLink = true,
+   plain = false,
    window,
-}: { messageLink?: boolean; window?: FixtureThread } = {}) => {
-   const link = `<div data-view-name="profile-primary-message"><a href="/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3AACoAAfixture" componentkey="k"><span>Message</span></a></div>`
+}: { messageLink?: boolean; plain?: boolean; window?: FixtureThread } = {}) => {
+   const view = (name: string) => (plain ? '' : ` data-view-name="${name}"`)
+   const link = `<div${view('profile-primary-message')}><a href="/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3AACoAAfixture" componentkey="k"><span>Message</span></a></div>`
 
-   return `<main><div data-view-name="profile-sticky-header">${messageLink ? link : ''}</div>
-<section data-view-name="profile-top-card"><h2>Profile</h2>${messageLink ? link : '<button>Connect</button>'}</section>
-<div data-view-name="profile-browsemap-compose-message-button"><a aria-label="Message Someone Else" href="/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3AACoAAother">Message</a></div></main>
+   return `<main><div${view('profile-sticky-header')}>${messageLink ? link : ''}</div>
+<section${view('profile-top-card')}><h2>Profile</h2>${messageLink ? `${link}${link}` : '<button>Connect</button>'}</section>
+<div${view('profile-browsemap-compose-message-button')}><a aria-label="Message Someone Else" href="/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3AACoAAother">Message</a></div></main>
 <aside class="msg-overlay-list-bubble msg-overlay-list-bubble--is-minimized"></aside>${window ? messageWindowMarkup(window) : ''}`
 }
 
