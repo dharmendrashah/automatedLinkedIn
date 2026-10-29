@@ -15,6 +15,8 @@ export type StatusConfig = {
    spiderWorker: (() => Promise<SpiderJobReading>) | null
    // Null where the deployment has no bucket: cloud storage is left out.
    bucketIsReachable: (() => Promise<boolean>) | null
+   // Null where the deployment has no public file cache bucket (CDN_GCS_BUCKET): the module is left out.
+   fileCacheIsReachable: (() => Promise<boolean>) | null
    smtp: { host: string; port: number; tls: boolean } | null
    ipInfoToken: string
    databaseIsHealthy: () => Promise<boolean>
@@ -107,6 +109,14 @@ export const buildModules = (config: StatusConfig): StatusModule[] => {
          workload: 'brain-worker',
          // Healthy means the database answers and every queue it consumes is connected.
          check: httpCheck(config.brainWorkerUrl),
+      },
+      config.fileCacheIsReachable !== null && {
+         key: 'fileCache',
+         group: APP,
+         name: 'File cache',
+         description:
+            'Keeps copies of pictures and videos from other sites (GET /cdn), so they still show when their links end',
+         check: fromBoolean(config.fileCacheIsReachable),
       },
       Boolean(config.signInUrl) && {
          key: 'signIn',

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
    initializeTrpc: vi.fn(),
    configHealth: vi.fn(),
    configWorkflowApi: vi.fn(),
+   configCdn: vi.fn(),
    env: { CORS_ORIGINS: ' http://localhost:3000 ,http://localhost:5173,, ' },
 }))
 
@@ -21,6 +22,8 @@ vi.mock('./health', () => ({ Health: { config: mocks.configHealth } }))
 
 vi.mock('./workflowApi', () => ({ WorkflowApi: { config: mocks.configWorkflowApi } }))
 
+vi.mock('./cdn', () => ({ Cdn: { config: mocks.configCdn } }))
+
 vi.mock('env', () => mocks.env)
 
 describe('Middlewares', () => {
@@ -29,7 +32,10 @@ describe('Middlewares', () => {
    })
 
    it('should allow only the configured origins and the authorization header', () => {
-      const app = { use: vi.fn() }
+      const app = {
+         use: vi.fn(),
+         set: vi.fn(),
+      }
 
       Middlewares.config(app as never)
 
@@ -39,17 +45,35 @@ describe('Middlewares', () => {
       })
    })
 
-   it('should register the health routes and the workflow API', () => {
-      const app = { use: vi.fn() }
+   it('should register the health routes, the workflow API and the file cache', () => {
+      const app = {
+         use: vi.fn(),
+         set: vi.fn(),
+      }
 
       Middlewares.config(app as never)
 
       expect(mocks.configHealth).toHaveBeenCalledWith(app)
       expect(mocks.configWorkflowApi).toHaveBeenCalledWith(app)
+      expect(mocks.configCdn).toHaveBeenCalledWith(app)
+   })
+
+   it('should trust the one ingress hop for the caller address', () => {
+      const app = {
+         use: vi.fn(),
+         set: vi.fn(),
+      }
+
+      Middlewares.config(app as never)
+
+      expect(app.set).toHaveBeenCalledWith('trust proxy', 1)
    })
 
    it('should register cors before the api', () => {
-      const app = { use: vi.fn() }
+      const app = {
+         use: vi.fn(),
+         set: vi.fn(),
+      }
 
       Middlewares.config(app as never)
 

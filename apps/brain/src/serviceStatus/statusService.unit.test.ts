@@ -12,6 +12,7 @@ vi.mock('core', () => ({
    MessageBroker: { isHealthy: mocks.brokerHealthy },
    CloudRunJob: { reading: vi.fn() },
    UploadFiles: { reachable: vi.fn() },
+   CdnFiles: { reachable: vi.fn() },
 }))
 vi.mock('env', () => ({
    STATUS_URL_WEBSITE: 'http://body:80/health',
@@ -20,6 +21,7 @@ vi.mock('env', () => ({
    STATUS_URL_SPIDER_API: '',
    CLOUD_RUN_JOB: '',
    SPIDER_GCS_BUCKET: '',
+   CDN_GCS_BUCKET: '',
    AUTHENTIK_EMAIL__HOST: '',
    AUTHENTIK_EMAIL__PORT: 465,
    AUTHENTIK_EMAIL__USE_SSL: true,

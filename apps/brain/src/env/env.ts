@@ -90,6 +90,11 @@ export class Environment {
             desc: 'How many days a session recording stays available. Match the bucket lifecycle rule for recordings/',
             default: 7,
          }),
+         CDN_GCS_BUCKET: string({
+            desc: 'Public Google Cloud Storage bucket GET /cdn copies remote files into and redirects to. Empty: /cdn answers 503',
+            example: 'automate-linkedin-511215-cdn',
+            default: '',
+         }),
          STATUS_URL_WEBSITE: string({
             desc: 'Address the Service status page asks to see whether the website is up. Empty: the module is left out',
             example: 'http://body:80/health',

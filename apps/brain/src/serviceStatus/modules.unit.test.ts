@@ -33,6 +33,7 @@ const config = (overrides: Partial<StatusConfig> = {}): StatusConfig => ({
       lastRunFailedAt: null,
    }),
    bucketIsReachable: async () => true,
+   fileCacheIsReachable: async () => true,
    smtp: {
       host: 'smtp.resend.com',
       port: 465,
@@ -61,6 +62,7 @@ describe('buildModules', () => {
          ['The app', 'api'],
          ['The app', 'database'],
          ['The app', 'brainWorker'],
+         ['The app', 'fileCache'],
          ['Sign-in', 'signIn'],
          ['Sign-in', 'email'],
          ['The spider', 'queue'],
@@ -87,6 +89,7 @@ describe('buildModules', () => {
             spiderApiUrl: '',
             spiderWorker: null,
             bucketIsReachable: null,
+            fileCacheIsReachable: null,
             smtp: null,
          })
       ).map(item => item.key)
@@ -246,6 +249,15 @@ describe('buildModules', () => {
       const modules = buildModules(config({ bucketIsReachable: async () => Promise.reject(new Error('denied')) }))
 
       await expect(find(modules, 'storage').check()).resolves.toEqual({
+         state: 'dead',
+         reason: 'Not answering',
+      })
+   })
+
+   it('should call the file cache dead when brain cannot read its bucket', async () => {
+      const modules = buildModules(config({ fileCacheIsReachable: async () => Promise.reject(new Error('denied')) }))
+
+      await expect(find(modules, 'fileCache').check()).resolves.toEqual({
          state: 'dead',
          reason: 'Not answering',
       })

@@ -1,9 +1,10 @@
-import { CloudRunJob, MessageBroker, UploadFiles } from 'core'
+import { CdnFiles, CloudRunJob, MessageBroker, UploadFiles } from 'core'
 
 import {
    AUTHENTIK_EMAIL__HOST,
    AUTHENTIK_EMAIL__PORT,
    AUTHENTIK_EMAIL__USE_SSL,
+   CDN_GCS_BUCKET,
    CLOUD_RUN_JOB,
    IPINFO_TOKEN,
    SPIDER_GCS_BUCKET,
@@ -33,6 +34,7 @@ export class StatusService {
             spiderApiUrl: STATUS_URL_SPIDER_API,
             spiderWorker: CLOUD_RUN_JOB ? () => CloudRunJob.reading() : null,
             bucketIsReachable: SPIDER_GCS_BUCKET ? () => UploadFiles.reachable() : null,
+            fileCacheIsReachable: CDN_GCS_BUCKET ? () => CdnFiles.reachable() : null,
             smtp: AUTHENTIK_EMAIL__HOST
                ? {
                     host: AUTHENTIK_EMAIL__HOST,

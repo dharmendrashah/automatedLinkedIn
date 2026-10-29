@@ -1,4 +1,6 @@
 import { Picture } from '@/components/details/detail-parts'
+import { cdnUrlOf } from '@/lib/cdn'
+import { useMediaSource } from '@/lib/use-media-source'
 import { MessageSquare, Repeat2, ThumbsUp } from 'lucide-react'
 import { useState } from 'react'
 
@@ -40,12 +42,34 @@ export const PostText = ({ text }: { text: string }) => {
    )
 }
 
+const PostImage = ({ url }: { url: string }) => {
+   const { src, onError } = useMediaSource(url)
+
+   return src ? (
+      <img
+         src={src}
+         alt=""
+         referrerPolicy="no-referrer"
+         onError={onError}
+         className="max-h-80 rounded-lg border object-cover"
+      />
+   ) : null
+}
+
+// Files open through the file cache; any other kind (a page, a playlist) opens where it is.
+const FILE_MEDIA = /video|audio|document|pdf/
+
 export const PostMedia = ({ media, articleUrl }: { media: Media; articleUrl: string | null }) => (
    <>
       {media?.type?.toLowerCase().includes('image') ? (
-         <img src={media.url} alt="" referrerPolicy="no-referrer" className="max-h-80 rounded-lg border object-cover" />
+         <PostImage url={media.url} />
       ) : media ? (
-         <a className="text-sm underline" href={media.url} target="_blank" rel="noreferrer noopener">
+         <a
+            className="text-sm underline"
+            href={FILE_MEDIA.test(media.type?.toLowerCase() ?? '') ? cdnUrlOf(media.url) : media.url}
+            target="_blank"
+            rel="noreferrer noopener"
+         >
             Open the {media.type ?? 'media'}
          </a>
       ) : null}
