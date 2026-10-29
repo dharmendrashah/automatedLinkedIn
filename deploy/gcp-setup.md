@@ -322,10 +322,10 @@ export SIGNER_EMAIL="brain-recording-links@$PROJECT_ID.iam.gserviceaccount.com"
 gcloud storage buckets create "gs://$CDN_BUCKET" --project="$PROJECT_ID" --location=asia-south1 \
   --default-storage-class=STANDARD --uniform-bucket-level-access --soft-delete-duration=0
 
+# objectUser (create, read, list, replace, delete), not objectCreator: writing a key that already exists (a fetch retried
+# after its row was lost, or a deleted file fetched again) needs storage.objects.delete, or /cdn answers 500.
 gcloud storage buckets add-iam-policy-binding "gs://$CDN_BUCKET" \
-  --member="serviceAccount:$SIGNER_EMAIL" --role=roles/storage.objectCreator
-gcloud storage buckets add-iam-policy-binding "gs://$CDN_BUCKET" \
-  --member="serviceAccount:$SIGNER_EMAIL" --role=roles/storage.objectViewer
+  --member="serviceAccount:$SIGNER_EMAIL" --role=roles/storage.objectUser
 
 cat > /tmp/cdn-cors.json <<EOF
 [{"origin": ["https://app.staging.elitale.com", "http://localhost:3000", "http://localhost:5173"], "method": ["GET", "HEAD"], "responseHeader": ["Content-Type", "Content-Length", "Range", "Accept-Ranges", "Cache-Control", "ETag"], "maxAgeSeconds": 86400}]
