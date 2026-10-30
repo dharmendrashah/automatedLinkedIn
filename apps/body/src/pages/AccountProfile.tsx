@@ -167,7 +167,7 @@ export const AccountProfile = () => {
             sample ? 'This is sample data. Remove ?sample= from the address.' : (state.data?.blocker ?? undefined)
          }
          reading={reading}
-         connectionsTo={`/accounts/${id}/connections`}
+         connectionsTo={`/network/${id}?found=connection`}
          onTestLogin={() => actions.testLogin({ id })}
          onVisit={() => actions.visit({ id })}
          onRead={() => read.mutate({ accountId: id })}
@@ -241,7 +241,7 @@ export const AccountProfile = () => {
                )}
             >
                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
-                  <ProfileHeader profile={profile} strip={strip} connectionsTo={`/accounts/${id}/connections`} />
+                  <ProfileHeader profile={profile} strip={strip} connectionsTo={`/network/${id}?found=connection`} />
                   <OpenToWork openToWork={profile.openToWork} />
                   <AboutCard about={profile.about} topSkills={profile.topSkills} />
                   <ContactCard contact={profile.contact} />

@@ -220,3 +220,17 @@ flowchart LR
   erase, keyset paging, the bulk job, a refused export over 10,000 rows (logged), client-member isolation on every route, and a
   client member's Do not contact leaving another client's row untouched, and brain refusing a paid read asked by a client member; a
   seeded 10M-person local database to time the list query (target under 300 ms).
+
+## Outcome (phase 1, front end, 2026-10-30)
+
+- Built in `apps/body`: `/network` (`pages/Network.tsx`, lazy) with client and account pickers, All clients Today lines, Today line
+  (no Invite), first-visit card, results line, four tabs with counts, debounced search, Found by / Fit / Label filters, table with
+  next step (Reply, Accept with 5 s Undo and Start anyway), j/k/Enter, page selection (100) with bulk Status, Label, Do not
+  contact, Export, Add people dialog, Load more; drawer with Chat (thread and reply, or a first message to a connection), Profile
+  (`PersonView`, paid read charged to the client), History (with Remove connection), Do not contact, for all clients, Erase.
+  Code in `components/my-network/`; view state in the address (`client`, `tab`, `found`, `fit`, `label`, `q`, `new`, `open`).
+- Redirects: `/accounts/:id/connections`, `/lists` (`?list=`), `/profiles`. The old Connections, Lists and Profiles pages and their
+  components were deleted; their sidebar entries are gone. Usage has "Erasures and exports".
+- Deviations: "New this week" opens Everyone with "new since your last visit" (no week filter in `people.list`); list management
+  (new, rename, delete) in the Found by menu and client create, rename and account assignment are not built (APIs exist);
+  Accounts and Proxies are lazy-loaded so the main chunk stays under Vite's 500 kB warning. Not seen in a browser (sign-in needed).
