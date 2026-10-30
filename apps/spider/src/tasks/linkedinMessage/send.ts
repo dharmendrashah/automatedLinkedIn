@@ -1,6 +1,7 @@
 import { describeError } from '../../browsing/errors'
 import { handsOf } from '../../browsing/hands'
 import { createReader } from '../../browsing/reader'
+import { slugKey } from '../../linkedin/inviteReader'
 import {
    MESSAGE_WINDOW,
    MESSAGING_PATH,
@@ -64,14 +65,6 @@ export const sameName = (shown: string, name: string) => {
          .split(/[^\p{L}\p{N}]+/u)
          .includes(first)
    )
-}
-
-const slugKey = (slug: string) => {
-   try {
-      return decodeURIComponent(slug).toLowerCase()
-   } catch {
-      return slug.toLowerCase()
-   }
 }
 
 // Whether the window is with the person asked for and nobody else. A conversation window names them in its title. A New message window

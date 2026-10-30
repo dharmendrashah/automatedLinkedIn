@@ -215,6 +215,29 @@ describe('runConnections', () => {
       expect(context.visit).toHaveBeenCalledWith(LIST)
    })
 
+   it('should stop at the first connection already stored, call the read done, and never call the list whole', async () => {
+      const { context, file } = setup({
+         rows: many(30),
+         chunk: 10,
+      })
+
+      await expect(
+         runConnections(
+            context as never,
+            BASE,
+            { stopAtKnown: ['person-14', 'person-15'] },
+            {
+               random: () => 0.5,
+               now: () => Date.UTC(2026, 9, 28),
+            }
+         )
+      ).resolves.toEqual({
+         outcome: 'DONE',
+         read: 20,
+      })
+      expect(file().complete).toBe(false)
+   })
+
    it('should read a page made in the layout with no data-view-name just the same', async () => {
       const { run, file } = setup({
          rows: many(3).map(row => ({

@@ -32,6 +32,8 @@ type Context = Pick<TaskContext, 'browser' | 'visit' | 'pause' | 'log' | 'warn' 
 export type ConnectionsInput = {
    // The connection to remove, by the part of its profile address after /in/; none reads the list only.
    remove?: string | undefined
+   // The newest connections already stored: a read of the newest stops at the first of them (.plan/network-invites.md).
+   stopAtKnown?: string[] | undefined
 }
 
 // DONE: the list was read to its end (or the removal asked for took). PARTIAL: it was read, but part of it was not (the list was
@@ -121,6 +123,8 @@ export const runConnections = async (
    let removal: ConnectionRemoval | undefined
    let clicked = false
    let repeated = false
+   let reachedKnown = false
+   const known = new Set(input.stopAtKnown ?? [])
 
    // Looks at the page until it draws connections, or says it has none; a page that does neither is not called empty.
    const settled = async () => {
@@ -178,6 +182,14 @@ export const runConnections = async (
 
          if (until !== undefined && seen.has(until)) {
             stoppedEarly = true
+
+            break
+         }
+
+         // The list is newest first: a connection already stored means every one after it is too.
+         if (page.connections.some(({ slug }) => known.has(slug))) {
+            stoppedEarly = true
+            reachedKnown = true
 
             break
          }
@@ -397,7 +409,8 @@ export const runConnections = async (
       }
 
       // A run that removes one is done when it did; the list it read on the way is not the whole of it.
-      const done = input.remove === undefined ? listing?.complete === true : removal?.outcome === 'REMOVED'
+      const done =
+         input.remove === undefined ? listing?.complete === true || reachedKnown : removal?.outcome === 'REMOVED'
 
       return {
          outcome: done ? 'DONE' : 'PARTIAL',
