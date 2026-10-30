@@ -33,6 +33,7 @@ model User {
   conversations     LinkedInConversation[]
   replies           LinkedInReply[]
   invitations       LinkedInInvitation[]
+  sentInvites       LinkedInInvite[]
   connections       LinkedInConnection[]
   accountProfiles   LinkedInAccountProfile[]
   firstDaysUsed     FirstDayUsed[]
@@ -647,6 +648,12 @@ model LinkedInAccount {
   // The client the account works for (one client per account); null is the owner's default client.
   clientId              String?
   client                Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  // Invites stopped by trouble (.plan/network-invites.md): when, why, and until when; with no end they wait for the next good
+  // sign-in after `invitesStoppedAt`. `nextAcceptReadAt` is the daily read of the newest connections while invites are pending.
+  invitesStoppedAt      DateTime?
+  invitesStopReason     String?
+  invitesStopUntil      DateTime?
+  nextAcceptReadAt      DateTime?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
@@ -656,6 +663,7 @@ model LinkedInAccount {
   conversations    LinkedInConversation[]
   replies          LinkedInReply[]
   invitations      LinkedInInvitation[]
+  sentInvites      LinkedInInvite[]
   connections      LinkedInConnection[]
   profile          LinkedInAccountProfile?
   profileVisits    LinkedInPageVisit[]
@@ -900,6 +908,7 @@ model SpiderSession {
   profileImport     ProfileImport?
   // Present for a finished `linkedin-invitations` run whose requests are stored (.plan/my-network-invitations.md).
   invitationImport  InvitationImport?
+  inviteImport      InviteImport?
   // The connection requests this run was asked to answer.
   invitations       LinkedInInvitation[]
   // Present for a finished `linkedin-connections` run whose connections are stored (.plan/my-connections.md).
@@ -1501,6 +1510,7 @@ model Client {
   lists     WorkflowList[]
   profiles  LinkedInProfile[]
   people    Person[]
+  invites   LinkedInInvite[]
 
   @@unique([userId, name])
 }
@@ -1527,6 +1537,7 @@ enum PersonLinkKind {
   CONVERSATION
   LIST_MEMBER
   TARGET
+  INVITE
 }
 
 // One person of one client on My network (.plan/network-hub.md), built by the people-index job from the rows that tie them to the
@@ -1627,4 +1638,88 @@ model PersonErasure {
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
+}
+
+enum LinkedInInviteState {
+  // Waits for its planned day and its account's turn.
+  QUEUED
+  // In a run that is going.
+  SENDING
+  SENT
+  ACCEPTED
+  // Pending too long: waits for a run that withdraws it, then in that run.
+  WITHDRAW_QUEUED
+  WITHDRAWING
+  WITHDRAWN
+  // Not sent; the sentence is in `reason`.
+  FAILED
+  // Send may have been pressed and LinkedIn did not say; counted as sent and never sent again.
+  UNKNOWN
+  // Refused when it was asked for (do not contact, already connected, invited recently); the sentence is in `reason`.
+  SKIPPED
+  // The owner took it back before it went.
+  CANCELLED
+}
+
+// A connection invite one account of a client sends (.plan/network-invites.md). The note is the owner's own words, filled in when
+// it was asked for, kept for the owner and deleted with the account. A partial unique index (see the migration) allows one live
+// invite per client and person.
+model LinkedInInvite {
+  id          String              @id @default(uuid(7))
+  userId      String
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId    String
+  client      Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  accountId   String
+  account     LinkedInAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  slug        String
+  // LinkedIn's own number of the member, from the Connect button.
+  memberId    String?
+  name        String
+  note        String?
+  // The Found by source that led to it (`request`, `connection`, `target`, `list:<id>`), credited with an accept.
+  source      String?
+  state       LinkedInInviteState @default(QUEUED)
+  // A fixed sentence the owner can read: why it was skipped, failed or withdrawn.
+  reason      String?
+  // The earliest it may go, as planned when it was asked for (20 a day, 100 a week per account).
+  plannedAt   DateTime
+  // Runs that did not get to it; after a few it fails.
+  tries       Int                 @default(0)
+  // The run that sends or withdraws it; the run may be deleted before the invite.
+  sessionId   String?
+  // Why it has not started and the earliest it may (the account resting, outside its hours), and the zone of its hours.
+  waitReason  String?
+  waitUntil   DateTime?
+  waitZone    String?
+  createdAt   DateTime            @default(now())
+  // When its send run was asked for; the account's limits count from it.
+  startedAt   DateTime?
+  invitedAt   DateTime?
+  acceptedAt  DateTime?
+  withdrawnAt DateTime?
+
+  @@index([accountId, state, plannedAt])
+  @@index([accountId, startedAt])
+  @@index([clientId, slug])
+  @@index([clientId, invitedAt])
+  @@index([userId, slug])
+  @@index([sessionId])
+  @@index([state, invitedAt])
+}
+
+// A finished `linkedin-invite` run that waits to be stored; the same shape and lifecycle as InvitationImport. It holds no names.
+model InviteImport {
+  sessionId     String              @id
+  session       SpiderSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  status        MessageImportStatus @default(PENDING)
+  attempts      Int                 @default(0)
+  nextAttemptAt DateTime            @default(now())
+  claimedUntil  DateTime?
+  // An error class, never page content.
+  lastError     String?
+  createdAt     DateTime            @default(now())
+  importedAt    DateTime?
+
+  @@index([status, nextAttemptAt])
 }

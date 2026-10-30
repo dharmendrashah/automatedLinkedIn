@@ -1,8 +1,12 @@
 import { type LinkedInLink, toCsv } from 'core'
 
+import { INVITES_LIVE } from 'env'
+
 import { type PersonFit, type PersonStatus, Prisma } from 'generated/prisma/client'
 
+import { ClientService } from './client.service'
 import { ConflictError } from './conflict'
+import { PRIORITY } from './peopleIndex'
 import { profileUrlOf } from './personContacts'
 import { PrismaService } from './prisma.service'
 import { WorkflowListService } from './workflowList.service'
@@ -40,6 +44,7 @@ export const COUNT_CAP = 10_000
 export const EXPORT_CAP = 10_000
 const SEARCH_CAP = 1_000
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
 const CLOSED: PersonStatus[] = ['NOT_INTERESTED', 'DONE']
 const SLUG_IN_LINK = /linkedin\.com\/in\/([^/?#\s]+)/i
 const EXPORT_HEADER = [
@@ -55,11 +60,16 @@ const EXPORT_HEADER = [
    'Last touch',
 ]
 
+// People ready to invite are in Needs me only while invites are live.
+const needsMeFrom = () => (INVITES_LIVE ? PRIORITY.INVITE : PRIORITY.REQUEST)
+
 const TAB_WHERE: Record<PeopleTab, Prisma.PersonWhereInput> = {
-   NEEDS_ME: {
-      doNotContact: false,
-      priority: { gt: 0 },
-      status: { notIn: CLOSED },
+   get NEEDS_ME() {
+      return {
+         doNotContact: false,
+         priority: { gte: needsMeFrom() },
+         status: { notIn: CLOSED },
+      }
    },
    WAITING: {
       doNotContact: false,
@@ -71,7 +81,9 @@ const TAB_WHERE: Record<PeopleTab, Prisma.PersonWhereInput> = {
 }
 
 const TAB_SQL: Record<PeopleTab, Prisma.Sql> = {
-   NEEDS_ME: Prisma.sql`NOT "doNotContact" AND "priority" > 0 AND "status" NOT IN ('NOT_INTERESTED', 'DONE')`,
+   get NEEDS_ME() {
+      return Prisma.sql`NOT "doNotContact" AND "priority" >= ${needsMeFrom()} AND "status" NOT IN ('NOT_INTERESTED', 'DONE')`
+   },
    WAITING: Prisma.sql`NOT "doNotContact" AND "waiting" AND "status" NOT IN ('NOT_INTERESTED', 'DONE')`,
    EVERYONE: Prisma.sql`NOT "doNotContact"`,
    DO_NOT_CONTACT: Prisma.sql`"doNotContact"`,
@@ -235,24 +247,59 @@ export class PeopleService {
       }
    }
 
-   // The Today line of every client of the owner: replies and requests waiting, and people new since the owner's last visit.
-   public static async today(userId: string) {
-      const clients = await PrismaService.client.client.findMany({
-         where: { userId },
-         orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
-         select: {
-            id: true,
-            name: true,
-            isDefault: true,
-            seenAt: true,
-         },
-      })
+   // The Today line of every client of the owner: replies and requests waiting, people ready to invite (once invites are live), invites
+   // waiting for an answer, people new since the owner's last visit, and the accounts whose invites are stopped.
+   public static async today(userId: string, now = new Date()) {
+      const db = PrismaService.client
+      const [clients, defaultId, stoppedAccounts] = await Promise.all([
+         db.client.findMany({
+            where: { userId },
+            orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+            select: {
+               id: true,
+               name: true,
+               isDefault: true,
+               seenAt: true,
+            },
+         }),
+         ClientService.defaultId(userId),
+         db.linkedInAccount.findMany({
+            where: {
+               userId,
+               invitesStoppedAt: { not: null },
+            },
+            select: {
+               id: true,
+               email: true,
+               displayName: true,
+               clientId: true,
+               lastVerifiedAt: true,
+               invitesStoppedAt: true,
+               invitesStopUntil: true,
+               invitesStopReason: true,
+            },
+         }),
+      ])
+      const stopped = stoppedAccounts.filter(account =>
+         account.invitesStopUntil
+            ? account.invitesStopUntil > now
+            : !(account.lastVerifiedAt && account.invitesStoppedAt && account.lastVerifiedAt > account.invitesStoppedAt)
+      )
 
       return Promise.all(
          clients.map(async client => {
-            const [replies, requests, fresh] = await Promise.all([
-               cappedCount(client.id, Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = 2`),
-               cappedCount(client.id, Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = 1`),
+            const [replies, requests, invites, waitingInvites, fresh] = await Promise.all([
+               cappedCount(client.id, Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = ${PRIORITY.REPLY}`),
+               cappedCount(client.id, Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = ${PRIORITY.REQUEST}`),
+               INVITES_LIVE
+                  ? cappedCount(client.id, Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = ${PRIORITY.INVITE}`)
+                  : Promise.resolve(0),
+               db.linkedInInvite.count({
+                  where: {
+                     clientId: client.id,
+                     state: { in: ['SENT', 'UNKNOWN'] },
+                  },
+               }),
                client.seenAt
                   ? cappedCount(client.id, Prisma.sql`NOT "doNotContact" AND "firstSeenAt" > ${client.seenAt}`)
                   : Promise.resolve(0),
@@ -264,21 +311,35 @@ export class PeopleService {
                isDefault: client.isDefault,
                replies,
                requests,
+               invites,
+               waitingInvites,
                fresh,
+               invitesLive: INVITES_LIVE,
+               stopped: stopped
+                  .filter(account => (account.clientId ?? defaultId) === client.id)
+                  .map(account => ({
+                     accountId: account.id,
+                     name: account.displayName ?? account.email,
+                     reason: account.invitesStopReason ?? 'Invites are stopped.',
+                  })),
             }
          })
       )
    }
 
-   // The phase 1 results line of a client: people new this week, and what reads for it cost this month.
-   public static async results(userId: string, clientId: string, now = new Date()) {
+   // The results line of a client: people new this week and what reads cost this month, and over the last `days` the invites sent,
+   // accepted and answered, by account and by the source that led to each (.plan/network-invites.md). An accept and the reads of
+   // that person are credited to the invite's source.
+   public static async results(userId: string, clientId: string, days = 7, now = new Date()) {
       if (!(await ownedClient(userId, clientId))) {
          return null
       }
 
-      const [newThisWeek, spent] = await Promise.all([
+      const db = PrismaService.client
+      const since = new Date(now.getTime() - days * DAY_MS)
+      const [newThisWeek, spent, invites] = await Promise.all([
          cappedCount(clientId, Prisma.sql`NOT "doNotContact" AND "firstSeenAt" > ${new Date(now.getTime() - WEEK_MS)}`),
-         PrismaService.client.spendLedger.aggregate({
+         db.spendLedger.aggregate({
             where: {
                userId,
                clientId,
@@ -286,12 +347,96 @@ export class PeopleService {
             },
             _sum: { amountMicros: true },
          }),
+         db.linkedInInvite.findMany({
+            where: {
+               clientId,
+               OR: [{ invitedAt: { gte: since } }, { acceptedAt: { gte: since } }],
+            },
+            take: COUNT_CAP,
+            select: {
+               slug: true,
+               source: true,
+               invitedAt: true,
+               acceptedAt: true,
+               account: {
+                  select: {
+                     id: true,
+                     email: true,
+                     displayName: true,
+                  },
+               },
+            },
+         }),
       ])
+      const slugs = [...new Set(invites.map(({ slug }) => slug))]
+      const [replied, reads, lists] = await Promise.all([
+         db.person.findMany({
+            where: {
+               clientId,
+               slug: { in: slugs },
+               status: 'REPLIED',
+            },
+            select: { slug: true },
+         }),
+         db.dataRead.groupBy({
+            by: ['slug'],
+            where: {
+               userId,
+               clientId,
+               slug: { in: slugs },
+            },
+            _sum: { costMicros: true },
+         }),
+         db.workflowList.findMany({
+            where: { userId },
+            select: {
+               id: true,
+               name: true,
+            },
+         }),
+      ])
+      const answered = new Set(replied.map(({ slug }) => slug))
+      const costOf = new Map(reads.map(({ slug, _sum }) => [slug, _sum.costMicros ?? 0]))
+      const listNames = new Map(lists.map(({ id, name }) => [`list:${id}`, name]))
+      const SOURCES: Record<string, string> = {
+         request: 'Requests',
+         connection: 'Connections',
+         target: 'Target profiles',
+      }
+      const sum = (rows: typeof invites) => {
+         const accepted = rows.filter(({ acceptedAt }) => acceptedAt && acceptedAt >= since).length
+         const spentMicros = rows.reduce((total, { slug }) => total + (costOf.get(slug) ?? 0), 0)
+
+         return {
+            invited: rows.filter(({ invitedAt }) => invitedAt && invitedAt >= since).length,
+            accepted,
+            replied: rows.filter(({ slug }) => answered.has(slug)).length,
+            spentMicros,
+            perAcceptMicros: accepted > 0 ? Math.round(spentMicros / accepted) : null,
+         }
+      }
+      const groupBy = (keyOf: (row: (typeof invites)[number]) => string, nameOf: (key: string) => string) =>
+         [...new Set(invites.map(keyOf))].map(key => ({
+            key,
+            name: nameOf(key),
+            ...sum(invites.filter(row => keyOf(row) === key)),
+         }))
+      const accountNames = new Map(invites.map(({ account }) => [account.id, account.displayName ?? account.email]))
 
       return {
          newThisWeek,
          dataSpentMicros: spent._sum.amountMicros ?? 0,
          cap: COUNT_CAP,
+         days,
+         ...sum(invites),
+         byAccount: groupBy(
+            ({ account }) => account.id,
+            key => accountNames.get(key) ?? 'Removed account'
+         ),
+         bySource: groupBy(
+            ({ source }) => source ?? 'none',
+            key => SOURCES[key] ?? listNames.get(key) ?? (key === 'none' ? 'Not known' : 'Removed list')
+         ),
       }
    }
 
@@ -475,6 +620,12 @@ export class PeopleService {
             where: {
                userId,
                recipientSlug: slug,
+            },
+         })
+         await tx.linkedInInvite.deleteMany({
+            where: {
+               userId,
+               slug,
             },
          })
          await tx.linkedInInvitation.deleteMany({

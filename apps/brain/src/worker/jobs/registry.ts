@@ -3,6 +3,7 @@ import { accountDaily } from './accountDaily'
 import { connectionImport } from './connectionImport'
 import { dataReads } from './dataReads'
 import { invitationImport } from './invitationImport'
+import { inviteSend } from './inviteSend'
 import { messageImport } from './messageImport'
 import { peopleIndex } from './peopleIndex'
 import { postSend } from './postSend'
@@ -35,4 +36,5 @@ export const JOBS = unique('job', [
    postSend,
    postSweep,
    peopleIndex,
+   inviteSend,
 ])

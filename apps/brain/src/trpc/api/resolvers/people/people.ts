@@ -1,9 +1,12 @@
 import { z } from 'zod'
 
-import { ClientService, PEOPLE_TABS, PeopleService } from 'database'
+import { ClientService, LinkedInInviteService, PEOPLE_TABS, PeopleService } from 'database'
+
+import { INVITE_LIMITS } from '@automatedLinkedIn/contracts'
 
 import { ownerProcedure, router } from 'trpc'
 
+import { asTrpcError } from '../asTrpcError'
 import { readLinks, tags, text } from '../linkedInRecord'
 import { orConflict, present } from '../owned'
 
@@ -25,6 +28,17 @@ const view = z.object({
 
 const clientName = z.string().trim().min(1).max(80)
 const PICK_A_LIST = { message: 'Pick a list or name a new one.' }
+const invitees = z.object({
+   clientId: id,
+   personIds: z.array(id).min(1).max(100),
+   accountId: id.optional(),
+})
+
+// A refusal of the invite service is a sentence for the owner.
+const refused = <T>(work: Promise<T>) =>
+   work.catch((error: unknown) => {
+      throw asTrpcError(error)
+   })
 
 // My network (.plan/network-hub.md): one client's people, the Today line, and the client's own changes to them. Every call is
 // scoped to ctx.user.id; a foreign client or person answers like a missing one. LinkedIn actions stay on their own routers
@@ -78,8 +92,44 @@ export const people = router({
       .query(async ({ ctx, input }) => present(await PeopleService.counts(ctx.user.id, input.clientId), NO_CLIENT)),
 
    results: ownerProcedure
-      .input(z.object({ clientId: id }))
-      .query(async ({ ctx, input }) => present(await PeopleService.results(ctx.user.id, input.clientId), NO_CLIENT)),
+      .input(
+         z.object({
+            clientId: id,
+            days: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(7),
+         })
+      )
+      .query(async ({ ctx, input }) =>
+         present(await PeopleService.results(ctx.user.id, input.clientId, input.days), NO_CLIENT)
+      ),
+
+   // What inviting these people would do (the account, the sentence), without doing it.
+   invitePlan: ownerProcedure
+      .input(invitees)
+      .query(async ({ ctx, input }) =>
+         present(await refused(LinkedInInviteService.plan(ctx.user.id, input)), NO_CLIENT)
+      ),
+
+   // Queues invites to up to 100 people of one client, planned over the days within the account's limits.
+   invite: ownerProcedure
+      .input(
+         invitees.extend({
+            note: z.string().trim().max(INVITE_LIMITS.noteChars).optional(),
+            source: z.string().max(120).optional(),
+         })
+      )
+      .mutation(async ({ ctx, input }) =>
+         present(await refused(LinkedInInviteService.invite(ctx.user.id, input)), NO_CLIENT)
+      ),
+
+   cancelInvite: ownerProcedure
+      .input(z.object({ id }))
+      .mutation(async ({ ctx, input }) =>
+         present(await LinkedInInviteService.cancel(ctx.user.id, input.id), 'Invite not found or already sent')
+      ),
+
+   invites: ownerProcedure
+      .input(z.object({ id }))
+      .query(async ({ ctx, input }) => present(await LinkedInInviteService.ofPerson(ctx.user.id, input.id), NO_PERSON)),
 
    seen: ownerProcedure
       .input(z.object({ clientId: id }))

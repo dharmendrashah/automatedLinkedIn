@@ -2,6 +2,7 @@ import { CONNECTION_LIMITS, type ConnectionsFile } from '@automatedLinkedIn/cont
 
 import { type ConnectionStatus, planStore } from './connectionRules'
 import { CONNECTIONS_TASK } from './linkedInConnection.hooks'
+import { LinkedInInviteService } from './linkedInInvite.service'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
 import { TaskBusyError, TaskRefusedError } from './taskErrors'
@@ -707,6 +708,12 @@ export class LinkedInConnectionService {
             }
          },
          { timeout: 60_000 }
+      )
+
+      // A new connection is the person's answer to an invite the account sent them.
+      await LinkedInInviteService.markAccepted(
+         owner.accountId,
+         changes.flatMap(({ id, connection }) => (!id && connection ? [connection.slug] : []))
       )
 
       return changes.length
