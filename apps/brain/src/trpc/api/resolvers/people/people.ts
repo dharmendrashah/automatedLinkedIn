@@ -24,6 +24,7 @@ const view = z.object({
 })
 
 const clientName = z.string().trim().min(1).max(80)
+const PICK_A_LIST = { message: 'Pick a list or name a new one.' }
 
 // My network (.plan/network-hub.md): one client's people, the Today line, and the client's own changes to them. Every call is
 // scoped to ctx.user.id; a foreign client or person answers like a missing one. LinkedIn actions stay on their own routers
@@ -55,7 +56,10 @@ export const people = router({
          })
       )
       .mutation(async ({ ctx, input }) =>
-         present(await ClientService.assignAccount(ctx.user.id, input.accountId, input.clientId), 'Account or client not found')
+         present(
+            await ClientService.assignAccount(ctx.user.id, input.accountId, input.clientId),
+            'Account or client not found'
+         )
       ),
 
    today: ownerProcedure.query(({ ctx }) => PeopleService.today(ctx.user.id)),
@@ -120,7 +124,9 @@ export const people = router({
 
    doNotContactEverywhere: ownerProcedure
       .input(z.object({ id }))
-      .mutation(async ({ ctx, input }) => present(await PeopleService.doNotContactEverywhere(ctx.user.id, input.id), NO_PERSON)),
+      .mutation(async ({ ctx, input }) =>
+         present(await PeopleService.doNotContactEverywhere(ctx.user.id, input.id), NO_PERSON)
+      ),
 
    erase: ownerProcedure
       .input(z.object({ id }))
@@ -136,12 +142,17 @@ export const people = router({
                listId: id.optional(),
                listName: z.string().trim().min(1).max(80).optional(),
             })
-            .refine(input => Boolean(input.listId) !== Boolean(input.listName), { message: 'Pick a list or name a new one.' })
+            .refine(input => Boolean(input.listId) !== Boolean(input.listName), PICK_A_LIST)
       )
       .mutation(async ({ ctx, input }) => {
          const { links, invalid } = readLinks(input.urls, 'profile')
          const result = await orConflict(
-            PeopleService.add(ctx.user.id, input.clientId, links, input.listId ? { id: input.listId } : { name: input.listName ?? '' })
+            PeopleService.add(
+               ctx.user.id,
+               input.clientId,
+               links,
+               input.listId ? { id: input.listId } : { name: input.listName ?? '' }
+            )
          )
 
          return {
@@ -152,5 +163,7 @@ export const people = router({
 
    export: ownerProcedure
       .input(view)
-      .mutation(async ({ ctx, input }) => present(await orConflict(PeopleService.export(ctx.user.id, input)), NO_CLIENT)),
+      .mutation(async ({ ctx, input }) =>
+         present(await orConflict(PeopleService.export(ctx.user.id, input)), NO_CLIENT)
+      ),
 })

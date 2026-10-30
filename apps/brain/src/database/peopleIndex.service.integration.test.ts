@@ -59,7 +59,12 @@ const conversation = (slug: string, accountId: string) =>
          linkedInId: randomUUID(),
          title: 'Ana Silva',
          kind: 'DIRECT',
-         participants: [{ name: 'Ana Silva', profileUrl: `https://www.linkedin.com/in/${slug}/` }],
+         participants: [
+            {
+               name: 'Ana Silva',
+               profileUrl: `https://www.linkedin.com/in/${slug}/`,
+            },
+         ],
          contactProfileUrl: `https://www.linkedin.com/in/${slug}/`,
          unread: true,
          complete: true,
@@ -104,7 +109,7 @@ describe('PeopleIndexService (database)', () => {
       ).toBe(1)
    })
 
-   it("should build one person per client, each with what waits on it and why they are there", async () => {
+   it('should build one person per client, each with what waits on it and why they are there', async () => {
       await request('ana', acmeAccountId, 'Loved your post')
       await conversation('ana', ownAccountId)
       await PeopleIndexService.refresh(userId, ['ana'])
@@ -139,7 +144,12 @@ describe('PeopleIndexService (database)', () => {
       })
 
       await db.person.update({
-         where: { clientId_slug: { clientId: defaultId, slug: 'ana' } },
+         where: {
+            clientId_slug: {
+               clientId: defaultId,
+               slug: 'ana',
+            },
+         },
          data: {
             status: 'DONE',
             statusSetAt: new Date(),
@@ -158,7 +168,14 @@ describe('PeopleIndexService (database)', () => {
       await PeopleIndexService.refresh(userId, ['ana'])
 
       expect(
-         await db.person.findUniqueOrThrow({ where: { clientId_slug: { clientId: defaultId, slug: 'ana' } } })
+         await db.person.findUniqueOrThrow({
+            where: {
+               clientId_slug: {
+                  clientId: defaultId,
+                  slug: 'ana',
+               },
+            },
+         })
       ).toMatchObject({
          status: 'DONE',
          fit: 'STRONG',

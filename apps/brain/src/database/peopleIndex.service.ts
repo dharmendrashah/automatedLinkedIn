@@ -184,7 +184,9 @@ export class PeopleIndexService {
       const rows = {
          requests: bySlug(requests, ({ slug }) => slug),
          connections: bySlug(connections, ({ slug }) => slug),
-         conversations: bySlug(conversations, row => slugOfConversation(row.contactProfileUrl, row.replies[0]?.recipientSlug)),
+         conversations: bySlug(conversations, row =>
+            slugOfConversation(row.contactProfileUrl, row.replies[0]?.recipientSlug)
+         ),
          members: bySlug(members, ({ slug }) => slug),
          targets: bySlug(targets, ({ slug }) => slug),
       }
@@ -268,7 +270,12 @@ export class PeopleIndexService {
                createdAt: row.createdAt,
             })),
          }
-         const drafts = draftPeople(sources, accountId => clientOf.get(accountId) ?? defaultClientId, defaultClientId, profileUrlOf(slug))
+         const drafts = draftPeople(
+            sources,
+            accountId => clientOf.get(accountId) ?? defaultClientId,
+            defaultClientId,
+            profileUrlOf(slug)
+         )
 
          await PeopleIndexService.write(
             userId,
@@ -284,14 +291,26 @@ export class PeopleIndexService {
       userId: string,
       slug: string,
       drafts: DraftPerson[],
-      existing: Array<{ id: string; clientId: string; doNotContact: boolean; notes: string | null; labels: string[]; statusSetAt: Date | null }>,
+      existing: Array<{
+         id: string
+         clientId: string
+         doNotContact: boolean
+         notes: string | null
+         labels: string[]
+         statusSetAt: Date | null
+      }>,
       blocked: boolean
    ) {
       await PrismaService.client.$transaction(async tx => {
          for (const { links, clientId, status, firstSeenAt, ...fields } of drafts) {
             const known = existing.find(person => person.clientId === clientId)
             const person = await tx.person.upsert({
-               where: { clientId_slug: { clientId, slug } },
+               where: {
+                  clientId_slug: {
+                     clientId,
+                     slug,
+                  },
+               },
                create: {
                   userId,
                   clientId,
@@ -312,7 +331,12 @@ export class PeopleIndexService {
             await tx.personLink.deleteMany({
                where: {
                   personId: person.id,
-                  NOT: { OR: links.map(({ kind, sourceId }) => ({ kind, sourceId })) },
+                  NOT: {
+                     OR: links.map(({ kind, sourceId }) => ({
+                        kind,
+                        sourceId,
+                     })),
+                  },
                },
             })
             await tx.personLink.createMany({

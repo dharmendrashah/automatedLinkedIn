@@ -110,8 +110,10 @@ describe('PeopleService (database)', () => {
       await PeopleService.update(userId, person?.id ?? '', { status: 'NOT_INTERESTED' })
       await PeopleIndexService.refresh(userId, ['person-0'])
 
+      const closed = { status: 'NOT_INTERESTED' }
+
       expect((await PeopleService.counts(userId, clientId))?.NEEDS_ME).toBe(2)
-      expect(await db.person.findUniqueOrThrow({ where: { id: person?.id ?? '' } })).toMatchObject({ status: 'NOT_INTERESTED' })
+      expect(await db.person.findUniqueOrThrow({ where: { id: person?.id ?? '' } })).toMatchObject(closed)
    })
 
    it('should erase a person everywhere and keep only their suppression and a dated entry', async () => {
@@ -120,9 +122,30 @@ describe('PeopleService (database)', () => {
       await PeopleService.erase(userId, person?.id ?? '')
       await PeopleIndexService.refresh(userId, ['person-2'])
 
-      expect(await db.linkedInInvitation.count({ where: { userId, slug: 'person-2' } })).toBe(0)
-      expect(await db.person.count({ where: { userId, slug: 'person-2' } })).toBe(0)
-      expect(await db.suppression.count({ where: { userId, slug: 'person-2' } })).toBe(1)
+      expect(
+         await db.linkedInInvitation.count({
+            where: {
+               userId,
+               slug: 'person-2',
+            },
+         })
+      ).toBe(0)
+      expect(
+         await db.person.count({
+            where: {
+               userId,
+               slug: 'person-2',
+            },
+         })
+      ).toBe(0)
+      expect(
+         await db.suppression.count({
+            where: {
+               userId,
+               slug: 'person-2',
+            },
+         })
+      ).toBe(1)
       expect(await db.personErasure.count({ where: { userId } })).toBe(1)
    })
 
@@ -154,7 +177,19 @@ describe('PeopleService (database)', () => {
          })),
       })
 
-      await expect(PeopleService.export(userId, { clientId, tab: 'EVERYONE' })).rejects.toBeInstanceOf(ConflictError)
-      expect(await db.peopleExport.findFirst({ where: { userId, refused: true } })).toMatchObject({ rows: 0 })
+      await expect(
+         PeopleService.export(userId, {
+            clientId,
+            tab: 'EVERYONE',
+         })
+      ).rejects.toBeInstanceOf(ConflictError)
+      expect(
+         await db.peopleExport.findFirst({
+            where: {
+               userId,
+               refused: true,
+            },
+         })
+      ).toMatchObject({ rows: 0 })
    }, 60_000)
 })

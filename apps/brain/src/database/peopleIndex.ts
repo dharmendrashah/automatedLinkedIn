@@ -180,9 +180,9 @@ const memberReason = (member: MemberRow) => {
 const draftOf = (clientId: string, rows: Rows, profileUrl: string): DraftPerson => {
    const reply = rows.conversations.find(row => open(row) && row.lastDirection === 'THEM')
    const request = rows.requests.find(pending)
-   const member = rows.members[0]
+   const [member] = rows.members
    const connection = rows.connections.find(connected)
-   const target = rows.targets[0]
+   const [target] = rows.targets
    const [first] = [...rows.connections, ...rows.requests, ...rows.conversations]
    const reason = (() => {
       if (reply) {

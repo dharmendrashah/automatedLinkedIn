@@ -29,7 +29,12 @@ export class ClientService {
          ? `${DEFAULT_NAME} (default)`
          : DEFAULT_NAME
       const made = await db.client.upsert({
-         where: { userId_name: { userId, name } },
+         where: {
+            userId_name: {
+               userId,
+               name,
+            },
+         },
          create: {
             userId,
             name,

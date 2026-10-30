@@ -7,7 +7,8 @@ import { defineJob } from './defineJob'
 export const peopleIndex = defineJob({
    name: 'people-index',
    title: 'My network index',
-   purpose: 'Keeps the people on My network up to date with their requests, connections, conversations, lists and targets.',
+   purpose:
+      'Keeps the people on My network up to date with their requests, connections, conversations, lists and targets.',
    everyMs: 15_000,
    startAfterMs: 30_000,
    timeoutMs: 5 * 60 * 1000,

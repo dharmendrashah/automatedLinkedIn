@@ -42,7 +42,18 @@ const SEARCH_CAP = 1_000
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const CLOSED: PersonStatus[] = ['NOT_INTERESTED', 'DONE']
 const SLUG_IN_LINK = /linkedin\.com\/in\/([^/?#\s]+)/i
-const EXPORT_HEADER = ['Name', 'Profile link', 'Headline', 'Company', 'Reason', 'Found by', 'Fit', 'Status', 'Labels', 'Last touch']
+const EXPORT_HEADER = [
+   'Name',
+   'Profile link',
+   'Headline',
+   'Company',
+   'Reason',
+   'Found by',
+   'Fit',
+   'Status',
+   'Labels',
+   'Last touch',
+]
 
 const TAB_WHERE: Record<PeopleTab, Prisma.PersonWhereInput> = {
    NEEDS_ME: {
@@ -375,7 +386,12 @@ export class PeopleService {
    }
 
    // The same changes to many people of one client at once. Resolves to how many changed.
-   public static async updateMany(userId: string, clientId: string, ids: string[], changes: Omit<PersonChanges, 'notes'>) {
+   public static async updateMany(
+      userId: string,
+      clientId: string,
+      ids: string[],
+      changes: Omit<PersonChanges, 'notes'>
+   ) {
       const { count } = await PrismaService.client.person.updateMany({
          where: {
             id: { in: ids },
@@ -503,7 +519,12 @@ export class PeopleService {
             },
          })
          await tx.suppression.upsert({
-            where: { userId_slug: { userId, slug } },
+            where: {
+               userId_slug: {
+                  userId,
+                  slug,
+               },
+            },
             create: {
                userId,
                slug,
@@ -593,7 +614,7 @@ export class PeopleService {
 
       const rows: PeopleRow[] = []
       let cursor: string | undefined
-      let refused = false
+      let refused: boolean
 
       do {
          const page = await PeopleService.list(userId, {
@@ -617,7 +638,9 @@ export class PeopleService {
       })
 
       if (refused) {
-         throw new ConflictError(`At most ${EXPORT_CAP.toLocaleString('en')} people can be exported at once. Narrow the view first.`)
+         throw new ConflictError(
+            `At most ${EXPORT_CAP.toLocaleString('en')} people can be exported at once. Narrow the view first.`
+         )
       }
 
       const lists = new Map(
