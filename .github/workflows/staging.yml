@@ -12,6 +12,9 @@ name: Staging images
 # -spider-worker is pushed to GHCR and to Artifact Registry: the Cloud Run job (infra/cloud-run) runs that copy, and the
 # deploy job applies it with deploy/scripts/spider-job.sh, failing unless the job is ready on this commit's image.
 #
+# Only the apps a push changed are built and deployed (deploy/scripts/changed-apps.sh; .plan/staging-selective-deploy.md):
+# the others keep the image live on the cluster. Shared or unknown paths, and a run started by hand, deploy everything.
+#
 # Configure these repository variables before the first run:
 #   STAGING_API_URL   https://api.staging.<domain>
 #   STAGING_AUTH_URL  https://auth.staging.<domain>
@@ -48,14 +51,57 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      body: ${{ steps.apps.outputs.body }}
+      brain: ${{ steps.apps.outputs.brain }}
+      spider: ${{ steps.apps.outputs.spider }}
+      any: ${{ steps.apps.outputs.any }}
+      matrix: ${{ steps.apps.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # A new branch, a force push (the old commit is gone) or a run by hand compares nothing and deploys everything.
+      - id: apps
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = push ] && [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ] \
+            && git fetch --quiet --no-tags --depth=1 origin "$BEFORE"; then
+            git diff --name-only "$BEFORE" HEAD | ./deploy/scripts/changed-apps.sh > "$RUNNER_TEMP/apps.env"
+          else
+            printf 'body=true\nbrain=true\nspider=true\n' > "$RUNNER_TEMP/apps.env"
+          fi
+          . "$RUNNER_TEMP/apps.env"
+          any=false
+          if [ "$body" = true ] || [ "$brain" = true ] || [ "$spider" = true ]; then any=true; fi
+          matrix="$(jq -cn --argjson body "$body" --argjson brain "$brain" --argjson spider "$spider" '{include: [
+            if $brain then {app: "brain", suffix: "brain", target: ""}, {app: "brain", suffix: "brain-migrate", target: "migrate"} else empty end,
+            if $body then {app: "body", suffix: "body", target: ""} else empty end,
+            if $spider then {app: "spider", suffix: "spider", target: "api"}, {app: "spider", suffix: "spider-worker", target: "worker"} else empty end
+          ]}')"
+          {
+            cat "$RUNNER_TEMP/apps.env"
+            echo "any=$any"
+            echo "matrix=$matrix"
+          } | tee -a "$GITHUB_OUTPUT"
+
   check:
+    needs: changes
+    if: needs.changes.outputs.any == 'true'
     permissions:
       contents: read
       packages: write
     uses: ./.github/workflows/ci.yml
+    with:
+      brain-integration: ${{ needs.changes.outputs.brain }}
+      spider-integration: ${{ needs.changes.outputs.spider }}
 
   publish:
-    needs: check
+    needs: [changes, check]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging
@@ -65,23 +111,7 @@ jobs:
       id-token: write
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - app: brain
-            suffix: brain
-            target: ''
-          - app: brain
-            suffix: brain-migrate
-            target: migrate
-          - app: body
-            suffix: body
-            target: ''
-          - app: spider
-            suffix: spider
-            target: api
-          - app: spider
-            suffix: spider-worker
-            target: worker
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -156,7 +186,7 @@ jobs:
           cache-to: type=registry,ref=${{ steps.image.outputs.name }}:buildcache,mode=max,oci-mediatypes=true,image-manifest=true
 
   deploy:
-    needs: publish
+    needs: [changes, publish]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     environment: staging
@@ -196,17 +226,6 @@ jobs:
           tar -xzf kustomize.tar.gz
           sudo install kustomize /usr/local/bin/
 
-      # Pin the immutable sha tag instead of the mutable `staging` tag, so the
-      # Deployment actually changes and a rollback points at a known build.
-      - name: Pin the image tags to this commit
-        working-directory: deploy/overlays/staging
-        run: |
-          tag="sha-$(git rev-parse --short HEAD)"
-          repo="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
-          for image in brain brain-migrate body spider; do
-            kustomize edit set image "automatedlinkedin-$image=$repo-$image:$tag"
-          done
-
       # Smart shutdown must not switch staging off while a deploy runs. The lock lasts 30 minutes,
       # and the release step below clears it when the deploy ends.
       - name: Hold the smart-shutdown lock for this deploy
@@ -225,8 +244,38 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
         run: ./deploy/scripts/staging-power.sh ensure-awake
 
+      # Rebuilt images are pinned to this commit's immutable tag; the others keep the exact tag running now, never the
+      # mutable `staging` tag, so every Deployment points at a known build.
+      - name: Pin the image tags
+        working-directory: deploy/overlays/staging
+        env:
+          BODY: ${{ needs.changes.outputs.body }}
+          BRAIN: ${{ needs.changes.outputs.brain }}
+          SPIDER: ${{ needs.changes.outputs.spider }}
+        run: |
+          tag="sha-$(git rev-parse --short HEAD)"
+          repo="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          live="$(kubectl -n automatedlinkedin get deploy -o jsonpath='{..image}' | tr ' ' '\n' | sort -u)"
+          for pair in "brain:$BRAIN" "brain-migrate:$BRAIN" "body:$BODY" "spider:$SPIDER"; do
+            image="${pair%%:*}"
+            if [ "${pair#*:}" = true ]; then
+              ref="$repo-$image:$tag"
+            else
+              ref="$(printf '%s\n' "$live" | grep -m1 "^$repo-$image:" || true)"
+              if [ -z "$ref" ]; then
+                echo "::error title=No live image::$image is not running on the cluster. Run this workflow by hand to deploy everything."
+                exit 1
+              fi
+            fi
+            echo "$image -> $ref"
+            kustomize edit set image "automatedlinkedin-$image=$ref"
+          done
+
       - name: Apply
         env:
+          BODY: ${{ needs.changes.outputs.body }}
+          BRAIN: ${{ needs.changes.outputs.brain }}
+          SPIDER: ${{ needs.changes.outputs.spider }}
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         run: |
@@ -264,33 +313,40 @@ jobs:
             exit 1
           fi
           kubectl apply -f /tmp/staging-rendered.yaml
-          kubectl -n automatedlinkedin rollout status statefulset/rabbitmq --timeout=5m
-          kubectl -n automatedlinkedin rollout status deploy/brain --timeout=5m
-          kubectl -n automatedlinkedin rollout status deploy/brain-worker --timeout=5m
-          kubectl -n automatedlinkedin rollout status deploy/body --timeout=5m
-          kubectl -n automatedlinkedin rollout status deploy/authentik-server --timeout=5m
-          kubectl -n automatedlinkedin rollout status deploy/authentik-worker --timeout=5m
-          kubectl -n automatedlinkedin rollout status deploy/spider-api --timeout=5m
+          waits=""
+          if [ "$BODY$BRAIN$SPIDER" = truetruetrue ]; then
+            waits="statefulset/rabbitmq deploy/authentik-server deploy/authentik-worker"
+          fi
+          if [ "$BRAIN" = true ]; then waits="$waits deploy/brain deploy/brain-worker"; fi
+          if [ "$BODY" = true ]; then waits="$waits deploy/body"; fi
+          if [ "$SPIDER" = true ]; then waits="$waits deploy/spider-api"; fi
+          for workload in $waits; do
+            kubectl -n automatedlinkedin rollout status "$workload" --timeout=5m
+          done
 
       # The spider worker runs as a Cloud Run job now. It is deployed after the apply, and this step fails unless the job is
       # ready on this commit's image (deploy/scripts/spider-job.sh; .plan/spider-worker-cloud-run.md).
       - uses: actions/setup-node@v7.1.0
+        if: needs.changes.outputs.spider == 'true'
         with:
           node-version-file: .nvmrc
 
       - name: Install the Pulumi CLI
+        if: needs.changes.outputs.spider == 'true'
         run: |
           curl -fsSL --retry 5 --retry-delay 10 -o "$RUNNER_TEMP/pulumi.tar.gz" https://get.pulumi.com/releases/sdk/pulumi-v3.272.0-linux-x64.tar.gz
           tar -xzf "$RUNNER_TEMP/pulumi.tar.gz" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/pulumi" >> "$GITHUB_PATH"
 
       - name: Build the infra code
+        if: needs.changes.outputs.spider == 'true'
         working-directory: infra/cloud-run
         run: |
           npm ci
           npm run build
 
       - name: Deploy the spider job
+        if: needs.changes.outputs.spider == 'true'
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_REGION: asia-south1

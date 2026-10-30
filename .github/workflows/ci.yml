@@ -3,6 +3,14 @@ name: CI
 on:
   pull_request:
   workflow_call:
+    # Strings, not booleans: on pull_request the inputs are absent, and only a string compare keeps both suites on then.
+    inputs:
+      brain-integration:
+        type: string
+        default: 'true'
+      spider-integration:
+        type: string
+        default: 'true'
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -64,11 +72,13 @@ jobs:
 
       # Straight through pnpm: Turborepo strict env mode would hide DATABASE_URL from the task.
       - name: Apply database migrations
+        if: inputs.brain-integration != 'false'
         run: pnpm --filter @automatedLinkedIn/brain db:migrate:deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/automatedlinkedin
 
       - name: Integration tests
+        if: inputs.brain-integration != 'false'
         run: pnpm --filter @automatedLinkedIn/brain test:integration:run
         env:
           NODE_ENV: test
@@ -77,6 +87,7 @@ jobs:
 
       # The broker is only used by these tests, so purging its queues is safe in CI.
       - name: Spider integration tests
+        if: inputs.spider-integration != 'false'
         run: pnpm --filter @automatedLinkedIn/spider test:integration:run
         env:
           NODE_ENV: test
