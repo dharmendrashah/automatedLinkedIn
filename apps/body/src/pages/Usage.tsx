@@ -1,14 +1,108 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { formatUsd } from '@/components/workflows/types'
 import { downloadFile } from '@/lib/download-file'
-import { Download } from 'lucide-react'
+import { ArrowDownUp, Download } from 'lucide-react'
+import { useState } from 'react'
+
+import { formatUsd } from '@/components/workflows/types'
 
 import { trpc } from '../trpc'
 
 const thisMonth = () => new Date().toISOString().slice(0, 7)
+
+const ALL = 'all'
+const EVERY_CLIENT = 'Every client'
+
+// Owner only: every erasure (for all clients at once) and every export of My network, by client and date. Nothing about anyone.
+const AuditView = () => {
+   const audit = trpc.people.audit.useQuery()
+   const [client, setClient] = useState(ALL)
+   const [newestFirst, setNewestFirst] = useState(true)
+   const entries = [
+      ...(audit.data?.erasures ?? []).map(({ id, createdAt }) => ({
+         id,
+         createdAt,
+         what: 'Erasure',
+         client: EVERY_CLIENT,
+         rows: '',
+         refused: '',
+      })),
+      ...(audit.data?.exports ?? []).map(entry => ({
+         id: entry.id,
+         createdAt: entry.createdAt,
+         what: 'Export',
+         client: entry.client,
+         rows: entry.rows.toLocaleString('en'),
+         refused: entry.refused ? 'Refused (over 10,000)' : '',
+      })),
+   ]
+      .filter(entry => client === ALL || entry.client === client)
+      .sort((a, b) => (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * (newestFirst ? -1 : 1))
+   const clients = [...new Set((audit.data?.exports ?? []).map(entry => entry.client))].sort()
+
+   return (
+      <Card>
+         <CardHeader>
+            <CardTitle>Erasures and exports</CardTitle>
+            <CardDescription>Who was erased and what was exported from My network, by date.</CardDescription>
+         </CardHeader>
+         <CardContent className="grid gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+               <Select value={client} onValueChange={setClient}>
+                  <SelectTrigger size="sm" className="w-48" aria-label="Client">
+                     <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                     <SelectItem value={ALL}>All clients</SelectItem>
+                     {clients.map(name => (
+                        <SelectItem key={name} value={name}>
+                           {name}
+                        </SelectItem>
+                     ))}
+                  </SelectContent>
+               </Select>
+               <Button variant="outline" size="sm" onClick={() => setNewestFirst(!newestFirst)}>
+                  <ArrowDownUp />
+                  {newestFirst ? 'Newest first' : 'Oldest first'}
+               </Button>
+            </div>
+            {audit.error ? <p className="text-destructive text-sm">{audit.error.message}</p> : null}
+            <Table>
+               <TableHeader>
+                  <TableRow>
+                     <TableHead>Date</TableHead>
+                     <TableHead>What</TableHead>
+                     <TableHead>Client</TableHead>
+                     <TableHead>Rows</TableHead>
+                     <TableHead>Refused</TableHead>
+                  </TableRow>
+               </TableHeader>
+               <TableBody>
+                  {entries.length === 0 ? (
+                     <TableRow>
+                        <TableCell colSpan={5} className="text-muted-foreground text-sm">
+                           Nothing erased or exported yet.
+                        </TableCell>
+                     </TableRow>
+                  ) : null}
+                  {entries.map(entry => (
+                     <TableRow key={entry.id}>
+                        <TableCell>{new Date(entry.createdAt).toLocaleString()}</TableCell>
+                        <TableCell>{entry.what}</TableCell>
+                        <TableCell>{entry.client}</TableCell>
+                        <TableCell>{entry.rows}</TableCell>
+                        <TableCell>{entry.refused}</TableCell>
+                     </TableRow>
+                  ))}
+               </TableBody>
+            </Table>
+         </CardContent>
+      </Card>
+   )
+}
 
 // The platform owner's view: the shared wallet and what each client spent this month.
 const OwnerView = () => {
@@ -33,7 +127,8 @@ const OwnerView = () => {
                <Alert variant="destructive">
                   <AlertTitle>New runs are paused</AlertTitle>
                   <AlertDescription>
-                     The wallet is below {formatUsd(wallet.data?.floorMicros ?? 0)}. Top it up to let workflows run again.
+                     The wallet is below {formatUsd(wallet.data?.floorMicros ?? 0)}. Top it up to let workflows run
+                     again.
                   </AlertDescription>
                </Alert>
             ) : low ? (
@@ -131,6 +226,8 @@ export const Usage = () => {
          </div>
 
          {me.data?.user?.role === 'ADMIN' ? <OwnerView /> : null}
+
+         <AuditView />
       </div>
    )
 }

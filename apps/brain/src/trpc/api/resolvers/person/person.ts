@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { PersonService } from 'database'
+import { ClientService, PersonService } from 'database'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -16,10 +16,15 @@ export const person = router({
       .input(bySlug)
       .query(async ({ ctx, input }) => present(await PersonService.detail(ctx.user.id, input.slug), MISSING)),
 
-   // Queues a full-profile read of the owner's own person for the worker.
+   // Queues a full-profile read of the owner's own person for the worker, booked to the client named (My network).
    readFull: ownerProcedure
-      .input(bySlug)
-      .mutation(async ({ ctx, input }) =>
-         present(await orConflict(PersonService.readFull(ctx.user.id, input.slug)), MISSING)
-      ),
+      .input(bySlug.extend({ clientId: z.string().min(1).max(100).optional() }))
+      .mutation(async ({ ctx, input }) => {
+         const clientId = input.clientId ? await ClientService.owned(ctx.user.id, input.clientId) : undefined
+
+         return present(
+            clientId === null ? null : await orConflict(PersonService.readFull(ctx.user.id, input.slug, clientId)),
+            MISSING
+         )
+      }),
 })

@@ -12,7 +12,15 @@ import { About, Education, Experience, Fit, Skills, WhyFound } from './person-se
 import { Workspace } from './person-workspace'
 
 // The top card, laid out like a LinkedIn profile: photo, name, headline, role, place and reach.
-const Header = ({ person, confirmRead }: { person: PersonDetail; confirmRead: boolean }) => {
+const Header = ({
+   person,
+   confirmRead,
+   clientId,
+}: {
+   person: PersonDetail
+   confirmRead: boolean
+   clientId?: string
+}) => {
    const utils = trpc.useUtils()
    const read = trpc.person.readFull.useMutation({
       onSuccess: data => utils.person.detail.setData({ slug: person.slug }, data),
@@ -63,7 +71,7 @@ const Header = ({ person, confirmRead }: { person: PersonDetail; confirmRead: bo
                   read={person.read}
                   pending={read.isPending}
                   error={read.error}
-                  onRead={() => read.mutate({ slug: person.slug })}
+                  onRead={() => read.mutate({ slug: person.slug, clientId })}
                   {...(confirmRead && {
                      confirm: `It adds ${firstNameOf(name)}'s about, experience, education and skills, and is paid from your wallet.`,
                   })}
@@ -97,8 +105,17 @@ const Accounts = ({ person }: { person: PersonDetail }) =>
       </section>
    ) : null
 
-// One person, like their LinkedIn profile, so a lead can be judged without leaving the table. `confirmRead` asks before the paid read.
-export const PersonView = ({ slug, confirmRead = false }: { slug: string; confirmRead?: boolean }) => {
+// One person, like their LinkedIn profile, so a lead can be judged without leaving the table. `confirmRead` asks before the paid read;
+// `clientId` charges it to that client (My network).
+export const PersonView = ({
+   slug,
+   confirmRead = false,
+   clientId,
+}: {
+   slug: string
+   confirmRead?: boolean
+   clientId?: string
+}) => {
    const detail = trpc.person.detail.useQuery(
       { slug },
       {
@@ -116,7 +133,7 @@ export const PersonView = ({ slug, confirmRead = false }: { slug: string; confir
 
    return (
       <div className="grid gap-3">
-         <Header person={person} confirmRead={confirmRead} />
+         <Header person={person} confirmRead={confirmRead} clientId={clientId} />
          <Accounts person={person} />
          {member && (member.score !== null || member.state !== 'UNSCORED' || member.matched.length > 0) ? (
             <Fit member={member} />

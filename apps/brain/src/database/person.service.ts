@@ -71,8 +71,8 @@ export class PersonService {
       }
    }
 
-   // Queues one full-profile read for the worker. null when the person is not the owner's.
-   public static async readFull(userId: string, slug: string) {
+   // Queues one full-profile read for the worker, booked to `clientId` when given. null when the person is not the owner's.
+   public static async readFull(userId: string, slug: string, clientId?: string) {
       const known = await PersonService.detail(userId, slug)
 
       if (!known) {
@@ -89,6 +89,7 @@ export class PersonService {
          slug,
          operation: 'profiles',
          params: { queries: [known.url] },
+         clientId,
       })
 
       return PersonService.detail(userId, slug)

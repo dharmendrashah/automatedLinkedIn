@@ -4,6 +4,7 @@ import { connectionImport } from './connectionImport'
 import { dataReads } from './dataReads'
 import { invitationImport } from './invitationImport'
 import { messageImport } from './messageImport'
+import { peopleIndex } from './peopleIndex'
 import { postSend } from './postSend'
 import { postSweep } from './postSweep'
 import { profileImport } from './profileImport'
@@ -33,4 +34,5 @@ export const JOBS = unique('job', [
    replySweep,
    postSend,
    postSweep,
+   peopleIndex,
 ])

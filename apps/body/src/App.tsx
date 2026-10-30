@@ -1,23 +1,19 @@
 import { FailureCard } from '@/components/failure-card'
+import { ConnectionsRedirect, ListsRedirect } from '@/components/my-network/redirects'
 import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
 
 import { DashboardLayout } from './layouts/DashboardLayout'
 import { PublicLayout } from './layouts/PublicLayout'
-import { Accounts } from './pages/Accounts'
 import { Callback } from './pages/Callback'
 import { Companies } from './pages/Companies'
 import { HealthStatus } from './pages/HealthStatus'
 import { Icps } from './pages/Icps'
 import { Jobs } from './pages/Jobs'
-import { Lists } from './pages/Lists'
 import { Login } from './pages/Login'
-import { Network } from './pages/Network'
 import { Posting } from './pages/Posting'
 import { Posts } from './pages/Posts'
 import { Profile } from './pages/Profile'
-import { Profiles } from './pages/Profiles'
-import { Proxies } from './pages/Proxies'
 import { Sessions } from './pages/Sessions'
 import { Signup } from './pages/Signup'
 import { Usage } from './pages/Usage'
@@ -30,16 +26,18 @@ const Dashboard = lazy(() => import('./pages/Dashboard').then(({ Dashboard: page
 const WorkflowPage = lazy(() => import('./pages/Workflow').then(({ WorkflowPage: page }) => ({ default: page })))
 // The inbox carries the virtual list and the composer, and is only opened by some of the visits.
 const Unibox = lazy(() => import('./pages/Unibox').then(({ Unibox: page }) => ({ default: page })))
+// My network carries the people table, the drawer and the profile view.
+const Network = lazy(() => import('./pages/Network').then(({ Network: page }) => ({ default: page })))
+// The accounts list carries the browsing heatmap, the drawers and the Today checklist.
+const Accounts = lazy(() => import('./pages/Accounts').then(({ Accounts: page }) => ({ default: page })))
+// The proxies page carries the health checks, the score history and its drawers.
+const Proxies = lazy(() => import('./pages/Proxies').then(({ Proxies: page }) => ({ default: page })))
 // The profile of an account carries a dozen cards, and is only opened from the accounts list.
 const AccountProfile = lazy(() =>
    import('./pages/AccountProfile').then(({ AccountProfile: page }) => ({ default: page }))
 )
-// The connections of an account carry a long list, and are only opened from the account's page.
-const Connections = lazy(() => import('./pages/Connections').then(({ Connections: page }) => ({ default: page })))
 // The post canvas carries the blocks, the preview and the schedule dialog, and is only opened after an account is picked.
-const PostingCanvas = lazy(() =>
-   import('./pages/PostingCanvas').then(({ PostingCanvas: page }) => ({ default: page }))
-)
+const PostingCanvas = lazy(() => import('./pages/PostingCanvas').then(({ PostingCanvas: page }) => ({ default: page })))
 
 const App = () => (
    <Routes>
@@ -72,7 +70,14 @@ const App = () => (
                </Suspense>
             }
          />
-         <Route path="/network/:accountId?" element={<Network />} />
+         <Route
+            path="/network/:accountId?"
+            element={
+               <Suspense fallback={null}>
+                  <Network />
+               </Suspense>
+            }
+         />
          <Route path="/posting" element={<Posting />} />
          <Route
             path="/posting/:accountId/:draftId?"
@@ -82,7 +87,14 @@ const App = () => (
                </Suspense>
             }
          />
-         <Route path="/accounts" element={<Accounts />} />
+         <Route
+            path="/accounts"
+            element={
+               <Suspense fallback={null}>
+                  <Accounts />
+               </Suspense>
+            }
+         />
          <Route
             path="/accounts/:id"
             element={
@@ -91,18 +103,11 @@ const App = () => (
                </Suspense>
             }
          />
-         <Route
-            path="/accounts/:accountId/connections"
-            element={
-               <Suspense fallback={null}>
-                  <Connections />
-               </Suspense>
-            }
-         />
-         <Route path="/profiles" element={<Profiles />} />
+         <Route path="/accounts/:accountId/connections" element={<ConnectionsRedirect />} />
+         <Route path="/profiles" element={<Navigate to="/network?found=target" replace />} />
          <Route path="/companies" element={<Companies />} />
          <Route path="/posts" element={<Posts />} />
-         <Route path="/lists" element={<Lists />} />
+         <Route path="/lists" element={<ListsRedirect />} />
          <Route path="/icps" element={<Icps />} />
          <Route path="/workflows" element={<Workflows />} />
          <Route path="/workflows/new" element={<WorkflowNew />} />
@@ -115,7 +120,14 @@ const App = () => (
             }
          />
          <Route path="/usage" element={<Usage />} />
-         <Route path="/proxies" element={<Proxies />} />
+         <Route
+            path="/proxies"
+            element={
+               <Suspense fallback={null}>
+                  <Proxies />
+               </Suspense>
+            }
+         />
          <Route path="/sessions" element={<Sessions />} />
          <Route path="/healthstatus" element={<HealthStatus />} />
          <Route path="/jobs" element={<Jobs />} />

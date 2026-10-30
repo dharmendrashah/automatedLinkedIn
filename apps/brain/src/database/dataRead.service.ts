@@ -28,6 +28,8 @@ type QueueInput = {
    variant?: string
    operation: string
    params: Prisma.InputJsonObject
+   // The client whose month the cost is booked to (My network).
+   clientId?: string
 }
 
 const startOfDay = () => new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`)
@@ -40,7 +42,7 @@ const failedMessage = (kind: DataReadKind) =>
 
 export class DataReadService {
    // Queues a read, or returns the one already queued for the item (a double click).
-   public static async queue({ userId, kind, slug, variant = '', operation, params }: QueueInput) {
+   public static async queue({ userId, kind, slug, variant = '', operation, params, clientId }: QueueInput) {
       const { noun } = DATA_READS[kind]
 
       if (await WalletService.belowFloor()) {
@@ -75,6 +77,7 @@ export class DataReadService {
                operation,
                params,
                activeKey,
+               clientId,
             },
          })
       } catch (error) {
@@ -289,6 +292,7 @@ export class DataReadService {
                label: DATA_READS[read.kind].label,
                amountMicros: costMicros,
                month: new Date().toISOString().slice(0, 7),
+               clientId: read.clientId,
             },
          })
       })

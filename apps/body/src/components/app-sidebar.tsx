@@ -18,7 +18,6 @@ import {
    FileText,
    Inbox,
    LayoutDashboard,
-   ListChecks,
    Network,
    Send,
    SquarePen,
@@ -26,7 +25,6 @@ import {
    Timer,
    UserCircle,
    UserPlus,
-   Users,
    Video,
    Wallet,
    Workflow as WorkflowIcon,
@@ -45,11 +43,9 @@ const navMain: NavItem[] = [
    { title: 'My network', to: '/network', icon: UserPlus },
    { title: 'Write a post', to: '/posting', icon: SquarePen },
    { title: 'LinkedIn accounts', to: '/accounts', icon: Briefcase },
-   { title: 'LinkedIn profiles', to: '/profiles', icon: Users },
    { title: 'LinkedIn companies', to: '/companies', icon: Building2 },
    { title: 'LinkedIn posts', to: '/posts', icon: FileText },
    { title: 'Workflows', to: '/workflows', icon: WorkflowIcon },
-   { title: 'Lists', to: '/lists', icon: ListChecks },
    { title: 'Ideal customers', to: '/icps', icon: Target },
    { title: 'Usage', to: '/usage', icon: Wallet },
    { title: 'Proxies', to: '/proxies', icon: Network },
@@ -73,7 +69,8 @@ export const AppSidebar = (props: ComponentProps<typeof Sidebar>) => {
       retry: false,
       staleTime: 5 * 60 * 1000,
    })
-   const items = me.data?.user?.role === 'ADMIN' ? [...navMain.slice(0, -1), cronMonitor, ...navMain.slice(-1)] : navMain
+   const items =
+      me.data?.user?.role === 'ADMIN' ? [...navMain.slice(0, -1), cronMonitor, ...navMain.slice(-1)] : navMain
 
    return (
       <Sidebar collapsible="offcanvas" {...props}>
