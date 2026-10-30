@@ -1590,7 +1590,8 @@ model Person {
   lastSentAt     DateTime?
   lastReceivedAt DateTime?
   inviteState    PersonInviteState      @default(NONE)
-  search       Unsupported("tsvector")?
+  // Prisma reads a generated column's expression as its default; written as Postgres prints it, so `migrate dev` sees no change.
+  search       Unsupported("tsvector")? @default(dbgenerated("to_tsvector('simple'::regconfig, ((((((COALESCE(name, ''::text) || ' '::text) || COALESCE(headline, ''::text)) || ' '::text) || COALESCE(company, ''::text)) || ' '::text) || slug))"))
   createdAt    DateTime                 @default(now())
   updatedAt    DateTime                 @updatedAt
   links        PersonLink[]
