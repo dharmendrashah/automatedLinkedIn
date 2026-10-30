@@ -256,7 +256,6 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
 
    return (
       <>
-         {pickers}
          {line ? <Today line={line} onGo={change => update({ ...change, open: null })} /> : null}
          {nobody ? <FirstVisit /> : null}
          <Tabs
@@ -366,6 +365,7 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
             options={filterOptions}
             count={people.isFetching && !people.isFetchingNextPage ? null : (people.data?.pages[0]?.total ?? 0)}
             cap={counts.data?.cap ?? 10_000}
+            scope={pickers}
             results={
                results.data && invitesLive ? <ResultsLine results={results.data} days={days} onDays={setDays} /> : null
             }
