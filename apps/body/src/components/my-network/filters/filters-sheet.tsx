@@ -27,6 +27,8 @@ type Props = {
    cap: number
    // The client and account pickers, first in the drawer.
    scope: ReactNode
+   // Found by, Fit and Label.
+   quick: ReactNode
    // How invites did over the chosen period, shown at the top while invites are live.
    results: ReactNode
    onOpenChange: (open: boolean) => void
@@ -54,7 +56,18 @@ const Tick = ({ label, checked, onChange }: { label: string; checked: boolean; o
 }
 
 // Every filter beyond the toolbar's, grouped by who they are, how they are tied to the owner, what happened, and the owner's work.
-export const FiltersSheet = ({ open, value, options, count, cap, scope, results, onOpenChange, onChange }: Props) => {
+export const FiltersSheet = ({
+   open,
+   value,
+   options,
+   count,
+   cap,
+   scope,
+   quick,
+   results,
+   onOpenChange,
+   onChange,
+}: Props) => {
    const set = (change: Partial<PeopleFilters>) => onChange({ ...value, ...change })
    const on = chipsOf(value).length
 
@@ -69,6 +82,7 @@ export const FiltersSheet = ({ open, value, options, count, cap, scope, results,
             </SheetHeader>
             <div className="grid gap-6 overflow-y-auto p-4">
                {scope}
+               {quick}
                {results ? <Group title="Results">{results}</Group> : null}
                <Group title="Who">
                   <TextField label="Name" value={value.name} placeholder="Contains…" onChange={name => set({ name })} />

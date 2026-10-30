@@ -12,7 +12,7 @@ import {
 } from './address'
 
 describe('readView', () => {
-   it('reads the filters and falls back on Needs me', () => {
+   it('reads the filters and falls back on Everyone', () => {
       expect(readView(new URLSearchParams('client=c1&tab=waiting&found=list:l1&fit=strong&q= ana &new=1'))).toEqual({
          client: 'c1',
          tab: 'WAITING',
@@ -25,7 +25,7 @@ describe('readView', () => {
          sort: undefined,
       })
       expect(readView(new URLSearchParams('tab=nope&fit=great'))).toMatchObject({
-         tab: 'NEEDS_ME',
+         tab: 'EVERYONE',
          fit: undefined,
       })
    })
