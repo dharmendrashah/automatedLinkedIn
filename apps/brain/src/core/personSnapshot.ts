@@ -133,6 +133,24 @@ export const snapshotFrom = (row: Row): PersonSnapshotData => {
 // Snapshots come back from a JSON column; one that does not fit is not shown.
 export const readSnapshot = (data: unknown): PersonSnapshotData | null => snapshotSchema.safeParse(data).data ?? null
 
+// Every LinkedIn company of the experience, once each, newest position first.
+export const companiesOf = (snapshot: PersonSnapshotData) => {
+   const found = new Map<string, string | null>()
+
+   for (const role of snapshot.experience) {
+      const slug = role.companyUrl ? parseLinkedInUrl(role.companyUrl, 'company')?.slug.toLowerCase() : undefined
+
+      if (slug && !found.has(slug)) {
+         found.set(slug, role.company)
+      }
+   }
+
+   return [...found].map(([slug, name]) => ({
+      slug,
+      name,
+   }))
+}
+
 // What My network's filters read from a profile read: the current position (one that has not ended, else the newest) and the
 // country (an older read only has the joined location, whose last part is the country when there are several).
 export const profileFacts = (snapshot: PersonSnapshotData) => {

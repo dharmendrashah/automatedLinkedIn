@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { profileFacts, readSnapshot, snapshotFrom } from './personSnapshot'
+import { companiesOf, profileFacts, readSnapshot, snapshotFrom } from './personSnapshot'
 
 describe('snapshotFrom', () => {
    it('should keep only the allow-listed fields, in a LinkedIn-like shape', () => {
@@ -212,5 +212,38 @@ describe('profileFacts', () => {
          country: null,
          premium: null,
       })
+   })
+})
+
+describe('companiesOf', () => {
+   it('should list every LinkedIn company of the experience once, with the first name seen', () => {
+      const snapshot = snapshotFrom({
+         experience: [
+            {
+               companyName: 'Rivulet iQ',
+               companyLinkedinUrl: 'https://www.linkedin.com/company/rivuletiq/',
+            },
+            {
+               companyName: 'Rivulet',
+               companyLinkedinUrl: 'https://www.linkedin.com/company/RivuletIQ',
+            },
+            { companyName: 'Freelance' },
+            {
+               companyName: null,
+               companyLinkedinUrl: 'https://www.linkedin.com/company/15112477/',
+            },
+         ],
+      })
+
+      expect(companiesOf(snapshot)).toEqual([
+         {
+            slug: 'rivuletiq',
+            name: 'Rivulet iQ',
+         },
+         {
+            slug: '15112477',
+            name: null,
+         },
+      ])
    })
 })

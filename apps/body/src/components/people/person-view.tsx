@@ -1,17 +1,18 @@
 import premiumMark from '@/assets/linkedin-premium.png'
 import { Cover, DetailLoading, DetailMissing, Picture, ReadButton } from '@/components/details/detail-parts'
-import { pollWhile } from '@/components/details/read-status'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DrawerDescription, DrawerTitle } from '@/components/ui/drawer'
 import { flagOf } from '@/lib/country-flag'
 import { BadgeCheck, ExternalLink, Sparkles } from 'lucide-react'
+import { type ReactNode } from 'react'
 
 import { type PersonDetail } from './types'
 
 import { trpc } from '../../trpc'
 import { About, Education, Experience, Fit, Skills, WhyFound } from './person-sections'
 import { Workspace } from './person-workspace'
+import { usePersonDetail } from './use-person-detail'
 
 // What the paid profile read says about the person, each only when the read says so.
 export const ProfileBadges = ({ snapshot }: { snapshot: PersonDetail['snapshot'] }) => {
@@ -52,15 +53,20 @@ export const ProfileBadges = ({ snapshot }: { snapshot: PersonDetail['snapshot']
    )
 }
 
-// The top card, laid out like a LinkedIn profile: photo, name, headline, role, place and reach.
-const Header = ({
+// The top card, laid out like a LinkedIn profile: photo, name, badges, headline, role, place and reach. `children` follow the
+// text (the drawer's reason) and `actions` follow Open on LinkedIn and the read.
+export const ProfileCard = ({
    person,
    confirmRead,
    clientId,
+   actions,
+   children,
 }: {
    person: PersonDetail
    confirmRead: boolean
    clientId?: string
+   actions?: ReactNode
+   children?: ReactNode
 }) => {
    const utils = trpc.useUtils()
    const read = trpc.person.readFull.useMutation({
@@ -89,13 +95,15 @@ const Header = ({
             {headline ? <DrawerDescription className="text-foreground text-sm">{headline}</DrawerDescription> : null}
             {title || company ? <p className="text-sm">{[title, company].filter(Boolean).join(' at ')}</p> : null}
             {reach.length > 0 ? <p className="text-muted-foreground text-xs">{reach.join(' · ')}</p> : null}
+            {children}
          </div>
          <div className="flex flex-wrap gap-1.5">
             <ProfileBadges snapshot={snapshot} />
             {person.suppressed ? <Badge variant="destructive">Do not contact</Badge> : null}
          </div>
          <div className="flex flex-wrap items-center gap-2">
-            <Button asChild size="sm">
+            {actions}
+            <Button asChild size="sm" variant={actions ? 'outline' : 'default'}>
                <a href={person.url} target="_blank" rel="noreferrer noopener">
                   <ExternalLink />
                   Open on LinkedIn
@@ -143,35 +151,12 @@ const Accounts = ({ person }: { person: PersonDetail }) =>
       </section>
    ) : null
 
-// One person, like their LinkedIn profile, so a lead can be judged without leaving the table. `confirmRead` asks before the paid read;
-// `clientId` charges it to that client (My network).
-export const PersonView = ({
-   slug,
-   confirmRead = false,
-   clientId,
-}: {
-   slug: string
-   confirmRead?: boolean
-   clientId?: string
-}) => {
-   const detail = trpc.person.detail.useQuery(
-      { slug },
-      {
-         retry: false,
-         refetchInterval: query => pollWhile(query.state.data?.read),
-      }
-   )
-   const person = detail.data
-
-   if (!person) {
-      return detail.error ? <DetailMissing error={detail.error} /> : <DetailLoading what="person" />
-   }
-
+// Everything under the top card: how the accounts know them, fit, why found, about, experience, education, skills, workspace.
+export const ProfileDetails = ({ person }: { person: PersonDetail }) => {
    const { member, snapshot } = person
 
    return (
       <div className="grid gap-3">
-         <Header person={person} confirmRead={confirmRead} clientId={clientId} />
          <Accounts person={person} />
          {member && (member.score !== null || member.state !== 'UNSCORED' || member.matched.length > 0) ? (
             <Fit member={member} />
@@ -187,6 +172,32 @@ export const PersonView = ({
             </p>
          )}
          <Workspace key={person.slug} person={person} />
+      </div>
+   )
+}
+
+// One person, like their LinkedIn profile, so a lead can be judged without leaving the table. `confirmRead` asks before the paid read;
+// `clientId` charges it to that client.
+export const PersonView = ({
+   slug,
+   confirmRead = false,
+   clientId,
+}: {
+   slug: string
+   confirmRead?: boolean
+   clientId?: string
+}) => {
+   const detail = usePersonDetail(slug)
+   const person = detail.data
+
+   if (!person) {
+      return detail.error ? <DetailMissing error={detail.error} /> : <DetailLoading what="person" />
+   }
+
+   return (
+      <div className="grid gap-3">
+         <ProfileCard person={person} confirmRead={confirmRead} clientId={clientId} />
+         <ProfileDetails person={person} />
       </div>
    )
 }

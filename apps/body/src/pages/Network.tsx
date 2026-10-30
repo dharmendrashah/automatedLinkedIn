@@ -92,8 +92,7 @@ const isTyping = (event: KeyboardEvent) => {
 }
 
 // The drawer opens on the chat when there is one.
-const paneFor = (row: PersonRow | undefined): Pane =>
-   row?.links.some(({ kind }) => kind === 'CONVERSATION') ? 'chat' : 'profile'
+const paneFor = (row: PersonRow | undefined): Pane => (row?.profileRead ? 'profile' : 'chat')
 
 type PeopleProps = {
    client: Client
