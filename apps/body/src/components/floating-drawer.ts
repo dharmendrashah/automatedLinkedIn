@@ -7,3 +7,6 @@ export const floatingDrawer = (maxWidth: string) =>
       `data-[vaul-drawer-direction=right]:w-[calc(100%-1.5rem)] ${maxWidth}`,
       'data-[vaul-drawer-direction=right]:rounded-2xl data-[vaul-drawer-direction=right]:border shadow-2xl'
    )
+
+// Widths must carry the direction prefix: a bare `sm:max-w-*` loses to the base drawer's `sm:max-w-sm`.
+export const FULL_WIDTH = 'data-[vaul-drawer-direction=right]:sm:max-w-none'

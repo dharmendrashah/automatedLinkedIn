@@ -27,6 +27,7 @@ import { InviteDialog } from '@/components/my-network/invite-dialog'
 import { PeopleTable } from '@/components/my-network/people-table'
 import { PersonDrawer } from '@/components/my-network/person-drawer'
 import { Pickers } from '@/components/my-network/pickers'
+import { ReadProfileDialog } from '@/components/my-network/read-profile-dialog'
 import {
    type NextStep,
    type ResultDays,
@@ -146,6 +147,8 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
    const [selectedId, setSelectedId] = useState<string | null>(null)
    const [chosen, setChosen] = useState<string[]>([])
    const [pane, setPane] = useState<Pane>('chat')
+   const [readingProfile, setReadingProfile] = useState<{ slug: string; name: string } | null>(null)
+   const saveLabels = trpc.people.update.useMutation({ onSuccess: () => utils.people.invalidate() })
    const [adding, setAdding] = useState(false)
    const { answer, refusal, goAnyway, stopAsking } = useAnswer()
    const shownChosen = chosen.filter(id => ids.includes(id))
@@ -339,7 +342,6 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
                      ...change,
                   })
                }
-               {...(invitesLive && { onInvite: () => setInviting(shownChosen) })}
                onClear={() => setChosen([])}
             />
          ) : null}
@@ -360,6 +362,19 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
                   onChoose={id => setChosen(toggleChosen(shownChosen, id))}
                   onChooseAll={() => setChosen(shownChosen.length > 0 ? [] : ids.slice(0, SELECT_MAX))}
                   onStep={act}
+                  onInvite={row => setInviting([row.id])}
+                  onReadProfile={row =>
+                     setReadingProfile({
+                        slug: row.slug,
+                        name: nameOf(row),
+                     })
+                  }
+                  onLabels={(row, labels) =>
+                     saveLabels.mutateAsync({
+                        id: row.id,
+                        labels,
+                     })
+                  }
                   sort={view.sort}
                   onSort={sort => update({ sort: sortParam(sort) })}
                   hasMore={people.hasNextPage}
@@ -407,6 +422,7 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
             />
          ) : null}
          <AddPeopleDialog key={client.id} client={client} open={adding} onOpenChange={setAdding} />
+         <ReadProfileDialog person={readingProfile} clientId={client.id} onClose={() => setReadingProfile(null)} />
          <InviteDialog
             key={inviting.join()}
             clientId={client.id}

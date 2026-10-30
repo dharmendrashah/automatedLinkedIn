@@ -6,4 +6,6 @@ const POLL_MS = 3_000
 
 export const isReading = (read: Read) => read?.status === 'QUEUED' || read?.status === 'RUNNING'
 
+export const money = (micros: number) => `$${(micros / 1_000_000).toFixed(3)}`
+
 export const pollWhile = (...reads: Read[]) => (reads.some(isReading) ? POLL_MS : false)
