@@ -73,6 +73,35 @@ const updateOwned = (userId: string, id: string, data: Prisma.LinkedInCompanyUpd
    )
 
 export class LinkedInCompanyService {
+   // The current company a profile read found: added once, an archived one left archived, a name filled only where none is set.
+   public static async saveFound(userId: string, company: { slug: string; name: string | null }) {
+      const table = PrismaService.client.linkedInCompany
+      const url = `https://www.linkedin.com/company/${encodeURIComponent(company.slug)}`
+
+      await table.createMany({
+         data: [
+            {
+               userId,
+               slug: company.slug,
+               url,
+               name: company.name,
+            },
+         ],
+         skipDuplicates: true,
+      })
+
+      if (company.name) {
+         await table.updateMany({
+            where: {
+               userId,
+               slug: company.slug,
+               name: null,
+            },
+            data: { name: company.name },
+         })
+      }
+   }
+
    // New links get the labels; links already saved get them added to theirs.
    public static async addMany(userId: string, companies: LinkedInLink[], labels: string[] = []) {
       const table = PrismaService.client.linkedInCompany

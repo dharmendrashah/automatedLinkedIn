@@ -41,7 +41,7 @@ const Header = ({
    ].filter(Boolean)
 
    return (
-      <Cover>
+      <Cover image={snapshot?.cover ?? null}>
          <Picture name={name} image={snapshot?.photo ?? connection?.photoUrl ?? null} />
          <div className="grid gap-1">
             <DrawerTitle className="text-xl">{name}</DrawerTitle>

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { parseLinkedInUrl } from './linkedInUrl'
 import { type Row, count, httpsLink as photoOf, rows, text } from './snapshotFields'
 
 // The full profile an owner chose to read, cut down to what helps judge a lead. Ids, contact details and anything
@@ -30,6 +31,14 @@ const dateOf = (value: unknown) => {
 
 const nullable = z.string().nullable()
 
+// A position's company as its canonical LinkedIn link (lower-case slug), or null when it is not one.
+const companyLinkOf = (value: unknown) => {
+   const raw = text(value, 1_000)
+   const slug = raw ? parseLinkedInUrl(raw, 'company')?.slug.toLowerCase() : undefined
+
+   return slug ? `https://www.linkedin.com/company/${encodeURIComponent(slug)}` : null
+}
+
 const snapshotSchema = z.object({
    name: nullable,
    headline: nullable,
@@ -38,6 +47,9 @@ const snapshotSchema = z.object({
    country: nullable.optional(),
    about: nullable,
    photo: nullable,
+   // Missing from reads made before 2026-10-31, like `premium` and a position's `companyUrl`.
+   cover: nullable.optional(),
+   premium: z.boolean().nullable().optional(),
    followers: z.number().nullable(),
    connections: z.number().nullable(),
    openToWork: z.boolean(),
@@ -46,6 +58,7 @@ const snapshotSchema = z.object({
       z.object({
          title: nullable,
          company: nullable,
+         companyUrl: nullable.optional(),
          location: nullable,
          start: nullable,
          end: nullable,
@@ -77,6 +90,8 @@ export const snapshotFrom = (row: Row): PersonSnapshotData => {
       country: text(row.country),
       about: text(row.about, MAX.about),
       photo: photoOf(row.photo),
+      cover: photoOf(row.coverPhoto),
+      premium: typeof row.premium === 'boolean' ? row.premium : null,
       followers: count(row.followers),
       connections: count(row.connections),
       openToWork: row.openToWork === true,
@@ -86,6 +101,7 @@ export const snapshotFrom = (row: Row): PersonSnapshotData => {
          .map(role => ({
             title: text(role.position),
             company: text(role.companyName),
+            companyUrl: companyLinkOf(role.companyLinkedinUrl),
             location: text(role.location),
             start: dateOf(role.startDate),
             end: dateOf(role.endDate),
@@ -119,6 +135,8 @@ export const profileFacts = (snapshot: PersonSnapshotData) => {
    return {
       title: role?.title ?? null,
       company: role?.company ?? null,
+      companySlug: role?.companyUrl ? (parseLinkedInUrl(role.companyUrl, 'company')?.slug ?? null) : null,
       country: snapshot.country ?? (places.length > 1 ? (places.at(-1) ?? null) : null),
+      premium: snapshot.premium ?? null,
    }
 }

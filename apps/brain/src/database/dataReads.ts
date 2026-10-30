@@ -1,4 +1,11 @@
-import { commentsSnapshotFrom, companySnapshotFrom, postSnapshotFrom, reactionsSnapshotFrom, snapshotFrom } from 'core'
+import {
+   commentsSnapshotFrom,
+   companySnapshotFrom,
+   postSnapshotFrom,
+   profileFacts,
+   reactionsSnapshotFrom,
+   snapshotFrom,
+} from 'core'
 
 import { type DataReadKind, type PageKind, type Prisma } from 'generated/prisma/client'
 
@@ -102,7 +109,17 @@ export const DATA_READS: Record<DataReadKind, ReadSpec> = {
       missing: 'No profile was found at this link.',
       wanted: personWanted,
       store: async ({ userId, slug }, [row]) => {
-         await PersonSnapshotService.save(userId, slug, snapshotFrom(row))
+         const snapshot = snapshotFrom(row)
+         const { companySlug, company } = profileFacts(snapshot)
+
+         await PersonSnapshotService.save(userId, slug, snapshot)
+
+         if (companySlug) {
+            await LinkedInCompanyService.saveFound(userId, {
+               slug: companySlug,
+               name: company,
+            })
+         }
       },
    },
    COMPANY: {

@@ -199,4 +199,39 @@ describe.skipIf(!process.env.DATA_LIVE_TEST)('data operations (live data service
       },
       LIVE_MS
    )
+
+   // Names only, never values: which fields of a full profile read hold the company link and the cover (.plan/network-person-drawer.md).
+   it(
+      'should say which fields a full profile read gives',
+      async () => {
+         const [row] = await collect('profiles', { queries: [PERSON] })
+         const roles = Array.isArray(row?.experience) ? row.experience : []
+         const [role] = roles
+         const linkish = (value: unknown) =>
+            typeof value === 'string' && /linkedin\.com\/company\/|^https:\/\/media\./.test(value)
+
+         console.log(
+            'profile keys',
+            Object.keys(row ?? {})
+               .sort()
+               .join(',')
+         )
+         console.log(
+            'experience keys',
+            Object.keys(role ?? {})
+               .sort()
+               .join(',')
+         )
+         console.log(
+            'link or picture fields',
+            [...Object.entries(row ?? {}), ...Object.entries(role ?? {})]
+               .filter(([, value]) => linkish(value))
+               .map(([key]) => key)
+               .join(',')
+         )
+
+         expect(row).toBeDefined()
+      },
+      LIVE_MS
+   )
 })

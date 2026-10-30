@@ -171,25 +171,31 @@ describe('draftPeople filter fields', () => {
       ).toBe(state)
    })
 
-   it('should take the title, the country and a missing company from the profile read', () => {
+   it('should take the title, the country, Premium, the company slug and a missing company from the profile read', () => {
       expect(
          draft({
             connections: [connection({})],
             facts: {
                title: 'Founder',
                company: 'Lumen Labs',
+               companySlug: 'lumen-labs',
                country: 'France',
+               premium: true,
             },
          })
       ).toMatchObject({
          title: 'Founder',
          company: 'Lumen Labs',
+         companySlug: 'lumen-labs',
          country: 'France',
+         premium: true,
          profileRead: true,
       })
       expect(draft({ connections: [connection({})] })).toMatchObject({
          title: null,
          country: null,
+         companySlug: null,
+         premium: null,
          profileRead: false,
       })
    })

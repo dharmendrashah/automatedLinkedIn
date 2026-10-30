@@ -8,6 +8,8 @@ const at = (day: string) => `${day}T10:00:00.000Z`
 const row = (rest: Partial<ActionRow>): ActionRow => ({
    slug: 'ada-l',
    company: null,
+   companySlug: null,
+   profileRead: false,
    doNotContact: false,
    connectedAt: null,
    inviteState: 'NONE',
@@ -120,8 +122,16 @@ describe('chatsLink', () => {
 })
 
 describe('readCompanyReason', () => {
-   it('asks for the profile read first, and waits for the company link', () => {
+   it('is open with the company slug, and otherwise says what is missing', () => {
+      expect(readCompanyReason(row({ companySlug: 'kite' }))).toBeNull()
       expect(readCompanyReason(row({}))).toBe('Read the profile first')
-      expect(readCompanyReason(row({ company: 'Kite' }))).toBe('Coming soon')
+      expect(
+         readCompanyReason(
+            row({
+               company: 'Kite',
+               profileRead: true,
+            })
+         )
+      ).toBe('No LinkedIn company on the profile')
    })
 })

@@ -114,6 +114,7 @@ const rowSelect = {
    doNotContact: true,
    title: true,
    country: true,
+   companySlug: true,
    premium: true,
    profileRead: true,
    connectedAt: true,

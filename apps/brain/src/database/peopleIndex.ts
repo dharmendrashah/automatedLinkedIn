@@ -85,7 +85,13 @@ export type InviteRow = {
 }
 
 // What the owner's newest profile read says (`profileFacts`), the same in every client.
-export type ProfileFacts = { title: string | null; company: string | null; country: string | null }
+export type ProfileFacts = {
+   title: string | null
+   company: string | null
+   companySlug: string | null
+   country: string | null
+   premium: boolean | null
+}
 
 export type Sources = {
    requests: RequestRow[]
@@ -125,6 +131,8 @@ export type DraftPerson = {
    firstSeenAt: Date
    title: string | null
    country: string | null
+   companySlug: string | null
+   premium: boolean | null
    profileRead: boolean
    connectedAt: Date | null
    lastSentAt: Date | null
@@ -420,6 +428,8 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string, facts: Profil
       firstSeenAt: earliest(seen),
       title: facts?.title ?? null,
       country: facts?.country ?? null,
+      companySlug: facts?.companySlug ?? null,
+      premium: facts?.premium ?? null,
       profileRead: facts !== null,
       connectedAt: rows.connections
          .filter(connected)

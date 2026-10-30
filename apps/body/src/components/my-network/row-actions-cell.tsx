@@ -13,6 +13,7 @@ type Props = {
    invitesLive: boolean
    onInvite: (row: PersonRow) => void
    onReadProfile: (row: PersonRow) => void
+   onReadCompany: (row: PersonRow) => void
    onPreview: (row: PersonRow) => void
 }
 
@@ -58,7 +59,7 @@ const Action = ({
 )
 
 // The row's own actions, shown on hover, on keyboard focus and always on screens without hover. Clicks never open the drawer.
-export const RowActions = ({ row, invitesLive, onInvite, onReadProfile, onPreview }: Props) => {
+export const RowActions = ({ row, invitesLive, onInvite, onReadProfile, onReadCompany, onPreview }: Props) => {
    const message = messageAction(row, invitesLive)
    const chats = chatsLink(row)
    const name = nameOf(row)
@@ -82,7 +83,13 @@ export const RowActions = ({ row, invitesLive, onInvite, onReadProfile, onPrevie
             icon={<FileSearch />}
             {...(row.doNotContact ? { disabled: 'On Do not contact' } : { onClick: () => onReadProfile(row) })}
          />
-         <Action label="Read company" icon={<Building2 />} disabled={readCompanyReason(row)} />
+         <Action
+            label="Read company"
+            icon={<Building2 />}
+            {...(readCompanyReason(row) === null
+               ? { onClick: () => onReadCompany(row) }
+               : { disabled: readCompanyReason(row) ?? undefined })}
+         />
          <Action
             label="Show chats"
             icon={<MessagesSquare />}
