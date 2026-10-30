@@ -2,8 +2,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Download, ListFilter, Search } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Download, ListFilter, Search, UserPlus } from 'lucide-react'
+import { type ReactNode, useEffect, useState } from 'react'
 
 import { FITS, type View, type ViewChange, pickedList } from './address'
 import { ListDialogs, type ListManaging } from './list-dialogs'
@@ -33,7 +33,7 @@ export const SearchBox = ({ value, onSearch }: { value: string; onSearch: (q: st
    }, [text, value, onSearch])
 
    return (
-      <div className="relative w-full max-w-sm">
+      <div className="relative w-full sm:w-72">
          <Search className="text-muted-foreground absolute top-2.5 left-2.5 size-4" aria-hidden />
          <Input
             type="search"
@@ -54,9 +54,12 @@ type Props = {
    exporting: boolean
    // How many filters of the panel are on.
    filtersOn: number
+   // The search box, first in the row.
+   search: ReactNode
    onFilters: () => void
    onChange: (change: ViewChange) => void
    onExport: () => void
+   onAdd: () => void
 }
 
 const Filter = ({
@@ -101,8 +104,19 @@ const Filter = ({
    </Select>
 )
 
-// Found by, Fit and Label, the button to the other filters, and the export of what they show.
-export const Filters = ({ view, lists, labels, exporting, filtersOn, onFilters, onChange, onExport }: Props) => {
+// The search, Found by, Fit and Label, the button to the other filters, then the export and Add people.
+export const Filters = ({
+   view,
+   lists,
+   labels,
+   exporting,
+   filtersOn,
+   search,
+   onFilters,
+   onChange,
+   onExport,
+   onAdd,
+}: Props) => {
    const [managing, setManaging] = useState<ListManaging>(null)
    const list = pickedList(view.found, lists)
    const known = [...SOURCES, ...lists.map(({ id }) => `list:${id}`)]
@@ -112,6 +126,7 @@ export const Filters = ({ view, lists, labels, exporting, filtersOn, onFilters, 
 
    return (
       <div className="flex flex-wrap items-center gap-2">
+         {search}
          <Filter
             label="Found by"
             value={view.found}
@@ -147,6 +162,10 @@ export const Filters = ({ view, lists, labels, exporting, filtersOn, onFilters, 
          <Button variant="outline" size="sm" className="ml-auto" disabled={exporting} onClick={onExport}>
             <Download />
             Export
+         </Button>
+         <Button size="sm" onClick={onAdd}>
+            <UserPlus />
+            Add people
          </Button>
          {list ? (
             <ListDialogs

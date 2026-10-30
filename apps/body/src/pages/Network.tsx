@@ -43,7 +43,6 @@ import { useSeenOnLeave } from '@/components/my-network/use-seen-on-leave'
 import { nameOf } from '@/components/my-network/words'
 import { EmptyState, ToAccounts } from '@/components/network/notices'
 import { PageStatus } from '@/components/page-status'
-import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { flagOf } from '@/lib/country-flag'
 import { downloadFile } from '@/lib/download-file'
@@ -257,16 +256,7 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
 
    return (
       <>
-         <div className="flex flex-wrap items-center justify-between gap-3">
-            {pickers}
-            <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-               <SearchBox key={client.id} value={view.q ?? ''} onSearch={q => update({ q, open: null })} />
-               <Button size="sm" onClick={() => setAdding(true)}>
-                  <UserPlus />
-                  Add people
-               </Button>
-            </div>
-         </div>
+         {pickers}
          {line ? <Today line={line} onGo={change => update({ ...change, open: null })} /> : null}
          {nobody ? <FirstVisit /> : null}
          <div className="flex flex-wrap items-center justify-between gap-3">
@@ -300,9 +290,11 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
             labels={(labels.data ?? []).map(({ label }) => label)}
             exporting={exporting.isPending}
             filtersOn={filtersOn}
+            search={<SearchBox key={client.id} value={view.q ?? ''} onSearch={q => update({ q, open: null })} />}
             onFilters={() => setFiltering(true)}
             onChange={update}
             onExport={() => exporting.mutate(query)}
+            onAdd={() => setAdding(true)}
          />
          <FilterChips
             value={filters}
