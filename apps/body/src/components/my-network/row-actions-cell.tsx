@@ -1,19 +1,17 @@
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Building2, FileSearch, Mail, MessageSquare, MessagesSquare, PanelRight, Phone, UserPlus } from 'lucide-react'
+import { Mail, MessageSquare, PanelRight, Phone, UserPlus } from 'lucide-react'
 import { type ReactNode } from 'react'
 
 import { type PersonRow } from './types'
 
-import { chatsLink, messageAction, readCompanyReason } from './row-actions'
+import { inviteBlock, messageAction } from './row-actions'
 import { nameOf } from './words'
 
 type Props = {
    row: PersonRow
    invitesLive: boolean
    onInvite: (row: PersonRow) => void
-   onReadProfile: (row: PersonRow) => void
-   onReadCompany: (row: PersonRow) => void
    onPreview: (row: PersonRow) => void
 }
 
@@ -59,9 +57,9 @@ const Action = ({
 )
 
 // The row's own actions, shown on hover, on keyboard focus and always on screens without hover. Clicks never open the drawer.
-export const RowActions = ({ row, invitesLive, onInvite, onReadProfile, onReadCompany, onPreview }: Props) => {
-   const message = messageAction(row, invitesLive)
-   const chats = chatsLink(row)
+export const RowActions = ({ row, invitesLive, onInvite, onPreview }: Props) => {
+   const message = messageAction(row)
+   const blocked = inviteBlock(row, invitesLive)
    const name = nameOf(row)
 
    return (
@@ -69,31 +67,15 @@ export const RowActions = ({ row, invitesLive, onInvite, onReadProfile, onReadCo
          className="flex justify-end gap-0.5 opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100"
          onClick={event => event.stopPropagation()}
       >
-         {message.kind === 'INVITE' ? (
-            <Action label={`Invite ${name}`} icon={<UserPlus />} onClick={() => onInvite(row)} />
-         ) : (
-            <Action
-               label={`Message ${name}`}
-               icon={<MessageSquare />}
-               {...(message.kind === 'NONE' ? { disabled: message.reason } : { href: message.href })}
-            />
-         )}
          <Action
-            label="Read profile"
-            icon={<FileSearch />}
-            {...(row.doNotContact ? { disabled: 'On Do not contact' } : { onClick: () => onReadProfile(row) })}
+            label={message.kind === 'OPEN_CHAT' ? `Open chat with ${name}` : `Message ${name}`}
+            icon={<MessageSquare />}
+            {...(message.kind === 'NONE' ? { disabled: message.reason } : { href: message.href })}
          />
          <Action
-            label="Read company"
-            icon={<Building2 />}
-            {...(readCompanyReason(row) === null
-               ? { onClick: () => onReadCompany(row) }
-               : { disabled: readCompanyReason(row) ?? undefined })}
-         />
-         <Action
-            label="Show chats"
-            icon={<MessagesSquare />}
-            {...(chats ? { href: chats } : { disabled: 'No conversation yet' })}
+            label={`Invite ${name}`}
+            icon={<UserPlus />}
+            {...(blocked ? { disabled: blocked } : { onClick: () => onInvite(row) })}
          />
          <Action label="Quick preview" icon={<PanelRight />} onClick={() => onPreview(row)} />
          <Action label="Email" icon={<Mail />} disabled="Coming soon" />

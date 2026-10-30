@@ -31,6 +31,8 @@ const dateOf = (value: unknown) => {
 
 const nullable = z.string().nullable()
 
+const flagOf = (value: unknown) => (typeof value === 'boolean' ? value : null)
+
 // A position's company as its canonical LinkedIn link (lower-case slug), or null when it is not one.
 const companyLinkOf = (value: unknown) => {
    const raw = text(value, 1_000)
@@ -50,6 +52,9 @@ const snapshotSchema = z.object({
    // Missing from reads made before 2026-10-31, like `premium` and a position's `companyUrl`.
    cover: nullable.optional(),
    premium: z.boolean().nullable().optional(),
+   // Missing from reads made before 2026-11-01.
+   verified: z.boolean().nullable().optional(),
+   creator: z.boolean().nullable().optional(),
    followers: z.number().nullable(),
    connections: z.number().nullable(),
    openToWork: z.boolean(),
@@ -91,7 +96,9 @@ export const snapshotFrom = (row: Row): PersonSnapshotData => {
       about: text(row.about, MAX.about),
       photo: photoOf(row.photo),
       cover: photoOf(row.coverPhoto),
-      premium: typeof row.premium === 'boolean' ? row.premium : null,
+      premium: flagOf(row.premium),
+      verified: flagOf(row.verified),
+      creator: flagOf(row.creator),
       followers: count(row.followers),
       connections: count(row.connections),
       openToWork: row.openToWork === true,
@@ -125,6 +132,24 @@ export const snapshotFrom = (row: Row): PersonSnapshotData => {
 
 // Snapshots come back from a JSON column; one that does not fit is not shown.
 export const readSnapshot = (data: unknown): PersonSnapshotData | null => snapshotSchema.safeParse(data).data ?? null
+
+// Every LinkedIn company of the experience, once each, newest position first.
+export const companiesOf = (snapshot: PersonSnapshotData) => {
+   const found = new Map<string, string | null>()
+
+   for (const role of snapshot.experience) {
+      const slug = role.companyUrl ? parseLinkedInUrl(role.companyUrl, 'company')?.slug.toLowerCase() : undefined
+
+      if (slug && !found.has(slug)) {
+         found.set(slug, role.company)
+      }
+   }
+
+   return [...found].map(([slug, name]) => ({
+      slug,
+      name,
+   }))
+}
 
 // What My network's filters read from a profile read: the current position (one that has not ended, else the newest) and the
 // country (an older read only has the joined location, whose last part is the country when there are several).

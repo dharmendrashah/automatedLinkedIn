@@ -9,4 +9,4 @@ export const floatingDrawer = (maxWidth: string) =>
    )
 
 // Widths must carry the direction prefix: a bare `sm:max-w-*` loses to the base drawer's `sm:max-w-sm`.
-export const FULL_WIDTH = 'data-[vaul-drawer-direction=right]:sm:max-w-none'
+export const WIDE = 'data-[vaul-drawer-direction=right]:sm:max-w-[60vw]'

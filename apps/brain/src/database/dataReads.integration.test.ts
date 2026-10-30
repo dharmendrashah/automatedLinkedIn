@@ -96,4 +96,64 @@ describe('DATA_READS.PROFILE (database)', () => {
 
       expect(await companies()).toHaveLength(before)
    })
+
+   it('should save every past company too, labelled as found on profiles, and leave saved ones as they are', async () => {
+      await db.linkedInCompany.create({
+         data: {
+            userId,
+            slug: 'kite',
+            url: 'https://www.linkedin.com/company/kite',
+            tags: ['Mine'],
+         },
+      })
+      await DATA_READS.PROFILE.store(
+         {
+            userId,
+            slug: 'edsger',
+            params: {},
+         },
+         [
+            {
+               experience: [
+                  {
+                     companyName: 'Kite',
+                     companyLinkedinUrl: 'https://www.linkedin.com/company/kite/',
+                     endDate: null,
+                  },
+                  {
+                     companyName: 'Mathematisch Centrum',
+                     companyLinkedinUrl: 'https://www.linkedin.com/company/mathematisch-centrum/',
+                     endDate: '1962',
+                  },
+               ],
+            },
+         ]
+      )
+
+      const saved = await db.linkedInCompany.findMany({
+         where: {
+            userId,
+            slug: { in: ['kite', 'mathematisch-centrum'] },
+         },
+         select: {
+            slug: true,
+            name: true,
+            tags: true,
+         },
+         orderBy: { slug: 'asc' },
+      })
+
+      expect(saved).toEqual([
+         {
+            slug: 'kite',
+            name: 'Kite',
+            tags: ['Mine'],
+         },
+         {
+            slug: 'mathematisch-centrum',
+            name: 'Mathematisch Centrum',
+            tags: ['From profiles'],
+         },
+      ])
+   })
 })

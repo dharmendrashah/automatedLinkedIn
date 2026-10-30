@@ -27,7 +27,6 @@ import { InviteDialog } from '@/components/my-network/invite-dialog'
 import { PeopleTable } from '@/components/my-network/people-table'
 import { PersonDrawer } from '@/components/my-network/person-drawer'
 import { Pickers } from '@/components/my-network/pickers'
-import { ReadCompanyDialog, ReadProfileDialog } from '@/components/my-network/read-dialogs'
 import {
    type NextStep,
    type ResultDays,
@@ -93,8 +92,7 @@ const isTyping = (event: KeyboardEvent) => {
 }
 
 // The drawer opens on the chat when there is one.
-const paneFor = (row: PersonRow | undefined): Pane =>
-   row?.links.some(({ kind }) => kind === 'CONVERSATION') ? 'chat' : 'profile'
+const paneFor = (row: PersonRow | undefined): Pane => (row?.profileRead ? 'profile' : 'chat')
 
 type PeopleProps = {
    client: Client
@@ -147,8 +145,6 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
    const [selectedId, setSelectedId] = useState<string | null>(null)
    const [chosen, setChosen] = useState<string[]>([])
    const [pane, setPane] = useState<Pane>('chat')
-   const [readingProfile, setReadingProfile] = useState<{ slug: string; name: string } | null>(null)
-   const [readingCompany, setReadingCompany] = useState<{ slug: string; name: string } | null>(null)
    const saveLabels = trpc.people.update.useMutation({ onSuccess: () => utils.people.invalidate() })
    const [adding, setAdding] = useState(false)
    const { answer, refusal, goAnyway, stopAsking } = useAnswer()
@@ -364,20 +360,6 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
                   onChooseAll={() => setChosen(shownChosen.length > 0 ? [] : ids.slice(0, SELECT_MAX))}
                   onStep={act}
                   onInvite={row => setInviting([row.id])}
-                  onReadProfile={row =>
-                     setReadingProfile({
-                        slug: row.slug,
-                        name: nameOf(row),
-                     })
-                  }
-                  onReadCompany={row =>
-                     row.companySlug
-                        ? setReadingCompany({
-                             slug: row.companySlug,
-                             name: row.company ?? row.companySlug,
-                          })
-                        : undefined
-                  }
                   onLabels={(row, labels) =>
                      saveLabels.mutateAsync({
                         id: row.id,
@@ -431,8 +413,6 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
             />
          ) : null}
          <AddPeopleDialog key={client.id} client={client} open={adding} onOpenChange={setAdding} />
-         <ReadProfileDialog person={readingProfile} clientId={client.id} onClose={() => setReadingProfile(null)} />
-         <ReadCompanyDialog company={readingCompany} onClose={() => setReadingCompany(null)} />
          <InviteDialog
             key={inviting.join()}
             clientId={client.id}

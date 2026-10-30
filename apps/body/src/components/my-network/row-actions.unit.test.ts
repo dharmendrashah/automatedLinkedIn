@@ -1,15 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { type ActionRow, chatsLink, messageAction, readCompanyReason } from './row-actions'
+import { type ActionRow, inviteBlock, messageAction } from './row-actions'
 
 // Dates reach the page as ISO text.
 const at = (day: string) => `${day}T10:00:00.000Z`
 
 const row = (rest: Partial<ActionRow>): ActionRow => ({
    slug: 'ada-l',
-   company: null,
-   companySlug: null,
-   profileRead: false,
    doNotContact: false,
    connectedAt: null,
    inviteState: 'NONE',
@@ -38,8 +35,7 @@ describe('messageAction', () => {
             row({
                connectedAt: at('2026-01-01'),
                links: [conversation('c-old', 'a1', '2026-09-01'), conversation('c-new', 'a2', '2026-10-01')],
-            }),
-            true
+            })
          )
       ).toEqual({
          kind: 'OPEN_CHAT',
@@ -53,8 +49,7 @@ describe('messageAction', () => {
             row({
                connectedAt: at('2026-01-01'),
                links: [connection('a1', '2026-01-01'), connection('a 2', '2026-05-01')],
-            }),
-            true
+            })
          )
       ).toEqual({
          kind: 'START_CHAT',
@@ -62,25 +57,15 @@ describe('messageAction', () => {
       })
    })
 
-   it('offers an invite to someone not connected, only when an invite can go', () => {
-      expect(messageAction(row({}), true)).toEqual({ kind: 'INVITE' })
-      expect(messageAction(row({ inviteState: 'ENDED' }), true)).toEqual({ kind: 'INVITE' })
-      expect(messageAction(row({}), false)).toEqual({
+   it('offers no message to someone not connected and with no conversation', () => {
+      expect(messageAction(row({ inviteState: 'PENDING' }))).toEqual({
          kind: 'NONE',
-         reason: 'Invites are not on yet',
-      })
-      expect(messageAction(row({ inviteState: 'PENDING' }), true)).toEqual({
-         kind: 'NONE',
-         reason: 'Invite already sent',
-      })
-      expect(messageAction(row({ inviteState: 'QUEUED' }), true)).toEqual({
-         kind: 'NONE',
-         reason: 'Invite already queued',
+         reason: 'Not connected yet',
       })
    })
 
-   it('never offers to write to someone on Do not contact', () => {
-      expect(messageAction(row({ doNotContact: true }), true)).toEqual({
+   it('never starts a message to someone on Do not contact, but still opens a conversation they have', () => {
+      expect(messageAction(row({ doNotContact: true }))).toEqual({
          kind: 'NONE',
          reason: 'On Do not contact',
       })
@@ -90,48 +75,44 @@ describe('messageAction', () => {
                doNotContact: true,
                connectedAt: at('2026-01-01'),
                links: [connection('a1', '2026-01-01')],
-            }),
-            true
+            })
          )
       ).toEqual({
          kind: 'NONE',
          reason: 'On Do not contact',
       })
+      expect(
+         messageAction(
+            row({
+               doNotContact: true,
+               links: [conversation('c1', 'a1', '2026-10-01')],
+            })
+         )
+      ).toEqual({
+         kind: 'OPEN_CHAT',
+         href: '/unibox/c1',
+      })
    })
 
    it('says so when connected but no account can be named', () => {
-      expect(messageAction(row({ connectedAt: at('2026-01-01') }), true)).toEqual({
+      expect(messageAction(row({ connectedAt: at('2026-01-01') }))).toEqual({
          kind: 'NONE',
          reason: 'No account to write from',
       })
    })
 })
 
-describe('chatsLink', () => {
-   it('opens the newest conversation, even on Do not contact, and nothing without one', () => {
-      expect(
-         chatsLink(
-            row({
-               doNotContact: true,
-               links: [conversation('c1', 'a1', '2026-10-01')],
-            })
-         )
-      ).toBe('/unibox/c1')
-      expect(chatsLink(row({}))).toBeNull()
+describe('inviteBlock', () => {
+   it('lets an invite go to someone not connected, and an ended invite go again', () => {
+      expect(inviteBlock(row({}), true)).toBeNull()
+      expect(inviteBlock(row({ inviteState: 'ENDED' }), true)).toBeNull()
    })
-})
 
-describe('readCompanyReason', () => {
-   it('is open with the company slug, and otherwise says what is missing', () => {
-      expect(readCompanyReason(row({ companySlug: 'kite' }))).toBeNull()
-      expect(readCompanyReason(row({}))).toBe('Read the profile first')
-      expect(
-         readCompanyReason(
-            row({
-               company: 'Kite',
-               profileRead: true,
-            })
-         )
-      ).toBe('No LinkedIn company on the profile')
+   it('says why no invite can go', () => {
+      expect(inviteBlock(row({}), false)).toBe('Invites are not on yet')
+      expect(inviteBlock(row({ doNotContact: true }), true)).toBe('On Do not contact')
+      expect(inviteBlock(row({ connectedAt: at('2026-01-01') }), true)).toBe('Already connected')
+      expect(inviteBlock(row({ inviteState: 'PENDING' }), true)).toBe('Invite already sent')
+      expect(inviteBlock(row({ inviteState: 'QUEUED' }), true)).toBe('Invite already queued')
    })
 })

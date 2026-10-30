@@ -1,8 +1,8 @@
 # My network person drawer improvements
 
-- Status: in progress (phase A)
+- Status: done
 - Created: 2026-10-30
-- Locked by user: yes, 2026-10-30 for phase A ("work on this plan"); phases B and C wait on the decision and the recording below
+- Locked by user: yes, 2026-10-30 for phase A ("work on this plan"), phase B ("continue with phase B") and phase C (owner's answers, see "Phase C, locked")
 
 ## Goal
 
@@ -27,12 +27,31 @@ Confirmed (owner, 2026-10-30):
 7. Premium: the orange LinkedIn mark (`apps/body/src/assets/linkedin-premium.png`, added by the owner) instead of the plain LinkedIn icon. Premium is learnt when an account visits the profile; the owner will record a Premium member's profile for it.
 8. Country: a flag next to the person's name (no new column), with the country name on hover (France: the French flag, "France"); nothing until a profile read gives the country.
 9. Labels on the row, added and removed from the row itself.
-10. Remove the Fit column.
-11. The drawer's profile card shows the person's real LinkedIn cover image (the banner behind the photo) instead of the plain blue strip, when it is known; the plain strip stays otherwise.
+10.   Remove the Fit column.
+11.   The drawer's profile card shows the person's real LinkedIn cover image (the banner behind the photo) instead of the plain blue strip, when it is known; the plain strip stays otherwise.
 
 Open questions (must be empty before locking):
 
 - None for phase A. Phase B needs a decision (see Phases): may one paid profile read run on staging to see which fields the data supplier sends for the company link and the cover? Phase C waits for the owner's Premium recording.
+- Phase C (2026-10-30): settled by the owner, see "Phase C, locked".
+
+## Phase C, locked (2026-10-30)
+
+The owner: profiles are never read in the browser; every profile fact comes from the data service's paid read, and its value is final. So the spider does not learn Premium (the findings below are kept only as a record), and Premium on the row already comes from the read (phase B). What remains:
+
+- The snapshot also keeps the read's `verified` and `creator` (booleans; missing from older reads, shown as nothing).
+- The drawer's badges under the name show, beside Open to work and Hiring: Premium (the orange mark), Verified, Creator, and the country (flag and name), each only when the read says so.
+- Verified against the owner's exported read (2026-10-30): `premium`, `verified`, `creator`, `hiring`, `openToWork` are booleans and `country` is a name ("India").
+- Not done: `influencer` and `openProfile` (not asked for).
+
+## Phase C, findings (2026-10-30, superseded by "Phase C, locked")
+
+Checked every kept page under `apps/spider/.devtools-recordings` (structure only, no names kept):
+
+- The profiles visited today (`session-2026-10-30T09-22-58-429Z`, `…09-45-48-912Z`) and on 2026-10-27 have no Premium mark in the top card: the name block is the verification trigger (`ProfileVerificationTriggerRef-<slug>`, `h2` and an unlabelled `svg`), then the pronouns and "· 2nd". So none of those members is shown as Premium, and the top card's Premium shape is still unseen.
+- Wherever LinkedIn does mark a member as Premium (feed post authors, the invitations list, the "Explore Premium profiles" box, a profile's side lists), it is the same shape: a link to `/in/<slug>/` with `span[role="img"][aria-label="Premium"]` inside it. The label is the brand name in the English pages seen; other languages are unseen.
+- The network data of a visit holds `premiumSubscriber` only for the signed-in account itself (`voyager…Me`), never for the member visited.
+- Proposed (to confirm): `linkedin-view-profile` reads the top card after it lands and reports `premium` (true when the top card holds the mark, false when the top card was found without it, nothing when no top card was read); brain's visit hook keeps it and the index fills `Person.premium` from the newest of the paid read and the visit. Not built until a Premium top card is recorded.
 
 ## Phase B, verified (2026-10-30)
 
@@ -179,3 +198,12 @@ Phase B built on branch `feat/network-company-cover` (2026-10-31), on top of pha
 - Read company opens `ReadCompanyDialog` (price first, archived company refused); `ReadProfileDialog` and it share `PaidReadDialog` (`read-dialogs.tsx`).
 - The drawer's profile card shows the cover through `/cdn`, the plain strip otherwise.
 - Phase C (spider Premium for people never read) stays open; the owner's recording is still needed only for that.
+
+Phase C built on branch `feat/network-profile-badges` (2026-10-31), redefined by the owner: no spider work, the paid read is the only source.
+
+- Snapshot keeps `verified` and `creator` (booleans only; older reads lack them).
+- The person drawer's badges show Premium (the orange mark), Verified, Creator and the country (flag and name) beside Open to work and Hiring.
+- Owner's follow-up (same PR): the person drawer is 60% of the screen wide (`WIDE`, replaces `FULL_WIDTH`), and the badges (`ProfileBadges`) also show in the drawer's header beside the status.
+- Owner's follow-up (same PR): Message and Show chats are one button. It opens the newest conversation when there is one (also on Do not contact, reading is allowed), else starts a message from the newest connection's account, else Invite.
+- Owner's follow-up (same PR): Read profile and Read company removed from the row (and `read-dialogs.tsx` with them). A profile is still read from the drawer's Profile tab, and a company from `/companies`; a profile read still saves its current company to `/companies`.
+- Lint, type check, build and unit tests (contracts 229, body 881, spider 1353, brain 1586) pass. Not seen in a browser; a read made after the deploy shows the new badges.

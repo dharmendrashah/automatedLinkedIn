@@ -72,33 +72,40 @@ const updateOwned = (userId: string, id: string, data: Prisma.LinkedInCompanyUpd
       })
    )
 
+// The label of companies a profile read added, so the owner can tell them from the ones they saved.
+export const FOUND_ON_PROFILES = 'From profiles'
+
 export class LinkedInCompanyService {
-   // The current company a profile read found: added once, an archived one left archived, a name filled only where none is set.
-   public static async saveFound(userId: string, company: { slug: string; name: string | null }) {
+   // Every company a profile read found: added once, an archived one left archived, a name filled only where none is set.
+   public static async saveFound(userId: string, companies: Array<{ slug: string; name: string | null }>) {
       const table = PrismaService.client.linkedInCompany
-      const url = `https://www.linkedin.com/company/${encodeURIComponent(company.slug)}`
+
+      if (companies.length === 0) {
+         return
+      }
 
       await table.createMany({
-         data: [
-            {
-               userId,
-               slug: company.slug,
-               url,
-               name: company.name,
-            },
-         ],
+         data: companies.map(({ slug, name }) => ({
+            userId,
+            slug,
+            url: `https://www.linkedin.com/company/${encodeURIComponent(slug)}`,
+            name,
+            tags: [FOUND_ON_PROFILES],
+         })),
          skipDuplicates: true,
       })
 
-      if (company.name) {
-         await table.updateMany({
-            where: {
-               userId,
-               slug: company.slug,
-               name: null,
-            },
-            data: { name: company.name },
-         })
+      for (const { slug, name } of companies) {
+         if (name) {
+            await table.updateMany({
+               where: {
+                  userId,
+                  slug,
+                  name: null,
+               },
+               data: { name },
+            })
+         }
       }
    }
 

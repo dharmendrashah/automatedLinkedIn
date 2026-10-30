@@ -1,8 +1,8 @@
 import {
    commentsSnapshotFrom,
+   companiesOf,
    companySnapshotFrom,
    postSnapshotFrom,
-   profileFacts,
    reactionsSnapshotFrom,
    snapshotFrom,
 } from 'core'
@@ -110,16 +110,9 @@ export const DATA_READS: Record<DataReadKind, ReadSpec> = {
       wanted: personWanted,
       store: async ({ userId, slug }, [row]) => {
          const snapshot = snapshotFrom(row)
-         const { companySlug, company } = profileFacts(snapshot)
 
          await PersonSnapshotService.save(userId, slug, snapshot)
-
-         if (companySlug) {
-            await LinkedInCompanyService.saveFound(userId, {
-               slug: companySlug,
-               name: company,
-            })
-         }
+         await LinkedInCompanyService.saveFound(userId, companiesOf(snapshot))
       },
    },
    COMPANY: {

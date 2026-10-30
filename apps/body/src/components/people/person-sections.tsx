@@ -17,6 +17,8 @@ import { cn } from '@/lib/utils'
 
 import { type PersonDetail } from './types'
 
+import { companyPageOf } from './company-page'
+
 type Snapshot = NonNullable<PersonDetail['snapshot']>
 type Member = NonNullable<PersonDetail['member']>
 
@@ -53,11 +55,22 @@ export const About = ({ text }: { text: string }) => {
 const span = (start: string | null, end: string | null) =>
    start || end ? `${start ?? '?'} – ${end ?? 'Present'}` : null
 
-const Entry = ({ icon, title, lines }: { icon: ReactNode; title: string; lines: (string | null)[] }) => (
+const Entry = ({
+   icon,
+   title,
+   subtitle,
+   lines,
+}: {
+   icon: ReactNode
+   title: string
+   subtitle?: ReactNode
+   lines: (string | null)[]
+}) => (
    <li className="grid grid-cols-[auto_1fr] gap-3">
       <span className="bg-muted text-muted-foreground grid size-10 place-items-center rounded-md">{icon}</span>
       <div className="grid gap-0.5">
          <span className="text-sm font-medium">{title}</span>
+         {subtitle}
          {lines.filter(Boolean).map(line => (
             <span key={line} className="text-muted-foreground text-xs whitespace-pre-line">
                {line}
@@ -75,12 +88,29 @@ export const Experience = ({ roles }: { roles: Snapshot['experience'] }) => (
                key={`${role.title}-${role.company}-${index}`}
                icon={<BriefcaseBusiness className="size-5" aria-hidden />}
                title={role.title ?? 'Role'}
-               lines={[role.company, span(role.start, role.end), role.location, role.description]}
+               subtitle={<CompanyName name={role.company} page={companyPageOf(role.companyUrl)} />}
+               lines={[span(role.start, role.end), role.location, role.description]}
             />
          ))}
       </ul>
    </Section>
 )
+
+// A company opens its drawer on /companies in a new tab when the read linked it to LinkedIn.
+const CompanyName = ({ name, page }: { name: string | null; page: string | null }) =>
+   page ? (
+      <a
+         href={page}
+         target="_blank"
+         rel="noopener noreferrer"
+         className="justify-self-start text-sm underline-offset-4 hover:underline"
+         aria-label={`${name ?? 'Company'} on Companies (opens in a new tab)`}
+      >
+         {name ?? 'Company'}
+      </a>
+   ) : name ? (
+      <span className="text-sm">{name}</span>
+   ) : null
 
 export const Education = ({ schools }: { schools: Snapshot['education'] }) => (
    <Section title="Education">
