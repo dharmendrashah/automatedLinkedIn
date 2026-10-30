@@ -18,11 +18,9 @@ import { type ReactNode, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
-import { isReading } from './read-status'
+import { isReading, money } from './read-status'
 
 // Pieces every detail drawer shares: the cover and picture, the paid read button, loading and missing states.
-
-const money = (micros: number) => `$${(micros / 1_000_000).toFixed(3)}`
 
 const initialsOf = (name: string) =>
    name

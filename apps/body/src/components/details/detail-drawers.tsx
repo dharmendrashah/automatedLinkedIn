@@ -41,7 +41,7 @@ export const DetailDrawers = ({ kind, order, docked = false, confirmRead = false
          onOpenChange={isOpen => (isOpen ? undefined : close())}
       >
          <DrawerContent
-            className={floatingDrawer('sm:max-w-3xl')}
+            className={floatingDrawer('data-[vaul-drawer-direction=right]:sm:max-w-3xl')}
             onInteractOutside={docked ? event => event.preventDefault() : undefined}
          >
             <div className="grid gap-3 overflow-y-auto p-4">

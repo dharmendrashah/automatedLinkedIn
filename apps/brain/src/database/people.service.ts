@@ -125,6 +125,7 @@ const rowSelect = {
          kind: true,
          accountId: true,
          sourceId: true,
+         at: true,
       },
    },
 } satisfies Prisma.PersonSelect

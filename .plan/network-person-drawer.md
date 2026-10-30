@@ -1,8 +1,8 @@
 # My network person drawer improvements
 
-- Status: draft
+- Status: in progress (phase A)
 - Created: 2026-10-30
-- Locked by user: no
+- Locked by user: yes, 2026-10-30 for phase A ("work on this plan"); phases B and C wait on the decision and the recording below
 
 ## Goal
 
@@ -32,7 +32,24 @@ Confirmed (owner, 2026-10-30):
 
 Open questions (must be empty before locking):
 
-1. The owner is adding a few more points (pending).
+- None for phase A. Phase B needs a decision (see Phases): may one paid profile read run on staging to see which fields the data supplier sends for the company link and the cover? Phase C waits for the owner's Premium recording.
+
+## Phases
+
+Verified against the code on 2026-10-30 (after the filters work, PR #142):
+
+- Already shipped by the filters work: the company line on top of the person, the Premium mark slot and the country flag with its name on hover (`people-table.tsx`, `lib/country-flag.ts`); `Person` has `country`, `title`, `premium`, `connectedAt`, `inviteState`.
+- Drawer width: only `person-drawer.tsx` and `details/detail-drawers.tsx` pass a bare `sm:max-w-3xl`, which loses to the base `data-[vaul-drawer-direction=right]:sm:max-w-sm`; the account, job, proxy and session drawers already pass the prefixed class and are fine. The fix is the prefixed class in those two callers, not a change to the shared base.
+- Connected: `row.connectedAt !== null` (any of the client's accounts). Conversations: `CONVERSATION` links carry the conversation id as `sourceId` and the account as `accountId` (`peopleIndex.ts`); the row's links do not carry their time yet, so brain adds `at` to the row's links to pick the newest.
+- The Unibox already opens a message to one person from its address: `/unibox/new?account=<accountId>&to=<slug>` (`unibox/address.ts`, `directOutcome` handles "not found" by opening a search). No Unibox change is needed.
+- Read profile: `person.readFull({ slug, clientId })`; its price comes with `person.detail` (`readPriceMicros`), and `ReadButton` (`details/detail-parts.tsx`) already asks before paying.
+- The "Messaged · 20756 days ago" reason: `peopleIndex.ts` falls back to `new Date(0)` when a conversation has no message time; it must fall back to when the conversation was first seen.
+
+Earlier notes:
+
+- **A — build now** (everything here is confirmed and uses data brain already has): drawer width, bulk bar without Invite, Fit column removed, "Suggested next step", labels on the row, hover actions (Send message or Send invite, Read profile, Show chats, Quick preview, Email and Phone disabled), Read company shown but disabled until phase B, and the "20756 days ago" reason bug.
+- **B — after one verified read**: keep the current company's LinkedIn link and the cover image from the paid read, save that company to `/companies`, enable Read company, and show the cover in the drawer. Raw supplier rows are never stored (only the allow-listed snapshot), so the field names are not known from the code; they are read once from a real read before building, never guessed.
+- **C — after the owner's recording**: the spider's profile reader learns Premium (`spider-task-writer` skill); `Person.premium` is filled from it. Until then no row shows the Premium mark.
 
 ## Findings so far
 
@@ -56,29 +73,73 @@ Open questions (must be empty before locking):
 
 ## Approach
 
-- [ ] Drawer: make the base right drawer honour the width it is given (`components/ui/drawer.tsx` / `floatingDrawer`), and give the person drawer the whole screen minus the floating margin; check the other drawers still look right.
-- [ ] Bulk bar: drop `onInvite`, its button and the bulk path in `Network.tsx`.
-- [ ] Brain row fields (`people.list`, one query, no per-row lookups): `connected` (a `CONNECTION` link to any of the client's accounts), `conversationId` (newest `CONVERSATION` link), `country`, `companyUrl`, `premium`, from the stored reads; tests first.
-- [ ] Storage (additive migration if columns are needed on `Person`, else read from `PersonSnapshot` and the visit data): country and company link from the newest read, Premium from the newest visit.
-- [ ] Profile read keeps the company link; when the read (or a visit) finds the current company, upsert it into `LinkedInCompany` for the owner (no duplicate when it is already there).
-- [ ] Spider: the profile reader learns the Premium badge from the owner's recording (follows the `spider-task-writer` skill and its checklist).
-- [ ] Body row: company line on top, name with the Premium image or the LinkedIn icon and the country flag (hover: name), labels with `LabelCell`, Fit column removed, "Suggested next step", hover actions (also shown on keyboard focus and on touch screens).
-- [ ] Actions wired to what exists: chat links in a new tab, the Unibox opening New message from `?to=&account=`, `InviteDialog` for one person, `person.readFull` and `companyPage.readFull` with their price confirms (the row learns the company's slug once it is saved), preview drawer, disabled Email and Phone.
-- [ ] Cover: keep the cover link in the paid read's snapshot when the supplier gives it (an added JSON field) and from an account's profile visit; `people.get` returns the newest; `Cover` takes an optional image (loaded through `/cdn`), so companies and posts can use it later without change.
-- [ ] Unit tests for the row rules (Send message or Send invite, Read company enabled, country to flag) and brain tests for the new fields and the company save.
+Phase A:
+
+- [x] Brain: the row's links carry `at`; the reason of a conversation without a message time falls back to when it was first seen (`peopleIndex.ts`), with a unit test; a migration marks the people whose reason date is 1970 for a rebuild.
+- [x] Body, pure rules (`my-network/row-actions.ts`, tests first): `messageAction(row, invitesLive)` answers OPEN_CHAT (newest conversation id), START_CHAT (account and slug) or INVITE or none; `chatLink`, `newMessageLink`; `readCompanyState` (disabled with its reason until phase B).
+- [x] Body, row: Fit column out; "Suggested next step"; labels with `LabelCell` on the row (saves through `people.update`); hover actions cell; Read profile opens a small confirm dialog that loads `person.detail` for the price and runs `person.readFull`.
+- [x] Bulk bar: drop `onInvite` and the bulk invite path.
+- [x] Drawer: the prefixed width class in `person-drawer.tsx` and `detail-drawers.tsx`, as wide as the screen allows minus the floating margin.
+- [ ] Definition of done, `MEMORY.md`, plan Outcome; seen in a browser on staging after deploy.
+
+Phase B (after the decision above): keep the company link and the cover in the snapshot (fields named from the real read), `LinkedInCompanyService` upsert from a read, `people.list` carries the company slug, Read company enabled, `Cover` takes an image through `/cdn`.
+
+Phase C (after the recording): Premium in the profile reader and `Person.premium` from it.
 
 ## Edge cases and risks
 
-- Send message vs Send invite: connected to one of the client's accounts and not another; the row uses "connected to any" and the chat opens on the account with the conversation. Send invite also hides while an invite is pending, on Do not contact, and when invites are not live (`INVITES_LIVE`).
-- Hover-only actions are invisible on touch screens and to keyboard users: show them on focus within the row, and always on screens without hover.
-- A paid action from a row is one click away: keep the confirm with the price, and stop a second click while the read runs. Read company is disabled (with the reason) until the company is saved, and a company read already done shows when it was read instead of reading again without asking.
-- `/unibox?to=&account=`: the account must be one of the owner's and connected to the person; otherwise the Unibox opens normally with a short message, never a composer for someone else.
-- Saving a company: only from a LinkedIn company link found by a read, never guessed from the name; a company already on `/companies` is not added twice; a person who changes job adds the new company, the old one stays.
-- Premium and country are only as fresh as the last read or visit; show nothing rather than a guess.
-- A cover link that has expired or fails to load falls back to the plain strip, with no broken image; the cover keeps its LinkedIn shape (wide, cropped) at every drawer width.
-- Unknown or unmatched country names show no flag (the hover still says where they are, if known).
-- Row buttons stop the click from also opening the drawer (as the Next step cell does).
-- New tabs are plain links (`target="_blank"`, `rel="noopener noreferrer"`), so a middle click works too.
+Send message, Send invite, Show chats:
+
+- Several accounts: a conversation on any account opens the newest one; no conversation and connected on several accounts starts the message from the account of the newest connection.
+- Connected but the account was removed from the client or signed out: the link still opens the Unibox, which says the account cannot send; no message is sent from the row itself.
+- Not connected: Send invite only while invites are live (`INVITES_LIVE`), not on Do not contact, not while an invite is queued or pending (`inviteState`), and only with an account to send from; otherwise no button, and the hover title says why ("Invite already pending", "On Do not contact").
+- Do not contact: no Send message and no Send invite; Show chats still opens an existing conversation (reading is allowed).
+- The person has no slug-based profile link (a conversation whose contact link is a member id): Send message opens the conversation if there is one, else no button.
+- A conversation that was deleted since the list loaded: the Unibox shows its own "not found"; the row does not check first.
+- New tabs are plain links (`target="_blank"`, `rel="noopener noreferrer"`), so middle click and copy link work; nothing is opened by script, so pop-up blockers do not apply.
+
+Read profile (paid):
+
+- Never one click: the dialog shows the price and what it adds, and the read starts only on its button; Escape or Cancel pays nothing.
+- A read already running ("Reading…"), a read done before ("Read again" with the date), a wallet below the floor, a refused read (`ConflictError` sentence) and a person on Do not contact (no button) all come from the existing read service and are shown as they are in the drawer.
+- Double click on the dialog's button sends one read (the button is disabled while pending, and brain answers a running read instead of starting a second).
+- After a read the row learns title, country and company through the index job (seconds to a minute); the row does not pretend it changed before then.
+
+Read company:
+
+- Phase A shows it disabled with "Read the profile first" when the company is unknown, and "Coming soon" when it is known by name only; it never reads a company guessed from a name.
+
+Labels on the row:
+
+- Adding a label that exists on another person reuses it (lower-cased, trimmed, as `people.update` already does); an empty or too long label is refused by the same rules; a failed save shows the error and keeps the old labels.
+- Clicks in the labels cell never open the drawer.
+
+Hover actions:
+
+- Shown on row hover, on keyboard focus inside the row (`focus-within`) and always on screens without hover (`@media (hover: none)`), so touch and keyboard users can reach them.
+- Every button has an accessible name and a tooltip; disabled buttons say why.
+- The row's keyboard shortcuts (J/K/Enter) keep working; Enter on a focused action button runs that button, not the row.
+- Virtual rows: actions live in the row, so they scroll and recycle with it; nothing is kept per row outside React state.
+
+Drawer:
+
+- As wide as the screen allows minus the floating margin; on a phone it is the full width as today.
+- The account, job, proxy and session drawers keep their widths (they already pass the prefixed class).
+
+Bulk bar:
+
+- Without Invite the bar still shows count, Set status, Label, Add label, Do not contact and Clear; inviting several people is no longer offered anywhere (one person at a time from the row or the drawer).
+
+Data and safety:
+
+- No new endpoint; all actions use existing, owner-scoped procedures (`people.update`, `person.readFull`, `person.detail`) and links.
+- Nothing irreversible happens from a hover button except the paid read, which asks first.
+- The reason-date fix only changes a person when the index rebuilds it, so a small additive migration marks every person whose reason date is 1970 for a rebuild; nothing else is touched.
+
+Phase B, kept for later:
+
+- Saving a company: only from a LinkedIn company link found by a read, never guessed from the name; a company already on `/companies` is not added twice (same slug), an archived one is not brought back without the owner; a person who changes job adds the new company and the old one stays.
+- A cover link that has expired or fails to load falls back to the plain strip, with no broken image; it keeps its LinkedIn shape (4:1, cropped) at every drawer width.
 
 ## Verification
 
@@ -86,4 +147,10 @@ Open questions (must be empty before locking):
 
 ## Outcome
 
-Filled in when done.
+Phase A built on branch `feat/network-row-actions` (2026-10-30); lint, type check, unit tests (contracts 229, body 881, spider 1353, brain 1584), build and the people integration tests pass. Not seen in a browser yet (no local brain running); check on staging after deploy.
+
+- Row actions (`row-actions.ts` rules, `row-actions-cell.tsx`): Message opens the newest conversation or `/unibox/new?account=&to=` (the Unibox already supported it), Invite for someone not connected, Read profile through `ReadProfileDialog` (price first), Read company disabled with its reason, Show chats, Quick preview, Email and Phone disabled. Shown on hover, focus and on screens without hover.
+- Labels edited on the row; Fit column removed; "Suggested next step"; bulk Invite removed.
+- Person drawer full width minus the margin (`FULL_WIDTH` in `floating-drawer.ts`); the details drawer's `sm:max-w-3xl` now takes effect.
+- Brain: message times before LinkedIn's launch (the reader's 1970 for a missing time) are treated as unknown in the index; migration `20261030170000_rebuild_people_dated_1970` marks those people for one rebuild. Row links carry `at`.
+- Phases B and C: not started (decision on one paid read; the Premium recording).

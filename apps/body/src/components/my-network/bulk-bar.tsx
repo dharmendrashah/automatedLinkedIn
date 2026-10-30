@@ -2,7 +2,7 @@ import { cleanLabel } from '@/components/labels/labels'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Ban, Tag, UserPlus, X } from 'lucide-react'
+import { Ban, Tag, X } from 'lucide-react'
 import { useState } from 'react'
 
 import { type PersonStatus, STATUSES, isStatus } from './words'
@@ -13,13 +13,11 @@ type Props = {
    count: number
    busy: boolean
    onChange: (change: BulkChange) => void
-   // Shown once invites are live.
-   onInvite?: () => void
    onClear: () => void
 }
 
-// What can be done to the chosen people of this page at once: invite, status, a label, Do not contact.
-export const BulkBar = ({ count, busy, onChange, onInvite, onClear }: Props) => {
+// What can be done to the chosen people of this page at once: status, a label, Do not contact. Invites go one person at a time.
+export const BulkBar = ({ count, busy, onChange, onClear }: Props) => {
    const [label, setLabel] = useState('')
    const cleaned = cleanLabel(label)
 
@@ -30,12 +28,6 @@ export const BulkBar = ({ count, busy, onChange, onInvite, onClear }: Props) => 
          aria-label="Chosen people"
       >
          <span className="font-medium">{`${count} chosen`}</span>
-         {onInvite ? (
-            <Button size="sm" disabled={busy} onClick={onInvite}>
-               <UserPlus />
-               Invite
-            </Button>
-         ) : null}
          <Select
             value=""
             disabled={busy}

@@ -1,6 +1,6 @@
 # My network filters
 
-- Status: in progress
+- Status: done
 - Created: 2026-10-30
 - Locked by user: yes, 2026-10-30 ("work on this and continue with brain development")
 
@@ -123,4 +123,8 @@ Built on branch `feat/network-filters-design` (2026-10-30); not seen in a browse
 - Contracts: `peopleFiltersSchema` (+ tests). Brain: migration `20261030160000_add_network_filters` (additive: `PersonInviteState`, eight `Person` columns, four indexes, the index trigger on `PersonSnapshot`, every person marked for a rebuild); the index fills the columns (`profileFacts` reads title, company and country from the newest paid read, which now also keeps `country`); `peopleWhere` / `orderOf` (`database/peopleFilters.ts`); `people.list` takes `filters` and `sort`, pages by offset and returns `total`; `people.filterOptions`. Unit and integration tests pass.
 - Body: the Filters button, side sheet (shadcn Calendar range with quick choices and times) and chips on `/network`, kept in the address (`filters`, `sort`); the people table is TanStack Table v9 (brain sorts Person and Last touch) with TanStack Virtual rows that load the next page near the end (no Load more button); company above the name, Premium mark, country flag (`lib/country-flag.ts`). The design preview page was removed.
 - Deviations: the page keeps its own copy of the filter schema (contracts ship as CommonJS and would bundle all of zod; a test keeps the copies equal); zod and the date libraries have their own chunks.
-- Follow-ups: Premium stays empty until the spider's profile reader learns it (needs the owner's recording; drawer plan); the deploy must run the migration, and new filters miss people until the index job has rebuilt them.
+- Shipped: merged as PR #142 and deployed to staging on 2026-10-30 (staging run 41080327556; brain `/health` reports commit `c2b0cb9`, database up, so the migration ran in brain's init container).
+- Follow-ups:
+  - Premium stays empty until the spider's profile reader learns it. No kept page has a Premium member's own top card yet, so the selector is unverified: LinkedIn marks Premium elsewhere as `aria-label="<Name> Premium Profile <degree>"` on cards and `<span role="img" aria-label="Premium">` after a name (runs of 2026-10-27/29). Needs the owner's recording of a Premium member's profile (drawer plan).
+  - Seen in a browser behind sign-in on staging: pending (the owner signs in).
+  - Saved filters (named views): a later plan.

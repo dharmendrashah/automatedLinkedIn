@@ -66,6 +66,28 @@ const draft = (rest: Partial<Sources>) => {
    return person
 }
 
+describe('draftPeople dates LinkedIn did not give', () => {
+   it('should not date a reason or a touch in 1970, and fall back to when the conversation was first seen', () => {
+      const person = draft({
+         conversations: [
+            conversation({
+               lastMessageAt: new Date(0),
+               lastReplyAt: new Date(0),
+               theirLastAt: new Date(0),
+            }),
+         ],
+      })
+
+      expect(person).toMatchObject({
+         reasonText: 'Messaged',
+         reasonAt: at('2026-10-01'),
+         lastSentAt: null,
+         lastReceivedAt: null,
+      })
+      expect(person.lastTouchAt.getFullYear()).toBeGreaterThan(2003)
+   })
+})
+
 describe('draftPeople filter fields', () => {
    it('should keep when the connection began, and the newest message each way', () => {
       expect(

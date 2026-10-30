@@ -1,4 +1,5 @@
 import premiumMark from '@/assets/linkedin-premium.png'
+import { LabelCell } from '@/components/labels/label-cell'
 import { Photo } from '@/components/photo'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -25,8 +26,9 @@ import { cn } from '@/lib/utils'
 import { type Client, type PersonRow } from './types'
 
 import { type RouterInputs } from '../../trpc'
+import { RowActions } from './row-actions-cell'
 import { type NextStep, PRIORITY, nextStepOf } from './rows'
-import { FIT_WORDS, nameOf, statusWord } from './words'
+import { nameOf, statusWord } from './words'
 
 export type PeopleSort = NonNullable<RouterInputs['people']['list']['sort']>
 
@@ -42,6 +44,10 @@ type Props = {
    onChoose: (id: string) => void
    onChooseAll: () => void
    onStep: (row: PersonRow, step: NonNullable<NextStep>) => void
+   onInvite: (row: PersonRow) => void
+   onReadProfile: (row: PersonRow) => void
+   // Saves the row's full label list.
+   onLabels: (row: PersonRow, labels: string[]) => Promise<unknown>
    sort: PeopleSort | undefined
    onSort: (sort: PeopleSort | undefined) => void
    // More rows wait in brain; asked for when the owner scrolls near the end.
@@ -131,10 +137,11 @@ const CELL_CLASS: Record<string, string> = {
    choose: 'w-10',
    name: 'max-w-80',
    reason: 'max-w-96 text-sm whitespace-normal',
-   fit: 'text-sm',
+   labels: 'max-w-56',
    lastTouchAt: 'text-sm',
    status: 'text-sm',
    step: 'text-right',
+   actions: 'w-0 text-right',
 }
 
 const SortHeader = ({
@@ -204,12 +211,37 @@ const PersonCell = ({ row }: { row: PersonRow }) => {
 
 type ColumnsOf = Pick<
    Props,
-   'accounts' | 'stopped' | 'invitesLive' | 'chosen' | 'rows' | 'onChoose' | 'onChooseAll' | 'onStep'
+   | 'accounts'
+   | 'stopped'
+   | 'invitesLive'
+   | 'chosen'
+   | 'rows'
+   | 'onOpen'
+   | 'onChoose'
+   | 'onChooseAll'
+   | 'onStep'
+   | 'onInvite'
+   | 'onReadProfile'
+   | 'onLabels'
 > & {
    many: boolean
 }
 
-const columnsOf = ({ accounts, stopped, invitesLive, many, chosen, rows, onChoose, onChooseAll, onStep }: ColumnsOf) =>
+const columnsOf = ({
+   accounts,
+   stopped,
+   invitesLive,
+   many,
+   chosen,
+   rows,
+   onOpen,
+   onChoose,
+   onChooseAll,
+   onStep,
+   onInvite,
+   onReadProfile,
+   onLabels,
+}: ColumnsOf) =>
    column.columns([
       column.display({
          id: 'choose',
@@ -241,10 +273,19 @@ const columnsOf = ({ accounts, stopped, invitesLive, many, chosen, rows, onChoos
          header: 'Reason',
          cell: ({ row }) => <Reason row={row.original} />,
       }),
-      column.accessor('fit', {
-         header: 'Fit',
+      column.accessor('labels', {
+         header: 'Labels',
          enableSorting: false,
-         cell: ({ row }) => (row.original.fit === 'NONE' ? '' : FIT_WORDS[row.original.fit]),
+         cell: ({ row }) => (
+            <span onClick={event => event.stopPropagation()}>
+               <LabelCell
+                  tags={row.original.labels}
+                  kind="people"
+                  name={nameOf(row.original)}
+                  save={labels => onLabels(row.original, labels)}
+               />
+            </span>
+         ),
       }),
       column.accessor('lastTouchAt', {
          header: ({ column: header }) => (
@@ -276,7 +317,7 @@ const columnsOf = ({ accounts, stopped, invitesLive, many, chosen, rows, onChoos
          : []),
       column.display({
          id: 'step',
-         header: 'Next step',
+         header: 'Suggested next step',
          cell: ({ row }) => {
             const step = nextStepOf({
                ...row.original,
@@ -296,9 +337,22 @@ const columnsOf = ({ accounts, stopped, invitesLive, many, chosen, rows, onChoos
             ) : null
          },
       }),
+      column.display({
+         id: 'actions',
+         header: () => <span className="sr-only">Actions</span>,
+         cell: ({ row }) => (
+            <RowActions
+               row={row.original}
+               invitesLive={invitesLive}
+               onInvite={onInvite}
+               onReadProfile={onReadProfile}
+               onPreview={person => onOpen(person.id)}
+            />
+         ),
+      }),
    ])
 
-// One row per person of the client: who, why, fit, last touch, status and the one next step.
+// One row per person of the client: who, why, labels, last touch, status, the suggested next step and the row's actions.
 export const PeopleTable = ({
    rows,
    accounts,
@@ -310,6 +364,9 @@ export const PeopleTable = ({
    onChoose,
    onChooseAll,
    onStep,
+   onInvite,
+   onReadProfile,
+   onLabels,
    sort,
    onSort,
    hasMore,
@@ -335,11 +392,29 @@ export const PeopleTable = ({
             many,
             chosen,
             rows,
+            onOpen,
             onChoose,
             onChooseAll,
             onStep,
+            onInvite,
+            onReadProfile,
+            onLabels,
          }),
-      [accounts, stopped, invitesLive, many, chosen, rows, onChoose, onChooseAll, onStep]
+      [
+         accounts,
+         stopped,
+         invitesLive,
+         many,
+         chosen,
+         rows,
+         onOpen,
+         onChoose,
+         onChooseAll,
+         onStep,
+         onInvite,
+         onReadProfile,
+         onLabels,
+      ]
    )
    const table = useTable({
       features,
@@ -422,7 +497,7 @@ export const PeopleTable = ({
                         data-index={item.index}
                         ref={virtualizer.measureElement}
                         data-state={row.id === selectedId ? 'selected' : undefined}
-                        className="cursor-pointer"
+                        className="group/row cursor-pointer"
                         onClick={() => onOpen(row.id)}
                      >
                         {row.getAllCells().map(cell => (

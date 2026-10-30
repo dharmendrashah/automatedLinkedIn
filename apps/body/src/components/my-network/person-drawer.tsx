@@ -1,6 +1,6 @@
 import { NotesField } from '@/components/details/notes-field'
 import { ErrorBoundary } from '@/components/error-boundary'
-import { floatingDrawer } from '@/components/floating-drawer'
+import { FULL_WIDTH, floatingDrawer } from '@/components/floating-drawer'
 import { LabelCell } from '@/components/labels/label-cell'
 import { PersonView } from '@/components/people/person-view'
 import {
@@ -338,7 +338,7 @@ const Body = ({ id, order, pane, onPane, onMove, onGone, onAnswer, onInvite }: O
 // One person of the client: who they are and why they are here, then the chat, the profile and the history.
 export const PersonDrawer = ({ onClose, ...props }: Props) => (
    <Drawer direction="right" open onOpenChange={open => (open ? undefined : onClose())}>
-      <DrawerContent className={floatingDrawer('sm:max-w-3xl')}>
+      <DrawerContent className={floatingDrawer(FULL_WIDTH)}>
          <ErrorBoundary where="person-drawer" resetKey={props.id}>
             <Body {...props} />
          </ErrorBoundary>

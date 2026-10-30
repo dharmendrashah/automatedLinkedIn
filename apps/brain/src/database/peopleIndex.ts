@@ -163,6 +163,10 @@ const SIGNAL_WORDS: Record<string, string> = {
 const latest = (dates: Array<Date | null | undefined>) =>
    dates.reduce<Date | null>((best, date) => (date && (!best || date > best) ? date : best), null)
 
+// A message time LinkedIn did not give is stored as 1970 by the reader; nothing on LinkedIn is older than its launch.
+const LINKEDIN_LAUNCH = Date.UTC(2003, 4, 5)
+const known = (date: Date | null) => (date && date.getTime() >= LINKEDIN_LAUNCH ? date : null)
+
 const earliest = (dates: Date[]) => dates.reduce((best, date) => (date < best ? date : best))
 
 const higher = (a: PersonStatus, b: PersonStatus) => (RANK[b] > RANK[a] ? b : a)
@@ -406,13 +410,13 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string, facts: Profil
          (rows.invites.some(invitePending) && !connection),
       lastTouchAt:
          latest([
-            ...rows.conversations.map(row => row.lastMessageAt),
+            ...rows.conversations.map(row => row.lastMessageAt ?? row.createdAt),
             ...rows.requests.map(row => row.seenAt),
             ...rows.connections.map(row => row.connectedOn ?? row.createdAt),
             ...rows.members.map(row => row.createdAt),
             ...rows.targets.map(row => row.createdAt),
             ...rows.invites.map(row => row.acceptedAt ?? row.invitedAt),
-         ]) ?? new Date(0),
+         ]) ?? earliest(seen),
       firstSeenAt: earliest(seen),
       title: facts?.title ?? null,
       country: facts?.country ?? null,
@@ -447,7 +451,15 @@ export const draftPeople = (
 
    sources.requests.forEach(row => rowsOf(clientOfAccount(row.accountId)).requests.push(row))
    sources.connections.forEach(row => rowsOf(clientOfAccount(row.accountId)).connections.push(row))
-   sources.conversations.forEach(row => rowsOf(clientOfAccount(row.accountId)).conversations.push(row))
+   sources.conversations.forEach(row =>
+      rowsOf(clientOfAccount(row.accountId)).conversations.push({
+         ...row,
+         lastMessageAt: known(row.lastMessageAt),
+         lastReplyAt: known(row.lastReplyAt),
+         waitingSince: known(row.waitingSince),
+         theirLastAt: known(row.theirLastAt),
+      })
+   )
    sources.members.forEach(row => rowsOf(row.clientId ?? defaultClientId).members.push(row))
    sources.targets.forEach(row => rowsOf(row.clientId ?? defaultClientId).targets.push(row))
    sources.invites.forEach(row => rowsOf(row.clientId).invites.push(row))
