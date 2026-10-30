@@ -1,3 +1,6 @@
+-- One transaction: a failure leaves nothing half done (Prisma runs the file as it is).
+BEGIN;
+
 -- CreateEnum
 CREATE TYPE "PersonStatus" AS ENUM ('NEW', 'CONTACTED', 'REPLIED', 'NOT_INTERESTED', 'DONE');
 
@@ -307,15 +310,18 @@ END $$;
 
 CREATE TRIGGER people_index AFTER UPDATE OF "clientId" ON "LinkedInAccount" FOR EACH ROW WHEN (OLD."clientId" IS DISTINCT FROM NEW."clientId") EXECUTE FUNCTION people_index_by_account();
 
--- The first build: every profile the owner has a row for.
+-- The first build: every profile the owner has a row for (a conversation with no profile address names nobody).
 INSERT INTO "PeopleIndexDirty" ("userId", "slug")
-SELECT "userId", "slug" FROM "LinkedInInvitation"
-UNION SELECT "userId", "slug" FROM "LinkedInConnection"
-UNION SELECT "userId", "slug" FROM "LinkedInProfile"
-UNION SELECT "userId", "slug" FROM "Suppression"
-UNION SELECT l."userId", m."slug" FROM "WorkflowListMember" m JOIN "WorkflowList" l ON l."id" = m."listId"
-UNION SELECT "userId", people_index_conversation_slug("id", "contactProfileUrl") FROM "LinkedInConversation" WHERE "kind" = 'DIRECT'
+SELECT "userId", "slug" FROM (
+    SELECT "userId", "slug" FROM "LinkedInInvitation"
+    UNION SELECT "userId", "slug" FROM "LinkedInConnection"
+    UNION SELECT "userId", "slug" FROM "LinkedInProfile"
+    UNION SELECT "userId", "slug" FROM "Suppression"
+    UNION SELECT l."userId", m."slug" FROM "WorkflowListMember" m JOIN "WorkflowList" l ON l."id" = m."listId"
+    UNION SELECT "userId", people_index_conversation_slug("id", "contactProfileUrl") FROM "LinkedInConversation" WHERE "kind" = 'DIRECT'
+) profiles
+WHERE "slug" IS NOT NULL AND "slug" <> ''
 ON CONFLICT DO NOTHING;
 
-DELETE FROM "PeopleIndexDirty" WHERE "slug" IS NULL OR "slug" = '';
+COMMIT;
 

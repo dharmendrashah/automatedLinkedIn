@@ -221,6 +221,29 @@ flowchart LR
   client member's Do not contact leaving another client's row untouched, and brain refusing a paid read asked by a client member; a
   seeded 10M-person local database to time the list query (target under 300 ms).
 
+## Outcome (phase 1, back end, 2026-10-30)
+
+- Migration `20261030130000_add_network_hub` (additive, one transaction): `Client` (default "My accounts" per owner, one per
+  distinct `clientLabel`, accounts moved to it), `clientId` on accounts, lists, targets, paid reads and the spend ledger;
+  `Person` (per client and slug, generated full-text `search`), `PersonLink`, `PeopleIndexDirty`, `PeopleExport`,
+  `PersonErasure`. Database triggers on invitations, connections, conversations, replies, list members, lists, targets,
+  suppressions and an account's client mark the profile; the first build marks every existing profile.
+- `PeopleIndexService` (job `people-index`, every 15 s, 200 profiles a pass) rebuilds marked profiles from their rows through the
+  pure `draftPeople` (`peopleIndex.ts`): reason (their reply, the request note, the list signal's own words, connected, target),
+  fit from list members, status from the rows unless the owner chose one, Needs me priority, Waiting, links.
+- `PeopleService` and router `people`: clients (with accounts and lists), today, list (keyset, tabs, search, filters), counts and
+  results capped at 10,000, seen, get, update, updateMany, do not contact for all clients, erase, add, export (10,000 cap,
+  logged), audit. `person.readFull` books the read to a client.
+- Deviations: per-client Do not contact lives on the `Person` row (it survives rebuilds), not as a client id on `Suppression`;
+  owner-wide stays `Suppression`. Index updates come from triggers and a job, not from the import transactions. Slugs match as
+  the rows have them (as the person drawer does), not lowercased. "All N matching" bulk runs as page selection (100) plus export
+  of the whole view; a background bulk job is a follow-up. Counts are capped `count(*) ... LIMIT 10001`, not a counter table.
+- Verified: lint, ts:check, unit tests, build; brain integration tests serially (283 of 285; the two failures,
+  `messageBroker` ready count and an invitation next-check time, pass alone and come from shared queue and data, not this work);
+  the migration and the first build on the local dev database (10 people, reasons in their own words). Not seen in a browser.
+- Gotcha: `prisma migrate diff` always wants `ALTER TABLE "Person" ALTER COLUMN "search" DROP DEFAULT` (it cannot see a generated
+  column); delete that line from any future migration.
+
 ## Outcome (phase 1, front end, 2026-10-30)
 
 - Built in `apps/body`: `/network` (`pages/Network.tsx`, lazy) with client and account pickers, All clients Today lines, Today line
@@ -234,3 +257,9 @@ flowchart LR
 - Deviations: "New this week" opens Everyone with "new since your last visit" (no week filter in `people.list`); list management
   (new, rename, delete) in the Found by menu and client create, rename and account assignment are not built (APIs exist);
   Accounts and Proxies are lazy-loaded so the main chunk stays under Vite's 500 kB warning. Not seen in a browser (sign-in needed).
+- Follow-up (2026-10-30): the client picker shows with several clients or several accounts and has "New client…" and "Rename
+  client…" (`people.createClient`, `people.renameClient`; CONFLICT text shown in the dialog). The account drawer on Accounts has a
+  "Client" part (`people.assignAccount`, "Its people move to this client within a minute."). Found by, with a list picked, has
+  "Rename list…" and "Delete list…" (`workflowList.renameList` / `deleteList`); new lists stay in Add people (`people.add` with
+  `listName`, so they get the client). The person drawer has Notes (`people.update` `notes`, saved on blur). Clients are created
+  only on My network, not on Accounts. Not seen in a browser.

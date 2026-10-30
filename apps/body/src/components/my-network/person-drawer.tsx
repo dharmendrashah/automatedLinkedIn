@@ -1,3 +1,4 @@
+import { NotesField } from '@/components/details/notes-field'
 import { floatingDrawer } from '@/components/floating-drawer'
 import { LabelCell } from '@/components/labels/label-cell'
 import { PersonView } from '@/components/people/person-view'
@@ -230,6 +231,21 @@ const Header = ({
             </Button>
             <EraseButton person={person} onErased={onErased} />
          </div>
+         <NotesField
+            key={person.id}
+            id={`person-notes-${person.id}`}
+            value={person.notes}
+            placeholder="Anything to remember about them. Saved when you leave the field."
+            onSave={notes =>
+               update.mutate(
+                  {
+                     id: person.id,
+                     notes: notes.trim() || null,
+                  },
+                  { onSuccess: () => toast.success('Notes saved.') }
+               )
+            }
+         />
       </div>
    )
 }

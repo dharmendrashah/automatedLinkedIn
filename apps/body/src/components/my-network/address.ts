@@ -86,6 +86,14 @@ export const clientFor = <C extends { id: string; accounts: Array<{ id: string }
    clients.find(({ accounts }) => accounts.some(({ id }) => id === accountId)) ??
    clients[0]
 
+// The client picker shows with several clients, or with several accounts that could be split into clients.
+export const showClientPicker = (clients: Array<{ accounts: unknown[] }>) =>
+   clients.length > 1 || clients.reduce((sum, { accounts }) => sum + accounts.length, 0) > 1
+
+// The client's list that Found by points at, if it is one.
+export const pickedList = <L extends { id: string }>(found: string | undefined, lists: L[]) =>
+   found?.startsWith('list:') ? lists.find(({ id }) => `list:${id}` === found) : undefined
+
 // `/lists?list=<id>` becomes Found by that list.
 export const listsRedirect = (search: string) => {
    const list = new URLSearchParams(search).get('list')?.trim()

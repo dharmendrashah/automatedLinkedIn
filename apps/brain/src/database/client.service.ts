@@ -126,6 +126,7 @@ export class ClientService {
    }
 
    // Moves an account to a client (its people move with it, through the index triggers). False when either is not the owner's.
+   // The old free-text note follows the client's name, so the pages that still show it agree.
    public static async assignAccount(userId: string, accountId: string, clientId: string) {
       const db = PrismaService.client
       const client = await db.client.findFirst({
@@ -133,7 +134,11 @@ export class ClientService {
             id: clientId,
             userId,
          },
-         select: { id: true },
+         select: {
+            id: true,
+            name: true,
+            isDefault: true,
+         },
       })
 
       if (!client) {
@@ -145,7 +150,10 @@ export class ClientService {
             id: accountId,
             userId,
          },
-         data: { clientId },
+         data: {
+            clientId,
+            clientLabel: client.isDefault ? null : client.name,
+         },
       })
 
       return count === 1

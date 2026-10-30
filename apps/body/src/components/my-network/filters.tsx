@@ -1,13 +1,19 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Download, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { FITS, type View, type ViewChange } from './address'
+import { FITS, type View, type ViewChange, pickedList } from './address'
+import { ListDialogs, type ListManaging } from './list-dialogs'
 import { FIT_WORDS, foundByWord } from './words'
 
 const ANY = 'any'
+// Found by entries that open a dialog for the picked list (sources never take these values).
+const LIST_ACTIONS: Array<[string, NonNullable<ListManaging>, string]> = [
+   ['+rename-list', 'rename', 'Rename list…'],
+   ['+delete-list', 'delete', 'Delete list…'],
+]
 const SEARCH_WAIT_MS = 300
 const SOURCES = ['request', 'connection', 'target']
 
@@ -53,14 +59,24 @@ const Filter = ({
    label,
    value,
    options,
+   actions = [],
    onChange,
+   onAction,
 }: {
    label: string
    value: string | undefined
    options: Array<[string, string]>
+   // Entries under a line that run something instead of filtering.
+   actions?: Array<[string, string]>
    onChange: (value: string | null) => void
+   onAction?: (action: string) => void
 }) => (
-   <Select value={value ?? ANY} onValueChange={next => onChange(next === ANY ? null : next)}>
+   <Select
+      value={value ?? ANY}
+      onValueChange={next =>
+         actions.some(([action]) => action === next) ? onAction?.(next) : onChange(next === ANY ? null : next)
+      }
+   >
       <SelectTrigger size="sm" className="w-44" aria-label={label}>
          <SelectValue />
       </SelectTrigger>
@@ -71,12 +87,20 @@ const Filter = ({
                {`${label}: ${word}`}
             </SelectItem>
          ))}
+         {actions.length > 0 ? <SelectSeparator /> : null}
+         {actions.map(([action, word]) => (
+            <SelectItem key={action} value={action}>
+               {word}
+            </SelectItem>
+         ))}
       </SelectContent>
    </Select>
 )
 
 // Found by, Fit and Label, and the export of what they show.
 export const Filters = ({ view, lists, labels, exporting, onChange, onExport }: Props) => {
+   const [managing, setManaging] = useState<ListManaging>(null)
+   const list = pickedList(view.found, lists)
    const known = [...SOURCES, ...lists.map(({ id }) => `list:${id}`)]
    // An address can name a source this client does not list (an old /lists link); it still shows as picked.
    const sources = view.found && !known.includes(view.found) ? [...known, view.found] : known
@@ -88,7 +112,9 @@ export const Filters = ({ view, lists, labels, exporting, onChange, onExport }: 
             label="Found by"
             value={view.found}
             options={sources.map(source => [source, foundByWord(source, lists)])}
+            actions={list ? LIST_ACTIONS.map(([value, , word]) => [value, word]) : []}
             onChange={found => onChange({ found, open: null })}
+            onAction={action => setManaging(LIST_ACTIONS.find(([value]) => value === action)?.[1] ?? null)}
          />
          <Filter
             label="Fit"
@@ -111,6 +137,18 @@ export const Filters = ({ view, lists, labels, exporting, onChange, onExport }: 
             <Download />
             Export
          </Button>
+         {list ? (
+            <ListDialogs
+               key={list.id}
+               list={list}
+               managing={managing}
+               onClose={() => setManaging(null)}
+               onDeleted={() => {
+                  setManaging(null)
+                  onChange({ found: null, open: null })
+               }}
+            />
+         ) : null}
       </div>
    )
 }

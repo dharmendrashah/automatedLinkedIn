@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { changeView, clientFor, clientView, listsRedirect, readView } from './address'
+import { changeView, clientFor, clientView, listsRedirect, pickedList, readView, showClientPicker } from './address'
 
 describe('readView', () => {
    it('reads the filters and falls back on Needs me', () => {
@@ -49,6 +49,25 @@ describe('clientFor', () => {
       expect(clientFor(clients, 'c1', 'a2')?.id).toBe('c1')
       expect(clientFor(clients, null, 'a2')?.id).toBe('c2')
       expect(clientFor(clients, 'gone', undefined)?.id).toBe('c1')
+   })
+})
+
+describe('showClientPicker', () => {
+   it('shows with several clients or several accounts to split', () => {
+      expect(showClientPicker([{ accounts: ['a1'] }])).toBe(false)
+      expect(showClientPicker([{ accounts: ['a1', 'a2'] }])).toBe(true)
+      expect(showClientPicker([{ accounts: [] }, { accounts: [] }])).toBe(true)
+   })
+})
+
+describe('pickedList', () => {
+   it('finds the list Found by points at, and nothing for other sources', () => {
+      const lists = [{ id: 'l1' }]
+
+      expect(pickedList('list:l1', lists)).toEqual({ id: 'l1' })
+      expect(pickedList('list:gone', lists)).toBeUndefined()
+      expect(pickedList('connection', lists)).toBeUndefined()
+      expect(pickedList(undefined, lists)).toBeUndefined()
    })
 })
 
