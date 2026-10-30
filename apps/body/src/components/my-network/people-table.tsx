@@ -113,7 +113,10 @@ export const PeopleTable = ({
    const many = accounts.length > 1
    const selected = useRef<HTMLTableRowElement>(null)
 
-   useEffect(() => selected.current?.scrollIntoView({ block: 'nearest' }), [selectedId])
+   // Braces on purpose: newer browsers return a promise from scrollIntoView, and React calls what an effect returns.
+   useEffect(() => {
+      selected.current?.scrollIntoView({ block: 'nearest' })
+   }, [selectedId])
 
    return (
       <Table>

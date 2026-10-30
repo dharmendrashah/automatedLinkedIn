@@ -1,4 +1,5 @@
 import { NotesField } from '@/components/details/notes-field'
+import { ErrorBoundary } from '@/components/error-boundary'
 import { floatingDrawer } from '@/components/floating-drawer'
 import { LabelCell } from '@/components/labels/label-cell'
 import { PersonView } from '@/components/people/person-view'
@@ -338,7 +339,9 @@ const Body = ({ id, order, pane, onPane, onMove, onGone, onAnswer, onInvite }: O
 export const PersonDrawer = ({ onClose, ...props }: Props) => (
    <Drawer direction="right" open onOpenChange={open => (open ? undefined : onClose())}>
       <DrawerContent className={floatingDrawer('sm:max-w-3xl')}>
-         <Body {...props} />
+         <ErrorBoundary resetKey={props.id}>
+            <Body {...props} />
+         </ErrorBoundary>
       </DrawerContent>
    </Drawer>
 )

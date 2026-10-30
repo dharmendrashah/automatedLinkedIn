@@ -1,11 +1,19 @@
 import { AppSidebar } from '@/components/app-sidebar'
+import { ErrorBoundary } from '@/components/error-boundary'
 import { SiteHeader } from '@/components/site-header'
 import { TakeoverBanner } from '@/components/takeover/takeover-banner'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { Outlet } from 'react-router'
+import { Outlet, useLocation } from 'react-router'
 import { Toaster } from 'sonner'
 
 import { RequireAuth } from '../auth/RequireAuth'
+
+// A crash in one page shows an error in its place and clears when another page is opened.
+const Page = () => (
+   <ErrorBoundary resetKey={useLocation().pathname}>
+      <Outlet />
+   </ErrorBoundary>
+)
 
 export const DashboardLayout = () => (
    <RequireAuth>
@@ -24,7 +32,7 @@ export const DashboardLayout = () => (
                <div className="@container/main flex flex-1 flex-col gap-2">
                   <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
                      <TakeoverBanner />
-                     <Outlet />
+                     <Page />
                   </div>
                </div>
             </div>
