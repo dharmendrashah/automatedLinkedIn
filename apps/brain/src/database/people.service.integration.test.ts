@@ -164,7 +164,7 @@ describe('PeopleService (database)', () => {
             limit: 50,
          })
       ).toBeNull()
-      expect(await PeopleService.counts(otherUserId, clientId)).toBeNull()
+      expect(await PeopleService.counts(otherUserId, { clientId })).toBeNull()
    })
 
    it('should show every client of the owner together under All clients, and no one of another owner', async () => {
@@ -198,7 +198,7 @@ describe('PeopleService (database)', () => {
       expect(all?.items.map(({ clientId: rowClient }) => rowClient).sort()).toEqual(
          [clientId, clientId, clientId, otherClientId].sort()
       )
-      expect((await PeopleService.counts(userId, ALL_CLIENTS))?.EVERYONE).toBe(4)
+      expect((await PeopleService.counts(userId, { clientId: ALL_CLIENTS }))?.EVERYONE).toBe(4)
       expect((await PeopleService.filterOptions(userId, ALL_CLIENTS))?.labels).toEqual([])
       expect(
          (
@@ -216,10 +216,19 @@ describe('PeopleService (database)', () => {
    })
 
    it('should count the tabs, and move a person out of Needs me when the owner closes them', async () => {
-      expect(await PeopleService.counts(userId, clientId)).toMatchObject({
+      expect(await PeopleService.counts(userId, { clientId })).toMatchObject({
          NEEDS_ME: 3,
          EVERYONE: 3,
          DO_NOT_CONTACT: 0,
+      })
+      expect(
+         await PeopleService.counts(userId, {
+            clientId,
+            search: 'rav',
+         })
+      ).toMatchObject({
+         NEEDS_ME: 1,
+         EVERYONE: 1,
       })
 
       const [person] = (await view({ search: 'ana' }))?.items ?? []
@@ -229,7 +238,7 @@ describe('PeopleService (database)', () => {
 
       const closed = { status: 'NOT_INTERESTED' }
 
-      expect((await PeopleService.counts(userId, clientId))?.NEEDS_ME).toBe(2)
+      expect((await PeopleService.counts(userId, { clientId }))?.NEEDS_ME).toBe(2)
       expect(await db.person.findUniqueOrThrow({ where: { id: person?.id ?? '' } })).toMatchObject(closed)
    })
 
