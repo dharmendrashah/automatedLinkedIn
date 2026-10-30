@@ -26,27 +26,28 @@ const INVITE_HELD: Partial<Record<ActionRow['inviteState'], string>> = {
    ACCEPTED: 'Invite already accepted',
 }
 
-export const chatsLink = (row: ActionRow) => {
+const chatsLink = (row: ActionRow) => {
    const chat = newest(row.links, 'CONVERSATION')
 
    return chat ? `/unibox/${encodeURIComponent(chat.sourceId)}` : null
 }
 
-// A conversation opens; a connection starts one from its account; anyone else is invited (LinkedIn allows only InMail to them).
+// A conversation opens (even on Do not contact: reading is allowed); a connection starts one from its account; anyone else is
+// invited (LinkedIn allows only InMail to them).
 export const messageAction = (row: ActionRow, invitesLive: boolean): MessageAction => {
-   if (row.doNotContact) {
-      return {
-         kind: 'NONE',
-         reason: 'On Do not contact',
-      }
-   }
-
    const chat = chatsLink(row)
 
    if (chat) {
       return {
          kind: 'OPEN_CHAT',
          href: chat,
+      }
+   }
+
+   if (row.doNotContact) {
+      return {
+         kind: 'NONE',
+         reason: 'On Do not contact',
       }
    }
 

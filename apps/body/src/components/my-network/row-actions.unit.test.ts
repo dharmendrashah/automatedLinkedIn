@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { type ActionRow, chatsLink, messageAction, readCompanyReason } from './row-actions'
+import { type ActionRow, messageAction, readCompanyReason } from './row-actions'
 
 // Dates reach the page as ISO text.
 const at = (day: string) => `${day}T10:00:00.000Z`
@@ -79,7 +79,7 @@ describe('messageAction', () => {
       })
    })
 
-   it('never offers to write to someone on Do not contact', () => {
+   it('never starts a message to someone on Do not contact, but still opens a conversation they have', () => {
       expect(messageAction(row({ doNotContact: true }), true)).toEqual({
          kind: 'NONE',
          reason: 'On Do not contact',
@@ -97,6 +97,18 @@ describe('messageAction', () => {
          kind: 'NONE',
          reason: 'On Do not contact',
       })
+      expect(
+         messageAction(
+            row({
+               doNotContact: true,
+               links: [conversation('c1', 'a1', '2026-10-01')],
+            }),
+            true
+         )
+      ).toEqual({
+         kind: 'OPEN_CHAT',
+         href: '/unibox/c1',
+      })
    })
 
    it('says so when connected but no account can be named', () => {
@@ -104,20 +116,6 @@ describe('messageAction', () => {
          kind: 'NONE',
          reason: 'No account to write from',
       })
-   })
-})
-
-describe('chatsLink', () => {
-   it('opens the newest conversation, even on Do not contact, and nothing without one', () => {
-      expect(
-         chatsLink(
-            row({
-               doNotContact: true,
-               links: [conversation('c1', 'a1', '2026-10-01')],
-            })
-         )
-      ).toBe('/unibox/c1')
-      expect(chatsLink(row({}))).toBeNull()
    })
 })
 

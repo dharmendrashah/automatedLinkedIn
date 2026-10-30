@@ -204,4 +204,5 @@ Phase C built on branch `feat/network-profile-badges` (2026-10-31), redefined by
 - Snapshot keeps `verified` and `creator` (booleans only; older reads lack them).
 - The person drawer's badges show Premium (the orange mark), Verified, Creator and the country (flag and name) beside Open to work and Hiring.
 - Owner's follow-up (same PR): the person drawer is 60% of the screen wide (`WIDE`, replaces `FULL_WIDTH`), and the badges (`ProfileBadges`) also show in the drawer's header beside the status.
+- Owner's follow-up (same PR): Message and Show chats are one button. It opens the newest conversation when there is one (also on Do not contact, reading is allowed), else starts a message from the newest connection's account, else Invite.
 - Lint, type check, build and unit tests (contracts 229, body 881, spider 1353, brain 1586) pass. Not seen in a browser; a read made after the deploy shows the new badges.
