@@ -102,8 +102,13 @@ export const people = router({
       ),
 
    counts: ownerProcedure
-      .input(z.object({ clientId: id }))
-      .query(async ({ ctx, input }) => present(await PeopleService.counts(ctx.user.id, input.clientId), NO_CLIENT)),
+      .input(
+         view.omit({
+            tab: true,
+            sort: true,
+         })
+      )
+      .query(async ({ ctx, input }) => present(await PeopleService.counts(ctx.user.id, input), NO_CLIENT)),
 
    results: ownerProcedure
       .input(

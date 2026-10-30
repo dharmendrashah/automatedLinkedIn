@@ -118,7 +118,6 @@ const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update
    const [inviting, setInviting] = useState<string[]>([])
    const utils = trpc.useUtils()
    const today = trpc.people.today.useQuery()
-   const counts = trpc.people.counts.useQuery({ clientId: client.id })
    const results = trpc.people.results.useQuery({
       clientId: client.id,
       days,
@@ -139,6 +138,8 @@ const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update
       filters: filtersOn > 0 ? apiFilters(filters) : undefined,
       sort: view.sort,
    }
+   const { tab: _tab, sort: _sort, ...counted } = query
+   const counts = trpc.people.counts.useQuery(counted, { placeholderData: previous => previous })
    const people = trpc.people.list.useInfiniteQuery(
       {
          ...query,
@@ -227,10 +228,12 @@ const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update
          : today.data?.find(({ clientId }) => clientId === client.id)
    const invitesLive = line?.invitesLive ?? false
    const stopped = (line?.stopped ?? []).map(({ accountId: id }) => id)
-   const nobody = counts.data !== undefined && counts.data.EVERYONE === 0 && counts.data.DO_NOT_CONTACT === 0
    const filtered = Boolean(
       view.q || view.found || view.fit || view.label || view.onlyNew || accountId || filtersOn > 0
    )
+   // With filters on the counts are of the matches, so an empty result is not a first visit.
+   const nobody =
+      !filtered && counts.data !== undefined && counts.data.EVERYONE === 0 && counts.data.DO_NOT_CONTACT === 0
    const setFilters = (next: PeopleFilters) =>
       update({
          filters: writeFilters(next),

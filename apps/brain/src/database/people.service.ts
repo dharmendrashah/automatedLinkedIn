@@ -32,6 +32,8 @@ export type PeopleQuery = {
    limit: number
 }
 
+export type ViewQuery = Omit<PeopleQuery, 'tab' | 'sort' | 'cursor' | 'limit'>
+
 export type PersonChanges = {
    status?: PersonStatus
    labels?: string[]
@@ -206,6 +208,34 @@ const newWhere = (scope: Scope): Prisma.PersonWhereInput => ({
    ),
 })
 
+// What a view asks for beyond its tab: the clients, the account, the search, the quick filters and the Filters panel.
+const viewWhere = async (scope: Scope, query: ViewQuery): Promise<Prisma.PersonWhereInput> => {
+   const search = query.search ? searchOf(query.search) : null
+   const matching =
+      search && 'query' in search
+         ? (
+              await PrismaService.client.$queryRaw<Array<{ id: string }>>`
+                 SELECT "id" FROM "Person"
+                 WHERE "clientId" = ANY(${scope.ids}) AND "search" @@ to_tsquery('simple', ${search.query})
+                 ORDER BY "lastTouchAt" DESC LIMIT ${SEARCH_CAP}`
+           ).map(({ id }) => id)
+         : undefined
+
+   return {
+      clientId: { in: scope.ids },
+      AND: [
+         ...(query.accountId ? [{ links: { some: { accountId: query.accountId } } }] : []),
+         ...(query.filters ? peopleWhere(query.filters) : []),
+         ...(query.onlyNew ? [newWhere(scope)] : []),
+      ],
+      ...(query.foundBy ? { foundBy: { has: query.foundBy } } : {}),
+      ...(query.fit ? { fit: query.fit } : {}),
+      ...(query.label ? { labels: { has: query.label } } : {}),
+      ...(search && 'slug' in search ? { slug: search.slug } : {}),
+      ...(matching ? { id: { in: matching } } : {}),
+   }
+}
+
 const ownedPerson = (userId: string, id: string) =>
    PrismaService.client.person.findFirst({
       where: {
@@ -229,30 +259,7 @@ export class PeopleService {
          return null
       }
 
-      const search = query.search ? searchOf(query.search) : null
-      const matching =
-         search && 'query' in search
-            ? (
-                 await PrismaService.client.$queryRaw<Array<{ id: string }>>`
-                    SELECT "id" FROM "Person"
-                    WHERE "clientId" = ANY(${scope.ids}) AND "search" @@ to_tsquery('simple', ${search.query})
-                    ORDER BY "lastTouchAt" DESC LIMIT ${SEARCH_CAP}`
-              ).map(({ id }) => id)
-            : undefined
-      const where: Prisma.PersonWhereInput = {
-         clientId: { in: scope.ids },
-         ...TAB_WHERE[query.tab],
-         AND: [
-            ...(query.accountId ? [{ links: { some: { accountId: query.accountId } } }] : []),
-            ...(query.filters ? peopleWhere(query.filters) : []),
-            ...(query.onlyNew ? [newWhere(scope)] : []),
-         ],
-         ...(query.foundBy ? { foundBy: { has: query.foundBy } } : {}),
-         ...(query.fit ? { fit: query.fit } : {}),
-         ...(query.label ? { labels: { has: query.label } } : {}),
-         ...(search && 'slug' in search ? { slug: search.slug } : {}),
-         ...(matching ? { id: { in: matching } } : {}),
-      }
+      const where: Prisma.PersonWhereInput = { AND: [await viewWhere(scope, query), TAB_WHERE[query.tab]] }
       const skip = query.cursor ?? 0
       const [rows, total] = await Promise.all([
          PrismaService.client.person.findMany({
@@ -281,18 +288,25 @@ export class PeopleService {
    }
 
    // How many people each tab holds, up to COUNT_CAP + 1 ("10k+").
-   public static async counts(userId: string, clientId: string) {
-      const scope = await scopeOf(userId, clientId)
+   // How many people each tab holds under the view's search and filters, up to COUNT_CAP + 1 ("10k+").
+   public static async counts(userId: string, query: ViewQuery) {
+      const scope = await scopeOf(userId, query.clientId)
 
       if (!scope) {
          return null
       }
 
+      const base = await viewWhere(scope, query)
+      const count = (tab: PeopleTab) =>
+         PrismaService.client.person.count({
+            where: { AND: [base, TAB_WHERE[tab]] },
+            take: COUNT_CAP + 1,
+         })
       const [NEEDS_ME, WAITING, EVERYONE, DO_NOT_CONTACT] = await Promise.all([
-         cappedCount(scope.ids, TAB_SQL.NEEDS_ME),
-         cappedCount(scope.ids, TAB_SQL.WAITING),
-         cappedCount(scope.ids, TAB_SQL.EVERYONE),
-         cappedCount(scope.ids, TAB_SQL.DO_NOT_CONTACT),
+         count('NEEDS_ME'),
+         count('WAITING'),
+         count('EVERYONE'),
+         count('DO_NOT_CONTACT'),
       ])
 
       return {
