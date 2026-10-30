@@ -10,7 +10,7 @@ import { RequireAuth } from '../auth/RequireAuth'
 
 // A crash in one page shows an error in its place and clears when another page is opened.
 const Page = () => (
-   <ErrorBoundary resetKey={useLocation().pathname}>
+   <ErrorBoundary where="page" resetKey={useLocation().key}>
       <Outlet />
    </ErrorBoundary>
 )

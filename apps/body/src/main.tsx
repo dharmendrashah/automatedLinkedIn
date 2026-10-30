@@ -1,3 +1,4 @@
+import { ErrorBoundary } from '@/components/error-boundary'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { PageTitle } from '@/components/page-title'
 import { ThemeProvider } from 'next-themes'
@@ -13,16 +14,18 @@ import { TrpcProvider } from './trpc/TrpcProvider.tsx'
 createRoot(document.getElementById('root')!).render(
    <StrictMode>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-         <TooltipProvider>
-            <BrowserRouter>
-               <PageTitle />
-               <OidcProvider>
-                  <TrpcProvider>
-                     <App />
-                  </TrpcProvider>
-               </OidcProvider>
-            </BrowserRouter>
-         </TooltipProvider>
+         <ErrorBoundary where="app" fullScreen>
+            <TooltipProvider>
+               <BrowserRouter>
+                  <PageTitle />
+                  <OidcProvider>
+                     <TrpcProvider>
+                        <App />
+                     </TrpcProvider>
+                  </OidcProvider>
+               </BrowserRouter>
+            </TooltipProvider>
+         </ErrorBoundary>
       </ThemeProvider>
    </StrictMode>
 )
