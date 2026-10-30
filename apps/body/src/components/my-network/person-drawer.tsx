@@ -339,7 +339,7 @@ const Body = ({ id, order, pane, onPane, onMove, onGone, onAnswer, onInvite }: O
 export const PersonDrawer = ({ onClose, ...props }: Props) => (
    <Drawer direction="right" open onOpenChange={open => (open ? undefined : onClose())}>
       <DrawerContent className={floatingDrawer('sm:max-w-3xl')}>
-         <ErrorBoundary resetKey={props.id}>
+         <ErrorBoundary where="person-drawer" resetKey={props.id}>
             <Body {...props} />
          </ErrorBoundary>
       </DrawerContent>

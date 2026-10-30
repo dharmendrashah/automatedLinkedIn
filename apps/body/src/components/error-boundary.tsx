@@ -1,15 +1,19 @@
-import { Button } from '@/components/ui/button'
+import { ErrorPage } from '@/components/error-page'
+import { reportError } from '@/lib/app-error'
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 
 type Props = {
    children: ReactNode
+   // Where it sits, for the error report: 'app', 'page', 'person-drawer'.
+   where: string
    // A new key (another page or person) clears the error and shows the children again.
    resetKey?: string
+   fullScreen?: boolean
 }
 
 type State = { error: Error | null; key: string | undefined }
 
-// Catches a crash below it so the rest of the app keeps working, and offers to try again instead of a blank page.
+// Catches a crash below it and shows the error page in its place instead of a blank screen.
 export class ErrorBoundary extends Component<Props, State> {
    state: State = {
       error: null,
@@ -30,7 +34,10 @@ export class ErrorBoundary extends Component<Props, State> {
    }
 
    componentDidCatch(error: Error, info: ErrorInfo) {
-      console.error(error, info.componentStack)
+      reportError(error, {
+         where: this.props.where,
+         componentStack: info.componentStack,
+      })
    }
 
    render() {
@@ -39,13 +46,11 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-         <div role="alert" className="grid justify-items-start gap-2 p-4">
-            <p className="font-medium">Something went wrong here.</p>
-            <p className="text-muted-foreground text-sm">{this.state.error.message}</p>
-            <Button variant="outline" size="sm" onClick={() => this.setState({ error: null })}>
-               Try again
-            </Button>
-         </div>
+         <ErrorPage
+            error={this.state.error}
+            fullScreen={this.props.fullScreen}
+            onRetry={() => this.setState({ error: null })}
+         />
       )
    }
 }
