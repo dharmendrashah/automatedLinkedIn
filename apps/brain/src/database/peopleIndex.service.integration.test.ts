@@ -122,13 +122,13 @@ describe('PeopleIndexService (database)', () => {
       expect(found).toHaveLength(2)
       expect(acme).toMatchObject({
          name: 'Ana Silva',
-         priority: 1,
+         priority: 2,
          reasonKind: 'REQUEST',
          reasonText: 'Sent you a request: "Loved your post"',
          foundBy: ['request'],
       })
       expect(own).toMatchObject({
-         priority: 2,
+         priority: 3,
          reasonText: 'Replied: "Sure, send the deck"',
       })
       expect(own?.links.map(({ kind }) => kind)).toEqual(['CONVERSATION'])

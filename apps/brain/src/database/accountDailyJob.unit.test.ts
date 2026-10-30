@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => {
       requestTask: vi.fn(),
       validation: { request: requestCheck },
       firstDayUsed: vi.fn(),
+      newestConnections: vi.fn(),
    }
 })
 
@@ -39,6 +40,7 @@ vi.mock('./prisma.service', () => ({
 }))
 vi.mock('./linkedInAccountValidation.service', () => ({ LinkedInAccountValidationService: mocks.validation }))
 vi.mock('./firstDayUsed.service', () => ({ FirstDayUsedService: { used: mocks.firstDayUsed } }))
+vi.mock('./linkedInInvite.service', () => ({ LinkedInInviteService: { newestConnections: mocks.newestConnections } }))
 vi.mock('./task.service', () => ({
    TaskService: {
       request: mocks.requestTask,
@@ -88,6 +90,8 @@ const account = (extra: Record<string, unknown> = {}) => ({
    nextFirstReadAt: null,
    nextConnectionsAt: LATER,
    nextProfileAt: LATER,
+   nextAcceptReadAt: LATER,
+   sentInvites: [],
    proxyServers: [
       {
          detectedCountryCode: 'IN',
@@ -824,5 +828,66 @@ describe('AccountDailyJob', () => {
          },
          data: { nextCheckAt: TOMORROW_8_IN_INDIA },
       })
+   })
+})
+
+describe('AccountDailyJob, the read of the newest connections while invites wait', () => {
+   beforeEach(() => {
+      vi.resetAllMocks()
+      mocks.updateMany.mockResolvedValue({ count: 1 })
+      mocks.countSessions.mockResolvedValue(0)
+      mocks.findSessions.mockResolvedValue([])
+      mocks.requestTask.mockResolvedValue({ id: 's1' })
+      mocks.newestConnections.mockResolvedValue(['ada', 'grace'])
+      mocks.catalog.mockResolvedValue([
+         {
+            task: 'linkedin-connections',
+            version: 2,
+         },
+      ])
+   })
+
+   const waiting = (extra: Record<string, unknown> = {}) =>
+      account({
+         nextCheckAt: LATER,
+         nextBrowseAt: LATER,
+         nextAcceptReadAt: EARLIER,
+         sentInvites: [{ id: 'i1' }],
+         ...extra,
+      })
+
+   it('should read the newest connections, stopping at the newest already stored, and set the next read a day on', async () => {
+      mocks.findMany.mockResolvedValue([waiting()])
+
+      await run()
+
+      expect(mocks.requestTask).toHaveBeenCalledWith(
+         expect.objectContaining({
+            task: 'linkedin-connections',
+            input: { stopAtKnown: ['ada', 'grace'] },
+         })
+      )
+      expect(mocks.updateMany).toHaveBeenCalledWith({
+         where: {
+            id: 'acc1',
+            nextAcceptReadAt: EARLIER,
+         },
+         data: { nextAcceptReadAt: TOMORROW_8_IN_INDIA },
+      })
+   })
+
+   it('should ask for no such read without invites waiting, and read the whole list from a spider that cannot stop', async () => {
+      mocks.findMany.mockResolvedValue([waiting({ sentInvites: [] })])
+
+      await run()
+
+      expect(mocks.requestTask).not.toHaveBeenCalled()
+
+      mocks.catalog.mockResolvedValue([])
+      mocks.findMany.mockResolvedValue([waiting()])
+
+      await run()
+
+      expect(mocks.requestTask).toHaveBeenCalledWith(expect.objectContaining({ input: {} }))
    })
 })

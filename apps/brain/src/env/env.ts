@@ -172,6 +172,10 @@ export class Environment {
             default: true,
             devDefault: false,
          }),
+         INVITES_LIVE: bool({
+            desc: 'Whether My network shows Invite and lists people ready to invite (.plan/network-invites.md). Brain accepts invites either way',
+            default: true,
+         }),
          GIT_SHA: string({
             desc: 'Git commit the image was built from, reported by GET /health',
             example: 'a1b2c3d',

@@ -2,11 +2,13 @@ import { dailyTime, nextMessagesTime, timezoneOfCountry } from 'core'
 
 import { PROFILE_TRIES } from './accountLoading'
 import { FirstDayUsedService } from './firstDayUsed.service'
+import { PENDING } from './inviteRules'
 import { type JobItemInput } from './jobRun.service'
 import { VISIT_TASK } from './linkedInAccount.service'
 import { LinkedInAccountValidationService } from './linkedInAccountValidation.service'
 import { CONNECTIONS_TASK } from './linkedInConnection.hooks'
 import { INVITATIONS_TASK } from './linkedInInvitation.hooks'
+import { LinkedInInviteService } from './linkedInInvite.service'
 import { MESSAGES_TASK } from './linkedInMessages.hooks'
 import { PROFILE_TASK } from './linkedInProfile.hooks'
 import { messagesInput, sweepDue } from './messagesRefresh'
@@ -34,6 +36,7 @@ type Field =
    | 'nextFirstReadAt'
    | 'nextConnectionsAt'
    | 'nextProfileAt'
+   | 'nextAcceptReadAt'
 // Asked for: the task is queued. Let go: the time moves on without a task, for a fixed reason. Retry: it could not be queued now,
 // so the time stays and the next pass tries again.
 type Attempt =
@@ -81,6 +84,12 @@ const findDue = (now: Date) => {
                   ...due('nextProfileAt'),
                ],
             },
+            // Invites waiting for an answer: the newest connections are read once a day (.plan/network-invites.md).
+            {
+               status: 'ACTIVE',
+               sentInvites: { some: { state: { in: PENDING } } },
+               OR: due('nextAcceptReadAt'),
+            },
          ],
       },
       select: {
@@ -94,6 +103,12 @@ const findDue = (now: Date) => {
          nextFirstReadAt: true,
          nextConnectionsAt: true,
          nextProfileAt: true,
+         nextAcceptReadAt: true,
+         sentInvites: {
+            where: { state: { in: PENDING } },
+            select: { id: true },
+            take: 1,
+         },
          firstSignedInAt: true,
          profile: { select: { accountId: true } },
          email: true,
@@ -132,6 +147,16 @@ const move = (account: Due, field: Field, to: Date) =>
    })
 
 const requestVisit = (account: Due) => askFor(account, VISIT_TASK, 'the daily visit')
+
+// The version of the connections task that stops at a known connection; an older spider refuses the input and reads the whole list.
+const STOP_AT_KNOWN_VERSION = 2
+
+const acceptReadInput = async (accountId: string) => {
+   const version = (await TaskService.catalog()).find(({ task }) => task === CONNECTIONS_TASK)?.version ?? 0
+   const known = version >= STOP_AT_KNOWN_VERSION ? await LinkedInInviteService.newestConnections(accountId) : []
+
+   return known.length > 0 ? { stopAtKnown: known } : {}
+}
 
 const requestInvitations = (account: Due, firstDay = false) =>
    askFor(account, INVITATIONS_TASK, 'the read of the connection requests', { answers: [] }, firstDay)
@@ -525,6 +550,24 @@ export class AccountDailyJob {
                () => askFor(account, PROFILE_TASK, 'the monthly read of the own profile'),
                'profile-read'
             )
+
+            // While invites wait for an answer, the newest connections once a day, stopping at the first one already stored.
+            if (account.sentInvites.length > 0 && account.connectionsReadAt !== null) {
+               const accepts = await daily('nextAcceptReadAt', 'accept-read', async () =>
+                  signedInToday
+                     ? askFor(
+                          account,
+                          CONNECTIONS_TASK,
+                          'the read of the newest connections',
+                          await acceptReadInput(account.id)
+                       )
+                     : notSignedIn
+               )
+
+               if (accepts) {
+                  result.repeatReads += 1
+               }
+            }
          }
       } finally {
          AccountDailyJob.running = false

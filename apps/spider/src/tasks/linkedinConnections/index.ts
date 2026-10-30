@@ -19,7 +19,7 @@ type Options = {
 export const createLinkedinConnections = ({ baseUrl }: Options) =>
    defineTask({
       name: TASK_NAME,
-      version: 1,
+      version: 2,
       title: 'LinkedIn connections',
       description:
          'Opens the connections of the account and reads who they are, scrolling the whole list. It can remove one connection it is asked for, after checking that the dialog names the same person.',
@@ -28,6 +28,13 @@ export const createLinkedinConnections = ({ baseUrl }: Options) =>
             .optional()
             .describe(
                'The connection to remove, by the part of its profile address after /in/; none reads the list only.'
+            ),
+         stopAtKnown: z
+            .array(connectionSlugSchema)
+            .max(50)
+            .optional()
+            .describe(
+               'The newest connections already stored: the read stops at the first of them, since the list shows the most recent first.'
             ),
       }),
       needs: {

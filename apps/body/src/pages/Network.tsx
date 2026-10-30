@@ -13,11 +13,13 @@ import {
 } from '@/components/my-network/address'
 import { BulkBar, type BulkChange } from '@/components/my-network/bulk-bar'
 import { Filters, SearchBox } from '@/components/my-network/filters'
+import { InviteDialog } from '@/components/my-network/invite-dialog'
 import { PeopleTable } from '@/components/my-network/people-table'
 import { PersonDrawer } from '@/components/my-network/person-drawer'
 import { Pickers } from '@/components/my-network/pickers'
 import {
    type NextStep,
+   type ResultDays,
    SELECT_MAX,
    countText,
    keyAction,
@@ -94,10 +96,15 @@ type PeopleProps = {
 const ClientPeople = ({ client, accountId, view, update, pickers }: PeopleProps) => {
    useSeenOnLeave(client.id)
 
+   const [days, setDays] = useState<ResultDays>(7)
+   const [inviting, setInviting] = useState<string[]>([])
    const utils = trpc.useUtils()
    const today = trpc.people.today.useQuery()
    const counts = trpc.people.counts.useQuery({ clientId: client.id })
-   const results = trpc.people.results.useQuery({ clientId: client.id })
+   const results = trpc.people.results.useQuery({
+      clientId: client.id,
+      days,
+   })
    const labels = trpc.label.list.useQuery()
    const query = {
       clientId: client.id,
@@ -153,6 +160,12 @@ const ClientPeople = ({ client, accountId, view, update, pickers }: PeopleProps)
          return
       }
 
+      if (step.kind === 'INVITE') {
+         setInviting([row.id])
+
+         return
+      }
+
       answer({
          accountId: step.accountId,
          requestId: step.requestId,
@@ -185,6 +198,8 @@ const ClientPeople = ({ client, accountId, view, update, pickers }: PeopleProps)
    }, [ids, selectedId, view.open, adding, open])
 
    const line = today.data?.find(({ clientId }) => clientId === client.id)
+   const invitesLive = line?.invitesLive ?? false
+   const stopped = (line?.stopped ?? []).map(({ accountId: id }) => id)
    const nobody = counts.data !== undefined && counts.data.EVERYONE === 0 && counts.data.DO_NOT_CONTACT === 0
    const filtered = Boolean(view.q || view.found || view.fit || view.label || view.onlyNew || accountId)
 
@@ -205,6 +220,9 @@ const ClientPeople = ({ client, accountId, view, update, pickers }: PeopleProps)
          {results.data ? (
             <ResultsLine
                results={results.data}
+               invitesLive={invitesLive}
+               days={days}
+               onDays={setDays}
                onNew={() =>
                   update({
                      tab: 'EVERYONE',
@@ -256,6 +274,7 @@ const ClientPeople = ({ client, accountId, view, update, pickers }: PeopleProps)
                      ...change,
                   })
                }
+               {...(invitesLive && { onInvite: () => setInviting(shownChosen) })}
                onClear={() => setChosen([])}
             />
          ) : null}
@@ -268,6 +287,8 @@ const ClientPeople = ({ client, accountId, view, update, pickers }: PeopleProps)
                <PeopleTable
                   rows={rows}
                   accounts={client.accounts}
+                  stopped={stopped}
+                  invitesLive={invitesLive}
                   selectedId={selectedId}
                   chosen={shownChosen}
                   onOpen={id => open(id)}
@@ -315,9 +336,21 @@ const ClientPeople = ({ client, accountId, view, update, pickers }: PeopleProps)
                   answer(ask)
                   setSelectedId(view.open ? nextAfter(ids, view.open) : null)
                }}
+               {...(invitesLive && { onInvite: (id: string) => setInviting([id]) })}
             />
          ) : null}
          <AddPeopleDialog key={client.id} client={client} open={adding} onOpenChange={setAdding} />
+         <InviteDialog
+            key={inviting.join()}
+            clientId={client.id}
+            personIds={inviting}
+            source={view.found ?? undefined}
+            onClose={() => setInviting([])}
+            onDone={() => {
+               setInviting([])
+               setChosen([])
+            }}
+         />
          <StartAnywayDialog message={refusal} onConfirm={goAnyway} onCancel={stopAsking} />
       </>
    )

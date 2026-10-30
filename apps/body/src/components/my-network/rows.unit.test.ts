@@ -16,15 +16,19 @@ describe('nextStepOf', () => {
       sourceId: 'r1',
    }
 
-   it('is Reply for a waiting reply, Accept for a waiting request, and nothing otherwise', () => {
-      expect(nextStepOf({ priority: 2, links: [request] })).toEqual({ kind: 'REPLY' })
-      expect(nextStepOf({ priority: 1, links: [request] })).toEqual({
+   it('is Reply for a waiting reply, Accept for a waiting request, Invite once invites are live, and nothing otherwise', () => {
+      const live = { invitesLive: true }
+
+      expect(nextStepOf({ priority: 3, links: [request], ...live })).toEqual({ kind: 'REPLY' })
+      expect(nextStepOf({ priority: 2, links: [request], ...live })).toEqual({
          kind: 'ACCEPT',
          accountId: 'a1',
          requestId: 'r1',
       })
-      expect(nextStepOf({ priority: 1, links: [] })).toBeNull()
-      expect(nextStepOf({ priority: 0, links: [request] })).toBeNull()
+      expect(nextStepOf({ priority: 2, links: [], ...live })).toBeNull()
+      expect(nextStepOf({ priority: 1, links: [], ...live })).toEqual({ kind: 'INVITE' })
+      expect(nextStepOf({ priority: 1, links: [], invitesLive: false })).toBeNull()
+      expect(nextStepOf({ priority: 0, links: [request], ...live })).toBeNull()
    })
 })
 

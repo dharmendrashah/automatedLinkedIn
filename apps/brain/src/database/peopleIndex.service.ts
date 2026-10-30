@@ -87,82 +87,101 @@ export class PeopleIndexService {
       const clientOf = new Map(accounts.map(({ id, clientId }) => [id, clientId ?? defaultClientId]))
       const accountIds = accounts.map(({ id }) => id)
       const urls = slugs.flatMap(slug => [profileUrlOf(slug), profileUrlOf(slug).slice(0, -1)])
-      const [requests, connections, conversations, members, targets, suppressed, existing] = await Promise.all([
-         db.linkedInInvitation.findMany({
-            where: {
-               userId,
-               accountId: { in: accountIds },
-               slug: { in: slugs },
-            },
-         }),
-         db.linkedInConnection.findMany({
-            where: {
-               userId,
-               accountId: { in: accountIds },
-               slug: { in: slugs },
-            },
-         }),
-         db.linkedInConversation.findMany({
-            where: {
-               userId,
-               kind: 'DIRECT',
-               OR: [{ contactProfileUrl: { in: urls } }, { replies: { some: { recipientSlug: { in: slugs } } } }],
-            },
-            select: {
-               id: true,
-               accountId: true,
-               contactProfileUrl: true,
-               participants: true,
-               lastMessageAt: true,
-               lastDirection: true,
-               lastReplyAt: true,
-               waitingSince: true,
-               doneAt: true,
-               createdAt: true,
-               replies: {
-                  where: { recipientSlug: { not: null } },
-                  select: { recipientSlug: true },
-                  take: 1,
+      const [requests, connections, conversations, members, targets, suppressed, existing, invites] = await Promise.all(
+         [
+            db.linkedInInvitation.findMany({
+               where: {
+                  userId,
+                  accountId: { in: accountIds },
+                  slug: { in: slugs },
                },
-            },
-         }),
-         db.workflowListMember.findMany({
-            where: {
-               list: { userId },
-               slug: { in: slugs },
-            },
-            include: { list: { select: { clientId: true } } },
-         }),
-         db.linkedInProfile.findMany({
-            where: {
-               userId,
-               slug: { in: slugs },
-               archivedAt: null,
-            },
-         }),
-         db.suppression.findMany({
-            where: {
-               userId,
-               slug: { in: slugs },
-            },
-            select: { slug: true },
-         }),
-         db.person.findMany({
-            where: {
-               userId,
-               slug: { in: slugs },
-            },
-            select: {
-               id: true,
-               clientId: true,
-               slug: true,
-               doNotContact: true,
-               notes: true,
-               labels: true,
-               statusSetAt: true,
-            },
-         }),
-      ])
+            }),
+            db.linkedInConnection.findMany({
+               where: {
+                  userId,
+                  accountId: { in: accountIds },
+                  slug: { in: slugs },
+               },
+            }),
+            db.linkedInConversation.findMany({
+               where: {
+                  userId,
+                  kind: 'DIRECT',
+                  OR: [{ contactProfileUrl: { in: urls } }, { replies: { some: { recipientSlug: { in: slugs } } } }],
+               },
+               select: {
+                  id: true,
+                  accountId: true,
+                  contactProfileUrl: true,
+                  participants: true,
+                  lastMessageAt: true,
+                  lastDirection: true,
+                  lastReplyAt: true,
+                  waitingSince: true,
+                  doneAt: true,
+                  createdAt: true,
+                  replies: {
+                     where: { recipientSlug: { not: null } },
+                     select: { recipientSlug: true },
+                     take: 1,
+                  },
+               },
+            }),
+            db.workflowListMember.findMany({
+               where: {
+                  list: { userId },
+                  slug: { in: slugs },
+               },
+               include: { list: { select: { clientId: true } } },
+            }),
+            db.linkedInProfile.findMany({
+               where: {
+                  userId,
+                  slug: { in: slugs },
+                  archivedAt: null,
+               },
+            }),
+            db.suppression.findMany({
+               where: {
+                  userId,
+                  slug: { in: slugs },
+               },
+               select: { slug: true },
+            }),
+            db.person.findMany({
+               where: {
+                  userId,
+                  slug: { in: slugs },
+               },
+               select: {
+                  id: true,
+                  clientId: true,
+                  slug: true,
+                  doNotContact: true,
+                  notes: true,
+                  labels: true,
+                  statusSetAt: true,
+               },
+            }),
+            db.linkedInInvite.findMany({
+               where: {
+                  userId,
+                  slug: { in: slugs },
+               },
+               select: {
+                  id: true,
+                  clientId: true,
+                  accountId: true,
+                  slug: true,
+                  name: true,
+                  state: true,
+                  invitedAt: true,
+                  acceptedAt: true,
+                  createdAt: true,
+               },
+            }),
+         ]
+      )
       const theirs = conversations.filter(({ lastDirection }) => lastDirection === 'THEM')
       const lastWords = new Map(
          (theirs.length > 0
@@ -189,6 +208,7 @@ export class PeopleIndexService {
          ),
          members: bySlug(members, ({ slug }) => slug),
          targets: bySlug(targets, ({ slug }) => slug),
+         invites: bySlug(invites, ({ slug }) => slug),
       }
       const blocked = new Set(suppressed.map(({ slug }) => slug))
 
@@ -269,6 +289,7 @@ export class PeopleIndexService {
                url: row.url,
                createdAt: row.createdAt,
             })),
+            invites: (rows.invites.get(slug) ?? []).map(({ slug: _slug, ...row }) => row),
          }
          const drafts = draftPeople(
             sources,

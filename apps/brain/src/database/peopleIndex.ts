@@ -70,12 +70,25 @@ export type TargetRow = {
    createdAt: Date
 }
 
+// An invite one of the client's accounts sent or will send (.plan/network-invites.md); it stays with the client it was asked for.
+export type InviteRow = {
+   id: string
+   clientId: string
+   accountId: string
+   name: string
+   state: string
+   invitedAt: Date | null
+   acceptedAt: Date | null
+   createdAt: Date
+}
+
 export type Sources = {
    requests: RequestRow[]
    connections: ConnectionRow[]
    conversations: ConversationRow[]
    members: MemberRow[]
    targets: TargetRow[]
+   invites: InviteRow[]
 }
 
 export type DraftLink = {
@@ -147,6 +160,18 @@ const connected = (row: ConnectionRow) => row.status === 'CONNECTED' || row.stat
 
 const open = (row: ConversationRow) => row.doneAt === null
 
+// Sent and not answered yet, so the client waits on them.
+const invitePending = (row: InviteRow) => ['SENT', 'UNKNOWN', 'WITHDRAW_QUEUED', 'WITHDRAWING'].includes(row.state)
+
+const inviteWent = (row: InviteRow) => invitePending(row) || row.state === 'ACCEPTED' || row.state === 'WITHDRAWN'
+
+// What Needs me puts first: a reply, then a request, then someone ready to invite.
+export const PRIORITY = {
+   REPLY: 3,
+   REQUEST: 2,
+   INVITE: 1,
+} as const
+
 type Rows = { [K in keyof Sources]: Sources[K] }
 
 const emptyRows = (): Rows => ({
@@ -155,6 +180,7 @@ const emptyRows = (): Rows => ({
    conversations: [],
    members: [],
    targets: [],
+   invites: [],
 })
 
 const memberReason = (member: MemberRow) => {
@@ -183,6 +209,7 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string): DraftPerson 
    const [member] = rows.members
    const connection = rows.connections.find(connected)
    const [target] = rows.targets
+   const invite = rows.invites.find(inviteWent)
    const [first] = [...rows.connections, ...rows.requests, ...rows.conversations]
    const reason = (() => {
       if (reply) {
@@ -214,9 +241,18 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string): DraftPerson 
       if (connection) {
          return {
             kind: 'CONNECTION' as const,
-            text: 'Connected',
+            text: invite?.state === 'ACCEPTED' ? 'Accepted your invite' : 'Connected',
             url: null,
             at: connection.connectedOn ?? connection.seenAt,
+         }
+      }
+
+      if (invite) {
+         return {
+            kind: 'INVITE' as const,
+            text: invite.state === 'ACCEPTED' ? 'Accepted your invite' : 'Invited',
+            url: null,
+            at: invite.acceptedAt ?? invite.invitedAt ?? invite.createdAt,
          }
       }
 
@@ -242,6 +278,7 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string): DraftPerson 
       ...rows.conversations.map(row =>
          row.lastReplyAt && row.waitingSince ? 'REPLIED' : row.lastReplyAt ? 'CONTACTED' : 'NEW'
       ),
+      ...rows.invites.map(row => (inviteWent(row) ? 'CONTACTED' : 'NEW')),
    ].reduce<PersonStatus>(higher, 'NEW')
    const scores = rows.members.flatMap(row => (row.score === null ? [] : [row.score]))
    const links: DraftLink[] = [
@@ -275,6 +312,14 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string): DraftPerson 
          sourceId: row.id,
          at: row.createdAt,
       })),
+      ...rows.invites
+         .filter(row => row.state !== 'CANCELLED' && row.state !== 'SKIPPED')
+         .map(row => ({
+            accountId: row.accountId,
+            kind: 'INVITE' as const,
+            sourceId: row.id,
+            at: row.invitedAt ?? row.createdAt,
+         })),
    ]
    const seen = [
       ...rows.requests.map(row => row.createdAt),
@@ -282,11 +327,25 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string): DraftPerson 
       ...rows.conversations.map(row => row.createdAt),
       ...rows.members.map(row => row.createdAt),
       ...rows.targets.map(row => row.createdAt),
+      ...rows.invites.map(row => row.createdAt),
    ]
+   const fit: PersonFit = rows.members.some(row => row.state === 'QUALIFIED')
+      ? 'STRONG'
+      : rows.members.some(row => row.state === 'MAYBE')
+        ? 'MAYBE'
+        : 'NONE'
+   // Found by a list with a fit, new, and no account of the client has anything with them yet (P3 of the plan).
+   const readyToInvite =
+      fit !== 'NONE' &&
+      fromRows === 'NEW' &&
+      rows.requests.length === 0 &&
+      rows.connections.length === 0 &&
+      rows.conversations.length === 0 &&
+      rows.invites.every(row => row.state === 'CANCELLED' || row.state === 'SKIPPED')
 
    return {
       clientId,
-      name: first?.name ?? member?.name ?? target?.name ?? null,
+      name: first?.name ?? member?.name ?? target?.name ?? rows.invites[0]?.name ?? null,
       headline: connection?.headline ?? request?.headline ?? member?.headline ?? target?.headline ?? null,
       company: member?.company ?? target?.company ?? null,
       photoUrl:
@@ -295,11 +354,7 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string): DraftPerson 
          rows.conversations.find(row => row.photoUrl)?.photoUrl ??
          null,
       status: fromRows,
-      fit: rows.members.some(row => row.state === 'QUALIFIED')
-         ? 'STRONG'
-         : rows.members.some(row => row.state === 'MAYBE')
-           ? 'MAYBE'
-           : 'NONE',
+      fit,
       score: scores.length > 0 ? Math.max(...scores) : null,
       reasonKind: reason.kind,
       reasonText: reason.text,
@@ -311,8 +366,10 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string): DraftPerson 
          ...(rows.targets.length > 0 ? ['target'] : []),
          ...new Set(rows.members.map(row => `list:${row.listId}`)),
       ],
-      priority: reply ? 2 : request ? 1 : 0,
-      waiting: rows.conversations.some(row => open(row) && row.lastDirection === 'ME'),
+      priority: reply ? PRIORITY.REPLY : request ? PRIORITY.REQUEST : readyToInvite ? PRIORITY.INVITE : 0,
+      waiting:
+         rows.conversations.some(row => open(row) && row.lastDirection === 'ME') ||
+         (rows.invites.some(invitePending) && !connection),
       lastTouchAt:
          latest([
             ...rows.conversations.map(row => row.lastMessageAt),
@@ -320,6 +377,7 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string): DraftPerson 
             ...rows.connections.map(row => row.connectedOn ?? row.createdAt),
             ...rows.members.map(row => row.createdAt),
             ...rows.targets.map(row => row.createdAt),
+            ...rows.invites.map(row => row.acceptedAt ?? row.invitedAt),
          ]) ?? new Date(0),
       firstSeenAt: earliest(seen),
       links,
@@ -348,6 +406,7 @@ export const draftPeople = (
    sources.conversations.forEach(row => rowsOf(clientOfAccount(row.accountId)).conversations.push(row))
    sources.members.forEach(row => rowsOf(row.clientId ?? defaultClientId).members.push(row))
    sources.targets.forEach(row => rowsOf(row.clientId ?? defaultClientId).targets.push(row))
+   sources.invites.forEach(row => rowsOf(row.clientId).invites.push(row))
 
    return [...byClient].map(([clientId, rows]) => draftOf(clientId, rows, profileUrl))
 }

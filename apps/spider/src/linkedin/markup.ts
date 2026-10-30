@@ -168,3 +168,48 @@ export const connectionMenuButton = (slug: string) => {
 
    return `[componentkey^="ConnectionCard_"][componentkey$="-${slug}"] button[aria-label^="More actions for"]`
 }
+
+// Inviting someone to connect (.plan/network-invites.md). Seen on kept profile pages (2026-10-28 and 2026-10-29, accounts
+// dharmendrashaheagle and tripti.verma, English, both layouts): a Connect button is a link to
+// /preload/custom-invite/?vanityName=<slug> named "Invite <Name> to connect", with `componentkey`
+// "ConnectButtonstate:invitation:urn:li:member:<number>_connect". The profile's own one and those of the people suggested beside it
+// look the same, so the person's is found by the slug in its address.
+// Recorded 2026-10-30 (dharmendrashaheagle, session 2026-10-30T09-22-58-429Z, an invite without a note): the person's link is in the
+// page three times (one absolute, with a `lipi` query); a click opens a window "Add a note to your invitation?" inside the open shadow
+// root of `#interop-outlet` (`data-testid="interop-shadowdom"`), with the buttons "Add a note" and "Send without a note" (seen on
+// video only; the markup inside the shadow root was not kept, so they are found by their words). "Send without a note" made
+// `POST /voyager/api/voyagerRelationshipsDashMemberRelationships?action=verifyQuotaAndCreateV2`, answered 200 at once; the window
+// closed, and the top card turned Connect into "Pending" only about 20 s later.
+// Recorded 2026-10-30 again (session 2026-10-30T09-45-48-912Z, an invite with a note): a top card with only Follow, Message and
+// More; More (an unnamed `button[aria-expanded]` saying "More", twice in the page) opens a `role="menu"` whose Connect is the same
+// custom-invite link with `role="menuitem"`; a "Connect if you know each other" card may hold another copy. The window is
+// `div[role="dialog"].artdeco-modal.send-invite` with `button[aria-label="Add a note"]` and `button[aria-label="Send without a
+// note"]`. The note window (video only): "Add a note to your invitation", "2 personalized invitations remaining for this month.", a
+// box counting to 200, Cancel, and a Send that waits for words; the same request as without a note.
+// NOT SEEN: the note box's markup, the email and weekly-limit notices, a month with no notes left, the Sent list and Withdraw.
+export const CONNECT_LINK = 'a[href*="/preload/custom-invite/"]'
+export const CONNECT_MEMBER = /^ConnectButtonstate:invitation:urn:li:member:(\d{1,20})_connect$/
+export const INVITE_REQUEST = ['voyagerRelationshipsDashMemberRelationships', 'verifyQuotaAndCreate']
+export const INVITE_BUTTON = 'button'
+export const INVITE_NOTE_BOX = 'textarea'
+export const INVITE_EMAIL = 'input[type="email"]'
+export const INVITE_QUESTION_WORDS = 'Add a note to your invitation?'
+export const ADD_NOTE_WORDS = 'Add a note'
+export const SEND_WITHOUT_NOTE_WORDS = 'Send without a note'
+export const SEND_INVITE_WORDS = ['Send', 'Send invitation', 'Send now']
+export const MORE_WORDS = 'More'
+export const PENDING_LABEL = /^Pending\b/
+export const INVITE_LIMIT_WORDS = /invitation limit|weekly limit/i
+// The Sent list, recorded 2026-10-30 (session 2026-10-30T10-07-21-893Z, dharmendrashaheagle, a real withdrawal): rows are
+// `[role="listitem"]` in `[data-testid="lazy-column"]`, each with a link to the person's profile (`/in/<slug>/`) and a Withdraw that
+// is a LINK named "Withdraw invitation sent to <Name>" (not a button). It opens `dialog[data-testid="dialog"]` "Withdraw invitation"
+// ("you won't be able to resend to this person for up to 3 weeks") with Cancel and a Withdraw button carrying the same name; the
+// press made `POST .../rsc-action/actions/server-request?sduiid=com.linkedin.sdui.requests.mynetwork.addaWithdrawInvitation` and the
+// row left the list.
+export const SENT_INVITES_PATH = '/mynetwork/invitation-manager/sent/'
+export const SENT_ROW = '[role="listitem"]'
+export const SENT_ROW_WITHDRAW =
+   '[role="listitem"] a[aria-label^="Withdraw"], [role="listitem"] button[aria-label^="Withdraw"]'
+export const WITHDRAW_DIALOG_BUTTON = 'dialog[data-testid="dialog"] button'
+export const WITHDRAW_REQUEST = ['sduiid=com.linkedin.sdui.requests.mynetwork.addaWithdrawInvitation']
+export const WITHDRAW_WORDS = 'Withdraw'
