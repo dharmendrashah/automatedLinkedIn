@@ -42,19 +42,19 @@ export const Today = ({ line, onGo }: { line: TodayLine; onGo: Go }) => {
          </LinkButton>
       ) : null,
    ].filter(Boolean)
-   const waiting =
-      line.waitingInvites > 0
-         ? ` ${line.waitingInvites} ${line.waitingInvites === 1 ? 'invite is' : 'invites are'} waiting for an answer.`
-         : ''
+
+   if (parts.length === 0 && line.stopped.length === 0) {
+      return null
+   }
 
    return (
       <div className="grid gap-1">
-         <p className="flex flex-wrap items-center gap-x-2 text-sm" role="status">
-            <span className="font-medium">Today:</span>
-            {parts.length > 0
-               ? parts.flatMap((part, index) => (index > 0 ? [<span key={`dot-${index}`}>·</span>, part] : [part]))
-               : `All done for today.${waiting}`}
-         </p>
+         {parts.length > 0 ? (
+            <p className="flex flex-wrap items-center gap-x-2 text-sm" role="status">
+               <span className="font-medium">Today:</span>
+               {parts.flatMap((part, index) => (index > 0 ? [<span key={`dot-${index}`}>·</span>, part] : [part]))}
+            </p>
+         ) : null}
          {line.stopped.map(({ accountId, name, reason }) => (
             <p key={accountId} className="text-destructive text-sm" role="alert">
                {`${name}: ${reason}`}
