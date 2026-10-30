@@ -1,19 +1,17 @@
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Building2, FileSearch, Mail, MessageSquare, PanelRight, Phone, UserPlus } from 'lucide-react'
+import { Mail, MessageSquare, PanelRight, Phone, UserPlus } from 'lucide-react'
 import { type ReactNode } from 'react'
 
 import { type PersonRow } from './types'
 
-import { messageAction, readCompanyReason } from './row-actions'
+import { messageAction } from './row-actions'
 import { nameOf } from './words'
 
 type Props = {
    row: PersonRow
    invitesLive: boolean
    onInvite: (row: PersonRow) => void
-   onReadProfile: (row: PersonRow) => void
-   onReadCompany: (row: PersonRow) => void
    onPreview: (row: PersonRow) => void
 }
 
@@ -59,7 +57,7 @@ const Action = ({
 )
 
 // The row's own actions, shown on hover, on keyboard focus and always on screens without hover. Clicks never open the drawer.
-export const RowActions = ({ row, invitesLive, onInvite, onReadProfile, onReadCompany, onPreview }: Props) => {
+export const RowActions = ({ row, invitesLive, onInvite, onPreview }: Props) => {
    const message = messageAction(row, invitesLive)
    const name = nameOf(row)
 
@@ -77,18 +75,6 @@ export const RowActions = ({ row, invitesLive, onInvite, onReadProfile, onReadCo
                {...(message.kind === 'NONE' ? { disabled: message.reason } : { href: message.href })}
             />
          )}
-         <Action
-            label="Read profile"
-            icon={<FileSearch />}
-            {...(row.doNotContact ? { disabled: 'On Do not contact' } : { onClick: () => onReadProfile(row) })}
-         />
-         <Action
-            label="Read company"
-            icon={<Building2 />}
-            {...(readCompanyReason(row) === null
-               ? { onClick: () => onReadCompany(row) }
-               : { disabled: readCompanyReason(row) ?? undefined })}
-         />
          <Action label="Quick preview" icon={<PanelRight />} onClick={() => onPreview(row)} />
          <Action label="Email" icon={<Mail />} disabled="Coming soon" />
          <Action label="Phone" icon={<Phone />} disabled="Coming soon" />

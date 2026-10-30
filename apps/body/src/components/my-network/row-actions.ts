@@ -2,10 +2,7 @@ import { type PersonRow } from './types'
 
 // What the hover actions of a My network row may do (.plan/network-person-drawer.md). Links only: the Unibox does the writing.
 
-export type ActionRow = Pick<
-   PersonRow,
-   'slug' | 'company' | 'companySlug' | 'profileRead' | 'doNotContact' | 'connectedAt' | 'inviteState' | 'links'
->
+export type ActionRow = Pick<PersonRow, 'slug' | 'doNotContact' | 'connectedAt' | 'inviteState' | 'links'>
 
 export type MessageAction =
    { kind: 'OPEN_CHAT' | 'START_CHAT'; href: string } | { kind: 'INVITE' } | { kind: 'NONE'; reason: string }
@@ -84,7 +81,3 @@ export const messageAction = (row: ActionRow, invitesLive: boolean): MessageActi
            reason: 'Invites are not on yet',
         }
 }
-
-// Read company needs the company's LinkedIn link, which a profile read brings and saves to /companies; null when it can run.
-export const readCompanyReason = (row: ActionRow) =>
-   row.companySlug ? null : row.profileRead ? 'No LinkedIn company on the profile' : 'Read the profile first'

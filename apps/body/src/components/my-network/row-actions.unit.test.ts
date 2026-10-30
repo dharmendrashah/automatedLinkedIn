@@ -1,15 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { type ActionRow, messageAction, readCompanyReason } from './row-actions'
+import { type ActionRow, messageAction } from './row-actions'
 
 // Dates reach the page as ISO text.
 const at = (day: string) => `${day}T10:00:00.000Z`
 
 const row = (rest: Partial<ActionRow>): ActionRow => ({
    slug: 'ada-l',
-   company: null,
-   companySlug: null,
-   profileRead: false,
    doNotContact: false,
    connectedAt: null,
    inviteState: 'NONE',
@@ -116,20 +113,5 @@ describe('messageAction', () => {
          kind: 'NONE',
          reason: 'No account to write from',
       })
-   })
-})
-
-describe('readCompanyReason', () => {
-   it('is open with the company slug, and otherwise says what is missing', () => {
-      expect(readCompanyReason(row({ companySlug: 'kite' }))).toBeNull()
-      expect(readCompanyReason(row({}))).toBe('Read the profile first')
-      expect(
-         readCompanyReason(
-            row({
-               company: 'Kite',
-               profileRead: true,
-            })
-         )
-      ).toBe('No LinkedIn company on the profile')
    })
 })
