@@ -57,13 +57,11 @@ export const ProfileBadges = ({ snapshot }: { snapshot: PersonDetail['snapshot']
 // text (the drawer's reason) and `actions` follow Open on LinkedIn and the read.
 export const ProfileCard = ({
    person,
-   confirmRead,
    clientId,
    actions,
    children,
 }: {
    person: PersonDetail
-   confirmRead: boolean
    clientId?: string
    actions?: ReactNode
    children?: ReactNode
@@ -112,23 +110,17 @@ export const ProfileCard = ({
             {person.suppressed ? null : (
                <ReadButton
                   what="full profile"
-                  priceMicros={person.readPriceMicros}
                   readAt={snapshot?.fetchedAt ?? null}
                   read={person.read}
                   pending={read.isPending}
                   error={read.error}
                   onRead={() => read.mutate({ slug: person.slug, clientId })}
-                  {...(confirmRead && {
-                     confirm: `It adds ${firstNameOf(name)}'s about, experience, education and skills, and is paid from your wallet.`,
-                  })}
                />
             )}
          </div>
       </Cover>
    )
 }
-
-const firstNameOf = (name: string) => name.split(/\s+/)[0] ?? name
 
 // How the owner's accounts know the person: connected since when, and the conversations they have.
 const Accounts = ({ person }: { person: PersonDetail }) =>
@@ -176,17 +168,9 @@ export const ProfileDetails = ({ person }: { person: PersonDetail }) => {
    )
 }
 
-// One person, like their LinkedIn profile, so a lead can be judged without leaving the table. `confirmRead` asks before the paid read;
-// `clientId` charges it to that client.
-export const PersonView = ({
-   slug,
-   confirmRead = false,
-   clientId,
-}: {
-   slug: string
-   confirmRead?: boolean
-   clientId?: string
-}) => {
+// One person, like their LinkedIn profile, so a lead can be judged without leaving the table. `clientId` charges the read to that
+// client.
+export const PersonView = ({ slug, clientId }: { slug: string; clientId?: string }) => {
    const detail = usePersonDetail(slug)
    const person = detail.data
 
@@ -196,7 +180,7 @@ export const PersonView = ({
 
    return (
       <div className="grid gap-3">
-         <ProfileCard person={person} confirmRead={confirmRead} clientId={clientId} />
+         <ProfileCard person={person} clientId={clientId} />
          <ProfileDetails person={person} />
       </div>
    )

@@ -54,7 +54,7 @@ export const readView = (params: URLSearchParams): View => {
 
    return {
       client: text(params.get('client')) ?? null,
-      tab: isTab(tab) ? tab : 'NEEDS_ME',
+      tab: isTab(tab) ? tab : 'EVERYONE',
       found: text(params.get('found')),
       fit: isFit(fit) ? fit : undefined,
       label: text(params.get('label')),

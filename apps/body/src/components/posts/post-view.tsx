@@ -71,7 +71,6 @@ const ThePost = ({ detail, onPerson }: { detail: PostDetail; onPerson: (slug: st
             {post.archivedAt ? null : (
                <ReadButton
                   what="post"
-                  priceMicros={detail.readPriceMicros}
                   readAt={snapshot?.fetchedAt ?? null}
                   read={detail.read}
                   pending={read.isPending}

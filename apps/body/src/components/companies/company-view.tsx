@@ -84,7 +84,6 @@ const Header = ({ detail }: { detail: CompanyDetail }) => {
             {company.archivedAt ? null : (
                <ReadButton
                   what="company page"
-                  priceMicros={detail.readPriceMicros}
                   readAt={snapshot?.fetchedAt ?? null}
                   read={detail.read}
                   pending={read.isPending}

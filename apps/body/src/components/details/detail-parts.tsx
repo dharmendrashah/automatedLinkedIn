@@ -1,24 +1,14 @@
-import {
-   AlertDialog,
-   AlertDialogAction,
-   AlertDialogCancel,
-   AlertDialogContent,
-   AlertDialogDescription,
-   AlertDialogFooter,
-   AlertDialogHeader,
-   AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { Skeleton } from '@/components/ui/skeleton'
 import { readableError } from '@/lib/trpc-error'
 import { useMediaSource } from '@/lib/use-media-source'
 import { FileSearch, Loader2, RefreshCw } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
 
-import { isReading, money } from './read-status'
+import { isReading } from './read-status'
 
 // Pieces every detail drawer shares: the cover and picture, the paid read button, loading and missing states.
 
@@ -83,49 +73,25 @@ export const Cover = ({ children, image = null }: { children: ReactNode; image?:
 
 type ReadProps = {
    what: string
-   priceMicros: number
    readAt: string | null
    // The newest read the worker has for this item.
    read: { status: 'QUEUED' | 'RUNNING' | 'DONE' | 'FAILED'; message: string | null } | null
    pending: boolean
    error: { message: string } | null
    onRead: () => void
-   // When set, the first press asks this before anything is paid.
-   confirm?: string
 }
 
-// The paid read: the price on the button, "Reading…" while the worker has it, when it was last read, and why it did
-// not work.
-export const ReadButton = ({ what, priceMicros, readAt, read, pending, error, onRead, confirm }: ReadProps) => {
+// The read: "Reading…" while the worker has it, when it was last read, and why it did not work. The cost is accepted, so it is
+// not shown.
+export const ReadButton = ({ what, readAt, read, pending, error, onRead }: ReadProps) => {
    const reading = isReading(read)
-   const [asking, setAsking] = useState(false)
-   const label = `${readAt ? 'Read again' : `Read ${what}`} · about ${money(priceMicros)}`
 
    return (
       <>
-         <Button
-            variant="outline"
-            size="sm"
-            disabled={pending || reading}
-            onClick={() => (confirm ? setAsking(true) : onRead())}
-         >
+         <Button variant="outline" size="sm" disabled={pending || reading} onClick={onRead}>
             {pending || reading ? <Loader2 className="animate-spin" /> : readAt ? <RefreshCw /> : <FileSearch />}
-            {reading ? `Reading the ${what}…` : label}
+            {reading ? `Reading the ${what}…` : readAt ? 'Read again' : `Read ${what}`}
          </Button>
-         {confirm ? (
-            <AlertDialog open={asking} onOpenChange={setAsking}>
-               <AlertDialogContent>
-                  <AlertDialogHeader>
-                     <AlertDialogTitle>{label}?</AlertDialogTitle>
-                     <AlertDialogDescription>{confirm}</AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                     <AlertDialogAction onClick={onRead}>Read</AlertDialogAction>
-                  </AlertDialogFooter>
-               </AlertDialogContent>
-            </AlertDialog>
-         ) : null}
          {reading ? (
             <p className="text-muted-foreground basis-full text-xs">
                This can take a few minutes. You can close this and come back.

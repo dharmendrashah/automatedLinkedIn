@@ -115,6 +115,10 @@ export const Pickers = ({ clients, clientId, accountId, onClient, onAccount }: P
       }
    }
 
+   if (!showClientPicker(clients) && accounts.length <= 1) {
+      return null
+   }
+
    return (
       <div className="flex flex-wrap items-center gap-2">
          {showClientPicker(clients) ? (

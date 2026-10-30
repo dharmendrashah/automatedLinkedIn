@@ -2,8 +2,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Download, ListFilter, Search } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Download, ListFilter, Search, UserPlus } from 'lucide-react'
+import { type ReactNode, useEffect, useState } from 'react'
 
 import { FITS, type View, type ViewChange, pickedList } from './address'
 import { ListDialogs, type ListManaging } from './list-dialogs'
@@ -33,7 +33,7 @@ export const SearchBox = ({ value, onSearch }: { value: string; onSearch: (q: st
    }, [text, value, onSearch])
 
    return (
-      <div className="relative w-full max-w-sm">
+      <div className="relative w-full sm:w-72">
          <Search className="text-muted-foreground absolute top-2.5 left-2.5 size-4" aria-hidden />
          <Input
             type="search"
@@ -49,14 +49,16 @@ export const SearchBox = ({ value, onSearch }: { value: string; onSearch: (q: st
 
 type Props = {
    view: View
-   lists: Array<{ id: string; name: string }>
-   labels: string[]
    exporting: boolean
-   // How many filters of the panel are on.
+   // How many filters of the drawer are on.
    filtersOn: number
+   // The search box, first in the row, then the tabs.
+   search: ReactNode
+   tabs: ReactNode
    onFilters: () => void
    onChange: (change: ViewChange) => void
    onExport: () => void
+   onAdd: () => void
 }
 
 const Filter = ({
@@ -81,7 +83,7 @@ const Filter = ({
          actions.some(([action]) => action === next) ? onAction?.(next) : onChange(next === ANY ? null : next)
       }
    >
-      <SelectTrigger size="sm" className="w-44" aria-label={label}>
+      <SelectTrigger size="sm" className="w-full" aria-label={label}>
          <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -101,8 +103,18 @@ const Filter = ({
    </Select>
 )
 
-// Found by, Fit and Label, the button to the other filters, and the export of what they show.
-export const Filters = ({ view, lists, labels, exporting, filtersOn, onFilters, onChange, onExport }: Props) => {
+// Found by (with Rename and Delete for a picked list), Fit and Label, at the top of the Filters drawer.
+export const QuickFilters = ({
+   view,
+   lists,
+   labels,
+   onChange,
+}: {
+   view: View
+   lists: Array<{ id: string; name: string }>
+   labels: string[]
+   onChange: (change: ViewChange) => void
+}) => {
    const [managing, setManaging] = useState<ListManaging>(null)
    const list = pickedList(view.found, lists)
    const known = [...SOURCES, ...lists.map(({ id }) => `list:${id}`)]
@@ -111,7 +123,7 @@ export const Filters = ({ view, lists, labels, exporting, filtersOn, onFilters, 
    const shownLabels = view.label && !labels.includes(view.label) ? [view.label, ...labels] : labels
 
    return (
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid gap-2">
          <Filter
             label="Found by"
             value={view.found}
@@ -132,22 +144,6 @@ export const Filters = ({ view, lists, labels, exporting, filtersOn, onFilters, 
             options={shownLabels.map(label => [label, label])}
             onChange={label => onChange({ label, open: null })}
          />
-         <Button variant={filtersOn > 0 ? 'secondary' : 'outline'} size="sm" onClick={onFilters}>
-            <ListFilter />
-            Filters
-            {filtersOn > 0 ? (
-               <Badge className="ml-0.5 h-5 min-w-5 rounded-full px-1.5 tabular-nums">{filtersOn}</Badge>
-            ) : null}
-         </Button>
-         {view.onlyNew ? (
-            <Button variant="secondary" size="sm" onClick={() => onChange({ new: null })}>
-               Only new · show all
-            </Button>
-         ) : null}
-         <Button variant="outline" size="sm" className="ml-auto" disabled={exporting} onClick={onExport}>
-            <Download />
-            Export
-         </Button>
          {list ? (
             <ListDialogs
                key={list.id}
@@ -163,3 +159,31 @@ export const Filters = ({ view, lists, labels, exporting, filtersOn, onFilters, 
       </div>
    )
 }
+
+// The search, the tabs, the button to the Filters drawer, then the export and Add people.
+export const Filters = ({ view, exporting, filtersOn, search, tabs, onFilters, onChange, onExport, onAdd }: Props) => (
+   <div className="flex flex-wrap items-center gap-2">
+      {search}
+      {tabs}
+      <Button variant={filtersOn > 0 ? 'secondary' : 'outline'} size="sm" onClick={onFilters}>
+         <ListFilter />
+         Filters
+         {filtersOn > 0 ? (
+            <Badge className="ml-0.5 h-5 min-w-5 rounded-full px-1.5 tabular-nums">{filtersOn}</Badge>
+         ) : null}
+      </Button>
+      {view.onlyNew ? (
+         <Button variant="secondary" size="sm" onClick={() => onChange({ new: null })}>
+            Only new · show all
+         </Button>
+      ) : null}
+      <Button variant="outline" size="sm" className="ml-auto" disabled={exporting} onClick={onExport}>
+         <Download />
+         Export
+      </Button>
+      <Button size="sm" onClick={onAdd}>
+         <UserPlus />
+         Add people
+      </Button>
+   </div>
+)

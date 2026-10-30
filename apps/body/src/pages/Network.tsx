@@ -13,7 +13,7 @@ import {
    sortParam,
 } from '@/components/my-network/address'
 import { BulkBar, type BulkChange } from '@/components/my-network/bulk-bar'
-import { Filters, SearchBox } from '@/components/my-network/filters'
+import { Filters, QuickFilters, SearchBox } from '@/components/my-network/filters'
 import { FilterChips } from '@/components/my-network/filters/filter-chips'
 import { type FilterOptions, FiltersSheet } from '@/components/my-network/filters/filters-sheet'
 import {
@@ -43,7 +43,6 @@ import { useSeenOnLeave } from '@/components/my-network/use-seen-on-leave'
 import { nameOf } from '@/components/my-network/words'
 import { EmptyState, ToAccounts } from '@/components/network/notices'
 import { PageStatus } from '@/components/page-status'
-import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { flagOf } from '@/lib/country-flag'
 import { downloadFile } from '@/lib/download-file'
@@ -257,65 +256,41 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
 
    return (
       <>
-         <div className="flex flex-wrap items-center justify-between gap-3">
-            {pickers}
-            <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-               <SearchBox key={client.id} value={view.q ?? ''} onSearch={q => update({ q, open: null })} />
-               <Button size="sm" onClick={() => setAdding(true)}>
-                  <UserPlus />
-                  Add people
-               </Button>
-            </div>
-         </div>
          {line ? <Today line={line} onGo={change => update({ ...change, open: null })} /> : null}
          {nobody ? <FirstVisit /> : null}
-         {results.data ? (
-            <ResultsLine
-               results={results.data}
-               invitesLive={invitesLive}
-               days={days}
-               onDays={setDays}
-               onNew={() =>
-                  update({
-                     tab: 'EVERYONE',
-                     found: null,
-                     new: '1',
-                     open: null,
-                  })
-               }
-            />
-         ) : null}
-         <Tabs
-            value={view.tab}
-            onValueChange={tab =>
-               update({
-                  tab: TABS.find(item => item === tab) ?? null,
-                  open: null,
-               })
-            }
-         >
-            <TabsList>
-               {TABS.map(tab => (
-                  <TabsTrigger key={tab} value={tab}>
-                     {TAB_WORDS[tab]}
-                     {counts.data ? (
-                        <span className="text-muted-foreground tabular-nums">
-                           {countText(counts.data[tab], counts.data.cap)}
-                        </span>
-                     ) : null}
-                  </TabsTrigger>
-               ))}
-            </TabsList>
-         </Tabs>
          <Filters
             view={view}
-            lists={client.lists}
-            labels={(labels.data ?? []).map(({ label }) => label)}
             exporting={exporting.isPending}
-            filtersOn={filtersOn}
+            filtersOn={filtersOn + [view.found, view.fit, view.label].filter(Boolean).length}
+            search={<SearchBox key={client.id} value={view.q ?? ''} onSearch={q => update({ q, open: null })} />}
+            tabs={
+               <Tabs
+                  value={view.tab}
+                  onValueChange={tab =>
+                     update({
+                        tab: TABS.find(item => item === tab) ?? null,
+                        open: null,
+                     })
+                  }
+               >
+                  <TabsList>
+                     {TABS.map(tab => (
+                        <TabsTrigger key={tab} value={tab}>
+                           {TAB_WORDS[tab]}
+                           {counts.data ? (
+                              <span className="text-muted-foreground tabular-nums">
+                                 {countText(counts.data[tab], counts.data.cap)}
+                              </span>
+                           ) : null}
+                        </TabsTrigger>
+                     ))}
+                  </TabsList>
+               </Tabs>
+            }
             onFilters={() => setFiltering(true)}
             onChange={update}
             onExport={() => exporting.mutate(query)}
+            onAdd={() => setAdding(true)}
          />
          <FilterChips
             value={filters}
@@ -390,6 +365,18 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
             options={filterOptions}
             count={people.isFetching && !people.isFetchingNextPage ? null : (people.data?.pages[0]?.total ?? 0)}
             cap={counts.data?.cap ?? 10_000}
+            scope={pickers}
+            quick={
+               <QuickFilters
+                  view={view}
+                  lists={client.lists}
+                  labels={(labels.data ?? []).map(({ label }) => label)}
+                  onChange={update}
+               />
+            }
+            results={
+               results.data && invitesLive ? <ResultsLine results={results.data} days={days} onDays={setDays} /> : null
+            }
             onOpenChange={setFiltering}
             onChange={setFilters}
          />

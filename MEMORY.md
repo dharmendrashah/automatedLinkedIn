@@ -72,6 +72,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Gotchas
 
+- `Person.search` is a generated column (raw SQL in `20261030130000_add_network_hub`). Prisma reads its expression as a default, so the schema carries it as `@default(dbgenerated("…"))` written exactly as Postgres prints it (`pg_get_expr`); without that, `migrate dev` generates `ALTER COLUMN "search" DROP DEFAULT`, which fails (42601). If the expression ever changes, update both.
+
 - The data service's full profile row (live read, 2026-10-30) has `coverPhoto`, `premium`, `verified`, `creator`, `hiring`, `openToWork`, `country`, `photo`, and per position `companyLinkedinUrl`, `companyLogo`, `companyName`, `position`, `endDate` (full list in `.plan/network-person-drawer.md`). Raw rows are never stored, so new fields are learnt with the opt-in live test (names only).
 - A right-hand drawer's width must carry the direction prefix (`data-[vaul-drawer-direction=right]:sm:max-w-*`, or `WIDE` (60% of the screen) from `floating-drawer.ts`): a bare `sm:max-w-*` loses to the base drawer's `sm:max-w-sm` and the drawer stays about 384 px wide.
 - A scroll container that is a `grid` with a fixed height (a drawer body with `overflow-y-auto`) shrinks its auto rows when the content is taller, so a child with `overflow-hidden` (the profile card) collapses to its border. Use `flex flex-col *:shrink-0` (or an inner grid) for long scrolling drawers.
@@ -238,6 +240,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-31: My network results trimmed (branch `feat/network-results-trim`): only "Invited · Accepted · Replied" and the period, beside the tabs while invites are live; New this week, Data spent, the Details tables and every read's price and confirm are gone from the UI (the owner accepts the read cost). Brain still returns `readPriceMicros`, `newThisWeek`, `dataSpentMicros`, `byAccount` and `bySource`; unused by the page.
 - 2026-10-31: My network fixes (branch `fix/network-drawer-top-and-row-facts`; migration `20261031110000_rebuild_people_with_reads` marks every read person for one rebuild): the drawer's card stays on every tab (flex instead of a fixed-height grid); the row shows the read's name, headline, photo and company first, rebuilt right after the read is stored, and the table refreshes when a read lands in the open drawer.
 - 2026-10-31: My network drawer redesign (`.plan/network-drawer-redesign.md`, done; migration `20261031100000_add_companies_from_profile_reads`): one profile card with Open chat, Email and Phone (coming soon), a work bar with a More menu, Profile tab first when read; a profile read saves every company of the experience to `/companies` labelled "From profiles", and Experience links each to `/companies?company=<slug>`.
 - 2026-10-31: My network phase C (`.plan/network-person-drawer.md`, done): the profile snapshot also keeps `verified` and `creator`; the person drawer shows Premium, Verified, Creator and the country (flag and name) as badges from the paid read. No spider work: the data service is the only source.
