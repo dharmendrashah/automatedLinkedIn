@@ -10,9 +10,9 @@ import { LabelCell } from '../labels/label-cell'
 import { LinkStatusBadge } from '../links/link-status-badge'
 import { RowActions } from '../links/row-actions'
 import { SelectAllHead, SelectCell } from '../links/selection'
+import { StateRows } from '../links/state-rows'
 import { type Selection } from '../links/use-selection'
 import { visitedText } from '../links/visit-form'
-import { StateRows } from '../links/state-rows'
 
 const COLUMNS = 7
 

@@ -19,9 +19,10 @@ import { type ReactNode, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
+import { type Graph } from './types'
+
 import { trpc } from '../../trpc'
 import { createApiUrl } from '../../trpc/config'
-import { type Graph } from './types'
 
 const COPIED_MS = 1_500
 // Ends a line of a shell command that goes on below.
@@ -140,7 +141,13 @@ export const ApiAccess = ({ workflowId, enabled, graph }: Props) => {
             <CardHeader>
                <div className="flex flex-wrap items-center gap-2">
                   <CardTitle>Start this workflow from another system</CardTitle>
-                  <Badge variant="outline" className={cn('border-transparent', ready ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning')}>
+                  <Badge
+                     variant="outline"
+                     className={cn(
+                        'border-transparent',
+                        ready ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'
+                     )}
+                  >
                      {ready ? 'Ready' : 'Not ready'}
                   </Badge>
                </div>
@@ -150,7 +157,9 @@ export const ApiAccess = ({ workflowId, enabled, graph }: Props) => {
                <ol className="grid gap-5 text-sm">
                   <Step done={enabled} title="Switch the workflow on">
                      {enabled ? null : (
-                        <p className="text-muted-foreground">Use the switch at the top of this page. Calls to a workflow that is off get 409.</p>
+                        <p className="text-muted-foreground">
+                           Use the switch at the top of this page. Calls to a workflow that is off get 409.
+                        </p>
                      )}
                   </Step>
                   <Step done={hasToken} title="Create a token">
@@ -161,7 +170,9 @@ export const ApiAccess = ({ workflowId, enabled, graph }: Props) => {
                               Copy it now. It is not shown again.
                            </p>
                            <div className="flex items-center gap-2">
-                              <code className="bg-background flex-1 rounded border px-2 py-1.5 font-mono text-xs break-all">{token}</code>
+                              <code className="bg-background flex-1 rounded border px-2 py-1.5 font-mono text-xs break-all">
+                                 {token}
+                              </code>
                               <CopyButton text={token} label="Copy token" />
                            </div>
                         </div>
@@ -174,12 +185,15 @@ export const ApiAccess = ({ workflowId, enabled, graph }: Props) => {
                                  <AlertDialogHeader>
                                     <AlertDialogTitle>Make a new token?</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                       The current token stops working at once. Update every system that calls this workflow.
+                                       The current token stops working at once. Update every system that calls this
+                                       workflow.
                                     </AlertDialogDescription>
                                  </AlertDialogHeader>
                                  <AlertDialogFooter>
                                     <AlertDialogCancel>Keep the current one</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => rotate.mutate({ id: workflowId })}>Make a new token</AlertDialogAction>
+                                    <AlertDialogAction onClick={() => rotate.mutate({ id: workflowId })}>
+                                       Make a new token
+                                    </AlertDialogAction>
                                  </AlertDialogFooter>
                               </AlertDialogContent>
                            </AlertDialog>
@@ -187,7 +201,9 @@ export const ApiAccess = ({ workflowId, enabled, graph }: Props) => {
                            createButton(() => rotate.mutate({ id: workflowId }))
                         )}
                         <span className="text-muted-foreground text-xs">
-                           {hasToken ? 'A token is set. Only a hash is stored, so it cannot be shown again.' : 'No token yet.'}
+                           {hasToken
+                              ? 'A token is set. Only a hash is stored, so it cannot be shown again.'
+                              : 'No token yet.'}
                         </span>
                      </div>
                      {rotate.error ? <p className="text-destructive">{readableError(rotate.error)}</p> : null}
@@ -226,9 +242,7 @@ export const ApiAccess = ({ workflowId, enabled, graph }: Props) => {
                </CardHeader>
                <CardContent className="grid gap-2 text-sm">
                   {inputs.length === 0 ? (
-                     <p>
-                        Nothing. This workflow finds what it needs itself, so a call with no body starts it.
-                     </p>
+                     <p>Nothing. This workflow finds what it needs itself, so a call with no body starts it.</p>
                   ) : (
                      <>
                         <p>Links for its inputs, all optional:</p>

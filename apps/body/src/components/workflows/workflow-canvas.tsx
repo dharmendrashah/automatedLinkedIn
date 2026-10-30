@@ -1,3 +1,6 @@
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import {
    Background,
    ConnectionMode,
@@ -15,13 +18,12 @@ import {
    useReactFlow,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { CircleAlert, Info, Keyboard, Loader2, Plus, Redo2, Save, Undo2 } from 'lucide-react'
 import { useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 
 import { cn } from '@/lib/utils'
+
+import { type Block, type ConfigValue, type Graph, type StepRun, formatUsd } from './types'
 
 import { trpc } from '../../trpc'
 import { BlockNode } from './block-node'
@@ -42,7 +44,6 @@ import {
 import { type History, record, redo, startHistory, undo } from './history'
 import { isLeftToRight, layoutTopToBottom, neighbourOf, placeBelow } from './layout'
 import { SHORTCUT_HELP, shortcutOf } from './shortcuts'
-import { type Block, type ConfigValue, type Graph, type StepRun, formatUsd } from './types'
 
 const NODE_TYPES = { block: BlockNode }
 const EDGE_OPTIONS = { type: 'smoothstep' }
@@ -245,8 +246,7 @@ const Editor = ({
       }
    }
 
-   const addBlock = () =>
-      setPicker({ afterId: selected?.data.block.output ? selected.id : null })
+   const addBlock = () => setPicker({ afterId: selected?.data.block.output ? selected.id : null })
 
    const step = (change: (current: History<Canvas>) => History<Canvas>) => {
       setHistory(change)
@@ -265,9 +265,7 @@ const Editor = ({
       event.preventDefault()
 
       if (shortcut.action === 'move') {
-         const next = selectedId
-            ? neighbourOf(nodes, edges, selectedId, shortcut.direction)
-            : (nodes[0]?.id ?? null)
+         const next = selectedId ? neighbourOf(nodes, edges, selectedId, shortcut.direction) : (nodes[0]?.id ?? null)
 
          setSelectedId(next ?? selectedId)
 
@@ -369,7 +367,10 @@ const Editor = ({
                <Background gap={20} />
                <Controls showInteractive={false} />
                <MiniMap pannable zoomable />
-               <Panel position="top-left" className="bg-background/90 grid max-w-sm gap-2 rounded-lg border p-3 text-sm shadow-sm backdrop-blur">
+               <Panel
+                  position="top-left"
+                  className="bg-background/90 grid max-w-sm gap-2 rounded-lg border p-3 text-sm shadow-sm backdrop-blur"
+               >
                   <p>
                      <span aria-hidden>💸 </span>
                      Up to <span className="font-medium">{formatUsd(estimate.data?.totalMicros ?? 0)}</span> a run
@@ -426,10 +427,22 @@ const Editor = ({
                   {saveError ? <p className="text-destructive text-xs">{saveError.message}</p> : null}
                </Panel>
                <Panel position="top-right" className="flex items-center gap-1">
-                  <Button variant="outline" size="icon" aria-label="Undo" disabled={history.past.length === 0} onClick={() => step(undo)}>
+                  <Button
+                     variant="outline"
+                     size="icon"
+                     aria-label="Undo"
+                     disabled={history.past.length === 0}
+                     onClick={() => step(undo)}
+                  >
                      <Undo2 />
                   </Button>
-                  <Button variant="outline" size="icon" aria-label="Redo" disabled={history.future.length === 0} onClick={() => step(redo)}>
+                  <Button
+                     variant="outline"
+                     size="icon"
+                     aria-label="Redo"
+                     disabled={history.future.length === 0}
+                     onClick={() => step(redo)}
+                  >
                      <Redo2 />
                   </Button>
                   <Button variant="outline" size="icon" aria-label="Keyboard shortcuts" onClick={() => setHelp(true)}>

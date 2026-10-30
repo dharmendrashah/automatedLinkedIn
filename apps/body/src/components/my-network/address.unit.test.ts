@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { changeView, clientFor, clientView, listsRedirect, pickedList, readView, showClientPicker, sortParam } from './address'
+import {
+   changeView,
+   clientFor,
+   clientView,
+   listsRedirect,
+   pickedList,
+   readView,
+   showClientPicker,
+   sortParam,
+} from './address'
 
 describe('readView', () => {
    it('reads the filters and falls back on Needs me', () => {

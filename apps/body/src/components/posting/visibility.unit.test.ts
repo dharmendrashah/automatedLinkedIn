@@ -13,7 +13,9 @@ describe('post visibility', () => {
    it('should say who can see and comment, for the confirmation', () => {
       expect(reachText('ANYONE', 'ANYONE')).toBe('Anyone on LinkedIn can see it and comment on it.')
       expect(reachText('CONNECTIONS', 'CONNECTIONS')).toBe('Only your connections can see it and comment on it.')
-      expect(reachText('ANYONE', 'CONNECTIONS')).toBe('Anyone on LinkedIn can see it, and only your connections can comment on it.')
+      expect(reachText('ANYONE', 'CONNECTIONS')).toBe(
+         'Anyone on LinkedIn can see it, and only your connections can comment on it.'
+      )
       expect(reachText('CONNECTIONS', 'ANYONE')).toBe('Only your connections can see it and comment on it.')
    })
 

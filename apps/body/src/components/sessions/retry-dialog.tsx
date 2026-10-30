@@ -15,11 +15,10 @@ import { useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
-import { isBudgetRefusal } from '../accounts/budget-refusal'
-
 import { type SessionDetail } from './types'
 
 import { trpc } from '../../trpc'
+import { isBudgetRefusal } from '../accounts/budget-refusal'
 import { describeLatency, speedClass } from '../proxies/latency'
 
 type Props = {
@@ -37,7 +36,8 @@ export const RetryDialog = ({ session, open, onOpenChange, onStarted }: Props) =
    const proxies = session.retryProxies
 
    // The proxy it ran through is chosen to begin with, so "Try again" alone repeats it.
-   const selected = chosen ?? (proxies.some(proxy => proxy.id === session.proxyServerId) ? session.proxyServerId : proxies[0]?.id)
+   const selected =
+      chosen ?? (proxies.some(proxy => proxy.id === session.proxyServerId) ? session.proxyServerId : proxies[0]?.id)
 
    const started = {
       onSuccess: ({ id }: { id: string }) => {
@@ -131,7 +131,11 @@ export const RetryDialog = ({ session, open, onOpenChange, onStarted }: Props) =
 
             {blocked ? (
                <div className="flex items-center gap-2">
-                  <Checkbox id="retry-start-anyway" checked={understood} onCheckedChange={value => setUnderstood(value === true)} />
+                  <Checkbox
+                     id="retry-start-anyway"
+                     checked={understood}
+                     onCheckedChange={value => setUnderstood(value === true)}
+                  />
                   <Label htmlFor="retry-start-anyway">I understand this can put the account at risk.</Label>
                </div>
             ) : null}

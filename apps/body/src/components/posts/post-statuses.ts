@@ -1,7 +1,8 @@
 import { CircleCheck, CircleDot } from 'lucide-react'
 
-import { type StatusStyle } from '../links/link-status-badge'
 import { type PostStatus } from './types'
+
+import { type StatusStyle } from '../links/link-status-badge'
 
 export const postStatuses: Record<PostStatus, StatusStyle> = {
    UNPROCESSED: {

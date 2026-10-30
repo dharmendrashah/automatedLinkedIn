@@ -1,6 +1,7 @@
+import { describe, expect, it } from 'vitest'
+
 import * as contract from '@automatedLinkedIn/contracts'
 import type { PostBlock } from '@automatedLinkedIn/contracts'
-import { describe, expect, it } from 'vitest'
 
 import { LIMITS, ONE_ATTACHMENT, characterCount, joinedText, mediaBlock } from './rules'
 

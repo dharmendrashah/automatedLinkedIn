@@ -255,7 +255,9 @@ describe('Account Actions blocks', () => {
          },
       ])
 
-      expect(summaryOf(write, { post: words, audience: 'CONNECTIONS' })).toBe('Posts “Hello” · Seen by connections only')
+      expect(summaryOf(write, { post: words, audience: 'CONNECTIONS' })).toBe(
+         'Posts “Hello” · Seen by connections only'
+      )
       expect(summaryOf(write, { post: words, comments: 'CONNECTIONS' })).toBe(
          'Posts “Hello” · Comments from connections only'
       )

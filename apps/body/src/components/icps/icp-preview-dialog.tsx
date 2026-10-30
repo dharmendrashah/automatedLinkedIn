@@ -9,9 +9,8 @@ import { readableError } from '@/lib/trpc-error'
 import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
 
-import { type Icp } from './icp-form'
-
 import { trpc } from '../../trpc'
+import { type Icp } from './icp-form'
 
 const PLACEHOLDER = 'Head of Growth at Acme | London, UK\nFounder, B2B SaaS | Berlin\nMarketing intern'
 
@@ -71,9 +70,7 @@ const PreviewForm = ({ icp }: { icp: Icp }) => {
                            <TableRow key={index}>
                               <TableCell>
                                  {row.headline ?? '(no headline)'}
-                                 {row.location ? (
-                                    <p className="text-muted-foreground text-xs">{row.location}</p>
-                                 ) : null}
+                                 {row.location ? <p className="text-muted-foreground text-xs">{row.location}</p> : null}
                               </TableCell>
                               <TableCell>
                                  {row.disqualified ? (

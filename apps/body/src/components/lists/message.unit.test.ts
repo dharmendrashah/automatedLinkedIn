@@ -4,7 +4,11 @@ import { messageFor, staleSignal, strongestSignal } from './message'
 
 const NOW = new Date('2026-10-18T10:00:00Z')
 
-const signal = (type: 'commented' | 'reacted' | 'employee' | 'hiring', at: string | null, excerpt: string | null = null) => ({
+const signal = (
+   type: 'commented' | 'reacted' | 'employee' | 'hiring',
+   at: string | null,
+   excerpt: string | null = null
+) => ({
    type,
    via: 'https://www.linkedin.com/posts/x',
    at,

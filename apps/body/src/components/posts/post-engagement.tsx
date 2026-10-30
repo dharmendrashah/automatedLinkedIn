@@ -1,4 +1,3 @@
-import { formatUsd } from '@/components/workflows/types'
 import { isReading, pollWhile } from '@/components/details/read-status'
 import { Section } from '@/components/people/person-sections'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -10,6 +9,8 @@ import { readableError } from '@/lib/trpc-error'
 import { useMediaSource } from '@/lib/use-media-source'
 import { Loader2, MessageSquare, ThumbsUp, UserPlus } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
+
+import { formatUsd } from '@/components/workflows/types'
 
 import { type RouterOutputs, trpc } from '../../trpc'
 
@@ -47,7 +48,17 @@ type Shared = {
 
 // One read button per size: "up to 100" always, "all" only when there may be more. The price is the count times the
 // price per row when the post read gave the count, else the most it can cost.
-const ReadChoices = ({ slug, kind, count, engagement }: { slug: string; kind: Kind; count: number | null; engagement: Engagement }) => {
+const ReadChoices = ({
+   slug,
+   kind,
+   count,
+   engagement,
+}: {
+   slug: string
+   kind: Kind
+   count: number | null
+   engagement: Engagement
+}) => {
    const utils = trpc.useUtils()
    const read = trpc.postPage.readEngagement.useMutation({
       onSuccess: data => utils.postPage.engagement.setData({ slug }, data),
@@ -63,7 +74,11 @@ const ReadChoices = ({ slug, kind, count, engagement }: { slug: string; kind: Ki
 
       return {
          everything,
-         label: fits ? `Read all ${kind}` : everything ? `Read all, up to ${all.toLocaleString()}` : `Read the first ${some}`,
+         label: fits
+            ? `Read all ${kind}`
+            : everything
+              ? `Read all, up to ${all.toLocaleString()}`
+              : `Read the first ${some}`,
          price: `${count === null ? 'up to' : 'about'} ${formatUsd(rows * engagement.priceMicros)}`,
       }
    })
@@ -133,21 +148,36 @@ const useAddToList = (slug: string) => {
 }
 
 // Who engaged: opens their drawer when they are in a list, LinkedIn otherwise, and can be added to the chosen list.
-const Person = ({ who, badges, children, shared }: { who: PersonLine; badges: ReactNode; children?: ReactNode; shared: Shared }) => {
+const Person = ({
+   who,
+   badges,
+   children,
+   shared,
+}: {
+   who: PersonLine
+   badges: ReactNode
+   children?: ReactNode
+   shared: Shared
+}) => {
    const add = useAddToList(shared.slug)
    const photo = useMediaSource(who.photo)
    const name = who.name ?? who.slug ?? 'Someone'
-   const nameNode = who.slug && who.listName ? (
-      <button type="button" className="text-left text-sm font-medium hover:underline" onClick={() => shared.onPerson(who.slug ?? '')}>
-         {name}
-      </button>
-   ) : who.url ? (
-      <a className="text-sm font-medium hover:underline" href={who.url} target="_blank" rel="noreferrer noopener">
-         {name}
-      </a>
-   ) : (
-      <span className="text-sm font-medium">{name}</span>
-   )
+   const nameNode =
+      who.slug && who.listName ? (
+         <button
+            type="button"
+            className="text-left text-sm font-medium hover:underline"
+            onClick={() => shared.onPerson(who.slug ?? '')}
+         >
+            {name}
+         </button>
+      ) : who.url ? (
+         <a className="text-sm font-medium hover:underline" href={who.url} target="_blank" rel="noreferrer noopener">
+            {name}
+         </a>
+      ) : (
+         <span className="text-sm font-medium">{name}</span>
+      )
    const addable = Boolean(who.slug) && !who.listName && !who.doNotContact
 
    return (
@@ -217,7 +247,12 @@ const Comments = ({ items, shared }: { items: Comment[]; shared: Shared }) => {
                >
                   {item.text ? <p className="text-sm whitespace-pre-line">{item.text}</p> : null}
                   <p className="text-muted-foreground text-xs">
-                     {[item.at ? dateOf(item.at) : null, item.reactions > 0 ? `${item.reactions.toLocaleString()} reactions` : null].filter(Boolean).join(' · ')}
+                     {[
+                        item.at ? dateOf(item.at) : null,
+                        item.reactions > 0 ? `${item.reactions.toLocaleString()} reactions` : null,
+                     ]
+                        .filter(Boolean)
+                        .join(' · ')}
                   </p>
                </Person>
             ))}
@@ -254,7 +289,12 @@ const Reactions = ({ items, shared }: { items: Reaction[]; shared: Shared }) => 
          ) : null}
          <ul className="grid gap-1">
             {visible.slice(0, shown).map(item => (
-               <Person key={item.slug} who={item} shared={shared} badges={<Badge variant="outline">{reactionName(item.type)}</Badge>} />
+               <Person
+                  key={item.slug}
+                  who={item}
+                  shared={shared}
+                  badges={<Badge variant="outline">{reactionName(item.type)}</Badge>}
+               />
             ))}
          </ul>
          <ShowMore shown={shown} total={visible.length} onMore={() => setShown(shown + SHOWN_STEP)} />
@@ -266,7 +306,9 @@ const Reactions = ({ items, shared }: { items: Reaction[]; shared: Shared }) => 
 const AddAll = ({ kind, shared }: { kind: Kind; shared: Shared }) => {
    const add = useAddToList(shared.slug)
    const items: PersonLine[] = shared.engagement[kind]?.items ?? []
-   const slugs = [...new Set(items.flatMap(item => (item.slug && !item.listName && !item.doNotContact ? [item.slug] : [])))]
+   const slugs = [
+      ...new Set(items.flatMap(item => (item.slug && !item.listName && !item.doNotContact ? [item.slug] : []))),
+   ]
 
    if (slugs.length === 0) {
       return null
@@ -381,8 +423,12 @@ export const PostEngagement = ({
                      <ReadChoices slug={slug} kind={kind} count={counts[kind]} engagement={data} />
                   )}
                   <AddAll kind={kind} shared={shared} />
-                  {kind === 'comments' && data.comments ? <Comments items={data.comments.items} shared={shared} /> : null}
-                  {kind === 'reactions' && data.reactions ? <Reactions items={data.reactions.items} shared={shared} /> : null}
+                  {kind === 'comments' && data.comments ? (
+                     <Comments items={data.comments.items} shared={shared} />
+                  ) : null}
+                  {kind === 'reactions' && data.reactions ? (
+                     <Reactions items={data.reactions.items} shared={shared} />
+                  ) : null}
                </TabsContent>
             ))}
          </Tabs>

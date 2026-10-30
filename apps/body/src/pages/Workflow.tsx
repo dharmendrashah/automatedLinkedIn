@@ -1,9 +1,3 @@
-import { ApiAccess } from '@/components/workflows/api-access'
-import { RunDialog } from '@/components/workflows/run-dialog'
-import { runSentence } from '@/components/workflows/run-sentence'
-import { RunDetailView, RunsTable } from '@/components/workflows/runs'
-import { WorkflowSettings } from '@/components/workflows/workflow-settings'
-import { WorkflowCanvas } from '@/components/workflows/workflow-canvas'
 import {
    AlertDialog,
    AlertDialogAction,
@@ -18,8 +12,14 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { readableError } from '@/lib/trpc-error'
+import { ApiAccess } from '@/components/workflows/api-access'
+import { RunDialog } from '@/components/workflows/run-dialog'
+import { runSentence } from '@/components/workflows/run-sentence'
+import { RunDetailView, RunsTable } from '@/components/workflows/runs'
+import { WorkflowCanvas } from '@/components/workflows/workflow-canvas'
+import { WorkflowSettings } from '@/components/workflows/workflow-settings'
 import { useDocumentTitle } from '@/lib/page-title'
+import { readableError } from '@/lib/trpc-error'
 import { FlaskConical, Loader2, Play, Square } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
@@ -132,7 +132,8 @@ export const WorkflowPage = () => {
       triggers.has('trigger.workflow') ? 'after the workflow it listens to' : null,
    ].filter(Boolean)
    const api = triggers.has('trigger.api')
-   const live = detail.data?.status === 'RUNNING' ? detail.data : liveDetail.data?.status === 'RUNNING' ? liveDetail.data : null
+   const live =
+      detail.data?.status === 'RUNNING' ? detail.data : liveDetail.data?.status === 'RUNNING' ? liveDetail.data : null
    const [latest] = runs.data ?? []
    const attention = latest?.status === 'FAILED' || latest?.status === 'PARTIAL'
 

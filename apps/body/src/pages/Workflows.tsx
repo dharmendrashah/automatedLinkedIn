@@ -1,11 +1,12 @@
 import { StateRows } from '@/components/links/state-rows'
-import { runSentence } from '@/components/workflows/run-sentence'
-import { RunStatusBadge } from '@/components/workflows/runs'
-import { type WorkflowSummary, formatUsd } from '@/components/workflows/types'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { runSentence } from '@/components/workflows/run-sentence'
+import { RunStatusBadge } from '@/components/workflows/runs'
 import { Plus, Workflow as WorkflowIcon } from 'lucide-react'
 import { Link } from 'react-router'
+
+import { type WorkflowSummary, formatUsd } from '@/components/workflows/types'
 
 import { trpc } from '../trpc'
 
@@ -27,8 +28,7 @@ const lastRunText = (run: WorkflowSummary['runs'][number]) =>
 export const Workflows = () => {
    const list = trpc.workflow.list.useQuery(undefined, {
       retry: false,
-      refetchInterval: query =>
-         query.state.data?.some(({ runs }) => runs[0]?.status === 'RUNNING') ? POLL_MS : false,
+      refetchInterval: query => (query.state.data?.some(({ runs }) => runs[0]?.status === 'RUNNING') ? POLL_MS : false),
    })
 
    return (
@@ -81,9 +81,7 @@ export const Workflows = () => {
                               >
                                  {workflow.name}
                               </Link>
-                              {workflow.goal ? (
-                                 <p className="text-muted-foreground text-xs">{workflow.goal}</p>
-                              ) : null}
+                              {workflow.goal ? <p className="text-muted-foreground text-xs">{workflow.goal}</p> : null}
                            </TableCell>
                            <TableCell>
                               {scheduled ? (workflow.enabled ? 'On its schedule' : 'Schedule switched off') : 'By hand'}

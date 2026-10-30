@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-   UNREACHABLE_MESSAGE,
-   bannerText,
-   checkedText,
-   groupModules,
-   stateLabel,
-   unreachableModules,
-} from './describe'
+import { UNREACHABLE_MESSAGE, bannerText, checkedText, groupModules, stateLabel, unreachableModules } from './describe'
 
 const module = (key: string, group: string, status: 'live' | 'dead' | 'unknown') => ({
    key,

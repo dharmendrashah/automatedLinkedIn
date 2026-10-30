@@ -2,11 +2,10 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { useState } from 'react'
 
-import { type Icp, type Seniority, seniorityOptions, toFormValues, toInput, wordFields } from './icp-form'
-
 import { trpc } from '../../trpc'
 import { EditDialog, EditFrame } from '../links/edit-frame'
 import { TextField } from '../links/record-fields'
+import { type Icp, type Seniority, seniorityOptions, toFormValues, toInput, wordFields } from './icp-form'
 
 type FormProps = {
    // null creates a new ideal customer.
@@ -30,9 +29,7 @@ const IcpForm = ({ icp, onClose }: FormProps) => {
    const toggle = (level: Seniority, on: boolean) =>
       setValues(current => ({
          ...current,
-         seniorities: on
-            ? [...current.seniorities, level]
-            : current.seniorities.filter(chosen => chosen !== level),
+         seniorities: on ? [...current.seniorities, level] : current.seniorities.filter(chosen => chosen !== level),
       }))
 
    const submit = () =>

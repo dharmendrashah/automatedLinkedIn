@@ -24,9 +24,9 @@ describe('viewOf', () => {
    it('should show the profile whenever there is one, even while a new read goes on or the last one failed', () => {
       expect(viewOf(state({ phase: 'READY' }), true, false)).toBe('PROFILE')
       expect(viewOf(state({ phase: 'READING' }), true, false)).toBe('PROFILE')
-      expect(viewOf(state({ phase: 'READY', lastRun: { ok: false, message: 'x', finishedAt: null } }), true, false)).toBe(
-         'PROFILE'
-      )
+      expect(
+         viewOf(state({ phase: 'READY', lastRun: { ok: false, message: 'x', finishedAt: null } }), true, false)
+      ).toBe('PROFILE')
    })
 
    it('should say reading, failed or empty when there is no profile to show', () => {
@@ -48,8 +48,13 @@ describe('noticeOf', () => {
    })
 
    it('should give the sentence of a run that failed', () => {
-      expect(noticeOf(state({ phase: 'FAILED', lastRun: { ok: false, message: 'LinkedIn asked for a sign-in.', finishedAt: null } }))).toBe(
-         'The last read did not give a profile: LinkedIn asked for a sign-in.'
-      )
+      expect(
+         noticeOf(
+            state({
+               phase: 'FAILED',
+               lastRun: { ok: false, message: 'LinkedIn asked for a sign-in.', finishedAt: null },
+            })
+         )
+      ).toBe('The last read did not give a profile: LinkedIn asked for a sign-in.')
    })
 })

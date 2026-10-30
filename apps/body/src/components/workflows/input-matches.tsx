@@ -2,10 +2,11 @@ import { CircleAlert } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
+import { type ConfigValue } from './types'
+
 import { trpc } from '../../trpc'
 import { INPUT_CAPS, INPUT_KINDS, type InputType } from './input-kinds'
 import { timeOf } from './run-sentence'
-import { type ConfigValue } from './types'
 
 const SINGULAR: Record<InputType, string> = {
    'input.posts': 'post',
@@ -35,7 +36,9 @@ export const InputMatches = ({
    const noun = INPUT_KINDS[type]
 
    if (Array.isArray(values.links) && values.links.length > 0) {
-      return <p className="text-muted-foreground text-sm">Takes the {values.links.length} links you gave, as they are.</p>
+      return (
+         <p className="text-muted-foreground text-sm">Takes the {values.links.length} links you gave, as they are.</p>
+      )
    }
 
    if (!matches.data) {

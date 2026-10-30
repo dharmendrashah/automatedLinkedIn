@@ -7,8 +7,8 @@ import { cn } from '@/lib/utils'
 import { type SessionDetail } from './types'
 
 import { describeStep } from './describe'
-import { Notice } from './recording-gate'
 import { type TimelineStep, parseTimeline } from './recording'
+import { Notice } from './recording-gate'
 import { useSessionLink, useSessionText } from './use-session-file'
 
 export const Screenshot = ({
@@ -30,14 +30,7 @@ export const Screenshot = ({
       return <p className="text-muted-foreground text-xs">The screenshot is not available.</p>
    }
 
-   return (
-      <img
-         src={link.data?.url}
-         alt={alt}
-         loading="lazy"
-         className="w-full rounded-lg border"
-      />
-   )
+   return <img src={link.data?.url} alt={alt} loading="lazy" className="w-full rounded-lg border" />
 }
 
 const Fact = ({ label, children }: { label: string; children: string }) => (

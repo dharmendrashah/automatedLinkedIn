@@ -35,7 +35,9 @@ export const LabelCell = ({ tags, kind, name, save, onFilter }: Props) => {
          await save(labels)
       } catch (error) {
          next.current = null
-         toast.error(`Labels of ${name} were not saved: ${error instanceof Error ? readableError(error) : 'please try again.'}`)
+         toast.error(
+            `Labels of ${name} were not saved: ${error instanceof Error ? readableError(error) : 'please try again.'}`
+         )
       }
 
       const queued = next.current

@@ -1,17 +1,17 @@
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+   Dialog,
+   DialogContent,
+   DialogDescription,
+   DialogFooter,
+   DialogHeader,
+   DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useMemo, useState } from 'react'
 
-import {
-   browserZone,
-   describePlanned,
-   fromInputs,
-   plannedProblem,
-   presets,
-   toInputs,
-} from './schedule'
+import { browserZone, describePlanned, fromInputs, plannedProblem, presets, toInputs } from './schedule'
 
 export type Planned = {
    at: string

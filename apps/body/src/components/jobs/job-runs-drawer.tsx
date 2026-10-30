@@ -1,18 +1,28 @@
 import { floatingDrawer } from '@/components/floating-drawer'
+import { formatDuration } from '@/components/sessions/describe'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { formatDuration } from '@/components/sessions/describe'
 import { ArrowLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
-import { trpc } from '../../trpc'
-import { ITEM_RESULT, OUTCOME, STORED, actionLabel, countsText, itemResultLabel, summariseItems, whenText } from './describe'
-import { ToneBadge } from './tone-badge'
 import { type Job } from './types'
+
+import { trpc } from '../../trpc'
+import {
+   ITEM_RESULT,
+   OUTCOME,
+   STORED,
+   actionLabel,
+   countsText,
+   itemResultLabel,
+   summariseItems,
+   whenText,
+} from './describe'
+import { ToneBadge } from './tone-badge'
 
 const when = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' })
 

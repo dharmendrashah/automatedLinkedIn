@@ -81,7 +81,8 @@ export const AttachmentView = ({
    const local = useObjectUrl(attachment.kind === 'IMAGE' ? attachment.file : undefined)
    const [keptUrl, setKeptUrl] = useState<string>()
    const [broken, setBroken] = useState(false)
-   const wantsKept = attachment.kind === 'IMAGE' && attachment.kept === true && !attachment.file && fileUrl !== undefined
+   const wantsKept =
+      attachment.kind === 'IMAGE' && attachment.kept === true && !attachment.file && fileUrl !== undefined
 
    useEffect(() => {
       if (!wantsKept || !seen || !fileUrl || keptUrl) {

@@ -33,7 +33,9 @@ export const Sessions = () => {
          retry: false,
          getNextPageParam: page => page.nextCursor,
          refetchInterval: query =>
-            query.state.data?.pages.some(page => page.items.some(item => item.status === 'IN_PROGRESS' && !item.noAnswer))
+            query.state.data?.pages.some(page =>
+               page.items.some(item => item.status === 'IN_PROGRESS' && !item.noAnswer)
+            )
                ? REFRESH_MS
                : false,
       }
@@ -106,7 +108,11 @@ export const Sessions = () => {
             onLoadMore={() => void list.fetchNextPage()}
          />
 
-         <SessionDrawer sessionId={openId} onOpen={id => setParam('session', id)} onClose={() => setParam('session', null)} />
+         <SessionDrawer
+            sessionId={openId}
+            onOpen={id => setParam('session', id)}
+            onClose={() => setParam('session', null)}
+         />
       </div>
    )
 }

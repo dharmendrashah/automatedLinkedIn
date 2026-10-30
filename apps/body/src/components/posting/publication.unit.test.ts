@@ -1,5 +1,6 @@
-import * as contract from '@automatedLinkedIn/contracts'
 import { describe, expect, it } from 'vitest'
+
+import * as contract from '@automatedLinkedIn/contracts'
 
 import { type PublicationState, canTakeBack, hasActive, isPostLink, stateText, waitingText } from './publication'
 
@@ -43,11 +44,16 @@ describe('waitingText', () => {
    })
 
    it('should say any moment now once the time has come, hours for a long wait, and nothing of time without one', () => {
-      expect(waitingText({ reason, until: '2026-10-26T12:24:00.000Z', zone: null }, options)).toContain('any moment now')
-      expect(waitingText({ reason, until: '2026-10-26T14:25:00.000Z', zone: null }, options)).toContain('in about 2 h')
-      expect(waitingText({ reason: 'Waiting for another task on this account to finish.', until: null, zone: null }, options)).toBe(
-         'Waiting for another task on this account to finish.'
+      expect(waitingText({ reason, until: '2026-10-26T12:24:00.000Z', zone: null }, options)).toContain(
+         'any moment now'
       )
+      expect(waitingText({ reason, until: '2026-10-26T14:25:00.000Z', zone: null }, options)).toContain('in about 2 h')
+      expect(
+         waitingText(
+            { reason: 'Waiting for another task on this account to finish.', until: null, zone: null },
+            options
+         )
+      ).toBe('Waiting for another task on this account to finish.')
    })
 
    it('should name the day when the time is not today', () => {

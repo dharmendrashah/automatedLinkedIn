@@ -3,12 +3,12 @@ import { CompaniesTable } from '@/components/companies/companies-table'
 import { EditCompanyDialog } from '@/components/companies/edit-company-dialog'
 import { DetailDrawers } from '@/components/details/detail-drawers'
 import { useDetailDrawer } from '@/components/details/use-detail-drawer'
-import { ListToolbar } from '@/components/links/list-toolbar'
 import { LinkBulkBar } from '@/components/links/bulk-bar'
 import { linkStatuses } from '@/components/links/link-statuses'
+import { ListToolbar } from '@/components/links/list-toolbar'
 import { Pager } from '@/components/links/pager'
-import { useSelection } from '@/components/links/use-selection'
 import { useListState } from '@/components/links/use-list-state'
+import { useSelection } from '@/components/links/use-selection'
 import { ViewPageDialog } from '@/components/links/view-page-dialog'
 import { Button } from '@/components/ui/button'
 import { Eye } from 'lucide-react'
@@ -109,7 +109,11 @@ export const Companies = () => {
             <ViewPageDialog
                key={viewing.company?.id ?? 'link'}
                kind="COMPANY"
-               saved={viewing.company ? { id: viewing.company.id, name: viewing.company.name ?? viewing.company.slug } : null}
+               saved={
+                  viewing.company
+                     ? { id: viewing.company.id, name: viewing.company.name ?? viewing.company.slug }
+                     : null
+               }
                onClose={() => setViewing(null)}
             />
          ) : null}

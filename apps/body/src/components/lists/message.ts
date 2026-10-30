@@ -1,7 +1,12 @@
 // The first message to someone found by a workflow: a fixed template filled from their strongest signal. It never
 // quotes their own words back, and nothing here sends anything.
 
-type Signal = { type: 'commented' | 'reacted' | 'employee' | 'hiring'; via: string; at: string | null; excerpt: string | null }
+type Signal = {
+   type: 'commented' | 'reacted' | 'employee' | 'hiring'
+   via: string
+   at: string | null
+   excerpt: string | null
+}
 
 type Person = { name: string | null; company: string | null; signals: Signal[] }
 
@@ -41,7 +46,9 @@ const opening = (signal: Signal | undefined, company: string | null) => {
       return 'I saw you engaged with a recent LinkedIn post and wanted to reach out.'
    }
 
-   return company && signal ? `I came across ${company} and wanted to reach out.` : 'I came across your profile and wanted to reach out.'
+   return company && signal
+      ? `I came across ${company} and wanted to reach out.`
+      : 'I came across your profile and wanted to reach out.'
 }
 
 export const messageFor = ({ name, company, signals }: Person) => {

@@ -122,7 +122,12 @@ export const PostCard = ({ post }: { post: Post }) => {
       <div className="bg-background grid gap-2 rounded-lg border p-3">
          {post.repostNote ? <p className="text-muted-foreground text-xs">{post.repostNote}</p> : null}
          <div className="grid grid-cols-[auto_1fr] items-center gap-2">
-            <Picture name={name} image={post.author.avatar} square={post.author.isCompany} className="size-10 border-0 text-sm" />
+            <Picture
+               name={name}
+               image={post.author.avatar}
+               square={post.author.isCompany}
+               className="size-10 border-0 text-sm"
+            />
             <div className="grid min-w-0">
                <span className="truncate text-sm font-medium">{name}</span>
                {post.author.headline ? (

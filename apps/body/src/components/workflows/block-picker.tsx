@@ -5,9 +5,10 @@ import { type KeyboardEvent, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
+import { type Block } from './types'
+
 import { BLOCK_ICONS, GROUPS, tileOf } from './block-look'
 import { choicesFor } from './graph-convert'
-import { type Block } from './types'
 
 type Props = {
    open: boolean

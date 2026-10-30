@@ -1,5 +1,12 @@
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+   Dialog,
+   DialogContent,
+   DialogDescription,
+   DialogFooter,
+   DialogHeader,
+   DialogTitle,
+} from '@/components/ui/dialog'
 import { PenLine } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
@@ -80,13 +87,23 @@ const PostWriter = ({ value, onChange, onClose, audience, comments, onAudience, 
                   {...writer.composer}
                   footer={
                      <p role="status" className="text-muted-foreground text-sm">
-                        {uploading > 0 ? `Uploading ${uploading} ${uploading === 1 ? 'file' : 'files'}…` : 'Saved with the workflow'}
+                        {uploading > 0
+                           ? `Uploading ${uploading} ${uploading === 1 ? 'file' : 'files'}…`
+                           : 'Saved with the workflow'}
                      </p>
                   }
                />
                <div className="grid gap-2">
-                  <p className="text-muted-foreground text-xs">Preview. LinkedIn may fold long text a little differently.</p>
-                  <PostPreview identity={ANY_ACCOUNT} blocks={writer.blocks} urls={writer.urls} width="desktop" audience={audience} />
+                  <p className="text-muted-foreground text-xs">
+                     Preview. LinkedIn may fold long text a little differently.
+                  </p>
+                  <PostPreview
+                     identity={ANY_ACCOUNT}
+                     blocks={writer.blocks}
+                     urls={writer.urls}
+                     width="desktop"
+                     audience={audience}
+                  />
                </div>
             </div>
             <DialogFooter>
@@ -100,7 +117,12 @@ const PostWriter = ({ value, onChange, onClose, audience, comments, onAudience, 
 }
 
 // The setting of a "Write a post" block: what is written, short, and a button to open the writer.
-export const PostField = ({ id, value, onChange, ...visibility }: Visibility & { id: string; value: string; onChange: (next: string) => void }) => {
+export const PostField = ({
+   id,
+   value,
+   onChange,
+   ...visibility
+}: Visibility & { id: string; value: string; onChange: (next: string) => void }) => {
    const [open, setOpen] = useState(false)
    const blocks = readPostBlocks(value)
    const { words, attachment } = summaryOf(blocks)

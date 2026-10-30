@@ -38,9 +38,13 @@ const bannerText = (session: SessionDetail) => {
 
 const Banner = ({ session }: { session: SessionDetail }) => {
    const { tone } = resultOf(session, useTaskCatalog())
-   const Icon = { success: CheckCircle2, failure: XCircle, running: Loader2, unknown: TriangleAlert, neutral: CircleHelp }[
-      tone
-   ]
+   const Icon = {
+      success: CheckCircle2,
+      failure: XCircle,
+      running: Loader2,
+      unknown: TriangleAlert,
+      neutral: CircleHelp,
+   }[tone]
    const hint = hintFor(session.message)
 
    return (
@@ -109,7 +113,9 @@ export const SummaryTab = ({ session, onOpen }: Props) => {
                <Fact label="LinkedIn account">{session.linkedInAccount.email}</Fact>
                <Fact label="Proxy">
                   <span className="font-mono text-xs">{proxyLabel(session)}</span>
-                  {session.proxyCountry ? <span className="text-muted-foreground"> · {session.proxyCountry}</span> : null}
+                  {session.proxyCountry ? (
+                     <span className="text-muted-foreground"> · {session.proxyCountry}</span>
+                  ) : null}
                </Fact>
                <Fact label="Started">{new Date(session.startedAt).toLocaleString()}</Fact>
                {session.requestParams.action === 'TASK' ? (

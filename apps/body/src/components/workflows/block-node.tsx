@@ -4,12 +4,13 @@ import { useContext } from 'react'
 
 import { cn } from '@/lib/utils'
 
+import { formatUsd } from './types'
+
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { CanvasActions } from './canvas-actions'
 import { type FlowNode, SIDES, summaryOf } from './graph-convert'
 import { NODE_WIDTH } from './layout'
 import { timeOf } from './run-sentence'
-import { formatUsd } from './types'
 
 const STEP_ICONS = {
    WAITING: CircleDashed,
@@ -99,19 +100,19 @@ export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
             </div>
          </div>
          <button
-               type="button"
-               aria-label={`Add a block after ${block.label}`}
-               onClick={event => {
-                  event.stopPropagation()
-                  addAfter(id)
-               }}
-               className={cn(
-                  'nodrag bg-background hover:bg-primary hover:text-primary-foreground absolute -bottom-9 left-1/2 grid size-6 -translate-x-1/2 place-items-center rounded-full border opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
-                  selected && 'opacity-100'
-               )}
-            >
-               <Plus className="size-3.5" />
-            </button>
+            type="button"
+            aria-label={`Add a block after ${block.label}`}
+            onClick={event => {
+               event.stopPropagation()
+               addAfter(id)
+            }}
+            className={cn(
+               'nodrag bg-background hover:bg-primary hover:text-primary-foreground absolute -bottom-9 left-1/2 grid size-6 -translate-x-1/2 place-items-center rounded-full border opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
+               selected && 'opacity-100'
+            )}
+         >
+            <Plus className="size-3.5" />
+         </button>
       </div>
    )
 }

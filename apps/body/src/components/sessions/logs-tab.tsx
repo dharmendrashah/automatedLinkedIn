@@ -7,8 +7,8 @@ import { cn } from '@/lib/utils'
 
 import { type SessionDetail } from './types'
 
-import { Notice } from './recording-gate'
 import { type LogEntry, parseLogs } from './recording'
+import { Notice } from './recording-gate'
 import { useSessionText } from './use-session-file'
 
 const sources = {
@@ -79,7 +79,9 @@ export const LogsTab = ({ session }: { session: SessionDetail }) => {
          </div>
 
          {shown.length === 0 ? (
-            <Notice>{entries.length === 0 ? 'Nothing was logged in this session.' : 'No lines match this filter.'}</Notice>
+            <Notice>
+               {entries.length === 0 ? 'Nothing was logged in this session.' : 'No lines match this filter.'}
+            </Notice>
          ) : (
             <ul className="divide-y rounded-xl border" aria-label="Log lines">
                {shown.map((entry, index) => (

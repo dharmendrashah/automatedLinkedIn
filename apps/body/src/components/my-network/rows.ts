@@ -3,10 +3,7 @@
 type Link = { kind: string; accountId: string | null; sourceId: string }
 
 export type NextStep =
-   | { kind: 'REPLY' }
-   | { kind: 'ACCEPT'; accountId: string; requestId: string }
-   | { kind: 'INVITE' }
-   | null
+   { kind: 'REPLY' } | { kind: 'ACCEPT'; accountId: string; requestId: string } | { kind: 'INVITE' } | null
 
 // What brain's Needs me puts first (`PRIORITY` in brain's peopleIndex.ts): a reply, a request, someone ready to invite.
 export const PRIORITY = {

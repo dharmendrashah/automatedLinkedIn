@@ -9,8 +9,8 @@ import { type SessionDetail } from './types'
 
 import { formatBody, formatHeaders } from '../proxies/format'
 import { shortAddress } from './describe'
-import { Notice } from './recording-gate'
 import { type NetworkEntry, parseNetwork } from './recording'
+import { Notice } from './recording-gate'
 import { useSessionText } from './use-session-file'
 
 const statusTone = (entry: NetworkEntry) => {

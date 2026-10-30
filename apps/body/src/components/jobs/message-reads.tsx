@@ -57,7 +57,9 @@ export const MessageReads = ({ now }: { now: number }) => {
                         <TableCell>
                            <ToneBadge tone={READ_STATE[row.state].tone}>{READ_STATE[row.state].label}</ToneBadge>
                         </TableCell>
-                        <TableCell className="text-xs">{row.lastReadAt ? whenText(row.lastReadAt, now) : 'Never'}</TableCell>
+                        <TableCell className="text-xs">
+                           {row.lastReadAt ? whenText(row.lastReadAt, now) : 'Never'}
+                        </TableCell>
                         <TableCell className="text-xs">{gapText(row.gapMinutes)}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">
                            {row.lastStatus

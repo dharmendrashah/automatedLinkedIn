@@ -92,9 +92,9 @@ export const TakeoverPanel = ({ id, accountEmail, onClose }: Props) => {
    return (
       <div className="grid gap-3">
          <p className="text-muted-foreground text-sm">
-            LinkedIn stopped the sign-in for <span className="text-foreground font-medium">{accountEmail}</span> at a security
-            check. Finish it here, as you would on your own screen, then press I am done. What you type goes straight to the
-            page and is not saved; the video of this run still shows what the screen showed.
+            LinkedIn stopped the sign-in for <span className="text-foreground font-medium">{accountEmail}</span> at a
+            security check. Finish it here, as you would on your own screen, then press I am done. What you type goes
+            straight to the page and is not saved; the video of this run still shows what the screen showed.
          </p>
 
          {/* The keys go to the page, so this must hold focus. */}

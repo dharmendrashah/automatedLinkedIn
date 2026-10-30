@@ -114,31 +114,31 @@ const daysLater = (wall: Wall, days: number): Wall => {
 // Quick choices that are still ahead and differ from each other.
 export const presets = (now: Date, zone: string) => {
    const today = wallOf(now, zone)
-   const nextMonday = ((1 - today.weekday + 7) % 7) || 7
+   const nextMonday = (1 - today.weekday + 7) % 7 || 7
    const choices = [
       {
-        label: 'Later today',
-        wall: {
-           ...today,
-           hour: 15,
-           minute: 0,
-        },
+         label: 'Later today',
+         wall: {
+            ...today,
+            hour: 15,
+            minute: 0,
+         },
       },
       {
-        label: 'Tomorrow morning',
-        wall: {
-           ...daysLater(today, 1),
-           hour: 9,
-           minute: 0,
-        },
+         label: 'Tomorrow morning',
+         wall: {
+            ...daysLater(today, 1),
+            hour: 9,
+            minute: 0,
+         },
       },
       {
-        label: 'Monday morning',
-        wall: {
-           ...daysLater(today, nextMonday),
-           hour: 9,
-           minute: 0,
-        },
+         label: 'Monday morning',
+         wall: {
+            ...daysLater(today, nextMonday),
+            hour: 9,
+            minute: 0,
+         },
       },
    ]
    const seen = new Set<number>()

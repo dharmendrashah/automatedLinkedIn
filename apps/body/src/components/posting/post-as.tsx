@@ -18,7 +18,16 @@ type Props = {
 }
 
 // The top of the writer on the Posting page: who the post is from, chosen from the owner's accounts, and who may see and comment.
-export const PostAs = ({ identity, accounts, accountId, onAccount, audience, comments, onAudience, onComments }: Props) => (
+export const PostAs = ({
+   identity,
+   accounts,
+   accountId,
+   onAccount,
+   audience,
+   comments,
+   onAudience,
+   onComments,
+}: Props) => (
    <>
       <Mark name={identity.name} imageUrl={identity.imageUrl} className="size-12 text-base" />
       <div className="grid min-w-0 gap-1">

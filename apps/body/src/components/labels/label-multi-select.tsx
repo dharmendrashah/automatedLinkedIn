@@ -1,5 +1,13 @@
 import { Badge } from '@/components/ui/badge'
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command'
+import {
+   Command,
+   CommandEmpty,
+   CommandGroup,
+   CommandInput,
+   CommandItem,
+   CommandList,
+   CommandSeparator,
+} from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { CheckIcon, ChevronsUpDown, Plus } from 'lucide-react'
 import { useState } from 'react'
@@ -26,7 +34,10 @@ export const LabelOptions = ({ value, onChange, kind }: Options) => {
    const all = [...new Set([...value, ...counts.keys()])]
    const shown = all
       .filter(label => label.includes(typed))
-      .sort((a, b) => Number(b.startsWith(typed)) - Number(a.startsWith(typed)) || (counts.get(b) ?? 0) - (counts.get(a) ?? 0))
+      .sort(
+         (a, b) =>
+            Number(b.startsWith(typed)) - Number(a.startsWith(typed)) || (counts.get(b) ?? 0) - (counts.get(a) ?? 0)
+      )
    const full = value.length >= LABEL_MAX
    const toggle = (label: string) =>
       onChange(value.includes(label) ? value.filter(item => item !== label) : [...value, label].slice(0, LABEL_MAX))
@@ -66,8 +77,12 @@ export const LabelOptions = ({ value, onChange, kind }: Options) => {
                            >
                               {on ? <CheckIcon className="text-primary-foreground size-3" /> : null}
                            </span>
-                           <span className={cn('rounded-md px-2 py-0.5 text-xs font-medium', toneOf(label))}>{label}</span>
-                           <span className="text-muted-foreground ml-auto text-xs tabular-nums">{counts.get(label) ?? 0}</span>
+                           <span className={cn('rounded-md px-2 py-0.5 text-xs font-medium', toneOf(label))}>
+                              {label}
+                           </span>
+                           <span className="text-muted-foreground ml-auto text-xs tabular-nums">
+                              {counts.get(label) ?? 0}
+                           </span>
                         </CommandItem>
                      )
                   })}

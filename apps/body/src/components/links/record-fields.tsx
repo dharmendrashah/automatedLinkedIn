@@ -3,11 +3,11 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
+import { type LinkStatus } from './types'
+
 import { LabelMultiSelect } from '../labels/label-multi-select'
 import { type LabelKind } from '../labels/labels'
 import { toTagList } from './form-rules'
-import { type LinkStatus } from './types'
-
 import { isLinkStatus, linkStatuses } from './link-statuses'
 
 type FieldProps = {
@@ -59,7 +59,9 @@ export const TagsField = ({ id, value, onChange, kind }: FieldProps & { kind: La
    <div className="grid gap-2">
       <Label htmlFor={id}>Labels</Label>
       <LabelMultiSelect id={id} kind={kind} value={toTagList(value)} onChange={labels => onChange(labels.join(', '))} />
-      <p className="text-muted-foreground text-xs">Up to 20, 30 characters each. A prefix such as acme: keeps a client's labels together.</p>
+      <p className="text-muted-foreground text-xs">
+         Up to 20, 30 characters each. A prefix such as acme: keeps a client's labels together.
+      </p>
    </div>
 )
 

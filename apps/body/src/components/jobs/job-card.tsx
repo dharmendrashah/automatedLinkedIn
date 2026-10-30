@@ -1,13 +1,14 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { tone } from '@/lib/tone'
 import { History } from 'lucide-react'
 
-import { tone } from '@/lib/tone'
 import { cn } from '@/lib/utils'
+
+import { type Job } from './types'
 
 import { HEALTH, HOUR_TONE, OUTCOME, hourState, hourTitle, whenText } from './describe'
 import { ToneBadge } from './tone-badge'
-import { type Job } from './types'
 
 type Props = {
    job: Job

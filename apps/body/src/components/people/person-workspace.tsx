@@ -17,19 +17,31 @@ import { readableError } from '@/lib/trpc-error'
 import { Ban, ListPlus, UserPlus } from 'lucide-react'
 import { useState } from 'react'
 
-import { LabelCell } from '../labels/label-cell'
-import { isLinkStatus, linkStatuses } from '../links/link-statuses'
 import { isMemberStatus, memberStatuses } from '../lists/types'
-import { Section } from './person-sections'
 import { type PersonDetail } from './types'
 
 import { trpc } from '../../trpc'
+import { LabelCell } from '../labels/label-cell'
+import { isLinkStatus, linkStatuses } from '../links/link-statuses'
+import { Section } from './person-sections'
 
 const Notes = ({ id, value, onSave }: { id: string; value: string | null; onSave: (next: string) => void }) => (
    <NotesField id={id} value={value} placeholder="What you know, why they fit, what to say" onSave={onSave} />
 )
 
-const Confirm = ({ trigger, title, description, action, onConfirm }: { trigger: React.ReactNode; title: string; description: string; action: string; onConfirm: () => void }) => (
+const Confirm = ({
+   trigger,
+   title,
+   description,
+   action,
+   onConfirm,
+}: {
+   trigger: React.ReactNode
+   title: string
+   description: string
+   action: string
+   onConfirm: () => void
+}) => (
    <AlertDialog>
       <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
       <AlertDialogContent>
@@ -68,9 +80,17 @@ export const Workspace = ({ person }: { person: PersonDetail }) => {
    const archive = trpc.linkedInProfile.archive.useMutation({ onSuccess: refresh })
    const restore = trpc.linkedInProfile.restore.useMutation({ onSuccess: refresh })
    const addProfile = trpc.linkedInProfile.create.useMutation({ onSuccess: refresh })
-   const error = [updateMember, moveMember, deleteMember, doNotContact, addMember, updateProfile, archive, restore, addProfile].find(
-      action => action.error
-   )?.error
+   const error = [
+      updateMember,
+      moveMember,
+      deleteMember,
+      doNotContact,
+      addMember,
+      updateProfile,
+      archive,
+      restore,
+      addProfile,
+   ].find(action => action.error)?.error
    const { member, profile, suppressed } = person
    const name = member?.name ?? profile?.fullName ?? person.slug
    const otherLists = lists.data?.filter(list => list.id !== member?.listId) ?? []
@@ -106,7 +126,9 @@ export const Workspace = ({ person }: { person: PersonDetail }) => {
                <div className="flex flex-wrap gap-2">
                   <Select
                      value={member.status}
-                     onValueChange={status => (isMemberStatus(status) ? updateMember.mutate({ id: member.id, status }) : undefined)}
+                     onValueChange={status =>
+                        isMemberStatus(status) ? updateMember.mutate({ id: member.id, status }) : undefined
+                     }
                   >
                      <SelectTrigger className="w-40" aria-label="List status">
                         <SelectValue />
@@ -134,7 +156,12 @@ export const Workspace = ({ person }: { person: PersonDetail }) => {
                      </Select>
                   ) : null}
                </div>
-               <Notes key={`member-${member.id}`} id={`notes-member-${member.id}`} value={member.notes} onSave={notes => updateMember.mutate({ id: member.id, notes })} />
+               <Notes
+                  key={`member-${member.id}`}
+                  id={`notes-member-${member.id}`}
+                  value={member.notes}
+                  onSave={notes => updateMember.mutate({ id: member.id, notes })}
+               />
                <div className="flex flex-wrap gap-2">
                   <Confirm
                      trigger={
@@ -172,7 +199,9 @@ export const Workspace = ({ person }: { person: PersonDetail }) => {
                <div className="flex flex-wrap gap-2">
                   <Select
                      value={profile.status}
-                     onValueChange={status => (isLinkStatus(status) ? updateProfile.mutate({ id: profile.id, status }) : undefined)}
+                     onValueChange={status =>
+                        isLinkStatus(status) ? updateProfile.mutate({ id: profile.id, status }) : undefined
+                     }
                   >
                      <SelectTrigger className="w-40" aria-label="Profile status">
                         <SelectValue />
@@ -188,12 +217,19 @@ export const Workspace = ({ person }: { person: PersonDetail }) => {
                   <Button
                      variant="outline"
                      size="sm"
-                     onClick={() => (profile.archivedAt ? restore.mutate({ id: profile.id }) : archive.mutate({ id: profile.id }))}
+                     onClick={() =>
+                        profile.archivedAt ? restore.mutate({ id: profile.id }) : archive.mutate({ id: profile.id })
+                     }
                   >
                      {profile.archivedAt ? 'Restore' : 'Archive'}
                   </Button>
                </div>
-               <Notes key={`profile-${profile.id}`} id={`notes-profile-${profile.id}`} value={profile.notes} onSave={notes => updateProfile.mutate({ id: profile.id, notes })} />
+               <Notes
+                  key={`profile-${profile.id}`}
+                  id={`notes-profile-${profile.id}`}
+                  value={profile.notes}
+                  onSave={notes => updateProfile.mutate({ id: profile.id, notes })}
+               />
                <LabelCell
                   tags={profile.tags}
                   kind="profiles"
@@ -212,7 +248,12 @@ export const Workspace = ({ person }: { person: PersonDetail }) => {
          {suppressed ? null : (
             <div className="flex flex-wrap items-center gap-2">
                {profile ? null : (
-                  <Button variant="outline" size="sm" disabled={addProfile.isPending} onClick={() => addProfile.mutate({ urls: person.url })}>
+                  <Button
+                     variant="outline"
+                     size="sm"
+                     disabled={addProfile.isPending}
+                     onClick={() => addProfile.mutate({ urls: person.url })}
+                  >
                      <UserPlus />
                      Add to profiles
                   </Button>

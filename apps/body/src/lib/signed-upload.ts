@@ -24,7 +24,12 @@ export const postForm: Post = (url, body, onProgress) =>
    })
 
 // Resolves to the status the bucket answered with; a good one is in the 200s.
-export const sendSigned = (signed: SignedForm, file: File, onProgress?: (percent: number) => void, post: Post = postForm) => {
+export const sendSigned = (
+   signed: SignedForm,
+   file: File,
+   onProgress?: (percent: number) => void,
+   post: Post = postForm
+) => {
    const body = new FormData()
 
    for (const [name, value] of Object.entries(signed.fields)) {

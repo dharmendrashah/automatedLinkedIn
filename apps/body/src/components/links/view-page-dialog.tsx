@@ -14,13 +14,12 @@ import { Loader2 } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 import { Link } from 'react-router'
 
-import { accountChoices, isCompanyLink, isProfileLink } from './visit-form'
-
 import { trpc } from '../../trpc'
-import { ConfirmRunDialog } from '../accounts/confirm-run-dialog'
 import { isBudgetRefusal } from '../accounts/budget-refusal'
+import { ConfirmRunDialog } from '../accounts/confirm-run-dialog'
 import { StartAnywayDialog } from '../accounts/start-anyway-dialog'
 import { TextField } from './record-fields'
+import { accountChoices, isCompanyLink, isProfileLink } from './visit-form'
 
 export type VisitKind = 'PROFILE' | 'COMPANY'
 

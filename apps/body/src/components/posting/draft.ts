@@ -1,6 +1,14 @@
 import type { PostBlock } from '@automatedLinkedIn/contracts'
 
-import { type Attachment, type AttachmentKind, LIMITS, ONE_ATTACHMENT, type PhotoItem, joinedText, mediaBlock } from './rules'
+import {
+   type Attachment,
+   type AttachmentKind,
+   LIMITS,
+   ONE_ATTACHMENT,
+   type PhotoItem,
+   joinedText,
+   mediaBlock,
+} from './rules'
 
 // The composer edits a post as one text and at most one attachment. These turn that into the blocks brain stores, and back.
 
@@ -34,7 +42,11 @@ export const attachmentRefusal = (attachment: Attachment | undefined, kind: Atta
 
 export const isHttps = (value: string) => URL.canParse(value) && new URL(value).protocol === 'https:'
 
-export const withPhotos = (attachment: Attachment | undefined, added: PhotoItem[], blockId: string): Attachment | undefined => {
+export const withPhotos = (
+   attachment: Attachment | undefined,
+   added: PhotoItem[],
+   blockId: string
+): Attachment | undefined => {
    if (added.length === 0) {
       return attachment
    }

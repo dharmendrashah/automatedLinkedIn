@@ -1,6 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-
 import { TRPCClientError } from '@trpc/client'
+import { describe, expect, it, vi } from 'vitest'
 
 import { createPostUpload } from './post-upload'
 
@@ -76,7 +75,9 @@ describe('createPostUpload', () => {
    })
 
    it('should show the sentence when the check after the upload refuses the file', async () => {
-      const { upload } = setup({ confirm: vi.fn().mockRejectedValue(refusal('The file is not what its name says it is.')) })
+      const { upload } = setup({
+         confirm: vi.fn().mockRejectedValue(refusal('The file is not what its name says it is.')),
+      })
 
       await expect(upload('f1', file, undefined, () => false)).resolves.toEqual({
          ok: false,

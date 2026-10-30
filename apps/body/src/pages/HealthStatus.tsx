@@ -1,3 +1,10 @@
+import {
+   UNREACHABLE_MESSAGE,
+   bannerText,
+   checkedText,
+   groupModules,
+   unreachableModules,
+} from '@/components/status/describe'
 import { StatusBanner } from '@/components/status/status-banner'
 import { StatusCard } from '@/components/status/status-card'
 import { Button } from '@/components/ui/button'
@@ -7,13 +14,6 @@ import { useEffect, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
-import {
-   UNREACHABLE_MESSAGE,
-   bannerText,
-   checkedText,
-   groupModules,
-   unreachableModules,
-} from '@/components/status/describe'
 import { trpc } from '../trpc'
 
 // The page asks again every ten seconds, and the age of the answer ticks up in between.
@@ -48,8 +48,7 @@ export const HealthStatus = () => {
             <div className="grid gap-1">
                <h2 className="text-lg font-semibold">Service status</h2>
                <p className="text-muted-foreground text-sm">
-                  Is everything working?{' '}
-                  {status.data && !unreachable ? checkedText(status.data.checkedAt, now) : null}
+                  Is everything working? {status.data && !unreachable ? checkedText(status.data.checkedAt, now) : null}
                </p>
             </div>
             <Button variant="outline" size="sm" onClick={() => void status.refetch()} disabled={status.isFetching}>

@@ -1,4 +1,5 @@
 import { IcpDialog } from '@/components/icps/icp-dialog'
+import { type Icp, seniorityOptions } from '@/components/icps/icp-form'
 import { IcpPreviewDialog } from '@/components/icps/icp-preview-dialog'
 import { StateRows } from '@/components/links/state-rows'
 import {
@@ -15,8 +16,6 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { FlaskConical, Pencil, Plus, Target, Trash2 } from 'lucide-react'
 import { useState } from 'react'
-
-import { type Icp, seniorityOptions } from '@/components/icps/icp-form'
 
 import { trpc } from '../trpc'
 

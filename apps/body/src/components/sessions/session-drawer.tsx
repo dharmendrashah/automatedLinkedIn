@@ -15,9 +15,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 
-import { trpc } from '../../trpc'
 import { type SessionDetail } from './types'
 
+import { trpc } from '../../trpc'
 import { type SessionTab, tabsFor } from './artifacts'
 import { actionLabel, formatDuration, timeAgo } from './describe'
 import { FilesTab } from './files-tab'
@@ -25,8 +25,8 @@ import { LogsTab } from './logs-tab'
 import { NetworkTab } from './network-tab'
 import { RecordingGate } from './recording-gate'
 import { ResultTab } from './result-tab'
-import { ScreenshotsTab } from './screenshots-tab'
 import { RetryDialog } from './retry-dialog'
+import { ScreenshotsTab } from './screenshots-tab'
 import { SessionStatusBadge } from './session-status-badge'
 import { StepsTab } from './steps-tab'
 import { SummaryTab } from './summary-tab'
@@ -105,9 +105,7 @@ export const SessionDrawer = ({ sessionId, onOpen, onClose }: Props) => {
          <DrawerContent className={floatingDrawer('data-[vaul-drawer-direction=right]:sm:max-w-3xl')}>
             <DrawerHeader className="flex-row items-start justify-between gap-3 border-b px-5 py-4">
                <div className="grid gap-1.5">
-                  <DrawerTitle className="text-base">
-                     {session ? actionLabel(session, catalog) : 'Session'}
-                  </DrawerTitle>
+                  <DrawerTitle className="text-base">{session ? actionLabel(session, catalog) : 'Session'}</DrawerTitle>
                   <DrawerDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
                      {session ? (
                         <>

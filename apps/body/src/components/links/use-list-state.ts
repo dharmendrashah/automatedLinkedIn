@@ -1,8 +1,9 @@
 import { useDeferredValue, useState } from 'react'
 import { useSearchParams } from 'react-router'
 
-import { type AddedFilter, addedSince, isAddedFilter } from '../labels/added'
 import { type LinkStatus } from './types'
+
+import { type AddedFilter, addedSince, isAddedFilter } from '../labels/added'
 
 export const PAGE_SIZE = 25
 
