@@ -53,6 +53,8 @@ describe('snapshotFrom', () => {
          photo: 'https://media.example/ada.jpg',
          cover: null,
          premium: null,
+         verified: null,
+         creator: null,
          followers: 1200,
          connections: 500,
          openToWork: true,
@@ -133,9 +135,11 @@ describe('profileFacts', () => {
       })
    })
 
-   it("should keep the current company's LinkedIn link, the cover and Premium, as the data service names them", () => {
+   it("should keep the current company's LinkedIn link, the cover and the badges, as the data service names them", () => {
       const row = {
          premium: true,
+         verified: true,
+         creator: false,
          coverPhoto: 'https://media.example/cover.jpg',
          experience: [
             {
@@ -150,6 +154,8 @@ describe('profileFacts', () => {
       expect(snapshotFrom(row)).toMatchObject({
          cover: 'https://media.example/cover.jpg',
          premium: true,
+         verified: true,
+         creator: false,
          experience: [{ companyUrl: 'https://www.linkedin.com/company/lumen-labs' }],
       })
       expect(read(row)).toMatchObject({
@@ -162,12 +168,14 @@ describe('profileFacts', () => {
       const snapshot = snapshotFrom({
          coverPhoto: 'http://media.example/cover.jpg',
          premium: 'yes',
+         verified: 1,
          experience: [{ companyLinkedinUrl: 'https://evil.example/company/x' }],
       })
 
       expect(snapshot).toMatchObject({
          cover: null,
          premium: null,
+         verified: null,
          experience: [{ companyUrl: null }],
       })
    })

@@ -31,6 +31,8 @@ const dateOf = (value: unknown) => {
 
 const nullable = z.string().nullable()
 
+const flagOf = (value: unknown) => (typeof value === 'boolean' ? value : null)
+
 // A position's company as its canonical LinkedIn link (lower-case slug), or null when it is not one.
 const companyLinkOf = (value: unknown) => {
    const raw = text(value, 1_000)
@@ -50,6 +52,9 @@ const snapshotSchema = z.object({
    // Missing from reads made before 2026-10-31, like `premium` and a position's `companyUrl`.
    cover: nullable.optional(),
    premium: z.boolean().nullable().optional(),
+   // Missing from reads made before 2026-11-01.
+   verified: z.boolean().nullable().optional(),
+   creator: z.boolean().nullable().optional(),
    followers: z.number().nullable(),
    connections: z.number().nullable(),
    openToWork: z.boolean(),
@@ -91,7 +96,9 @@ export const snapshotFrom = (row: Row): PersonSnapshotData => {
       about: text(row.about, MAX.about),
       photo: photoOf(row.photo),
       cover: photoOf(row.coverPhoto),
-      premium: typeof row.premium === 'boolean' ? row.premium : null,
+      premium: flagOf(row.premium),
+      verified: flagOf(row.verified),
+      creator: flagOf(row.creator),
       followers: count(row.followers),
       connections: count(row.connections),
       openToWork: row.openToWork === true,

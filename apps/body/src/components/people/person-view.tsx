@@ -1,9 +1,11 @@
+import premiumMark from '@/assets/linkedin-premium.png'
 import { Cover, DetailLoading, DetailMissing, Picture, ReadButton } from '@/components/details/detail-parts'
 import { pollWhile } from '@/components/details/read-status'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DrawerDescription, DrawerTitle } from '@/components/ui/drawer'
-import { ExternalLink } from 'lucide-react'
+import { flagOf } from '@/lib/country-flag'
+import { BadgeCheck, ExternalLink, Sparkles } from 'lucide-react'
 
 import { type PersonDetail } from './types'
 
@@ -34,6 +36,8 @@ const Header = ({
    const company = current?.company ?? member?.company ?? profile?.company
    const location = snapshot?.location ?? member?.location ?? profile?.location
    const followers = snapshot?.followers ?? member?.followers
+   const country = snapshot?.country ?? null
+   const flag = flagOf(country)
    const reach = [
       location,
       followers !== null && followers !== undefined ? `${followers.toLocaleString()} followers` : null,
@@ -50,6 +54,30 @@ const Header = ({
             {reach.length > 0 ? <p className="text-muted-foreground text-xs">{reach.join(' · ')}</p> : null}
          </div>
          <div className="flex flex-wrap gap-1.5">
+            {snapshot?.premium ? (
+               <Badge variant="outline">
+                  <img src={premiumMark} alt="" className="size-3.5 rounded-[2px]" />
+                  Premium
+               </Badge>
+            ) : null}
+            {snapshot?.verified ? (
+               <Badge variant="outline">
+                  <BadgeCheck />
+                  Verified
+               </Badge>
+            ) : null}
+            {snapshot?.creator ? (
+               <Badge variant="outline">
+                  <Sparkles />
+                  Creator
+               </Badge>
+            ) : null}
+            {country ? (
+               <Badge variant="outline">
+                  {flag ? <span aria-hidden="true">{flag}</span> : null}
+                  {country}
+               </Badge>
+            ) : null}
             {snapshot?.openToWork ? (
                <Badge className="bg-success/10 text-success border-transparent">Open to work</Badge>
             ) : null}
