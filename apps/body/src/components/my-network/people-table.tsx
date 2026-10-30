@@ -29,7 +29,8 @@ import { type Client, type PersonRow } from './types'
 import { type RouterInputs } from '../../trpc'
 import { RowActions } from './row-actions-cell'
 import { type NextStep, PRIORITY, nextStepOf } from './rows'
-import { nameOf, statusWord } from './words'
+import { StatusChip } from './status-chip'
+import { nameOf } from './words'
 
 export type PeopleSort = NonNullable<RouterInputs['people']['list']['sort']>
 
@@ -302,7 +303,7 @@ const columnsOf = ({
       column.accessor('status', {
          header: 'Status',
          enableSorting: false,
-         cell: ({ row }) => statusWord(row.original.status),
+         cell: ({ row }) => <StatusChip status={row.original.status} />,
       }),
       ...(many
          ? [
