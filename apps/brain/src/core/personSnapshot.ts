@@ -158,6 +158,9 @@ export const profileFacts = (snapshot: PersonSnapshotData) => {
    const places = (snapshot.location ?? '').split(',').map(place => place.trim())
 
    return {
+      name: snapshot.name,
+      headline: snapshot.headline,
+      photo: snapshot.photo,
       title: role?.title ?? null,
       company: role?.company ?? null,
       companySlug: role?.companyUrl ? (parseLinkedInUrl(role.companyUrl, 'company')?.slug ?? null) : null,

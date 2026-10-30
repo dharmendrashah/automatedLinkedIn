@@ -67,6 +67,28 @@ const draft = (rest: Partial<Sources>) => {
 }
 
 describe('draftPeople dates LinkedIn did not give', () => {
+   it('should show the name, headline, photo and company of the profile read first: the read is final', () => {
+      expect(
+         draft({
+            connections: [connection({ photoUrl: 'https://media.example/old.jpg' })],
+            facts: {
+               name: 'Ada Lovelace',
+               headline: 'Analyst of engines',
+               photo: 'https://media.example/ada.jpg',
+               title: 'Analyst',
+               company: 'Analytical Engines',
+               companySlug: null,
+               country: null,
+               premium: null,
+            },
+         })
+      ).toMatchObject({
+         name: 'Ada Lovelace',
+         headline: 'Analyst of engines',
+         photoUrl: 'https://media.example/ada.jpg',
+         company: 'Analytical Engines',
+      })
+   })
    it('should not date a reason or a touch in 1970, and fall back to when the conversation was first seen', () => {
       const person = draft({
          conversations: [
@@ -176,6 +198,9 @@ describe('draftPeople filter fields', () => {
          draft({
             connections: [connection({})],
             facts: {
+               name: null,
+               headline: null,
+               photo: null,
                title: 'Founder',
                company: 'Lumen Labs',
                companySlug: 'lumen-labs',

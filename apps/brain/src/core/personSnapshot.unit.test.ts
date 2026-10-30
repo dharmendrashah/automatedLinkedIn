@@ -127,11 +127,29 @@ describe('profileFacts', () => {
             ],
          })
       ).toEqual({
+         name: null,
+         headline: null,
+         photo: null,
          title: 'Founder',
          company: 'Lumen Labs',
          companySlug: null,
          country: 'France',
          premium: null,
+      })
+   })
+
+   it('should give the name, headline and photo of the read', () => {
+      expect(
+         read({
+            firstName: 'Prince',
+            lastName: 'Patel',
+            headline: 'Magento lead',
+            photo: 'https://media.example/prince.jpg',
+         })
+      ).toMatchObject({
+         name: 'Prince Patel',
+         headline: 'Magento lead',
+         photo: 'https://media.example/prince.jpg',
       })
    })
 
@@ -196,6 +214,9 @@ describe('profileFacts', () => {
       })
 
       expect(older && profileFacts(older)).toEqual({
+         name: null,
+         headline: null,
+         photo: null,
          title: 'Analyst',
          company: 'Engines',
          companySlug: null,
@@ -206,6 +227,9 @@ describe('profileFacts', () => {
 
    it('should not take a lone place for a country', () => {
       expect(read({ city: 'London' })).toEqual({
+         name: null,
+         headline: null,
+         photo: null,
          title: null,
          company: null,
          companySlug: null,

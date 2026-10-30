@@ -86,6 +86,9 @@ export type InviteRow = {
 
 // What the owner's newest profile read says (`profileFacts`), the same in every client.
 export type ProfileFacts = {
+   name: string | null
+   headline: string | null
+   photo: string | null
    title: string | null
    company: string | null
    companySlug: string | null
@@ -391,10 +394,13 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string, facts: Profil
 
    return {
       clientId,
-      name: first?.name ?? member?.name ?? target?.name ?? rows.invites[0]?.name ?? null,
-      headline: connection?.headline ?? request?.headline ?? member?.headline ?? target?.headline ?? null,
-      company: member?.company ?? target?.company ?? facts?.company ?? null,
+      // The owner's profile read is final, so what it says comes first.
+      name: facts?.name ?? first?.name ?? member?.name ?? target?.name ?? rows.invites[0]?.name ?? null,
+      headline:
+         facts?.headline ?? connection?.headline ?? request?.headline ?? member?.headline ?? target?.headline ?? null,
+      company: facts?.company ?? member?.company ?? target?.company ?? null,
       photoUrl:
+         facts?.photo ??
          rows.connections.find(row => row.photoUrl)?.photoUrl ??
          rows.requests.find(row => row.photoUrl)?.photoUrl ??
          rows.conversations.find(row => row.photoUrl)?.photoUrl ??

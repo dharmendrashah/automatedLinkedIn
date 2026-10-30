@@ -11,6 +11,7 @@ import { type DataReadKind, type PageKind, type Prisma } from 'generated/prisma/
 
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
+import { PeopleIndexService } from './peopleIndex.service'
 import { connectionsOf, conversationsWith } from './personContacts'
 import { PersonSnapshotService } from './personSnapshot.service'
 import { PrismaService } from './prisma.service'
@@ -113,6 +114,8 @@ export const DATA_READS: Record<DataReadKind, ReadSpec> = {
 
          await PersonSnapshotService.save(userId, slug, snapshot)
          await LinkedInCompanyService.saveFound(userId, companiesOf(snapshot))
+         // The row shows the read now, not on the index job's next pass.
+         await PeopleIndexService.refresh(userId, [slug])
       },
    },
    COMPANY: {
