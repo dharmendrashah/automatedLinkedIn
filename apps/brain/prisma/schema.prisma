@@ -46,6 +46,8 @@ model User {
   dataReads         DataRead[]
   icps              Icp[]
   workflows         Workflow[]
+  clients           Client[]
+  people            Person[]
 }
 
 enum WorkflowListMemberState {
@@ -71,6 +73,9 @@ model WorkflowList {
   userId    String
   user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
+  // The client its people belong to on My network; null is the owner's default client.
+  clientId  String?
+  client    Client?              @relation(fields: [clientId], references: [id], onDelete: SetNull)
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
   members   WorkflowListMember[]
@@ -202,6 +207,8 @@ model DataRead {
   costMicros Int            @default(0)
   // The sentence the owner reads when it failed.
   message    String?
+  // The client of the person or company it was read for, so its cost is booked to that client.
+  clientId   String?
   createdAt  DateTime       @default(now())
   finishedAt DateTime?
 
@@ -380,10 +387,13 @@ model SpendLedger {
   label        String?
   // Calendar month in UTC, such as 2026-10.
   month        String
+  // The client the spend is booked to; null when it was not made for one client (a workflow run).
+  clientId     String?
   createdAt    DateTime @default(now())
 
   @@index([userId, month])
   @@index([month])
+  @@index([clientId, month])
 }
 
 // The shared data wallet as the worker last saw it. One row.
@@ -494,6 +504,9 @@ model LinkedInProfile {
   status     LinkedInProfileStatus @default(NEW)
   // Set when the owner removes the profile; it can be restored.
   archivedAt DateTime?
+  // The client the target belongs to on My network; null is the owner's default client.
+  clientId   String?
+  client     Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
   createdAt  DateTime              @default(now())
   updatedAt  DateTime              @updatedAt
 
@@ -631,6 +644,9 @@ model LinkedInAccount {
   officeEndMinute       Int                   @default(1080)
   // The owner's own note on who the account works for; changes no limit.
   clientLabel           String?
+  // The client the account works for (one client per account); null is the owner's default client.
+  clientId              String?
+  client                Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
@@ -645,6 +661,7 @@ model LinkedInAccount {
   profileVisits    LinkedInPageVisit[]
   postDrafts       PostDraft[]
   postPublications PostPublication[]
+  personLinks      PersonLink[]
 
   @@unique([userId, email])
   @@index([userId])
@@ -1277,6 +1294,7 @@ model LinkedInInvitation {
   @@index([accountId, status])
   @@index([sessionId])
   @@index([status, startedAt])
+  @@index([userId, slug])
 }
 
 // A finished `linkedin-invitations` run that waits to be stored; the same shape and lifecycle as MessageImport. It holds no names.
@@ -1345,6 +1363,7 @@ model LinkedInConnection {
   @@index([accountId, status])
   @@index([sessionId])
   @@index([status, startedAt])
+  @@index([userId, slug])
 }
 
 // A finished `linkedin-connections` run that waits to be stored; the same shape and lifecycle as InvitationImport. It holds no names.
@@ -1464,4 +1483,148 @@ model CdnFile {
   size        Int?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+}
+
+// Who the owner works for (.plan/network-hub.md). Every account, list and target belongs to one; null on those rows means the
+// owner's default client, the one with `isDefault`, created on first use.
+model Client {
+  id        String            @id @default(uuid(7))
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  isDefault Boolean           @default(false)
+  // When the owner last left My network on this client; people first seen after it are new.
+  seenAt    DateTime?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  accounts  LinkedInAccount[]
+  lists     WorkflowList[]
+  profiles  LinkedInProfile[]
+  people    Person[]
+
+  @@unique([userId, name])
+}
+
+enum PersonStatus {
+  NEW
+  // Set when one of the client's accounts messaged them.
+  CONTACTED
+  // Set when they wrote back.
+  REPLIED
+  NOT_INTERESTED
+  DONE
+}
+
+enum PersonFit {
+  STRONG
+  MAYBE
+  NONE
+}
+
+enum PersonLinkKind {
+  REQUEST
+  CONNECTION
+  CONVERSATION
+  LIST_MEMBER
+  TARGET
+}
+
+// One person of one client on My network (.plan/network-hub.md), built by the people-index job from the rows that tie them to the
+// client (`PersonLink`). Status, labels, notes and Do not contact are the client's own and survive a rebuild. `search` is a
+// generated full-text column (see the migration).
+model Person {
+  id           String                   @id @default(uuid(7))
+  userId       String
+  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId     String
+  client       Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  // The profile's public identifier from linkedin.com/in/<slug>, as the rows have it.
+  slug         String
+  name         String?
+  headline     String?
+  company      String?
+  photoUrl     String?
+  status       PersonStatus             @default(NEW)
+  // Set when the owner chose the status; the index never moves a chosen Not interested or Done.
+  statusSetAt  DateTime?
+  labels       String[]
+  notes        String?
+  doNotContact Boolean                  @default(false)
+  fit          PersonFit                @default(NONE)
+  score        Int?
+  // Why they are here, in one line: what brought them in, their own words when there are some, a link, and when.
+  reasonKind   PersonLinkKind?
+  reasonText   String?
+  reasonUrl    String?
+  reasonAt     DateTime?
+  // `request`, `connection`, `target`, or `list:<id>`, for the Found by filter.
+  foundBy      String[]
+  // 2: a reply waits, 1: a request waits, 0: nothing waits on the client.
+  priority     Int                      @default(0)
+  // The client wrote last and no answer came yet.
+  waiting      Boolean                  @default(false)
+  lastTouchAt  DateTime
+  firstSeenAt  DateTime                 @default(now())
+  search       Unsupported("tsvector")?
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  links        PersonLink[]
+
+  @@unique([clientId, slug])
+  @@index([clientId, priority, lastTouchAt, id])
+  @@index([clientId, waiting, lastTouchAt, id])
+  @@index([clientId, lastTouchAt, id])
+  @@index([clientId, firstSeenAt])
+  @@index([userId, slug])
+  @@index([foundBy], type: Gin)
+  @@index([labels], type: Gin)
+  @@index([search], map: "Person_search_idx", type: Gin)
+}
+
+// One row that ties a person to a client: the request, connection or conversation of an account, the list member or the target.
+model PersonLink {
+  id        String           @id @default(uuid(7))
+  personId  String
+  person    Person           @relation(fields: [personId], references: [id], onDelete: Cascade)
+  accountId String?
+  account   LinkedInAccount? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  kind      PersonLinkKind
+  sourceId  String
+  at        DateTime
+
+  @@unique([personId, kind, sourceId])
+  @@index([accountId, personId])
+  @@index([sourceId])
+}
+
+// The profiles whose people must be rebuilt. Filled by database triggers on every row that ties a profile to the owner (see the
+// migration add_network_hub), emptied by the people-index job.
+model PeopleIndexDirty {
+  userId    String
+  slug      String
+  createdAt DateTime @default(now())
+
+  @@id([userId, slug])
+  @@index([createdAt])
+}
+
+// One export of My network: who, which client, how many rows, and whether it was refused. No personal data.
+model PeopleExport {
+  id        String   @id @default(uuid(7))
+  userId    String
+  clientId  String
+  rows      Int
+  refused   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// One erasure of a person: who asked and when, nothing about the person, so it can be quoted back to them.
+model PersonErasure {
+  id        String   @id @default(uuid(7))
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
