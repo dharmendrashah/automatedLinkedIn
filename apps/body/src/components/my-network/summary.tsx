@@ -64,20 +64,6 @@ export const Today = ({ line, onGo }: { line: TodayLine; onGo: Go }) => {
    )
 }
 
-// "All clients": one Today line per client; picking a line opens that client.
-export const AllClients = ({ lines, onPick }: { lines: TodayLine[]; onPick: (clientId: string) => void }) => (
-   <ul className="bg-card divide-y rounded-xl border">
-      {lines.map(line => (
-         <li key={line.clientId} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-            <Button variant="ghost" size="sm" className="font-semibold" onClick={() => onPick(line.clientId)}>
-               {line.name}
-            </Button>
-            <Today line={line} onGo={() => onPick(line.clientId)} />
-         </li>
-      ))}
-   </ul>
-)
-
 type Results = RouterOutputs['people']['results']
 
 const percent = (part: number, whole: number) => (whole > 0 ? ` (${Math.round((part / whole) * 100)}%)` : '')

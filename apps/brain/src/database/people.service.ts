@@ -43,6 +43,8 @@ type PeopleRow = NonNullable<Awaited<ReturnType<typeof PeopleService.list>>>['it
 
 // Counts stop here and show as "10k+": no count ever reads a whole table.
 export const COUNT_CAP = 10_000
+// The `clientId` that means every client of the owner (.plan/network-all-clients.md).
+export const ALL_CLIENTS = 'all'
 export const EXPORT_CAP = 10_000
 const SEARCH_CAP = 1_000
 const OPTIONS_CAP = 200
@@ -94,6 +96,7 @@ const TAB_SQL: Record<PeopleTab, Prisma.Sql> = {
 
 const rowSelect = {
    id: true,
+   clientId: true,
    slug: true,
    name: true,
    headline: true,
@@ -144,27 +147,64 @@ const searchOf = (text: string) => {
    return words.length > 0 ? { query: words.map(word => `${word}:*`).join(' & ') } : null
 }
 
-const cappedCount = async (clientId: string, condition: Prisma.Sql) => {
+const cappedCount = async (clientIds: string[], condition: Prisma.Sql) => {
    const [row] = await PrismaService.client.$queryRaw<Array<{ count: bigint }>>`
       SELECT count(*) AS "count" FROM (
-         SELECT 1 FROM "Person" WHERE "clientId" = ${clientId} AND ${condition} LIMIT ${COUNT_CAP + 1}
+         SELECT 1 FROM "Person" WHERE "clientId" = ANY(${clientIds}) AND ${condition} LIMIT ${COUNT_CAP + 1}
       ) capped`
 
    return Number(row?.count ?? 0)
 }
 
-const ownedClient = (userId: string, clientId: string) =>
-   PrismaService.client.client.findFirst({
+type Scope = {
+   ids: string[]
+   name: string
+   // When the owner last left My network on each client; a person is new after it.
+   seenAt: Map<string, Date | null>
+}
+
+// The clients a view covers: one of the owner's, or all of them for ALL_CLIENTS. null when there is none.
+const scopeOf = async (userId: string, clientId: string): Promise<Scope | null> => {
+   const clients = await PrismaService.client.client.findMany({
       where: {
-         id: clientId,
          userId,
+         ...(clientId === ALL_CLIENTS ? {} : { id: clientId }),
       },
+      orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
       select: {
          id: true,
          name: true,
          seenAt: true,
       },
    })
+
+   return clients.length > 0
+      ? {
+           ids: clients.map(({ id }) => id),
+           name: clientId === ALL_CLIENTS ? 'All clients' : (clients[0]?.name ?? ''),
+           seenAt: new Map(clients.map(({ id, seenAt }) => [id, seenAt])),
+        }
+      : null
+}
+
+const isNewIn = (scope: Scope, clientId: string, firstSeenAt: Date) => {
+   const seenAt = scope.seenAt.get(clientId)
+
+   return seenAt !== null && seenAt !== undefined && firstSeenAt > seenAt
+}
+
+const newWhere = (scope: Scope): Prisma.PersonWhereInput => ({
+   OR: [...scope.seenAt].flatMap(([clientId, seenAt]) =>
+      seenAt
+         ? [
+              {
+                 clientId,
+                 firstSeenAt: { gt: seenAt },
+              },
+           ]
+         : []
+   ),
+})
 
 const ownedPerson = (userId: string, id: string) =>
    PrismaService.client.person.findFirst({
@@ -180,12 +220,12 @@ const ownedPerson = (userId: string, id: string) =>
    })
 
 export class PeopleService {
-   // One page of a client's people in a tab, newest touch first (Needs me: replies, then requests). null when the client is not
-   // the owner's. Pages follow `next`, never an offset.
+   // One page of a client's people (or all clients') in a tab, newest touch first (Needs me: replies, then requests). null when the
+   // client is not the owner's.
    public static async list(userId: string, query: PeopleQuery) {
-      const client = await ownedClient(userId, query.clientId)
+      const scope = await scopeOf(userId, query.clientId)
 
-      if (!client) {
+      if (!scope) {
          return null
       }
 
@@ -195,21 +235,21 @@ export class PeopleService {
             ? (
                  await PrismaService.client.$queryRaw<Array<{ id: string }>>`
                     SELECT "id" FROM "Person"
-                    WHERE "clientId" = ${client.id} AND "search" @@ to_tsquery('simple', ${search.query})
+                    WHERE "clientId" = ANY(${scope.ids}) AND "search" @@ to_tsquery('simple', ${search.query})
                     ORDER BY "lastTouchAt" DESC LIMIT ${SEARCH_CAP}`
               ).map(({ id }) => id)
             : undefined
       const where: Prisma.PersonWhereInput = {
-         clientId: client.id,
+         clientId: { in: scope.ids },
          ...TAB_WHERE[query.tab],
          AND: [
             ...(query.accountId ? [{ links: { some: { accountId: query.accountId } } }] : []),
             ...(query.filters ? peopleWhere(query.filters) : []),
+            ...(query.onlyNew ? [newWhere(scope)] : []),
          ],
          ...(query.foundBy ? { foundBy: { has: query.foundBy } } : {}),
          ...(query.fit ? { fit: query.fit } : {}),
          ...(query.label ? { labels: { has: query.label } } : {}),
-         ...(query.onlyNew && client.seenAt ? { firstSeenAt: { gt: client.seenAt } } : {}),
          ...(search && 'slug' in search ? { slug: search.slug } : {}),
          ...(matching ? { id: { in: matching } } : {}),
       }
@@ -229,7 +269,7 @@ export class PeopleService {
       ])
       const items = rows.slice(0, query.limit).map(row => ({
          ...row,
-         isNew: client.seenAt !== null && row.firstSeenAt > client.seenAt,
+         isNew: isNewIn(scope, row.clientId, row.firstSeenAt),
       }))
 
       return {
@@ -242,15 +282,17 @@ export class PeopleService {
 
    // How many people each tab holds, up to COUNT_CAP + 1 ("10k+").
    public static async counts(userId: string, clientId: string) {
-      if (!(await ownedClient(userId, clientId))) {
+      const scope = await scopeOf(userId, clientId)
+
+      if (!scope) {
          return null
       }
 
       const [NEEDS_ME, WAITING, EVERYONE, DO_NOT_CONTACT] = await Promise.all([
-         cappedCount(clientId, TAB_SQL.NEEDS_ME),
-         cappedCount(clientId, TAB_SQL.WAITING),
-         cappedCount(clientId, TAB_SQL.EVERYONE),
-         cappedCount(clientId, TAB_SQL.DO_NOT_CONTACT),
+         cappedCount(scope.ids, TAB_SQL.NEEDS_ME),
+         cappedCount(scope.ids, TAB_SQL.WAITING),
+         cappedCount(scope.ids, TAB_SQL.EVERYONE),
+         cappedCount(scope.ids, TAB_SQL.DO_NOT_CONTACT),
       ])
 
       return {
@@ -304,10 +346,10 @@ export class PeopleService {
       return Promise.all(
          clients.map(async client => {
             const [replies, requests, invites, waitingInvites, fresh] = await Promise.all([
-               cappedCount(client.id, Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = ${PRIORITY.REPLY}`),
-               cappedCount(client.id, Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = ${PRIORITY.REQUEST}`),
+               cappedCount([client.id], Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = ${PRIORITY.REPLY}`),
+               cappedCount([client.id], Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = ${PRIORITY.REQUEST}`),
                INVITES_LIVE
-                  ? cappedCount(client.id, Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = ${PRIORITY.INVITE}`)
+                  ? cappedCount([client.id], Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = ${PRIORITY.INVITE}`)
                   : Promise.resolve(0),
                db.linkedInInvite.count({
                   where: {
@@ -316,7 +358,7 @@ export class PeopleService {
                   },
                }),
                client.seenAt
-                  ? cappedCount(client.id, Prisma.sql`NOT "doNotContact" AND "firstSeenAt" > ${client.seenAt}`)
+                  ? cappedCount([client.id], Prisma.sql`NOT "doNotContact" AND "firstSeenAt" > ${client.seenAt}`)
                   : Promise.resolve(0),
             ])
 
@@ -346,25 +388,31 @@ export class PeopleService {
    // accepted and answered, by account and by the source that led to each (.plan/network-invites.md). An accept and the reads of
    // that person are credited to the invite's source.
    public static async results(userId: string, clientId: string, days = 7, now = new Date()) {
-      if (!(await ownedClient(userId, clientId))) {
+      const scope = await scopeOf(userId, clientId)
+
+      if (!scope) {
          return null
       }
 
+      const inScope = { in: scope.ids }
       const db = PrismaService.client
       const since = new Date(now.getTime() - days * DAY_MS)
       const [newThisWeek, spent, invites] = await Promise.all([
-         cappedCount(clientId, Prisma.sql`NOT "doNotContact" AND "firstSeenAt" > ${new Date(now.getTime() - WEEK_MS)}`),
+         cappedCount(
+            scope.ids,
+            Prisma.sql`NOT "doNotContact" AND "firstSeenAt" > ${new Date(now.getTime() - WEEK_MS)}`
+         ),
          db.spendLedger.aggregate({
             where: {
                userId,
-               clientId,
+               clientId: inScope,
                month: now.toISOString().slice(0, 7),
             },
             _sum: { amountMicros: true },
          }),
          db.linkedInInvite.findMany({
             where: {
-               clientId,
+               clientId: inScope,
                OR: [{ invitedAt: { gte: since } }, { acceptedAt: { gte: since } }],
             },
             take: COUNT_CAP,
@@ -387,7 +435,7 @@ export class PeopleService {
       const [replied, reads, lists] = await Promise.all([
          db.person.findMany({
             where: {
-               clientId,
+               clientId: inScope,
                slug: { in: slugs },
                status: 'REPLIED',
             },
@@ -397,7 +445,7 @@ export class PeopleService {
             by: ['slug'],
             where: {
                userId,
-               clientId,
+               clientId: inScope,
                slug: { in: slugs },
             },
             _sum: { costMicros: true },
@@ -457,9 +505,9 @@ export class PeopleService {
 
    // What the filters can pick for a client, most common first: its people's countries, companies (top OPTIONS_CAP) and labels.
    public static async filterOptions(userId: string, clientId: string) {
-      const client = await ownedClient(userId, clientId)
+      const scope = await scopeOf(userId, clientId)
 
-      if (!client) {
+      if (!scope) {
          return null
       }
 
@@ -467,15 +515,15 @@ export class PeopleService {
       const [countries, companies, labels] = await Promise.all([
          db.$queryRaw<Array<{ value: string; count: bigint }>>`
             SELECT "country" AS "value", count(*) AS "count" FROM "Person"
-            WHERE "clientId" = ${client.id} AND "country" IS NOT NULL
+            WHERE "clientId" = ANY(${scope.ids}) AND "country" IS NOT NULL
             GROUP BY "country" ORDER BY count(*) DESC, "country" LIMIT ${OPTIONS_CAP}`,
          db.$queryRaw<Array<{ value: string; count: bigint }>>`
             SELECT "company" AS "value", count(*) AS "count" FROM "Person"
-            WHERE "clientId" = ${client.id} AND "company" IS NOT NULL AND "company" <> ''
+            WHERE "clientId" = ANY(${scope.ids}) AND "company" IS NOT NULL AND "company" <> ''
             GROUP BY "company" ORDER BY count(*) DESC, "company" LIMIT ${OPTIONS_CAP}`,
          db.$queryRaw<Array<{ value: string; count: bigint }>>`
             SELECT "label" AS "value", count(*) AS "count" FROM "Person", unnest("labels") AS "label"
-            WHERE "clientId" = ${client.id}
+            WHERE "clientId" = ANY(${scope.ids})
             GROUP BY "label" ORDER BY count(*) DESC, "label" LIMIT ${OPTIONS_CAP}`,
       ])
       const counted = (rows: Array<{ value: string; count: bigint }>) =>
@@ -495,13 +543,13 @@ export class PeopleService {
    public static async seen(userId: string, clientId: string) {
       const { count } = await PrismaService.client.client.updateMany({
          where: {
-            id: clientId,
             userId,
+            ...(clientId === ALL_CLIENTS ? {} : { id: clientId }),
          },
          data: { seenAt: new Date() },
       })
 
-      return count === 1
+      return count > 0
    }
 
    // One person with the rows behind them, for the drawer: which account has the request, connection or conversation.
@@ -582,7 +630,7 @@ export class PeopleService {
       return count === 1
    }
 
-   // The same changes to many people of one client at once. Resolves to how many changed.
+   // The same changes to many people of one client (or of any client, for ALL_CLIENTS) at once. Resolves to how many changed.
    public static async updateMany(
       userId: string,
       clientId: string,
@@ -593,7 +641,7 @@ export class PeopleService {
          where: {
             id: { in: ids },
             userId,
-            clientId,
+            ...(clientId === ALL_CLIENTS ? {} : { clientId }),
          },
          data: {
             ...(changes.status
@@ -609,7 +657,7 @@ export class PeopleService {
       if (changes.labels?.length) {
          await PrismaService.client.$executeRaw`
             UPDATE "Person" SET "labels" = ARRAY(SELECT DISTINCT unnest("labels" || ${changes.labels}::text[]))
-            WHERE "id" = ANY(${ids}) AND "userId" = ${userId} AND "clientId" = ${clientId}`
+            WHERE "id" = ANY(${ids}) AND "userId" = ${userId} AND (${clientId} = ${ALL_CLIENTS} OR "clientId" = ${clientId})`
       }
 
       return count
@@ -749,7 +797,7 @@ export class PeopleService {
       list: { id: string } | { name: string }
    ) {
       const db = PrismaService.client
-      const client = await ownedClient(userId, clientId)
+      const client = clientId === ALL_CLIENTS ? null : await scopeOf(userId, clientId)
 
       if (!client) {
          return null
@@ -773,7 +821,7 @@ export class PeopleService {
       if ('name' in list) {
          await db.workflowList.update({
             where: { id: target.id },
-            data: { clientId: client.id },
+            data: { clientId: client.ids[0] },
          })
       }
 
@@ -852,9 +900,10 @@ export class PeopleService {
 
    // The people of one view as a CSV, at most EXPORT_CAP rows; a bigger view is refused. Every export is logged, refused or not.
    public static async export(userId: string, query: Omit<PeopleQuery, 'cursor' | 'limit'>) {
-      const client = await ownedClient(userId, query.clientId)
+      const scope = await scopeOf(userId, query.clientId)
+      const [clientId] = scope?.ids ?? []
 
-      if (!client) {
+      if (!scope || !clientId) {
          return null
       }
 
@@ -877,7 +926,8 @@ export class PeopleService {
       await PrismaService.client.peopleExport.create({
          data: {
             userId,
-            clientId: client.id,
+            // All clients is logged against the first client (the default one).
+            clientId,
             rows: refused ? 0 : rows.length,
             refused,
          },
@@ -907,7 +957,7 @@ export class PeopleService {
       }
 
       return {
-         fileName: `${client.name.replace(/[^\w-]+/g, '-')}-people.csv`,
+         fileName: `${scope.name.replace(/[^\w-]+/g, '-')}-people.csv`,
          csv: toCsv(
             EXPORT_HEADER,
             rows.map(row => [

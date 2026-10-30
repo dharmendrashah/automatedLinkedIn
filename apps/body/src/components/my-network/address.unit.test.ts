@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+   ALL_CLIENTS,
+   allClientsOf,
    changeView,
    clientFor,
    clientView,
@@ -8,7 +10,9 @@ import {
    pickedList,
    readView,
    showClientPicker,
+   showsAllClients,
    sortParam,
+   todayOfAll,
 } from './address'
 
 describe('readView', () => {
@@ -51,6 +55,72 @@ describe('changeView', () => {
 
       expect(params.get('tab')).toBe('everyone')
       expect(changeView(params, clientView('c2')).toString()).toBe('tab=everyone&client=c2')
+   })
+})
+
+describe('All clients', () => {
+   it('is the view with no client in the address, unless an account opens its own client', () => {
+      expect(showsAllClients(null, undefined)).toBe(true)
+      expect(showsAllClients(ALL_CLIENTS, 'a1')).toBe(true)
+      expect(showsAllClients('c1', undefined)).toBe(false)
+      expect(showsAllClients(null, 'a1')).toBe(false)
+   })
+
+   it('merges every client into one, with every account and list', () => {
+      expect(
+         allClientsOf([
+            {
+               id: 'c1',
+               name: 'My accounts',
+               isDefault: true,
+               accounts: [{ id: 'a1' }],
+               lists: [{ id: 'l1' }],
+            },
+            {
+               id: 'c2',
+               name: 'Beta',
+               isDefault: false,
+               accounts: [{ id: 'a2' }],
+               lists: [],
+            },
+         ])
+      ).toEqual({
+         id: ALL_CLIENTS,
+         name: 'All clients',
+         isDefault: false,
+         accounts: [{ id: 'a1' }, { id: 'a2' }],
+         lists: [{ id: 'l1' }],
+      })
+   })
+
+   it("sums the clients' Today lines", () => {
+      const line = (clientId: string, replies: number, stopped: string[]) => ({
+         clientId,
+         name: clientId,
+         isDefault: false,
+         replies,
+         requests: 1,
+         invites: 0,
+         waitingInvites: 2,
+         fresh: 3,
+         invitesLive: true,
+         stopped: stopped.map(accountId => ({
+            accountId,
+            name: accountId,
+            reason: 'Stopped.',
+         })),
+      })
+
+      expect(todayOfAll([line('c1', 1, ['a1']), line('c2', 2, [])])).toMatchObject({
+         clientId: ALL_CLIENTS,
+         replies: 3,
+         requests: 2,
+         waitingInvites: 4,
+         fresh: 6,
+         invitesLive: true,
+         stopped: [{ accountId: 'a1' }],
+      })
+      expect(todayOfAll([])).toBeUndefined()
    })
 })
 
