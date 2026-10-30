@@ -47,30 +47,49 @@ export class ClientService {
       return made.id
    }
 
-   // Every client of the owner, the default first, with how many accounts each has.
+   // Every client of the owner, the default first, with its accounts and lists (rows with no client go to the default one).
    public static async list(userId: string) {
-      await ClientService.defaultId(userId)
+      const defaultId = await ClientService.defaultId(userId)
+      const db = PrismaService.client
+      const [clients, accounts, lists] = await Promise.all([
+         db.client.findMany({
+            where: { userId },
+            orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+            select: {
+               id: true,
+               name: true,
+               isDefault: true,
+            },
+         }),
+         db.linkedInAccount.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'asc' },
+            select: {
+               id: true,
+               email: true,
+               displayName: true,
+               status: true,
+               clientId: true,
+            },
+         }),
+         db.workflowList.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'asc' },
+            select: {
+               id: true,
+               name: true,
+               clientId: true,
+            },
+         }),
+      ])
+      const of = (clientId: string | null) => clientId ?? defaultId
 
-      const clients = await PrismaService.client.client.findMany({
-         where: { userId },
-         orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
-         select: {
-            id: true,
-            name: true,
-            isDefault: true,
-            _count: { select: { accounts: true } },
-         },
-      })
-      const unassigned = await PrismaService.client.linkedInAccount.count({
-         where: {
-            userId,
-            clientId: null,
-         },
-      })
-
-      return clients.map(({ _count, ...client }) => ({
+      return clients.map(client => ({
          ...client,
-         accounts: _count.accounts + (client.isDefault ? unassigned : 0),
+         accounts: accounts
+            .filter(account => of(account.clientId) === client.id)
+            .map(({ clientId: _clientId, ...account }) => account),
+         lists: lists.filter(list => of(list.clientId) === client.id).map(({ clientId: _clientId, ...list }) => list),
       }))
    }
 

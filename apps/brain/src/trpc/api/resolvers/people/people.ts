@@ -161,6 +161,9 @@ export const people = router({
          }
       }),
 
+   // Owner only: erasures and exports, for the Usage page.
+   audit: ownerProcedure.query(({ ctx }) => PeopleService.audit(ctx.user.id)),
+
    export: ownerProcedure
       .input(view)
       .mutation(async ({ ctx, input }) =>

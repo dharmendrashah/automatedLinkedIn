@@ -107,6 +107,7 @@ const rowSelect = {
       select: {
          kind: true,
          accountId: true,
+         sourceId: true,
       },
    },
 } satisfies Prisma.PersonSelect
@@ -601,6 +602,49 @@ export class PeopleService {
          listId: target.id,
          added,
          skipped,
+      }
+   }
+
+   // The owner's erasures and exports, newest first, for the Usage page: dates, clients and row counts, nothing about anyone.
+   public static async audit(userId: string, take = 200) {
+      const [erasures, exports, clients] = await Promise.all([
+         PrismaService.client.personErasure.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'desc' },
+            take,
+            select: {
+               id: true,
+               createdAt: true,
+            },
+         }),
+         PrismaService.client.peopleExport.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'desc' },
+            take,
+            select: {
+               id: true,
+               clientId: true,
+               rows: true,
+               refused: true,
+               createdAt: true,
+            },
+         }),
+         PrismaService.client.client.findMany({
+            where: { userId },
+            select: {
+               id: true,
+               name: true,
+            },
+         }),
+      ])
+      const names = new Map(clients.map(({ id, name }) => [id, name]))
+
+      return {
+         erasures,
+         exports: exports.map(({ clientId, ...entry }) => ({
+            ...entry,
+            client: names.get(clientId) ?? 'Removed client',
+         })),
       }
    }
 
