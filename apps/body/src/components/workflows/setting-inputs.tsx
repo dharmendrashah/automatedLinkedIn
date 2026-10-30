@@ -21,12 +21,31 @@ const PLACEHOLDERS: Record<ChipKind | 'any', string> = {
    domains: 'Paste websites, such as stripe.com',
 }
 
-export const Stepper = ({ id, value, min, max, onChange }: { id: string; value: number; min: number; max: number; onChange: (next: number) => void }) => {
+export const Stepper = ({
+   id,
+   value,
+   min,
+   max,
+   onChange,
+}: {
+   id: string
+   value: number
+   min: number
+   max: number
+   onChange: (next: number) => void
+}) => {
    const clamp = (next: number) => Math.min(max, Math.max(min, Number.isFinite(next) ? next : min))
 
    return (
       <div className="flex w-44 items-center gap-1">
-         <Button type="button" variant="outline" size="icon" aria-label="Less" disabled={value <= min} onClick={() => onChange(clamp(value - 1))}>
+         <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Less"
+            disabled={value <= min}
+            onClick={() => onChange(clamp(value - 1))}
+         >
             <Minus />
          </Button>
          <Input
@@ -39,7 +58,14 @@ export const Stepper = ({ id, value, min, max, onChange }: { id: string; value: 
             value={value}
             onChange={event => onChange(clamp(Number(event.target.value)))}
          />
-         <Button type="button" variant="outline" size="icon" aria-label="More" disabled={value >= max} onClick={() => onChange(clamp(value + 1))}>
+         <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="More"
+            disabled={value >= max}
+            onClick={() => onChange(clamp(value + 1))}
+         >
             <Plus />
          </Button>
       </div>
@@ -85,7 +111,11 @@ export const ChipsInput = ({
             {value.map(word => (
                <Badge key={word} variant="secondary" className="gap-1">
                   {word}
-                  <button type="button" aria-label={`Remove ${word}`} onClick={() => onChange(value.filter(item => item !== word))}>
+                  <button
+                     type="button"
+                     aria-label={`Remove ${word}`}
+                     onClick={() => onChange(value.filter(item => item !== word))}
+                  >
                      <X className="size-3" />
                   </button>
                </Badge>
@@ -122,13 +152,23 @@ export const ChipsInput = ({
                }}
             />
             {draft.trim() ? (
-               <Button type="button" size="sm" variant="ghost" className="h-7" onMouseDown={event => event.preventDefault()} onClick={() => add(draft)}>
+               <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7"
+                  onMouseDown={event => event.preventDefault()}
+                  onClick={() => add(draft)}
+               >
                   Add
                </Button>
             ) : null}
          </div>
          {suggestions.length > 0 ? (
-            <ul className="bg-popover absolute top-full z-50 mt-1 grid w-full gap-0.5 rounded-md border p-1 shadow-md" role="listbox">
+            <ul
+               className="bg-popover absolute top-full z-50 mt-1 grid w-full gap-0.5 rounded-md border p-1 shadow-md"
+               role="listbox"
+            >
                {suggestions.map(suggestion => (
                   <li key={suggestion}>
                      <button
@@ -213,9 +253,17 @@ export const SearchPick = ({
          {value.length > 0 ? (
             <div className="flex flex-wrap gap-1">
                {value.map(code => (
-                  <span key={code} title={labelOf(code)} className="bg-muted flex items-center gap-1 rounded-md px-2 py-0.5 text-xs">
+                  <span
+                     key={code}
+                     title={labelOf(code)}
+                     className="bg-muted flex items-center gap-1 rounded-md px-2 py-0.5 text-xs"
+                  >
                      {labelOf(code).split(' > ').at(-1)}
-                     <button type="button" aria-label={`Remove ${labelOf(code)}`} onClick={() => onChange(value.filter(item => item !== code))}>
+                     <button
+                        type="button"
+                        aria-label={`Remove ${labelOf(code)}`}
+                        onClick={() => onChange(value.filter(item => item !== code))}
+                     >
                         <X className="size-3" />
                      </button>
                   </span>
@@ -250,4 +298,3 @@ export const SearchPick = ({
       </div>
    )
 }
-

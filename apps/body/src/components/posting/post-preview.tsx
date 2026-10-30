@@ -2,9 +2,9 @@ import { Mark } from '@/components/account-profile/mark'
 import { FileText, Globe, MessageSquare, Repeat2, Send, ThumbsUp, Users } from 'lucide-react'
 import { useState } from 'react'
 
-import { cn } from '@/lib/utils'
-
 import type { PostBlock, PostVisibility } from '@automatedLinkedIn/contracts'
+
+import { cn } from '@/lib/utils'
 
 import type { Identity } from './accounts'
 import { formatBytes } from './files'

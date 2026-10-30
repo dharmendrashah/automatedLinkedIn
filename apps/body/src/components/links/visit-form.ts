@@ -1,6 +1,6 @@
-import { timeAgo } from '../../lib/time-ago'
-
 import { type AccountStatus } from '../accounts/types'
+
+import { timeAgo } from '../../lib/time-ago'
 
 // A link to a profile as a person pastes it: with or without the scheme, any LinkedIn host, anything after the name. Brain checks it
 // again; this only keeps the button off for text that cannot be one.

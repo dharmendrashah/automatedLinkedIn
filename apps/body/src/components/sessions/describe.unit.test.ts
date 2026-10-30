@@ -81,19 +81,27 @@ describe('resultOf', () => {
       ['DETECTED', 'FAILED', 'Detected as a bot', 'failure'],
       ['COULD_NOT_TELL', 'FAILED', 'Could not tell', 'neutral'],
       ['PROXY_FAILED', 'FAILED', 'The proxy did not work', 'failure'],
-   ] as const)('should show the verdict %s of a task with the label the worker announced', (verdict, status, label, tone) => {
-      expect(resultOf({ status, noAnswer: false, kind: 'TASK', task: 'browser-detection', verdict }, catalog)).toEqual({
-         label,
-         tone,
-      })
-   })
+   ] as const)(
+      'should show the verdict %s of a task with the label the worker announced',
+      (verdict, status, label, tone) => {
+         expect(
+            resultOf({ status, noAnswer: false, kind: 'TASK', task: 'browser-detection', verdict }, catalog)
+         ).toEqual({
+            label,
+            tone,
+         })
+      }
+   )
 
    it('should fall back to the status for a verdict nobody announced, and while the run is not finished', () => {
       expect(
          resultOf({ status: 'FAILED', noAnswer: false, kind: 'TASK', task: 'x', verdict: 'SURPRISE' }, catalog)
       ).toEqual({ label: 'Failed', tone: 'failure' })
       expect(
-         resultOf({ status: 'IN_PROGRESS', noAnswer: false, kind: 'TASK', task: 'browser-detection', verdict: null }, catalog)
+         resultOf(
+            { status: 'IN_PROGRESS', noAnswer: false, kind: 'TASK', task: 'browser-detection', verdict: null },
+            catalog
+         )
       ).toEqual({ label: 'In progress', tone: 'running' })
    })
 })
@@ -212,12 +220,18 @@ describe('describeStep', () => {
 
    it('should describe a click on a place, typing into the page and files given to it', () => {
       expect(describeStep(step({ call: 'clickSelector', found: true }))).toBe('Clicked an element')
-      expect(describeStep(step({ call: 'clickSelector', found: false }))).toBe('Looked for an element to click and it was not there')
+      expect(describeStep(step({ call: 'clickSelector', found: false }))).toBe(
+         'Looked for an element to click and it was not there'
+      )
       expect(describeStep(step({ call: 'clickNth', found: true }))).toBe('Clicked an element of a list')
       expect(describeStep(step({ call: 'typeKeys', length: 12 }))).toBe('Typed 12 characters into the page')
       expect(describeStep(step({ call: 'attachFiles', count: 1, found: true }))).toBe('Gave 1 file to the page')
-      expect(describeStep(step({ call: 'attachFiles', count: 2, found: false }))).toBe('Found nowhere to give the files')
-      expect(describeStep(step({ call: 'chooseFiles', count: 1, found: true }))).toBe('Gave 1 file to the page through its file chooser')
+      expect(describeStep(step({ call: 'attachFiles', count: 2, found: false }))).toBe(
+         'Found nowhere to give the files'
+      )
+      expect(describeStep(step({ call: 'chooseFiles', count: 1, found: true }))).toBe(
+         'Gave 1 file to the page through its file chooser'
+      )
       expect(describeStep(step({ call: 'chooseFiles', count: 1, found: false }))).toBe('Its file chooser did not open')
    })
 

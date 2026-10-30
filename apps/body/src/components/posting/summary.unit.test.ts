@@ -27,7 +27,9 @@ describe('summaryOf', () => {
    })
 
    it('should name a video and a link, and say so when there are no words', () => {
-      expect(summaryOf([{ id: 'v1', type: 'VIDEO', file: { id: 'f', name: 'a.mp4', bytes: 1 } }]).attachment).toBe('Video')
+      expect(summaryOf([{ id: 'v1', type: 'VIDEO', file: { id: 'f', name: 'a.mp4', bytes: 1 } }]).attachment).toBe(
+         'Video'
+      )
       expect(summaryOf([{ id: 'l1', type: 'LINK', url: 'https://example.com/a' }])).toEqual({
          words: 'No words yet',
          attachment: 'Link to example.com',

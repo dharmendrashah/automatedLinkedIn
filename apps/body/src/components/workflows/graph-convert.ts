@@ -1,11 +1,12 @@
 import { type Edge, type Node } from '@xyflow/react'
 
+import { type Block, type ConfigValue, type Graph, type GraphNode, type StepRun } from './types'
+
 import { readPostBlocks } from '../posting/post-config'
 import { joinedText } from '../posting/rules'
 import { summaryOf as postSummaryOf } from '../posting/summary'
 import { restrictionText } from '../posting/visibility'
 import { browserTimeZone, describeSchedule } from './schedule-text'
-import { type Block, type ConfigValue, type Graph, type GraphNode, type StepRun } from './types'
 
 // Turns the saved graph into React Flow nodes and edges and back. The graph is the source of truth; the canvas only
 // draws it.
@@ -45,8 +46,7 @@ export const choicesFor = (catalog: Block[], after: Block | null, query: string)
 
    return catalog.filter(
       block =>
-         (!after || block.input !== null) &&
-         (!words || `${block.label} ${block.summary}`.toLowerCase().includes(words))
+         (!after || block.input !== null) && (!words || `${block.label} ${block.summary}`.toLowerCase().includes(words))
    )
 }
 
@@ -163,7 +163,9 @@ export const toGraph = (nodes: FlowNode[], edges: Edge[], loopRounds?: number): 
 
 // Any block joins any other once; a block never joins itself. What a block cannot use passes through it.
 export const canConnect = (edges: Edge[], source: string | null, target: string | null) =>
-   Boolean(source && target && source !== target && !edges.some(edge => edge.source === source && edge.target === target))
+   Boolean(
+      source && target && source !== target && !edges.some(edge => edge.source === source && edge.target === target)
+   )
 
 // The same limits the server keeps on how often a loop runs.
 export const DEFAULT_LOOP_ROUNDS = 3
@@ -277,7 +279,9 @@ const pickOf = (values: Record<string, ConfigValue | undefined>) => {
       labels.length > 0 ? `labelled ${labels.join(joiner)}` : null,
       without.length > 0 ? `not ${without.join(', ')}` : null,
       ADDED_WORDS[show(values.added)] ?? null,
-      statuses.length > 0 && statuses.length < 3 ? `${statuses.map(status => STATUS_WORDS[status] ?? status).join(' or ')} only` : null,
+      statuses.length > 0 && statuses.length < 3
+         ? `${statuses.map(status => STATUS_WORDS[status] ?? status).join(' or ')} only`
+         : null,
    ].filter((part): part is string => part !== null)
 }
 

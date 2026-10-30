@@ -34,6 +34,8 @@ const snapshotSchema = z.object({
    name: nullable,
    headline: nullable,
    location: nullable,
+   // Missing from reads made before 2026-10-30.
+   country: nullable.optional(),
    about: nullable,
    photo: nullable,
    followers: z.number().nullable(),
@@ -72,6 +74,7 @@ export const snapshotFrom = (row: Row): PersonSnapshotData => {
       name: name || null,
       headline: text(row.headline),
       location: location || null,
+      country: text(row.country),
       about: text(row.about, MAX.about),
       photo: photoOf(row.photo),
       followers: count(row.followers),
@@ -106,3 +109,16 @@ export const snapshotFrom = (row: Row): PersonSnapshotData => {
 
 // Snapshots come back from a JSON column; one that does not fit is not shown.
 export const readSnapshot = (data: unknown): PersonSnapshotData | null => snapshotSchema.safeParse(data).data ?? null
+
+// What My network's filters read from a profile read: the current position (one that has not ended, else the newest) and the
+// country (an older read only has the joined location, whose last part is the country when there are several).
+export const profileFacts = (snapshot: PersonSnapshotData) => {
+   const role = snapshot.experience.find(({ end }) => end === null) ?? snapshot.experience[0]
+   const places = (snapshot.location ?? '').split(',').map(place => place.trim())
+
+   return {
+      title: role?.title ?? null,
+      company: role?.company ?? null,
+      country: snapshot.country ?? (places.length > 1 ? (places.at(-1) ?? null) : null),
+   }
+}

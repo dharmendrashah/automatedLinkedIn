@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { snapshotFrom } from 'core'
+
+import { peopleFiltersSchema } from '@automatedLinkedIn/contracts'
+
 import { ClientService } from './client.service'
 import { ConflictError } from './conflict'
 import { PeopleService } from './people.service'
@@ -67,7 +71,7 @@ describe('PeopleService (database)', () => {
       await db.user.deleteMany({ where: { id: { in: [userId, otherUserId] } } })
    })
 
-   it('should page through a tab with a cursor, never repeating a person', async () => {
+   it('should page through a tab by offset, never repeating a person', async () => {
       const first = await view({ limit: 2 })
       const second = await view({
          limit: 2,
@@ -78,6 +82,71 @@ describe('PeopleService (database)', () => {
       expect(second?.items).toHaveLength(1)
       expect(second?.next).toBeNull()
       expect(new Set([...(first?.items ?? []), ...(second?.items ?? [])].map(({ id }) => id)).size).toBe(3)
+      expect(first?.total).toBe(3)
+   })
+
+   it('should filter by what a profile read says, sort by a column, and offer the values to pick', async () => {
+      await db.personSnapshot.create({
+         data: {
+            userId,
+            slug: 'person-1',
+            data: snapshotFrom({
+               country: 'France',
+               experience: [
+                  {
+                     position: 'Founder',
+                     companyName: 'Kite',
+                     endDate: null,
+                  },
+               ],
+            }),
+         },
+      })
+      await PeopleIndexService.refresh(userId, ['person-1'])
+
+      const filtered = await view({
+         filters: peopleFiltersSchema.parse({
+            countries: ['france'],
+            title: 'found',
+            profileRead: true,
+         }),
+      })
+
+      expect(filtered?.items.map(({ name, title, country }) => [name, title, country])).toEqual([
+         ['Ravi Kumar', 'Founder', 'France'],
+      ])
+      expect(filtered?.total).toBe(1)
+      expect(
+         (await view({ filters: peopleFiltersSchema.parse({ profileRead: false }) }))?.items
+            .map(({ name }) => name)
+            .sort()
+      ).toEqual(['Ana Silva', 'Mia Chen'])
+      expect(
+         (
+            await view({
+               sort: {
+                  by: 'name',
+                  desc: false,
+               },
+            })
+         )?.items.map(({ name }) => name)
+      ).toEqual(['Ana Silva', 'Mia Chen', 'Ravi Kumar'])
+      expect(await PeopleService.filterOptions(userId, clientId)).toEqual({
+         countries: [
+            {
+               value: 'France',
+               count: 1,
+            },
+         ],
+         companies: [
+            {
+               value: 'Kite',
+               count: 1,
+            },
+         ],
+         labels: [],
+      })
+      expect(await PeopleService.filterOptions(otherUserId, clientId)).toBeNull()
    })
 
    it('should find people by the start of a word, and by a profile link', async () => {

@@ -1,6 +1,6 @@
 import { ErrorBoundary } from '@/components/error-boundary'
-import { TooltipProvider } from '@/components/ui/tooltip'
 import { PageTitle } from '@/components/page-title'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { ThemeProvider } from 'next-themes'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'

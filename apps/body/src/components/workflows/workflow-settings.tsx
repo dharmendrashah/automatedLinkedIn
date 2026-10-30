@@ -18,8 +18,9 @@ import { Loader2 } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router'
 
-import { trpc } from '../../trpc'
 import { type Workflow } from './types'
+
+import { trpc } from '../../trpc'
 
 // Name and the two thresholds: qualified at or above the first number, maybe between the two.
 export const WorkflowSettings = ({ workflow }: { workflow: Workflow }) => {

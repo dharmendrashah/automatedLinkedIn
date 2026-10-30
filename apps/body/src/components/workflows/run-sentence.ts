@@ -72,9 +72,10 @@ const live = (run: Run, labelOf: (type: string) => string, now: Date) => {
 
    const working = run.steps.filter(({ status }) => status === 'RUNNING').map(({ type }) => labelOf(type))
    const spent = `About ${formatUsd(run.costMicros)} spent of up to ${formatUsd(run.estimateMicros)}.`
-   const retry = retrying > 0 && retryAt
-      ? `Waiting to retry ${plural(retrying, 'request')} at ${timeOf(retryAt, now)} (retries are not charged unless they answer).`
-      : ''
+   const retry =
+      retrying > 0 && retryAt
+         ? `Waiting to retry ${plural(retrying, 'request')} at ${timeOf(retryAt, now)} (retries are not charged unless they answer).`
+         : ''
 
    if (working.length === 0 && retry) {
       return `${retry} ${spent}`
@@ -120,7 +121,8 @@ export const runSentence = (run: Run, labelOf: (type: string) => string, now: Da
    }
 
    const share = people > 0 ? ` from ${peopleCount(people)} (${Math.round((run.qualified / people) * 100)}%)` : ''
-   const each = run.qualified > 0 ? `, ${formatUsd(Math.round(run.costMicros / run.qualified))} per qualified person` : ''
+   const each =
+      run.qualified > 0 ? `, ${formatUsd(Math.round(run.costMicros / run.qualified))} per qualified person` : ''
 
    return `Done: ${run.qualified} qualified and ${run.maybe} maybe${share} for ${formatUsd(run.costMicros)}${each}.`
 }

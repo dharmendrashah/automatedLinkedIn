@@ -1,5 +1,3 @@
-import { useState } from 'react'
-
 import {
    AlertDialog,
    AlertDialogAction,
@@ -12,6 +10,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+import { useState } from 'react'
 
 type Props = {
    // What the server said about why the account may not browse now; null while nothing waits for an answer.
@@ -45,7 +44,11 @@ export const StartAnywayDialog = ({ message, onConfirm, onCancel }: Props) => {
                </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="flex items-center gap-2">
-               <Checkbox id="start-anyway" checked={understood} onCheckedChange={value => setUnderstood(value === true)} />
+               <Checkbox
+                  id="start-anyway"
+                  checked={understood}
+                  onCheckedChange={value => setUnderstood(value === true)}
+               />
                <Label htmlFor="start-anyway">I understand this can put the account at risk.</Label>
             </div>
             <AlertDialogFooter>

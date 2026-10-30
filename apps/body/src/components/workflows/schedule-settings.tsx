@@ -7,6 +7,8 @@ import { useMemo, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
+import { type ConfigValue } from './types'
+
 import { trpc } from '../../trpc'
 import {
    WEEKDAY_NAMES,
@@ -18,7 +20,6 @@ import {
    offsetOf,
 } from './schedule-text'
 import { Chips, Stepper } from './setting-inputs'
-import { type ConfigValue } from './types'
 
 type Values = Record<string, ConfigValue | undefined>
 
@@ -168,7 +169,9 @@ const TimeZonePicker = ({ value, onChange }: { value: string; onChange: (next: s
                         </span>
                      </button>
                   ))}
-                  {found.length === 0 ? <p className="text-muted-foreground p-2 text-sm">No time zone matches.</p> : null}
+                  {found.length === 0 ? (
+                     <p className="text-muted-foreground p-2 text-sm">No time zone matches.</p>
+                  ) : null}
                </div>
             </div>
          ) : null}

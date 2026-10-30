@@ -1,11 +1,10 @@
-import { browserTimeZone } from '@/components/workflows/schedule-text'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { formatUsd } from '@/components/workflows/types'
+import { browserTimeZone } from '@/components/workflows/schedule-text'
 import { readableError } from '@/lib/trpc-error'
 import {
    ArrowRight,
@@ -29,6 +28,8 @@ import { type FormEvent, type ReactNode, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 
 import { cn } from '@/lib/utils'
+
+import { formatUsd } from '@/components/workflows/types'
 
 import { type RouterOutputs, trpc } from '../trpc'
 
@@ -170,7 +171,9 @@ export const WorkflowNew = () => {
                   </CardHeader>
                </Choice>
             </div>
-            {templates.isLoading ? <Loader2 className="text-muted-foreground animate-spin" aria-label="Loading templates" /> : null}
+            {templates.isLoading ? (
+               <Loader2 className="text-muted-foreground animate-spin" aria-label="Loading templates" />
+            ) : null}
             {templates.error ? (
                <Alert variant="destructive">
                   <AlertDescription>{readableError(templates.error)}</AlertDescription>
@@ -191,8 +194,8 @@ export const WorkflowNew = () => {
                </div>
             ))}
             <p className="text-muted-foreground text-xs">
-               Costs are the most one run can spend at the starting sizes. Change the sizes on the canvas; its estimate is
-               the one to check before a run.
+               Costs are the most one run can spend at the starting sizes. Change the sizes on the canvas; its estimate
+               is the one to check before a run.
             </p>
          </section>
       </form>

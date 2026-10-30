@@ -1,5 +1,6 @@
-import type { PostDraftInput } from '@automatedLinkedIn/contracts'
 import { useEffect, useState } from 'react'
+
+import type { PostDraftInput } from '@automatedLinkedIn/contracts'
 
 import { type SaveState, createSaveQueue } from './save-queue'
 

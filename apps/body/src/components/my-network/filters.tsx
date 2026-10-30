@@ -1,7 +1,8 @@
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Download, Search } from 'lucide-react'
+import { Download, ListFilter, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { FITS, type View, type ViewChange, pickedList } from './address'
@@ -51,6 +52,9 @@ type Props = {
    lists: Array<{ id: string; name: string }>
    labels: string[]
    exporting: boolean
+   // How many filters of the panel are on.
+   filtersOn: number
+   onFilters: () => void
    onChange: (change: ViewChange) => void
    onExport: () => void
 }
@@ -97,8 +101,8 @@ const Filter = ({
    </Select>
 )
 
-// Found by, Fit and Label, and the export of what they show.
-export const Filters = ({ view, lists, labels, exporting, onChange, onExport }: Props) => {
+// Found by, Fit and Label, the button to the other filters, and the export of what they show.
+export const Filters = ({ view, lists, labels, exporting, filtersOn, onFilters, onChange, onExport }: Props) => {
    const [managing, setManaging] = useState<ListManaging>(null)
    const list = pickedList(view.found, lists)
    const known = [...SOURCES, ...lists.map(({ id }) => `list:${id}`)]
@@ -128,6 +132,13 @@ export const Filters = ({ view, lists, labels, exporting, onChange, onExport }: 
             options={shownLabels.map(label => [label, label])}
             onChange={label => onChange({ label, open: null })}
          />
+         <Button variant={filtersOn > 0 ? 'secondary' : 'outline'} size="sm" onClick={onFilters}>
+            <ListFilter />
+            Filters
+            {filtersOn > 0 ? (
+               <Badge className="ml-0.5 h-5 min-w-5 rounded-full px-1.5 tabular-nums">{filtersOn}</Badge>
+            ) : null}
+         </Button>
          {view.onlyNew ? (
             <Button variant="secondary" size="sm" onClick={() => onChange({ new: null })}>
                Only new · show all

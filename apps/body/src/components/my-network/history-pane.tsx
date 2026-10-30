@@ -99,7 +99,7 @@ const Invites = ({ personId }: { personId: string }) => {
                      </Button>
                   ) : null}
                </span>
-               {invite.reason ?? invite.waitReason ? (
+               {(invite.reason ?? invite.waitReason) ? (
                   <span className="text-muted-foreground">{invite.reason ?? invite.waitReason}</span>
                ) : null}
                {invite.note ? <span className="text-muted-foreground italic">{invite.note}</span> : null}
@@ -116,7 +116,10 @@ export const HistoryPane = ({ person }: { person: Person }) => (
       {person.links.length > 0 ? (
          <ul className="divide-y rounded-xl border text-sm">
             {person.links.map(link => (
-               <li key={`${link.kind}-${link.sourceId}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
+               <li
+                  key={`${link.kind}-${link.sourceId}`}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2"
+               >
                   <span className="font-medium">{LINK_WORDS[link.kind] ?? link.kind}</span>
                   <span className="text-muted-foreground">{accountOf(link)}</span>
                   <span className="text-muted-foreground ml-auto">{new Date(link.at).toLocaleDateString()}</span>

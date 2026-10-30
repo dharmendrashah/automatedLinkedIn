@@ -14,9 +14,8 @@ import { readableError } from '@/lib/trpc-error'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import { NOTE_CHARS, NOTE_FIELDS, insertField } from './invite-rules'
-
 import { trpc } from '../../trpc'
+import { NOTE_CHARS, NOTE_FIELDS, insertField } from './invite-rules'
 
 type Props = {
    clientId: string
@@ -68,10 +67,12 @@ export const InviteDialog = ({ clientId, personIds, source, onClose, onDone }: P
       <Dialog open={open} onOpenChange={next => (next ? undefined : onClose())}>
          <DialogContent>
             <DialogHeader>
-               <DialogTitle>{personIds.length === 1 ? 'Invite to connect' : `Invite ${personIds.length} people`}</DialogTitle>
+               <DialogTitle>
+                  {personIds.length === 1 ? 'Invite to connect' : `Invite ${personIds.length} people`}
+               </DialogTitle>
                <DialogDescription>
-                  Each invite goes from the account&apos;s own LinkedIn, at most 20 a day and 100 a week, 30 to 90 seconds
-                  apart, in its working hours.
+                  Each invite goes from the account&apos;s own LinkedIn, at most 20 a day and 100 a week, 30 to 90
+                  seconds apart, in its working hours.
                </DialogDescription>
             </DialogHeader>
             <div className="grid gap-3">

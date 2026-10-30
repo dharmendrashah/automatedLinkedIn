@@ -1,4 +1,4 @@
-import { readSignals } from 'core'
+import { profileFacts, readSignals, readSnapshot } from 'core'
 
 import { type Prisma } from 'generated/prisma/client'
 
@@ -87,8 +87,8 @@ export class PeopleIndexService {
       const clientOf = new Map(accounts.map(({ id, clientId }) => [id, clientId ?? defaultClientId]))
       const accountIds = accounts.map(({ id }) => id)
       const urls = slugs.flatMap(slug => [profileUrlOf(slug), profileUrlOf(slug).slice(0, -1)])
-      const [requests, connections, conversations, members, targets, suppressed, existing, invites] = await Promise.all(
-         [
+      const [requests, connections, conversations, members, targets, suppressed, existing, invites, snapshots] =
+         await Promise.all([
             db.linkedInInvitation.findMany({
                where: {
                   userId,
@@ -180,14 +180,30 @@ export class PeopleIndexService {
                   createdAt: true,
                },
             }),
-         ]
+            db.personSnapshot.findMany({
+               where: {
+                  userId,
+                  slug: { in: slugs },
+               },
+               select: {
+                  slug: true,
+                  data: true,
+               },
+            }),
+         ])
+      const facts = new Map(
+         snapshots.flatMap(({ slug, data }) => {
+            const snapshot = readSnapshot(data)
+
+            return snapshot ? [[slug, profileFacts(snapshot)] as const] : []
+         })
       )
-      const theirs = conversations.filter(({ lastDirection }) => lastDirection === 'THEM')
-      const lastWords = new Map(
-         (theirs.length > 0
+      // Their newest message in each conversation: its words when it is also the last one, and when it came.
+      const theirNewest = new Map(
+         (conversations.length > 0
             ? await db.linkedInMessage.findMany({
                  where: {
-                    conversationId: { in: theirs.map(({ id }) => id) },
+                    conversationId: { in: conversations.map(({ id }) => id) },
                     direction: 'THEM',
                  },
                  orderBy: { position: 'desc' },
@@ -195,10 +211,11 @@ export class PeopleIndexService {
                  select: {
                     conversationId: true,
                     text: true,
+                    sentAt: true,
                  },
               })
             : []
-         ).map(({ conversationId, text }) => [conversationId, text.slice(0, 200)])
+         ).map(({ conversationId, ...message }) => [conversationId, message])
       )
       const rows = {
          requests: bySlug(requests, ({ slug }) => slug),
@@ -238,6 +255,8 @@ export class PeopleIndexService {
             })),
             conversations: (rows.conversations.get(slug) ?? []).map(row => {
                const person = firstParticipant(row.participants)
+               const newest = theirNewest.get(row.id)
+               const theirsLast = row.lastDirection === 'THEM'
 
                return {
                   id: row.id,
@@ -249,7 +268,8 @@ export class PeopleIndexService {
                   lastReplyAt: row.lastReplyAt,
                   waitingSince: row.waitingSince,
                   doneAt: row.doneAt,
-                  lastText: lastWords.get(row.id) ?? null,
+                  lastText: theirsLast && newest ? newest.text.slice(0, 200) : null,
+                  theirLastAt: newest?.sentAt ?? (theirsLast ? row.lastMessageAt : null),
                   createdAt: row.createdAt,
                }
             }),
@@ -290,6 +310,7 @@ export class PeopleIndexService {
                createdAt: row.createdAt,
             })),
             invites: (rows.invites.get(slug) ?? []).map(({ slug: _slug, ...row }) => row),
+            facts: facts.get(slug) ?? null,
          }
          const drafts = draftPeople(
             sources,

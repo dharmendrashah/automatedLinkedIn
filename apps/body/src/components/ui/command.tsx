@@ -8,7 +8,10 @@ function Command({ className, ...props }: React.ComponentProps<typeof CommandPri
    return (
       <CommandPrimitive
          data-slot="command"
-         className={cn('bg-popover text-popover-foreground flex h-full w-full flex-col overflow-hidden rounded-md', className)}
+         className={cn(
+            'bg-popover text-popover-foreground flex h-full w-full flex-col overflow-hidden rounded-md',
+            className
+         )}
          {...props}
       />
    )
@@ -58,7 +61,13 @@ function CommandGroup({ className, ...props }: React.ComponentProps<typeof Comma
 }
 
 function CommandSeparator({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.Separator>) {
-   return <CommandPrimitive.Separator data-slot="command-separator" className={cn('bg-border -mx-1 h-px', className)} {...props} />
+   return (
+      <CommandPrimitive.Separator
+         data-slot="command-separator"
+         className={cn('bg-border -mx-1 h-px', className)}
+         {...props}
+      />
+   )
 }
 
 function CommandItem({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.Item>) {

@@ -47,7 +47,7 @@ export {
    readItem,
    readSignals,
 } from './workflowItem'
-export { type PersonSnapshotData, readSnapshot, snapshotFrom } from './personSnapshot'
+export { type PersonSnapshotData, profileFacts, readSnapshot, snapshotFrom } from './personSnapshot'
 export {
    type CompanySnapshotData,
    type PostSnapshotData,

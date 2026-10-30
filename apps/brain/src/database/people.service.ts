@@ -4,18 +4,17 @@ import { INVITES_LIVE } from 'env'
 
 import { type PersonFit, type PersonStatus, Prisma } from 'generated/prisma/client'
 
+import { type PeopleFilters } from '@automatedLinkedIn/contracts'
+
 import { ClientService } from './client.service'
 import { ConflictError } from './conflict'
+import { type PeopleSort, type PeopleTab, orderOf, peopleWhere } from './peopleFilters'
 import { PRIORITY } from './peopleIndex'
 import { profileUrlOf } from './personContacts'
 import { PrismaService } from './prisma.service'
 import { WorkflowListService } from './workflowList.service'
 
 // My network (.plan/network-hub.md): the people of one client, what to do today, and the client's own changes to them.
-
-export const PEOPLE_TABS = ['NEEDS_ME', 'WAITING', 'EVERYONE', 'DO_NOT_CONTACT'] as const
-
-export type PeopleTab = (typeof PEOPLE_TABS)[number]
 
 export type PeopleQuery = {
    clientId: string
@@ -26,7 +25,10 @@ export type PeopleQuery = {
    fit?: PersonFit
    label?: string
    onlyNew?: boolean
-   cursor?: string
+   filters?: PeopleFilters
+   sort?: PeopleSort
+   // How many rows of the view come before this page.
+   cursor?: number
    limit: number
 }
 
@@ -43,6 +45,7 @@ type PeopleRow = NonNullable<Awaited<ReturnType<typeof PeopleService.list>>>['it
 export const COUNT_CAP = 10_000
 export const EXPORT_CAP = 10_000
 const SEARCH_CAP = 1_000
+const OPTIONS_CAP = 200
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const DAY_MS = 24 * 60 * 60 * 1000
 const CLOSED: PersonStatus[] = ['NOT_INTERESTED', 'DONE']
@@ -89,12 +92,6 @@ const TAB_SQL: Record<PeopleTab, Prisma.Sql> = {
    DO_NOT_CONTACT: Prisma.sql`"doNotContact"`,
 }
 
-const orderOf = (tab: PeopleTab): Prisma.PersonOrderByWithRelationInput[] => [
-   ...(tab === 'NEEDS_ME' ? [{ priority: 'desc' as const }] : []),
-   { lastTouchAt: 'desc' },
-   { id: 'desc' },
-]
-
 const rowSelect = {
    id: true,
    slug: true,
@@ -115,6 +112,14 @@ const rowSelect = {
    lastTouchAt: true,
    firstSeenAt: true,
    doNotContact: true,
+   title: true,
+   country: true,
+   premium: true,
+   profileRead: true,
+   connectedAt: true,
+   lastSentAt: true,
+   lastReceivedAt: true,
+   inviteState: true,
    links: {
       select: {
          kind: true,
@@ -192,28 +197,34 @@ export class PeopleService {
                     ORDER BY "lastTouchAt" DESC LIMIT ${SEARCH_CAP}`
               ).map(({ id }) => id)
             : undefined
-      const rows = await PrismaService.client.person.findMany({
-         where: {
-            clientId: client.id,
-            ...TAB_WHERE[query.tab],
-            ...(query.accountId ? { links: { some: { accountId: query.accountId } } } : {}),
-            ...(query.foundBy ? { foundBy: { has: query.foundBy } } : {}),
-            ...(query.fit ? { fit: query.fit } : {}),
-            ...(query.label ? { labels: { has: query.label } } : {}),
-            ...(query.onlyNew && client.seenAt ? { firstSeenAt: { gt: client.seenAt } } : {}),
-            ...(search && 'slug' in search ? { slug: search.slug } : {}),
-            ...(matching ? { id: { in: matching } } : {}),
-         },
-         orderBy: orderOf(query.tab),
-         take: query.limit + 1,
-         ...(query.cursor
-            ? {
-                 cursor: { id: query.cursor },
-                 skip: 1,
-              }
-            : {}),
-         select: rowSelect,
-      })
+      const where: Prisma.PersonWhereInput = {
+         clientId: client.id,
+         ...TAB_WHERE[query.tab],
+         AND: [
+            ...(query.accountId ? [{ links: { some: { accountId: query.accountId } } }] : []),
+            ...(query.filters ? peopleWhere(query.filters) : []),
+         ],
+         ...(query.foundBy ? { foundBy: { has: query.foundBy } } : {}),
+         ...(query.fit ? { fit: query.fit } : {}),
+         ...(query.label ? { labels: { has: query.label } } : {}),
+         ...(query.onlyNew && client.seenAt ? { firstSeenAt: { gt: client.seenAt } } : {}),
+         ...(search && 'slug' in search ? { slug: search.slug } : {}),
+         ...(matching ? { id: { in: matching } } : {}),
+      }
+      const skip = query.cursor ?? 0
+      const [rows, total] = await Promise.all([
+         PrismaService.client.person.findMany({
+            where,
+            orderBy: orderOf(query.tab, query.sort),
+            skip,
+            take: query.limit + 1,
+            select: rowSelect,
+         }),
+         PrismaService.client.person.count({
+            where,
+            take: COUNT_CAP + 1,
+         }),
+      ])
       const items = rows.slice(0, query.limit).map(row => ({
          ...row,
          isNew: client.seenAt !== null && row.firstSeenAt > client.seenAt,
@@ -221,7 +232,9 @@ export class PeopleService {
 
       return {
          items,
-         next: rows.length > query.limit ? (items.at(-1)?.id ?? null) : null,
+         // Capped like the tab counts: COUNT_CAP + 1 reads as "10k+".
+         total,
+         next: rows.length > query.limit ? skip + query.limit : null,
       }
    }
 
@@ -437,6 +450,42 @@ export class PeopleService {
             ({ source }) => source ?? 'none',
             key => SOURCES[key] ?? listNames.get(key) ?? (key === 'none' ? 'Not known' : 'Removed list')
          ),
+      }
+   }
+
+   // What the filters can pick for a client, most common first: its people's countries, companies (top OPTIONS_CAP) and labels.
+   public static async filterOptions(userId: string, clientId: string) {
+      const client = await ownedClient(userId, clientId)
+
+      if (!client) {
+         return null
+      }
+
+      const db = PrismaService.client
+      const [countries, companies, labels] = await Promise.all([
+         db.$queryRaw<Array<{ value: string; count: bigint }>>`
+            SELECT "country" AS "value", count(*) AS "count" FROM "Person"
+            WHERE "clientId" = ${client.id} AND "country" IS NOT NULL
+            GROUP BY "country" ORDER BY count(*) DESC, "country" LIMIT ${OPTIONS_CAP}`,
+         db.$queryRaw<Array<{ value: string; count: bigint }>>`
+            SELECT "company" AS "value", count(*) AS "count" FROM "Person"
+            WHERE "clientId" = ${client.id} AND "company" IS NOT NULL AND "company" <> ''
+            GROUP BY "company" ORDER BY count(*) DESC, "company" LIMIT ${OPTIONS_CAP}`,
+         db.$queryRaw<Array<{ value: string; count: bigint }>>`
+            SELECT "label" AS "value", count(*) AS "count" FROM "Person", unnest("labels") AS "label"
+            WHERE "clientId" = ${client.id}
+            GROUP BY "label" ORDER BY count(*) DESC, "label" LIMIT ${OPTIONS_CAP}`,
+      ])
+      const counted = (rows: Array<{ value: string; count: bigint }>) =>
+         rows.map(({ value, count }) => ({
+            value,
+            count: Number(count),
+         }))
+
+      return {
+         countries: counted(countries),
+         companies: counted(companies),
+         labels: counted(labels),
       }
    }
 
@@ -808,7 +857,7 @@ export class PeopleService {
       }
 
       const rows: PeopleRow[] = []
-      let cursor: string | undefined
+      let cursor: number | undefined
       let refused: boolean
 
       do {

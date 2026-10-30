@@ -1,6 +1,6 @@
-import { waitingText } from '../posting/publication'
 import { type UniboxConversation } from './types'
 
+import { waitingText } from '../posting/publication'
 import { agoOf } from './time'
 
 type Sending = NonNullable<UniboxConversation['sending']>

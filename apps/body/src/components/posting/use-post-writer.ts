@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 
 import { attachmentRefusal, blocksOf, withAlt, withKey, withPhotos, withoutPhoto } from './draft'
 import { type FileKind, fileProblem, storedName, totalProblem } from './files'
-import { LIMITS, type Attachment, type PhotoItem } from './rules'
+import { type Attachment, LIMITS, type PhotoItem } from './rules'
 import { useAttachments } from './use-attachments'
 import { useFileUrls } from './use-file-urls'
 import { useUploads } from './use-uploads'

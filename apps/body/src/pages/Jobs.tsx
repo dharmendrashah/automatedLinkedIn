@@ -1,17 +1,18 @@
 import { FailureCard } from '@/components/failure-card'
+import { workerBanner } from '@/components/jobs/describe'
 import { JobCard } from '@/components/jobs/job-card'
 import { JobRunsDrawer } from '@/components/jobs/job-runs-drawer'
 import { MessageReads } from '@/components/jobs/message-reads'
-import { workerBanner } from '@/components/jobs/describe'
-import { type Job } from '@/components/jobs/types'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { tone } from '@/lib/tone'
 import { RefreshCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { tone } from '@/lib/tone'
 import { cn } from '@/lib/utils'
+
+import { type Job } from '@/components/jobs/types'
 
 import { trpc } from '../trpc'
 
@@ -47,9 +48,7 @@ export const Jobs = () => {
    }
 
    if (!isAdmin) {
-      return (
-         <FailureCard title="Page not found" message="This page does not exist." to="/" action="Back to home" />
-      )
+      return <FailureCard title="Page not found" message="This page does not exist." to="/" action="Back to home" />
    }
 
    const banner = overview.data ? workerBanner(overview.data.worker, overview.data.lastRunAt, now) : null

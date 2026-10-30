@@ -5,15 +5,15 @@ import { CircleCheck, FileText, Loader2, Undo2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
-import { postStatuses } from './post-statuses'
 import { type Post } from './types'
 
 import { LabelCell } from '../labels/label-cell'
 import { StatusBadge } from '../links/link-status-badge'
 import { RowActions } from '../links/row-actions'
 import { SelectAllHead, SelectCell } from '../links/selection'
-import { type Selection } from '../links/use-selection'
 import { StateRows } from '../links/state-rows'
+import { type Selection } from '../links/use-selection'
+import { postStatuses } from './post-statuses'
 
 const COLUMNS = 6
 

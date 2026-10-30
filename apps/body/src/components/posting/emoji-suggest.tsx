@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 
-import type { Emoji } from './emoji'
 import type { Spot } from './caret-position'
+import type { Emoji } from './emoji'
 import { EMOJI_LIST_ID, emojiOptionId } from './emoji-trigger'
 
 type Props = {

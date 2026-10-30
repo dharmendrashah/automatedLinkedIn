@@ -561,24 +561,22 @@ describe('createTrpcSource.send', () => {
             { accountId: 'a3', at: null },
          ],
       }
-      const query = vi
-         .fn()
-         .mockResolvedValue({
-            people: [
-               wire,
-               {
-                  ...wire,
-                  slug: 'bob',
-                  status: 'NEVER',
-                  lastAt: undefined,
-                  lastText: undefined,
-                  lastMine: undefined,
-                  alsoWith: undefined,
-                  conversationId: undefined,
-               },
-            ],
-            total: 7,
-         })
+      const query = vi.fn().mockResolvedValue({
+         people: [
+            wire,
+            {
+               ...wire,
+               slug: 'bob',
+               status: 'NEVER',
+               lastAt: undefined,
+               lastText: undefined,
+               lastMine: undefined,
+               alsoWith: undefined,
+               conversationId: undefined,
+            },
+         ],
+         total: 7,
+      })
       const exact = vi.fn().mockResolvedValueOnce(wire).mockResolvedValueOnce(null)
       const { client } = fake({ recipients: { query }, recipient: { query: exact } })
       const source = createTrpcSource(client)

@@ -125,7 +125,9 @@ export const describeStep = ({ call, ok, target, urlAfter, length, found, count 
             : 'Could not type into the field'
 
       case 'press':
-         return ok ? `Pressed a key${urlAfter ? ` and moved to ${shortAddress(urlAfter)}` : ''}` : 'Could not press the key'
+         return ok
+            ? `Pressed a key${urlAfter ? ` and moved to ${shortAddress(urlAfter)}` : ''}`
+            : 'Could not press the key'
 
       case 'exists':
          return `Looked for an element and ${found ? 'found it' : 'it was not there'}`
@@ -151,7 +153,9 @@ export const describeStep = ({ call, ok, target, urlAfter, length, found, count 
             : 'Could not click the element'
 
       case 'typeKeys':
-         return ok ? `Typed ${plural(length ?? 0, 'character', 'characters')} into the page` : 'Could not type into the page'
+         return ok
+            ? `Typed ${plural(length ?? 0, 'character', 'characters')} into the page`
+            : 'Could not type into the page'
 
       case 'attachFiles':
          return ok

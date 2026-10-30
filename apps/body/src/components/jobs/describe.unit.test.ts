@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { type RunDetail } from './types'
+
 import {
    actionLabel,
    countsText,
@@ -11,7 +13,6 @@ import {
    whenText,
    workerBanner,
 } from './describe'
-import { type RunDetail } from './types'
 
 const NOW = Date.parse('2026-10-24T12:00:00.000Z')
 const ago = (ms: number) => new Date(NOW - ms).toISOString()

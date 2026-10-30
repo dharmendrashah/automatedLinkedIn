@@ -44,7 +44,10 @@ const UploadStatus = ({ state, onRetry }: { state: UploadState | undefined; onRe
 
    if (state.status === 'uploading') {
       return (
-         <div role="status" className="absolute inset-x-0 bottom-0 z-[5] bg-black/60 px-2 pt-1.5 pb-1 text-[11px] text-white">
+         <div
+            role="status"
+            className="absolute inset-x-0 bottom-0 z-[5] bg-black/60 px-2 pt-1.5 pb-1 text-[11px] text-white"
+         >
             <span className="flex items-center gap-1">
                <Loader2 className="size-3 animate-spin" aria-hidden />
                Uploading {state.percent}%
@@ -57,7 +60,10 @@ const UploadStatus = ({ state, onRetry }: { state: UploadState | undefined; onRe
    }
 
    return (
-      <div role="alert" className="bg-destructive/90 absolute inset-x-0 bottom-0 z-[5] px-2 py-1.5 text-[11px] text-white">
+      <div
+         role="alert"
+         className="bg-destructive/90 absolute inset-x-0 bottom-0 z-[5] px-2 py-1.5 text-[11px] text-white"
+      >
          <span className="block">{state.reason}</span>
          <button type="button" onClick={onRetry} className="mt-1 inline-flex items-center gap-1 font-medium underline">
             <RotateCw className="size-3" aria-hidden />
@@ -243,7 +249,11 @@ export const AttachmentArea = ({
             className="top-1/2 -translate-y-1/2 bg-black/50"
          />
          {attachment.type === 'DOCUMENT' ? (
-            <DocumentNote state={state} stored={Boolean(attachment.file.key)} onRetry={() => onRetry(attachment.file.id)} />
+            <DocumentNote
+               state={state}
+               stored={Boolean(attachment.file.key)}
+               onRetry={() => onRetry(attachment.file.id)}
+            />
          ) : null}
       </div>
    )

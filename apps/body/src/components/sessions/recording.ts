@@ -58,7 +58,6 @@ export type Timeline = Omit<z.infer<typeof timelineSchema>, 'steps'> & { steps: 
 export type NetworkEntry = z.infer<typeof networkSchema>
 export type LogEntry = z.infer<typeof logSchema>
 
-
 const json = (text: string): unknown => {
    try {
       return JSON.parse(text)

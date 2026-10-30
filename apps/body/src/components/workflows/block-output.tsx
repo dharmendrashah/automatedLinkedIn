@@ -23,7 +23,9 @@ const nameOf = ({ item }: Item) => (item.kind === 'post' ? item.slug : (item.nam
 
 const detailOf = ({ item }: Item) => {
    if (item.kind === 'profile') {
-      return [item.headline, item.score === null ? null : `score ${item.score}`, ...item.tags].filter(Boolean).join(' · ')
+      return [item.headline, item.score === null ? null : `score ${item.score}`, ...item.tags]
+         .filter(Boolean)
+         .join(' · ')
    }
 
    return item.kind === 'company' ? item.hiring.join(', ') : (item.author ?? '')

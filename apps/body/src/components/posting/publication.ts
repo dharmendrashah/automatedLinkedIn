@@ -72,7 +72,12 @@ export const waitingText = ({ reason, until, zone }: Waiting, { now = Date.now()
    const at = new Date(until)
    const own = localZone ?? new Intl.DateTimeFormat().resolvedOptions().timeZone
    const minutes = Math.ceil((at.getTime() - now) / 60_000)
-   const wait = minutes <= 0 ? 'any moment now' : minutes < 60 ? `in about ${minutes} min` : `in about ${Math.round(minutes / 60)} h`
+   const wait =
+      minutes <= 0
+         ? 'any moment now'
+         : minutes < 60
+           ? `in about ${minutes} min`
+           : `in about ${Math.round(minutes / 60)} h`
    const sameDay = dayOf(at, own) === dayOf(new Date(now), own)
    const clock = clockOf(at, locale, own)
    const when = sameDay

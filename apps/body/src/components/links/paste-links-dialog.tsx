@@ -111,8 +111,16 @@ export const PasteLinksDialog = ({
 
                <div className="grid gap-2">
                   <Label htmlFor="pasted-labels">Labels for everything you add (optional)</Label>
-                  <LabelMultiSelect id="pasted-labels" kind={kind} value={labels} onChange={setLabels} placeholder="Pick or create labels" />
-                  <p className="text-muted-foreground text-xs">Links you already have get these labels added to theirs.</p>
+                  <LabelMultiSelect
+                     id="pasted-labels"
+                     kind={kind}
+                     value={labels}
+                     onChange={setLabels}
+                     placeholder="Pick or create labels"
+                  />
+                  <p className="text-muted-foreground text-xs">
+                     Links you already have get these labels added to theirs.
+                  </p>
                </div>
 
                {result ? (

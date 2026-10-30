@@ -34,12 +34,28 @@ export const BulkBar = ({
       <div className="bg-muted/50 flex flex-wrap items-center gap-2 rounded-lg border p-2 text-sm">
          <span className="px-1 font-medium">{count} selected</span>
          <div className="w-64">
-            <LabelMultiSelect id={`bulk-${kind}-labels`} kind={kind} value={labels} onChange={setLabels} placeholder="Pick labels" />
+            <LabelMultiSelect
+               id={`bulk-${kind}-labels`}
+               kind={kind}
+               value={labels}
+               onChange={setLabels}
+               placeholder="Pick labels"
+            />
          </div>
-         <Button size="sm" variant="outline" disabled={labels.length === 0 || pending} onClick={() => apply({ add: labels })}>
+         <Button
+            size="sm"
+            variant="outline"
+            disabled={labels.length === 0 || pending}
+            onClick={() => apply({ add: labels })}
+         >
             Add labels
          </Button>
-         <Button size="sm" variant="outline" disabled={labels.length === 0 || pending} onClick={() => apply({ remove: labels })}>
+         <Button
+            size="sm"
+            variant="outline"
+            disabled={labels.length === 0 || pending}
+            onClick={() => apply({ remove: labels })}
+         >
             Remove labels
          </Button>
          {children}

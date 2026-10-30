@@ -42,7 +42,17 @@ describe('keyInput', () => {
    })
 
    it('should press the keys a form needs', () => {
-      for (const key of ['Enter', 'Tab', 'Backspace', 'Delete', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {
+      for (const key of [
+         'Enter',
+         'Tab',
+         'Backspace',
+         'Delete',
+         'Escape',
+         'ArrowUp',
+         'ArrowDown',
+         'ArrowLeft',
+         'ArrowRight',
+      ]) {
          expect(press(key)).toEqual({ kind: 'key', key })
       }
    })

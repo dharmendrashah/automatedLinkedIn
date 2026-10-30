@@ -1,7 +1,16 @@
-import { Badge } from '@/components/ui/badge'
 import { PostCard } from '@/components/posts/post-body'
+import { Badge } from '@/components/ui/badge'
 import { timeAgo } from '@/lib/time-ago'
-import { BriefcaseBusiness, ExternalLink, GraduationCap, MessageSquare, Sparkles, ThumbsUp, Building2, Target } from 'lucide-react'
+import {
+   BriefcaseBusiness,
+   Building2,
+   ExternalLink,
+   GraduationCap,
+   MessageSquare,
+   Sparkles,
+   Target,
+   ThumbsUp,
+} from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -29,7 +38,11 @@ export const About = ({ text }: { text: string }) => {
       <Section title="About">
          <p className="text-sm whitespace-pre-line">{open || !long ? text : `${text.slice(0, ABOUT_SHORT)}…`}</p>
          {long ? (
-            <button type="button" className="text-muted-foreground justify-self-start text-xs underline" onClick={() => setOpen(!open)}>
+            <button
+               type="button"
+               className="text-muted-foreground justify-self-start text-xs underline"
+               onClick={() => setOpen(!open)}
+            >
                {open ? 'Show less' : 'Show more'}
             </button>
          ) : null}
@@ -37,7 +50,8 @@ export const About = ({ text }: { text: string }) => {
    )
 }
 
-const span = (start: string | null, end: string | null) => (start || end ? `${start ?? '?'} – ${end ?? 'Present'}` : null)
+const span = (start: string | null, end: string | null) =>
+   start || end ? `${start ?? '?'} – ${end ?? 'Present'}` : null
 
 const Entry = ({ icon, title, lines }: { icon: ReactNode; title: string; lines: (string | null)[] }) => (
    <li className="grid grid-cols-[auto_1fr] gap-3">
@@ -76,7 +90,10 @@ export const Education = ({ schools }: { schools: Snapshot['education'] }) => (
                key={`${school.school}-${index}`}
                icon={<GraduationCap className="size-5" aria-hidden />}
                title={school.school ?? 'School'}
-               lines={[[school.degree, school.field].filter(Boolean).join(', ') || null, span(school.start, school.end)]}
+               lines={[
+                  [school.degree, school.field].filter(Boolean).join(', ') || null,
+                  span(school.start, school.end),
+               ]}
             />
          ))}
       </ul>
@@ -118,7 +135,14 @@ export const Fit = ({ member }: { member: Member }) => (
                   <span className="font-semibold">Score {member.score}</span>
                   <span className="text-muted-foreground text-xs">of 100</span>
                </div>
-               <div className="bg-muted h-2 overflow-hidden rounded-full" role="meter" aria-valuenow={member.score} aria-valuemin={0} aria-valuemax={100} aria-label="Score">
+               <div
+                  className="bg-muted h-2 overflow-hidden rounded-full"
+                  role="meter"
+                  aria-valuenow={member.score}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label="Score"
+               >
                   <div className="bg-primary h-full" style={{ width: `${Math.min(100, member.score)}%` }} />
                </div>
             </div>
@@ -188,7 +212,9 @@ export const WhyFound = ({ signals }: { signals: Member['signals'] }) => (
                      {signal.post ? <PostCard post={signal.post} /> : null}
                      {signal.excerpt ? (
                         <p className="text-xs">
-                           <span className="text-muted-foreground">{signal.type === 'commented' ? 'Their comment: ' : ''}</span>
+                           <span className="text-muted-foreground">
+                              {signal.type === 'commented' ? 'Their comment: ' : ''}
+                           </span>
                            <q>{signal.excerpt}</q>
                         </p>
                      ) : null}

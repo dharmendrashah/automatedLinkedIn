@@ -1,5 +1,6 @@
-import * as contract from '@automatedLinkedIn/contracts'
 import { describe, expect, it } from 'vitest'
+
+import * as contract from '@automatedLinkedIn/contracts'
 
 import { NOTE_CHARS, NOTE_FIELDS, insertField } from './invite-rules'
 

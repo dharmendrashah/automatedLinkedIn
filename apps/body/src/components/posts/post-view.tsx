@@ -161,7 +161,11 @@ export const PostView = ({ slug, onPerson }: { slug: string; onPerson: (slug: st
                         name={person.name ?? person.slug}
                         lines={[
                            person.headline,
-                           [STATES[person.state], person.score !== null ? `score ${person.score}` : null, person.list.name]
+                           [
+                              STATES[person.state],
+                              person.score !== null ? `score ${person.score}` : null,
+                              person.list.name,
+                           ]
                               .filter(Boolean)
                               .join(' · '),
                            person.comment ? `"${person.comment}"` : null,

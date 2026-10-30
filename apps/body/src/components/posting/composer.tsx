@@ -5,13 +5,13 @@ import { cn } from '@/lib/utils'
 
 import { AttachmentArea } from './attachment-area'
 import { ComposerToolbar } from './composer-toolbar'
+import { attachmentRefusal, truncateToRoom } from './draft'
 import { insertAt } from './emoji'
 import { ACCEPT, type FileKind, splitDrop } from './files'
-import { ShortcutsHelp } from './shortcuts-help'
+import { type Attachment, LIMITS, characterCount } from './rules'
 import { modKey } from './shortcuts'
+import { ShortcutsHelp } from './shortcuts-help'
 import { TextEditor } from './text-editor'
-import { attachmentRefusal, truncateToRoom } from './draft'
-import { characterCount, LIMITS, type Attachment } from './rules'
 import type { UploadState } from './use-uploads'
 
 type Props = {

@@ -1,6 +1,13 @@
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+   Dialog,
+   DialogContent,
+   DialogDescription,
+   DialogFooter,
+   DialogHeader,
+   DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -9,19 +16,18 @@ import { ChevronRight, CircleAlert, Trash2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
-import { AccountsPick } from './accounts-pick'
-import { BlockOutput } from './block-output'
-import { INPUT_KINDS, isInputType } from './input-kinds'
-import { InputMatches } from './input-matches'
-import { ScheduleSettings } from './schedule-settings'
-import { PostField } from './post-field'
-import { Chips, ChipsInput, SearchPick, Stepper } from './setting-inputs'
+import { type Block, type ConfigValue, type Field } from './types'
 
 import { LabelMultiSelect } from '../labels/label-multi-select'
-
+import { AccountsPick } from './accounts-pick'
 import { BLOCK_ICONS, tileOf } from './block-look'
+import { BlockOutput } from './block-output'
 import { type FlowNode } from './graph-convert'
-import { type Block, type ConfigValue, type Field } from './types'
+import { INPUT_KINDS, isInputType } from './input-kinds'
+import { InputMatches } from './input-matches'
+import { PostField } from './post-field'
+import { ScheduleSettings } from './schedule-settings'
+import { Chips, ChipsInput, SearchPick, Stepper } from './setting-inputs'
 
 type Choice = { id: string; name: string }
 
@@ -84,7 +90,18 @@ const flowOf = (block: Block) => {
 }
 
 // A block's settings over the canvas. Every change applies at once; the canvas's Save keeps them.
-export const BlockSettings = ({ node, workflowId, problems, icps, workflows, parents, onChange: onPatch, onRemove, onClose, output }: Props) => {
+export const BlockSettings = ({
+   node,
+   workflowId,
+   problems,
+   icps,
+   workflows,
+   parents,
+   onChange: onPatch,
+   onRemove,
+   onClose,
+   output,
+}: Props) => {
    if (!node) {
       return null
    }
@@ -108,7 +125,15 @@ export const BlockSettings = ({ node, workflowId, problems, icps, workflows, par
       const value = values[item.key]
 
       if (item.kind === 'int') {
-         return <Stepper id={id} value={Number(value ?? item.min)} min={item.min} max={item.max} onChange={next => onChange(item.key, next)} />
+         return (
+            <Stepper
+               id={id}
+               value={Number(value ?? item.min)}
+               min={item.min}
+               max={item.max}
+               onChange={next => onChange(item.key, next)}
+            />
+         )
       }
 
       if (item.kind === 'words') {
@@ -147,13 +172,23 @@ export const BlockSettings = ({ node, workflowId, problems, icps, workflows, par
 
       if (item.kind === 'search') {
          return (
-            <SearchPick id={id} options={item.options} max={item.max} value={Array.isArray(value) ? value : []} onChange={next => onChange(item.key, next)} />
+            <SearchPick
+               id={id}
+               options={item.options}
+               max={item.max}
+               value={Array.isArray(value) ? value : []}
+               onChange={next => onChange(item.key, next)}
+            />
          )
       }
 
       if (item.kind === 'accounts') {
          return (
-            <AccountsPick id={id} value={Array.isArray(value) ? value : []} onChange={next => onChange(item.key, next)} />
+            <AccountsPick
+               id={id}
+               value={Array.isArray(value) ? value : []}
+               onChange={next => onChange(item.key, next)}
+            />
          )
       }
 
@@ -192,14 +227,27 @@ export const BlockSettings = ({ node, workflowId, problems, icps, workflows, par
                   onToggle={option => onChange(item.allKey, option === 'all')}
                />
                {all ? null : (
-                  <Stepper id={`${id}-count`} value={Number(value ?? item.min)} min={item.min} max={item.max} onChange={next => onChange(item.key, next)} />
+                  <Stepper
+                     id={`${id}-count`}
+                     value={Number(value ?? item.min)}
+                     min={item.min}
+                     max={item.max}
+                     onChange={next => onChange(item.key, next)}
+                  />
                )}
             </div>
          )
       }
 
       if (item.kind === 'select' && item.options.length <= SHORT_LIST) {
-         return <Chips id={id} options={item.options} isOn={option => textOf(value) === option} onToggle={option => onChange(item.key, typed(item.key, option))} />
+         return (
+            <Chips
+               id={id}
+               options={item.options}
+               isOn={option => textOf(value) === option}
+               onToggle={option => onChange(item.key, typed(item.key, option))}
+            />
+         )
       }
 
       if (item.kind === 'select' || item.kind === 'icp' || item.kind === 'workflow' || item.kind === 'parent') {
@@ -308,7 +356,9 @@ export const BlockSettings = ({ node, workflowId, problems, icps, workflows, par
          <p className="text-muted-foreground text-sm">This block has nothing to set.</p>
       ) : (
          <div className="grid max-h-[60vh] gap-5 overflow-y-auto pr-1">
-            {isInputType(block.type) ? <InputMatches workflowId={workflowId} type={block.type} values={values} /> : null}
+            {isInputType(block.type) ? (
+               <InputMatches workflowId={workflowId} type={block.type} values={values} />
+            ) : null}
             {presets}
             {main.map(row)}
             {more.length > 0 ? (

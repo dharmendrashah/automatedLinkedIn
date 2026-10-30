@@ -60,7 +60,16 @@ describe('tabsFor', () => {
          { headline: 'x', sections: [] }
       )
 
-      expect(tabsFor(session)).toEqual(['summary', 'result', 'video', 'steps', 'screenshots', 'network', 'logs', 'files'])
+      expect(tabsFor(session)).toEqual([
+         'summary',
+         'result',
+         'video',
+         'steps',
+         'screenshots',
+         'network',
+         'logs',
+         'files',
+      ])
    })
 
    it('should hide the tabs a run has nothing for', () => {

@@ -1,9 +1,9 @@
 import { Badge } from '@/components/ui/badge'
+import { type Tone, tone } from '@/lib/tone'
 import { AlertTriangle, CheckCircle2, CircleHelp, XCircle } from 'lucide-react'
 import { type ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
-import { type Tone, tone } from '@/lib/tone'
 
 // A tone is always an icon and a word as well as a colour.
 const ICONS: Record<Tone, typeof CheckCircle2> = {

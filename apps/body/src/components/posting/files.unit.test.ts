@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { LIMITS } from './rules'
 import { fileProblem, formatBytes, kindOfFile, splitDrop, storedName, totalProblem } from './files'
+import { LIMITS } from './rules'
 
 const file = (name: string, size = 1000) => ({
    name,

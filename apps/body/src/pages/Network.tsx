@@ -10,9 +10,19 @@ import {
    clientFor,
    clientView,
    readView,
+   sortParam,
 } from '@/components/my-network/address'
 import { BulkBar, type BulkChange } from '@/components/my-network/bulk-bar'
 import { Filters, SearchBox } from '@/components/my-network/filters'
+import { FilterChips } from '@/components/my-network/filters/filter-chips'
+import { type FilterOptions, FiltersSheet } from '@/components/my-network/filters/filters-sheet'
+import {
+   type PeopleFilters,
+   apiFilters,
+   chipsOf,
+   readFilters,
+   writeFilters,
+} from '@/components/my-network/filters/model'
 import { InviteDialog } from '@/components/my-network/invite-dialog'
 import { PeopleTable } from '@/components/my-network/people-table'
 import { PersonDrawer } from '@/components/my-network/person-drawer'
@@ -35,9 +45,10 @@ import { EmptyState, ToAccounts } from '@/components/network/notices'
 import { PageStatus } from '@/components/page-status'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { flagOf } from '@/lib/country-flag'
 import { downloadFile } from '@/lib/download-file'
 import { readableError } from '@/lib/trpc-error'
-import { Loader2, UserPlus, Users } from 'lucide-react'
+import { UserPlus, Users } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
@@ -88,12 +99,14 @@ type PeopleProps = {
    client: Client
    accountId: string | undefined
    view: View
+   // The Filters panel, kept in the address as `filters`.
+   filters: PeopleFilters
    update: (change: ViewChange) => void
    pickers: ReactNode
 }
 
 // One client's people: Today, results, the four tabs, filters, the table and the drawer.
-const ClientPeople = ({ client, accountId, view, update, pickers }: PeopleProps) => {
+const ClientPeople = ({ client, accountId, view, filters, update, pickers }: PeopleProps) => {
    useSeenOnLeave(client.id)
 
    const [days, setDays] = useState<ResultDays>(7)
@@ -106,6 +119,9 @@ const ClientPeople = ({ client, accountId, view, update, pickers }: PeopleProps)
       days,
    })
    const labels = trpc.label.list.useQuery()
+   const [filtering, setFiltering] = useState(false)
+   const filtersOn = chipsOf(filters).length
+   const options = trpc.people.filterOptions.useQuery({ clientId: client.id }, { enabled: filtering })
    const query = {
       clientId: client.id,
       tab: view.tab,
@@ -115,6 +131,8 @@ const ClientPeople = ({ client, accountId, view, update, pickers }: PeopleProps)
       fit: view.fit,
       label: view.label,
       onlyNew: view.onlyNew || undefined,
+      filters: filtersOn > 0 ? apiFilters(filters) : undefined,
+      sort: view.sort,
    }
    const people = trpc.people.list.useInfiniteQuery(
       {
@@ -201,7 +219,41 @@ const ClientPeople = ({ client, accountId, view, update, pickers }: PeopleProps)
    const invitesLive = line?.invitesLive ?? false
    const stopped = (line?.stopped ?? []).map(({ accountId: id }) => id)
    const nobody = counts.data !== undefined && counts.data.EVERYONE === 0 && counts.data.DO_NOT_CONTACT === 0
-   const filtered = Boolean(view.q || view.found || view.fit || view.label || view.onlyNew || accountId)
+   const filtered = Boolean(
+      view.q || view.found || view.fit || view.label || view.onlyNew || accountId || filtersOn > 0
+   )
+   const setFilters = (next: PeopleFilters) =>
+      update({
+         filters: writeFilters(next),
+         open: null,
+      })
+   const accountName = (id: string) => {
+      const account = client.accounts.find(other => other.id === id)
+
+      return account ? (account.displayName ?? account.email) : 'an account'
+   }
+   const filterOptions: FilterOptions = {
+      countries: (options.data?.countries ?? []).map(({ value, count }) => ({
+         value,
+         label: value,
+         icon: flagOf(value) ? <span aria-hidden>{flagOf(value)}</span> : undefined,
+         hint: count.toLocaleString('en'),
+      })),
+      companies: (options.data?.companies ?? []).map(({ value, count }) => ({
+         value,
+         label: value,
+         hint: count.toLocaleString('en'),
+      })),
+      labels: (options.data?.labels ?? []).map(({ value, count }) => ({
+         value,
+         label: value,
+         hint: count.toLocaleString('en'),
+      })),
+      accounts: client.accounts.map(({ id }) => ({
+         value: id,
+         label: accountName(id),
+      })),
+   }
 
    return (
       <>
@@ -260,8 +312,21 @@ const ClientPeople = ({ client, accountId, view, update, pickers }: PeopleProps)
             lists={client.lists}
             labels={(labels.data ?? []).map(({ label }) => label)}
             exporting={exporting.isPending}
+            filtersOn={filtersOn}
+            onFilters={() => setFiltering(true)}
             onChange={update}
             onExport={() => exporting.mutate(query)}
+         />
+         <FilterChips
+            value={filters}
+            accountName={accountName}
+            onChange={setFilters}
+            onClearAll={() =>
+               update({
+                  filters: null,
+                  open: null,
+               })
+            }
          />
          {shownChosen.length > 0 ? (
             <BulkBar
@@ -295,11 +360,16 @@ const ClientPeople = ({ client, accountId, view, update, pickers }: PeopleProps)
                   onChoose={id => setChosen(toggleChosen(shownChosen, id))}
                   onChooseAll={() => setChosen(shownChosen.length > 0 ? [] : ids.slice(0, SELECT_MAX))}
                   onStep={act}
+                  sort={view.sort}
+                  onSort={sort => update({ sort: sortParam(sort) })}
+                  hasMore={people.hasNextPage}
+                  loadingMore={people.isFetchingNextPage}
+                  onMore={() => void people.fetchNextPage()}
                />
             ) : (
                <EmptyState
                   icon={Users}
-                  title={filtered ? 'Nobody matches this view.' : EMPTY_WORDS[view.tab]}
+                  title={filtered ? 'No one matches these filters.' : EMPTY_WORDS[view.tab]}
                   text={
                      filtered
                         ? 'Clear the search or a filter to see more people.'
@@ -308,18 +378,15 @@ const ClientPeople = ({ client, accountId, view, update, pickers }: PeopleProps)
                />
             )}
          </div>
-         {people.hasNextPage ? (
-            <Button
-               variant="outline"
-               size="sm"
-               className="justify-self-center"
-               disabled={people.isFetchingNextPage}
-               onClick={() => void people.fetchNextPage()}
-            >
-               {people.isFetchingNextPage ? <Loader2 className="animate-spin" /> : null}
-               Load more
-            </Button>
-         ) : null}
+         <FiltersSheet
+            open={filtering}
+            value={filters}
+            options={filterOptions}
+            count={people.isFetching && !people.isFetchingNextPage ? null : (people.data?.pages[0]?.total ?? 0)}
+            cap={counts.data?.cap ?? 10_000}
+            onOpenChange={setFiltering}
+            onChange={setFilters}
+         />
          {view.open ? (
             <PersonDrawer
                id={view.open}
@@ -442,6 +509,7 @@ export const Network = () => {
             <ClientPeople
                key={client.id}
                client={client}
+               filters={readFilters(params.get('filters'))}
                accountId={account}
                view={view}
                update={update}

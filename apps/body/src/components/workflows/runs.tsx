@@ -154,7 +154,10 @@ export const RunDetailView = ({ run, catalog, onOpenBlock }: DetailProps) => {
                         {step.child ? (
                            <>
                               {' '}
-                              <Link className="underline" to={`/workflows/${step.child.workflowId}?run=${step.child.runId}`}>
+                              <Link
+                                 className="underline"
+                                 to={`/workflows/${step.child.workflowId}?run=${step.child.runId}`}
+                              >
                                  Open its run
                               </Link>
                            </>
@@ -184,7 +187,9 @@ export const RunDetailView = ({ run, catalog, onOpenBlock }: DetailProps) => {
                   <DialogTitle>
                      {shownStep ? (blockOf(catalog, shownStep.type)?.label ?? shownStep.type) : ''}: what it passed on
                   </DialogTitle>
-                  <DialogDescription>Kept 14 days; what reached an Export to CSV block is kept 90 days.</DialogDescription>
+                  <DialogDescription>
+                     Kept 14 days; what reached an Export to CSV block is kept 90 days.
+                  </DialogDescription>
                </DialogHeader>
                {shownStep ? (
                   <BlockOutput runId={run.id} nodeId={shownStep.nodeId} rounds={shownStep.round + 1} />

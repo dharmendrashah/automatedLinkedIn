@@ -6,7 +6,8 @@ import { createApiUrl } from '../trpc/config'
 const DIRECT_HOSTS = [/(^|\.)googleapis\.com$/, /(^|\.)elitale\.com$/, /^localhost$/]
 
 // LinkedIn's private message pictures need the account's cookies, which the cache does not have.
-const isPrivateLinkedIn = ({ hostname, pathname }: URL) => hostname === 'www.linkedin.com' && pathname.startsWith('/dms/prv/')
+const isPrivateLinkedIn = ({ hostname, pathname }: URL) =>
+   hostname === 'www.linkedin.com' && pathname.startsWith('/dms/prv/')
 
 const defaultApi = () => createApiUrl(import.meta.env)
 

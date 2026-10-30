@@ -1,8 +1,7 @@
 import { timeAgo } from '@/lib/time-ago'
 
-import { strongestSignal } from './message'
-
 import { type RouterOutputs } from '../../trpc'
+import { strongestSignal } from './message'
 
 export type ListSummary = RouterOutputs['workflowList']['lists'][number]
 export type Inbox = RouterOutputs['workflowList']['inbox']

@@ -11,8 +11,9 @@ import {
 import { readableError } from '@/lib/trpc-error'
 import { Loader2 } from 'lucide-react'
 
-import { trpc } from '../../trpc'
 import { formatUsd } from './types'
+
+import { trpc } from '../../trpc'
 
 type Props = {
    workflowId: string

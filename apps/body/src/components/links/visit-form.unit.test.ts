@@ -28,12 +28,15 @@ describe('isProfileLink', () => {
       expect(isProfileLink(text)).toBe(true)
    })
 
-   it.each(['', 'https://www.linkedin.com/company/sample/', 'https://example.com/in/ada', 'ada lovelace', 'linkedin.com/in/'])(
-      'should not take anything else: %j',
-      text => {
-         expect(isProfileLink(text)).toBe(false)
-      }
-   )
+   it.each([
+      '',
+      'https://www.linkedin.com/company/sample/',
+      'https://example.com/in/ada',
+      'ada lovelace',
+      'linkedin.com/in/',
+   ])('should not take anything else: %j', text => {
+      expect(isProfileLink(text)).toBe(false)
+   })
 })
 
 describe('accountChoices', () => {

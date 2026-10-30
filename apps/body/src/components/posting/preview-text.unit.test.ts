@@ -46,7 +46,11 @@ describe('splitText', () => {
    })
 
    it('should not take a number sign inside a word or a lone # for a hashtag, and should know non-latin hashtags', () => {
-      expect(splitText('C# and #1 and # and a#b')).toEqual([{ kind: 'text', value: 'C# and ' }, { kind: 'hashtag', value: '#1' }, { kind: 'text', value: ' and # and a#b' }])
+      expect(splitText('C# and #1 and # and a#b')).toEqual([
+         { kind: 'text', value: 'C# and ' },
+         { kind: 'hashtag', value: '#1' },
+         { kind: 'text', value: ' and # and a#b' },
+      ])
       expect(splitText('#विकास')).toEqual([{ kind: 'hashtag', value: '#विकास' }])
    })
 

@@ -1,6 +1,6 @@
 import { Cover, DetailLoading, DetailMissing, PersonRow, Picture, ReadButton } from '@/components/details/detail-parts'
-import { pollWhile } from '@/components/details/read-status'
 import { NotesField } from '@/components/details/notes-field'
+import { pollWhile } from '@/components/details/read-status'
 import { About, Section } from '@/components/people/person-sections'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,9 +10,8 @@ import { readableError } from '@/lib/trpc-error'
 import { BadgeCheck, ExternalLink, Globe, Users } from 'lucide-react'
 import { Link } from 'react-router'
 
-import { isLinkStatus, linkStatuses } from '../links/link-statuses'
-
 import { type RouterOutputs, trpc } from '../../trpc'
+import { isLinkStatus, linkStatuses } from '../links/link-statuses'
 
 type CompanyDetail = RouterOutputs['companyPage']['detail']
 type Bar = { label: string; count: number }

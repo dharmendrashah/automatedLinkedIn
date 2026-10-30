@@ -3,9 +3,11 @@
 
 export const TABS = ['NEEDS_ME', 'WAITING', 'EVERYONE', 'DO_NOT_CONTACT'] as const
 export const FITS = ['STRONG', 'MAYBE', 'NONE'] as const
+export const SORTS = ['name', 'connectedAt', 'lastSentAt', 'lastReceivedAt', 'lastTouchAt', 'firstSeenAt'] as const
 
 export type Tab = (typeof TABS)[number]
 export type Fit = (typeof FITS)[number]
+export type Sort = { by: (typeof SORTS)[number]; desc: boolean }
 
 // `client=all` shows the Today line of every client.
 export const ALL_CLIENTS = 'all'
@@ -24,11 +26,27 @@ export type View = {
    q?: string
    onlyNew: boolean
    open: string | null
+   // A column sort (`sort=name`, `sort=-lastTouchAt` for newest first); the Filters panel is `filters`, read by the page.
+   sort?: Sort
 }
 
 const isTab = (value: string | null): value is Tab => TABS.some(tab => tab === value)
 const isFit = (value: string | null): value is Fit => FITS.some(fit => fit === value)
 const text = (value: string | null) => value?.trim() || undefined
+
+const readSort = (value: string | null): Sort | undefined => {
+   const desc = value?.startsWith('-') ?? false
+   const by = SORTS.find(sort => sort === (desc ? value?.slice(1) : value))
+
+   return by
+      ? {
+           by,
+           desc,
+        }
+      : undefined
+}
+
+export const sortParam = (sort: Sort | undefined) => (sort ? `${sort.desc ? '-' : ''}${sort.by}` : null)
 
 export const readView = (params: URLSearchParams): View => {
    const tab = params.get('tab')?.toUpperCase() ?? null
@@ -43,11 +61,12 @@ export const readView = (params: URLSearchParams): View => {
       q: text(params.get('q')),
       onlyNew: params.get('new') === '1',
       open: text(params.get('open')) ?? null,
+      sort: readSort(params.get('sort')),
    }
 }
 
 export type ViewChange = Partial<
-   Record<'client' | 'tab' | 'found' | 'fit' | 'label' | 'q' | 'new' | 'open', string | null>
+   Record<'client' | 'tab' | 'found' | 'fit' | 'label' | 'q' | 'new' | 'open' | 'filters' | 'sort', string | null>
 >
 
 // A copy of the address with these keys set, or removed when null or empty.
@@ -74,6 +93,8 @@ export const clientView = (client: string): ViewChange => ({
    q: null,
    new: null,
    open: null,
+   filters: null,
+   sort: null,
 })
 
 // The client asked for, else the one the account in the address belongs to, else the first (the default one).

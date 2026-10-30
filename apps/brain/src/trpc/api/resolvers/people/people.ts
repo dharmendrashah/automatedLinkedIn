@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
-import { ClientService, LinkedInInviteService, PEOPLE_TABS, PeopleService } from 'database'
+import { COUNT_CAP, ClientService, LinkedInInviteService, PEOPLE_SORTS, PEOPLE_TABS, PeopleService } from 'database'
 
-import { INVITE_LIMITS } from '@automatedLinkedIn/contracts'
+import { INVITE_LIMITS, peopleFiltersSchema } from '@automatedLinkedIn/contracts'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -24,6 +24,13 @@ const view = z.object({
    fit: z.enum(['STRONG', 'MAYBE', 'NONE']).optional(),
    label: z.string().trim().toLowerCase().max(30).optional(),
    onlyNew: z.boolean().optional(),
+   filters: peopleFiltersSchema.optional(),
+   sort: z
+      .object({
+         by: z.enum(PEOPLE_SORTS),
+         desc: z.boolean(),
+      })
+      .optional(),
 })
 
 const clientName = z.string().trim().min(1).max(80)
@@ -81,11 +88,18 @@ export const people = router({
    list: ownerProcedure
       .input(
          view.extend({
-            cursor: id.optional(),
+            // How many rows come before the page (`next` of the page before).
+            cursor: z.number().int().min(0).max(COUNT_CAP).optional(),
             limit: z.number().int().min(1).max(100).default(50),
          })
       )
       .query(async ({ ctx, input }) => present(await PeopleService.list(ctx.user.id, input), NO_CLIENT)),
+
+   filterOptions: ownerProcedure
+      .input(z.object({ clientId: id }))
+      .query(async ({ ctx, input }) =>
+         present(await PeopleService.filterOptions(ctx.user.id, input.clientId), NO_CLIENT)
+      ),
 
    counts: ownerProcedure
       .input(z.object({ clientId: id }))
