@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { changeView, clientFor, clientView, listsRedirect, pickedList, readView, showClientPicker } from './address'
+import { changeView, clientFor, clientView, listsRedirect, pickedList, readView, showClientPicker, sortParam } from './address'
 
 describe('readView', () => {
    it('reads the filters and falls back on Needs me', () => {
@@ -13,22 +13,34 @@ describe('readView', () => {
          q: 'ana',
          onlyNew: true,
          open: null,
+         sort: undefined,
       })
       expect(readView(new URLSearchParams('tab=nope&fit=great'))).toMatchObject({
          tab: 'NEEDS_ME',
          fit: undefined,
       })
    })
+
+   it('reads a sort, and ignores a sort it does not know', () => {
+      const view = readView(new URLSearchParams('sort=-lastTouchAt'))
+
+      expect(view.sort).toEqual({
+         by: 'lastTouchAt',
+         desc: true,
+      })
+      expect(sortParam(view.sort)).toBe('-lastTouchAt')
+      expect(readView(new URLSearchParams('sort=salary')).sort).toBeUndefined()
+   })
 })
 
 describe('changeView', () => {
    it('sets keys and removes empty ones, and a new client drops the filters', () => {
-      const params = changeView(new URLSearchParams('found=target&q=x'), {
+      const params = changeView(new URLSearchParams('found=target&q=x&filters={}&sort=name'), {
          tab: 'EVERYONE',
          q: '',
       })
 
-      expect(params.toString()).toBe('found=target&tab=everyone')
+      expect(params.get('tab')).toBe('everyone')
       expect(changeView(params, clientView('c2')).toString()).toBe('tab=everyone&client=c2')
    })
 })

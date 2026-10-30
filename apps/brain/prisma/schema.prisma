@@ -1576,6 +1576,18 @@ model Person {
   waiting      Boolean                  @default(false)
   lastTouchAt  DateTime
   firstSeenAt  DateTime                 @default(now())
+  // For the filters (.plan/network-filters.md), kept by the index. Title and country come from the newest profile read.
+  title          String?
+  country        String?
+  // Null until an account's profile visit says.
+  premium        Boolean?
+  profileRead    Boolean                @default(false)
+  // The earliest connection of the client's accounts that still holds; null when not connected.
+  connectedAt    DateTime?
+  // The newest message of the client's accounts to them, and theirs to the accounts (LinkedIn's wall-clock, see LinkedInConversation).
+  lastSentAt     DateTime?
+  lastReceivedAt DateTime?
+  inviteState    PersonInviteState      @default(NONE)
   search       Unsupported("tsvector")?
   createdAt    DateTime                 @default(now())
   updatedAt    DateTime                 @updatedAt
@@ -1590,6 +1602,20 @@ model Person {
   @@index([foundBy], type: Gin)
   @@index([labels], type: Gin)
   @@index([search], map: "Person_search_idx", type: Gin)
+  @@index([clientId, country])
+  @@index([clientId, connectedAt])
+  @@index([clientId, lastSentAt])
+  @@index([clientId, lastReceivedAt])
+}
+
+// Where the newest invite of the client to a person stands: QUEUED (not sent yet), PENDING (sent, no answer), ACCEPTED, or
+// ENDED (withdrawn or failed).
+enum PersonInviteState {
+  NONE
+  QUEUED
+  PENDING
+  ACCEPTED
+  ENDED
 }
 
 // One row that ties a person to a client: the request, connection or conversation of an account, the list member or the target.

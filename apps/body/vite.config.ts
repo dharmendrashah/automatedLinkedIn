@@ -41,7 +41,9 @@ export default defineConfig({
             { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler|react-router)[\\/]/ },
             { name: 'radix', test: /node_modules[\\/](radix-ui|@radix-ui|@floating-ui|vaul)[\\/]/ },
             { name: 'icons', test: /node_modules[\\/](lucide-react|@tabler)[\\/]/ },
-            { name: 'data', test: /node_modules[\\/](@tanstack|@trpc|oidc-client-ts|react-oidc-context|zod)[\\/]/ }
+            { name: 'data', test: /node_modules[\\/](@tanstack|@trpc|oidc-client-ts|react-oidc-context)[\\/]/ },
+            { name: 'schemas', test: /node_modules[\\/]zod[\\/]/ },
+            { name: 'dates', test: /node_modules[\\/](date-fns|react-day-picker)[\\/]/ }
           ]
         }
       }

@@ -3,15 +3,8 @@ export { AccountTodayService } from './accountToday.service'
 export { CdnFileService } from './cdnFile.service'
 export { ClientService } from './client.service'
 export { PeopleIndexService } from './peopleIndex.service'
-export {
-   COUNT_CAP,
-   EXPORT_CAP,
-   PEOPLE_TABS,
-   type PeopleQuery,
-   PeopleService,
-   type PeopleTab,
-   type PersonChanges,
-} from './people.service'
+export { COUNT_CAP, EXPORT_CAP, type PeopleQuery, PeopleService, type PersonChanges } from './people.service'
+export { PEOPLE_SORTS, PEOPLE_TABS, type PeopleSort, type PeopleTab } from './peopleFilters'
 export { ConflictError } from './conflict'
 export { type IcpInput, IcpService } from './icp.service'
 export { RETENTION, RetentionService } from './retention.service'

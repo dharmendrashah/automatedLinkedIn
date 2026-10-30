@@ -1,8 +1,8 @@
 # My network filters
 
-- Status: draft
+- Status: in progress
 - Created: 2026-10-30
-- Locked by user: no
+- Locked by user: yes, 2026-10-30 ("work on this and continue with brain development")
 
 ## Goal
 
@@ -19,6 +19,8 @@ Confirmed (owner, 2026-10-30):
 5. The tab counts keep showing the client's totals.
 6. Saved filters (named views) come later.
 7. The UI is designed first on sample data and shown to the owner; building starts only when the owner asks.
+8. Dates use the shadcn date picker (Popover + Calendar, react-day-picker) as a range with quick choices and a from and to time.
+9. The people list is a TanStack Table fed straight from brain through TanStack Query, with rows rendered by TanStack Virtual so a long list stays smooth; sorting is done by brain.
 
 Proposed (owner to confirm with the design):
 
@@ -57,6 +59,15 @@ Proposed (owner to confirm with the design):
 Open questions (must be empty before locking):
 
 1. The design on sample data (`/preview/network-filters`, development server only) is approved.
+
+## Build decisions (2026-10-30)
+
+- Filter input is one zod schema in `packages/contracts` (`peopleFiltersSchema`), used by brain's `people.list` and `people.export`; dates are exact instants (ISO), the browser turns the owner's local day and time into them.
+- `Person` gains `title`, `country`, `premium` (null until the spider learns it), `profileRead`, `connectedAt`, `lastSentAt`, `lastReceivedAt` and `inviteState` (enum `PersonInviteState`: NONE, QUEUED, PENDING, ACCEPTED, ENDED), filled by the index; `PersonSnapshot` gets the index trigger so a profile read refreshes them; title, country and a missing company come from the newest paid read.
+- Message times are LinkedIn's wall-clock kept as if UTC (see `LinkedInConversation`), so the two message filters can be off by the account's timezone offset.
+- `people.list` pages by offset (capped at 10,000, like the counts) instead of an id cursor, because sorting by a column that can be empty breaks Prisma's cursor; it also returns `total` (capped) for the table, and takes `sort` (name, connected, last message, last touch).
+- `people.filterOptions` returns the countries, the top companies and the labels of a client with how many people have each.
+- Country flags: the browser maps a country name to its code with `Intl.DisplayNames` (no table to keep).
 
 ## Design preview
 
@@ -107,4 +118,9 @@ Open questions (must be empty before locking):
 
 ## Outcome
 
-Filled in when done.
+Built on branch `feat/network-filters-design` (2026-10-30); not seen in a browser behind sign-in, not deployed.
+
+- Contracts: `peopleFiltersSchema` (+ tests). Brain: migration `20261030160000_add_network_filters` (additive: `PersonInviteState`, eight `Person` columns, four indexes, the index trigger on `PersonSnapshot`, every person marked for a rebuild); the index fills the columns (`profileFacts` reads title, company and country from the newest paid read, which now also keeps `country`); `peopleWhere` / `orderOf` (`database/peopleFilters.ts`); `people.list` takes `filters` and `sort`, pages by offset and returns `total`; `people.filterOptions`. Unit and integration tests pass.
+- Body: the Filters button, side sheet (shadcn Calendar range with quick choices and times) and chips on `/network`, kept in the address (`filters`, `sort`); the people table is TanStack Table v9 (brain sorts Person and Last touch) with TanStack Virtual rows that load the next page near the end (no Load more button); company above the name, Premium mark, country flag (`lib/country-flag.ts`). The design preview page was removed.
+- Deviations: the page keeps its own copy of the filter schema (contracts ship as CommonJS and would bundle all of zod; a test keeps the copies equal); zod and the date libraries have their own chunks.
+- Follow-ups: Premium stays empty until the spider's profile reader learns it (needs the owner's recording; drawer plan); the deploy must run the migration, and new filters miss people until the index job has rebuilt them.

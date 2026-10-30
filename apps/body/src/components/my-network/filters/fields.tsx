@@ -5,11 +5,9 @@ import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Check, ChevronDown, X } from 'lucide-react'
-import { type ReactNode, useId, useState } from 'react'
+import { type ReactNode, useId } from 'react'
 
 import { cn } from '@/lib/utils'
-
-import { type DateRange, QUICK_RANGES } from './model'
 
 export type Option = { value: string; label: string; icon?: ReactNode; hint?: string }
 
@@ -158,64 +156,27 @@ export const Choice = <V extends string>({
    </Field>
 )
 
-// A from and a to day, either may stay empty, with quick choices above.
-export const DateRangeField = ({
+// Yes, no, or either (nothing chosen).
+export const YesNo = ({
    label,
+   yes,
+   no,
    value,
-   disabled = false,
    onChange,
 }: {
    label: string
-   value: DateRange
-   disabled?: boolean
-   onChange: (value: DateRange) => void
-}) => {
-   const id = useId()
-   const [now] = useState(() => new Date())
-
-   return (
-      <Field label={label} htmlFor={`${id}-from`}>
-         <div className="flex flex-wrap gap-1">
-            {QUICK_RANGES.map(([word, range]) => {
-               const quick = range(now)
-               const on = quick.from === value.from && quick.to === value.to
-
-               return (
-                  <Button
-                     key={word}
-                     type="button"
-                     variant={on ? 'secondary' : 'ghost'}
-                     size="sm"
-                     className="h-7 px-2 text-xs"
-                     disabled={disabled}
-                     aria-pressed={on}
-                     onClick={() => onChange(on ? {} : quick)}
-                  >
-                     {word}
-                  </Button>
-               )
-            })}
-         </div>
-         <div className="flex items-center gap-2">
-            <Input
-               id={`${id}-from`}
-               type="date"
-               aria-label={`${label} from`}
-               value={value.from ?? ''}
-               max={value.to}
-               disabled={disabled}
-               onChange={event => onChange({ ...value, from: event.target.value || undefined })}
-            />
-            <span className="text-muted-foreground text-xs">to</span>
-            <Input
-               type="date"
-               aria-label={`${label} to`}
-               value={value.to ?? ''}
-               min={value.from}
-               disabled={disabled}
-               onChange={event => onChange({ ...value, to: event.target.value || undefined })}
-            />
-         </div>
-      </Field>
-   )
-}
+   yes: string
+   no: string
+   value: boolean | undefined
+   onChange: (value: boolean | undefined) => void
+}) => (
+   <Choice
+      label={label}
+      options={[
+         ['yes', yes],
+         ['no', no],
+      ]}
+      value={value === undefined ? undefined : value ? 'yes' : 'no'}
+      onChange={next => onChange(next === undefined ? undefined : next === 'yes')}
+   />
+)

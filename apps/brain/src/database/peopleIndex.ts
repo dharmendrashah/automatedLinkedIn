@@ -1,4 +1,4 @@
-import { type PersonFit, type PersonLinkKind, type PersonStatus } from 'generated/prisma/client'
+import { type PersonFit, type PersonInviteState, type PersonLinkKind, type PersonStatus } from 'generated/prisma/client'
 
 // The pure part of My network's index (.plan/network-hub.md): from the rows that tie one profile to the owner, one draft person
 // per client. Tested without a database.
@@ -39,6 +39,8 @@ export type ConversationRow = {
    doneAt: Date | null
    // Their newest words, when the last message is theirs.
    lastText: string | null
+   // When their newest message came, whoever wrote last.
+   theirLastAt: Date | null
    createdAt: Date
 }
 
@@ -82,6 +84,9 @@ export type InviteRow = {
    createdAt: Date
 }
 
+// What the owner's newest profile read says (`profileFacts`), the same in every client.
+export type ProfileFacts = { title: string | null; company: string | null; country: string | null }
+
 export type Sources = {
    requests: RequestRow[]
    connections: ConnectionRow[]
@@ -89,6 +94,7 @@ export type Sources = {
    members: MemberRow[]
    targets: TargetRow[]
    invites: InviteRow[]
+   facts: ProfileFacts | null
 }
 
 export type DraftLink = {
@@ -117,6 +123,13 @@ export type DraftPerson = {
    waiting: boolean
    lastTouchAt: Date
    firstSeenAt: Date
+   title: string | null
+   country: string | null
+   profileRead: boolean
+   connectedAt: Date | null
+   lastSentAt: Date | null
+   lastReceivedAt: Date | null
+   inviteState: PersonInviteState
    links: DraftLink[]
 }
 
@@ -165,6 +178,27 @@ const invitePending = (row: InviteRow) => ['SENT', 'UNKNOWN', 'WITHDRAW_QUEUED',
 
 const inviteWent = (row: InviteRow) => invitePending(row) || row.state === 'ACCEPTED' || row.state === 'WITHDRAWN'
 
+const INVITE_STATE: Record<string, PersonInviteState> = {
+   QUEUED: 'QUEUED',
+   SENDING: 'QUEUED',
+   SENT: 'PENDING',
+   UNKNOWN: 'PENDING',
+   WITHDRAW_QUEUED: 'PENDING',
+   WITHDRAWING: 'PENDING',
+   ACCEPTED: 'ACCEPTED',
+   WITHDRAWN: 'ENDED',
+   FAILED: 'ENDED',
+}
+
+// The newest invite that was not taken back or refused.
+const inviteStateOf = (rows: InviteRow[]): PersonInviteState => {
+   const newest = rows
+      .filter(row => row.state in INVITE_STATE)
+      .reduce<InviteRow | null>((best, row) => (!best || row.createdAt > best.createdAt ? row : best), null)
+
+   return newest ? (INVITE_STATE[newest.state] ?? 'NONE') : 'NONE'
+}
+
 // What Needs me puts first: a reply, then a request, then someone ready to invite.
 export const PRIORITY = {
    REPLY: 3,
@@ -172,7 +206,7 @@ export const PRIORITY = {
    INVITE: 1,
 } as const
 
-type Rows = { [K in keyof Sources]: Sources[K] }
+type Rows = Omit<Sources, 'facts'>
 
 const emptyRows = (): Rows => ({
    requests: [],
@@ -203,7 +237,7 @@ const memberReason = (member: MemberRow) => {
 
 // One client's rows for a profile into one person: the most useful reason first (a reply, a request, why a list found them,
 // the connection, the target), the best fit, the status the rows say, and what waits on whom.
-const draftOf = (clientId: string, rows: Rows, profileUrl: string): DraftPerson => {
+const draftOf = (clientId: string, rows: Rows, profileUrl: string, facts: ProfileFacts | null): DraftPerson => {
    const reply = rows.conversations.find(row => open(row) && row.lastDirection === 'THEM')
    const request = rows.requests.find(pending)
    const [member] = rows.members
@@ -347,7 +381,7 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string): DraftPerson 
       clientId,
       name: first?.name ?? member?.name ?? target?.name ?? rows.invites[0]?.name ?? null,
       headline: connection?.headline ?? request?.headline ?? member?.headline ?? target?.headline ?? null,
-      company: member?.company ?? target?.company ?? null,
+      company: member?.company ?? target?.company ?? facts?.company ?? null,
       photoUrl:
          rows.connections.find(row => row.photoUrl)?.photoUrl ??
          rows.requests.find(row => row.photoUrl)?.photoUrl ??
@@ -380,6 +414,16 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string): DraftPerson 
             ...rows.invites.map(row => row.acceptedAt ?? row.invitedAt),
          ]) ?? new Date(0),
       firstSeenAt: earliest(seen),
+      title: facts?.title ?? null,
+      country: facts?.country ?? null,
+      profileRead: facts !== null,
+      connectedAt: rows.connections
+         .filter(connected)
+         .map(row => row.connectedOn ?? row.createdAt)
+         .reduce<Date | null>((best, date) => (!best || date < best ? date : best), null),
+      lastSentAt: latest(rows.conversations.map(row => row.lastReplyAt)),
+      lastReceivedAt: latest(rows.conversations.map(row => row.theirLastAt)),
+      inviteState: inviteStateOf(rows.invites),
       links,
    }
 }
@@ -408,5 +452,5 @@ export const draftPeople = (
    sources.targets.forEach(row => rowsOf(row.clientId ?? defaultClientId).targets.push(row))
    sources.invites.forEach(row => rowsOf(row.clientId).invites.push(row))
 
-   return [...byClient].map(([clientId, rows]) => draftOf(clientId, rows, profileUrl))
+   return [...byClient].map(([clientId, rows]) => draftOf(clientId, rows, profileUrl, sources.facts))
 }

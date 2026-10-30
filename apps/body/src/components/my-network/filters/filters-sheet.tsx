@@ -5,8 +5,10 @@ import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { type ReactNode, useId } from 'react'
 
+import { countText } from '../rows'
 import { STATUSES } from '../words'
-import { Choice, DateRangeField, MultiPick, type Option, TextField } from './fields'
+import { DateTimeRangeField } from './date-time-range'
+import { Choice, MultiPick, type Option, TextField, YesNo } from './fields'
 import { INVITE_STATES, INVITE_WORDS, NO_FILTERS, type PeopleFilters, chipsOf } from './model'
 
 export type FilterOptions = {
@@ -20,8 +22,9 @@ type Props = {
    open: boolean
    value: PeopleFilters
    options: FilterOptions
-   // Matches in the chosen tab, capped like the tab counts.
-   count: number
+   // Matches in the chosen tab (null while counting), capped like the tab counts.
+   count: number | null
+   cap: number
    onOpenChange: (open: boolean) => void
    onChange: (value: PeopleFilters) => void
 }
@@ -47,13 +50,13 @@ const Tick = ({ label, checked, onChange }: { label: string; checked: boolean; o
 }
 
 // Every filter beyond the toolbar's, grouped by who they are, how they are tied to the owner, what happened, and the owner's work.
-export const FiltersSheet = ({ open, value, options, count, onOpenChange, onChange }: Props) => {
+export const FiltersSheet = ({ open, value, options, count, cap, onOpenChange, onChange }: Props) => {
    const set = (change: Partial<PeopleFilters>) => onChange({ ...value, ...change })
    const on = chipsOf(value).length
 
    return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-         <SheetContent className="w-full gap-0 sm:max-w-md">
+         <SheetContent className="w-full gap-0 sm:max-w-lg">
             <SheetHeader className="border-b">
                <SheetTitle>Filters</SheetTitle>
                <SheetDescription>
@@ -83,12 +86,10 @@ export const FiltersSheet = ({ open, value, options, count, onOpenChange, onChan
                      value={value.countries}
                      onChange={countries => set({ countries })}
                   />
-                  <Choice
+                  <YesNo
                      label="LinkedIn Premium"
-                     options={[
-                        ['yes', 'Premium'],
-                        ['no', 'Not Premium'],
-                     ]}
+                     yes="Premium"
+                     no="Not Premium"
                      value={value.premium}
                      onChange={premium => set({ premium })}
                   />
@@ -98,14 +99,14 @@ export const FiltersSheet = ({ open, value, options, count, onOpenChange, onChan
                   <Choice
                      label="Connection"
                      options={[
-                        ['connected', 'Connected'],
-                        ['not-connected', 'Not connected'],
+                        ['CONNECTED', 'Connected'],
+                        ['NOT_CONNECTED', 'Not connected'],
                      ]}
                      value={value.connection}
                      onChange={connection =>
                         set({
                            connection,
-                           ...(connection === 'connected'
+                           ...(connection === 'CONNECTED'
                               ? {}
                               : {
                                    connectedTo: undefined,
@@ -114,7 +115,7 @@ export const FiltersSheet = ({ open, value, options, count, onOpenChange, onChan
                         })
                      }
                   />
-                  {value.connection === 'connected' && options.accounts.length > 1 ? (
+                  {value.connection === 'CONNECTED' && options.accounts.length > 1 ? (
                      <Choice
                         label="Connected to"
                         options={options.accounts.map(account => [account.value, account.label])}
@@ -122,10 +123,10 @@ export const FiltersSheet = ({ open, value, options, count, onOpenChange, onChan
                         onChange={connectedTo => set({ connectedTo })}
                      />
                   ) : null}
-                  <DateRangeField
+                  <DateTimeRangeField
                      label="Connected between"
                      value={value.connectedAt}
-                     disabled={value.connection === 'not-connected'}
+                     disabled={value.connection === 'NOT_CONNECTED'}
                      onChange={connectedAt => set({ connectedAt })}
                   />
                   <MultiPick
@@ -141,15 +142,15 @@ export const FiltersSheet = ({ open, value, options, count, onOpenChange, onChan
                </Group>
                <Separator />
                <Group title="Activity">
-                  <DateRangeField
+                  <DateTimeRangeField
                      label="Last message from you"
                      value={value.lastSent}
                      onChange={lastSent => set({ lastSent })}
                   />
-                  <DateRangeField
+                  <DateTimeRangeField
                      label="Last reply from them"
-                     value={value.lastReply}
-                     onChange={lastReply => set({ lastReply })}
+                     value={value.lastReceived}
+                     onChange={lastReceived => set({ lastReceived })}
                   />
                   <div className="grid gap-2">
                      <Tick
@@ -163,12 +164,12 @@ export const FiltersSheet = ({ open, value, options, count, onOpenChange, onChan
                         onChange={replyWaiting => set({ replyWaiting })}
                      />
                   </div>
-                  <DateRangeField
+                  <DateTimeRangeField
                      label="Last touch between"
                      value={value.lastTouch}
                      onChange={lastTouch => set({ lastTouch })}
                   />
-                  <DateRangeField
+                  <DateTimeRangeField
                      label="First seen between"
                      value={value.firstSeen}
                      onChange={firstSeen => set({ firstSeen })}
@@ -211,12 +212,10 @@ export const FiltersSheet = ({ open, value, options, count, onOpenChange, onChan
                         set({ statuses: STATUSES.flatMap(([status]) => (picked.includes(status) ? [status] : [])) })
                      }
                   />
-                  <Choice
+                  <YesNo
                      label="Profile"
-                     options={[
-                        ['read', 'Read'],
-                        ['not-read', 'Not read'],
-                     ]}
+                     yes="Read"
+                     no="Not read"
                      value={value.profileRead}
                      onChange={profileRead => set({ profileRead })}
                   />
@@ -227,9 +226,11 @@ export const FiltersSheet = ({ open, value, options, count, onOpenChange, onChan
                   Clear all
                </Button>
                <Button onClick={() => onOpenChange(false)}>
-                  {count === 0
-                     ? 'No one matches'
-                     : `Show ${count.toLocaleString()} ${count === 1 ? 'person' : 'people'}`}
+                  {count === null
+                     ? 'Counting…'
+                     : count === 0
+                       ? 'No one matches'
+                       : `Show ${countText(count, cap)} ${count === 1 ? 'person' : 'people'}`}
                </Button>
             </SheetFooter>
          </SheetContent>
