@@ -38,9 +38,25 @@ const AccountProfile = lazy(() =>
 )
 // The post canvas carries the blocks, the preview and the schedule dialog, and is only opened after an account is picked.
 const PostingCanvas = lazy(() => import('./pages/PostingCanvas').then(({ PostingCanvas: page }) => ({ default: page })))
+// Design previews on invented data, served by the development server only (left out of a build).
+const FiltersPreview = import.meta.env.DEV
+   ? lazy(() =>
+        import('./pages/previews/NetworkFiltersPreview').then(({ NetworkFiltersPreview: page }) => ({ default: page }))
+     )
+   : null
 
 const App = () => (
    <Routes>
+      {FiltersPreview ? (
+         <Route
+            path="/preview/network-filters"
+            element={
+               <Suspense fallback={null}>
+                  <FiltersPreview />
+               </Suspense>
+            }
+         />
+      ) : null}
       <Route element={<PublicLayout />}>
          <Route path="/login" element={<Login />} />
          <Route path="/signup" element={<Signup />} />
