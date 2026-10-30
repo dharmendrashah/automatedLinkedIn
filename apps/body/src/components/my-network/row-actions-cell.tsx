@@ -5,7 +5,7 @@ import { type ReactNode } from 'react'
 
 import { type PersonRow } from './types'
 
-import { messageAction } from './row-actions'
+import { inviteBlock, messageAction } from './row-actions'
 import { nameOf } from './words'
 
 type Props = {
@@ -58,7 +58,8 @@ const Action = ({
 
 // The row's own actions, shown on hover, on keyboard focus and always on screens without hover. Clicks never open the drawer.
 export const RowActions = ({ row, invitesLive, onInvite, onPreview }: Props) => {
-   const message = messageAction(row, invitesLive)
+   const message = messageAction(row)
+   const blocked = inviteBlock(row, invitesLive)
    const name = nameOf(row)
 
    return (
@@ -66,15 +67,16 @@ export const RowActions = ({ row, invitesLive, onInvite, onPreview }: Props) => 
          className="flex justify-end gap-0.5 opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100"
          onClick={event => event.stopPropagation()}
       >
-         {message.kind === 'INVITE' ? (
-            <Action label={`Invite ${name}`} icon={<UserPlus />} onClick={() => onInvite(row)} />
-         ) : (
-            <Action
-               label={message.kind === 'OPEN_CHAT' ? `Open chat with ${name}` : `Message ${name}`}
-               icon={<MessageSquare />}
-               {...(message.kind === 'NONE' ? { disabled: message.reason } : { href: message.href })}
-            />
-         )}
+         <Action
+            label={message.kind === 'OPEN_CHAT' ? `Open chat with ${name}` : `Message ${name}`}
+            icon={<MessageSquare />}
+            {...(message.kind === 'NONE' ? { disabled: message.reason } : { href: message.href })}
+         />
+         <Action
+            label={`Invite ${name}`}
+            icon={<UserPlus />}
+            {...(blocked ? { disabled: blocked } : { onClick: () => onInvite(row) })}
+         />
          <Action label="Quick preview" icon={<PanelRight />} onClick={() => onPreview(row)} />
          <Action label="Email" icon={<Mail />} disabled="Coming soon" />
          <Action label="Phone" icon={<Phone />} disabled="Coming soon" />

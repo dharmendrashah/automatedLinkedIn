@@ -27,6 +27,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { readableError } from '@/lib/trpc-error'
 import { Ban, ChevronLeft, ChevronRight, Ellipsis, Mail, MessageSquare, Phone, Trash2, UserPlus } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
@@ -38,7 +39,7 @@ import { trpc } from '../../trpc'
 import { PANES, type Pane } from './address'
 import { ChatPane } from './chat-pane'
 import { HistoryPane } from './history-pane'
-import { messageAction } from './row-actions'
+import { inviteBlock, messageAction } from './row-actions'
 import { nextAfter, nextStepOf } from './rows'
 import { type Ask } from './use-answer'
 import { FIT_WORDS, STATUSES, foundByWord, isStatus, nameOf } from './words'
@@ -119,34 +120,56 @@ const Soon = ({ icon, label }: { icon: ReactNode; label: string }) => (
    </Button>
 )
 
-// Open chat in a new tab (the newest conversation, or a new message from the connected account); Invite for someone not connected.
+// A disabled button keeps its reason in a tooltip (a disabled button gets no pointer events, so the span carries it).
+const Blocked = ({ reason, children }: { reason: string; children: ReactNode }) => (
+   <Tooltip>
+      <TooltipTrigger asChild>
+         <span tabIndex={0} aria-label={reason}>
+            {children}
+         </span>
+      </TooltipTrigger>
+      <TooltipContent>{reason}</TooltipContent>
+   </Tooltip>
+)
+
+// Open chat in a new tab (the newest conversation, or a new message from the connected account), and Invite, with or without a note.
 const ContactActions = ({ person, onInvite }: { person: Person; onInvite: ((id: string) => void) | undefined }) => {
-   const message = messageAction(person, onInvite !== undefined)
+   const message = messageAction(person)
+   const blocked = inviteBlock(person, onInvite !== undefined)
 
    return (
       <>
-         {message.kind === 'INVITE' && onInvite ? (
-            <Button size="sm" onClick={() => onInvite(person.id)}>
-               <UserPlus />
-               Invite
-            </Button>
-         ) : message.kind === 'OPEN_CHAT' || message.kind === 'START_CHAT' ? (
+         {message.kind === 'NONE' ? (
+            <Blocked reason={message.reason}>
+               <Button size="sm" variant="outline" disabled>
+                  <MessageSquare />
+                  Open chat
+               </Button>
+            </Blocked>
+         ) : (
             <Button asChild size="sm">
                <a href={message.href} target="_blank" rel="noopener noreferrer">
                   <MessageSquare />
                   Open chat
                </a>
             </Button>
-         ) : (
-            <span className="flex items-center gap-2">
-               <Button size="sm" disabled aria-label={`Open chat: ${message.kind === 'NONE' ? message.reason : ''}`}>
-                  <MessageSquare />
-                  Open chat
+         )}
+         {blocked || !onInvite ? (
+            <Blocked reason={blocked ?? 'Invites are not on yet'}>
+               <Button size="sm" variant="outline" disabled>
+                  <UserPlus />
+                  Invite
                </Button>
-               {message.kind === 'NONE' ? (
-                  <span className="text-muted-foreground text-xs">{message.reason}</span>
-               ) : null}
-            </span>
+            </Blocked>
+         ) : (
+            <Button
+               size="sm"
+               variant={message.kind === 'NONE' ? 'default' : 'outline'}
+               onClick={() => onInvite(person.id)}
+            >
+               <UserPlus />
+               Invite
+            </Button>
          )}
          <Soon icon={<Mail />} label="Email" />
          <Soon icon={<Phone />} label="Phone" />

@@ -111,3 +111,4 @@ Built on `feat/network-profile-badges` (PR #145), 2026-10-31:
    - Experience links each company to `/companies?company=<slug>` in a new tab (`company-page.ts`).
 - Checks: lint, type check, build, unit tests (contracts 229, body 881, spider 1353, brain 1587), the data reads, company and people integration tests, and the backfill's selection checked on sample rows. Not seen in a browser.
 - Deviation: the drawer's Invite step button moved into the card's actions (Open chat becomes Invite for someone not connected), so it is not shown twice.
+- Owner's follow-up (same PR): Invite is its own button in the drawer and on every row, beside Open chat / Message. It opens the invite dialog (note optional). When it cannot go, it is disabled and its tooltip says why: On Do not contact, Already connected, Invite already queued, sent or accepted, or Invites are not on yet. The rules are split into `messageAction` (chats only) and `inviteBlock`.

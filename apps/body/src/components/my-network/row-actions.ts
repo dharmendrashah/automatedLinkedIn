@@ -4,8 +4,7 @@ import { type PersonRow } from './types'
 
 export type ActionRow = Pick<PersonRow, 'slug' | 'doNotContact' | 'connectedAt' | 'inviteState' | 'links'>
 
-export type MessageAction =
-   { kind: 'OPEN_CHAT' | 'START_CHAT'; href: string } | { kind: 'INVITE' } | { kind: 'NONE'; reason: string }
+export type MessageAction = { kind: 'OPEN_CHAT' | 'START_CHAT'; href: string } | { kind: 'NONE'; reason: string }
 
 type Link = ActionRow['links'][number]
 
@@ -29,9 +28,9 @@ const chatsLink = (row: ActionRow) => {
    return chat ? `/unibox/${encodeURIComponent(chat.sourceId)}` : null
 }
 
-// A conversation opens (even on Do not contact: reading is allowed); a connection starts one from its account; anyone else is
-// invited (LinkedIn allows only InMail to them).
-export const messageAction = (row: ActionRow, invitesLive: boolean): MessageAction => {
+// A conversation opens (even on Do not contact: reading is allowed); a connection starts one from its account; anyone else needs
+// an invite first (LinkedIn allows only InMail to them).
+export const messageAction = (row: ActionRow): MessageAction => {
    const chat = chatsLink(row)
 
    if (chat) {
@@ -65,19 +64,21 @@ export const messageAction = (row: ActionRow, invitesLive: boolean): MessageActi
            }
    }
 
-   const held = INVITE_HELD[row.inviteState]
+   return {
+      kind: 'NONE',
+      reason: 'Not connected yet',
+   }
+}
 
-   if (held) {
-      return {
-         kind: 'NONE',
-         reason: held,
-      }
+// Why no invite can go to the person, or null when one can.
+export const inviteBlock = (row: ActionRow, invitesLive: boolean) => {
+   if (row.doNotContact) {
+      return 'On Do not contact'
    }
 
-   return invitesLive
-      ? { kind: 'INVITE' }
-      : {
-           kind: 'NONE',
-           reason: 'Invites are not on yet',
-        }
+   if (row.connectedAt) {
+      return 'Already connected'
+   }
+
+   return INVITE_HELD[row.inviteState] ?? (invitesLive ? null : 'Invites are not on yet')
 }
