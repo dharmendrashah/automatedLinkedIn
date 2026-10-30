@@ -6,11 +6,14 @@ import {
    TABS,
    type View,
    type ViewChange,
+   allClientsOf,
    changeView,
    clientFor,
    clientView,
    readView,
+   showsAllClients,
    sortParam,
+   todayOfAll,
 } from '@/components/my-network/address'
 import { BulkBar, type BulkChange } from '@/components/my-network/bulk-bar'
 import { Filters, QuickFilters, SearchBox } from '@/components/my-network/filters'
@@ -37,7 +40,7 @@ import {
    stepFrom,
    toggleChosen,
 } from '@/components/my-network/rows'
-import { AllClients, FirstVisit, ResultsLine, Today } from '@/components/my-network/summary'
+import { FirstVisit, ResultsLine, Today } from '@/components/my-network/summary'
 import { useAnswer } from '@/components/my-network/use-answer'
 import { useSeenOnLeave } from '@/components/my-network/use-seen-on-leave'
 import { nameOf } from '@/components/my-network/words'
@@ -95,6 +98,10 @@ const paneFor = (row: PersonRow | undefined): Pane => (row?.profileRead ? 'profi
 
 type PeopleProps = {
    client: Client
+   // Where Add people puts people: the client itself, or the default client under All clients.
+   addTo: Client
+   // The clients to name on each row under All clients when there are several; null otherwise.
+   clients: Array<{ id: string; name: string }> | null
    accountId: string | undefined
    view: View
    // The Filters panel, kept in the address as `filters`.
@@ -103,8 +110,8 @@ type PeopleProps = {
    pickers: ReactNode
 }
 
-// One client's people: Today, results, the four tabs, filters, the table and the drawer.
-const ClientPeople = ({ client, accountId, view, filters, update, pickers }: PeopleProps) => {
+// One client's people (or every client's): Today, the tabs, filters, the table and the drawer.
+const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update, pickers }: PeopleProps) => {
    useSeenOnLeave(client.id)
 
    const [days, setDays] = useState<ResultDays>(7)
@@ -214,7 +221,10 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
       return () => window.removeEventListener('keydown', onKey)
    }, [ids, selectedId, view.open, adding, open])
 
-   const line = today.data?.find(({ clientId }) => clientId === client.id)
+   const line =
+      client.id === ALL_CLIENTS
+         ? todayOfAll(today.data ?? [])
+         : today.data?.find(({ clientId }) => clientId === client.id)
    const invitesLive = line?.invitesLive ?? false
    const stopped = (line?.stopped ?? []).map(({ accountId: id }) => id)
    const nobody = counts.data !== undefined && counts.data.EVERYONE === 0 && counts.data.DO_NOT_CONTACT === 0
@@ -325,6 +335,7 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
             ) : rows.length > 0 ? (
                <PeopleTable
                   rows={rows}
+                  clients={clients}
                   accounts={client.accounts}
                   stopped={stopped}
                   invitesLive={invitesLive}
@@ -399,10 +410,10 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
                {...(invitesLive && { onInvite: (id: string) => setInviting([id]) })}
             />
          ) : null}
-         <AddPeopleDialog key={client.id} client={client} open={adding} onOpenChange={setAdding} />
+         <AddPeopleDialog key={addTo.id} client={addTo} open={adding} onOpenChange={setAdding} />
          <InviteDialog
             key={inviting.join()}
-            clientId={client.id}
+            clientId={rows.find(row => row.id === inviting[0])?.clientId ?? addTo.id}
             personIds={inviting}
             source={view.found ?? undefined}
             onClose={() => setInviting([])}
@@ -412,18 +423,6 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
             }}
          />
          <StartAnywayDialog message={refusal} onConfirm={goAnyway} onCancel={stopAsking} />
-      </>
-   )
-}
-
-const AllClientsToday = ({ pickers, onPick }: { pickers: ReactNode; onPick: (clientId: string) => void }) => {
-   const today = trpc.people.today.useQuery()
-
-   return (
-      <>
-         {pickers}
-         {today.error ? <p className="text-destructive text-sm">{readableError(today.error)}</p> : null}
-         {today.data ? <AllClients lines={today.data} onPick={onPick} /> : null}
       </>
    )
 }
@@ -465,8 +464,9 @@ export const Network = () => {
       )
    }
 
-   const all = view.client === ALL_CLIENTS && clients.data.length > 1
-   const account = client.accounts.some(({ id }) => id === accountId) ? accountId : undefined
+   const all = showsAllClients(view.client, accountId)
+   const shown = all ? allClientsOf(clients.data) : client
+   const account = shown.accounts.some(({ id }) => id === accountId) ? accountId : undefined
    const pickClient = (id: string) =>
       void navigate({
          pathname: '/network',
@@ -479,14 +479,14 @@ export const Network = () => {
       void navigate({
          pathname: id ? `/network/${encodeURIComponent(id)}` : '/network',
          search: changeView(params, {
-            client: client.id,
+            client: shown.id,
             open: null,
          }).toString(),
       })
    const pickers = (
       <Pickers
          clients={clients.data}
-         clientId={all ? ALL_CLIENTS : client.id}
+         clientId={shown.id}
          accountId={account}
          onClient={pickClient}
          onAccount={pickAccount}
@@ -496,19 +496,17 @@ export const Network = () => {
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
          <h2 className="sr-only">My network</h2>
-         {all ? (
-            <AllClientsToday pickers={pickers} onPick={pickClient} />
-         ) : (
-            <ClientPeople
-               key={client.id}
-               client={client}
-               filters={readFilters(params.get('filters'))}
-               accountId={account}
-               view={view}
-               update={update}
-               pickers={pickers}
-            />
-         )}
+         <ClientPeople
+            key={shown.id}
+            client={shown}
+            addTo={client}
+            clients={all && clients.data.length > 1 ? clients.data : null}
+            filters={readFilters(params.get('filters'))}
+            accountId={account}
+            view={view}
+            update={update}
+            pickers={pickers}
+         />
       </div>
    )
 }

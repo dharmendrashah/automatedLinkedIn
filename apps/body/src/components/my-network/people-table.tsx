@@ -36,6 +36,8 @@ export type PeopleSort = NonNullable<RouterInputs['people']['list']['sort']>
 
 type Props = {
    rows: PersonRow[]
+   // The clients to name on each row (All clients with several); null to name none.
+   clients: Array<{ id: string; name: string }> | null
    accounts: Client['accounts']
    // Accounts whose invites are stopped (signed out, restricted, LinkedIn's limit): their chips show red.
    stopped: string[]
@@ -169,7 +171,7 @@ const SortHeader = ({
    )
 }
 
-const PersonCell = ({ row }: { row: PersonRow }) => {
+const PersonCell = ({ row, client }: { row: PersonRow; client: string | undefined }) => {
    const name = nameOf(row)
    const flag = flagOf(row.country)
 
@@ -203,6 +205,11 @@ const PersonCell = ({ row }: { row: PersonRow }) => {
                      {flag}
                   </span>
                ) : null}
+               {client ? (
+                  <Badge variant="outline" className="max-w-28 truncate font-normal" title={`Client: ${client}`}>
+                     {client}
+                  </Badge>
+               ) : null}
             </span>
             {row.headline ? <span className="text-muted-foreground truncate text-xs">{row.headline}</span> : null}
          </div>
@@ -212,6 +219,7 @@ const PersonCell = ({ row }: { row: PersonRow }) => {
 
 type ColumnsOf = Pick<
    Props,
+   | 'clients'
    | 'accounts'
    | 'stopped'
    | 'invitesLive'
@@ -228,6 +236,7 @@ type ColumnsOf = Pick<
 }
 
 const columnsOf = ({
+   clients,
    accounts,
    stopped,
    invitesLive,
@@ -265,7 +274,9 @@ const columnsOf = ({
          header: ({ column: header }) => (
             <SortHeader label="Person" sorted={header.getIsSorted()} onClick={header.getToggleSortingHandler()} />
          ),
-         cell: ({ row }) => <PersonCell row={row.original} />,
+         cell: ({ row }) => (
+            <PersonCell row={row.original} client={clients?.find(({ id }) => id === row.original.clientId)?.name} />
+         ),
       }),
       column.display({
          id: 'reason',
@@ -353,6 +364,7 @@ const columnsOf = ({
 // One row per person of the client: who, why, labels, last touch, status, the suggested next step and the row's actions.
 export const PeopleTable = ({
    rows,
+   clients,
    accounts,
    stopped,
    invitesLive,
@@ -383,6 +395,7 @@ export const PeopleTable = ({
    const columns = useMemo(
       () =>
          columnsOf({
+            clients,
             accounts,
             stopped,
             invitesLive,
@@ -396,7 +409,21 @@ export const PeopleTable = ({
             onInvite,
             onLabels,
          }),
-      [accounts, stopped, invitesLive, many, chosen, rows, onOpen, onChoose, onChooseAll, onStep, onInvite, onLabels]
+      [
+         clients,
+         accounts,
+         stopped,
+         invitesLive,
+         many,
+         chosen,
+         rows,
+         onOpen,
+         onChoose,
+         onChooseAll,
+         onStep,
+         onInvite,
+         onLabels,
+      ]
    )
    const table = useTable({
       features,

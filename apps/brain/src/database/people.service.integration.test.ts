@@ -7,7 +7,7 @@ import { peopleFiltersSchema } from '@automatedLinkedIn/contracts'
 
 import { ClientService } from './client.service'
 import { ConflictError } from './conflict'
-import { PeopleService } from './people.service'
+import { ALL_CLIENTS, PeopleService } from './people.service'
 import { PeopleIndexService } from './peopleIndex.service'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
@@ -165,6 +165,54 @@ describe('PeopleService (database)', () => {
          })
       ).toBeNull()
       expect(await PeopleService.counts(otherUserId, clientId)).toBeNull()
+   })
+
+   it('should show every client of the owner together under All clients, and no one of another owner', async () => {
+      const otherClientId = (await ClientService.create(userId, 'Beta')).id
+      const betaAccount = await db.linkedInAccount.create({
+         data: {
+            userId,
+            email: `${randomUUID()}@example.com`,
+            secret: 'x',
+            secretIv: 'x',
+            secretTag: 'x',
+            status: 'ACTIVE',
+            clientId: otherClientId,
+         },
+      })
+
+      await db.linkedInInvitation.create({
+         data: {
+            userId,
+            accountId: betaAccount.id,
+            linkedInId: randomUUID(),
+            slug: 'beta-person',
+            name: 'Bea Turner',
+            headline: 'Buyer',
+         },
+      })
+      await PeopleIndexService.refresh(userId, ['beta-person'])
+
+      const all = await view({ clientId: ALL_CLIENTS })
+
+      expect(all?.items.map(({ clientId: rowClient }) => rowClient).sort()).toEqual(
+         [clientId, clientId, clientId, otherClientId].sort()
+      )
+      expect((await PeopleService.counts(userId, ALL_CLIENTS))?.EVERYONE).toBe(4)
+      expect((await PeopleService.filterOptions(userId, ALL_CLIENTS))?.labels).toEqual([])
+      expect(
+         (
+            await PeopleService.list(otherUserId, {
+               clientId: ALL_CLIENTS,
+               tab: 'EVERYONE',
+               limit: 50,
+            })
+         )?.items ?? []
+      ).toEqual([])
+
+      await db.person.deleteMany({ where: { clientId: otherClientId } })
+      await db.linkedInAccount.delete({ where: { id: betaAccount.id } })
+      await db.client.delete({ where: { id: otherClientId } })
    })
 
    it('should count the tabs, and move a person out of Needs me when the owner closes them', async () => {

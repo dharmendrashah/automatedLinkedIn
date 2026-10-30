@@ -111,6 +111,59 @@ export const clientFor = <C extends { id: string; accounts: Array<{ id: string }
 export const showClientPicker = (clients: Array<{ accounts: unknown[] }>) =>
    clients.length > 1 || clients.reduce((sum, { accounts }) => sum + accounts.length, 0) > 1
 
+// All clients is the default (.plan/network-all-clients.md); an account's own page (`/network/<accountId>`) opens its client.
+export const showsAllClients = (client: string | null, accountId: string | undefined) =>
+   client === ALL_CLIENTS || (client === null && accountId === undefined)
+
+// Every client as one: all their accounts and lists, under the id brain reads as "every client".
+export const allClientsOf = <A, L>(
+   clients: Array<{ id: string; name: string; isDefault: boolean; accounts: A[]; lists: L[] }>
+) => ({
+   id: ALL_CLIENTS,
+   name: 'All clients',
+   isDefault: false,
+   accounts: clients.flatMap(({ accounts }) => accounts),
+   lists: clients.flatMap(({ lists }) => lists),
+})
+
+type TodayCounts = {
+   clientId: string
+   name: string
+   isDefault: boolean
+   replies: number
+   requests: number
+   invites: number
+   waitingInvites: number
+   fresh: number
+   invitesLive: boolean
+   stopped: Array<{ accountId: string; name: string; reason: string }>
+}
+
+// The Today line of every client added up; undefined before any line is known.
+export const todayOfAll = <T extends TodayCounts>(lines: T[]): TodayCounts | undefined => {
+   const [first] = lines
+
+   if (!first) {
+      return undefined
+   }
+
+   const sum = (key: 'replies' | 'requests' | 'invites' | 'waitingInvites' | 'fresh') =>
+      lines.reduce((total, line) => total + line[key], 0)
+
+   return {
+      clientId: ALL_CLIENTS,
+      name: 'All clients',
+      isDefault: false,
+      replies: sum('replies'),
+      requests: sum('requests'),
+      invites: sum('invites'),
+      waitingInvites: sum('waitingInvites'),
+      fresh: sum('fresh'),
+      invitesLive: first.invitesLive,
+      stopped: lines.flatMap(({ stopped }) => stopped),
+   }
+}
+
 // The client's list that Found by points at, if it is one.
 export const pickedList = <L extends { id: string }>(found: string | undefined, lists: L[]) =>
    found?.startsWith('list:') ? lists.find(({ id }) => `list:${id}` === found) : undefined
