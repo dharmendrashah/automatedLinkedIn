@@ -82,7 +82,7 @@ type Results = RouterOutputs['people']['results']
 
 const percent = (part: number, whole: number) => (whole > 0 ? ` (${Math.round((part / whole) * 100)}%)` : '')
 
-// "Invited · Accepted (%) · Replied" over 7, 30 or 90 days, shown beside the tabs while invites are live.
+// "Invited · Accepted (%) · Replied" over 7, 30 or 90 days, at the top of the Filters drawer while invites are live.
 export const ResultsLine = ({
    results,
    days,
