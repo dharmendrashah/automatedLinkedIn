@@ -34,6 +34,22 @@ Open questions (must be empty before locking):
 
 - None for phase A. Phase B needs a decision (see Phases): may one paid profile read run on staging to see which fields the data supplier sends for the company link and the cover? Phase C waits for the owner's Premium recording.
 
+## Phase B, verified (2026-10-30)
+
+One live full-profile read (`operations.live.test.ts`, owner's go-ahead "continue with phase B", cost $0.004, names only logged) showed the data service's fields:
+
+- profile: `about, causes, certifications, city, connections, country, courses, coverPhoto, creator, education, experience, firstName, followers, handle, headline, hiring, honorsAndAwards, influencer, languages, lastName, openProfile, openToWork, patents, photo, premium, profileId, profileUrl, projects, publications, receivedRecommendations, skills, state, verified, volunteering`
+- each position: `companyId, companyLinkedinUrl, companyLogo, companyName, description, durationMonths, employmentType, endDate, location, position, startDate, workplaceType`
+
+Decisions that follow:
+
+- The cover is `coverPhoto`; the company link is the current position's `companyLinkedinUrl` (kept only when it parses as a LinkedIn company link).
+- `premium` comes with the paid read, so Premium no longer waits for the spider: the row shows the Premium mark after a profile read. The spider (phase C) only adds it for people who were never read.
+- The snapshot keeps `cover`, `premium` and each position's `companyUrl` (added JSON fields; older reads simply lack them). `Person` gains `companySlug` (additive migration), filled by the index with `premium` from the newest read.
+- When a read is stored and the current position has a company link, that company is added to `/companies` (`createMany` with `skipDuplicates`): never twice, an archived one stays archived, a name is filled only where none was set.
+- Read company is enabled when the row has a `companySlug`; it opens a dialog with the price (`companyPage.detail`) and runs `companyPage.readFull`. An archived company says "Restore the company on Companies first" (brain already refuses it).
+- `Cover` takes an optional image loaded through `/cdn`; the plain strip stays when there is none or it fails to load.
+
 ## Phases
 
 Verified against the code on 2026-10-30 (after the filters work, PR #142):
@@ -154,3 +170,12 @@ Phase A built on branch `feat/network-row-actions` (2026-10-30); lint, type chec
 - Person drawer full width minus the margin (`FULL_WIDTH` in `floating-drawer.ts`); the details drawer's `sm:max-w-3xl` now takes effect.
 - Brain: message times before LinkedIn's launch (the reader's 1970 for a missing time) are treated as unknown in the index; migration `20261030170000_rebuild_people_dated_1970` marks those people for one rebuild. Row links carry `at`.
 - Phases B and C: not started (decision on one paid read; the Premium recording).
+
+Phase B built on branch `feat/network-company-cover` (2026-10-31), on top of phase A (merged as PR #143 and deployed):
+
+- Snapshot keeps `cover` (`coverPhoto`, https only), `premium` (boolean only) and each position's `companyUrl` (`companyLinkedinUrl`, only a LinkedIn company link, canonical lower-case); `profileFacts` gives `companySlug` and `premium`.
+- Migration `20261031090000_add_person_company_slug` (additive); the index fills `companySlug` and `premium` from the newest read, so the row's Premium mark works after a read without the spider.
+- A stored profile read saves the current company to `/companies` (`LinkedInCompanyService.saveFound`: once, archived stays archived, a name only where none); integration test `dataReads.integration.test.ts`.
+- Read company opens `ReadCompanyDialog` (price first, archived company refused); `ReadProfileDialog` and it share `PaidReadDialog` (`read-dialogs.tsx`).
+- The drawer's profile card shows the cover through `/cdn`, the plain strip otherwise.
+- Phase C (spider Premium for people never read) stays open; the owner's recording is still needed only for that.

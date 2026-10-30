@@ -1579,7 +1579,9 @@ model Person {
   // For the filters (.plan/network-filters.md), kept by the index. Title and country come from the newest profile read.
   title          String?
   country        String?
-  // Null until an account's profile visit says.
+  // The current company's LinkedIn slug from the newest read; it is also saved to the owner's /companies.
+  companySlug    String?
+  // Null until a read or an account's visit says.
   premium        Boolean?
   profileRead    Boolean                @default(false)
   // The earliest connection of the client's accounts that still holds; null when not connected.

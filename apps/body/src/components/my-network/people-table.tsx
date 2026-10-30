@@ -46,6 +46,7 @@ type Props = {
    onStep: (row: PersonRow, step: NonNullable<NextStep>) => void
    onInvite: (row: PersonRow) => void
    onReadProfile: (row: PersonRow) => void
+   onReadCompany: (row: PersonRow) => void
    // Saves the row's full label list.
    onLabels: (row: PersonRow, labels: string[]) => Promise<unknown>
    sort: PeopleSort | undefined
@@ -222,6 +223,7 @@ type ColumnsOf = Pick<
    | 'onStep'
    | 'onInvite'
    | 'onReadProfile'
+   | 'onReadCompany'
    | 'onLabels'
 > & {
    many: boolean
@@ -240,6 +242,7 @@ const columnsOf = ({
    onStep,
    onInvite,
    onReadProfile,
+   onReadCompany,
    onLabels,
 }: ColumnsOf) =>
    column.columns([
@@ -346,6 +349,7 @@ const columnsOf = ({
                invitesLive={invitesLive}
                onInvite={onInvite}
                onReadProfile={onReadProfile}
+               onReadCompany={onReadCompany}
                onPreview={person => onOpen(person.id)}
             />
          ),
@@ -366,6 +370,7 @@ export const PeopleTable = ({
    onStep,
    onInvite,
    onReadProfile,
+   onReadCompany,
    onLabels,
    sort,
    onSort,
@@ -398,6 +403,7 @@ export const PeopleTable = ({
             onStep,
             onInvite,
             onReadProfile,
+            onReadCompany,
             onLabels,
          }),
       [
@@ -413,6 +419,7 @@ export const PeopleTable = ({
          onStep,
          onInvite,
          onReadProfile,
+         onReadCompany,
          onLabels,
       ]
    )

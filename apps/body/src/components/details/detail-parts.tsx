@@ -59,13 +59,27 @@ export const Picture = ({
    )
 }
 
-// The top card with a cover strip, like a LinkedIn page.
-export const Cover = ({ children }: { children: ReactNode }) => (
-   <div className="overflow-hidden rounded-xl border">
-      <div className="from-primary/30 to-primary/5 h-20 bg-gradient-to-r" />
-      <div className="-mt-12 grid gap-3 px-4 pb-4">{children}</div>
-   </div>
-)
+// The top card with a cover strip, like a LinkedIn page: the person's own cover when there is one and it loads.
+export const Cover = ({ children, image = null }: { children: ReactNode; image?: string | null }) => {
+   const { src, onError } = useMediaSource(image)
+
+   return (
+      <div className="overflow-hidden rounded-xl border">
+         {src ? (
+            <img
+               src={src}
+               alt=""
+               referrerPolicy="no-referrer"
+               onError={onError}
+               className="bg-muted aspect-[4/1] max-h-48 w-full object-cover"
+            />
+         ) : (
+            <div className="from-primary/30 to-primary/5 h-20 bg-gradient-to-r" />
+         )}
+         <div className="-mt-12 grid gap-3 px-4 pb-4">{children}</div>
+      </div>
+   )
+}
 
 type ReadProps = {
    what: string

@@ -51,6 +51,8 @@ describe('snapshotFrom', () => {
          country: 'United Kingdom',
          about: 'I write programs.',
          photo: 'https://media.example/ada.jpg',
+         cover: null,
+         premium: null,
          followers: 1200,
          connections: 500,
          openToWork: true,
@@ -59,6 +61,7 @@ describe('snapshotFrom', () => {
             {
                title: 'Analyst',
                company: 'Analytical Engines',
+               companyUrl: null,
                location: 'London',
                start: '7/1842',
                end: null,
@@ -124,7 +127,48 @@ describe('profileFacts', () => {
       ).toEqual({
          title: 'Founder',
          company: 'Lumen Labs',
+         companySlug: null,
          country: 'France',
+         premium: null,
+      })
+   })
+
+   it("should keep the current company's LinkedIn link, the cover and Premium, as the data service names them", () => {
+      const row = {
+         premium: true,
+         coverPhoto: 'https://media.example/cover.jpg',
+         experience: [
+            {
+               position: 'Founder',
+               companyName: 'Lumen Labs',
+               companyLinkedinUrl: 'https://www.linkedin.com/company/Lumen-Labs/about/',
+               endDate: null,
+            },
+         ],
+      }
+
+      expect(snapshotFrom(row)).toMatchObject({
+         cover: 'https://media.example/cover.jpg',
+         premium: true,
+         experience: [{ companyUrl: 'https://www.linkedin.com/company/lumen-labs' }],
+      })
+      expect(read(row)).toMatchObject({
+         companySlug: 'lumen-labs',
+         premium: true,
+      })
+   })
+
+   it('should drop a company link that is not a LinkedIn company, and a cover that is not https', () => {
+      const snapshot = snapshotFrom({
+         coverPhoto: 'http://media.example/cover.jpg',
+         premium: 'yes',
+         experience: [{ companyLinkedinUrl: 'https://evil.example/company/x' }],
+      })
+
+      expect(snapshot).toMatchObject({
+         cover: null,
+         premium: null,
+         experience: [{ companyUrl: null }],
       })
    })
 
@@ -146,7 +190,9 @@ describe('profileFacts', () => {
       expect(older && profileFacts(older)).toEqual({
          title: 'Analyst',
          company: 'Engines',
+         companySlug: null,
          country: 'United Kingdom',
+         premium: null,
       })
    })
 
@@ -154,7 +200,9 @@ describe('profileFacts', () => {
       expect(read({ city: 'London' })).toEqual({
          title: null,
          company: null,
+         companySlug: null,
          country: null,
+         premium: null,
       })
    })
 })
