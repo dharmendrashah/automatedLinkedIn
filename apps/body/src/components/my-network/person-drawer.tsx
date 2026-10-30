@@ -30,7 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { readableError } from '@/lib/trpc-error'
 import { Ban, ChevronLeft, ChevronRight, Ellipsis, Mail, MessageSquare, Phone, Trash2, UserPlus } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { type Person } from './types'
@@ -180,6 +180,22 @@ const ContactActions = ({ person, onInvite }: { person: Person; onInvite: ((id: 
 // Who they are, from the profile read when there is one, with why they are here and how to reach them.
 const Identity = ({ person, onInvite }: { person: Person; onInvite: ((id: string) => void) | undefined }) => {
    const detail = usePersonDetail(person.slug)
+   const utils = trpc.useUtils()
+   const fetchedAt = detail.data?.snapshot?.fetchedAt ?? null
+   const seen = useRef<string | null | undefined>(undefined)
+
+   // A read that lands while the drawer is open puts its name, photo and facts on the row at once.
+   useEffect(() => {
+      if (!detail.data) {
+         return
+      }
+
+      if (seen.current !== undefined && seen.current !== fetchedAt) {
+         void utils.people.invalidate()
+      }
+
+      seen.current = fetchedAt
+   }, [detail.data, fetchedAt, utils])
    const foundBy = person.foundBy.map(source => foundByWord(source, person.lists))
    const why = (
       <>
@@ -440,8 +456,9 @@ const Body = ({ id, order, pane, onPane, onMove, onGone, onAnswer, onInvite }: O
       )
    }
 
+   // Flex, not grid: a fixed-height grid shrinks its rows when a tab is long, and the card collapsed to its border.
    return (
-      <div className="grid content-start gap-4 overflow-y-auto p-4">
+      <div className="flex flex-col gap-4 overflow-y-auto p-4 *:shrink-0">
          {moves}
          <Identity person={person.data} onInvite={onInvite} />
          <WorkBar

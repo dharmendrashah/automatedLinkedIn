@@ -112,3 +112,8 @@ Built on `feat/network-profile-badges` (PR #145), 2026-10-31:
 - Checks: lint, type check, build, unit tests (contracts 229, body 881, spider 1353, brain 1587), the data reads, company and people integration tests, and the backfill's selection checked on sample rows. Not seen in a browser.
 - Deviation: the drawer's Invite step button moved into the card's actions (Open chat becomes Invite for someone not connected), so it is not shown twice.
 - Owner's follow-up (same PR): Invite is its own button in the drawer and on every row, beside Open chat / Message. It opens the invite dialog (note optional). When it cannot go, it is disabled and its tooltip says why: On Do not contact, Already connected, Invite already queued, sent or accepted, or Invites are not on yet. The rules are split into `messageAction` (chats only) and `inviteBlock`.
+
+Follow-up fix (2026-10-31, branch `fix/network-drawer-top-and-row-facts`), owner's report after deploy:
+
+- The card vanished on the Profile tab: the drawer body was a fixed-height `grid` with `overflow-y-auto`, which shrinks auto rows when a tab is long, and the card (`overflow-hidden`) collapsed to its border. Now `flex flex-col *:shrink-0`; the same top shows on Profile, Chat and History.
+- The row showed the slug and no photo after a read: the index now takes the read's name, headline, photo and company first (`profileFacts`, the read is final), the PROFILE store rebuilds the person's row right away (`PeopleIndexService.refresh`), the drawer refreshes the table when a new read lands, and migration `20261031110000_rebuild_people_with_reads` rebuilds people read before.
