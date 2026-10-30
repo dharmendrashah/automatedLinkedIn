@@ -1,8 +1,8 @@
 import { NotesField } from '@/components/details/notes-field'
 import { ErrorBoundary } from '@/components/error-boundary'
-import { FULL_WIDTH, floatingDrawer } from '@/components/floating-drawer'
+import { WIDE, floatingDrawer } from '@/components/floating-drawer'
 import { LabelCell } from '@/components/labels/label-cell'
-import { PersonView } from '@/components/people/person-view'
+import { PersonView, ProfileBadges } from '@/components/people/person-view'
 import {
    AlertDialog,
    AlertDialogAction,
@@ -126,6 +126,7 @@ const Header = ({
       invitesLive: onInvite !== undefined,
    })
    const foundBy = person.foundBy.map(source => foundByWord(source, person.lists))
+   const detail = trpc.person.detail.useQuery({ slug: person.slug }, { retry: false })
    // The Profile tab names the person itself.
    const Title = pane === 'profile' ? 'h2' : DrawerTitle
 
@@ -142,6 +143,7 @@ const Header = ({
             ) : null}
          </div>
          <div className="flex flex-wrap items-center gap-2">
+            <ProfileBadges snapshot={detail.data?.snapshot ?? null} />
             {person.fit === 'NONE' ? null : <Badge variant="secondary">{FIT_WORDS[person.fit]}</Badge>}
             {person.doNotContact ? <Badge variant="destructive">Do not contact</Badge> : null}
             <Select
@@ -338,7 +340,7 @@ const Body = ({ id, order, pane, onPane, onMove, onGone, onAnswer, onInvite }: O
 // One person of the client: who they are and why they are here, then the chat, the profile and the history.
 export const PersonDrawer = ({ onClose, ...props }: Props) => (
    <Drawer direction="right" open onOpenChange={open => (open ? undefined : onClose())}>
-      <DrawerContent className={floatingDrawer(FULL_WIDTH)}>
+      <DrawerContent className={floatingDrawer(WIDE)}>
          <ErrorBoundary where="person-drawer" resetKey={props.id}>
             <Body {...props} />
          </ErrorBoundary>

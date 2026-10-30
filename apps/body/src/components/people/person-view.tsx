@@ -13,6 +13,45 @@ import { trpc } from '../../trpc'
 import { About, Education, Experience, Fit, Skills, WhyFound } from './person-sections'
 import { Workspace } from './person-workspace'
 
+// What the paid profile read says about the person, each only when the read says so.
+export const ProfileBadges = ({ snapshot }: { snapshot: PersonDetail['snapshot'] }) => {
+   const country = snapshot?.country ?? null
+   const flag = flagOf(country)
+
+   return (
+      <>
+         {snapshot?.premium ? (
+            <Badge variant="outline">
+               <img src={premiumMark} alt="" className="size-3.5 rounded-[2px]" />
+               Premium
+            </Badge>
+         ) : null}
+         {snapshot?.verified ? (
+            <Badge variant="outline">
+               <BadgeCheck />
+               Verified
+            </Badge>
+         ) : null}
+         {snapshot?.creator ? (
+            <Badge variant="outline">
+               <Sparkles />
+               Creator
+            </Badge>
+         ) : null}
+         {country ? (
+            <Badge variant="outline">
+               {flag ? <span aria-hidden="true">{flag}</span> : null}
+               {country}
+            </Badge>
+         ) : null}
+         {snapshot?.openToWork ? (
+            <Badge className="bg-success/10 text-success border-transparent">Open to work</Badge>
+         ) : null}
+         {snapshot?.hiring ? <Badge className="bg-primary/10 text-primary border-transparent">Hiring</Badge> : null}
+      </>
+   )
+}
+
 // The top card, laid out like a LinkedIn profile: photo, name, headline, role, place and reach.
 const Header = ({
    person,
@@ -36,8 +75,6 @@ const Header = ({
    const company = current?.company ?? member?.company ?? profile?.company
    const location = snapshot?.location ?? member?.location ?? profile?.location
    const followers = snapshot?.followers ?? member?.followers
-   const country = snapshot?.country ?? null
-   const flag = flagOf(country)
    const reach = [
       location,
       followers !== null && followers !== undefined ? `${followers.toLocaleString()} followers` : null,
@@ -54,34 +91,7 @@ const Header = ({
             {reach.length > 0 ? <p className="text-muted-foreground text-xs">{reach.join(' · ')}</p> : null}
          </div>
          <div className="flex flex-wrap gap-1.5">
-            {snapshot?.premium ? (
-               <Badge variant="outline">
-                  <img src={premiumMark} alt="" className="size-3.5 rounded-[2px]" />
-                  Premium
-               </Badge>
-            ) : null}
-            {snapshot?.verified ? (
-               <Badge variant="outline">
-                  <BadgeCheck />
-                  Verified
-               </Badge>
-            ) : null}
-            {snapshot?.creator ? (
-               <Badge variant="outline">
-                  <Sparkles />
-                  Creator
-               </Badge>
-            ) : null}
-            {country ? (
-               <Badge variant="outline">
-                  {flag ? <span aria-hidden="true">{flag}</span> : null}
-                  {country}
-               </Badge>
-            ) : null}
-            {snapshot?.openToWork ? (
-               <Badge className="bg-success/10 text-success border-transparent">Open to work</Badge>
-            ) : null}
-            {snapshot?.hiring ? <Badge className="bg-primary/10 text-primary border-transparent">Hiring</Badge> : null}
+            <ProfileBadges snapshot={snapshot} />
             {person.suppressed ? <Badge variant="destructive">Do not contact</Badge> : null}
          </div>
          <div className="flex flex-wrap items-center gap-2">
