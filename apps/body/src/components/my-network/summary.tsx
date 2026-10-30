@@ -1,12 +1,9 @@
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Sparkles } from 'lucide-react'
-import { useState } from 'react'
 import { Link } from 'react-router'
 
 import { type TodayLine } from './types'
-import { formatUsd } from '@/components/workflows/types'
 
 import { type RouterOutputs } from '../../trpc'
 import { type ViewChange } from './address'
@@ -85,97 +82,36 @@ type Results = RouterOutputs['people']['results']
 
 const percent = (part: number, whole: number) => (whole > 0 ? ` (${Math.round((part / whole) * 100)}%)` : '')
 
-const perAccept = (micros: number | null) => (micros === null ? 'n/a' : formatUsd(micros))
-
-const ResultsTable = ({ title, rows }: { title: string; rows: Results['byAccount'] }) => (
-   <Table>
-      <TableHeader>
-         <TableRow>
-            <TableHead>{title}</TableHead>
-            <TableHead className="text-right">Invited</TableHead>
-            <TableHead className="text-right">Accepted</TableHead>
-            <TableHead className="text-right">Replied</TableHead>
-            <TableHead className="text-right">Data spent</TableHead>
-            <TableHead className="text-right">Cost per accept</TableHead>
-         </TableRow>
-      </TableHeader>
-      <TableBody>
-         {rows.map(row => (
-            <TableRow key={row.key}>
-               <TableCell>{row.name}</TableCell>
-               <TableCell className="text-right tabular-nums">{row.invited}</TableCell>
-               <TableCell className="text-right tabular-nums">{row.accepted}</TableCell>
-               <TableCell className="text-right tabular-nums">{row.replied}</TableCell>
-               <TableCell className="text-right tabular-nums">{formatUsd(row.spentMicros)}</TableCell>
-               <TableCell className="text-right tabular-nums">{perAccept(row.perAcceptMicros)}</TableCell>
-            </TableRow>
-         ))}
-      </TableBody>
-   </Table>
-)
-
-// "New this week · Data spent this month", and with invites live "Invited · Accepted (%) · Replied" over 7, 30 or 90 days, with the
-// same by account and by the source that led to each invite.
+// "Invited · Accepted (%) · Replied" over 7, 30 or 90 days, shown beside the tabs while invites are live.
 export const ResultsLine = ({
    results,
-   invitesLive,
    days,
    onDays,
-   onNew,
 }: {
    results: Results
-   invitesLive: boolean
    days: ResultDays
    onDays: (days: ResultDays) => void
-   onNew: () => void
-}) => {
-   const [details, setDetails] = useState(false)
-
-   return (
-      <div className="grid gap-2">
-         <p className="text-muted-foreground flex flex-wrap items-center gap-x-2 text-sm">
-            <LinkButton onClick={onNew}>{`New this week: ${countText(results.newThisWeek, results.cap)}`}</LinkButton>
-            <span>·</span>
-            {invitesLive ? (
-               <>
-                  <span>{`Invited ${results.invited}`}</span>
-                  <span>·</span>
-                  <span>{`Accepted ${results.accepted}${percent(results.accepted, results.invited)}`}</span>
-                  <span>·</span>
-                  <span>{`Replied ${results.replied}`}</span>
-                  <span>·</span>
-               </>
-            ) : null}
-            <Link to="/usage" className="hover:text-foreground underline-offset-4 hover:underline">
-               Data spent this month: {formatUsd(results.dataSpentMicros)}
-            </Link>
-            {invitesLive ? (
-               <>
-                  <Select value={String(days)} onValueChange={value => onDays(resultDays(value))}>
-                     <SelectTrigger size="sm" className="h-7 w-24" aria-label="Results over">
-                        <SelectValue />
-                     </SelectTrigger>
-                     <SelectContent>
-                        {RESULT_DAYS.map(value => (
-                           <SelectItem key={value} value={String(value)}>
-                              {`${value} days`}
-                           </SelectItem>
-                        ))}
-                     </SelectContent>
-                  </Select>
-                  <LinkButton onClick={() => setDetails(!details)}>{details ? 'Hide details' : 'Details'}</LinkButton>
-               </>
-            ) : null}
-         </p>
-         {invitesLive && details ? (
-            <div className="bg-card grid gap-2 rounded-xl border p-2">
-               <ResultsTable title="Account" rows={results.byAccount} />
-               <ResultsTable title="Found by" rows={results.bySource} />
-            </div>
-         ) : null}
-      </div>
-   )
-}
+}) => (
+   <p className="text-muted-foreground flex flex-wrap items-center gap-x-2 text-sm">
+      <span>{`Invited ${results.invited}`}</span>
+      <span>·</span>
+      <span>{`Accepted ${results.accepted}${percent(results.accepted, results.invited)}`}</span>
+      <span>·</span>
+      <span>{`Replied ${results.replied}`}</span>
+      <Select value={String(days)} onValueChange={value => onDays(resultDays(value))}>
+         <SelectTrigger size="sm" className="h-7 w-24" aria-label="Results over">
+            <SelectValue />
+         </SelectTrigger>
+         <SelectContent>
+            {RESULT_DAYS.map(value => (
+               <SelectItem key={value} value={String(value)}>
+                  {`${value} days`}
+               </SelectItem>
+            ))}
+         </SelectContent>
+      </Select>
+   </p>
+)
 
 // A client with nobody yet: the guided start finds people for it.
 export const FirstVisit = () => (

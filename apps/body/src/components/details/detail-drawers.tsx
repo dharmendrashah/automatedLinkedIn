@@ -20,13 +20,11 @@ type Props = {
    order: string[]
    // Stays open beside the list while the owner keeps working it, instead of covering the page.
    docked?: boolean
-   // Asks before a paid read (the Unibox, where a read is a side step).
-   confirmRead?: boolean
 }
 
 // The one detail drawer of a page: a person, a company or a post, like their LinkedIn page. A person opened from a
 // company or post replaces it, with a way back.
-export const DetailDrawers = ({ kind, order, docked = false, confirmRead = false }: Props) => {
+export const DetailDrawers = ({ kind, order, docked = false }: Props) => {
    const { open, back, show, close } = useDetailDrawer()
    const index = open?.kind === kind ? order.indexOf(open.slug) : -1
    const previous = index > 0 ? order[index - 1] : undefined
@@ -56,9 +54,7 @@ export const DetailDrawers = ({ kind, order, docked = false, confirmRead = false
                      {BACK_LABELS[back.kind]}
                   </Button>
                ) : null}
-               {open?.kind === 'person' ? (
-                  <PersonView key={open.slug} slug={open.slug} confirmRead={confirmRead} />
-               ) : null}
+               {open?.kind === 'person' ? <PersonView key={open.slug} slug={open.slug} /> : null}
                {open?.kind === 'company' ? <CompanyView key={open.slug} slug={open.slug} onPerson={toPerson} /> : null}
                {open?.kind === 'post' ? <PostView key={open.slug} slug={open.slug} onPerson={toPerson} /> : null}
             </div>

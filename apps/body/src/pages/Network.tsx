@@ -269,44 +269,31 @@ const ClientPeople = ({ client, accountId, view, filters, update, pickers }: Peo
          </div>
          {line ? <Today line={line} onGo={change => update({ ...change, open: null })} /> : null}
          {nobody ? <FirstVisit /> : null}
-         {results.data ? (
-            <ResultsLine
-               results={results.data}
-               invitesLive={invitesLive}
-               days={days}
-               onDays={setDays}
-               onNew={() =>
+         <div className="flex flex-wrap items-center justify-between gap-3">
+            <Tabs
+               value={view.tab}
+               onValueChange={tab =>
                   update({
-                     tab: 'EVERYONE',
-                     found: null,
-                     new: '1',
+                     tab: TABS.find(item => item === tab) ?? null,
                      open: null,
                   })
                }
-            />
-         ) : null}
-         <Tabs
-            value={view.tab}
-            onValueChange={tab =>
-               update({
-                  tab: TABS.find(item => item === tab) ?? null,
-                  open: null,
-               })
-            }
-         >
-            <TabsList>
-               {TABS.map(tab => (
-                  <TabsTrigger key={tab} value={tab}>
-                     {TAB_WORDS[tab]}
-                     {counts.data ? (
-                        <span className="text-muted-foreground tabular-nums">
-                           {countText(counts.data[tab], counts.data.cap)}
-                        </span>
-                     ) : null}
-                  </TabsTrigger>
-               ))}
-            </TabsList>
-         </Tabs>
+            >
+               <TabsList>
+                  {TABS.map(tab => (
+                     <TabsTrigger key={tab} value={tab}>
+                        {TAB_WORDS[tab]}
+                        {counts.data ? (
+                           <span className="text-muted-foreground tabular-nums">
+                              {countText(counts.data[tab], counts.data.cap)}
+                           </span>
+                        ) : null}
+                     </TabsTrigger>
+                  ))}
+               </TabsList>
+            </Tabs>
+            {results.data && invitesLive ? <ResultsLine results={results.data} days={days} onDays={setDays} /> : null}
+         </div>
          <Filters
             view={view}
             lists={client.lists}

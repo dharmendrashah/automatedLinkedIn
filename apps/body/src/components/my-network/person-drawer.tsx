@@ -209,7 +209,7 @@ const Identity = ({ person, onInvite }: { person: Person; onInvite: ((id: string
 
    if (detail.data) {
       return (
-         <ProfileCard person={detail.data} confirmRead clientId={person.clientId} actions={actions}>
+         <ProfileCard person={detail.data} clientId={person.clientId} actions={actions}>
             {why}
          </ProfileCard>
       )
