@@ -234,3 +234,14 @@ export const writeFilters = (filters: PeopleFilters) => {
 
    return Object.keys(on).length > 0 ? JSON.stringify(on) : null
 }
+
+// My network showing the people connected to one LinkedIn account (the account's "Connections").
+export const connectionsPage = (accountId: string) =>
+   `/network/${encodeURIComponent(accountId)}?${new URLSearchParams({
+      filters:
+         writeFilters({
+            ...NO_FILTERS,
+            connection: 'CONNECTED',
+            connectedTo: accountId,
+         }) ?? '',
+   }).toString()}`

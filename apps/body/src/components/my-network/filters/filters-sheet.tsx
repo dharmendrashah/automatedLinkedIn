@@ -135,12 +135,17 @@ export const FiltersSheet = ({
                         })
                      }
                   />
-                  {value.connection === 'CONNECTED' && options.accounts.length > 1 ? (
+                  {options.accounts.length > 0 ? (
                      <Choice
-                        label="Connected to"
+                        label="Connected to (LinkedIn account)"
                         options={options.accounts.map(account => [account.value, account.label])}
                         value={value.connectedTo}
-                        onChange={connectedTo => set({ connectedTo })}
+                        onChange={connectedTo =>
+                           set({
+                              connectedTo,
+                              ...(connectedTo ? { connection: 'CONNECTED' } : {}),
+                           })
+                        }
                      />
                   ) : null}
                   <DateTimeRangeField

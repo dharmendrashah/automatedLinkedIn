@@ -20,6 +20,7 @@ import { useDrawerNav } from '@/components/accounts/use-drawer-nav'
 import { BrowseSampleBanner } from '@/components/browsing/browse-sample-banner'
 import { useBrowsing } from '@/components/browsing/use-browse'
 import { FailureCard } from '@/components/failure-card'
+import { connectionsPage } from '@/components/my-network/filters/model'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -167,7 +168,7 @@ export const AccountProfile = () => {
             sample ? 'This is sample data. Remove ?sample= from the address.' : (state.data?.blocker ?? undefined)
          }
          reading={reading}
-         connectionsTo={`/network/${id}?found=connection`}
+         connectionsTo={connectionsPage(id)}
          onTestLogin={() => actions.testLogin({ id })}
          onVisit={() => actions.visit({ id })}
          onRead={() => read.mutate({ accountId: id })}
@@ -241,7 +242,7 @@ export const AccountProfile = () => {
                )}
             >
                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
-                  <ProfileHeader profile={profile} strip={strip} connectionsTo={`/network/${id}?found=connection`} />
+                  <ProfileHeader profile={profile} strip={strip} connectionsTo={connectionsPage(id)} />
                   <OpenToWork openToWork={profile.openToWork} />
                   <AboutCard about={profile.about} topSkills={profile.topSkills} />
                   <ContactCard contact={profile.contact} />

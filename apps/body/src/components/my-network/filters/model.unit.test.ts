@@ -8,6 +8,7 @@ import {
    NO_FILTERS,
    apiFilters,
    chipsOf,
+   connectionsPage,
    filtersSchema,
    rangeText,
    readFilters,
@@ -54,6 +55,16 @@ describe('the page copy of the filter schema', () => {
 })
 
 describe('filters in the address', () => {
+   it("opens an account's connections with the Connected to filter on", () => {
+      const url = new URL(connectionsPage('acc 1'), 'https://app.example')
+
+      expect(url.pathname).toBe('/network/acc%201')
+      expect(readFilters(url.searchParams.get('filters'))).toEqual({
+         ...NO_FILTERS,
+         connection: 'CONNECTED',
+         connectedTo: 'acc 1',
+      })
+   })
    it('writes only what is on, and reads it back', () => {
       const filters = {
          ...NO_FILTERS,

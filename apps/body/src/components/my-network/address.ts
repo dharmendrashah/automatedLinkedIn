@@ -13,7 +13,7 @@ export type Sort = { by: (typeof SORTS)[number]; desc: boolean }
 export const ALL_CLIENTS = 'all'
 
 // The tabs of the person drawer.
-export const PANES = ['chat', 'profile', 'history'] as const
+export const PANES = ['chat', 'profile', 'history', 'data'] as const
 
 export type Pane = (typeof PANES)[number]
 

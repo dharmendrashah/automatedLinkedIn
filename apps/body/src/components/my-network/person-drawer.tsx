@@ -16,6 +16,14 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+   CodeBlock,
+   CodeBlockActions,
+   CodeBlockContent,
+   CodeBlockCopyButton,
+   CodeBlockHeader,
+   CodeBlockTitle,
+} from '@/components/ui/code-block'
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from '@/components/ui/drawer'
 import {
    DropdownMenu,
@@ -29,7 +37,18 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { readableError } from '@/lib/trpc-error'
-import { Ban, ChevronLeft, ChevronRight, Ellipsis, Mail, MessageSquare, Phone, Trash2, UserPlus } from 'lucide-react'
+import {
+   Ban,
+   Braces,
+   ChevronLeft,
+   ChevronRight,
+   Ellipsis,
+   Mail,
+   MessageSquare,
+   Phone,
+   Trash2,
+   UserPlus,
+} from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -401,6 +420,37 @@ const Notes = ({ person }: { person: Person }) => {
    )
 }
 
+// The profile read as it is saved in the database (the allow-listed snapshot), to check what a read brought.
+const DataTab = ({ slug }: { slug: string }) => {
+   const detail = usePersonDetail(slug)
+   const snapshot = detail.data?.snapshot
+
+   if (!snapshot) {
+      return (
+         <p className="text-muted-foreground text-sm">
+            {detail.error ? readableError(detail.error) : detail.data ? 'No profile read is saved yet.' : 'Loading…'}
+         </p>
+      )
+   }
+
+   const json = JSON.stringify(snapshot, null, 2)
+
+   return (
+      <CodeBlock>
+         <CodeBlockHeader>
+            <CodeBlockTitle>
+               <Braces />
+               Profile read · {new Date(snapshot.fetchedAt).toLocaleString()}
+            </CodeBlockTitle>
+            <CodeBlockActions>
+               <CodeBlockCopyButton value={json} />
+            </CodeBlockActions>
+         </CodeBlockHeader>
+         <CodeBlockContent wrap>{json}</CodeBlockContent>
+      </CodeBlock>
+   )
+}
+
 const ProfileTab = ({ slug }: { slug: string }) => {
    const detail = usePersonDetail(slug)
 
@@ -474,6 +524,7 @@ const Body = ({ id, order, pane, onPane, onMove, onGone, onAnswer, onInvite }: O
                <TabsTrigger value="profile">Profile</TabsTrigger>
                <TabsTrigger value="chat">Chat</TabsTrigger>
                <TabsTrigger value="history">History</TabsTrigger>
+               <TabsTrigger value="data">Data JSON</TabsTrigger>
             </TabsList>
             <TabsContent value="profile">
                <ProfileTab key={person.data.slug} slug={person.data.slug} />
@@ -483,6 +534,9 @@ const Body = ({ id, order, pane, onPane, onMove, onGone, onAnswer, onInvite }: O
             </TabsContent>
             <TabsContent value="history">
                <HistoryPane person={person.data} />
+            </TabsContent>
+            <TabsContent value="data">
+               <DataTab key={person.data.slug} slug={person.data.slug} />
             </TabsContent>
          </Tabs>
       </div>

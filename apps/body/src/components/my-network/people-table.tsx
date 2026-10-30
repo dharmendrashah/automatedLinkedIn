@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { flagOf } from '@/lib/country-flag'
 import { timeAgo } from '@/lib/time-ago'
+import { useFillHeight } from '@/lib/use-fill-height'
 import { IconBrandLinkedin } from '@tabler/icons-react'
 import {
    FlexRender,
@@ -28,7 +29,8 @@ import { type Client, type PersonRow } from './types'
 import { type RouterInputs } from '../../trpc'
 import { RowActions } from './row-actions-cell'
 import { type NextStep, PRIORITY, nextStepOf } from './rows'
-import { nameOf, statusWord } from './words'
+import { StatusChip } from './status-chip'
+import { nameOf } from './words'
 
 export type PeopleSort = NonNullable<RouterInputs['people']['list']['sort']>
 
@@ -301,7 +303,7 @@ const columnsOf = ({
       column.accessor('status', {
          header: 'Status',
          enableSorting: false,
-         cell: ({ row }) => statusWord(row.original.status),
+         cell: ({ row }) => <StatusChip status={row.original.status} />,
       }),
       ...(many
          ? [
@@ -431,6 +433,7 @@ export const PeopleTable = ({
    const bottom = virtualizer.getTotalSize() - (items.at(-1)?.end ?? 0)
    const selectedIndex = rows.findIndex(row => row.id === selectedId)
    const width = table.getAllLeafColumns().length
+   const height = useFillHeight(scroller)
 
    useEffect(() => {
       if (hasMore && !loadingMore && last >= rows.length - LOAD_AHEAD) {
@@ -445,7 +448,7 @@ export const PeopleTable = ({
    }, [selectedIndex, virtualizer])
 
    return (
-      <div ref={scroller} className="relative max-h-[calc(100svh-14rem)] min-h-64 overflow-auto">
+      <div ref={scroller} className="relative min-h-64 overflow-auto" style={{ height }}>
          <table className="w-full caption-bottom text-sm">
             <TableHeader className="bg-muted sticky top-0 z-10">
                {table.getHeaderGroups().map(group => (
