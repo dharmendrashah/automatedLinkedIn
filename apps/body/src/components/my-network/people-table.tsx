@@ -11,12 +11,15 @@ import { cn } from '@/lib/utils'
 
 import { type Client, type PersonRow } from './types'
 
-import { type NextStep, nextStepOf } from './rows'
+import { type NextStep, PRIORITY, nextStepOf } from './rows'
 import { FIT_WORDS, nameOf, statusWord } from './words'
 
 type Props = {
    rows: PersonRow[]
    accounts: Client['accounts']
+   // Accounts whose invites are stopped (signed out, restricted, LinkedIn's limit): their chips show red.
+   stopped: string[]
+   invitesLive: boolean
    selectedId: string | null
    chosen: string[]
    onOpen: (id: string) => void
@@ -57,7 +60,21 @@ const Reason = ({ row }: { row: PersonRow }) =>
       </span>
    ) : null
 
-const AccountChips = ({ row, accounts }: { row: PersonRow; accounts: Client['accounts'] }) => {
+const STEP_WORDS: Record<NonNullable<NextStep>['kind'], string> = {
+   REPLY: 'Reply',
+   ACCEPT: 'Accept',
+   INVITE: 'Invite',
+}
+
+const AccountChips = ({
+   row,
+   accounts,
+   stopped,
+}: {
+   row: PersonRow
+   accounts: Client['accounts']
+   stopped: string[]
+}) => {
    const ids = [...new Set(row.links.flatMap(({ accountId }) => (accountId ? [accountId] : [])))]
 
    return (
@@ -66,7 +83,12 @@ const AccountChips = ({ row, accounts }: { row: PersonRow; accounts: Client['acc
             const account = accounts.find(other => other.id === id)
 
             return account ? (
-               <Badge key={id} variant="outline" className="max-w-32 truncate">
+               <Badge
+                  key={id}
+                  variant={stopped.includes(id) ? 'destructive' : 'outline'}
+                  className="max-w-32 truncate"
+                  title={stopped.includes(id) ? 'Invites from this account are stopped' : undefined}
+               >
                   {account.displayName ?? account.email}
                </Badge>
             ) : null
@@ -76,7 +98,18 @@ const AccountChips = ({ row, accounts }: { row: PersonRow; accounts: Client['acc
 }
 
 // One row per person of the client: who, why, fit, last touch, status and the one next step.
-export const PeopleTable = ({ rows, accounts, selectedId, chosen, onOpen, onChoose, onChooseAll, onStep }: Props) => {
+export const PeopleTable = ({
+   rows,
+   accounts,
+   stopped,
+   invitesLive,
+   selectedId,
+   chosen,
+   onOpen,
+   onChoose,
+   onChooseAll,
+   onStep,
+}: Props) => {
    const many = accounts.length > 1
    const selected = useRef<HTMLTableRowElement>(null)
 
@@ -104,7 +137,10 @@ export const PeopleTable = ({ rows, accounts, selectedId, chosen, onOpen, onChoo
          </TableHeader>
          <TableBody>
             {rows.map(row => {
-               const step = nextStepOf(row)
+               const step = nextStepOf({
+                  ...row,
+                  invitesLive,
+               })
                const isSelected = row.id === selectedId
                const name = nameOf(row)
 
@@ -156,14 +192,16 @@ export const PeopleTable = ({ rows, accounts, selectedId, chosen, onOpen, onChoo
                      <TableCell className="text-sm">{row.fit === 'NONE' ? '' : FIT_WORDS[row.fit]}</TableCell>
                      <TableCell className="text-sm">
                         <span className="flex items-center gap-1.5">
-                           {row.priority === 2 ? <Dot className="bg-destructive" label="Unread reply" /> : null}
+                           {row.priority === PRIORITY.REPLY ? (
+                              <Dot className="bg-destructive" label="Unread reply" />
+                           ) : null}
                            {timeAgo(row.lastTouchAt)}
                         </span>
                      </TableCell>
                      <TableCell className="text-sm">{statusWord(row.status)}</TableCell>
                      {many ? (
                         <TableCell>
-                           <AccountChips row={row} accounts={accounts} />
+                           <AccountChips row={row} accounts={accounts} stopped={stopped} />
                         </TableCell>
                      ) : null}
                      <TableCell className="text-right" onClick={event => event.stopPropagation()}>
@@ -173,7 +211,7 @@ export const PeopleTable = ({ rows, accounts, selectedId, chosen, onOpen, onChoo
                               variant={step.kind === 'REPLY' ? 'default' : 'outline'}
                               onClick={() => onStep(row, step)}
                            >
-                              {step.kind === 'REPLY' ? 'Reply' : 'Accept'}
+                              {STEP_WORDS[step.kind]}
                            </Button>
                         ) : null}
                      </TableCell>

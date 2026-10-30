@@ -43,6 +43,8 @@ type Props = {
    // The person is gone (erased): the drawer moves on, or closes on the last row.
    onGone: (next: string | null) => void
    onAnswer: (ask: Ask) => void
+   // Present once invites are live: opens the invite dialog for the person.
+   onInvite?: (id: string) => void
 }
 
 const useUpdate = () => {
@@ -98,12 +100,14 @@ const Header = ({
    pane,
    onPane,
    onAnswer,
+   onInvite,
    onErased,
 }: {
    person: Person
    pane: Pane
    onPane: (pane: Pane) => void
    onAnswer: (ask: Ask) => void
+   onInvite: ((id: string) => void) | undefined
    onErased: () => void
 }) => {
    const utils = trpc.useUtils()
@@ -116,7 +120,10 @@ const Header = ({
       onError: error => toast.error(readableError(error)),
    })
    const name = nameOf(person)
-   const step = nextStepOf(person)
+   const step = nextStepOf({
+      ...person,
+      invitesLive: onInvite !== undefined,
+   })
    const foundBy = person.foundBy.map(source => foundByWord(source, person.lists))
    // The Profile tab names the person itself.
    const Title = pane === 'profile' ? 'h2' : DrawerTitle
@@ -174,6 +181,11 @@ const Header = ({
             {step?.kind === 'REPLY' && pane !== 'chat' ? (
                <Button size="sm" onClick={() => onPane('chat')}>
                   Reply
+               </Button>
+            ) : null}
+            {step?.kind === 'INVITE' && onInvite ? (
+               <Button size="sm" onClick={() => onInvite(person.id)}>
+                  Invite
                </Button>
             ) : null}
             {step?.kind === 'ACCEPT' ? (
@@ -250,7 +262,7 @@ const Header = ({
    )
 }
 
-const Body = ({ id, order, pane, onPane, onMove, onGone, onAnswer }: Omit<Props, 'onClose'>) => {
+const Body = ({ id, order, pane, onPane, onMove, onGone, onAnswer, onInvite }: Omit<Props, 'onClose'>) => {
    const person = trpc.people.get.useQuery({ id }, { retry: false })
    const index = order.indexOf(id)
    const previous = index > 0 ? order[index - 1] : undefined
@@ -299,6 +311,7 @@ const Body = ({ id, order, pane, onPane, onMove, onGone, onAnswer }: Omit<Props,
             pane={pane}
             onPane={onPane}
             onAnswer={onAnswer}
+            onInvite={onInvite}
             onErased={() => onGone(nextAfter(order, id))}
          />
          <Tabs value={pane} onValueChange={value => onPane(PANES.find(item => item === value) ?? 'chat')}>

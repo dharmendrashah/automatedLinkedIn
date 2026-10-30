@@ -28,6 +28,20 @@ export const LINK_WORDS: Record<string, string> = {
    CONVERSATION: 'Conversation',
    LIST_MEMBER: 'Added to a list',
    TARGET: 'Target profile',
+   INVITE: 'Invited',
+}
+
+export const INVITE_STATE_WORDS: Record<string, string> = {
+   QUEUED: 'Invite queued',
+   SENDING: 'Invite being sent',
+   SENT: 'Invite sent',
+   ACCEPTED: 'Invite accepted',
+   WITHDRAW_QUEUED: 'To be withdrawn',
+   WITHDRAWING: 'Being withdrawn',
+   WITHDRAWN: 'Invite withdrawn',
+   FAILED: 'Invite not sent',
+   UNKNOWN: 'Invite may have been sent',
+   CANCELLED: 'Invite cancelled',
 }
 
 // A person not read yet has only their profile name.

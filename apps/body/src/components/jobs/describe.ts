@@ -66,6 +66,8 @@ const ACTIONS: Record<string, string> = {
    'invitations-read': 'Connection requests read',
    'profile-read': 'Own profile read',
    'connections-read': 'Connections read',
+   'accept-read': 'Newest connections read (invite answers)',
+   'invites-send': 'Invites sent or withdrawn',
    visit: 'Daily visit',
    'sign-in-check': 'Sign-in check',
    'proxy-score': 'Proxy score',

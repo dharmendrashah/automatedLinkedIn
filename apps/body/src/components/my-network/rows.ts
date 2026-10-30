@@ -2,9 +2,27 @@
 
 type Link = { kind: string; accountId: string | null; sourceId: string }
 
-export type NextStep = { kind: 'REPLY' } | { kind: 'ACCEPT'; accountId: string; requestId: string } | null
+export type NextStep =
+   | { kind: 'REPLY' }
+   | { kind: 'ACCEPT'; accountId: string; requestId: string }
+   | { kind: 'INVITE' }
+   | null
+
+// What brain's Needs me puts first (`PRIORITY` in brain's peopleIndex.ts): a reply, a request, someone ready to invite.
+export const PRIORITY = {
+   REPLY: 3,
+   REQUEST: 2,
+   INVITE: 1,
+} as const
 
 export const SELECT_MAX = 100
+
+// The periods the results line can cover.
+export const RESULT_DAYS = [7, 30, 90] as const
+
+export type ResultDays = (typeof RESULT_DAYS)[number]
+
+export const resultDays = (value: string): ResultDays => RESULT_DAYS.find(days => String(days) === value) ?? 7
 
 // Brain stops counting here; the Today line has no cap of its own.
 export const COUNT_CAP = 10_000
@@ -12,13 +30,25 @@ export const COUNT_CAP = 10_000
 // "10k+" above the cap the server counts to.
 export const countText = (value: number, cap: number) => (value > cap ? `${cap / 1000}k+` : value.toLocaleString('en'))
 
-// A reply waits (priority 2): Reply. A request waits (priority 1): Accept it on the account that got it.
-export const nextStepOf = ({ priority, links }: { priority: number; links: Link[] }): NextStep => {
-   if (priority === 2) {
+// A reply waits: Reply. A request waits: Accept it on the account that got it. Ready to invite (once invites are live): Invite.
+export const nextStepOf = ({
+   priority,
+   links,
+   invitesLive,
+}: {
+   priority: number
+   links: Link[]
+   invitesLive: boolean
+}): NextStep => {
+   if (priority === PRIORITY.REPLY) {
       return { kind: 'REPLY' }
    }
 
-   const request = priority === 1 ? links.find(({ kind }) => kind === 'REQUEST') : undefined
+   if (priority === PRIORITY.INVITE) {
+      return invitesLive ? { kind: 'INVITE' } : null
+   }
+
+   const request = priority === PRIORITY.REQUEST ? links.find(({ kind }) => kind === 'REQUEST') : undefined
 
    return request?.accountId
       ? {
