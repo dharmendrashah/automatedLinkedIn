@@ -5,6 +5,7 @@ import { KeptFiles } from 'core'
 
 import { type MessagesFile } from '@automatedLinkedIn/contracts'
 
+import { ClientService } from './client.service'
 import { LinkedInConversationService } from './linkedInConversation.service'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
@@ -685,6 +686,16 @@ describe('LinkedInConversationService (database)', () => {
 
       await chat('2-prince', 'Prince Patel')
       await chat('2-twin', 'Sam Twin')
+      await chat('2-listed', 'Lena Listed')
+      await PrismaService.client.person.create({
+         data: {
+            userId,
+            clientId: (await ClientService.create(userId, 'Listed')).id,
+            slug: 'lena-l',
+            name: 'Lena Listed',
+            lastTouchAt: new Date(),
+         },
+      })
       await PrismaService.client.linkedInConnection.createMany({
          data: [
             ['princepatel', 'Prince Patel'],
@@ -703,7 +714,10 @@ describe('LinkedInConversationService (database)', () => {
 
       expect(listed.find(item => item.title === 'Prince Patel')?.contactSlug).toBe('princepatel')
       expect(listed.find(item => item.title === 'Sam Twin')).not.toHaveProperty('contactSlug')
+      // Known to no account yet (an accepted invite whose connection is not read): the one person of that name on My network.
+      expect(listed.find(item => item.title === 'Lena Listed')?.contactSlug).toBe('lena-l')
 
+      await PrismaService.client.person.deleteMany({ where: { userId } })
       await PrismaService.client.linkedInConnection.deleteMany({ where: { userId } })
    })
 
