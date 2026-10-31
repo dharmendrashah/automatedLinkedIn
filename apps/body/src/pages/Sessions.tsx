@@ -175,14 +175,6 @@ export const Sessions = () => {
 
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
-         <div className="grid gap-1">
-            <h2 className="text-lg font-semibold">Sessions</h2>
-            <p className="text-muted-foreground text-sm">
-               Every check the spider ran for your accounts. Open one to see what happened, watch the video, and try it
-               again through another proxy.
-            </p>
-         </div>
-
          <div className="flex flex-wrap items-center gap-2">
             <SearchBox
                value={filters.q ?? ''}
