@@ -4,10 +4,19 @@ import { pollWhile } from '@/components/details/read-status'
 import { About, Section } from '@/components/people/person-sections'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+   CodeBlock,
+   CodeBlockActions,
+   CodeBlockContent,
+   CodeBlockCopyButton,
+   CodeBlockHeader,
+   CodeBlockTitle,
+} from '@/components/ui/code-block'
 import { DrawerDescription, DrawerTitle } from '@/components/ui/drawer'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { readableError } from '@/lib/trpc-error'
-import { BadgeCheck, BriefcaseBusiness, ExternalLink, Globe, MousePointerClick, Users } from 'lucide-react'
+import { BadgeCheck, Braces, BriefcaseBusiness, ExternalLink, Globe, MousePointerClick, Users } from 'lucide-react'
 import { type ReactNode } from 'react'
 import { Link } from 'react-router'
 
@@ -27,6 +36,30 @@ const LinkButton = ({ href, icon, children }: { href: string; icon: ReactNode; c
       </a>
    </Button>
 )
+
+// The company read as it is saved in the database (the allow-listed snapshot), to check what a read brought.
+const DataJson = ({ snapshot }: { snapshot: CompanyDetail['snapshot'] }) => {
+   if (!snapshot) {
+      return <p className="text-muted-foreground text-sm">No company read is saved yet.</p>
+   }
+
+   const json = JSON.stringify(snapshot, null, 2)
+
+   return (
+      <CodeBlock>
+         <CodeBlockHeader>
+            <CodeBlockTitle>
+               <Braces />
+               Company read · {new Date(snapshot.fetchedAt).toLocaleString()}
+            </CodeBlockTitle>
+            <CodeBlockActions>
+               <CodeBlockCopyButton value={json} />
+            </CodeBlockActions>
+         </CodeBlockHeader>
+         <CodeBlockContent wrap>{json}</CodeBlockContent>
+      </CodeBlock>
+   )
+}
 
 const Header = ({ detail }: { detail: CompanyDetail }) => {
    const utils = trpc.useUtils()
@@ -174,53 +207,64 @@ export const CompanyView = ({ slug, onPerson }: { slug: string; onPerson: (slug:
    return (
       <div className="grid gap-3">
          <Header detail={data} />
-         {snapshot && !snapshot.detailed && !data.company.archivedAt ? (
-            <p className="text-muted-foreground rounded-xl border border-dashed p-3 text-xs">
-               Read again to see the full address, skills, schools and more.
-            </p>
-         ) : null}
-         <KeyFacts facts={factsOf(snapshot, data.company)} />
-         {snapshot?.about ? <About text={snapshot.about} /> : null}
-         {snapshot && snapshot.specialities.length > 0 ? (
-            <Section title="Specialities">
-               <div className="flex flex-wrap gap-1.5">
-                  {snapshot.specialities.map(item => (
-                     <Badge key={item} variant="secondary">
-                        {item}
-                     </Badge>
-                  ))}
-               </div>
-            </Section>
-         ) : null}
-         {snapshot ? <Offices snapshot={snapshot} /> : null}
-         {snapshot ? <Breakdowns snapshot={snapshot} /> : null}
-         {snapshot ? null : (
-            <p className="text-muted-foreground rounded-xl border border-dashed p-4 text-sm">
-               About, specialities and who works there show after Read company page.
-            </p>
-         )}
-         <Section title={`Your people there (${people.length})`}>
-            {people.length === 0 ? (
-               <p className="text-muted-foreground text-sm">Nobody in your lists works here yet.</p>
-            ) : (
-               <ul className="grid gap-1">
-                  {people.map(person => (
-                     <PersonRow
-                        key={person.slug}
-                        name={person.name ?? person.slug}
-                        lines={[
-                           person.title ?? person.headline,
-                           [person.list.name, person.score !== null ? `score ${person.score}` : null]
-                              .filter(Boolean)
-                              .join(' · '),
-                        ]}
-                        onOpen={() => onPerson(person.slug)}
-                     />
-                  ))}
-               </ul>
-            )}
-         </Section>
-         <Workspace detail={data} />
+         <Tabs defaultValue="overview">
+            <TabsList>
+               <TabsTrigger value="overview">Overview</TabsTrigger>
+               <TabsTrigger value="data">Data JSON</TabsTrigger>
+            </TabsList>
+            <TabsContent value="data">
+               <DataJson snapshot={snapshot} />
+            </TabsContent>
+            <TabsContent value="overview" className="grid gap-3">
+               {snapshot && !snapshot.detailed && !data.company.archivedAt ? (
+                  <p className="text-muted-foreground rounded-xl border border-dashed p-3 text-xs">
+                     Read again to see the full address, skills, schools and more.
+                  </p>
+               ) : null}
+               <KeyFacts facts={factsOf(snapshot, data.company)} />
+               {snapshot?.about ? <About text={snapshot.about} /> : null}
+               {snapshot && snapshot.specialities.length > 0 ? (
+                  <Section title="Specialities">
+                     <div className="flex flex-wrap gap-1.5">
+                        {snapshot.specialities.map(item => (
+                           <Badge key={item} variant="secondary">
+                              {item}
+                           </Badge>
+                        ))}
+                     </div>
+                  </Section>
+               ) : null}
+               {snapshot ? <Offices snapshot={snapshot} /> : null}
+               {snapshot ? <Breakdowns snapshot={snapshot} /> : null}
+               {snapshot ? null : (
+                  <p className="text-muted-foreground rounded-xl border border-dashed p-4 text-sm">
+                     About, specialities and who works there show after Read company page.
+                  </p>
+               )}
+               <Section title={`Your people there (${people.length})`}>
+                  {people.length === 0 ? (
+                     <p className="text-muted-foreground text-sm">Nobody in your lists works here yet.</p>
+                  ) : (
+                     <ul className="grid gap-1">
+                        {people.map(person => (
+                           <PersonRow
+                              key={person.slug}
+                              name={person.name ?? person.slug}
+                              lines={[
+                                 person.title ?? person.headline,
+                                 [person.list.name, person.score !== null ? `score ${person.score}` : null]
+                                    .filter(Boolean)
+                                    .join(' · '),
+                              ]}
+                              onOpen={() => onPerson(person.slug)}
+                           />
+                        ))}
+                     </ul>
+                  )}
+               </Section>
+               <Workspace detail={data} />
+            </TabsContent>
+         </Tabs>
       </div>
    )
 }
