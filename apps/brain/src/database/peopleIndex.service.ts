@@ -13,11 +13,29 @@ const BATCH = 200
 const PROFILE_SLUG = /\/in\/([^/?#]+)/
 const MEMBER_ID = /^ACo/
 
-const slugOfConversation = (url: string | null, begunWith: string | null | undefined) => {
+const slugOfConversation = (url: string | null, begunWith: string | null | undefined, byName: string | undefined) => {
    const [, slug] = PROFILE_SLUG.exec(url ?? '') ?? []
 
-   return slug && !MEMBER_ID.test(slug) ? slug : (begunWith ?? undefined)
+   return slug && !MEMBER_ID.test(slug) ? slug : (begunWith ?? byName)
 }
+
+// The owner's chats LinkedIn names by member id that the name rule (`people_index_slug_by_name`) ties to one of these profiles.
+const chatsByName = async (userId: string, slugs: string[]) =>
+   new Map(
+      (
+         await PrismaService.client.$queryRaw<Array<{ id: string; slug: string }>>`
+            SELECT c."id", s."slug" FROM "LinkedInConversation" c
+            CROSS JOIN LATERAL (SELECT people_index_conversation_slug(c."id", c."contactProfileUrl") AS "slug") s
+            WHERE c."userId" = ${userId} AND c."kind" = 'DIRECT' AND c."contactProfileUrl" LIKE '%/in/ACo%'
+              AND c."participants" -> 0 ->> 'name' IN (
+                 SELECT "name" FROM "LinkedInConnection" WHERE "userId" = ${userId} AND "slug" = ANY(${slugs})
+                 UNION SELECT "name" FROM "LinkedInInvite" WHERE "userId" = ${userId} AND "slug" = ANY(${slugs})
+                 UNION SELECT "name" FROM "LinkedInInvitation" WHERE "userId" = ${userId} AND "slug" = ANY(${slugs})
+                 UNION SELECT "name" FROM "Person" WHERE "userId" = ${userId} AND "slug" = ANY(${slugs})
+              )
+              AND s."slug" = ANY(${slugs})`
+      ).map(({ id, slug }) => [id, slug])
+   )
 
 type Participant = { name?: string; imageUrl?: string }
 
@@ -87,6 +105,7 @@ export class PeopleIndexService {
       const clientOf = new Map(accounts.map(({ id, clientId }) => [id, clientId ?? defaultClientId]))
       const accountIds = accounts.map(({ id }) => id)
       const urls = slugs.flatMap(slug => [profileUrlOf(slug), profileUrlOf(slug).slice(0, -1)])
+      const named = await chatsByName(userId, slugs)
       const [requests, connections, conversations, members, targets, suppressed, existing, invites, snapshots] =
          await Promise.all([
             db.linkedInInvitation.findMany({
@@ -107,7 +126,11 @@ export class PeopleIndexService {
                where: {
                   userId,
                   kind: 'DIRECT',
-                  OR: [{ contactProfileUrl: { in: urls } }, { replies: { some: { recipientSlug: { in: slugs } } } }],
+                  OR: [
+                     { contactProfileUrl: { in: urls } },
+                     { replies: { some: { recipientSlug: { in: slugs } } } },
+                     { id: { in: [...named.keys()] } },
+                  ],
                },
                select: {
                   id: true,
@@ -221,7 +244,7 @@ export class PeopleIndexService {
          requests: bySlug(requests, ({ slug }) => slug),
          connections: bySlug(connections, ({ slug }) => slug),
          conversations: bySlug(conversations, row =>
-            slugOfConversation(row.contactProfileUrl, row.replies[0]?.recipientSlug)
+            slugOfConversation(row.contactProfileUrl, row.replies[0]?.recipientSlug, named.get(row.id))
          ),
          members: bySlug(members, ({ slug }) => slug),
          targets: bySlug(targets, ({ slug }) => slug),

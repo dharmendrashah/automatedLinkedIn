@@ -24,79 +24,14 @@ const profileSlug = (url: string | undefined) => {
    return slug && !MEMBER_ID.test(slug) ? slug : undefined
 }
 
-// A chat LinkedIn names by member id: the person is the one profile of that name the same account is connected to, invited or
-// was asked by, else the one person of that name on the owner's My network. Two profiles of one name leave it unknown.
-const byName = async (userId: string, chats: Shown[]) => {
-   const named = chats.flatMap(({ id, accountId, participants: [first] }) =>
-      first?.name
-         ? [
-              {
-                 id,
-                 name: first.name,
-                 key: `${accountId}:${first.name}`,
-              },
-           ]
-         : []
-   )
-
-   if (named.length === 0) {
-      return new Map<string, string>()
-   }
-
-   const names = { in: [...new Set(named.map(({ name }) => name))] }
-   const where = {
-      userId,
-      accountId: { in: [...new Set(chats.map(({ accountId }) => accountId))] },
-      name: names,
-   }
-   const select = {
-      accountId: true,
-      name: true,
-      slug: true,
-   }
-   const [connections, invites, requests, people] = await Promise.all([
-      PrismaService.client.linkedInConnection.findMany({
-         where,
-         select,
-      }),
-      PrismaService.client.linkedInInvite.findMany({
-         where,
-         select,
-      }),
-      PrismaService.client.linkedInInvitation.findMany({
-         where,
-         select,
-      }),
-      PrismaService.client.person.findMany({
-         where: {
-            userId,
-            name: names,
-         },
-         select: {
-            name: true,
-            slug: true,
-         },
-      }),
-   ])
-   const found = new Map<string, Set<string>>()
-   const add = (key: string, slug: string) => found.set(key, new Set([...(found.get(key) ?? []), slug]))
-
-   for (const row of [...connections, ...invites, ...requests]) {
-      add(`${row.accountId}:${row.name}`, row.slug)
-   }
-
-   for (const row of people) {
-      add(`*:${row.name ?? ''}`, row.slug)
-   }
-
-   return new Map(
-      named.flatMap(({ id, name, key }) => {
-         const [slug, other] = [...(found.get(key) ?? found.get(`*:${name}`) ?? [])]
-
-         return slug && !other ? [[id, slug] as const] : []
-      })
-   )
-}
+// The profile of chats the address does not give, by the rule the people index uses (`people_index_conversation_slug`): the first
+// message's recipient, else the one profile of that name the account knows, else the one My network person of that name.
+const slugsOf = async (ids: string[]) =>
+   ids.length > 0
+      ? PrismaService.client.$queryRaw<Array<{ id: string; slug: string | null }>>`
+           SELECT "id", people_index_conversation_slug("id", "contactProfileUrl") AS "slug"
+           FROM "LinkedInConversation" WHERE "id" = ANY(${ids})`
+      : []
 
 // The person of each one-to-one conversation by profile name (`contactSlug`), for the person drawer, and their picture from the
 // account's stored connection when the read gave none. One query each, whatever the number of conversations.
@@ -112,33 +47,11 @@ export const withPeople = async <T extends Shown>(
          return slug ? [[item.id, slug] as const] : []
       })
    )
-   const unknown = direct.filter(({ id }) => !slugs.has(id)).map(({ id }) => id)
-   const begun =
-      unknown.length > 0
-         ? await PrismaService.client.linkedInReply.findMany({
-              where: {
-                 userId,
-                 conversationId: { in: unknown },
-                 recipientSlug: { not: null },
-              },
-              select: {
-                 conversationId: true,
-                 recipientSlug: true,
-              },
-           })
-         : []
 
-   for (const { conversationId, recipientSlug } of begun) {
-      if (conversationId && recipientSlug) {
-         slugs.set(conversationId, recipientSlug)
+   for (const { id, slug } of await slugsOf(direct.filter(({ id }) => !slugs.has(id)).map(({ id }) => id))) {
+      if (slug) {
+         slugs.set(id, slug)
       }
-   }
-
-   for (const [id, slug] of await byName(
-      userId,
-      direct.filter(({ id }) => !slugs.has(id))
-   )) {
-      slugs.set(id, slug)
    }
 
    const bare = direct.filter(item => slugs.has(item.id) && !item.participants[0]?.imageUrl)

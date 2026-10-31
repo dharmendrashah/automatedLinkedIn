@@ -134,6 +134,53 @@ describe('PeopleIndexService (database)', () => {
       expect(own?.links.map(({ kind }) => kind)).toEqual(['CONVERSATION'])
    })
 
+   it('should tie a chat LinkedIn names by member id to the one connection of that name, and leave it out for two', async () => {
+      const chat = (name: string) =>
+         db.linkedInConversation.create({
+            data: {
+               userId,
+               accountId: ownAccountId,
+               linkedInId: randomUUID(),
+               title: name,
+               kind: 'DIRECT',
+               participants: [
+                  {
+                     name,
+                     profileUrl: `https://www.linkedin.com/in/ACoAA${randomUUID()}`,
+                  },
+               ],
+               contactProfileUrl: `https://www.linkedin.com/in/ACoAA${randomUUID()}`,
+               unread: false,
+               complete: true,
+               lastMessageAt: new Date(),
+               lastDirection: 'ME',
+            },
+         })
+
+      await chat('Mo Member')
+      await chat('Twin Name')
+      await db.linkedInConnection.createMany({
+         data: [
+            ['mo-m', 'Mo Member'],
+            ['twin-a', 'Twin Name'],
+            ['twin-b', 'Twin Name'],
+         ].map(([slug = '', name = '']) => ({
+            userId,
+            accountId: ownAccountId,
+            slug,
+            name,
+            headline: '',
+         })),
+      })
+      await PeopleIndexService.refresh(userId, ['mo-m', 'twin-a', 'twin-b'])
+
+      const [mo] = await people('mo-m')
+      const [twin] = await people('twin-a')
+
+      expect(mo?.links.map(({ kind }) => kind).sort()).toEqual(['CONNECTION', 'CONVERSATION'])
+      expect(twin?.links.map(({ kind }) => kind)).toEqual(['CONNECTION'])
+   })
+
    it('should keep a status the owner chose, and add list members of the default client with their fit', async () => {
       const defaultId = await ClientService.defaultId(userId)
       const list = await db.workflowList.create({
