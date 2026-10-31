@@ -17,7 +17,9 @@ import { cn } from '@/lib/utils'
 
 import { type PersonDetail } from './types'
 
-import { companyPageOf } from './company-page'
+import { trpc } from '../../trpc'
+import { type StackRef, useDetailStack } from '../details/use-detail-stack'
+import { companySlugOf } from './company-slug'
 
 type Snapshot = NonNullable<PersonDetail['snapshot']>
 type Member = NonNullable<PersonDetail['member']>
@@ -60,17 +62,43 @@ const Entry = ({
    title,
    subtitle,
    lines,
+   onOpen,
+   openLabel,
 }: {
    icon: ReactNode
    title: string
    subtitle?: ReactNode
    lines: (string | null)[]
+   // A company position opens the company drawer from its icon and its name.
+   onOpen?: () => void
+   openLabel?: string
 }) => (
    <li className="grid grid-cols-[auto_1fr] gap-3">
-      <span className="bg-muted text-muted-foreground grid size-10 place-items-center rounded-md">{icon}</span>
+      {onOpen ? (
+         <button
+            type="button"
+            onClick={onOpen}
+            aria-label={openLabel}
+            className="bg-muted text-muted-foreground hover:text-foreground focus-visible:ring-ring grid size-10 place-items-center rounded-md hover:ring-1 focus-visible:ring-2 focus-visible:outline-none"
+         >
+            {icon}
+         </button>
+      ) : (
+         <span className="bg-muted text-muted-foreground grid size-10 place-items-center rounded-md">{icon}</span>
+      )}
       <div className="grid gap-0.5">
          <span className="text-sm font-medium">{title}</span>
-         {subtitle}
+         {onOpen && subtitle ? (
+            <button
+               type="button"
+               onClick={onOpen}
+               className="justify-self-start text-left underline-offset-4 hover:underline"
+            >
+               {subtitle}
+            </button>
+         ) : (
+            subtitle
+         )}
          {lines.filter(Boolean).map(line => (
             <span key={line} className="text-muted-foreground text-xs whitespace-pre-line">
                {line}
@@ -80,37 +108,70 @@ const Entry = ({
    </li>
 )
 
-export const Experience = ({ roles }: { roles: Snapshot['experience'] }) => (
-   <Section title="Experience">
-      <ul className="grid gap-4">
-         {roles.map((role, index) => (
-            <Entry
-               key={`${role.title}-${role.company}-${index}`}
-               icon={<BriefcaseBusiness className="size-5" aria-hidden />}
-               title={role.title ?? 'Role'}
-               subtitle={<CompanyName name={role.company} page={companyPageOf(role.companyUrl)} />}
-               lines={[span(role.start, role.end), role.location, role.description]}
-            />
-         ))}
-      </ul>
-   </Section>
-)
+// Every position's company opens in the stacked drawer: by the link the read gave, else by a company of /companies with the same
+// name, else as an unknown company the owner can find and add.
+export const Experience = ({ roles }: { roles: Snapshot['experience'] }) => {
+   const open = useDetailStack()
+   const unlinked = [
+      ...new Set(
+         roles
+            .filter(role => role.company && !companySlugOf(role.companyUrl))
+            .flatMap(role => (role.company ? [role.company] : []))
+      ),
+   ].slice(0, 50)
+   const named = trpc.linkedInCompany.byNames.useQuery(
+      { names: unlinked },
+      {
+         enabled: Boolean(open) && unlinked.length > 0,
+         retry: false,
+         staleTime: 60_000,
+      }
+   )
+   const slugOfName = new Map((named.data ?? []).map(({ name, slug }) => [name.toLowerCase(), slug]))
+   const refOf = (role: Snapshot['experience'][number]): StackRef | null => {
+      const slug = companySlugOf(role.companyUrl) ?? slugOfName.get(role.company?.trim().toLowerCase() ?? '')
 
-// A company opens its drawer on /companies in a new tab when the read linked it to LinkedIn.
-const CompanyName = ({ name, page }: { name: string | null; page: string | null }) =>
-   page ? (
-      <a
-         href={page}
-         target="_blank"
-         rel="noopener noreferrer"
-         className="justify-self-start text-sm underline-offset-4 hover:underline"
-         aria-label={`${name ?? 'Company'} on Companies (opens in a new tab)`}
-      >
-         {name ?? 'Company'}
-      </a>
-   ) : name ? (
-      <span className="text-sm">{name}</span>
-   ) : null
+      if (slug) {
+         return {
+            kind: 'company',
+            slug,
+            ...(role.company && { name: role.company }),
+         }
+      }
+
+      return role.company && named.isSuccess
+         ? {
+              kind: 'unknownCompany',
+              name: role.company,
+           }
+         : null
+   }
+
+   return (
+      <Section title="Experience">
+         <ul className="grid gap-4">
+            {roles.map((role, index) => {
+               const ref = open ? refOf(role) : null
+
+               return (
+                  <Entry
+                     key={`${role.title}-${role.company}-${index}`}
+                     icon={<BriefcaseBusiness className="size-5" aria-hidden />}
+                     title={role.title ?? 'Role'}
+                     subtitle={role.company ? <span className="text-sm">{role.company}</span> : null}
+                     lines={[span(role.start, role.end), role.location, role.description]}
+                     {...(ref &&
+                        open && {
+                           onOpen: () => open(ref),
+                           openLabel: `Open ${role.company ?? 'the company'}`,
+                        })}
+                  />
+               )
+            })}
+         </ul>
+      </Section>
+   )
+}
 
 export const Education = ({ schools }: { schools: Snapshot['education'] }) => (
    <Section title="Education">

@@ -95,6 +95,11 @@ export const CompanyPeople = ({
                         </span>
                      </PersonCard>
                      <span className="ml-auto flex flex-wrap items-center justify-end gap-1">
+                        {person.relation === 'FORMER' ? (
+                           <Badge variant="outline" className="font-normal">
+                              {person.endedOn ? `Former · left ${person.endedOn}` : 'Former'}
+                           </Badge>
+                        ) : null}
                         {person.doNotContact ? <Badge variant="destructive">Do not contact</Badge> : null}
                         <StatusChip status={person.status} />
                         {person.clients.map(client => (

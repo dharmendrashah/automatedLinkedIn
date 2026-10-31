@@ -444,6 +444,7 @@ export class LinkedInCompanyService {
                readAt: read?.fetchedAt ?? null,
                people: people.get(item.slug) ?? {
                   count: 0,
+                  former: 0,
                   first: [],
                },
             }
@@ -592,6 +593,44 @@ export class LinkedInCompanyService {
             },
          },
          select: companySelect,
+      })
+   }
+
+   // The owner's companies named so (case-insensitive), for positions a profile read did not link; the newest wins a shared name.
+   public static async byNames(userId: string, names: string[]) {
+      const wanted = [...new Set(names.map(name => name.trim()).filter(Boolean))]
+      const rows =
+         wanted.length === 0
+            ? []
+            : await PrismaService.client.linkedInCompany.findMany({
+                 where: {
+                    userId,
+                    OR: wanted.map(name => ({
+                       name: {
+                          equals: name,
+                          mode: 'insensitive' as const,
+                       },
+                    })),
+                 },
+                 orderBy: { createdAt: 'asc' },
+                 select: {
+                    name: true,
+                    slug: true,
+                 },
+              })
+      const found = new Map(rows.map(({ name, slug }) => [(name ?? '').toLowerCase(), slug]))
+
+      return wanted.flatMap(name => {
+         const slug = found.get(name.toLowerCase())
+
+         return slug
+            ? [
+                 {
+                    name,
+                    slug,
+                 },
+              ]
+            : []
       })
    }
 

@@ -13,9 +13,10 @@ import { Button } from '@/components/ui/button'
 import { readableError } from '@/lib/trpc-error'
 import { toast } from 'sonner'
 
+import { type Company } from './types'
+
 import { trpc } from '../../trpc'
 import { isRecent, readCostLine, readResultLine } from './read-cost'
-import { type Company } from './types'
 
 // The bulk bar's Read for the picked companies (.plan/companies-import-csv.md): the price first, then one paid read each.
 export const ReadManyButton = ({ picked }: { picked: Company[] }) => {

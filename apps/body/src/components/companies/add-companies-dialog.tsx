@@ -426,8 +426,8 @@ export const AddCompaniesDialog = ({ onShow }: { onShow: (label: string) => void
                         placeholder="Pick or create labels"
                      />
                      <p className="text-muted-foreground text-xs">
-                        Companies you already have get these labels added to theirs. The import label lets you find
-                        this import later.
+                        Companies you already have get these labels added to theirs. The import label lets you find this
+                        import later.
                      </p>
                   </div>
                   <ReadOptions

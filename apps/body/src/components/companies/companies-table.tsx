@@ -95,9 +95,9 @@ type Handlers = {
    onPerson: (slug: string) => void
 }
 
-// The company's My network people: up to three photos with a short look on hover, and how many there are.
+// The company's My network people: up to three photos with a short look on hover, how many work there and how many did.
 const PeopleCell = ({ people, onPerson }: { people: Company['people']; onPerson: (slug: string) => void }) =>
-   people.count === 0 ? (
+   people.count + people.former === 0 ? (
       <Muted>—</Muted>
    ) : (
       <Stop>
@@ -108,13 +108,18 @@ const PeopleCell = ({ people, onPerson }: { people: Company['people']; onPerson:
                      <ContactAvatar
                         name={person.name ?? person.slug}
                         size="sm"
-                        className="ring-background ring-2"
+                        className={cn('ring-background ring-2', person.relation === 'FORMER' && 'opacity-50 grayscale')}
                         {...(person.photoUrl && { imageUrl: person.photoUrl })}
                      />
                   </PersonCard>
                ))}
             </span>
-            <span className="text-sm tabular-nums">{people.count}</span>
+            <span className="grid text-sm leading-tight tabular-nums">
+               {people.count > 0 ? people.count : null}
+               {people.former > 0 ? (
+                  <span className="text-muted-foreground text-xs">{people.former} former</span>
+               ) : null}
+            </span>
          </span>
       </Stop>
    )

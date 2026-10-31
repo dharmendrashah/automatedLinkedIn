@@ -167,6 +167,7 @@ describe('LinkedInCompanyService', () => {
                   readAt: null,
                   people: {
                      count: 0,
+                     former: 0,
                      first: [],
                   },
                },

@@ -200,6 +200,11 @@ export const linkedInCompany = router({
       }
    }),
 
+   // The owner's companies by name, for a person's positions that carry no company link.
+   byNames: ownerProcedure
+      .input(z.object({ names: z.array(z.string().trim().min(1).max(200)).min(1).max(50) }))
+      .query(({ ctx, input }) => LinkedInCompanyService.byNames(ctx.user.id, input.names)),
+
    // One paid read each for the picked companies; a read in the last 30 days is skipped.
    readMany: ownerProcedure
       .input(z.object({ ids }))
