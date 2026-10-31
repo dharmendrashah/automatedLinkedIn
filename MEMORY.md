@@ -72,6 +72,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Gotchas
 
+- `apps/body` browser code must not import values from `@automatedLinkedIn/contracts` (types are fine): Vite serves its CommonJS `dist` without named exports, so the page fails with "does not provide an export named …". Tests run in Node and may. Take what the page needs from brain's answer instead.
 - `Person.search` is a generated column (raw SQL in `20261030130000_add_network_hub`). Prisma reads its expression as a default, so the schema carries it as `@default(dbgenerated("…"))` written exactly as Postgres prints it (`pg_get_expr`); without that, `migrate dev` generates `ALTER COLUMN "search" DROP DEFAULT`, which fails (42601). If the expression ever changes, update both.
 
 - The data service's full profile row (live read, 2026-10-30) has `coverPhoto`, `premium`, `verified`, `creator`, `hiring`, `openToWork`, `country`, `photo`, and per position `companyLinkedinUrl`, `companyLogo`, `companyName`, `position`, `endDate` (full list in `.plan/network-person-drawer.md`). Raw rows are never stored, so new fields are learnt with the opt-in live test (names only).
