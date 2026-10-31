@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
    findSnapshots: vi.fn(),
 }))
 
+// The whole `core` reads the environment; this service only needs the snapshot helpers.
+vi.mock('core', async () => ({ ...(await vi.importActual<object>('../core/pageSnapshot')) }))
+
 vi.mock('./prisma.service', () => ({
    PrismaService: {
       client: {
