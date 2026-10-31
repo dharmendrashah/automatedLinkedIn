@@ -126,6 +126,7 @@ describe('LinkedInInviteService (database)', () => {
          accountId,
          today: 20,
          toInvite: 3,
+         unnamed: 0,
          skipped: { REQUEST: 1 },
       })
       expect(plan?.sentence).toBe(
@@ -140,7 +141,7 @@ describe('LinkedInInviteService (database)', () => {
       ).toBeNull()
    })
 
-   it('should queue invites with the note filled in, and skip people invited already on a second ask', async () => {
+   it('should queue invites with the note as written, and skip people invited already on a second ask', async () => {
       const ids = await Promise.all(SLUGS.slice(0, 3).map(personId))
 
       await expect(
@@ -152,7 +153,7 @@ describe('LinkedInInviteService (database)', () => {
       ).resolves.toMatchObject({ queued: 3 })
       expect((await invitesOf('ada-l'))[0]).toMatchObject({
          state: 'QUEUED',
-         note: 'Hi ada-l',
+         note: 'Hi {first_name}',
          accountId,
       })
       expect(
@@ -174,12 +175,31 @@ describe('LinkedInInviteService (database)', () => {
          return { id: sessionId } as Awaited<ReturnType<typeof TaskService.request>>
       })
 
+      // A read named Ada after she was invited: the invite goes with that name, and the note is filled from it.
+      await db.person.updateMany({
+         where: {
+            clientId,
+            slug: 'ada-l',
+         },
+         data: { name: 'Ada Lovelace' },
+      })
+
       await expect(LinkedInInviteService.dispatchNext(accountId)).resolves.toEqual({ asked: true })
       expect(request.mock.calls[0]?.[0]).toMatchObject({
          task: 'linkedin-invite',
          input: { withdraw: [] },
       })
       expect((request.mock.calls[0]?.[0].input as { send: unknown[] }).send).toHaveLength(3)
+      expect((request.mock.calls[0]?.[0].input as { send: unknown[] }).send).toContainEqual({
+         id: (await invitesOf('ada-l'))[0]?.id,
+         slug: 'ada-l',
+         name: 'Ada Lovelace',
+         note: 'Hi Ada',
+      })
+      expect((await invitesOf('ada-l'))[0]).toMatchObject({
+         name: 'Ada Lovelace',
+         note: 'Hi Ada',
+      })
       // A run is going: nothing else starts.
       await expect(LinkedInInviteService.dispatchNext(accountId)).resolves.toMatchObject({ asked: false })
       request.mockRestore()
@@ -274,5 +294,26 @@ describe('LinkedInInviteService (database)', () => {
       const [alan] = await invitesOf('alan-t')
 
       expect(await LinkedInInviteService.cancel(userId, alan?.id ?? '')).toBe(false)
+   })
+
+   it('should give an invite asked before a name was known the name My network has, and never take its address as a name', async () => {
+      const [grace] = await invitesOf('grace-h')
+
+      await db.linkedInInvite.update({
+         where: { id: grace?.id ?? '' },
+         data: { name: 'grace-h' },
+      })
+      await PeopleIndexService.refresh(userId, ['grace-h'])
+
+      expect((await invitesOf('grace-h'))[0]?.name).toBe('grace-h Person')
+      expect(
+         await db.person.findFirst({
+            where: {
+               clientId,
+               slug: 'grace-h',
+            },
+            select: { name: true },
+         })
+      ).toEqual({ name: 'grace-h Person' })
    })
 })

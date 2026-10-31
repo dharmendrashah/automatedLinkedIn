@@ -3,12 +3,11 @@ import { z } from 'zod'
 import {
    COUNT_CAP,
    ClientService,
-   IMPORT_BATCH,
-   IMPORT_CAP,
    LinkedInInviteService,
    PEOPLE_SORTS,
    PEOPLE_TABS,
    PeopleService,
+   PersonService,
 } from 'database'
 
 import { INVITE_LIMITS, peopleFiltersSchema } from '@automatedLinkedIn/contracts'
@@ -137,6 +136,11 @@ export const people = router({
       .query(async ({ ctx, input }) =>
          present(await refused(LinkedInInviteService.plan(ctx.user.id, input)), NO_CLIENT)
       ),
+
+   // Reads the profiles of the picked people with no name yet, so their invite notes get a first name.
+   readUnnamed: ownerProcedure
+      .input(invitees.omit({ accountId: true }))
+      .mutation(({ ctx, input }) => PersonService.readUnnamed(ctx.user.id, input.clientId, input.personIds)),
 
    // Queues invites to up to 100 people of one client, planned over the days within the account's limits.
    invite: ownerProcedure
