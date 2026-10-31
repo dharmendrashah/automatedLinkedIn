@@ -28,7 +28,8 @@ type Options = {
 // Every label the owner has, to tick or untick, plus "Create" for a new one. Starts-with matches come first.
 export const LabelOptions = ({ value, onChange, kind }: Options) => {
    const [search, setSearch] = useState('')
-   const known = trpc.label.list.useQuery(undefined, { staleTime: 30_000 })
+   // Read again each time the picker opens, so a label just made on another row or page is there.
+   const known = trpc.label.list.useQuery(undefined, { refetchOnMount: 'always' })
    const typed = cleanLabel(search)
    const counts = new Map((known.data ?? []).map(label => [label.label, kind ? label[kind] : label.total]))
    const all = [...new Set([...value, ...counts.keys()])]

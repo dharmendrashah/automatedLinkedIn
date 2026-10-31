@@ -208,6 +208,30 @@ describe('labels and input picks (database)', () => {
       })
    })
 
+   it('should list the labels the owner put on My network people', async () => {
+      const client = await PrismaService.client.client.create({
+         data: {
+            userId,
+            name: `Client ${randomUUID().slice(0, 8)}`,
+         },
+      })
+
+      await PrismaService.client.person.create({
+         data: {
+            userId,
+            clientId: client.id,
+            slug: 'icp-person',
+            labels: ['icp'],
+            lastTouchAt: new Date(),
+         },
+      })
+
+      expect((await LabelService.list(userId)).find(({ label }) => label === 'icp')).toMatchObject({
+         people: 1,
+         total: 1,
+      })
+   })
+
    it('should relabel people in the owner lists only', async () => {
       const list = await PrismaService.client.workflowList.create({
          data: {
