@@ -71,17 +71,19 @@ type Mutation<I, O> = {
    isPending: boolean
 }
 
-// The bulk bar of /profiles, /companies and /posts: labels, and archive where the list has it.
+// The bulk bar of /profiles, /companies and /posts: labels, archive where the list has it, then the page's own actions.
 export const LinkBulkBar = ({
    kind,
    selection,
    labelMany,
    archiveMany,
+   children,
 }: {
    kind: LabelKind
    selection: Selection
    labelMany: Mutation<{ ids: string[]; add: string[]; remove: string[] }, { changed: number; full: number }>
    archiveMany?: Mutation<{ ids: string[] }, { archived: number }>
+   children?: ReactNode
 }) => {
    const ids = [...selection.selected]
 
@@ -126,6 +128,7 @@ export const LinkBulkBar = ({
                Archive
             </Button>
          ) : null}
+         {children}
       </BulkBar>
    )
 }

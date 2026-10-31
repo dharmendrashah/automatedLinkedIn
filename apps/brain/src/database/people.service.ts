@@ -1,4 +1,4 @@
-import { type LinkedInLink, parseLinkedInUrl, toCsv } from 'core'
+import { toCsv } from 'core'
 
 import { INVITES_LIVE } from 'env'
 
@@ -9,7 +9,7 @@ import { type PeopleFilters } from '@automatedLinkedIn/contracts'
 import { ClientService } from './client.service'
 import { ConflictError } from './conflict'
 import { DataReadService } from './dataRead.service'
-import { LABEL_LIMIT } from './linkedInRecord'
+import { type ImportEntry, type Imported, LABEL_LIMIT, appendNote, importedOf } from './linkedInRecord'
 import { type PeopleSort, type PeopleTab, orderOf, peopleWhere } from './peopleFilters'
 import { PRIORITY } from './peopleIndex'
 import { PeopleIndexService } from './peopleIndex.service'
@@ -37,57 +37,7 @@ export type PeopleQuery = {
 
 export type ViewQuery = Omit<PeopleQuery, 'tab' | 'sort' | 'cursor' | 'limit'>
 
-// One profile to import: its link, and the labels and notes the CSV gave it.
-export type ImportPerson = {
-   url: string
-   labels?: string[]
-   notes?: string
-}
-
-// One add call takes this many profiles; an import of up to IMPORT_CAP is sent in such batches.
-export const IMPORT_BATCH = 200
-export const IMPORT_CAP = 1_000
-const NOTES_MAX = 5_000
-
-type Imported = LinkedInLink & {
-   labels: string[]
-   notes: string | null
-   // The entries of the import that are this profile, as given.
-   inputs: string[]
-}
-
 type ImportState = 'NEW' | 'ALREADY_HERE' | 'DO_NOT_CONTACT'
-
-// The profiles of an import, once each (labels merged, notes joined), and how many entries were not profile links.
-const importedOf = (people: ImportPerson[]) => {
-   const found = new Map<string, Imported>()
-   let invalid = 0
-
-   for (const person of people) {
-      const link = parseLinkedInUrl(person.url.trim(), 'profile')
-
-      if (!link) {
-         invalid += 1
-         continue
-      }
-
-      const known = found.get(link.slug)
-      const labels = (person.labels ?? []).map(label => label.trim().toLowerCase()).filter(Boolean)
-      const notes = person.notes?.trim() || null
-
-      found.set(link.slug, {
-         ...link,
-         labels: [...new Set([...(known?.labels ?? []), ...labels])].slice(0, LABEL_LIMIT),
-         notes: [known?.notes, notes].filter(Boolean).join('\n') || null,
-         inputs: [...(known?.inputs ?? []), person.url],
-      })
-   }
-
-   return {
-      profiles: [...found.values()],
-      invalid,
-   }
-}
 
 const blockedOf = async (userId: string, slugs: string[]) =>
    new Set(
@@ -121,10 +71,7 @@ const keepOwnFields = async (userId: string, clientId: string, profile: Imported
       return
    }
 
-   const notes =
-      profile.notes && !(person.notes ?? '').includes(profile.notes)
-         ? [person.notes, profile.notes].filter(Boolean).join('\n').slice(0, NOTES_MAX)
-         : person.notes
+   const notes = appendNote(person.notes, profile.notes)
 
    await PrismaService.client.person.update({
       where: { id: person.id },
@@ -921,7 +868,7 @@ export class PeopleService {
    public static async add(
       userId: string,
       clientId: string,
-      people: ImportPerson[],
+      people: ImportEntry[],
       list: { id: string } | { name: string },
       read: boolean
    ) {
@@ -959,7 +906,7 @@ export class PeopleService {
       }
 
       const listClientId = 'clientId' in target && target.clientId ? target.clientId : ownClientId
-      const { profiles, invalid } = importedOf(people)
+      const { links: profiles, invalid } = importedOf(people, 'profile')
       const blocked = await blockedOf(
          userId,
          profiles.map(({ slug }) => slug)
@@ -1024,7 +971,7 @@ export class PeopleService {
          added,
          skipped,
          blocked: blocked.size,
-         invalid,
+         invalid: invalid.length,
          reading,
          notRead: read ? kept.length - reading : 0,
       }
@@ -1039,7 +986,10 @@ export class PeopleService {
          return null
       }
 
-      const { profiles, invalid } = importedOf(urls.map(url => ({ url })))
+      const { links: profiles, invalid } = importedOf(
+         urls.map(url => ({ url })),
+         'profile'
+      )
       const slugs = profiles.map(({ slug }) => slug)
       const db = PrismaService.client
       const [blocked, members, targets, known] = await Promise.all([
@@ -1077,7 +1027,7 @@ export class PeopleService {
             inputs,
             state: stateOf(slug),
          })),
-         invalid,
+         invalid: invalid.length,
       }
    }
 

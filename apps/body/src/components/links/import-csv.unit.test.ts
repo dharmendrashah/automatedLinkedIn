@@ -1,16 +1,24 @@
 import { describe, expect, it } from 'vitest'
 
-import { EXAMPLE_CSV, IMPORT_ROWS, linksOf, peopleOf, readImportCsv } from './import-csv'
+import {
+   COMPANY_CSV,
+   IMPORT_ROWS,
+   PROFILE_CSV,
+   entriesOf,
+   linksOf,
+   readImportCsv,
+   skippedCsv,
+} from './import-csv'
 
-const rowsOf = (raw: string) => {
-   const read = readImportCsv(raw)
+const rowsOf = (raw: string, kind = PROFILE_CSV) => {
+   const read = readImportCsv(raw, kind)
 
    return 'rows' in read ? read.rows : read.error
 }
 
 describe('readImportCsv', () => {
    it('reads the example: the link, the labels split on ";" and the notes', () => {
-      expect(readImportCsv(EXAMPLE_CSV)).toEqual({
+      expect(readImportCsv(PROFILE_CSV.example, PROFILE_CSV)).toEqual({
          rows: [
             {
                url: 'https://www.linkedin.com/in/example-one/',
@@ -55,11 +63,44 @@ describe('readImportCsv', () => {
    })
 
    it('says what is wrong with a file it cannot use', () => {
-      expect(readImportCsv('')).toEqual({ error: 'The file is empty.' })
-      expect(readImportCsv('name,labels\nAda,x\n')).toEqual({ error: 'The file has no profile_url column.' })
-      expect(readImportCsv(`profile_url\n${'https://www.linkedin.com/in/a/\n'.repeat(IMPORT_ROWS + 1)}`)).toEqual({
-         error: `Import at most ${IMPORT_ROWS.toLocaleString('en')} profiles at once.`,
-      })
+      expect(rowsOf('')).toBe('The file is empty.')
+      expect(rowsOf('name,labels\nAda,x\n')).toBe('The file has no profile_url column.')
+      expect(rowsOf('name,labels\nAcme,x\n', COMPANY_CSV)).toBe('The file has no company_url column.')
+      expect(rowsOf(`profile_url\n${'https://www.linkedin.com/in/a/\n'.repeat(IMPORT_ROWS + 1)}`)).toBe(
+         `Import at most ${IMPORT_ROWS.toLocaleString('en')} profiles at once.`
+      )
+   })
+
+   it('finds the company link column under the names exports use', () => {
+      expect(rowsOf('Name,LinkedIn URL,Labels\nAcme,https://www.linkedin.com/company/acme/,tier1\n', COMPANY_CSV)).toEqual([
+         {
+            url: 'https://www.linkedin.com/company/acme/',
+            labels: ['tier1'],
+            notes: '',
+         },
+      ])
+      expect(rowsOf(COMPANY_CSV.example, COMPANY_CSV)).toHaveLength(2)
+   })
+})
+
+describe('skippedCsv', () => {
+   it('gives back the rows that were not links, safe to open in a spreadsheet', () => {
+      const rows = [
+         {
+            url: 'https://www.linkedin.com/company/acme/',
+            labels: [],
+            notes: '',
+         },
+         {
+            url: '=HYPERLINK("x")',
+            labels: ['a', 'b'],
+            notes: 'Hi, there',
+         },
+      ]
+
+      expect(skippedCsv(rows, ['=HYPERLINK("x")'], COMPANY_CSV)).toBe(
+         'company_url,labels,notes\r\n"\'=HYPERLINK(""x"")",a;b,"Hi, there"'
+      )
    })
 })
 
@@ -73,7 +114,7 @@ describe('linksOf', () => {
    })
 })
 
-describe('peopleOf', () => {
+describe('entriesOf', () => {
    it('gives each chosen profile the labels and notes of every row that named it', () => {
       const rows = [
          {
@@ -94,7 +135,7 @@ describe('peopleOf', () => {
       ]
 
       expect(
-         peopleOf(rows, [
+         entriesOf(rows, [
             {
                url: 'https://www.linkedin.com/in/a',
                inputs: ['linkedin.com/in/a', 'https://www.linkedin.com/in/a/'],

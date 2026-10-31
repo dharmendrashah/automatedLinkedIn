@@ -1,6 +1,7 @@
 import { AddCompaniesDialog } from '@/components/companies/add-companies-dialog'
 import { CompaniesTable } from '@/components/companies/companies-table'
 import { CompanyFilterChips, CompanyFiltersSheet } from '@/components/companies/filters/company-filters'
+import { ReadManyButton } from '@/components/companies/read-many-button'
 import {
    type Basics,
    type CompanyFilters,
@@ -251,7 +252,7 @@ export const Companies = () => {
             </Button>
             <div className="ml-auto flex items-center gap-2">
                <ColumnsMenu columns={COMPANY_COLUMNS} hidden={hidden} onChange={setHidden} />
-               <AddCompaniesDialog />
+               <AddCompaniesDialog onShow={label => state.setTags([label])} />
             </div>
          </div>
 
@@ -286,7 +287,9 @@ export const Companies = () => {
 
          {actionError ? <p className="text-destructive text-sm">{actionError}</p> : null}
 
-         <LinkBulkBar kind="companies" selection={selection} labelMany={labelMany} />
+         <LinkBulkBar kind="companies" selection={selection} labelMany={labelMany}>
+            <ReadManyButton picked={rows.filter(({ id }) => selection.selected.has(id))} />
+         </LinkBulkBar>
 
          <CompaniesTable
             companies={rows}

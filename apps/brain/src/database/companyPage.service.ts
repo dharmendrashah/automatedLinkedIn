@@ -1,5 +1,7 @@
 import { readCompanySnapshot } from 'core'
 
+import { type Prisma } from 'generated/prisma/client'
+
 import { PRICE_MICROS } from '@automatedLinkedIn/contracts'
 
 import { ConflictError } from './conflict'
@@ -11,6 +13,16 @@ import { PrismaService } from './prisma.service'
 // their lists who work there.
 
 const PEOPLE_SHOWN = 50
+const RECENT_MS = 30 * 24 * 60 * 60 * 1000
+
+const queueRead = (userId: string, slug: string, url: string) =>
+   DataReadService.queue({
+      userId,
+      kind: 'COMPANY',
+      slug,
+      operation: 'companies',
+      params: { companies: [url] },
+   })
 
 const whereSnapshot = (userId: string, slug: string) => ({
    userId_kind_slug: {
@@ -105,14 +117,54 @@ export class CompanyPageService {
          throw new ConflictError('Restore the company first.')
       }
 
-      await DataReadService.queue({
-         userId,
-         kind: 'COMPANY',
-         slug,
-         operation: 'companies',
-         params: { companies: [known.url] },
-      })
+      await queueRead(userId, slug, known.url)
 
       return CompanyPageService.detail(userId, slug)
+   }
+
+   // The companies of these read (and paid for) in the last 30 days, which an import or a bulk read leaves alone.
+   public static readRecently(userId: string, slugs: string[], now = new Date()) {
+      return DataReadService.paidSince(userId, 'COMPANY', slugs, new Date(now.getTime() - RECENT_MS))
+   }
+
+   // One read each for the owner's live companies matched, except those read in the last 30 days (.plan/companies-import-csv.md).
+   // A read refused now (the balance is low) is counted, not failed.
+   public static async readMany(userId: string, which: Prisma.LinkedInCompanyWhereInput) {
+      const companies = await PrismaService.client.linkedInCompany.findMany({
+         where: {
+            ...which,
+            userId,
+            archivedAt: null,
+         },
+         select: {
+            slug: true,
+            url: true,
+         },
+      })
+      const recent = await CompanyPageService.readRecently(
+         userId,
+         companies.map(({ slug }) => slug)
+      )
+      let reading = 0
+      let paused = 0
+
+      for (const { slug, url } of companies.filter(({ slug }) => !recent.has(slug))) {
+         try {
+            await queueRead(userId, slug, url)
+            reading += 1
+         } catch (error) {
+            if (!(error instanceof ConflictError)) {
+               throw error
+            }
+
+            paused += 1
+         }
+      }
+
+      return {
+         reading,
+         readRecently: recent.size,
+         paused,
+      }
    }
 }

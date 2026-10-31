@@ -1,7 +1,10 @@
 import { z } from 'zod'
 
 import {
+   CompanyPageService,
    CompanyViewService,
+   IMPORT_BATCH,
+   IMPORT_CAP,
    IcpService,
    LinkedInCompanyService,
    READ_AGES,
@@ -11,7 +14,7 @@ import {
 
 import { ownerProcedure, router } from 'trpc'
 
-import { byId, createInput, found, ids, labelInput, listInput, readLinks, status, tags, text } from '../linkedInRecord'
+import { byId, found, ids, labelInput, listInput, status, tags, text } from '../linkedInRecord'
 import { orConflict, present } from '../owned'
 import { visitProcedure } from '../pageVisit'
 
@@ -135,17 +138,72 @@ const viewInput = z.object({
    query: z.string().max(4_000),
 })
 
+const companyUrl = z.string().trim().min(1).max(500)
+
+// The import of pasted links or a CSV (.plan/companies-import-csv.md), sent in batches. `read`: none, only the companies that
+// were new or archived, or all of them; any read in the last 30 days is skipped.
+const importInput = z.object({
+   companies: z
+      .array(
+         z.object({
+            url: companyUrl,
+            labels: tags.optional(),
+            notes: z.string().trim().max(1_000).optional(),
+         })
+      )
+      .min(1)
+      .max(IMPORT_BATCH),
+   labels: tags.default([]),
+   read: z.enum(['NONE', 'NEW', 'ALL']).default('NONE'),
+})
+
+const NO_READS = {
+   reading: 0,
+   readRecently: 0,
+   paused: 0,
+}
+
 // Every procedure scopes to ctx.user.id, so one user can never reach another's companies by id.
 export const linkedInCompany = router({
-   create: ownerProcedure.input(createInput).mutation(async ({ ctx, input }) => {
-      const { links, invalid } = readLinks(input.urls, 'company')
-      const saved = await LinkedInCompanyService.addMany(ctx.user.id, links, input.labels)
+   // What an import would do with each link (read only; a mutation so up to IMPORT_CAP links fit in the request).
+   preview: ownerProcedure
+      .input(z.object({ urls: z.array(companyUrl).min(1).max(IMPORT_CAP) }))
+      .mutation(async ({ ctx, input }) => {
+         const { companies, invalid } = await LinkedInCompanyService.preview(ctx.user.id, input.urls)
+         const recent = await CompanyPageService.readRecently(
+            ctx.user.id,
+            companies.map(({ slug }) => slug)
+         )
+
+         return {
+            companies: companies.map(company => ({
+               ...company,
+               readRecently: recent.has(company.slug),
+            })),
+            invalid,
+         }
+      }),
+
+   import: ownerProcedure.input(importInput).mutation(async ({ ctx, input }) => {
+      const { slugs, fresh, ...saved } = await LinkedInCompanyService.importMany(
+         ctx.user.id,
+         input.companies,
+         input.labels
+      )
+      const toRead = input.read === 'ALL' ? slugs : input.read === 'NEW' ? fresh : []
+      const reads =
+         toRead.length === 0 ? NO_READS : await CompanyPageService.readMany(ctx.user.id, { slug: { in: toRead } })
 
       return {
          ...saved,
-         invalid,
+         ...reads,
       }
    }),
+
+   // One paid read each for the picked companies; a read in the last 30 days is skipped.
+   readMany: ownerProcedure
+      .input(z.object({ ids }))
+      .mutation(({ ctx, input }) => CompanyPageService.readMany(ctx.user.id, { id: { in: input.ids } })),
 
    // `cursor` is the page a scrolling table asks for next (TanStack infinite query); `nextCursor` is unset at the end.
    list: ownerProcedure.input(companyListInput).query(async ({ ctx, input }) => {
