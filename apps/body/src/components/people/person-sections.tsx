@@ -17,7 +17,8 @@ import { cn } from '@/lib/utils'
 
 import { type PersonDetail } from './types'
 
-import { companyPageOf } from './company-page'
+import { useDetailStack } from '../details/use-detail-stack'
+import { companySlugOf } from './company-slug'
 
 type Snapshot = NonNullable<PersonDetail['snapshot']>
 type Member = NonNullable<PersonDetail['member']>
@@ -60,17 +61,43 @@ const Entry = ({
    title,
    subtitle,
    lines,
+   onOpen,
+   openLabel,
 }: {
    icon: ReactNode
    title: string
    subtitle?: ReactNode
    lines: (string | null)[]
+   // A company position opens the company drawer from its icon and its name.
+   onOpen?: () => void
+   openLabel?: string
 }) => (
    <li className="grid grid-cols-[auto_1fr] gap-3">
-      <span className="bg-muted text-muted-foreground grid size-10 place-items-center rounded-md">{icon}</span>
+      {onOpen ? (
+         <button
+            type="button"
+            onClick={onOpen}
+            aria-label={openLabel}
+            className="bg-muted text-muted-foreground hover:text-foreground focus-visible:ring-ring grid size-10 place-items-center rounded-md hover:ring-1 focus-visible:ring-2 focus-visible:outline-none"
+         >
+            {icon}
+         </button>
+      ) : (
+         <span className="bg-muted text-muted-foreground grid size-10 place-items-center rounded-md">{icon}</span>
+      )}
       <div className="grid gap-0.5">
          <span className="text-sm font-medium">{title}</span>
-         {subtitle}
+         {onOpen && subtitle ? (
+            <button
+               type="button"
+               onClick={onOpen}
+               className="justify-self-start text-left underline-offset-4 hover:underline"
+            >
+               {subtitle}
+            </button>
+         ) : (
+            subtitle
+         )}
          {lines.filter(Boolean).map(line => (
             <span key={line} className="text-muted-foreground text-xs whitespace-pre-line">
                {line}
@@ -80,37 +107,38 @@ const Entry = ({
    </li>
 )
 
-export const Experience = ({ roles }: { roles: Snapshot['experience'] }) => (
-   <Section title="Experience">
-      <ul className="grid gap-4">
-         {roles.map((role, index) => (
-            <Entry
-               key={`${role.title}-${role.company}-${index}`}
-               icon={<BriefcaseBusiness className="size-5" aria-hidden />}
-               title={role.title ?? 'Role'}
-               subtitle={<CompanyName name={role.company} page={companyPageOf(role.companyUrl)} />}
-               lines={[span(role.start, role.end), role.location, role.description]}
-            />
-         ))}
-      </ul>
-   </Section>
-)
+export const Experience = ({ roles }: { roles: Snapshot['experience'] }) => {
+   const open = useDetailStack()
 
-// A company opens its drawer on /companies in a new tab when the read linked it to LinkedIn.
-const CompanyName = ({ name, page }: { name: string | null; page: string | null }) =>
-   page ? (
-      <a
-         href={page}
-         target="_blank"
-         rel="noopener noreferrer"
-         className="justify-self-start text-sm underline-offset-4 hover:underline"
-         aria-label={`${name ?? 'Company'} on Companies (opens in a new tab)`}
-      >
-         {name ?? 'Company'}
-      </a>
-   ) : name ? (
-      <span className="text-sm">{name}</span>
-   ) : null
+   return (
+      <Section title="Experience">
+         <ul className="grid gap-4">
+            {roles.map((role, index) => {
+               const slug = companySlugOf(role.companyUrl)
+
+               return (
+                  <Entry
+                     key={`${role.title}-${role.company}-${index}`}
+                     icon={<BriefcaseBusiness className="size-5" aria-hidden />}
+                     title={role.title ?? 'Role'}
+                     subtitle={role.company ? <span className="text-sm">{role.company}</span> : null}
+                     lines={[span(role.start, role.end), role.location, role.description]}
+                     {...(slug &&
+                        open && {
+                           onOpen: () =>
+                              open({
+                                 kind: 'company',
+                                 slug,
+                              }),
+                           openLabel: `Open ${role.company ?? 'the company'}`,
+                        })}
+                  />
+               )
+            })}
+         </ul>
+      </Section>
+   )
+}
 
 export const Education = ({ schools }: { schools: Snapshot['education'] }) => (
    <Section title="Education">
