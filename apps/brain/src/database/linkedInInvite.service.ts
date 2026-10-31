@@ -113,6 +113,43 @@ export class LinkedInInviteService {
       })
    }
 
+   // The due invites with the name My network has now and their note filled in from it (an address-named invite gets the name a
+   // read brought since). A person no longer in the client keeps the invite's own name.
+   private static async withNames(
+      sends: Array<{ id: string; clientId: string; slug: string; name: string; note: string | null }>
+   ) {
+      const people = await PrismaService.client.person.findMany({
+         where: {
+            OR: sends.map(({ clientId, slug }) => ({
+               clientId,
+               slug,
+            })),
+         },
+         select: {
+            clientId: true,
+            slug: true,
+            name: true,
+            company: true,
+         },
+      })
+      const personOf = new Map(people.map(person => [`${person.clientId}:${person.slug}`, person]))
+
+      return sends.map(invite => {
+         const person = personOf.get(`${invite.clientId}:${invite.slug}`)
+         const name = person?.name ?? invite.name
+
+         return {
+            id: invite.id,
+            slug: invite.slug,
+            name,
+            note: fillNote(invite.note ?? undefined, {
+               name: name === invite.slug ? null : name,
+               company: person?.company ?? null,
+            }),
+         }
+      })
+   }
+
    // Why each picked person would be skipped, or not; only people of the client count.
    private static async facts(userId: string, clientId: string, personIds: string[], now: Date) {
       const db = PrismaService.client
@@ -196,6 +233,7 @@ export class LinkedInInviteService {
       const facts = await this.facts(userId, request.clientId, request.personIds, now)
       const skipped = this.skipCounts(facts)
       const toInvite = facts.filter(({ skip }) => skip === undefined).length
+      const unnamed = facts.filter(({ person, skip }) => skip === undefined && !person.name).length
       const { today, times } = planInvites({
          now,
          ...(await this.usage(account.id, now)),
@@ -210,6 +248,8 @@ export class LinkedInInviteService {
          })),
          today,
          toInvite: times.length,
+         // People to invite My network has no name for yet: {first_name} is empty for them unless a read lands first.
+         unnamed,
          skipped,
          sentence: inviteSentence({
             now,
@@ -249,7 +289,8 @@ export class LinkedInInviteService {
             accountId,
             slug: person.slug,
             name: person.name ?? person.slug,
-            note: fillNote(request.note, person) ?? null,
+            // Filled in when it goes, with the name and company My network has then.
+            note: request.note?.trim() || null,
             source:
                request.source && person.foundBy.includes(request.source)
                   ? request.source
@@ -424,6 +465,7 @@ export class LinkedInInviteService {
                  take: room,
                  select: {
                     id: true,
+                    clientId: true,
                     slug: true,
                     name: true,
                     note: true,
@@ -452,6 +494,8 @@ export class LinkedInInviteService {
          }
       }
 
+      const ready = await this.withNames(sends)
+
       try {
          await TaskService.request({
             userId: account.userId,
@@ -459,7 +503,7 @@ export class LinkedInInviteService {
             accountId,
             trigger: 'automatic',
             input: {
-               send: sends.map(({ id, slug, name, note }) => ({
+               send: ready.map(({ id, slug, name, note }) => ({
                   id,
                   slug,
                   name,
@@ -482,6 +526,16 @@ export class LinkedInInviteService {
                      waitZone: null,
                   },
                })
+
+               for (const { id, name, note } of ready) {
+                  await tx.linkedInInvite.update({
+                     where: { id },
+                     data: {
+                        name,
+                        note: note ?? null,
+                     },
+                  })
+               }
                const withdrawing = await tx.linkedInInvite.updateMany({
                   where: {
                      id: { in: withdrawals.map(({ id }) => id) },

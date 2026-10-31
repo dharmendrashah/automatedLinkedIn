@@ -77,7 +77,7 @@ export type InviteRow = {
    id: string
    clientId: string
    accountId: string
-   name: string
+   name: string | null
    state: string
    invitedAt: Date | null
    acceptedAt: Date | null

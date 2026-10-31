@@ -55,6 +55,14 @@ export const InviteDialog = ({ clientId, personIds, source, onClose, onDone }: P
       onError: error => toast.error(readableError(error)),
    })
    const chosen = accountId ?? plan.data?.accountId
+   const read = trpc.people.readUnnamed.useMutation({
+      onSuccess: ({ reading, notRead }) =>
+         toast.success(
+            `Reading ${reading} ${reading === 1 ? 'profile' : 'profiles'}.${notRead > 0 ? ` ${notRead} could not be read now.` : ''}`
+         ),
+      onError: error => toast.error(readableError(error)),
+   })
+   const unnamed = note.includes(NOTE_FIELDS.firstName) ? (plan.data?.unnamed ?? 0) : 0
 
    const insert = (field: string) => {
       const at = box.current?.selectionStart ?? note.length
@@ -122,6 +130,32 @@ export const InviteDialog = ({ clientId, personIds, source, onClose, onDone }: P
                   <p className="text-sm" role="status">
                      {plan.data.sentence}
                   </p>
+               ) : null}
+               {unnamed > 0 ? (
+                  <div className="grid gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950">
+                     <p>
+                        {unnamed === 1 ? '1 person has' : `${unnamed} people have`} no name yet, so their first name
+                        would be empty. The note is filled in when each invite goes: read their profiles now and the
+                        names are there by then.
+                     </p>
+                     <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="justify-self-start"
+                        disabled={read.isPending || read.isSuccess}
+                        onClick={() =>
+                           read.mutate({
+                              clientId,
+                              personIds,
+                           })
+                        }
+                     >
+                        {read.isSuccess
+                           ? 'Reading their profiles'
+                           : `Read ${unnamed === 1 ? 'their profile' : `${unnamed} profiles`}`}
+                     </Button>
+                  </div>
                ) : null}
                {plan.error ? <p className="text-destructive text-sm">{readableError(plan.error)}</p> : null}
             </div>
