@@ -1,6 +1,7 @@
 import { AddCompaniesDialog } from '@/components/companies/add-companies-dialog'
 import { CompaniesTable } from '@/components/companies/companies-table'
 import { CompanyFilterChips, CompanyFiltersSheet } from '@/components/companies/filters/company-filters'
+import { SpecialitiesPick } from '@/components/companies/filters/specialities-pick'
 import { ReadManyButton } from '@/components/companies/read-many-button'
 import {
    type Basics,
@@ -250,6 +251,18 @@ export const Companies = () => {
                Filters
                {filtersOn > 0 ? <Badge variant="secondary">{filtersOn}</Badge> : null}
             </Button>
+            <SpecialitiesPick
+               compact
+               value={drawerFilters.specialities}
+               mode={drawerFilters.specialitiesMode}
+               onChange={(specialities, specialitiesMode) =>
+                  setDrawerFilters({
+                     ...drawerFilters,
+                     specialities,
+                     specialitiesMode,
+                  })
+               }
+            />
             <div className="ml-auto flex items-center gap-2">
                <ColumnsMenu columns={COMPANY_COLUMNS} hidden={hidden} onChange={setHidden} />
                <AddCompaniesDialog onShow={label => state.setTags([label])} />

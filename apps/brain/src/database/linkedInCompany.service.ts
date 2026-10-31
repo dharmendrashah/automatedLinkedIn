@@ -10,6 +10,7 @@ import {
    companyIdsSql,
    filterSql,
    icpSql,
+   likeOf,
    visitedWhere,
 } from './companyFilters'
 import { CompanyPeopleService } from './companyPeople.service'
@@ -94,6 +95,8 @@ const whereOf = async (
 }
 
 const FACET_LIMIT = 200
+// Values a searchable picker gets per keystroke.
+const SEARCH_LIMIT = 50
 
 export type DrawerFacetKind = TeamKind | 'speciality' | 'place' | 'office' | 'category' | 'size'
 
@@ -507,6 +510,18 @@ export class LinkedInCompanyService {
       }
 
       return facets
+   }
+
+   // The Specialities picker's options as the owner types: specialities of their read companies containing `search`, most common
+   // first.
+   public static async specialityOptions(userId: string, search: string) {
+      return PrismaService.client.$queryRaw<Array<{ value: string; count: number }>>`
+         SELECT s AS "value", COUNT(*)::int AS "count"
+         FROM "PageSnapshot" AS p
+         JOIN "LinkedInCompany" AS c ON c."userId" = p."userId" AND c."slug" = p."slug",
+            jsonb_array_elements_text(COALESCE(p."data"->'specialities', '[]'::jsonb)) AS s
+         WHERE p."userId" = ${userId} AND p."kind" = 'COMPANY' AND c."archivedAt" IS NULL AND s ILIKE ${likeOf(search)}
+         GROUP BY s ORDER BY COUNT(*) DESC, s LIMIT ${SEARCH_LIMIT}`
    }
 
    // A company read overwrites the row's name, industry, website, size, headquarters and country where it has them.

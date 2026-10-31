@@ -92,6 +92,7 @@ describe('PeopleService (database)', () => {
             slug: 'person-1',
             data: snapshotFrom({
                country: 'France',
+               skills: ['Salesforce', { name: 'HubSpot' }],
                experience: [
                   {
                      position: 'Founder',
@@ -147,6 +148,30 @@ describe('PeopleService (database)', () => {
          labels: [],
       })
       expect(await PeopleService.filterOptions(otherUserId, clientId)).toBeNull()
+   })
+
+   it('should filter by the skills of the profile read, all of them by default, and offer them as typed', async () => {
+      const names = async (skills: string[], skillsMode?: 'any') =>
+         (
+            await view({
+               filters: peopleFiltersSchema.parse({
+                  skills,
+                  ...(skillsMode && { skillsMode }),
+               }),
+            })
+         )?.items.map(({ name }) => name)
+
+      expect(await names(['Salesforce', 'HubSpot'])).toEqual(['Ravi Kumar'])
+      expect(await names(['Salesforce', 'Excel'])).toEqual([])
+      expect(await names(['Salesforce', 'Excel'], 'any')).toEqual(['Ravi Kumar'])
+      expect(await PeopleService.skillOptions(userId, clientId, 'sales')).toEqual([
+         {
+            value: 'Salesforce',
+            count: 1,
+         },
+      ])
+      expect(await PeopleService.skillOptions(userId, clientId, '%')).toEqual([])
+      expect(await PeopleService.skillOptions(otherUserId, clientId, '')).toBeNull()
    })
 
    it('should find people by the start of a word, and by a profile link', async () => {

@@ -375,6 +375,7 @@ const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update
             )}
          </div>
          <FiltersSheet
+            clientId={client.id}
             open={filtering}
             value={filters}
             options={filterOptions}

@@ -118,6 +118,7 @@ describe('chipsOf', () => {
             {
                ...NO_FILTERS,
                countries: ['France', 'Germany', 'Spain'],
+               skills: ['Salesforce', 'HubSpot'],
                connection: 'CONNECTED',
                connectedTo: 'acc-1',
                lastReceived: {
@@ -130,6 +131,7 @@ describe('chipsOf', () => {
          ).map(({ text }) => text)
       ).toEqual([
          'Country: France, Germany +1',
+         'Skills (all): Salesforce, HubSpot',
          'Not Premium',
          'Connected to Tripti',
          'Last reply from them: 1 Oct 2026 – 30 Oct 2026',

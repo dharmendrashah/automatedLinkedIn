@@ -7,6 +7,8 @@ describe('peopleFiltersSchema', () => {
       expect(peopleFiltersSchema.parse({})).toEqual({
          companies: [],
          countries: [],
+         skills: [],
+         skillsMode: 'all',
          invites: [],
          labels: [],
          labelsMode: 'any',

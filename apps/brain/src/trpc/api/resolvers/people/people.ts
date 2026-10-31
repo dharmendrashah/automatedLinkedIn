@@ -112,6 +112,18 @@ export const people = router({
          present(await PeopleService.filterOptions(ctx.user.id, input.clientId), NO_CLIENT)
       ),
 
+   // The Skills picker's options as the owner types; empty `search` gives the most common.
+   skillOptions: ownerProcedure
+      .input(
+         z.object({
+            clientId: id,
+            search: z.string().trim().max(100).default(''),
+         })
+      )
+      .query(async ({ ctx, input }) =>
+         present(await PeopleService.skillOptions(ctx.user.id, input.clientId, input.search), NO_CLIENT)
+      ),
+
    counts: ownerProcedure
       .input(
          view.omit({

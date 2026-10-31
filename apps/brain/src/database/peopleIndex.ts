@@ -94,6 +94,7 @@ export type ProfileFacts = {
    companySlug: string | null
    country: string | null
    premium: boolean | null
+   skills: string[]
 }
 
 export type Sources = {
@@ -136,6 +137,7 @@ export type DraftPerson = {
    country: string | null
    companySlug: string | null
    premium: boolean | null
+   skills: string[]
    profileRead: boolean
    connectedAt: Date | null
    lastSentAt: Date | null
@@ -458,6 +460,7 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string, facts: Profil
       country: facts?.country ?? null,
       companySlug: facts?.companySlug ?? null,
       premium: facts?.premium ?? null,
+      skills: facts?.skills ?? [],
       profileRead: facts !== null,
       connectedAt: rows.connections
          .filter(connected)

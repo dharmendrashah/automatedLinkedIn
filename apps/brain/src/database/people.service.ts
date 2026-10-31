@@ -7,6 +7,7 @@ import { type PersonFit, type PersonStatus, Prisma } from 'generated/prisma/clie
 import { type PeopleFilters } from '@automatedLinkedIn/contracts'
 
 import { ClientService } from './client.service'
+import { likeOf } from './companyFilters'
 import { ConflictError } from './conflict'
 import { DataReadService } from './dataRead.service'
 import { type ImportEntry, type Imported, LABEL_LIMIT, appendNote, importedOf } from './linkedInRecord'
@@ -98,6 +99,8 @@ export const ALL_CLIENTS = 'all'
 export const EXPORT_CAP = 10_000
 const SEARCH_CAP = 1_000
 const OPTIONS_CAP = 200
+// Values a searchable picker gets per keystroke.
+const PICK_CAP = 50
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const DAY_MS = 24 * 60 * 60 * 1000
 const CLOSED: PersonStatus[] = ['NOT_INTERESTED', 'DONE']
@@ -599,6 +602,25 @@ export class PeopleService {
          companies: counted(companies),
          labels: counted(labels),
       }
+   }
+
+   // The skills of a client's people for the Skills picker, most common first, narrowed to those containing `search` as typed.
+   public static async skillOptions(userId: string, clientId: string, search: string) {
+      const scope = await scopeOf(userId, clientId)
+
+      if (!scope) {
+         return null
+      }
+
+      const rows = await PrismaService.client.$queryRaw<Array<{ value: string; count: bigint }>>`
+         SELECT "skill" AS "value", count(*) AS "count" FROM "Person", unnest("skills") AS "skill"
+         WHERE "clientId" = ANY(${scope.ids}) AND "skill" ILIKE ${likeOf(search)}
+         GROUP BY "skill" ORDER BY count(*) DESC, "skill" LIMIT ${PICK_CAP}`
+
+      return rows.map(({ value, count }) => ({
+         value,
+         count: Number(count),
+      }))
    }
 
    // The owner left My network on this client: people seen until now are not new any more.

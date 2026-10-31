@@ -16,6 +16,7 @@ import { ADDED_FILTERS, type AddedFilter, addedSince, isAddedFilter } from '../.
 import { LabelFilter } from '../../labels/label-filter'
 import { linkStatuses } from '../../links/link-statuses'
 import { Choice, Field, MultiPick, type Option, TextField, YesNo } from '../../my-network/filters/fields'
+import { SpecialitiesPick } from './specialities-pick'
 import {
    type Basics,
    type CompanyFilters,
@@ -432,12 +433,15 @@ export const CompanyFiltersSheet = ({
                </Group>
                <Separator />
                <Group title="What they do">
-                  <MultiPick
-                     label="Specialities"
-                     placeholder="Any speciality"
-                     options={optionsOf(facets.data?.speciality)}
+                  <SpecialitiesPick
                      value={draft.specialities}
-                     onChange={specialities => set({ specialities })}
+                     mode={draft.specialitiesMode}
+                     onChange={(specialities, specialitiesMode) =>
+                        set({
+                           specialities,
+                           specialitiesMode,
+                        })
+                     }
                   />
                   <TextField
                      label="Tagline, about or specialities say"

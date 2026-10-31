@@ -55,10 +55,13 @@ describe('company filters', () => {
                },
             ],
             verified: false,
+            specialities: ['VoIP', 'SIP'],
          })
       ).toEqual({
          icpId: 'icp-1',
          icpIncludeUnread: false,
+         specialities: ['VoIP', 'SIP'],
+         specialitiesMode: 'all',
          team: [
             {
                kind: 'school',
@@ -88,12 +91,15 @@ describe('company filters', () => {
          ],
          read: 'never' as const,
          followers: { max: 5000 },
+         specialities: ['VoIP', 'SIP'],
+         specialitiesMode: 'any' as const,
       }
       const chips = chipsOf(filters, icpName)
 
       expect(chips.map(({ text }) => text)).toEqual([
          'Matches ICP: EU MSPs',
          'At least 3 in department Sales, Marketing +1',
+         'Speciality (any): VoIP, SIP',
          'Never read',
          'Followers: up to 5,000',
       ])

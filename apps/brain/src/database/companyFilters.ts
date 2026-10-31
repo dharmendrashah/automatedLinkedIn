@@ -31,6 +31,8 @@ export type CompanyFilters = {
    categories?: string[]
    team?: Array<{ kind: TeamKind; values: string[]; min: number }>
    specialities?: string[]
+   // All of the picked specialities (the default) or any of them.
+   specialitiesMode?: 'all' | 'any'
    words?: { values: string[]; match: 'any' | 'all' }
    read?: (typeof READ_AGES)[number]
    visited?: (typeof VISIT_AGES)[number]
@@ -67,6 +69,8 @@ const anyLike = (expression: Prisma.Sql, values: string[]) =>
    either(values.map(value => Prisma.sql`${expression} ILIKE ${likeOf(value)}`))
 const inList = (expression: Prisma.Sql, values: string[]) => Prisma.sql`LOWER(${expression}) = ANY(${lower(values)})`
 const elements = (key: string) => Prisma.raw(`jsonb_array_elements(COALESCE(p."data"->'${key}', '[]'::jsonb))`)
+const hasSpeciality = (values: string[]) =>
+   Prisma.sql`EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(p."data"->'specialities', '[]'::jsonb)) AS s WHERE ${inList(Prisma.sql`s`, values)})`
 
 const range = (expression: Prisma.Sql, { min, max }: Range) => [
    ...(min === undefined ? [] : [ofRead(Prisma.sql`(${expression})::numeric >= ${min}`)]),
@@ -169,7 +173,9 @@ export const filterSql = (filters: CompanyFilters, now: Date) => [
    ...(filters.specialities?.length
       ? [
            ofRead(
-              Prisma.sql`EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(p."data"->'specialities', '[]'::jsonb)) AS s WHERE ${inList(Prisma.sql`s`, filters.specialities)})`
+              filters.specialitiesMode === 'any'
+                 ? hasSpeciality(filters.specialities)
+                 : both(filters.specialities.map(speciality => hasSpeciality([speciality])))
            ),
         ]
       : []),

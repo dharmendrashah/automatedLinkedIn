@@ -76,6 +76,7 @@ const drawerInput = {
       .max(10)
       .optional(),
    specialities: values,
+   specialitiesMode: z.enum(['all', 'any']).optional(),
    words: z
       .object({
          values: z.array(z.string().trim().min(1).max(100)).min(1).max(20),
@@ -235,6 +236,11 @@ export const linkedInCompany = router({
       ),
 
    drawerFacets: ownerProcedure.query(({ ctx }) => LinkedInCompanyService.drawerFacets(ctx.user.id)),
+
+   // The Specialities picker's options as the owner types; empty `search` gives the most common.
+   specialityOptions: ownerProcedure
+      .input(z.object({ search: z.string().trim().max(100).default('') }))
+      .query(({ ctx, input }) => LinkedInCompanyService.specialityOptions(ctx.user.id, input.search)),
 
    views: ownerProcedure.query(({ ctx }) => CompanyViewService.list(ctx.user.id)),
 

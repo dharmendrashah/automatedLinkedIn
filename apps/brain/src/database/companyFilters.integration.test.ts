@@ -150,6 +150,19 @@ describe('Companies drawer filters (database)', () => {
       expect(await slugsOf({ places: ['Western Cape'] })).toEqual(['du-toit'])
       expect(await slugsOf({ offices: ['plymouth'] })).toEqual(['nova'])
       expect(await slugsOf({ specialities: ['boat systems'] })).toEqual(['du-toit'])
+      expect(await slugsOf({ specialities: ['Boat systems', 'Unified Communication'] })).toEqual([])
+      expect(
+         await slugsOf({
+            specialities: ['Boat systems', 'Unified Communication'],
+            specialitiesMode: 'any',
+         })
+      ).toEqual(['du-toit', 'nova'])
+      expect(await LinkedInCompanyService.specialityOptions(userId, 'boat')).toEqual([
+         {
+            value: 'Boat systems',
+            count: 1,
+         },
+      ])
       expect(
          await slugsOf({
             words: {

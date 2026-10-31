@@ -81,6 +81,7 @@ const filtersSchema = z.strictObject({
       .max(5)
       .default([]),
    specialities: values,
+   specialitiesMode: z.enum(['all', 'any']).default('all'),
    // Comma-separated words looked for in the tagline, about and specialities.
    words: z.string().trim().max(300).default(''),
    wordsMatch: z.enum(['any', 'all']).default('any'),
@@ -182,7 +183,10 @@ export const apiFilters = (filters: CompanyFilters): ApiFilters => {
       ...(list(filters.offices) && { offices: filters.offices }),
       ...(list(filters.categories) && { categories: filters.categories }),
       ...(team.length > 0 && { team }),
-      ...(list(filters.specialities) && { specialities: filters.specialities }),
+      ...(list(filters.specialities) && {
+         specialities: filters.specialities,
+         specialitiesMode: filters.specialitiesMode,
+      }),
       ...(words.length > 0 && {
          words: {
             values: words,
@@ -261,7 +265,18 @@ export const chipsOf = (filters: CompanyFilters, icpName: (id: string) => string
               ]
             : []
       ),
-      ...(filters.specialities.length ? [chip('specialities', `Speciality: ${listText(filters.specialities)}`)] : []),
+      ...(filters.specialities.length
+         ? [
+              {
+                 key: 'specialities',
+                 text: `Speciality${filters.specialities.length > 1 ? ` (${filters.specialitiesMode})` : ''}: ${listText(filters.specialities)}`,
+                 clear: {
+                    specialities: [],
+                    specialitiesMode: 'all' as const,
+                 },
+              },
+           ]
+         : []),
       ...(wordsOf(filters.words).length
          ? [
               chip(
