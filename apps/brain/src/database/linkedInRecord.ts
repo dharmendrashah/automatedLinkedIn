@@ -1,4 +1,5 @@
-import { type LinkKind, type LinkedInLink, parseLinkedInUrl } from 'core'
+// The module itself, not the `core` index: the index loads `env`, which unit tests without a database cannot.
+import { type LinkKind, type LinkedInLink, parseLinkedInUrl } from 'core/linkedInUrl'
 
 import { LABEL_MAX } from '@automatedLinkedIn/contracts'
 
