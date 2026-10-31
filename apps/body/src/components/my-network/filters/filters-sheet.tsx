@@ -121,6 +121,7 @@ export const FiltersSheet = ({
                      options={[
                         ['CONNECTED', 'Connected'],
                         ['NOT_CONNECTED', 'Not connected'],
+                        ['DISCOVERY', 'Discovery'],
                      ]}
                      value={value.connection}
                      onChange={connection =>
@@ -151,7 +152,7 @@ export const FiltersSheet = ({
                   <DateTimeRangeField
                      label="Connected between"
                      value={value.connectedAt}
-                     disabled={value.connection === 'NOT_CONNECTED'}
+                     disabled={value.connection === 'NOT_CONNECTED' || value.connection === 'DISCOVERY'}
                      onChange={connectedAt => set({ connectedAt })}
                   />
                   <MultiPick

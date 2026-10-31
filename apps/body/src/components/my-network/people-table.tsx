@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils'
 import { type Client, type PersonRow } from './types'
 
 import { type RouterInputs } from '../../trpc'
+import { isDiscovery } from './row-actions'
 import { RowActions } from './row-actions-cell'
 import { type NextStep, PRIORITY, nextStepOf } from './rows'
 import { StatusChip } from './status-chip'
@@ -208,6 +209,15 @@ const PersonCell = ({ row, client }: { row: PersonRow; client: string | undefine
                {client ? (
                   <Badge variant="outline" className="max-w-28 truncate font-normal" title={`Client: ${client}`}>
                      {client}
+                  </Badge>
+               ) : null}
+               {isDiscovery(row) ? (
+                  <Badge
+                     variant="secondary"
+                     className="font-normal"
+                     title="No LinkedIn account of yours knows them yet"
+                  >
+                     Discovery
                   </Badge>
                ) : null}
             </span>

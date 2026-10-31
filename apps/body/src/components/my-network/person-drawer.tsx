@@ -58,7 +58,7 @@ import { trpc } from '../../trpc'
 import { PANES, type Pane } from './address'
 import { ChatPane } from './chat-pane'
 import { HistoryPane } from './history-pane'
-import { inviteBlock, messageAction } from './row-actions'
+import { inviteBlock, isDiscovery, messageAction } from './row-actions'
 import { nextAfter, nextStepOf } from './rows'
 import { type Ask } from './use-answer'
 import { FIT_WORDS, STATUSES, foundByWord, isStatus, nameOf } from './words'
@@ -308,6 +308,7 @@ const WorkBar = ({
             </SelectContent>
          </Select>
          {person.fit === 'NONE' ? null : <Badge variant="secondary">{FIT_WORDS[person.fit]}</Badge>}
+         {isDiscovery(person) ? <Badge variant="secondary">Discovery</Badge> : null}
          <span className="text-muted-foreground text-xs">Labels</span>
          <LabelCell
             tags={person.labels}
