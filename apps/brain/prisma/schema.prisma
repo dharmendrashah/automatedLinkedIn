@@ -1625,6 +1625,7 @@ model Person {
   @@index([clientId, lastTouchAt, id])
   @@index([clientId, firstSeenAt])
   @@index([userId, slug])
+  @@index([userId, companySlug])
   @@index([foundBy], type: Gin)
   @@index([labels], type: Gin)
   @@index([search], map: "Person_search_idx", type: Gin)

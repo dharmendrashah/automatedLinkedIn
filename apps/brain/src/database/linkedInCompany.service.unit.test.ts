@@ -13,7 +13,10 @@ const mocks = vi.hoisted(() => ({
    update: vi.fn(),
    deleteSnapshots: vi.fn(),
    findSnapshots: vi.fn(),
+   peopleCounts: vi.fn(),
 }))
+
+vi.mock('./companyPeople.service', () => ({ CompanyPeopleService: { counts: mocks.peopleCounts } }))
 
 // The whole `core` reads the environment; this service only needs the snapshot helpers.
 vi.mock('core', async () => ({ ...(await vi.importActual<object>('../core/pageSnapshot')) }))
@@ -115,6 +118,17 @@ describe('LinkedInCompanyService', () => {
                },
             },
          ])
+         mocks.peopleCounts.mockResolvedValueOnce(
+            new Map([
+               [
+                  'nova',
+                  {
+                     count: 1,
+                     first: [],
+                  },
+               ],
+            ])
+         )
 
          const result = await LinkedInCompanyService.list('u1', {
             search: 'acme',
@@ -141,12 +155,20 @@ describe('LinkedInCompanyService', () => {
                      followers: 2952,
                   },
                   readAt,
+                  people: {
+                     count: 1,
+                     first: [],
+                  },
                },
                {
                   id: 'c2',
                   slug: 'unread',
                   card: null,
                   readAt: null,
+                  people: {
+                     count: 0,
+                     first: [],
+                  },
                },
             ],
             total: 30,
@@ -173,6 +195,7 @@ describe('LinkedInCompanyService', () => {
          mocks.findMany.mockResolvedValueOnce([])
          mocks.count.mockResolvedValueOnce(0)
          mocks.findSnapshots.mockResolvedValueOnce([])
+         mocks.peopleCounts.mockResolvedValueOnce(new Map())
 
          await LinkedInCompanyService.list('u1', {
             industries: ['Maritime'],

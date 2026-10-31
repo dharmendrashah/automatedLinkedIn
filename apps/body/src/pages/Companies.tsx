@@ -310,6 +310,7 @@ export const Companies = () => {
             onOpen={company => drawer.show('company', company.slug)}
             selection={selection}
             onTag={state.addTag}
+            onPerson={slug => drawer.show('person', slug)}
             saveTags={saveTags}
          />
 

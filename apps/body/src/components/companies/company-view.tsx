@@ -1,4 +1,4 @@
-import { DetailLoading, DetailMissing, PersonRow, Picture, ReadButton } from '@/components/details/detail-parts'
+import { DetailLoading, DetailMissing, Picture, ReadButton } from '@/components/details/detail-parts'
 import { NotesField } from '@/components/details/notes-field'
 import { pollWhile } from '@/components/details/read-status'
 import { About, Section } from '@/components/people/person-sections'
@@ -25,6 +25,7 @@ import { LabelCell } from '../labels/label-cell'
 import { isLinkStatus, linkStatuses } from '../links/link-statuses'
 import { ViewPageDialog } from '../links/view-page-dialog'
 import { Breakdowns } from './company/breakdowns'
+import { CompanyPeople } from './company/company-people'
 import { domainOf, factsOf } from './company/facts'
 import { KeyFacts, Offices } from './company/key-facts'
 
@@ -221,7 +222,7 @@ const Notes = ({ detail }: { detail: CompanyDetail }) => {
    )
 }
 
-// One company, like its LinkedIn page, with the people from the owner's lists who work there.
+// One company, like its LinkedIn page, with the My network people who work there.
 export const CompanyView = ({ slug, onPerson }: { slug: string; onPerson: (slug: string) => void }) => {
    const detail = trpc.companyPage.detail.useQuery(
       { slug },
@@ -236,7 +237,7 @@ export const CompanyView = ({ slug, onPerson }: { slug: string; onPerson: (slug:
       return detail.error ? <DetailMissing error={detail.error} /> : <DetailLoading what="company" />
    }
 
-   const { snapshot, people } = data
+   const { snapshot } = data
 
    return (
       <div className="grid gap-3">
@@ -250,6 +251,11 @@ export const CompanyView = ({ slug, onPerson }: { slug: string; onPerson: (slug:
                <DataJson snapshot={snapshot} />
             </TabsContent>
             <TabsContent value="overview" className="grid gap-3">
+               <CompanyPeople
+                  slug={data.slug}
+                  name={snapshot?.name ?? data.company.name ?? data.slug}
+                  onPerson={onPerson}
+               />
                {snapshot && !snapshot.detailed && !data.company.archivedAt ? (
                   <p className="text-muted-foreground rounded-xl border border-dashed p-3 text-xs">
                      Read again to see the full address, skills, schools and more.
@@ -275,27 +281,6 @@ export const CompanyView = ({ slug, onPerson }: { slug: string; onPerson: (slug:
                      About, specialities and who works there show after Read company page.
                   </p>
                )}
-               <Section title={`Your people there (${people.length})`}>
-                  {people.length === 0 ? (
-                     <p className="text-muted-foreground text-sm">Nobody in your lists works here yet.</p>
-                  ) : (
-                     <ul className="grid gap-1">
-                        {people.map(person => (
-                           <PersonRow
-                              key={person.slug}
-                              name={person.name ?? person.slug}
-                              lines={[
-                                 person.title ?? person.headline,
-                                 [person.list.name, person.score !== null ? `score ${person.score}` : null]
-                                    .filter(Boolean)
-                                    .join(' · '),
-                              ]}
-                              onOpen={() => onPerson(person.slug)}
-                           />
-                        ))}
-                     </ul>
-                  )}
-               </Section>
                <Notes detail={data} />
             </TabsContent>
          </Tabs>
