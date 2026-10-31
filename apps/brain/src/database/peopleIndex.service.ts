@@ -70,8 +70,21 @@ export class PeopleIndexService {
          take: limit,
       })
       const owners = bySlug(marked, ({ userId }) => userId)
+      // Deleting an owner fires the triggers on their rows, so their marks outlive them; those are only cleared.
+      const live = new Set(
+         (
+            await db.user.findMany({
+               where: { id: { in: [...owners.keys()] } },
+               select: { id: true },
+            })
+         ).map(({ id }) => id)
+      )
 
       for (const [userId, marks] of owners) {
+         if (!live.has(userId)) {
+            continue
+         }
+
          await PeopleIndexService.refresh(
             userId,
             marks.map(({ slug }) => slug)
@@ -332,7 +345,11 @@ export class PeopleIndexService {
                url: row.url,
                createdAt: row.createdAt,
             })),
-            invites: (rows.invites.get(slug) ?? []).map(({ slug: _slug, ...row }) => row),
+            invites: (rows.invites.get(slug) ?? []).map(({ slug: inviteSlug, ...row }) => ({
+               ...row,
+               // An invite asked before any name was known carries the address; it is no name.
+               name: row.name === inviteSlug ? null : row.name,
+            })),
             facts: facts.get(slug) ?? null,
          }
          const drafts = draftPeople(
@@ -392,6 +409,17 @@ export class PeopleIndexService {
                },
                select: { id: true },
             })
+
+            if (fields.name) {
+               await tx.linkedInInvite.updateMany({
+                  where: {
+                     clientId,
+                     slug,
+                     name: slug,
+                  },
+                  data: { name: fields.name },
+               })
+            }
 
             await tx.personLink.deleteMany({
                where: {

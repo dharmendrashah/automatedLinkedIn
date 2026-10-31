@@ -47,7 +47,7 @@ export class Environment {
             default: '',
          }),
          CORS_ORIGINS: string({
-            desc: 'Comma-separated browser origins allowed to call the API',
+            desc: 'Comma-separated browser origins allowed to call the API on every path; "*" allows any origin',
             example: 'http://localhost:3000,http://localhost:5173',
             default: 'http://localhost:3000,http://localhost:5173',
          }),
