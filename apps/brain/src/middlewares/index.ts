@@ -17,11 +17,14 @@ export class Middlewares {
       // One hop: the ingress sets X-Forwarded-For, so request.ip is the caller (the /cdn rate limit counts by it).
       app.set('trust proxy', 1)
 
+      const origins = CORS_ORIGINS.split(',')
+         .map(origin => origin.trim())
+         .filter(Boolean)
+
+      // Every path; "*" in CORS_ORIGINS lets any origin call, else only the listed ones.
       app.use(
          cors({
-            origin: CORS_ORIGINS.split(',')
-               .map(origin => origin.trim())
-               .filter(Boolean),
+            origin: origins.includes('*') ? true : origins,
             allowedHeaders: ['authorization', 'content-type'],
          }) as RequestHandler
       )
