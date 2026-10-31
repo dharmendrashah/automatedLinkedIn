@@ -52,8 +52,6 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import { PRICE_MICROS } from '@automatedLinkedIn/contracts'
-
 import { type Person } from './types'
 import { type PersonDetail } from '@/components/people/types'
 
@@ -220,7 +218,6 @@ const useProfile = (person: Person): PersonDetail | undefined => {
               conversations: [],
               suppressed: person.doNotContact,
               snapshot: null,
-              readPriceMicros: PRICE_MICROS.profile,
               read: null,
            }
          : undefined)
