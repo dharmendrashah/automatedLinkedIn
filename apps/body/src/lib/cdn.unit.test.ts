@@ -27,8 +27,8 @@ describe('cdnUrlOf', () => {
 })
 
 describe('mediaSource', () => {
-   it('should try the cached copy, then the original once, then nothing', () => {
-      expect([0, 1, 2].map(failures => mediaSource(PHOTO, failures, API))).toEqual([CACHED, PHOTO, undefined])
+   it('should try the cached copy once and never the third-party original', () => {
+      expect([0, 1].map(failures => mediaSource(PHOTO, failures, API))).toEqual([CACHED, undefined])
    })
 
    it('should try a direct address once', () => {

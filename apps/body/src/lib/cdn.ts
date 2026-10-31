@@ -25,13 +25,6 @@ export const cdnUrlOf = (url: string, api = defaultApi()) => {
    return `${api}/cdn?url=${encodeURIComponent(url)}`
 }
 
-// The address to load after `failures` failed loads: the cached copy, then the original once, then none.
-export const mediaSource = (url: string | null | undefined, failures: number, api = defaultApi()) => {
-   if (!url) {
-      return undefined
-   }
-
-   const cached = cdnUrlOf(url, api)
-
-   return (cached === url ? [url] : [cached, url])[failures]
-}
+// The address to load: the cached copy (or our own direct address) once; a third-party original is never loaded.
+export const mediaSource = (url: string | null | undefined, failures: number, api = defaultApi()) =>
+   url && failures === 0 ? cdnUrlOf(url, api) : undefined
