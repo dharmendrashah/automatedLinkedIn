@@ -39,10 +39,10 @@ const whereSlug = (userId: string, slug: string) => ({
    },
 })
 
-// A person is read only while they are in /profiles, a list, a connection of the owner's accounts or one of their conversations, and
-// may be contacted.
+// A person is read while they are in /profiles, a list, My network, a connection of the owner's accounts or one of their conversations,
+// unless they are on Do not contact for every client (a suppression, also left by an erasure).
 const personWanted = async (userId: string, slug: string) => {
-   const [profile, member, suppressed, connections, conversations] = await Promise.all([
+   const [profile, member, onNetwork, suppressed, connections, conversations] = await Promise.all([
       PrismaService.client.linkedInProfile.findUnique({
          where: whereSlug(userId, slug),
          select: { archivedAt: true },
@@ -51,6 +51,13 @@ const personWanted = async (userId: string, slug: string) => {
          where: {
             slug,
             list: { userId },
+         },
+         select: { id: true },
+      }),
+      PrismaService.client.person.findFirst({
+         where: {
+            userId,
+            slug,
          },
          select: { id: true },
       }),
@@ -64,7 +71,9 @@ const personWanted = async (userId: string, slug: string) => {
 
    return (
       !suppressed &&
-      Boolean(member || (profile && !profile.archivedAt) || connections.length > 0 || conversations.length > 0)
+      Boolean(
+         member || onNetwork || (profile && !profile.archivedAt) || connections.length > 0 || conversations.length > 0
+      )
    )
 }
 

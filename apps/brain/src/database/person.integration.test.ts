@@ -5,6 +5,7 @@ import { fakeDataClient } from 'core/fakeDataClient'
 
 import { ConflictError } from './conflict'
 import { LinkedInProfileService } from './linkedInProfile.service'
+import { PeopleIndexService } from './peopleIndex.service'
 import { PersonService } from './person.service'
 import { PrismaService } from './prisma.service'
 import { RetentionService } from './retention.service'
@@ -185,6 +186,8 @@ describe('PersonService (database)', () => {
       const bob = await LinkedInProfileService.bySlug(userId, 'bob')
 
       await LinkedInProfileService.archiveForUser(userId, bob?.id ?? '')
+      // The worker rebuilds My network every minute: bob leaves it, ada stays on Do not contact everywhere.
+      await PeopleIndexService.drain(10_000)
       await RetentionService.run()
 
       expect(await PrismaService.client.personSnapshot.count({ where: { userId } })).toBe(0)
@@ -278,6 +281,14 @@ describe('PersonService (database)', () => {
          where: { slug: 'carol' },
          data: { status: 'REMOVED' },
       })
+      await PeopleIndexService.drain(10_000)
+      await RetentionService.run()
+
+      // A removed connection is still on My network, so the read is kept; once nothing ties her to the owner, it goes.
+      expect((await PersonService.detail(userId, 'carol'))?.snapshot?.name).toBe('Ada Lovelace')
+
+      await PrismaService.client.linkedInConnection.deleteMany({ where: { slug: 'carol' } })
+      await PeopleIndexService.drain(10_000)
       await RetentionService.run()
 
       expect(
@@ -288,11 +299,38 @@ describe('PersonService (database)', () => {
             },
          })
       ).toBe(0)
-      expect(await PersonService.detail(userId, 'carol')).toMatchObject({
-         connections: [],
-         snapshot: null,
-      })
+      expect(await PersonService.detail(userId, 'carol')).toBeNull()
 
       await PrismaService.client.user.delete({ where: { id: otherId } })
+   })
+
+   it('should read someone only on My network (an accepted request, say), again after Do not contact for one client is undone, and keep the read', async () => {
+      const clientId = (
+         await PrismaService.client.client.create({
+            data: {
+               userId,
+               name: `Client ${randomUUID().slice(0, 8)}`,
+            },
+         })
+      ).id
+
+      await PrismaService.client.person.create({
+         data: {
+            userId,
+            clientId,
+            slug: 'harshit',
+            doNotContact: true,
+            lastTouchAt: new Date(),
+         },
+      })
+
+      expect((await PersonService.readFull(userId, 'harshit', clientId))?.read?.status).toBe('QUEUED')
+      await workReads(userId, fakeReader())
+      await RetentionService.run()
+
+      expect(await PersonService.detail(userId, 'harshit')).toMatchObject({
+         read: { status: 'DONE' },
+         snapshot: { name: 'Ada Lovelace' },
+      })
    })
 })
