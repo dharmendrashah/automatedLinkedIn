@@ -8,6 +8,11 @@ import {
    LinkedInAccountValidationService,
    LinkedInVerifyCooldownError,
    ProxyServerService,
+   SESSION_HAS,
+   SESSION_RESULTS,
+   SESSION_RETRIES,
+   SESSION_TOOK,
+   SESSION_TRIGGERS,
    SessionRetryError,
    SpiderRecordingUnavailableError,
    SpiderSensitiveFileError,
@@ -19,11 +24,38 @@ import {
 import { ownerProcedure, router } from 'trpc'
 
 const byId = z.object({ id: z.string().min(1).max(100) })
+const ids = z.array(z.string().min(1).max(100)).max(100).optional()
+const words = z.array(z.string().min(1).max(120)).max(100).optional()
 
-const listInput = z.object({
-   accountId: z.string().min(1).max(100).optional(),
-   status: z.enum(['IN_PROGRESS', 'SUCCEEDED', 'FAILED']).optional(),
-   cursor: z.string().min(1).max(100).optional(),
+const filtersInput = z.object({
+   search: z.string().trim().max(200).optional(),
+   accountIds: ids,
+   results: z.array(z.enum(SESSION_RESULTS)).max(SESSION_RESULTS.length).optional(),
+   tasks: words,
+   verdicts: words,
+   triggers: z.array(z.enum(SESSION_TRIGGERS)).max(SESSION_TRIGGERS.length).optional(),
+   startedFrom: z.coerce.date().optional(),
+   startedTo: z.coerce.date().optional(),
+   took: z.array(z.enum(SESSION_TOOK)).max(SESSION_TOOK.length).optional(),
+   proxyIds: ids,
+   proxyCountries: words,
+   has: z.array(z.enum(SESSION_HAS)).max(SESSION_HAS.length).optional(),
+   retries: z.enum(SESSION_RETRIES).optional(),
+})
+
+const listInput = filtersInput.extend({
+   sort: z
+      .object({
+         by: z.enum(['startedAt', 'durationMs']),
+         desc: z.boolean(),
+      })
+      .optional(),
+   cursor: z.number().int().min(0).max(100_000).optional(),
+})
+
+const changesInput = filtersInput.extend({
+   since: z.coerce.date(),
+   watch: z.array(z.string().min(1).max(100)).max(100),
 })
 
 // An older session names its file; a task session names the id of one of its files, so no path or name comes from the browser.
@@ -88,6 +120,26 @@ export const session = router({
    list: ownerProcedure.input(listInput).query(async ({ ctx, input }) => {
       try {
          return await SpiderSessionService.listForUser(ctx.user.id, input)
+      } catch (error) {
+         throw asTrpcError(error)
+      }
+   }),
+
+   // New runs and finished ones for an open Sessions page, every few seconds (.plan/sessions-page.md).
+   changes: ownerProcedure.input(changesInput).query(async ({ ctx, input }) => {
+      const { since, watch, ...filters } = input
+
+      try {
+         return await SpiderSessionService.changes(ctx.user.id, filters, since, watch)
+      } catch (error) {
+         throw asTrpcError(error)
+      }
+   }),
+
+   // How many sessions each value of a filter would show, for the Filters drawer.
+   facets: ownerProcedure.input(filtersInput).query(async ({ ctx, input }) => {
+      try {
+         return await SpiderSessionService.facets(ctx.user.id, input)
       } catch (error) {
          throw asTrpcError(error)
       }

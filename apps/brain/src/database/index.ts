@@ -111,6 +111,7 @@ export {
    SpiderSessionNotFoundError,
    SpiderSessionService,
 } from './spiderSession.service'
+export { SESSION_HAS, SESSION_RESULTS, SESSION_RETRIES, SESSION_TOOK, SESSION_TRIGGERS } from './spiderSessionFilters'
 export { AccountConflictError, UserService } from './user.service'
 export { TakeoverNotFoundError, TakeoverService } from './takeover.service'
 export { TASK_HOOKS } from './taskHooks'

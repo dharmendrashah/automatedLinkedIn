@@ -40,7 +40,8 @@ const mocks = vi.hoisted(() => {
    }
 })
 
-vi.mock('database', () => ({
+vi.mock('database', async () => ({
+   ...(await vi.importActual<object>('../../../../database/spiderSessionFilters')),
    SpiderSensitiveFileError: mocks.SpiderSensitiveFileError,
    SpiderSessionNotFoundError: mocks.SpiderSessionNotFoundError,
    SpiderRecordingUnavailableError: mocks.SpiderRecordingUnavailableError,
@@ -127,20 +128,20 @@ describe('session router', () => {
          })
 
          await caller().list({
-            accountId: 'acc1',
-            status: 'FAILED',
-            cursor: 's9',
+            accountIds: ['acc1'],
+            results: ['FAILED'],
+            cursor: 50,
          })
 
          expect(mocks.listForUser).toHaveBeenCalledWith('u1', {
-            accountId: 'acc1',
-            status: 'FAILED',
-            cursor: 's9',
+            accountIds: ['acc1'],
+            results: ['FAILED'],
+            cursor: 50,
          })
       })
 
       it('should refuse a result filter it does not know', async () => {
-         await expect(caller().list({ status: 'LOST' as never })).rejects.toThrow()
+         await expect(caller().list({ results: ['LOST' as never] })).rejects.toThrow()
       })
    })
 

@@ -12,6 +12,7 @@ import {
 
 import { BrowseBudgetService } from './browseBudget.service'
 import { PrismaService } from './prisma.service'
+import { NO_ANSWER_AFTER_MS, type SessionFilters, sessionWhere, without } from './spiderSessionFilters'
 import { type FinishedSession } from './taskHooks'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -20,10 +21,17 @@ const DAY_MS = 24 * 60 * 60 * 1000
 // from the bucket by its lifecycle rule), after which the row says so.
 const ROW_RETENTION_DAYS = 30
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 50
+// New runs handed to an open Sessions page in one refresh; more wait for the next one.
+const CHANGES_MAX = 100
 
-// A check that has not been answered after the account lease would have run out is shown as "No answer".
-const NO_ANSWER_AFTER_MS = 30 * 60 * 1000
+export type SessionSort = { by: 'startedAt' | 'durationMs'; desc: boolean }
+
+export type SessionQuery = SessionFilters & {
+   sort?: SessionSort
+   // How many rows the page already holds; new runs above may repeat a few, which the page drops by id.
+   cursor?: number
+}
 
 // The only files of a recording the browser may ask for. The path itself always comes from the database.
 export const SESSION_FILE_PATTERN =
@@ -102,13 +110,44 @@ const listSelect = {
    durationMs: true,
    recordingPrefix: true,
    retryOfId: true,
+   trigger: true,
+   taskVersion: true,
+   workerBuild: true,
+   proxyServerId: true,
    linkedInAccount: {
       select: {
          id: true,
          email: true,
+         displayName: true,
+         imageUrl: true,
       },
    },
-} as const
+   // Which kinds of file the run kept (video, screenshot, log, network, session…), not the files.
+   artifacts: {
+      select: { kind: true },
+      distinct: ['kind'],
+   },
+   _count: { select: { retries: true } },
+} satisfies Prisma.SpiderSessionSelect
+
+type ListRow = Prisma.SpiderSessionGetPayload<{ select: typeof listSelect }>
+
+const orderOf = ({ by, desc }: SessionSort): Prisma.SpiderSessionOrderByWithRelationInput[] => {
+   const direction = desc ? 'desc' : 'asc'
+
+   return by === 'durationMs'
+      ? [
+           {
+              durationMs: {
+                 sort: direction,
+                 nulls: 'last',
+              },
+           },
+           { startedAt: 'desc' },
+           { id: 'desc' },
+        ]
+      : [{ startedAt: direction }, { id: direction }]
+}
 
 // The row as the page needs it: no bucket path, whether a recording exists, and whether the check never answered.
 const present = <T extends { recordingPrefix: string | null; startedAt: Date; status: SpiderSessionStatus }>(
@@ -125,6 +164,32 @@ const present = <T extends { recordingPrefix: string | null; startedAt: Date; st
       noAnswer: row.status === 'IN_PROGRESS' && Date.now() - row.startedAt.getTime() > NO_ANSWER_AFTER_MS,
    }
 }
+
+// A row of the Sessions table: the kinds of file it kept and how often it was retried, instead of the raw relations.
+const presentRow = (row: ListRow) => {
+   const { artifacts, _count, workerBuild, ...rest } = present(row)
+
+   return {
+      ...rest,
+      workerBuild: workerBuild?.slice(0, 7) ?? null,
+      files: artifacts.map(({ kind }) => kind),
+      retriesCount: _count.retries,
+   }
+}
+
+const countsOf = <K extends string>(rows: Array<Record<K, string | null> & { _count: { _all: number } }>, key: K) =>
+   rows.flatMap(row => {
+      const value = row[key]
+
+      return value === null
+         ? []
+         : [
+              {
+                 value,
+                 count: row._count._all,
+              },
+           ]
+   })
 
 // One session is one run of the spider for one of the user's accounts. See .plan/spider-session-recording.md.
 export class SpiderSessionService {
@@ -298,38 +363,129 @@ export class SpiderSessionService {
          : null
    }
 
-   // A page of the user's sessions, newest first. `cursor` is the id of the last session of the previous page.
-   public static async listForUser(
-      userId: string,
-      {
-         accountId,
-         status,
-         cursor,
-      }: {
-         accountId?: string
-         status?: SpiderSessionStatus
-         cursor?: string
-      }
-   ) {
+   // A page of the user's sessions under the Sessions page's filters, newest first unless sorted otherwise.
+   public static async listForUser(userId: string, { sort, cursor = 0, ...filters }: SessionQuery) {
       const rows = await PrismaService.client.spiderSession.findMany({
-         where: {
-            userId,
-            ...(accountId && { linkedInAccountId: accountId }),
-            ...(status && { status }),
-         },
-         orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
+         where: sessionWhere(userId, filters),
+         orderBy: orderOf(
+            sort ?? {
+               by: 'startedAt',
+               desc: true,
+            }
+         ),
+         skip: cursor,
          take: PAGE_SIZE + 1,
-         ...(cursor && {
-            cursor: { id: cursor },
-            skip: 1,
-         }),
          select: listSelect,
       })
-      const page = rows.slice(0, PAGE_SIZE)
 
       return {
-         items: page.map(present),
-         nextCursor: rows.length > PAGE_SIZE ? page[page.length - 1].id : undefined,
+         items: rows.slice(0, PAGE_SIZE).map(presentRow),
+         nextCursor: rows.length > PAGE_SIZE ? cursor + PAGE_SIZE : undefined,
+      }
+   }
+
+   // What changed for an open Sessions page: runs newer than `since` under its filters, and the rows it watches (still running when
+   // it last looked) as they are now.
+   public static async changes(userId: string, filters: SessionFilters, since: Date, watch: string[]) {
+      const db = PrismaService.client
+      const [fresh, updated] = await Promise.all([
+         db.spiderSession.findMany({
+            where: { AND: [sessionWhere(userId, filters), { startedAt: { gt: since } }] },
+            orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
+            take: CHANGES_MAX,
+            select: listSelect,
+         }),
+         watch.length > 0
+            ? db.spiderSession.findMany({
+                 where: {
+                    userId,
+                    id: { in: watch },
+                 },
+                 select: listSelect,
+              })
+            : Promise.resolve([]),
+      ])
+
+      return {
+         fresh: fresh.map(presentRow),
+         updated: updated.map(presentRow),
+      }
+   }
+
+   // How many sessions each value of a filter would show, with the other filters on, for the Filters drawer.
+   public static async facets(userId: string, filters: SessionFilters) {
+      const db = PrismaService.client
+      const where = (key: keyof SessionFilters) => sessionWhere(userId, without(filters, key))
+      const [accounts, tasks, verdicts, triggers, countries, proxies, statuses, running, unanswered] =
+         await Promise.all([
+            db.spiderSession.groupBy({
+               by: ['linkedInAccountId'],
+               where: where('accountIds'),
+               _count: { _all: true },
+            }),
+            db.spiderSession.groupBy({
+               by: ['task'],
+               where: where('tasks'),
+               _count: { _all: true },
+            }),
+            db.spiderSession.groupBy({
+               by: ['verdict'],
+               where: where('verdicts'),
+               _count: { _all: true },
+            }),
+            db.spiderSession.groupBy({
+               by: ['trigger'],
+               where: where('triggers'),
+               _count: { _all: true },
+            }),
+            db.spiderSession.groupBy({
+               by: ['proxyCountry'],
+               where: where('proxyCountries'),
+               _count: { _all: true },
+            }),
+            db.spiderSession.groupBy({
+               by: ['proxyServerId'],
+               where: where('proxyIds'),
+               _count: { _all: true },
+            }),
+            db.spiderSession.groupBy({
+               by: ['status'],
+               where: where('results'),
+               _count: { _all: true },
+            }),
+            db.spiderSession.count({
+               where: sessionWhere(userId, {
+                  ...without(filters, 'results'),
+                  results: ['IN_PROGRESS'],
+               }),
+            }),
+            db.spiderSession.count({
+               where: sessionWhere(userId, {
+                  ...without(filters, 'results'),
+                  results: ['NO_ANSWER'],
+               }),
+            }),
+         ])
+      const ended = countsOf(statuses, 'status').filter(({ value }) => value !== 'IN_PROGRESS')
+
+      return {
+         accounts: countsOf(accounts, 'linkedInAccountId'),
+         tasks: countsOf(tasks, 'task'),
+         verdicts: countsOf(verdicts, 'verdict'),
+         triggers: countsOf(triggers, 'trigger'),
+         proxyCountries: countsOf(countries, 'proxyCountry'),
+         proxies: countsOf(proxies, 'proxyServerId'),
+         results: [
+            ...ended,
+            {
+               value: 'IN_PROGRESS',
+               count: running,
+            },
+            {
+               value: 'NO_ANSWER',
+               count: unanswered,
+            },
+         ],
       }
    }
 

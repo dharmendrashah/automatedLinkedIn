@@ -919,6 +919,9 @@ model SpiderSession {
   connections       LinkedInConnection[]
 
   @@index([userId, startedAt])
+  @@index([userId, status, startedAt])
+  @@index([userId, task, startedAt])
+  @@index([userId, trigger, startedAt])
   @@index([linkedInAccountId, startedAt])
   @@index([task, proxyServerId, startedAt])
 }

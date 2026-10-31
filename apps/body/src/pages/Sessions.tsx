@@ -1,63 +1,174 @@
+import { SearchBox } from '@/components/my-network/filters'
+import { MultiPick } from '@/components/my-network/filters/fields'
 import { SessionDrawer } from '@/components/sessions/session-drawer'
 import { SessionsTable } from '@/components/sessions/sessions-table'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useMemo } from 'react'
+import { type SessionSort, useSessions } from '@/components/sessions/use-sessions'
+import { useTaskCatalog } from '@/components/sessions/use-task-catalog'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { flagOf } from '@/lib/country-flag'
+import { ArrowUp, ListFilter } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 
+import {
+   RESULTS,
+   RESULT_WORDS,
+   type SessionFilters,
+   apiFilters,
+   chipsOf,
+   fixed,
+   only,
+   readFilters,
+   writeFilters,
+} from '../components/sessions/filters/model'
+import {
+   type FilterOptions,
+   type Names,
+   SessionFilterChips,
+   SessionFiltersSheet,
+} from '../components/sessions/filters/session-filters'
 import { trpc } from '../trpc'
 
-const results = [
-   { value: 'all', label: 'All results' },
-   { value: 'SUCCEEDED', label: 'Success' },
-   { value: 'FAILED', label: 'Failed' },
-   { value: 'IN_PROGRESS', label: 'In progress' },
-] as const
+const SORT_BY: Array<SessionSort['by']> = ['startedAt', 'durationMs']
 
-// A running session is refreshed every few seconds, so its result appears without a reload.
-const REFRESH_MS = 3000
+const readSort = (value: string | null): SessionSort | undefined => {
+   const [field, direction] = (value ?? '').split('.')
+   const by = SORT_BY.find(item => item === field)
+
+   return by
+      ? {
+           by,
+           desc: direction !== 'asc',
+        }
+      : undefined
+}
+
+const countsOf = (facet: Array<{ value: string; count: number }> | undefined) =>
+   new Map((facet ?? []).map(({ value, count }) => [value, count]))
+
+const hintOf = (counts: Map<string, number>, value: string) => {
+   const count = counts.get(value)
+
+   return count === undefined ? undefined : String(count)
+}
 
 export const Sessions = () => {
-   // The open session and the filters live in the address, so a link opens exactly what was being looked at.
+   // The open session, the filters and the order live in the address, so a link opens exactly what was being looked at.
    const [params, setParams] = useSearchParams()
    const openId = params.get('session')
-   const accountId = params.get('account') ?? 'all'
-   const result = params.get('result') ?? 'all'
+   const filtersParam = params.get('filters')
+   const legacyAccount = params.get('account')
+   const legacyResult = params.get('result')
+   const sortParam = params.get('sort')
+   const filters = useMemo(
+      () =>
+         readFilters(
+            new URLSearchParams({
+               ...(filtersParam && { filters: filtersParam }),
+               ...(legacyAccount && { account: legacyAccount }),
+               ...(legacyResult && { result: legacyResult }),
+            })
+         ),
+      [filtersParam, legacyAccount, legacyResult]
+   )
+   const api = useMemo(() => apiFilters(filters), [filters])
+   const sort = useMemo(() => readSort(sortParam), [sortParam])
+   const [atTop, setAtTop] = useState(true)
+   const [sheetOpen, setSheetOpen] = useState(false)
 
+   const { rows, list, waiting, showWaiting } = useSessions(api, sort, atTop)
+   const catalog = useTaskCatalog()
    const accounts = trpc.linkedInAccount.list.useQuery(undefined, { retry: false })
-   const list = trpc.session.list.useInfiniteQuery(
-      {
-         ...(accountId !== 'all' && { accountId }),
-         ...(result !== 'all' && { status: result as 'SUCCEEDED' | 'FAILED' | 'IN_PROGRESS' }),
-      },
-      {
-         retry: false,
-         getNextPageParam: page => page.nextCursor,
-         refetchInterval: query =>
-            query.state.data?.pages.some(page =>
-               page.items.some(item => item.status === 'IN_PROGRESS' && !item.noAnswer)
-            )
-               ? REFRESH_MS
-               : false,
-      }
+   const proxies = trpc.proxyServer.list.useQuery(undefined, { retry: false })
+   const facets = trpc.session.facets.useQuery(api, { retry: false })
+
+   const update = useCallback(
+      (change: Record<string, string | null>) =>
+         setParams(
+            current => {
+               const next = new URLSearchParams(current)
+
+               for (const [name, value] of Object.entries(change)) {
+                  if (value === null) {
+                     next.delete(name)
+                  } else {
+                     next.set(name, value)
+                  }
+               }
+
+               return next
+            },
+            { replace: true }
+         ),
+      [setParams]
    )
 
-   const sessions = useMemo(() => list.data?.pages.flatMap(page => page.items), [list.data])
+   const setFilters = (next: SessionFilters) =>
+      update({
+         filters: writeFilters(next),
+         account: null,
+         result: null,
+      })
+   const open = useCallback((id: string | null) => update({ session: id }), [update])
 
-   const setParam = (name: string, value: string | null) =>
-      setParams(
-         current => {
-            const next = new URLSearchParams(current)
-
-            if (value === null || value === 'all') {
-               next.delete(name)
-            } else {
-               next.set(name, value)
-            }
-
-            return next
-         },
-         { replace: true }
+   const names: Names = useMemo(() => {
+      const account = new Map(accounts.data?.map(item => [item.id, item.displayName ?? item.email]))
+      const task = new Map(catalog?.tasks.map(item => [item.task, item.title]))
+      const verdict = new Map(
+         [catalog?.runnerVerdicts ?? {}, ...(catalog?.tasks.map(item => item.verdicts) ?? [])].flatMap(verdicts =>
+            Object.entries(verdicts).map(([key, info]) => [key, info.label] as const)
+         )
       )
+      const proxy = new Map(proxies.data?.map(item => [item.id, `${item.host}:${item.port}`]))
+
+      return {
+         account: id => account.get(id) ?? 'Removed account',
+         task: id => task.get(id) ?? id,
+         verdict: id => verdict.get(id) ?? id,
+         proxy: id => proxy.get(id) ?? 'Removed proxy',
+      }
+   }, [accounts.data, catalog, proxies.data])
+
+   const options: FilterOptions = useMemo(() => {
+      const counts = {
+         accounts: countsOf(facets.data?.accounts),
+         tasks: countsOf(facets.data?.tasks),
+         verdicts: countsOf(facets.data?.verdicts),
+         proxies: countsOf(facets.data?.proxies),
+         countries: countsOf(facets.data?.proxyCountries),
+      }
+      // Known values first, then any the sessions hold that the lists no longer name.
+      const withSeen = (known: string[], seen: Map<string, number>) => [...new Set([...known, ...seen.keys()])]
+      const option = (value: string, label: string, seen: Map<string, number>) => ({
+         value,
+         label,
+         hint: hintOf(seen, value),
+      })
+
+      return {
+         accounts: withSeen(accounts.data?.map(item => item.id) ?? [], counts.accounts).map(id =>
+            option(id, names.account(id), counts.accounts)
+         ),
+         tasks: withSeen(catalog?.tasks.map(item => item.task) ?? [], counts.tasks).map(task =>
+            option(task, names.task(task), counts.tasks)
+         ),
+         verdicts: [...counts.verdicts.keys()].map(verdict => option(verdict, names.verdict(verdict), counts.verdicts)),
+         proxies: withSeen(proxies.data?.map(item => item.id) ?? [], counts.proxies).map(id =>
+            option(id, names.proxy(id), counts.proxies)
+         ),
+         countries: [...counts.countries.keys()].map(country => ({
+            ...option(country, country, counts.countries),
+            icon: flagOf(country) ?? undefined,
+         })),
+         hints: {
+            results: countsOf(facets.data?.results),
+            triggers: countsOf(facets.data?.triggers),
+         },
+      }
+   }, [accounts.data, catalog, facets.data, names, proxies.data])
+
+   const filtersOn = chipsOf(filters, names).length
 
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
@@ -69,50 +180,82 @@ export const Sessions = () => {
             </p>
          </div>
 
-         <div className="flex flex-wrap gap-2">
-            <Select value={accountId} onValueChange={value => setParam('account', value)}>
-               <SelectTrigger className="w-56" aria-label="Filter by account">
-                  <SelectValue />
-               </SelectTrigger>
-               <SelectContent>
-                  <SelectItem value="all">All accounts</SelectItem>
-                  {accounts.data?.map(account => (
-                     <SelectItem key={account.id} value={account.id}>
-                        {account.email}
-                     </SelectItem>
-                  ))}
-               </SelectContent>
-            </Select>
-            <Select value={result} onValueChange={value => setParam('result', value)}>
-               <SelectTrigger className="w-40" aria-label="Filter by result">
-                  <SelectValue />
-               </SelectTrigger>
-               <SelectContent>
-                  {results.map(item => (
-                     <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                     </SelectItem>
-                  ))}
-               </SelectContent>
-            </Select>
+         <div className="flex flex-wrap items-center gap-2">
+            <SearchBox
+               value={filters.q ?? ''}
+               placeholder="Search account, action, verdict, message…"
+               label="Search sessions"
+               onSearch={q => setFilters({ ...filters, q: q || undefined })}
+            />
+            <MultiPick
+               compact
+               label="Account"
+               placeholder="Any account"
+               options={options.accounts}
+               value={filters.accounts}
+               onChange={accounts => setFilters({ ...filters, accounts })}
+            />
+            <MultiPick
+               compact
+               label="Result"
+               placeholder="Any result"
+               options={fixed(RESULTS, RESULT_WORDS, options.hints.results)}
+               value={filters.results}
+               onChange={results => setFilters({ ...filters, results: only(RESULTS, results) })}
+            />
+            <MultiPick
+               compact
+               label="Action"
+               placeholder="Any action"
+               options={options.tasks}
+               value={filters.tasks}
+               onChange={tasks => setFilters({ ...filters, tasks })}
+            />
+            <Button variant="outline" onClick={() => setSheetOpen(true)}>
+               <ListFilter />
+               Filters
+               {filtersOn > 0 ? <Badge variant="secondary">{filtersOn}</Badge> : null}
+            </Button>
+            <span className="text-muted-foreground flex items-center gap-1.5 text-xs" title="Refreshes every 5 seconds">
+               <span className="size-2 animate-pulse rounded-full bg-emerald-500" aria-hidden />
+               Live
+            </span>
+            {waiting > 0 ? (
+               <Button size="sm" className="ml-auto" onClick={showWaiting}>
+                  <ArrowUp />
+                  {waiting === 1 ? '1 new session' : `${waiting} new sessions`}
+               </Button>
+            ) : null}
          </div>
 
+         <SessionFilterChips value={filters} names={names} onChange={setFilters} />
+
          <SessionsTable
-            sessions={sessions}
+            rows={rows}
+            catalog={catalog}
             loading={list.isPending}
             error={list.error?.message}
+            empty={filtersOn > 0 || filters.q ? 'No sessions match these filters.' : 'No sessions yet.'}
             selectedId={openId}
+            sort={sort}
             hasMore={Boolean(list.hasNextPage)}
             loadingMore={list.isFetchingNextPage}
-            onOpen={id => setParam('session', id)}
-            onLoadMore={() => void list.fetchNextPage()}
+            onOpen={open}
+            onSort={next => update({ sort: next ? `${next.by}.${next.desc ? 'desc' : 'asc'}` : null })}
+            onMore={() => void list.fetchNextPage()}
+            onTop={setAtTop}
          />
 
-         <SessionDrawer
-            sessionId={openId}
-            onOpen={id => setParam('session', id)}
-            onClose={() => setParam('session', null)}
+         <SessionFiltersSheet
+            open={sheetOpen}
+            value={filters}
+            options={options}
+            names={names}
+            onOpenChange={setSheetOpen}
+            onChange={setFilters}
          />
+
+         <SessionDrawer sessionId={openId} onOpen={open} onClose={() => open(null)} />
       </div>
    )
 }

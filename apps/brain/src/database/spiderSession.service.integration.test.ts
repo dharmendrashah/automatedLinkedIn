@@ -171,7 +171,7 @@ describe('SpiderSessionService (database)', () => {
    })
 
    it('should page through the sessions, newest first', async () => {
-      const ids = Array.from({ length: 22 }, () => randomUUID())
+      const ids = Array.from({ length: 52 }, () => randomUUID())
 
       for (const id of ids) {
          await start(id)
@@ -180,11 +180,80 @@ describe('SpiderSessionService (database)', () => {
       const first = await SpiderSessionService.listForUser(userId, {})
       const second = await SpiderSessionService.listForUser(userId, { cursor: first.nextCursor })
 
-      expect(first.items).toHaveLength(20)
-      expect(first.nextCursor).toBeDefined()
+      expect(first.items).toHaveLength(50)
+      expect(first.nextCursor).toBe(50)
       expect(new Set([...first.items, ...second.items].map(item => item.id)).size).toBe(
          first.items.length + second.items.length
       )
+   })
+
+   it('should narrow by the page filters, hand an open page what changed, and count each value of a filter', async () => {
+      const invite = randomUUID()
+      const retried = randomUUID()
+      const since = new Date()
+
+      await start(invite, {
+         task: 'linkedin-invite',
+         trigger: 'automatic',
+      })
+      await start(retried, { trigger: 'retry' })
+      await PrismaService.client.spiderSession.update({
+         where: { id: invite },
+         data: {
+            status: 'FAILED',
+            verdict: 'SIGNED_OUT',
+            durationMs: 20 * 60_000,
+         },
+      })
+
+      const ids = async (filters: Parameters<typeof SpiderSessionService.listForUser>[1]) =>
+         (await SpiderSessionService.listForUser(userId, filters)).items.map(({ id }) => id)
+
+      expect(await ids({ tasks: ['linkedin-invite'] })).toEqual([invite])
+      expect(await ids({ triggers: ['retry'] })).toContain(retried)
+      expect(
+         await ids({
+            results: ['FAILED'],
+            took: ['OVER_15'],
+            verdicts: ['SIGNED_OUT'],
+         })
+      ).toEqual([invite])
+      expect(
+         await ids({
+            search: 'ADA@WORK',
+            tasks: ['linkedin-invite'],
+         })
+      ).toEqual([invite])
+      expect(
+         await ids({
+            proxyCountries: ['Canada'],
+            has: ['VIDEO'],
+         })
+      ).toEqual([])
+      expect((await SpiderSessionService.listForUser(otherUserId, { tasks: ['linkedin-invite'] })).items).toEqual([])
+
+      const changes = await SpiderSessionService.changes(
+         userId,
+         { tasks: ['linkedin-invite'] },
+         new Date(since.getTime() - 1),
+         [retried]
+      )
+
+      expect(changes.fresh.map(({ id }) => id)).toEqual([invite])
+      expect(changes.updated.map(({ id }) => id)).toEqual([retried])
+      expect((await SpiderSessionService.changes(otherUserId, {}, since, [retried])).updated).toEqual([])
+
+      const facets = await SpiderSessionService.facets(userId, { tasks: ['linkedin-invite'] })
+
+      // A facet counts with the other filters on, but not its own.
+      expect(facets.tasks.find(({ value }) => value === 'demo')?.count).toBeGreaterThan(0)
+      expect(facets.verdicts).toEqual([
+         {
+            value: 'SIGNED_OUT',
+            count: 1,
+         },
+      ])
+      expect(facets.results.find(({ value }) => value === 'FAILED')?.count).toBe(1)
    })
 
    it('should keep the proxy snapshot when the proxy is deleted, and link a retry to the session it retries', async () => {

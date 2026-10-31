@@ -98,6 +98,9 @@ describe('SpiderSessionService', () => {
             id: `s${index}`,
             recordingPrefix: index === 0 ? PREFIX : null,
             startedAt: new Date(),
+            workerBuild: index === 0 ? '0d5610bdd6807b51a0cdd85ff7ce89735bbfcaf0' : null,
+            artifacts: index === 0 ? [{ kind: 'video' }, { kind: 'log' }] : [],
+            _count: { retries: index },
          }))
 
       it('should only read the sessions of this user, newest first', async () => {
@@ -111,49 +114,70 @@ describe('SpiderSessionService', () => {
          })
       })
 
-      it('should narrow by account and result', async () => {
+      it('should narrow by account and result, and sort by how long a run took', async () => {
          mocks.findMany.mockResolvedValue([])
 
          await SpiderSessionService.listForUser('u1', {
-            accountId: 'acc1',
-            status: 'FAILED',
+            accountIds: ['acc1'],
+            results: ['FAILED'],
+            sort: {
+               by: 'durationMs',
+               desc: true,
+            },
          })
 
-         expect(mocks.findMany.mock.calls[0][0].where).toEqual({
-            userId: 'u1',
-            linkedInAccountId: 'acc1',
-            status: 'FAILED',
+         expect(mocks.findMany.mock.calls[0][0]).toMatchObject({
+            where: {
+               userId: 'u1',
+               AND: [{ linkedInAccountId: { in: ['acc1'] } }, { OR: [{ status: 'FAILED' }] }],
+            },
+            orderBy: [
+               {
+                  durationMs: {
+                     sort: 'desc',
+                     nulls: 'last',
+                  },
+               },
+               { startedAt: 'desc' },
+               { id: 'desc' },
+            ],
          })
       })
 
-      it('should return a page of 20 and the cursor for the next one', async () => {
-         mocks.findMany.mockResolvedValue(rows(21))
+      it('should return a page of 50 and where the next one starts', async () => {
+         mocks.findMany.mockResolvedValue(rows(51))
 
          const page = await SpiderSessionService.listForUser('u1', {})
 
-         expect(mocks.findMany.mock.calls[0][0].take).toBe(21)
-         expect(page.items).toHaveLength(20)
-         expect(page.nextCursor).toBe('s19')
+         expect(mocks.findMany.mock.calls[0][0]).toMatchObject({
+            skip: 0,
+            take: 51,
+         })
+         expect(page.items).toHaveLength(50)
+         expect(page.nextCursor).toBe(50)
       })
 
-      it('should have no next cursor on the last page, and start after the cursor it is given', async () => {
+      it('should have no next cursor on the last page, and start after the rows the page holds', async () => {
          mocks.findMany.mockResolvedValue(rows(3))
 
-         const page = await SpiderSessionService.listForUser('u1', { cursor: 's9' })
+         const page = await SpiderSessionService.listForUser('u1', { cursor: 50 })
 
          expect(page.nextCursor).toBeUndefined()
-         expect(mocks.findMany.mock.calls[0][0]).toMatchObject({
-            cursor: { id: 's9' },
-            skip: 1,
-         })
+         expect(mocks.findMany.mock.calls[0][0].skip).toBe(50)
       })
 
-      it('should say whether a recording exists without handing out its path', async () => {
+      it('should say whether a recording exists without handing out its path, which files it kept and its retries', async () => {
          mocks.findMany.mockResolvedValue(rows(2))
 
          const { items } = await SpiderSessionService.listForUser('u1', {})
 
          expect(items.map(item => item.hasRecording)).toEqual([true, false])
+         expect(items[0]).toMatchObject({
+            files: ['video', 'log'],
+            retriesCount: 0,
+            workerBuild: '0d5610b',
+         })
+         expect(items[1]?.retriesCount).toBe(1)
          expect(JSON.stringify(items)).not.toContain('recordings/')
       })
 
@@ -164,12 +188,16 @@ describe('SpiderSessionService', () => {
                status: 'IN_PROGRESS',
                recordingPrefix: null,
                startedAt: new Date(Date.now() - 31 * 60 * 1000),
+               artifacts: [],
+               _count: { retries: 0 },
             },
             {
                id: 'new',
                status: 'IN_PROGRESS',
                recordingPrefix: null,
                startedAt: new Date(),
+               artifacts: [],
+               _count: { retries: 0 },
             },
          ])
 
