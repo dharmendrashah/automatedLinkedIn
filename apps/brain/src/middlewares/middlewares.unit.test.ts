@@ -45,6 +45,22 @@ describe('Middlewares', () => {
       })
    })
 
+   it('should allow every origin when the list holds "*"', () => {
+      const app = {
+         use: vi.fn(),
+         set: vi.fn(),
+      }
+
+      mocks.env.CORS_ORIGINS = 'http://localhost:3000, *'
+      Middlewares.config(app as never)
+      mocks.env.CORS_ORIGINS = ' http://localhost:3000 ,http://localhost:5173,, '
+
+      expect(mocks.cors).toHaveBeenCalledWith({
+         origin: true,
+         allowedHeaders: ['authorization', 'content-type'],
+      })
+   })
+
    it('should register the health routes, the workflow API and the file cache', () => {
       const app = {
          use: vi.fn(),

@@ -1,6 +1,6 @@
 import { CompanyView } from '@/components/companies/company-view'
-import { floatingDrawer } from '@/components/floating-drawer'
-import { PersonView } from '@/components/people/person-view'
+import { WIDE, floatingDrawer } from '@/components/floating-drawer'
+import { PersonBySlug } from '@/components/my-network/person-by-slug'
 import { PostView } from '@/components/posts/post-view'
 import { Button } from '@/components/ui/button'
 import { Drawer, DrawerContent, DrawerFooter } from '@/components/ui/drawer'
@@ -18,13 +18,11 @@ type Props = {
    // What the page's table lists, in order, for Previous and Next.
    kind: DetailKind
    order: string[]
-   // Stays open beside the list while the owner keeps working it, instead of covering the page.
-   docked?: boolean
 }
 
-// The one detail drawer of a page: a person, a company or a post, like their LinkedIn page. A person opened from a
-// company or post replaces it, with a way back.
-export const DetailDrawers = ({ kind, order, docked = false }: Props) => {
+// The one detail drawer of a page: a person (the My network drawer), a company or a post, like their LinkedIn page. A person
+// opened from a company or post replaces it, with a way back.
+export const DetailDrawers = ({ kind, order }: Props) => {
    const { open, back, show, close } = useDetailDrawer()
    const index = open?.kind === kind ? order.indexOf(open.slug) : -1
    const previous = index > 0 ? order[index - 1] : undefined
@@ -32,16 +30,8 @@ export const DetailDrawers = ({ kind, order, docked = false }: Props) => {
    const toPerson = (slug: string) => (open ? show('person', slug, open) : undefined)
 
    return (
-      <Drawer
-         direction="right"
-         modal={!docked}
-         open={Boolean(open)}
-         onOpenChange={isOpen => (isOpen ? undefined : close())}
-      >
-         <DrawerContent
-            className={floatingDrawer('data-[vaul-drawer-direction=right]:sm:max-w-3xl')}
-            onInteractOutside={docked ? event => event.preventDefault() : undefined}
-         >
+      <Drawer direction="right" open={Boolean(open)} onOpenChange={isOpen => (isOpen ? undefined : close())}>
+         <DrawerContent className={floatingDrawer(WIDE)}>
             <div className="grid gap-3 overflow-y-auto p-4">
                {back ? (
                   <Button
@@ -54,7 +44,7 @@ export const DetailDrawers = ({ kind, order, docked = false }: Props) => {
                      {BACK_LABELS[back.kind]}
                   </Button>
                ) : null}
-               {open?.kind === 'person' ? <PersonView key={open.slug} slug={open.slug} /> : null}
+               {open?.kind === 'person' ? <PersonBySlug key={open.slug} slug={open.slug} onClose={close} /> : null}
                {open?.kind === 'company' ? <CompanyView key={open.slug} slug={open.slug} onPerson={toPerson} /> : null}
                {open?.kind === 'post' ? <PostView key={open.slug} slug={open.slug} onPerson={toPerson} /> : null}
             </div>

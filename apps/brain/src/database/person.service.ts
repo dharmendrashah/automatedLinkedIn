@@ -1,7 +1,5 @@
 import { type PersonSnapshotData, readSnapshot } from 'core'
 
-import { PRICE_MICROS } from '@automatedLinkedIn/contracts'
-
 import { ConflictError } from './conflict'
 import { DataReadService } from './dataRead.service'
 import { LinkedInProfileService } from './linkedInProfile.service'
@@ -73,7 +71,6 @@ export class PersonService {
                     fetchedAt: snapshot.fetchedAt,
                  }
                : null,
-         readPriceMicros: PRICE_MICROS.profile,
          read: await DataReadService.latest(userId, 'PROFILE', slug),
       }
    }

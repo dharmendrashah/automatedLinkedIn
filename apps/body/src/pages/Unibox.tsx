@@ -886,7 +886,7 @@ const Board = ({
                ) : null}
             </SheetContent>
          </Sheet>
-         {sample ? null : <DetailDrawers kind="person" order={[]} docked />}
+         {sample ? null : <DetailDrawers kind="person" order={[]} />}
          <Palette
             open={paletteOpen}
             onOpenChange={setPaletteOpen}

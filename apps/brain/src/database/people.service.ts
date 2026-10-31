@@ -667,6 +667,18 @@ export class PeopleService {
       return count > 0
    }
 
+   // The owner's person of a profile, the most recently touched when several clients have them.
+   public static find(userId: string, slug: string) {
+      return PrismaService.client.person.findFirst({
+         where: {
+            userId,
+            slug,
+         },
+         orderBy: { lastTouchAt: 'desc' },
+         select: { id: true },
+      })
+   }
+
    // One person with the rows behind them, for the drawer: which account has the request, connection or conversation.
    public static async get(userId: string, id: string) {
       const person = await PrismaService.client.person.findFirst({
