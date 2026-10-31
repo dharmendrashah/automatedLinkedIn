@@ -99,4 +99,14 @@ describe('LinkedInCompanyService (database)', () => {
       await expect(LinkedInCompanyService.updateForUser(otherUserId, mine.id, { notes: 'x' })).resolves.toBeNull()
       await expect(LinkedInCompanyService.archiveForUser(otherUserId, mine.id)).resolves.toBeNull()
    })
+
+   it('should find the owner\u2019s companies by name, ignoring case, for positions with no company link', async () => {
+      await expect(LinkedInCompanyService.byNames(userId, [' ELITALE ', 'Nobody'])).resolves.toEqual([
+         {
+            name: 'ELITALE',
+            slug: 'elitale',
+         },
+      ])
+      await expect(LinkedInCompanyService.byNames(otherUserId, ['Elitale'])).resolves.toEqual([])
+   })
 })

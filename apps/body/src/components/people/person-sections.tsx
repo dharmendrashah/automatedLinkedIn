@@ -17,7 +17,8 @@ import { cn } from '@/lib/utils'
 
 import { type PersonDetail } from './types'
 
-import { useDetailStack } from '../details/use-detail-stack'
+import { trpc } from '../../trpc'
+import { type StackRef, useDetailStack } from '../details/use-detail-stack'
 import { companySlugOf } from './company-slug'
 
 type Snapshot = NonNullable<PersonDetail['snapshot']>
@@ -107,14 +108,50 @@ const Entry = ({
    </li>
 )
 
+// Every position's company opens in the stacked drawer: by the link the read gave, else by a company of /companies with the same
+// name, else as an unknown company the owner can find and add.
 export const Experience = ({ roles }: { roles: Snapshot['experience'] }) => {
    const open = useDetailStack()
+   const unlinked = [
+      ...new Set(
+         roles
+            .filter(role => role.company && !companySlugOf(role.companyUrl))
+            .flatMap(role => (role.company ? [role.company] : []))
+      ),
+   ].slice(0, 50)
+   const named = trpc.linkedInCompany.byNames.useQuery(
+      { names: unlinked },
+      {
+         enabled: Boolean(open) && unlinked.length > 0,
+         retry: false,
+         staleTime: 60_000,
+      }
+   )
+   const slugOfName = new Map((named.data ?? []).map(({ name, slug }) => [name.toLowerCase(), slug]))
+   const refOf = (role: Snapshot['experience'][number]): StackRef | null => {
+      const slug = companySlugOf(role.companyUrl) ?? slugOfName.get(role.company?.trim().toLowerCase() ?? '')
+
+      if (slug) {
+         return {
+            kind: 'company',
+            slug,
+            ...(role.company && { name: role.company }),
+         }
+      }
+
+      return role.company && named.isSuccess
+         ? {
+              kind: 'unknownCompany',
+              name: role.company,
+           }
+         : null
+   }
 
    return (
       <Section title="Experience">
          <ul className="grid gap-4">
             {roles.map((role, index) => {
-               const slug = companySlugOf(role.companyUrl)
+               const ref = open ? refOf(role) : null
 
                return (
                   <Entry
@@ -123,13 +160,9 @@ export const Experience = ({ roles }: { roles: Snapshot['experience'] }) => {
                      title={role.title ?? 'Role'}
                      subtitle={role.company ? <span className="text-sm">{role.company}</span> : null}
                      lines={[span(role.start, role.end), role.location, role.description]}
-                     {...(slug &&
+                     {...(ref &&
                         open && {
-                           onOpen: () =>
-                              open({
-                                 kind: 'company',
-                                 slug,
-                              }),
+                           onOpen: () => open(ref),
                            openLabel: `Open ${role.company ?? 'the company'}`,
                         })}
                   />
