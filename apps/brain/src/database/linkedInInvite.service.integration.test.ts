@@ -209,12 +209,12 @@ describe('LinkedInInviteService (database)', () => {
       const [alan] = await invitesOf('alan-t')
 
       await LinkedInInviteService.store(sessionId, {
-         contract: 1,
+         contract: 2,
          captured_at: new Date().toISOString(),
          sent: [
             {
                id: ada?.id ?? '',
-               outcome: 'SENT',
+               outcome: 'SENT_WITHOUT_NOTE',
                memberId: '42',
             },
             {
@@ -232,12 +232,23 @@ describe('LinkedInInviteService (database)', () => {
       expect((await invitesOf('ada-l'))[0]).toMatchObject({
          state: 'SENT',
          memberId: '42',
+         note: 'Hi Ada',
+         reason: 'Sent without the note: no free notes left this month.',
       })
       expect((await invitesOf('grace-h'))[0]).toMatchObject({
          state: 'QUEUED',
          tries: 1,
       })
       expect((await invitesOf('alan-t'))[0]).toMatchObject({ state: 'FAILED' })
+
+      // LinkedIn refused a note: the account's next run is told its notes are out.
+      const next = vi
+         .spyOn(TaskService, 'request')
+         .mockResolvedValueOnce({ id: randomUUID() } as Awaited<ReturnType<typeof TaskService.request>>)
+
+      await LinkedInInviteService.dispatchNext(accountId)
+      expect(next.mock.calls[0]?.[0].input).toMatchObject({ notesOut: true })
+      next.mockRestore()
 
       await PeopleIndexService.refresh(userId, SLUGS)
 

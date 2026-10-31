@@ -185,6 +185,9 @@ export type InviteChange = {
    memberId?: string
 }
 
+// LinkedIn gives free accounts a few invite notes a month; once they are used up, notes come back on the 1st (UTC, the closest known).
+export const notesBackAt = (now: Date) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+
 // What one outcome of a run makes of an invite. NOT_SENT and LIMIT_REACHED keep it in the queue (a few times for the first).
 export const sendChange = (outcome: InviteSendOutcome, tries: number, now: Date, memberId?: string): InviteChange => {
    const member = memberId ? { memberId } : {}
@@ -194,6 +197,13 @@ export const sendChange = (outcome: InviteSendOutcome, tries: number, now: Date,
          return {
             state: 'SENT',
             reason: null,
+            invitedAt: now,
+            ...member,
+         }
+      case 'SENT_WITHOUT_NOTE':
+         return {
+            state: 'SENT',
+            reason: 'Sent without the note: no free notes left this month.',
             invitedAt: now,
             ...member,
          }

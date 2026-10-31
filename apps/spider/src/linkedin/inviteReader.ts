@@ -10,6 +10,8 @@ import {
    INVITE_NOTE_BOX,
    INVITE_QUESTION_WORDS,
    MORE_WORDS,
+   NOTES_OUT_WORDS,
+   NOTE_UPSELL,
    PENDING_LABEL,
    SEND_INVITE_WORDS,
    SEND_WITHOUT_NOTE_WORDS,
@@ -109,6 +111,8 @@ export type InviteDialog = {
    noteBox: boolean
    emailNeeded: boolean
    limitReached: boolean
+   // LinkedIn offered Premium instead of the note box: the account has no free notes left this month.
+   notesOut: boolean
 }
 
 // The window opens inside a shadow root whose markup was not kept, so nothing here depends on its container: its question, its
@@ -132,6 +136,7 @@ export const parseInviteDialog = (html: string): InviteDialog => {
       noteBox,
       emailNeeded: root.querySelector(INVITE_EMAIL) !== null,
       limitReached: INVITE_LIMIT_WORDS.test(text),
+      notesOut: root.querySelector(NOTE_UPSELL) !== null || NOTES_OUT_WORDS.test(text),
    }
 }
 

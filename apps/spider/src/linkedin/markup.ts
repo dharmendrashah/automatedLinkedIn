@@ -200,6 +200,13 @@ export const SEND_INVITE_WORDS = ['Send', 'Send invitation', 'Send now']
 export const MORE_WORDS = 'More'
 export const PENDING_LABEL = /^Pending\b/
 export const INVITE_LIMIT_WORDS = /invitation limit|weekly limit/i
+// Add a note on an account with no free notes left (staging run e137a154, 2026-10-31, kept page and video): instead of the note box,
+// a Premium offer "Send unlimited personalized invites with Premium" / "You're out of free custom notes" in the page's own modal
+// outlet (light DOM), with a Dismiss button. Nothing is sent by it (no invite request in the run's network). NOT SEEN: the page
+// after Dismiss, other languages.
+export const NOTE_UPSELL = '[data-test-modal-id="modal-upsell"]'
+export const NOTE_UPSELL_DISMISS = '[data-test-modal-id="modal-upsell"] button[aria-label="Dismiss"]'
+export const NOTES_OUT_WORDS = /out of free custom notes/i
 // The Sent list, recorded 2026-10-30 (session 2026-10-30T10-07-21-893Z, dharmendrashaheagle, a real withdrawal): rows are
 // `[role="listitem"]` in `[data-testid="lazy-column"]`, each with a link to the person's profile (`/in/<slug>/`) and a Withdraw that
 // is a LINK named "Withdraw invitation sent to <Name>" (not a button). It opens `dialog[data-testid="dialog"]` "Withdraw invitation"

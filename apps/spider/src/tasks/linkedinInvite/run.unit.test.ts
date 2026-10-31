@@ -3,11 +3,18 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { invitesFileSchema } from '@automatedLinkedIn/contracts'
 
-import { inviteDialogMarkup, profileMarkup, sentMarkup, withdrawDialogMarkup } from '../../linkedin/inviteFixture'
+import {
+   inviteDialogMarkup,
+   notesOutMarkup,
+   profileMarkup,
+   sentMarkup,
+   withdrawDialogMarkup,
+} from '../../linkedin/inviteFixture'
 import {
    CONNECT_LINK,
    INVITE_BUTTON,
    INVITE_NOTE_BOX,
+   NOTE_UPSELL_DISMISS,
    SENT_ROW_WITHDRAW,
    WITHDRAW_DIALOG_BUTTON,
 } from '../../linkedin/markup'
@@ -42,6 +49,9 @@ type Page = {
    // Where a visit ends instead of the address asked for, by slug.
    lands?: Record<string, string>
    upsell?: boolean
+   // What Dismiss on the Premium offer leaves: the profile (seen with Escape, 2026-10-31), the invite window (not seen), the
+   // profile already showing Pending, or a Dismiss that cannot be pressed.
+   afterDismiss?: 'profile' | 'window' | 'pending' | 'stuck'
    // After Send: LinkedIn answers the invite request at once and the page still shows Connect for a while (recorded 2026-10-30), it
    // answers with a refusal, no answer is heard and the page shows Pending, nothing happens, or LinkedIn shows its limit.
    afterSend?: 'answered' | 'refused' | 'pendingLater' | 'stays' | 'limit'
@@ -64,6 +74,7 @@ const wordsOf = (html: string, index: number) => {
 const setup = (page: Page = {}) => {
    const { noConnect = [], menuOnly = [], pending = [], lands = {}, afterSend = 'answered' } = page
    const invited = new Set<string>()
+   const pendingNow = new Set<string>()
    const rows = new Set(page.sentRows ?? [])
    let at = ''
    let slug = ''
@@ -83,7 +94,7 @@ const setup = (page: Page = {}) => {
             note: true,
             typed,
          }),
-         upsell: inviteDialogMarkup({ upsell: true }),
+         upsell: notesOutMarkup(),
          limit: inviteDialogMarkup({ limit: true }),
       })[dialog]
    const html = () => {
@@ -92,7 +103,7 @@ const setup = (page: Page = {}) => {
       }
 
       const name = slug === ADA.slug ? ADA.name : GRACE.name
-      const shownPending = afterSend === 'pendingLater' && invited.has(slug)
+      const shownPending = (afterSend === 'pendingLater' && invited.has(slug)) || pendingNow.has(slug)
 
       return `<html><body>${profileMarkup({
          slug,
@@ -171,6 +182,7 @@ const setup = (page: Page = {}) => {
             const words = wordsOf(html(), index)
 
             if (words.endsWith('|Add a note')) {
+               calls.push('add note')
                dialog = page.upsell ? 'upsell' : 'note'
             } else if (words.endsWith('|More')) {
                calls.push('more')
@@ -195,6 +207,21 @@ const setup = (page: Page = {}) => {
          }
       }),
       clickSelector: vi.fn(async (selector: string) => {
+         if (selector === NOTE_UPSELL_DISMISS) {
+            if (dialog !== 'upsell' || page.afterDismiss === 'stuck') {
+               return false
+            }
+
+            calls.push('dismiss')
+            dialog = page.afterDismiss === 'window' ? 'choice' : 'none'
+
+            if (page.afterDismiss === 'pending') {
+               pendingNow.add(slug)
+            }
+
+            return true
+         }
+
          calls.push(selector === INVITE_NOTE_BOX ? 'click box' : `click ${selector}`)
 
          return true
@@ -310,13 +337,80 @@ describe('runInvites', () => {
       expect(file().sent.map(({ outcome }) => outcome)).toEqual(['NO_CONNECT', 'ALREADY_PENDING'])
    })
 
-   it('should close the dialog, type and send nothing when LinkedIn gives no place for the note, and go on with the next', async () => {
-      const { run, calls, file } = setup({ upsell: true })
+   it('should send without the note when LinkedIn has no free notes left, typing nothing, and skip the note for the rest of the run', async () => {
+      const { run, calls, context, file } = setup({ upsell: true })
 
-      await expect(run(both)).resolves.toMatchObject({ outcome: 'PARTIAL' })
-      expect(calls).toContain('key Escape')
+      await expect(
+         run({
+            send: [
+               ADA,
+               {
+                  ...GRACE,
+                  note: 'Hi Grace',
+               },
+            ],
+            withdraw: [],
+         })
+      ).resolves.toMatchObject({ outcome: 'DONE' })
+      expect(calls).toContain('dismiss')
+      expect(calls.filter(call => call === 'add note')).toHaveLength(1)
+      expect(calls.filter(call => call === 'connect ada-lovelace')).toHaveLength(2)
+      expect(calls.filter(call => call === 'markAttempt')).toHaveLength(1)
       expect(calls.some(call => call.startsWith('type'))).toBe(false)
-      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['NOTE_REFUSED', 'SENT'])
+      expect(calls.filter(call => call.startsWith('send '))).toEqual(['send ada-lovelace', 'send grace-hopper'])
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['SENT_WITHOUT_NOTE', 'SENT_WITHOUT_NOTE'])
+      expect(context.log).toHaveBeenCalledWith('LinkedIn has no free notes left for this account')
+   })
+
+   it('should not try the note at all when brain says the free notes are used up, and still say the note was left out', async () => {
+      const { run, calls, file } = setup()
+
+      await run({
+         send: [ADA, GRACE],
+         withdraw: [],
+         notesOut: true,
+      })
+
+      expect(calls).not.toContain('add note')
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['SENT_WITHOUT_NOTE', 'SENT'])
+   })
+
+   it('should send from the invite window when Dismiss leaves it open, and use Escape when Dismiss cannot be pressed', async () => {
+      const open = setup({
+         upsell: true,
+         afterDismiss: 'window',
+      })
+
+      await open.run({
+         send: [ADA],
+         withdraw: [],
+      })
+      expect(open.calls.filter(call => call === 'connect ada-lovelace')).toHaveLength(1)
+      expect(open.file().sent.map(({ outcome }) => outcome)).toEqual(['SENT_WITHOUT_NOTE'])
+
+      const stuck = setup({
+         upsell: true,
+         afterDismiss: 'stuck',
+      })
+
+      await stuck.run({
+         send: [ADA],
+         withdraw: [],
+      })
+      expect(stuck.calls).toContain('key Escape')
+      expect(stuck.file().sent.map(({ outcome }) => outcome)).toEqual(['SENT_WITHOUT_NOTE'])
+   })
+
+   it('should press nothing more and be unsure when the profile already shows Pending after the offer', async () => {
+      const { run, calls, file } = setup({
+         upsell: true,
+         afterDismiss: 'pending',
+      })
+
+      await expect(run(both)).resolves.toMatchObject({ outcome: 'UNKNOWN' })
+      expect(calls.filter(call => call === 'connect ada-lovelace')).toHaveLength(1)
+      expect(calls.some(call => call.startsWith('send '))).toBe(false)
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['UNSURE', 'NOT_SENT'])
    })
 
    it('should stop at an invite whose dialog stays open after Send and never open the next profile', async () => {
@@ -484,5 +578,24 @@ describe('answerFor', () => {
             ...run,
          }).verdict
       ).toBe('SIGNED_OUT')
+   })
+
+   it('should count an invite sent without its note as sent, and say so', () => {
+      expect(
+         answerFor({
+            outcome: 'DONE',
+            sent: [
+               {
+                  id: ID_A,
+                  outcome: 'SENT_WITHOUT_NOTE',
+               },
+               {
+                  id: ID_B,
+                  outcome: 'SENT',
+               },
+            ],
+            withdrawn: [],
+         }).report?.headline
+      ).toBe('2 of 2 invites sent (1 without the note: no free notes left), 0 of 0 withdrawn.')
    })
 })

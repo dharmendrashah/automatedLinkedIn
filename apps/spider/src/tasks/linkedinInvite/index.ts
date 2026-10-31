@@ -16,10 +16,10 @@ type Options = {
 export const createLinkedinInvite = ({ baseUrl }: Options) =>
    defineTask({
       name: TASK_NAME,
-      version: 1,
+      version: 2,
       title: 'LinkedIn invites',
       description:
-         "Opens each person's profile, presses Connect, adds the note when there is one and presses Send, 30 to 90 seconds apart. It can also withdraw invites from the Sent list.",
+         "Opens each person's profile, presses Connect, adds the note when there is one (or sends without it when LinkedIn has no free notes left) and presses Send, 30 to 90 seconds apart. It can also withdraw invites from the Sent list.",
       input: inviteInputSchema,
       needs: {
          proxy: 'required',

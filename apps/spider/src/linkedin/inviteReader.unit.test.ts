@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { inviteDialogMarkup, profileMarkup, sentMarkup, withdrawDialogMarkup } from './inviteFixture'
+import { inviteDialogMarkup, notesOutMarkup, profileMarkup, sentMarkup, withdrawDialogMarkup } from './inviteFixture'
 import {
    moreButtons,
    parseInviteDialog,
@@ -130,6 +130,17 @@ describe('parseInviteDialog', () => {
          send: -1,
          addNote: -1,
       })
+   })
+
+   it('should read the Premium offer that replaces the note box once the free notes are used up, by its outlet or its words', () => {
+      expect(parseInviteDialog(withWindow(notesOutMarkup()))).toMatchObject({
+         open: false,
+         noteBox: false,
+         notesOut: true,
+      })
+      expect(parseInviteDialog(withWindow(notesOutMarkup({ words: false }))).notesOut).toBe(true)
+      expect(parseInviteDialog(`<main><p>You’re out of free custom notes.</p></main>`).notesOut).toBe(true)
+      expect(parseInviteDialog(withWindow(inviteDialogMarkup({ note: true }))).notesOut).toBe(false)
    })
 })
 

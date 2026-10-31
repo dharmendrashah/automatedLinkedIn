@@ -25,6 +25,7 @@ import {
    INVITE_BUTTON,
    INVITE_NOTE_BOX,
    INVITE_REQUEST,
+   NOTE_UPSELL_DISMISS,
    SENT_INVITES_PATH,
    SENT_ROW,
    SENT_ROW_WITHDRAW,
@@ -41,6 +42,8 @@ type Context = Pick<TaskContext, 'browser' | 'visit' | 'pause' | 'log' | 'warn' 
 
 type Sent = { id: string; outcome: InviteSendOutcome; memberId?: string }
 type Withdrawn = { id: string; outcome: InviteWithdrawOutcome }
+// The note window did not come (no free notes left, or no box): nothing was sent, and the invite goes on without the note.
+type DialogEnd = InviteSendOutcome | 'NO_NOTE'
 
 // DONE: every invite and withdrawal ended clearly, each sent or settled without a press. PARTIAL: some did not happen (no Connect
 // button, a step that did not show, a note refused), and nothing is unclear. UNKNOWN: a press may have landed and the page did not
@@ -119,6 +122,8 @@ export const runInvites = async (
    let repeated = false
    let stopped = false
    let limited = false
+   // The account has no free notes left this month (brain knew, or LinkedIn said so in this run): invites go without their note.
+   let notesOut = input.notesOut ?? false
    let kept = 0
 
    const open = async (url: string) => {
@@ -228,7 +233,7 @@ export const runInvites = async (
 
    // The window the Connect press opened, from its question to Send. Nothing is typed or sent until its buttons show. A layout that
    // sends on Connect alone is told by LinkedIn's answer.
-   const throughDialog = async (invite: InviteSend, watch: AnswerWatch): Promise<InviteSendOutcome> => {
+   const throughDialog = async (invite: InviteSend, watch: AnswerWatch, withNote: boolean): Promise<DialogEnd> => {
       const first = parseInviteDialog(
          await until(DIALOG_LOOKS, page => parseInviteDialog(page).open || answerOf(watch) !== undefined)
       )
@@ -259,7 +264,7 @@ export const runInvites = async (
 
       await reader.wait(PAUSES.step)
 
-      if (invite.note) {
+      if (withNote && invite.note) {
          if (first.addNote < 0 || !(await pressButton(first.addNote))) {
             await keepPage('invite-dialog')
             await closeDialog()
@@ -267,14 +272,30 @@ export const runInvites = async (
             return 'NOT_SENT'
          }
 
-         const withBox = parseInviteDialog(await until(DIALOG_LOOKS, page => parseInviteDialog(page).noteBox))
+         const withBox = parseInviteDialog(
+            await until(DIALOG_LOOKS, page => {
+               const dialog = parseInviteDialog(page)
+
+               return dialog.noteBox || dialog.notesOut
+            })
+         )
 
          if (!withBox.noteBox) {
-            log('LinkedIn gave no place for the note')
+            log(
+               withBox.notesOut
+                  ? 'LinkedIn has no free notes left for this account'
+                  : 'LinkedIn gave no place for the note'
+            )
             await keepPage('note')
-            await closeDialog()
+            notesOut ||= withBox.notesOut
 
-            return 'NOTE_REFUSED'
+            if (!(await hands.clickSelector(NOTE_UPSELL_DISMISS))) {
+               await hands.press('Escape')
+            }
+
+            await reader.wait(PAUSES.step)
+
+            return 'NO_NOTE'
          }
 
          await hands.clickSelector(INVITE_NOTE_BOX)
@@ -354,6 +375,39 @@ export const runInvites = async (
       }
 
       return []
+   }
+
+   // After the note was refused and its offer dismissed: Send without a note in the window when it is still open, else Connect once
+   // more. Add a note and the offer sent nothing (2026-10-31), so this is still the one invite; a Pending already showing means
+   // something left that the page did not say, and nothing is pressed.
+   const withoutNote = async (invite: InviteSend, watch: AnswerWatch): Promise<DialogEnd> => {
+      const html = await until(MENU_LOOKS, page => !parseInviteDialog(page).notesOut)
+
+      if (parseInviteDialog(html).sendWithoutNote >= 0) {
+         return throughDialog(invite, watch, false)
+      }
+
+      const actions = parseProfileActions(html, invite.slug, invite.name)
+
+      if (actions.pending || answerOf(watch) !== undefined) {
+         log('The profile changed before the invite was sent again')
+
+         return 'UNSURE'
+      }
+
+      await reader.wait(PAUSES.step)
+
+      const connects = actions.connects.length > 0 ? actions.connects : await openMenu(invite)
+
+      if (!(await pressConnect(connects))) {
+         log('The Connect button could not be pressed again')
+
+         return 'NOT_SENT'
+      }
+
+      log('Pressed Connect again, to send without the note')
+
+      return throughDialog(invite, watch, false)
    }
 
    const sendOne = async (invite: InviteSend, index: number) => {
@@ -441,7 +495,16 @@ export const runInvites = async (
             ...member,
          }
 
-         const outcome = await throughDialog(invite, watch)
+         const withNote = Boolean(invite.note) && !notesOut
+         const first = await throughDialog(invite, watch, withNote)
+         const end = first === 'NO_NOTE' ? await withoutNote(invite, watch) : first
+         // An invite asked with a note that left without it says so; anything short of SENT stays what it was.
+         const outcome: InviteSendOutcome =
+            end === 'NO_NOTE'
+               ? 'NOT_SENT'
+               : end === 'SENT' && invite.note && (!withNote || first === 'NO_NOTE')
+                 ? 'SENT_WITHOUT_NOTE'
+                 : end
 
          sent[index] = {
             id: invite.id,
@@ -606,7 +669,9 @@ export const runInvites = async (
 
       handOver()
 
-      const settled = sent.every(({ outcome: one }) => one === 'SENT' || DONE_WITHOUT_PRESS.includes(one))
+      const settled = sent.every(
+         ({ outcome: one }) => one === 'SENT' || one === 'SENT_WITHOUT_NOTE' || DONE_WITHOUT_PRESS.includes(one)
+      )
       const allWithdrawn = withdrawn.every(({ outcome: one }) => one === 'WITHDRAWN' || one === 'NOT_PENDING')
 
       return {

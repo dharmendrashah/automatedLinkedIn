@@ -79,6 +79,24 @@ describe('invitesFileSchema', () => {
 
       expect(invitesFileSchema.parse(file)).toEqual(file)
       expect(
+         invitesFileSchema.parse({
+            ...file,
+            contract: 2,
+            sent: [
+               {
+                  id: ID,
+                  outcome: 'SENT_WITHOUT_NOTE',
+               },
+            ],
+         }).sent[0]?.outcome
+      ).toBe('SENT_WITHOUT_NOTE')
+      expect(
+         invitesFileSchema.safeParse({
+            ...file,
+            contract: 3,
+         }).success
+      ).toBe(false)
+      expect(
          invitesFileSchema.safeParse({
             ...file,
             sent: [
