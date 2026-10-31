@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { type Row, count, httpsLink, rows, text } from './snapshotFields'
+import { type Row, count, httpsLink, linkedInLink, rows, text, webLink } from './snapshotFields'
 
 // A company page or a post the owner chose to read, cut down to what helps judge an account or a conversation.
 // Ids and anything not listed here stop at the `...From` functions.
@@ -9,7 +9,8 @@ const MAX = {
    about: 2_600,
    post: 3_000,
    specialities: 20,
-   breakdown: 8,
+   breakdown: 15,
+   offices: 10,
 }
 
 // The top of an employee breakdown such as [{ function, count }], as { label, count }.
@@ -38,7 +39,15 @@ const bars = z.array(
       count: z.number(),
    })
 )
+const address = z.object({
+   street: nullable,
+   city: nullable,
+   state: nullable,
+   postalCode: nullable,
+   country: nullable,
+})
 
+// Fields added after the first company reads default, so a snapshot kept before them still opens.
 const companySchema = z.object({
    name: nullable,
    tagline: nullable,
@@ -56,19 +65,45 @@ const companySchema = z.object({
    byFunction: bars,
    byLocation: bars,
    bySkill: bars,
+   industryCategory: nullable.default(null),
+   address: address.nullable().default(null),
+   locations: z.array(address).default([]),
+   jobsUrl: nullable.default(null),
+   ctaUrl: nullable.default(null),
+   active: z.boolean().nullable().default(null),
+   showcase: z.boolean().default(false),
+   bySchool: bars.default([]),
+   byFieldOfStudy: bars.default([]),
+   byServiceCategory: bars.default([]),
+   // False for a snapshot read before the fields above existed.
+   detailed: z.boolean().default(false),
 })
 
 export type CompanySnapshotData = z.infer<typeof companySchema>
 
+const addressFrom = (street: unknown, city: unknown, state: unknown, postalCode: unknown, country: unknown) => {
+   const parts = {
+      street: text(street),
+      city: text(city),
+      state: text(state),
+      postalCode: text(postalCode, 20),
+      country: text(country),
+   }
+
+   return Object.values(parts).some(Boolean) ? parts : null
+}
+
 export const companySnapshotFrom = (row: Row): CompanySnapshotData => {
    const headquarters = [text(row.hqCity), text(row.hqState), text(row.hqCountry)].filter(Boolean).join(', ')
+   const website = webLink(row.website)
+   const ctaUrl = webLink(row.ctaUrl)
 
    return {
       name: text(row.companyName),
       tagline: text(row.tagline),
       about: text(row.description, MAX.about),
       logo: httpsLink(row.logo),
-      website: httpsLink(row.website),
+      website,
       founded: count(row.foundedYear),
       employees: count(row.employeeCount),
       employeeRange: text(row.employeeCountRange, 40),
@@ -83,6 +118,23 @@ export const companySnapshotFrom = (row: Row): CompanySnapshotData => {
       byFunction: breakdown(row.employeesByFunction, 'function'),
       byLocation: breakdown(row.employeesByLocation, 'location'),
       bySkill: breakdown(row.employeesBySkill, 'skill'),
+      industryCategory: text(row.industryCategory),
+      address: addressFrom(row.hqStreet, row.hqCity, row.hqState, row.hqPostalCode, row.hqCountry),
+      locations: rows(row.locations)
+         .flatMap(office => {
+            const found = addressFrom(office.street, office.city, office.state, office.postalCode, office.country)
+
+            return found ? [found] : []
+         })
+         .slice(0, MAX.offices),
+      jobsUrl: linkedInLink(row.jobsUrl),
+      ctaUrl: ctaUrl === website ? null : ctaUrl,
+      active: typeof row.activeStatus === 'boolean' ? row.activeStatus : null,
+      showcase: typeof row.pageType === 'string' && row.pageType !== 'COMPANY',
+      bySchool: breakdown(row.employeesBySchool, 'school'),
+      byFieldOfStudy: breakdown(row.employeesByFieldOfStudy, 'fieldOfStudy'),
+      byServiceCategory: breakdown(row.employeesByServiceCategory, 'serviceCategory'),
+      detailed: true,
    }
 }
 

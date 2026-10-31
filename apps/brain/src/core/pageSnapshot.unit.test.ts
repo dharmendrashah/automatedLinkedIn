@@ -70,18 +70,160 @@ describe('companySnapshotFrom', () => {
             },
          ],
          bySkill: [],
+         industryCategory: null,
+         address: {
+            street: null,
+            city: 'San Francisco',
+            state: null,
+            postalCode: null,
+            country: 'US',
+         },
+         locations: [],
+         jobsUrl: null,
+         ctaUrl: null,
+         active: null,
+         showcase: false,
+         bySchool: [],
+         byFieldOfStudy: [],
+         byServiceCategory: [],
+         detailed: true,
       })
       expect(readCompanySnapshot(snapshot)).toEqual(snapshot)
       expect(readCompanySnapshot({ name: 1 })).toBeNull()
    })
 
-   it('should refuse links that are not https', () => {
+   it('should keep the address, offices, links and every breakdown of a full read', () => {
+      const snapshot = companySnapshotFrom({
+         companyName: 'Du Toit Yacht Design',
+         website: 'http://dutoityachtdesign.co.za/',
+         ctaUrl: 'http://dutoityachtdesign.co.za/',
+         jobsUrl: 'https://www.linkedin.com/jobs/search?geoId=92000000&f_C=35591296',
+         industryCategory: 'Maritime',
+         hqStreet: 'Bolt Ave',
+         hqCity: 'Montague Gardens',
+         hqState: 'Western Cape',
+         hqPostalCode: '7441',
+         hqCountry: 'South Africa',
+         locations: [
+            {
+               street: 'Bolt Ave',
+               city: 'Montague Gardens',
+               country: 'South Africa',
+               postalCode: '7441',
+            },
+            'not an office',
+         ],
+         activeStatus: true,
+         pageType: 'SHOWCASE',
+         employeesBySkill: Array.from({ length: 20 }, (_, index) => ({
+            skill: `Skill ${index}`,
+            count: 20 - index,
+         })),
+         employeesBySchool: [
+            {
+               school: 'University of Cape Town',
+               count: 1,
+            },
+         ],
+         employeesByFieldOfStudy: [
+            {
+               fieldOfStudy: 'Engineering',
+               count: 2,
+            },
+         ],
+         employeesByServiceCategory: [
+            {
+               serviceCategory: 'Design',
+               count: 1,
+            },
+         ],
+      })
+
+      expect(snapshot).toMatchObject({
+         website: 'http://dutoityachtdesign.co.za/',
+         jobsUrl: 'https://www.linkedin.com/jobs/search?geoId=92000000&f_C=35591296',
+         industryCategory: 'Maritime',
+         address: {
+            street: 'Bolt Ave',
+            city: 'Montague Gardens',
+            state: 'Western Cape',
+            postalCode: '7441',
+            country: 'South Africa',
+         },
+         locations: [
+            {
+               street: 'Bolt Ave',
+               city: 'Montague Gardens',
+               state: null,
+               postalCode: '7441',
+               country: 'South Africa',
+            },
+         ],
+         active: true,
+         showcase: true,
+         bySchool: [
+            {
+               label: 'University of Cape Town',
+               count: 1,
+            },
+         ],
+         byFieldOfStudy: [
+            {
+               label: 'Engineering',
+               count: 2,
+            },
+         ],
+         byServiceCategory: [
+            {
+               label: 'Design',
+               count: 1,
+            },
+         ],
+      })
+      expect(snapshot.bySkill).toHaveLength(15)
+      // The call to action is the website, so it is not shown twice.
+      expect(snapshot.ctaUrl).toBeNull()
+   })
+
+   it('should still read a snapshot kept before the full fields', () => {
+      const old = {
+         name: 'Stripe',
+         tagline: null,
+         about: null,
+         logo: null,
+         website: null,
+         founded: null,
+         employees: null,
+         employeeRange: null,
+         followers: null,
+         industry: null,
+         headquarters: null,
+         specialities: [],
+         verified: false,
+         byFunction: [],
+         byLocation: [],
+         bySkill: [],
+      }
+
+      expect(readCompanySnapshot(old)).toMatchObject({
+         name: 'Stripe',
+         address: null,
+         locations: [],
+         bySchool: [],
+         showcase: false,
+         detailed: false,
+      })
+   })
+
+   it('should refuse links that are not http or https, and a jobs link off LinkedIn', () => {
       const snapshot = companySnapshotFrom({
          logo: 'http://x',
          website: 'javascript:alert(1)',
+         ctaUrl: 'ftp://example.com',
+         jobsUrl: 'https://evil.example/jobs',
       })
 
-      expect([snapshot.logo, snapshot.website]).toEqual([null, null])
+      expect([snapshot.logo, snapshot.website, snapshot.ctaUrl, snapshot.jobsUrl]).toEqual([null, null, null, null])
    })
 })
 
