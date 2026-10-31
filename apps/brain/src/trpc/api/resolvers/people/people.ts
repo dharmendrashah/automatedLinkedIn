@@ -1,13 +1,22 @@
 import { z } from 'zod'
 
-import { COUNT_CAP, ClientService, LinkedInInviteService, PEOPLE_SORTS, PEOPLE_TABS, PeopleService } from 'database'
+import {
+   COUNT_CAP,
+   ClientService,
+   IMPORT_BATCH,
+   IMPORT_CAP,
+   LinkedInInviteService,
+   PEOPLE_SORTS,
+   PEOPLE_TABS,
+   PeopleService,
+} from 'database'
 
 import { INVITE_LIMITS, peopleFiltersSchema } from '@automatedLinkedIn/contracts'
 
 import { ownerProcedure, router } from 'trpc'
 
 import { asTrpcError } from '../asTrpcError'
-import { readLinks, tags, text } from '../linkedInRecord'
+import { tags, text } from '../linkedInRecord'
 import { orConflict, present } from '../owned'
 
 const id = z.string().min(1).max(100)
@@ -34,6 +43,7 @@ const view = z.object({
 })
 
 const clientName = z.string().trim().min(1).max(80)
+const profileUrl = z.string().trim().min(1).max(500)
 const PICK_A_LIST = { message: 'Pick a list or name a new one.' }
 const invitees = z.object({
    clientId: id,
@@ -201,34 +211,54 @@ export const people = router({
       .input(z.object({ id }))
       .mutation(async ({ ctx, input }) => present(await PeopleService.erase(ctx.user.id, input.id), NO_PERSON)),
 
-   // Pasted profile links into a list of the client (picked, or made with `listName`). Nothing is read or charged.
+   // What an import would do with each link (read only; a mutation so up to IMPORT_CAP links fit in the request).
+   preview: ownerProcedure
+      .input(
+         z.object({
+            clientId: id,
+            urls: z.array(profileUrl).min(1).max(IMPORT_CAP),
+         })
+      )
+      .mutation(async ({ ctx, input }) =>
+         present(await PeopleService.preview(ctx.user.id, input.clientId, input.urls), NO_CLIENT)
+      ),
+
+   // Imported profiles into a list of the client (picked, or made with `listName`), in batches; `read` reads each profile (paid).
    add: ownerProcedure
       .input(
          z
             .object({
                clientId: id,
-               urls: z.string().max(40_000),
+               people: z
+                  .array(
+                     z.object({
+                        url: profileUrl,
+                        labels: tags.optional(),
+                        notes: z.string().trim().max(1_000).optional(),
+                     })
+                  )
+                  .min(1)
+                  .max(IMPORT_BATCH),
                listId: id.optional(),
                listName: z.string().trim().min(1).max(80).optional(),
+               read: z.boolean().default(false),
             })
             .refine(input => Boolean(input.listId) !== Boolean(input.listName), PICK_A_LIST)
       )
-      .mutation(async ({ ctx, input }) => {
-         const { links, invalid } = readLinks(input.urls, 'profile')
-         const result = await orConflict(
-            PeopleService.add(
-               ctx.user.id,
-               input.clientId,
-               links,
-               input.listId ? { id: input.listId } : { name: input.listName ?? '' }
-            )
+      .mutation(async ({ ctx, input }) =>
+         present(
+            await orConflict(
+               PeopleService.add(
+                  ctx.user.id,
+                  input.clientId,
+                  input.people,
+                  input.listId ? { id: input.listId } : { name: input.listName ?? '' },
+                  input.read
+               )
+            ),
+            'Client or list not found'
          )
-
-         return {
-            ...present(result, 'Client or list not found'),
-            invalid: invalid.length,
-         }
-      }),
+      ),
 
    // Owner only: erasures and exports, for the Usage page.
    audit: ownerProcedure.query(({ ctx }) => PeopleService.audit(ctx.user.id)),

@@ -30,6 +30,7 @@ import { InviteDialog } from '@/components/my-network/invite-dialog'
 import { PeopleTable } from '@/components/my-network/people-table'
 import { PersonDrawer } from '@/components/my-network/person-drawer'
 import { Pickers } from '@/components/my-network/pickers'
+import { isDiscovery } from '@/components/my-network/row-actions'
 import {
    type NextStep,
    type ResultDays,
@@ -418,6 +419,7 @@ const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update
             key={inviting.join()}
             clientId={rows.find(row => row.id === inviting[0])?.clientId ?? addTo.id}
             personIds={inviting}
+            pickAccount={rows.some(row => inviting.includes(row.id) && isDiscovery(row))}
             source={view.found ?? undefined}
             onClose={() => setInviting([])}
             onDone={() => {

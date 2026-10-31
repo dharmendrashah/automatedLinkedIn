@@ -82,3 +82,7 @@ export const inviteBlock = (row: ActionRow, invitesLive: boolean) => {
 
    return INVITE_HELD[row.inviteState] ?? (invitesLive ? null : 'Invites are not on yet')
 }
+
+// Discovery: no account of the owner knows them yet and no invite went (an imported profile); inviting asks for the account.
+export const isDiscovery = (row: ActionRow) =>
+   !row.connectedAt && row.inviteState === 'NONE' && !row.links.some(({ accountId }) => accountId)
