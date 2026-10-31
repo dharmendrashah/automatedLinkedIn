@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { type Row, count, httpsLink, linkedInLink, rows, text, webLink } from './snapshotFields'
 
 // A company page or a post the owner chose to read, cut down to what helps judge an account or a conversation.
-// Ids and anything not listed here stop at the `...From` functions.
+// Anything not listed here stops at the `...From` functions.
 
 const MAX = {
    about: 2_600,
@@ -72,6 +72,9 @@ const companySchema = z.object({
    ctaUrl: nullable.default(null),
    active: z.boolean().nullable().default(null),
    showcase: z.boolean().default(false),
+   linkedinUrl: nullable.default(null),
+   companyId: nullable.default(null),
+   pageType: nullable.default(null),
    bySchool: bars.default([]),
    byFieldOfStudy: bars.default([]),
    byServiceCategory: bars.default([]),
@@ -96,7 +99,6 @@ const addressFrom = (street: unknown, city: unknown, state: unknown, postalCode:
 export const companySnapshotFrom = (row: Row): CompanySnapshotData => {
    const headquarters = [text(row.hqCity), text(row.hqState), text(row.hqCountry)].filter(Boolean).join(', ')
    const website = webLink(row.website)
-   const ctaUrl = webLink(row.ctaUrl)
 
    return {
       name: text(row.companyName),
@@ -128,9 +130,12 @@ export const companySnapshotFrom = (row: Row): CompanySnapshotData => {
          })
          .slice(0, MAX.offices),
       jobsUrl: linkedInLink(row.jobsUrl),
-      ctaUrl: ctaUrl === website ? null : ctaUrl,
+      ctaUrl: webLink(row.ctaUrl),
       active: typeof row.activeStatus === 'boolean' ? row.activeStatus : null,
       showcase: typeof row.pageType === 'string' && row.pageType !== 'COMPANY',
+      linkedinUrl: linkedInLink(row.linkedinUrl),
+      companyId: text(row.companyId, 40),
+      pageType: text(row.pageType, 40),
       bySchool: breakdown(row.employeesBySchool, 'school'),
       byFieldOfStudy: breakdown(row.employeesByFieldOfStudy, 'fieldOfStudy'),
       byServiceCategory: breakdown(row.employeesByServiceCategory, 'serviceCategory'),

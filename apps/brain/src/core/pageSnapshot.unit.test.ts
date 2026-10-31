@@ -19,7 +19,7 @@ describe('companySnapshotFrom', () => {
          hqCountry: 'US',
          specialities: ['Payments', 'APIs'],
          verified: true,
-         companyId: 'internal',
+         companyId: '2135371',
          employeesByFunction: [
             {
                function: 'Engineering',
@@ -83,6 +83,9 @@ describe('companySnapshotFrom', () => {
          ctaUrl: null,
          active: null,
          showcase: false,
+         linkedinUrl: null,
+         companyId: '2135371',
+         pageType: null,
          bySchool: [],
          byFieldOfStudy: [],
          byServiceCategory: [],
@@ -115,6 +118,7 @@ describe('companySnapshotFrom', () => {
          ],
          activeStatus: true,
          pageType: 'SHOWCASE',
+         linkedinUrl: 'https://www.linkedin.com/company/du-toit-yacht-design/',
          employeesBySkill: Array.from({ length: 20 }, (_, index) => ({
             skill: `Skill ${index}`,
             count: 20 - index,
@@ -161,6 +165,9 @@ describe('companySnapshotFrom', () => {
          ],
          active: true,
          showcase: true,
+         pageType: 'SHOWCASE',
+         linkedinUrl: 'https://www.linkedin.com/company/du-toit-yacht-design/',
+         ctaUrl: 'http://dutoityachtdesign.co.za/',
          bySchool: [
             {
                label: 'University of Cape Town',
@@ -181,8 +188,6 @@ describe('companySnapshotFrom', () => {
          ],
       })
       expect(snapshot.bySkill).toHaveLength(15)
-      // The call to action is the website, so it is not shown twice.
-      expect(snapshot.ctaUrl).toBeNull()
    })
 
    it('should still read a snapshot kept before the full fields', () => {

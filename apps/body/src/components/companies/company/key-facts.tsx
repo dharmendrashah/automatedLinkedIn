@@ -1,16 +1,38 @@
 import { Section } from '@/components/people/person-sections'
-import { Building2, CalendarDays, Factory, Globe, MapPin, UserRound, Users } from 'lucide-react'
+import { IconBrandLinkedin } from '@tabler/icons-react'
+import {
+   BadgeCheck,
+   Building2,
+   CalendarDays,
+   Factory,
+   FileText,
+   Fingerprint,
+   Globe,
+   Layers,
+   MapPin,
+   MousePointerClick,
+   Power,
+   UserRound,
+   Users,
+} from 'lucide-react'
 import { type ComponentType } from 'react'
 
 import { type Fact, type FactKind, type Snapshot, addressText } from './facts'
 
 const ICONS: Record<FactKind, ComponentType<{ className?: string }>> = {
    industry: Factory,
+   category: Layers,
    founded: CalendarDays,
    size: Building2,
    employees: UserRound,
    followers: Users,
    website: Globe,
+   cta: MousePointerClick,
+   linkedin: IconBrandLinkedin,
+   pageType: FileText,
+   status: Power,
+   verified: BadgeCheck,
+   companyId: Fingerprint,
    headquarters: MapPin,
 }
 

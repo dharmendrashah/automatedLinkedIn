@@ -10,33 +10,50 @@ const company = {
 } as Parameters<typeof factsOf>[1]
 
 const snapshot = {
-   industry: 'Maritime',
-   industryCategory: 'Maritime',
-   founded: 2001,
-   employeeRange: '2-10',
-   employees: 12,
-   followers: 2014,
-   website: 'http://dutoityachtdesign.co.za/',
-   headquarters: 'Montague Gardens, Western Cape, South Africa',
+   industry: 'Telecommunications',
+   industryCategory: 'Telecommunications',
+   founded: 2002,
+   employeeRange: '11-50',
+   employees: 19,
+   followers: 2952,
+   website: 'http://www.nova-tech.us',
+   ctaUrl: 'http://www.nova-tech.us',
+   linkedinUrl: 'https://www.linkedin.com/company/nova-communications-inc/',
+   pageType: 'COMPANY',
+   active: true,
+   verified: false,
+   companyId: '1458481',
+   headquarters: 'Plymouth, Minnesota, United States',
    address: {
-      street: 'Bolt Ave',
-      city: 'Montague Gardens',
-      state: 'Western Cape',
-      postalCode: '7441',
-      country: 'South Africa',
+      street: '16305 36th Ave N',
+      city: 'Plymouth',
+      state: 'Minnesota',
+      postalCode: '55446',
+      country: 'United States',
    },
 } as Snapshot
 
 describe('factsOf', () => {
-   it('should list every fact of a full read, with the full address and the website link', () => {
+   it('should list every fact of a full read, with the full address and the links', () => {
       expect(factsOf(snapshot, company).map(({ label, value, href }) => [label, value, href])).toEqual([
-         ['Industry', 'Maritime', undefined],
-         ['Founded', '2001', undefined],
-         ['Company size', '2–10 employees', undefined],
-         ['On LinkedIn', '12 members', undefined],
-         ['Followers', '2,014', undefined],
-         ['Website', 'dutoityachtdesign.co.za', 'http://dutoityachtdesign.co.za/'],
-         ['Headquarters', 'Bolt Ave, Montague Gardens, Western Cape 7441, South Africa', undefined],
+         ['Industry', 'Telecommunications', undefined],
+         ['Industry category', 'Telecommunications', undefined],
+         ['Founded', '2002', undefined],
+         ['Company size', '11–50 employees', undefined],
+         ['On LinkedIn', '19 members', undefined],
+         ['Followers', '2,952', undefined],
+         ['Website', 'nova-tech.us', 'http://www.nova-tech.us'],
+         ['Call to action', 'nova-tech.us', 'http://www.nova-tech.us'],
+         [
+            'LinkedIn page',
+            'linkedin.com/company/nova-communications-inc',
+            'https://www.linkedin.com/company/nova-communications-inc/',
+         ],
+         ['Page type', 'Company', undefined],
+         ['Status', 'Active', undefined],
+         ['Verified', 'Not verified', undefined],
+         ['LinkedIn id', '1458481', undefined],
+         ['Headquarters', '16305 36th Ave N, Plymouth, Minnesota 55446, United States', undefined],
       ])
    })
 

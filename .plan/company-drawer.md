@@ -141,3 +141,9 @@ Shipped (branch `feat/company-drawer`):
 - Body (`companies/company/`): `facts.ts` (the key facts, address text and domain; unit tested), `key-facts.tsx` (the facts grid and Offices) and `breakdowns.tsx` (six cards, top 5 then "Show all N"). `company-view.tsx` has a header with no banner and the Website (domain), Jobs and call-to-action buttons, plus the "Read again to see…" hint on an old snapshot. Overview became Key facts plus Specialities.
 
 Deviations: none. Not checked in a browser: the local page needs an authentik sign-in.
+
+Follow-up (owner, 2026-10-31, "show other information as well"):
+
+- The snapshot also keeps `linkedinUrl`, `companyId` and `pageType`.
+- `ctaUrl` is kept even when it is the website. The header hides the duplicate button, and the key facts list it.
+- Key facts add Industry category, Call to action, LinkedIn page, Page type, Status, Verified and LinkedIn id.

@@ -71,7 +71,7 @@ const Header = ({ detail }: { detail: CompanyDetail }) => {
                   Jobs
                </LinkButton>
             ) : null}
-            {snapshot?.ctaUrl ? (
+            {snapshot?.ctaUrl && snapshot.ctaUrl !== website ? (
                <LinkButton href={snapshot.ctaUrl} icon={<MousePointerClick />}>
                   {domainOf(snapshot.ctaUrl)}
                </LinkButton>
