@@ -1,6 +1,6 @@
 # Invite with a note, else without: the free-notes fallback
 
-- Status: in progress (built and tested; the live devtools and staging runs are still to do)
+- Status: in progress (devtools run passed; staging run after deploy)
 - Created: 2026-10-31
 - Locked by user: yes, 2026-10-31 (answers below)
 
@@ -101,7 +101,7 @@ Checklist (from the spider-task-writer skill):
 ### 7. Verify
 
 - [x] `pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build` pass with no warnings (only Vite's existing chunk-size note).
-- [ ] Devtools run on the account with no free notes left: an invite with a note ends `SENT_WITHOUT_NOTE`. Not run (needs the owner's go and a test person).
+- [x] Devtools run on the account with no free notes left (run `4a122b5c`, 2026-10-31, invite with a note to Harshit Srivastava): `SENT_WITHOUT_NOTE`, verdict DONE in 58 s. Its log: More menu, Connect, Add a note, "no free notes left", Dismiss, More menu again, Connect again, Send. After Dismiss the profile came back (the invite window did not), and exactly one invite request (`verifyQuotaAndCreateV2`) went out.
 - [x] The failed staging run was read from `files/`, `network.json`, `timeline.json` and the video.
 - [ ] Staging run: after deploy.
 
