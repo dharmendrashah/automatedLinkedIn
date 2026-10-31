@@ -71,13 +71,18 @@ export class RetentionService {
       // A finished read keeps the link it read; the result itself lives in the snapshot.
       const readCutoff = daysBefore(now, RETENTION.itemsDays)
       const reads = await db.dataRead.deleteMany({ where: { finishedAt: { lt: readCutoff } } })
-      // A full profile is kept only while the person is in one of the owner's lists, in /profiles, a connection of one of the owner's
-      // accounts, or in a conversation of one.
+      // A full profile is kept only while the person is in one of the owner's lists, in /profiles, on My network (and not on Do not
+      // contact for every client), a connection of one of the owner's accounts, or in a conversation of one.
       const snapshots = await db.$executeRaw`
          DELETE FROM "PersonSnapshot" s
          WHERE NOT EXISTS (
             SELECT 1 FROM "WorkflowListMember" m JOIN "WorkflowList" l ON l."id" = m."listId"
             WHERE l."userId" = s."userId" AND m."slug" = s."slug"
+         )
+         AND NOT EXISTS (
+            SELECT 1 FROM "Person" pe
+            WHERE pe."userId" = s."userId" AND pe."slug" = s."slug"
+            AND NOT EXISTS (SELECT 1 FROM "Suppression" x WHERE x."userId" = s."userId" AND x."slug" = s."slug")
          )
          AND NOT EXISTS (
             SELECT 1 FROM "LinkedInProfile" p
