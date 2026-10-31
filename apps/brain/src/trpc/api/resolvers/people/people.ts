@@ -3,6 +3,8 @@ import { z } from 'zod'
 import {
    COUNT_CAP,
    ClientService,
+   IMPORT_BATCH,
+   IMPORT_CAP,
    LinkedInInviteService,
    PEOPLE_SORTS,
    PEOPLE_TABS,
