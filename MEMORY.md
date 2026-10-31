@@ -73,6 +73,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Gotchas
 
+- A runtime (value) import from the `core` index in a `database` module loads `env`, and brain unit tests then exit on a missing `DATABASE_URL` in CI (CI sets none for unit tests). Locally it hides, because zsh-autoenv exports `DATABASE_URL` and `.env.test` has it. Import the module itself (`core/linkedInUrl`), and check with `env -u DATABASE_URL` and `.env.test` moved away. Broke `main` after PR 166.
 <<<<<<< HEAD
 - `apps/body` browser code must not import values from `@automatedLinkedIn/contracts` (types are fine): Vite serves its CommonJS `dist` without named exports, so the page fails with "does not provide an export named …". Tests run in Node and may. Take what the page needs from brain's answer instead.
 =======
@@ -248,6 +249,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-11-01: Fixed brain unit tests in CI after PR 166 (`linkedInRecord.ts` imports `core/linkedInUrl`, not the `core` index; see Gotchas).
 - 2026-11-01: Companies CSV import, bulk Read and import labels (`.plan/companies-import-csv.md`, done; not seen in a browser behind sign-in). Verified: lint, ts:check, unit tests, build, brain integration tests against local Postgres.
 
 - 2026-11-01: Companies Filters drawer and saved views (`.plan/companies-filter-drawer.md`): filters on the company read (`PageSnapshot.data`) run as one parameterised SQL query in `database/companyFilters.ts` (LEFT JOIN on `userId` and `slug`, jsonb keys only from code constants, ILIKE escaped) that returns ids for the Prisma list; Matches ICP uses the ICP's industries, sizes, locations and keywords only (unread hidden unless asked). Breakdowns are top 15, so team filters are "at least N" only. Views (`CompanyView`) store the page's address query.
