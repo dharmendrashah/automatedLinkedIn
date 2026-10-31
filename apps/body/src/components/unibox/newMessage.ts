@@ -28,6 +28,7 @@ export const draftConversation = (account: UniboxAccount, { slug, name, imageUrl
       id: placeholderId(account.id, slug),
       accountId: account.id,
       contact,
+      contactSlug: slug,
       participants: [contact],
       kind: 'DIRECT',
       unread: false,

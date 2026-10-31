@@ -34,13 +34,14 @@ const person = (slug: string, over: Partial<Recipient> = {}): Recipient => ({
 })
 
 describe('draftConversation', () => {
-   it('should stand in for a conversation not begun yet, with nothing on its way', () => {
+   it('should stand in for a conversation not begun yet, with nothing on its way, and name its person for the card and drawer', () => {
       const conversation = draftConversation(account('ACTIVE'), person('grace-h', { name: 'Grace Hopper' }))
 
       expect(conversation).toMatchObject({
          id: placeholderId('a1', 'grace-h'),
          accountId: 'a1',
          contact: { name: 'Grace Hopper', profileUrl: 'https://www.linkedin.com/in/grace-h/' },
+         contactSlug: 'grace-h',
          messages: [],
          starting: { slug: 'grace-h' },
       })
