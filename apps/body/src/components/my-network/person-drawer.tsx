@@ -24,7 +24,7 @@ import {
    CodeBlockHeader,
    CodeBlockTitle,
 } from '@/components/ui/code-block'
-import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from '@/components/ui/drawer'
+import { Drawer, DrawerContent, DrawerTitle } from '@/components/ui/drawer'
 import {
    DropdownMenu,
    DropdownMenuContent,
@@ -52,7 +52,10 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { PRICE_MICROS } from '@automatedLinkedIn/contracts'
+
 import { type Person } from './types'
+import { type PersonDetail } from '@/components/people/types'
 
 import { trpc } from '../../trpc'
 import { PANES, type Pane } from './address'
@@ -196,9 +199,33 @@ const ContactActions = ({ person, onInvite }: { person: Person; onInvite: ((id: 
    )
 }
 
+// The profile detail of a person; when brain has none for them, the same card and options from their My network row.
+const useProfile = (person: Person): PersonDetail | undefined => {
+   const detail = usePersonDetail(person.slug)
+
+   return (
+      detail.data ??
+      (detail.error
+         ? {
+              slug: person.slug,
+              url: person.url,
+              profile: null,
+              member: null,
+              connections: [],
+              conversations: [],
+              suppressed: person.doNotContact,
+              snapshot: null,
+              readPriceMicros: PRICE_MICROS.profile,
+              read: null,
+           }
+         : undefined)
+   )
+}
+
 // Who they are, from the profile read when there is one, with why they are here and how to reach them.
 const Identity = ({ person, onInvite }: { person: Person; onInvite: ((id: string) => void) | undefined }) => {
    const detail = usePersonDetail(person.slug)
+   const profile = useProfile(person)
    const utils = trpc.useUtils()
    const fetchedAt = detail.data?.snapshot?.fetchedAt ?? null
    const seen = useRef<string | null | undefined>(undefined)
@@ -226,26 +253,15 @@ const Identity = ({ person, onInvite }: { person: Person; onInvite: ((id: string
    )
    const actions = <ContactActions person={person} onInvite={onInvite} />
 
-   if (detail.data) {
+   if (profile) {
       return (
-         <ProfileCard person={detail.data} clientId={person.clientId} actions={actions}>
+         <ProfileCard person={profile} clientId={person.clientId} actions={actions} known={person}>
             {why}
          </ProfileCard>
       )
    }
 
-   return detail.error ? (
-      <div className="grid gap-3 rounded-xl border p-4">
-         <div className="grid gap-1">
-            <DrawerTitle className="text-xl">{nameOf(person)}</DrawerTitle>
-            {person.headline ? (
-               <DrawerDescription className="text-foreground text-sm">{person.headline}</DrawerDescription>
-            ) : null}
-            {why}
-         </div>
-         <div className="flex flex-wrap items-center gap-2">{actions}</div>
-      </div>
-   ) : (
+   return (
       <>
          <DrawerTitle className="sr-only">{nameOf(person)}</DrawerTitle>
          <Skeleton className="h-56 w-full rounded-xl" />
@@ -452,18 +468,10 @@ const DataTab = ({ slug }: { slug: string }) => {
    )
 }
 
-const ProfileTab = ({ slug }: { slug: string }) => {
-   const detail = usePersonDetail(slug)
+const ProfileTab = ({ person }: { person: Person }) => {
+   const profile = useProfile(person)
 
-   if (detail.data) {
-      return <ProfileDetails person={detail.data} />
-   }
-
-   return detail.error ? (
-      <p className="text-muted-foreground text-sm">{readableError(detail.error)}</p>
-   ) : (
-      <Skeleton className="h-40 w-full rounded-xl" />
-   )
+   return profile ? <ProfileDetails person={profile} /> : <Skeleton className="h-40 w-full rounded-xl" />
 }
 
 const Body = ({ id, order, pane, onPane, onMove, onGone, onAnswer, onInvite }: Omit<Props, 'onClose'>) => {
@@ -528,7 +536,7 @@ const Body = ({ id, order, pane, onPane, onMove, onGone, onAnswer, onInvite }: O
                <TabsTrigger value="data">Data JSON</TabsTrigger>
             </TabsList>
             <TabsContent value="profile">
-               <ProfileTab key={person.data.slug} slug={person.data.slug} />
+               <ProfileTab key={person.data.slug} person={person.data} />
             </TabsContent>
             <TabsContent value="chat">
                <ChatPane key={person.data.id} person={person.data} />
