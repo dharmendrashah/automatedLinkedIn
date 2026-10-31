@@ -1,18 +1,9 @@
 import { Photo } from '@/components/photo'
-import { Button } from '@/components/ui/button'
-import {
-   DropdownMenu,
-   DropdownMenuCheckboxItem,
-   DropdownMenuContent,
-   DropdownMenuLabel,
-   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { flagOf } from '@/lib/country-flag'
 import { useFillHeight } from '@/lib/use-fill-height'
 import {
-   type ColumnVisibilityState,
    FlexRender,
    type SortingState,
    type Updater,
@@ -28,7 +19,6 @@ import {
    ArrowUp,
    ArrowUpDown,
    Building2,
-   Columns3,
    Eye,
    FileText,
    Film,
@@ -53,7 +43,7 @@ import {
    Video,
    Workflow,
 } from 'lucide-react'
-import { type ComponentType, useEffect, useMemo, useRef, useState } from 'react'
+import { type ComponentType, useEffect, useMemo, useRef } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -61,6 +51,7 @@ import { type SessionRow } from './types'
 
 import { type Catalog, actionLabel, formatDuration, proxyLabel, timeAgo } from './describe'
 import { SessionStatusBadge } from './session-status-badge'
+import { type HiddenColumns } from './use-hidden-columns'
 import { type SessionSort } from './use-sessions'
 
 type Icon = ComponentType<{ className?: string }>
@@ -129,18 +120,6 @@ const FILE_ICONS: Array<{ kind: string; icon: Icon; word: string }> = [
    },
 ]
 
-const COLUMN_WORDS: Record<string, string> = {
-   result: 'Result',
-   action: 'Action',
-   account: 'Account',
-   trigger: 'Started by',
-   proxy: 'Proxy',
-   detail: 'Detail',
-   startedAt: 'Started',
-   durationMs: 'Took',
-   files: 'Files',
-}
-
 const CELL_CLASS: Record<string, string> = {
    result: 'w-0',
    action: 'max-w-64',
@@ -156,7 +135,6 @@ const CELL_CLASS: Record<string, string> = {
 const SORTS: Array<SessionSort['by']> = ['startedAt', 'durationMs']
 const ROW_HEIGHT = 57
 const LOAD_AHEAD = 15
-const HIDDEN_KEY = 'sessions.hiddenColumns'
 
 const features = tableFeatures({
    rowSortingFeature,
@@ -359,18 +337,6 @@ const columnsOf = (catalog: Catalog | undefined, onOpen: (id: string) => void) =
       }),
    ])
 
-const readHidden = (): ColumnVisibilityState => {
-   try {
-      const parsed: unknown = JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? '{}')
-
-      return parsed && typeof parsed === 'object'
-         ? Object.fromEntries(Object.entries(parsed).filter(([, shown]) => shown === false))
-         : {}
-   } catch {
-      return {}
-   }
-}
-
 type Props = {
    rows: SessionRow[]
    catalog: Catalog | undefined
@@ -381,6 +347,8 @@ type Props = {
    sort: SessionSort | undefined
    hasMore: boolean
    loadingMore: boolean
+   // Columns the owner hid (the Columns menu on the page).
+   hidden: HiddenColumns
    onOpen: (id: string) => void
    onSort: (sort: SessionSort | undefined) => void
    onMore: () => void
@@ -400,13 +368,13 @@ export const SessionsTable = ({
    sort,
    hasMore,
    loadingMore,
+   hidden,
    onOpen,
    onSort,
    onMore,
    onTop,
 }: Props) => {
    const scroller = useRef<HTMLDivElement>(null)
-   const [hidden, setHidden] = useState<ColumnVisibilityState>(readHidden)
    const columns = useMemo(() => columnsOf(catalog, onOpen), [catalog, onOpen])
    const sorting: SortingState = sort
       ? [
@@ -440,12 +408,6 @@ export const SessionsTable = ({
                : undefined
          )
       },
-      onColumnVisibilityChange: (updater: Updater<ColumnVisibilityState>) => {
-         const next = typeof updater === 'function' ? updater(hidden) : updater
-
-         localStorage.setItem(HIDDEN_KEY, JSON.stringify(next))
-         setHidden(next)
-      },
    })
    // oxlint-disable-next-line react/incompatible-library -- the virtualizer's functions are used here and as the rows' ref, never memoised
    const virtualizer = useVirtualizer({
@@ -477,32 +439,6 @@ export const SessionsTable = ({
 
    return (
       <div className="grid gap-2">
-         <div className="flex justify-end">
-            <DropdownMenu>
-               <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                     <Columns3 />
-                     Columns
-                  </Button>
-               </DropdownMenuTrigger>
-               <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Show columns</DropdownMenuLabel>
-                  {table
-                     .getAllLeafColumns()
-                     .filter(({ id }) => id !== 'result')
-                     .map(each => (
-                        <DropdownMenuCheckboxItem
-                           key={each.id}
-                           checked={each.getIsVisible()}
-                           onCheckedChange={shown => each.toggleVisibility(shown === true)}
-                           onSelect={event => event.preventDefault()}
-                        >
-                           {COLUMN_WORDS[each.id] ?? each.id}
-                        </DropdownMenuCheckboxItem>
-                     ))}
-               </DropdownMenuContent>
-            </DropdownMenu>
-         </div>
          <div
             ref={scroller}
             className="bg-card relative min-h-64 overflow-auto rounded-xl border"

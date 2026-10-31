@@ -1,7 +1,9 @@
 import { SearchBox } from '@/components/my-network/filters'
 import { MultiPick } from '@/components/my-network/filters/fields'
+import { ColumnsMenu } from '@/components/sessions/columns-menu'
 import { SessionDrawer } from '@/components/sessions/session-drawer'
 import { SessionsTable } from '@/components/sessions/sessions-table'
+import { useHiddenColumns } from '@/components/sessions/use-hidden-columns'
 import { type SessionSort, useSessions } from '@/components/sessions/use-sessions'
 import { useTaskCatalog } from '@/components/sessions/use-task-catalog'
 import { Badge } from '@/components/ui/badge'
@@ -78,6 +80,7 @@ export const Sessions = () => {
    const [sheetOpen, setSheetOpen] = useState(false)
 
    const { rows, list, waiting, showWaiting } = useSessions(api, sort, atTop)
+   const [hidden, setHidden] = useHiddenColumns()
    const catalog = useTaskCatalog()
    const accounts = trpc.linkedInAccount.list.useQuery(undefined, { retry: false })
    const proxies = trpc.proxyServer.list.useQuery(undefined, { retry: false })
@@ -220,12 +223,15 @@ export const Sessions = () => {
                <span className="size-2 animate-pulse rounded-full bg-emerald-500" aria-hidden />
                Live
             </span>
-            {waiting > 0 ? (
-               <Button size="sm" className="ml-auto" onClick={showWaiting}>
-                  <ArrowUp />
-                  {waiting === 1 ? '1 new session' : `${waiting} new sessions`}
-               </Button>
-            ) : null}
+            <div className="ml-auto flex items-center gap-2">
+               {waiting > 0 ? (
+                  <Button size="sm" onClick={showWaiting}>
+                     <ArrowUp />
+                     {waiting === 1 ? '1 new session' : `${waiting} new sessions`}
+                  </Button>
+               ) : null}
+               <ColumnsMenu hidden={hidden} onChange={setHidden} />
+            </div>
          </div>
 
          <SessionFilterChips value={filters} names={names} onChange={setFilters} />
@@ -240,6 +246,7 @@ export const Sessions = () => {
             sort={sort}
             hasMore={Boolean(list.hasNextPage)}
             loadingMore={list.isFetchingNextPage}
+            hidden={hidden}
             onOpen={open}
             onSort={next => update({ sort: next ? `${next.by}.${next.desc ? 'desc' : 'asc'}` : null })}
             onMore={() => void list.fetchNextPage()}
