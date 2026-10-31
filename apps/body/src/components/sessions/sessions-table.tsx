@@ -84,15 +84,15 @@ const TASK_ICONS: Record<string, Icon> = {
 const TRIGGER_ICONS: Record<string, { icon: Icon; word: string }> = {
    manual: {
       icon: Hand,
-      word: 'Started by hand',
+      word: 'Manual',
    },
    automatic: {
       icon: Timer,
-      word: 'Started automatically',
+      word: 'Automatic',
    },
    retry: {
       icon: RotateCcw,
-      word: 'A retry',
+      word: 'Retry',
    },
 }
 
@@ -260,8 +260,9 @@ const columnsOf = (catalog: Catalog | undefined, onOpen: (id: string) => void) =
             return (
                <span className="text-muted-foreground flex items-center gap-1.5">
                   {known ? (
-                     <span title={known.word} aria-label={known.word} role="img">
-                        <known.icon className="size-4" />
+                     <span className="flex items-center gap-1.5 whitespace-nowrap">
+                        <known.icon className="size-4 shrink-0" />
+                        {known.word}
                      </span>
                   ) : null}
                   {retryOfId ? (
