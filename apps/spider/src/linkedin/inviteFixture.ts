@@ -79,6 +79,20 @@ export const inviteDialogMarkup = ({
    }
 </div>`
 
+// What Add a note opened on an account with no free notes left (staging run e137a154, 2026-10-31): a Premium offer in the page's own
+// modal outlet, not the invite window's shadow root. Structure only; `words: false` keeps the outlet and drops the sentence.
+export const notesOutMarkup = ({ words = true }: { words?: boolean } = {}) => `<div id="artdeco-modal-outlet">
+   <div data-test-modal-container="" data-test-modal-id="modal-upsell" aria-hidden="false" class="artdeco-modal-overlay">
+      <div data-test-modal="" role="dialog" class="artdeco-modal modal-upsell" aria-labelledby="modal-upsell-header">
+         <span class="a11y-text">Dialog content start.</span>
+         <button aria-label="Dismiss"></button>
+         <h2 id="modal-upsell-header">Send unlimited personalized invites with Premium</h2>
+         ${words ? '<p>You’re out of free custom notes. Bypass the limit with Premium.</p>' : '<p>Premium</p>'}
+         <a href="https://www.linkedin.com/premium/products/">Reactivate Premium</a>
+      </div>
+   </div>
+</div>`
+
 // The Sent list of "Manage invitations" (recorded 2026-10-30), one row per person: the photo and name link to the profile, and
 // Withdraw is a link named after the person.
 export const sentMarkup = (slugs: string[]) =>

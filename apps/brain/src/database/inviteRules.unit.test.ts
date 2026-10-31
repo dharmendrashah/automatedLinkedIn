@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { fillNote, inviteSentence, planInvites, sendChange, skipReasonOf, withdrawChange } from './inviteRules'
+import {
+   fillNote,
+   inviteSentence,
+   notesBackAt,
+   planInvites,
+   sendChange,
+   skipReasonOf,
+   withdrawChange,
+} from './inviteRules'
 
 const NOW = new Date('2026-10-30T10:00:00.000Z')
 const HOUR = 60 * 60 * 1000
@@ -154,7 +162,18 @@ describe('sendChange and withdrawChange', () => {
       })
       expect(sendChange('NOT_SENT', 2, NOW).state).toBe('FAILED')
       expect(sendChange('NOTE_REFUSED', 0, NOW).state).toBe('FAILED')
+      expect(sendChange('SENT_WITHOUT_NOTE', 0, NOW, '42')).toEqual({
+         state: 'SENT',
+         reason: 'Sent without the note: no free notes left this month.',
+         invitedAt: NOW,
+         memberId: '42',
+      })
       expect(sendChange('REFUSED', 0, NOW).state).toBe('FAILED')
+   })
+
+   it('should keep the free notes out until the first day of the next month', () => {
+      expect(notesBackAt(new Date('2026-10-31T23:00:00.000Z'))).toEqual(new Date('2026-11-01T00:00:00.000Z'))
+      expect(notesBackAt(new Date('2026-12-15T10:00:00.000Z'))).toEqual(new Date('2027-01-01T00:00:00.000Z'))
    })
 
    it('should call an invite no longer pending withdrawn and try an unclear withdrawal again', () => {

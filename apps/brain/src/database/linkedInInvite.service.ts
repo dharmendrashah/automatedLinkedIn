@@ -10,6 +10,7 @@ import {
    type SkipReason,
    fillNote,
    inviteSentence,
+   notesBackAt,
    planInvites,
    sendChange,
    skipReasonOf,
@@ -406,6 +407,7 @@ export class LinkedInInviteService {
             invitesStoppedAt: true,
             invitesStopUntil: true,
             invitesStopReason: true,
+            notesOutUntil: true,
          },
       })
 
@@ -510,6 +512,7 @@ export class LinkedInInviteService {
                   ...(note && { note }),
                })),
                withdraw: withdrawals,
+               ...(account.notesOutUntil && account.notesOutUntil > now && { notesOut: true }),
             },
             onStart: async (sessionId, tx) => {
                const sending = await tx.linkedInInvite.updateMany({
@@ -656,6 +659,7 @@ export class LinkedInInviteService {
          },
          select: {
             id: true,
+            accountId: true,
             state: true,
             tries: true,
          },
@@ -691,6 +695,20 @@ export class LinkedInInviteService {
             if (row && (row.state === 'WITHDRAWING' || row.state === 'WITHDRAW_QUEUED')) {
                await apply(id, withdrawChange(outcome, row.tries, now), ['WITHDRAWING', 'WITHDRAW_QUEUED'])
             }
+         }
+
+         // LinkedIn refused a note: the account's later invites go without one until its notes come back.
+         const notesOut = new Set(
+            file.sent.flatMap(({ id, outcome }) =>
+               outcome === 'SENT_WITHOUT_NOTE' ? (byId.get(id)?.accountId ?? []) : []
+            )
+         )
+
+         if (notesOut.size > 0) {
+            await tx.linkedInAccount.updateMany({
+               where: { id: { in: [...notesOut] } },
+               data: { notesOutUntil: notesBackAt(now) },
+            })
          }
       })
 

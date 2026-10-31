@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { connectionSlugSchema } from './connections'
 
-export const INVITES_CONTRACT_VERSION = 1
+export const INVITES_CONTRACT_VERSION = 2
 
 // Connection invites an account sends, and the ones it withdraws, through the task `linkedin-invite` (.plan/network-invites.md).
 // One file per run, named `invites.json`, says what became of each.
@@ -52,6 +52,8 @@ export const inviteInputSchema = z
    .strictObject({
       send: z.array(inviteSendSchema).max(INVITE_LIMITS.perRun).default([]),
       withdraw: z.array(inviteWithdrawSchema).max(INVITE_LIMITS.withdrawPerRun).default([]),
+      // The account has used its free notes this month (.plan/invite-note-fallback.md): invites go without their note.
+      notesOut: z.boolean().optional(),
    })
    .refine(input => input.send.length + input.withdraw.length > 0, 'Nothing to send or withdraw')
 
@@ -59,10 +61,12 @@ export const inviteInputSchema = z
 // pressed. NO_CONNECT: the profile showed no Connect button for the person. NOTE_REFUSED: LinkedIn gave no place for the note (free
 // accounts get few), nothing sent. EMAIL_NEEDED: LinkedIn asked for the person's email, nothing sent. NOT_AVAILABLE: the address led
 // to no profile. LIMIT_REACHED: LinkedIn said the account may not invite more now. REFUSED: LinkedIn answered the invite request with an
-// error, so it did not go. UNSURE: Send was pressed and the page did not say.
+// error, so it did not go. UNSURE: Send was pressed and the page did not say. SENT_WITHOUT_NOTE: LinkedIn refused the note before Send
+// (no free notes left), and the invite left without it.
 // NOT_SENT: the run stopped before its turn, or a step did not show, nothing pressed.
 export const INVITE_SEND_OUTCOMES = [
    'SENT',
+   'SENT_WITHOUT_NOTE',
    'ALREADY_CONNECTED',
    'ALREADY_PENDING',
    'NO_CONNECT',
@@ -80,7 +84,8 @@ export const INVITE_SEND_OUTCOMES = [
 export const INVITE_WITHDRAW_OUTCOMES = ['WITHDRAWN', 'NOT_PENDING', 'UNSURE', 'NOT_CLICKED'] as const
 
 export const invitesFileSchema = z.strictObject({
-   contract: z.literal(INVITES_CONTRACT_VERSION),
+   // A run of the task's version 1 may still finish after brain moved on to contract 2; its file reads the same.
+   contract: z.union([z.literal(1), z.literal(INVITES_CONTRACT_VERSION)]),
    captured_at: z.iso.datetime(),
    sent: z
       .array(

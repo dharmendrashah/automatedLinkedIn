@@ -653,6 +653,8 @@ model LinkedInAccount {
   invitesStoppedAt      DateTime?
   invitesStopReason     String?
   invitesStopUntil      DateTime?
+  // The account used its free invite notes this month (.plan/invite-note-fallback.md): until then invites go without their note.
+  notesOutUntil         DateTime?
   nextAcceptReadAt      DateTime?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt

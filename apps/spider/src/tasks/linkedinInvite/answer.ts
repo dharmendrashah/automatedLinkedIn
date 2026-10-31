@@ -2,11 +2,12 @@ import { type TaskOutcome } from '../defineTask'
 import { type InviteRun } from './run'
 
 const counted = ({ sent, withdrawn }: InviteRun) => {
-   const invited = sent.filter(({ outcome }) => outcome === 'SENT').length
+   const bare = sent.filter(({ outcome }) => outcome === 'SENT_WITHOUT_NOTE').length
+   const invited = sent.filter(({ outcome }) => outcome === 'SENT').length + bare
    const taken = withdrawn.filter(({ outcome }) => outcome === 'WITHDRAWN').length
 
    return {
-      headline: `${invited} of ${sent.length} invites sent, ${taken} of ${withdrawn.length} withdrawn.`,
+      headline: `${invited} of ${sent.length} invites sent${bare > 0 ? ` (${bare} without the note: no free notes left)` : ''}, ${taken} of ${withdrawn.length} withdrawn.`,
       sections: [],
    }
 }
