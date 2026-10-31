@@ -2,13 +2,16 @@ import { Section } from '@/components/people/person-sections'
 import { IconBrandLinkedin } from '@tabler/icons-react'
 import {
    BadgeCheck,
+   BriefcaseBusiness,
    Building2,
    CalendarDays,
    Factory,
    FileText,
    Fingerprint,
    Globe,
+   History,
    Layers,
+   Mailbox,
    MapPin,
    MousePointerClick,
    Power,
@@ -28,11 +31,14 @@ const ICONS: Record<FactKind, ComponentType<{ className?: string }>> = {
    followers: Users,
    website: Globe,
    cta: MousePointerClick,
+   jobs: BriefcaseBusiness,
    linkedin: IconBrandLinkedin,
    pageType: FileText,
    status: Power,
    verified: BadgeCheck,
    companyId: Fingerprint,
+   read: History,
+   postalCode: Mailbox,
    headquarters: MapPin,
 }
 

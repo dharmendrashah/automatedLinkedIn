@@ -1,3 +1,4 @@
+import { timeAgo } from '../../../lib/time-ago'
 import { type RouterOutputs } from '../../../trpc'
 
 type CompanyDetail = RouterOutputs['companyPage']['detail']
@@ -13,12 +14,15 @@ export type FactKind =
    | 'followers'
    | 'website'
    | 'cta'
+   | 'jobs'
    | 'linkedin'
    | 'pageType'
    | 'status'
    | 'verified'
    | 'companyId'
    | 'headquarters'
+   | 'postalCode'
+   | 'read'
 export type Fact = { kind: FactKind; label: string; value: string; href?: string }
 
 // "Bolt Ave, Montague Gardens, Western Cape 7441, South Africa"
@@ -54,12 +58,17 @@ const yesNo = (value: boolean | null | undefined, yes: string, no: string) =>
    value === true ? yes : value === false ? no : null
 
 // The key facts of a company read, each only when it has a value; the company row fills in before a read.
-export const factsOf = (snapshot: Snapshot | null, company: CompanyDetail['company']): Fact[] => {
+export const factsOf = (
+   snapshot: Snapshot | null,
+   company: CompanyDetail['company'],
+   now: Date = new Date()
+): Fact[] => {
    const range = snapshot?.employeeRange ?? company.size
    const website = snapshot?.website ?? (company.website?.startsWith('https://') ? company.website : null)
    const headquarters = snapshot?.address ? addressText(snapshot.address) : (snapshot?.headquarters ?? company.location)
    const employees = snapshot?.employees
    const cta = snapshot?.ctaUrl
+   const jobs = snapshot?.jobsUrl
    const linkedin = snapshot?.linkedinUrl
 
    return [
@@ -69,17 +78,22 @@ export const factsOf = (snapshot: Snapshot | null, company: CompanyDetail['compa
       ...fact('size', 'Company size', range ? `${range.replace('-', '–')} employees` : null),
       ...fact(
          'employees',
-         'On LinkedIn',
-         employees ? `${employees.toLocaleString()} ${employees === 1 ? 'member' : 'members'}` : null
+         'Employees on LinkedIn',
+         employees
+            ? `${employees.toLocaleString()} exactly${range ? ` (in the ${range.replace('-', '–')} band)` : ''}`
+            : null
       ),
       ...fact('followers', 'Followers', snapshot?.followers ? snapshot.followers.toLocaleString() : null),
       ...fact('website', 'Website', website ? domainOf(website) : null, website ?? undefined),
       ...fact('cta', 'Call to action', cta ? domainOf(cta) : null, cta ?? undefined),
+      ...fact('jobs', 'Jobs', jobs ? 'Open jobs on LinkedIn' : null, jobs ?? undefined),
       ...fact('linkedin', 'LinkedIn page', linkedin ? domainOf(linkedin) : null, linkedin ?? undefined),
       ...fact('pageType', 'Page type', snapshot?.pageType ? words(snapshot.pageType) : null),
-      ...fact('status', 'Status', yesNo(snapshot?.active, 'Active', 'Inactive')),
+      ...fact('status', 'Active status', yesNo(snapshot?.active, 'Active', 'Inactive')),
       ...fact('verified', 'Verified', yesNo(snapshot?.verified, 'Verified', 'Not verified')),
-      ...fact('companyId', 'LinkedIn id', snapshot?.companyId),
+      ...fact('companyId', 'Company id', snapshot?.companyId),
+      ...fact('read', 'Last read', snapshot?.fetchedAt ? timeAgo(snapshot.fetchedAt, now) : null),
+      ...fact('postalCode', 'Postal code', snapshot?.address?.postalCode),
       ...fact('headquarters', 'Headquarters', headquarters),
    ]
 }

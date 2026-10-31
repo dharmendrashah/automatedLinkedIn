@@ -23,6 +23,8 @@ const snapshot = {
    active: true,
    verified: false,
    companyId: '1458481',
+   jobsUrl: 'https://www.linkedin.com/jobs/search?geoId=92000000&f_C=1458481',
+   fetchedAt: '2026-10-29T10:00:00.000Z',
    headquarters: 'Plymouth, Minnesota, United States',
    address: {
       street: '16305 36th Ave N',
@@ -35,24 +37,33 @@ const snapshot = {
 
 describe('factsOf', () => {
    it('should list every fact of a full read, with the full address and the links', () => {
-      expect(factsOf(snapshot, company).map(({ label, value, href }) => [label, value, href])).toEqual([
+      expect(
+         factsOf(snapshot, company, new Date('2026-10-31T10:00:00.000Z')).map(({ label, value, href }) => [
+            label,
+            value,
+            href,
+         ])
+      ).toEqual([
          ['Industry', 'Telecommunications', undefined],
          ['Industry category', 'Telecommunications', undefined],
          ['Founded', '2002', undefined],
          ['Company size', '11–50 employees', undefined],
-         ['On LinkedIn', '19 members', undefined],
+         ['Employees on LinkedIn', '19 exactly (in the 11–50 band)', undefined],
          ['Followers', '2,952', undefined],
          ['Website', 'nova-tech.us', 'http://www.nova-tech.us'],
          ['Call to action', 'nova-tech.us', 'http://www.nova-tech.us'],
+         ['Jobs', 'Open jobs on LinkedIn', 'https://www.linkedin.com/jobs/search?geoId=92000000&f_C=1458481'],
          [
             'LinkedIn page',
             'linkedin.com/company/nova-communications-inc',
             'https://www.linkedin.com/company/nova-communications-inc/',
          ],
          ['Page type', 'Company', undefined],
-         ['Status', 'Active', undefined],
+         ['Active status', 'Active', undefined],
          ['Verified', 'Not verified', undefined],
-         ['LinkedIn id', '1458481', undefined],
+         ['Company id', '1458481', undefined],
+         ['Last read', '2 days ago', undefined],
+         ['Postal code', '55446', undefined],
          ['Headquarters', '16305 36th Ave N, Plymouth, Minnesota 55446, United States', undefined],
       ])
    })
