@@ -7,7 +7,8 @@ export type LabelCount = Record<Kind, number> & { label: string; total: number }
 const SHOWN = 500
 
 export class LabelService {
-   // Every label the owner uses and how often, on each page, most used first. Archived items do not count.
+   // Every label the owner uses and how often, on each page, most used first. Archived items do not count. People are list members
+   // and My network's people.
    public static async list(userId: string): Promise<LabelCount[]> {
       const rows = await PrismaService.client.$queryRaw<{ label: string; kind: Kind; count: number }[]>`
          SELECT label, kind, count(*)::int AS count FROM (
@@ -21,6 +22,8 @@ export class LabelService {
             SELECT unnest(member.tags), 'people' FROM "WorkflowListMember" AS member
                JOIN "WorkflowList" AS list ON list.id = member."listId"
                WHERE list."userId" = ${userId}
+            UNION ALL
+            SELECT unnest(labels), 'people' FROM "Person" WHERE "userId" = ${userId}
          ) AS labelled
          GROUP BY label, kind`
       const byLabel = new Map<string, LabelCount>()
