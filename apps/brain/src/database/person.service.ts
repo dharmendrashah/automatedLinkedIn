@@ -98,4 +98,34 @@ export class PersonService {
 
       return PersonService.detail(userId, slug)
    }
+
+   // One full-profile read each for the picked people of a client My network has no name for, before they are invited. A read that
+   // cannot start (paused, read today, do not contact) is counted, not failed.
+   public static async readUnnamed(userId: string, clientId: string, personIds: string[]) {
+      const people = await PrismaService.client.person.findMany({
+         where: {
+            id: { in: personIds },
+            userId,
+            clientId,
+            name: null,
+         },
+         select: { slug: true },
+      })
+      let reading = 0
+
+      for (const { slug } of people) {
+         try {
+            reading += (await PersonService.readFull(userId, slug, clientId)) ? 1 : 0
+         } catch (error) {
+            if (!(error instanceof ConflictError)) {
+               throw error
+            }
+         }
+      }
+
+      return {
+         reading,
+         notRead: people.length - reading,
+      }
+   }
 }

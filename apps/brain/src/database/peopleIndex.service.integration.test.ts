@@ -109,6 +109,23 @@ describe('PeopleIndexService (database)', () => {
       ).toBe(1)
    })
 
+   it('should clear the marks of an owner who was deleted, and still build the others', async () => {
+      const goneId = (await UserService.create({ email: `${randomUUID()}@elitale.com` })).id
+
+      await db.peopleIndexDirty.create({
+         data: {
+            userId: goneId,
+            slug: 'gone-one',
+            createdAt: new Date(0),
+         },
+      })
+      await db.user.delete({ where: { id: goneId } })
+
+      await expect(PeopleIndexService.drain(10_000)).resolves.toBeGreaterThan(0)
+      expect(await db.peopleIndexDirty.count({ where: { userId: goneId } })).toBe(0)
+      expect(await people('marked-one')).toHaveLength(1)
+   })
+
    it('should build one person per client, each with what waits on it and why they are there', async () => {
       await request('ana', acmeAccountId, 'Loved your post')
       await conversation('ana', ownAccountId)
