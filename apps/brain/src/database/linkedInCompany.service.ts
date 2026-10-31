@@ -14,12 +14,16 @@ import {
 } from './companyFilters'
 import { ConflictError } from './conflict'
 import {
+   type ImportEntry,
    type InputFilter,
    type LabelChange,
    type RecordListQuery,
    addLinks,
+   appendNote,
+   importedOf,
    inputOrder,
    inputWhere,
+   mergeLabels,
    orNull,
    pageArgs,
    recordWhere,
@@ -152,6 +156,26 @@ const updateOwned = (userId: string, id: string, data: Prisma.LinkedInCompanyUpd
 // The label of companies a profile read added, so the owner can tell them from the ones they saved.
 export const FOUND_ON_PROFILES = 'From profiles'
 
+// Each saved company of these, and when it was archived (null while live).
+const savedOf = async (userId: string, slugs: string[]) =>
+   new Map(
+      (
+         await PrismaService.client.linkedInCompany.findMany({
+            where: {
+               userId,
+               slug: { in: slugs },
+            },
+            select: {
+               slug: true,
+               archivedAt: true,
+            },
+         })
+      ).map(({ slug, archivedAt }) => [slug, archivedAt])
+   )
+
+const stateOf = (saved: Map<string, Date | null>, slug: string) =>
+   !saved.has(slug) ? ('NEW' as const) : saved.get(slug) ? ('ARCHIVED' as const) : ('ALREADY_HERE' as const)
+
 export class LinkedInCompanyService {
    // Every company a profile read found: added once, an archived one left archived, a name filled only where none is set.
    public static async saveFound(userId: string, companies: Array<{ slug: string; name: string | null }>) {
@@ -238,6 +262,84 @@ export class LinkedInCompanyService {
       }
 
       return saved
+   }
+
+   // What an import would do with each company, changing nothing (.plan/companies-import-csv.md).
+   public static async preview(userId: string, urls: string[]) {
+      const { links, invalid } = importedOf(
+         urls.map(url => ({ url })),
+         'company'
+      )
+      const saved = await savedOf(
+         userId,
+         links.map(({ slug }) => slug)
+      )
+
+      return {
+         companies: links.map(({ url, slug, inputs }) => ({
+            url,
+            slug,
+            inputs,
+            state: stateOf(saved, slug),
+         })),
+         invalid,
+      }
+   }
+
+   // Adds the import's companies, then gives each the shared labels, its own labels and its notes. Safe to repeat. `fresh` are the
+   // companies of `slugs` that were new or archived before.
+   public static async importMany(userId: string, entries: ImportEntry[], labels: string[]) {
+      const { links, invalid } = importedOf(entries, 'company')
+      const slugs = links.map(({ slug }) => slug)
+      const before = await savedOf(userId, slugs)
+      const saved = await LinkedInCompanyService.addMany(userId, links)
+      const bySlug = new Map(links.map(link => [link.slug, link]))
+      const full = await PrismaService.client.$transaction(async tx => {
+         const rows = await tx.linkedInCompany.findMany({
+            where: {
+               userId,
+               slug: { in: slugs },
+            },
+            select: {
+               id: true,
+               slug: true,
+               tags: true,
+               notes: true,
+            },
+         })
+         let over = 0
+
+         for (const row of rows) {
+            const link = bySlug.get(row.slug)
+            const merged = mergeLabels(row.tags, {
+               add: [...labels, ...(link?.labels ?? [])],
+               remove: [],
+            })
+            const notes = appendNote(row.notes, link?.notes ?? null)
+
+            over += merged.full ? 1 : 0
+
+            if (merged.labels.join('\n') !== row.tags.join('\n') || notes !== row.notes) {
+               await tx.linkedInCompany.update({
+                  where: { id: row.id },
+                  data: {
+                     tags: merged.labels,
+                     notes,
+                  },
+               })
+            }
+         }
+
+         return over
+      })
+
+      return {
+         ...saved,
+         invalid: invalid.length,
+         full,
+         slugs,
+         fresh: slugs.filter(slug => stateOf(before, slug) !== 'ALREADY_HERE'),
+      }
    }
 
    // Rows that are not the owner's are left alone.

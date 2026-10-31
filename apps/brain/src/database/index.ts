@@ -7,13 +7,12 @@ export {
    ALL_CLIENTS,
    COUNT_CAP,
    EXPORT_CAP,
-   IMPORT_BATCH,
-   IMPORT_CAP,
    type PeopleQuery,
    PeopleService,
    type PersonChanges,
 } from './people.service'
 export { PEOPLE_SORTS, PEOPLE_TABS, type PeopleSort, type PeopleTab } from './peopleFilters'
+export { IMPORT_BATCH, IMPORT_CAP } from './linkedInRecord'
 export { ConflictError } from './conflict'
 export { CompanyViewService } from './companyView.service'
 export { type CompanyFilters, READ_AGES, TEAM_KIND_NAMES, VISIT_AGES } from './companyFilters'

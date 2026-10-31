@@ -6,7 +6,8 @@ import { type Context } from '../../context'
 import { linkedInCompany } from './linkedInCompany'
 
 const mocks = vi.hoisted(() => ({
-   addMany: vi.fn(),
+   importMany: vi.fn(),
+   readMany: vi.fn(),
    list: vi.fn(),
    getForUser: vi.fn(),
    updateForUser: vi.fn(),
@@ -20,8 +21,11 @@ vi.mock('database', async () => ({
    ConflictError: class extends Error {},
    TaskRefusedError: class extends Error {},
    IcpService: { getForUser: mocks.getIcp },
+   IMPORT_BATCH: 200,
+   IMPORT_CAP: 1_000,
+   CompanyPageService: { readMany: mocks.readMany },
    LinkedInCompanyService: {
-      addMany: mocks.addMany,
+      importMany: mocks.importMany,
       list: mocks.list,
       getForUser: mocks.getForUser,
       updateForUser: mocks.updateForUser,
@@ -76,44 +80,96 @@ describe('linkedInCompany resolvers', () => {
       ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
    })
 
-   describe('create', () => {
-      it('should save the company links for the user and report everything else', async () => {
-         mocks.addMany.mockResolvedValueOnce({
-            created: 1,
-            restored: 0,
-            skipped: 0,
+   describe('import', () => {
+      const saved = {
+         created: 1,
+         restored: 1,
+         skipped: 1,
+         invalid: 0,
+         full: 0,
+         slugs: ['new', 'gone', 'live'],
+         fresh: ['new', 'gone'],
+      }
+      const reads = {
+         reading: 2,
+         readRecently: 0,
+         paused: 0,
+      }
+
+      it('should read only the new and restored companies when asked for new ones', async () => {
+         mocks.importMany.mockResolvedValueOnce(saved)
+         mocks.readMany.mockResolvedValueOnce(reads)
+
+         const companies = [
+            {
+               url: 'linkedin.com/company/new',
+               labels: [' SaaS '],
+            },
+         ]
+         const result = await caller(authed()).import({
+            companies,
+            labels: ['Tier1'],
+            read: 'NEW',
          })
 
-         const urls = 'linkedin.com/company/Elitale/jobs linkedin.com/in/ada-lovelace'
-         const result = await caller(authed()).create({ urls })
-
-         expect(mocks.addMany).toHaveBeenCalledWith(
+         expect(mocks.importMany).toHaveBeenCalledWith(
             'u1',
             [
                {
-                  slug: 'elitale',
-                  url: 'https://www.linkedin.com/company/elitale',
+                  url: 'linkedin.com/company/new',
+                  labels: ['saas'],
                },
             ],
-            []
+            ['tier1']
          )
+         expect(mocks.readMany).toHaveBeenCalledWith('u1', { slug: { in: ['new', 'gone'] } })
          expect(result).toEqual({
             created: 1,
-            restored: 0,
-            skipped: 0,
-            invalid: ['linkedin.com/in/ada-lovelace'],
+            restored: 1,
+            skipped: 1,
+            invalid: 0,
+            full: 0,
+            ...reads,
          })
       })
 
-      it('should reject an empty paste and a paste with too many links', async () => {
-         const urls = Array.from({ length: 201 }, (_, index) => `linkedin.com/company/firm-${index}`).join('\n')
+      it('should read every company of the batch for ALL and none by default', async () => {
+         mocks.importMany.mockResolvedValue(saved)
+         mocks.readMany.mockResolvedValueOnce(reads)
 
-         await expect(caller(authed()).create({ urls: '  ' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
-         await expect(caller(authed()).create({ urls })).rejects.toMatchObject({
-            code: 'BAD_REQUEST',
-            message: 'Paste at most 200 links at once.',
+         await caller(authed()).import({
+            companies: [{ url: 'x' }],
+            read: 'ALL',
          })
-         expect(mocks.addMany).not.toHaveBeenCalled()
+         await expect(caller(authed()).import({ companies: [{ url: 'x' }] })).resolves.toMatchObject({ reading: 0 })
+
+         expect(mocks.readMany).toHaveBeenCalledOnce()
+         expect(mocks.readMany).toHaveBeenCalledWith('u1', { slug: { in: ['new', 'gone', 'live'] } })
+      })
+
+      it('should refuse an empty batch and one over 200 companies', async () => {
+         const companies = Array.from({ length: 201 }, (_, index) => ({ url: `linkedin.com/company/firm-${index}` }))
+
+         await expect(caller(authed()).import({ companies: [] })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+         await expect(caller(authed()).import({ companies })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+         expect(mocks.importMany).not.toHaveBeenCalled()
+      })
+   })
+
+   describe('readMany', () => {
+      it('should read only the picked companies of the user, up to 200', async () => {
+         mocks.readMany.mockResolvedValueOnce({
+            reading: 1,
+            readRecently: 0,
+            paused: 0,
+         })
+
+         await caller(authed()).readMany({ ids: ['c1'] })
+
+         expect(mocks.readMany).toHaveBeenCalledWith('u1', { id: { in: ['c1'] } })
+         await expect(
+            caller(authed()).readMany({ ids: Array.from({ length: 201 }, (_, index) => `c${index}`) })
+         ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
       })
    })
 

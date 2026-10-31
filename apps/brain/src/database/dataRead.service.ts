@@ -89,6 +89,24 @@ export class DataReadService {
       }
    }
 
+   // The items of these that had a paid read finish since then.
+   public static async paidSince(userId: string, kind: DataReadKind, slugs: string[], since: Date) {
+      const reads = await PrismaService.client.dataRead.findMany({
+         where: {
+            userId,
+            kind,
+            slug: { in: slugs },
+            status: 'DONE',
+            costMicros: { gt: 0 },
+            finishedAt: { gte: since },
+         },
+         select: { slug: true },
+         distinct: ['slug'],
+      })
+
+      return new Set(reads.map(({ slug }) => slug))
+   }
+
    // The newest read of an item, for the drawer: still going, done, or why it failed.
    public static latest(userId: string, kind: DataReadKind, slug: string) {
       return PrismaService.client.dataRead.findFirst({

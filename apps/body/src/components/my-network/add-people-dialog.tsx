@@ -21,7 +21,15 @@ import { type ChangeEvent, useState } from 'react'
 import { type Client } from './types'
 
 import { type RouterOutputs, trpc } from '../../trpc'
-import { EXAMPLE_CSV, IMPORT_BYTES, IMPORT_ROWS, type ImportRow, linksOf, peopleOf, readImportCsv } from './import-csv'
+import {
+   IMPORT_BYTES,
+   IMPORT_ROWS,
+   type ImportRow,
+   PROFILE_CSV,
+   entriesOf,
+   linksOf,
+   readImportCsv,
+} from '../links/import-csv'
 
 const NEW_LIST = 'new'
 const BATCH = 200
@@ -132,7 +140,7 @@ export const AddPeopleDialog = ({ client, open, onOpenChange }: Props) => {
          return
       }
 
-      const result = readImportCsv(await picked.text())
+      const result = readImportCsv(await picked.text(), PROFILE_CSV)
 
       if ('error' in result) {
          setFileError(result.error)
@@ -161,7 +169,7 @@ export const AddPeopleDialog = ({ client, open, onOpenChange }: Props) => {
       )
 
    const runImport = async () => {
-      const people = peopleOf(
+      const people = entriesOf(
          rows,
          choosable.filter(({ slug }) => chosen.has(slug))
       )
@@ -339,7 +347,7 @@ export const AddPeopleDialog = ({ client, open, onOpenChange }: Props) => {
                            <button
                               type="button"
                               className="text-foreground underline"
-                              onClick={() => downloadFile('people-example.csv', EXAMPLE_CSV, 'text/csv')}
+                              onClick={() => downloadFile('people-example.csv', PROFILE_CSV.example, 'text/csv')}
                            >
                               Download example CSV
                            </button>

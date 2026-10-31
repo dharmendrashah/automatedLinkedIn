@@ -1,4 +1,4 @@
-import { type LinkedInLink } from 'core'
+import { type LinkKind, type LinkedInLink, parseLinkedInUrl } from 'core'
 
 import { LABEL_MAX } from '@automatedLinkedIn/contracts'
 
@@ -170,3 +170,57 @@ export const addLinks = async <L extends LinkedInLink>(links: L[], store: LinkSt
       skipped: links.length - created - restored,
    }
 }
+
+// One call takes this many entries; an import of up to IMPORT_CAP is sent in such batches.
+export const IMPORT_BATCH = 200
+export const IMPORT_CAP = 1_000
+const NOTES_MAX = 5_000
+
+// One entry of an import (pasted or a CSV row): its link, and the labels and notes given with it.
+export type ImportEntry = {
+   url: string
+   labels?: string[]
+   notes?: string
+}
+
+export type Imported = LinkedInLink & {
+   labels: string[]
+   notes: string | null
+   // The entries of the import that are this link, as given.
+   inputs: string[]
+}
+
+// The links of an import, once each (labels merged, notes joined), and the entries that are not links of this kind.
+export const importedOf = (entries: ImportEntry[], kind: LinkKind) => {
+   const found = new Map<string, Imported>()
+   const invalid: string[] = []
+
+   for (const entry of entries) {
+      const link = parseLinkedInUrl(entry.url.trim(), kind)
+
+      if (!link) {
+         invalid.push(entry.url)
+         continue
+      }
+
+      const known = found.get(link.slug)
+      const labels = (entry.labels ?? []).map(label => label.trim().toLowerCase()).filter(Boolean)
+      const notes = entry.notes?.trim() || null
+
+      found.set(link.slug, {
+         ...link,
+         labels: [...new Set([...(known?.labels ?? []), ...labels])].slice(0, LABEL_LIMIT),
+         notes: [known?.notes, notes].filter(Boolean).join('\n') || null,
+         inputs: [...(known?.inputs ?? []), entry.url],
+      })
+   }
+
+   return {
+      links: [...found.values()],
+      invalid,
+   }
+}
+
+// Imported notes go below the saved ones, unless the saved ones already hold them.
+export const appendNote = (saved: string | null, added: string | null) =>
+   added && !(saved ?? '').includes(added) ? [saved, added].filter(Boolean).join('\n').slice(0, NOTES_MAX) : saved
