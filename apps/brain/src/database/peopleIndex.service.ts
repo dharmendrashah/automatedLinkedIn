@@ -52,8 +52,21 @@ export class PeopleIndexService {
          take: limit,
       })
       const owners = bySlug(marked, ({ userId }) => userId)
+      // Deleting an owner fires the triggers on their rows, so their marks outlive them; those are only cleared.
+      const live = new Set(
+         (
+            await db.user.findMany({
+               where: { id: { in: [...owners.keys()] } },
+               select: { id: true },
+            })
+         ).map(({ id }) => id)
+      )
 
       for (const [userId, marks] of owners) {
+         if (!live.has(userId)) {
+            continue
+         }
+
          await PeopleIndexService.refresh(
             userId,
             marks.map(({ slug }) => slug)
