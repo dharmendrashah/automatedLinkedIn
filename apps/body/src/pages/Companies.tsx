@@ -244,18 +244,6 @@ export const Companies = () => {
 
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
-         <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="grid gap-1">
-               <h2 className="text-lg font-semibold">LinkedIn companies</h2>
-               <p className="text-muted-foreground text-sm">
-                  The companies you want to reach. Paste their links to add them.
-               </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-               <AddCompaniesDialog />
-            </div>
-         </div>
-
          <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
                <Search className="text-muted-foreground absolute top-2.5 left-2.5 size-4" />
@@ -275,6 +263,7 @@ export const Companies = () => {
             </Button>
             <div className="ml-auto flex items-center gap-2">
                <ColumnsMenu columns={COMPANY_COLUMNS} hidden={hidden} onChange={setHidden} />
+               <AddCompaniesDialog />
             </div>
          </div>
 
