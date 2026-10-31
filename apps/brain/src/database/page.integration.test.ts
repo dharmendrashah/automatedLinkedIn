@@ -95,7 +95,7 @@ describe('company and post pages (database)', () => {
                   count: 900,
                },
             ],
-            companyId: 'internal',
+            companySlug: 'internal',
          },
          4_000
       )

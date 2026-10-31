@@ -245,6 +245,10 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-10-31: Third-party pictures and videos load only through `/cdn` (owner's call): `mediaSource` no longer falls back to the original address when the cached copy fails, so the initials show instead. Locally `/cdn` answers 500 while the gcloud ADC in `$HOME/.config/gcloud-spider` is expired; log in again (see Gotchas) and restart brain.
+
+- 2026-10-31: Company drawer shows the full company read (`.plan/company-drawer.md`): the snapshot keeps the address, offices, industry category, Jobs and call-to-action links, active and showcase flags, and six breakdowns of up to 15 each; http websites are kept (`webLink`). The LinkedIn page link, company id and page type are kept and listed under Key facts (the owner asked for every field). New `CompanySnapshotData` fields must have a schema default so old `PageSnapshot` rows still parse (`detailed: false` shows a Read again hint). There is no banner because the read has no cover image.
+
 - 2026-10-31: Sessions page rebuilt (`.plan/sessions-page.md`): many filters in the address (`filters` JSON; old `?account=`/`?result=` still read), quick pickers plus a Filters drawer with counts (`session.facets`), TanStack Table v9 with virtual rows, icons and hideable columns, scroll paging (offset `cursor`, client dedupes by id), and `session.changes` every 5 s merged into the cache (new runs wait behind a pill unless at the top). Filters live in `database/spiderSessionFilters.ts`; additive indexes `(userId, status|task|trigger, startedAt)`.
 
 - 2026-10-31: Profile reads for anyone on My network (branch `fix/read-anyone-on-my-network`): `personWanted` (`dataReads.ts`) also accepts a `Person` row, so someone known only by a request or an invite is read (it failed with "This is no longer in your workspace"), and retention keeps their snapshot while they are on My network. Do not contact for one client does not block a read; Do not contact for every client (a `Suppression`, also left by an erasure) still does.

@@ -107,10 +107,12 @@ function CodeBlockContent({
       <pre
          data-slot="code-block-content"
          data-wrap={wrap || undefined}
+         // A drawer would take the press as a drag and the text could not be selected.
+         data-vaul-no-drag=""
          dir="ltr"
          tabIndex={0}
          className={cn(
-            'min-h-0 min-w-0 overflow-auto p-3 text-start font-mono text-xs leading-relaxed outline-none',
+            'min-h-0 min-w-0 cursor-text overflow-auto p-3 text-start font-mono text-xs leading-relaxed outline-none select-text',
             wrap && 'break-words whitespace-pre-wrap',
             className
          )}

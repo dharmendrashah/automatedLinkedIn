@@ -1,40 +1,63 @@
-import { Cover, DetailLoading, DetailMissing, PersonRow, Picture, ReadButton } from '@/components/details/detail-parts'
+import { DetailLoading, DetailMissing, PersonRow, Picture, ReadButton } from '@/components/details/detail-parts'
 import { NotesField } from '@/components/details/notes-field'
 import { pollWhile } from '@/components/details/read-status'
 import { About, Section } from '@/components/people/person-sections'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+   CodeBlock,
+   CodeBlockActions,
+   CodeBlockContent,
+   CodeBlockCopyButton,
+   CodeBlockHeader,
+   CodeBlockTitle,
+} from '@/components/ui/code-block'
 import { DrawerDescription, DrawerTitle } from '@/components/ui/drawer'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { readableError } from '@/lib/trpc-error'
-import { BadgeCheck, ExternalLink, Globe, Users } from 'lucide-react'
+import { BadgeCheck, Braces, BriefcaseBusiness, ExternalLink, Globe, MousePointerClick, Users } from 'lucide-react'
+import { type ReactNode } from 'react'
 import { Link } from 'react-router'
 
 import { type RouterOutputs, trpc } from '../../trpc'
 import { isLinkStatus, linkStatuses } from '../links/link-statuses'
+import { Breakdowns } from './company/breakdowns'
+import { domainOf, factsOf } from './company/facts'
+import { KeyFacts, Offices } from './company/key-facts'
 
 type CompanyDetail = RouterOutputs['companyPage']['detail']
-type Bar = { label: string; count: number }
 
-// The top of one employee breakdown as bars, relative to the biggest.
-const Bars = ({ title, bars }: { title: string; bars: Bar[] }) => {
-   const most = Math.max(1, ...bars.map(({ count }) => count))
+const LinkButton = ({ href, icon, children }: { href: string; icon: ReactNode; children: ReactNode }) => (
+   <Button asChild size="sm" variant="outline">
+      <a href={href} target="_blank" rel="noreferrer noopener">
+         {icon}
+         {children}
+      </a>
+   </Button>
+)
+
+// The company read as it is saved in the database (the allow-listed snapshot), to check what a read brought.
+const DataJson = ({ snapshot }: { snapshot: CompanyDetail['snapshot'] }) => {
+   if (!snapshot) {
+      return <p className="text-muted-foreground text-sm">No company read is saved yet.</p>
+   }
+
+   const json = JSON.stringify(snapshot, null, 2)
 
    return (
-      <div className="grid gap-1.5">
-         <span className="text-muted-foreground text-xs font-medium">{title}</span>
-         {bars.map(bar => (
-            <div key={bar.label} className="grid grid-cols-[minmax(0,10rem)_1fr_auto] items-center gap-2 text-xs">
-               <span className="truncate" title={bar.label}>
-                  {bar.label}
-               </span>
-               <span className="bg-muted h-2 overflow-hidden rounded-full">
-                  <span className="bg-primary block h-full" style={{ width: `${(bar.count / most) * 100}%` }} />
-               </span>
-               <span className="text-muted-foreground tabular-nums">{bar.count.toLocaleString()}</span>
-            </div>
-         ))}
-      </div>
+      <CodeBlock>
+         <CodeBlockHeader>
+            <CodeBlockTitle>
+               <Braces />
+               Company read · {new Date(snapshot.fetchedAt).toLocaleString()}
+            </CodeBlockTitle>
+            <CodeBlockActions>
+               <CodeBlockCopyButton value={json} />
+            </CodeBlockActions>
+         </CodeBlockHeader>
+         <CodeBlockContent wrap>{json}</CodeBlockContent>
+      </CodeBlock>
    )
 }
 
@@ -46,25 +69,23 @@ const Header = ({ detail }: { detail: CompanyDetail }) => {
    const { company, snapshot } = detail
    const name = snapshot?.name ?? company.name ?? detail.slug
    const website = snapshot?.website ?? (company.website?.startsWith('https://') ? company.website : null)
-   const facts = [
-      snapshot?.industry ?? company.industry,
-      snapshot?.employeeRange ? `${snapshot.employeeRange} employees` : company.size,
-      snapshot?.headquarters ?? company.location,
-      snapshot?.followers ? `${snapshot.followers.toLocaleString()} followers` : null,
-   ].filter(Boolean)
 
    return (
-      <Cover>
-         <Picture name={name} image={snapshot?.logo ?? null} square />
-         <div className="grid gap-1">
-            <DrawerTitle className="flex items-center gap-1.5 text-xl">
-               {name}
-               {snapshot?.verified ? <BadgeCheck className="text-primary size-5" aria-label="Verified" /> : null}
-            </DrawerTitle>
-            {snapshot?.tagline ? (
-               <DrawerDescription className="text-foreground text-sm">{snapshot.tagline}</DrawerDescription>
-            ) : null}
-            {facts.length > 0 ? <p className="text-muted-foreground text-xs">{facts.join(' · ')}</p> : null}
+      <div className="grid gap-3 rounded-xl border p-4">
+         <div className="flex items-start gap-4">
+            <Picture name={name} image={snapshot?.logo ?? null} square className="size-20 border" />
+            <div className="grid min-w-0 gap-1">
+               <DrawerTitle className="flex flex-wrap items-center gap-1.5 text-xl">
+                  {name}
+                  {snapshot?.verified ? <BadgeCheck className="text-primary size-5" aria-label="Verified" /> : null}
+                  {snapshot?.showcase ? <Badge variant="secondary">Showcase page</Badge> : null}
+                  {snapshot?.active === false ? <Badge variant="outline">Inactive</Badge> : null}
+               </DrawerTitle>
+               {snapshot?.tagline ? (
+                  <DrawerDescription className="text-foreground text-sm">{snapshot.tagline}</DrawerDescription>
+               ) : null}
+               {snapshot?.industry ? <p className="text-muted-foreground text-xs">{snapshot.industry}</p> : null}
+            </div>
          </div>
          <div className="flex flex-wrap items-center gap-2">
             <Button asChild size="sm">
@@ -74,12 +95,19 @@ const Header = ({ detail }: { detail: CompanyDetail }) => {
                </a>
             </Button>
             {website ? (
-               <Button asChild size="sm" variant="outline">
-                  <a href={website} target="_blank" rel="noreferrer noopener">
-                     <Globe />
-                     Website
-                  </a>
-               </Button>
+               <LinkButton href={website} icon={<Globe />}>
+                  {domainOf(website)}
+               </LinkButton>
+            ) : null}
+            {snapshot?.jobsUrl ? (
+               <LinkButton href={snapshot.jobsUrl} icon={<BriefcaseBusiness />}>
+                  Jobs
+               </LinkButton>
+            ) : null}
+            {snapshot?.ctaUrl && snapshot.ctaUrl !== website ? (
+               <LinkButton href={snapshot.ctaUrl} icon={<MousePointerClick />}>
+                  {domainOf(snapshot.ctaUrl)}
+               </LinkButton>
             ) : null}
             {company.archivedAt ? null : (
                <ReadButton
@@ -92,7 +120,7 @@ const Header = ({ detail }: { detail: CompanyDetail }) => {
                />
             )}
          </div>
-      </Cover>
+      </div>
    )
 }
 
@@ -175,64 +203,68 @@ export const CompanyView = ({ slug, onPerson }: { slug: string; onPerson: (slug:
    }
 
    const { snapshot, people } = data
-   const breakdowns = snapshot
-      ? [
-           ['Departments', snapshot.byFunction],
-           ['Where they are', snapshot.byLocation],
-           ['Skills', snapshot.bySkill],
-        ].filter((entry): entry is [string, Bar[]] => Array.isArray(entry[1]) && entry[1].length > 0)
-      : []
 
    return (
       <div className="grid gap-3">
          <Header detail={data} />
-         {snapshot?.about ? <About text={snapshot.about} /> : null}
-         {snapshot && (snapshot.founded || snapshot.specialities.length > 0) ? (
-            <Section title="Overview">
-               {snapshot.founded ? <p className="text-sm">Founded {snapshot.founded}</p> : null}
-               <div className="flex flex-wrap gap-1.5">
-                  {snapshot.specialities.map(item => (
-                     <Badge key={item} variant="secondary">
-                        {item}
-                     </Badge>
-                  ))}
-               </div>
-            </Section>
-         ) : null}
-         {breakdowns.length > 0 ? (
-            <Section title="Their people">
-               {breakdowns.map(([title, bars]) => (
-                  <Bars key={title} title={title} bars={bars} />
-               ))}
-            </Section>
-         ) : null}
-         {snapshot ? null : (
-            <p className="text-muted-foreground rounded-xl border border-dashed p-4 text-sm">
-               About, specialities and who works there show after Read company page.
-            </p>
-         )}
-         <Section title={`Your people there (${people.length})`}>
-            {people.length === 0 ? (
-               <p className="text-muted-foreground text-sm">Nobody in your lists works here yet.</p>
-            ) : (
-               <ul className="grid gap-1">
-                  {people.map(person => (
-                     <PersonRow
-                        key={person.slug}
-                        name={person.name ?? person.slug}
-                        lines={[
-                           person.title ?? person.headline,
-                           [person.list.name, person.score !== null ? `score ${person.score}` : null]
-                              .filter(Boolean)
-                              .join(' · '),
-                        ]}
-                        onOpen={() => onPerson(person.slug)}
-                     />
-                  ))}
-               </ul>
-            )}
-         </Section>
-         <Workspace detail={data} />
+         <Tabs defaultValue="overview">
+            <TabsList>
+               <TabsTrigger value="overview">Overview</TabsTrigger>
+               <TabsTrigger value="data">Data JSON</TabsTrigger>
+            </TabsList>
+            <TabsContent value="data">
+               <DataJson snapshot={snapshot} />
+            </TabsContent>
+            <TabsContent value="overview" className="grid gap-3">
+               {snapshot && !snapshot.detailed && !data.company.archivedAt ? (
+                  <p className="text-muted-foreground rounded-xl border border-dashed p-3 text-xs">
+                     Read again to see the full address, skills, schools and more.
+                  </p>
+               ) : null}
+               <KeyFacts facts={factsOf(snapshot, data.company)} />
+               {snapshot?.about ? <About text={snapshot.about} /> : null}
+               {snapshot && snapshot.specialities.length > 0 ? (
+                  <Section title="Specialities">
+                     <div className="flex flex-wrap gap-1.5">
+                        {snapshot.specialities.map(item => (
+                           <Badge key={item} variant="secondary">
+                              {item}
+                           </Badge>
+                        ))}
+                     </div>
+                  </Section>
+               ) : null}
+               {snapshot ? <Offices snapshot={snapshot} /> : null}
+               {snapshot ? <Breakdowns snapshot={snapshot} /> : null}
+               {snapshot ? null : (
+                  <p className="text-muted-foreground rounded-xl border border-dashed p-4 text-sm">
+                     About, specialities and who works there show after Read company page.
+                  </p>
+               )}
+               <Section title={`Your people there (${people.length})`}>
+                  {people.length === 0 ? (
+                     <p className="text-muted-foreground text-sm">Nobody in your lists works here yet.</p>
+                  ) : (
+                     <ul className="grid gap-1">
+                        {people.map(person => (
+                           <PersonRow
+                              key={person.slug}
+                              name={person.name ?? person.slug}
+                              lines={[
+                                 person.title ?? person.headline,
+                                 [person.list.name, person.score !== null ? `score ${person.score}` : null]
+                                    .filter(Boolean)
+                                    .join(' · '),
+                              ]}
+                              onOpen={() => onPerson(person.slug)}
+                           />
+                        ))}
+                     </ul>
+                  )}
+               </Section>
+               <Workspace detail={data} />
+            </TabsContent>
+         </Tabs>
       </div>
    )
 }
