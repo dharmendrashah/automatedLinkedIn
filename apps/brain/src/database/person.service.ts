@@ -20,9 +20,9 @@ const whereSlug = (userId: string, slug: string) => ({
 })
 
 export class PersonService {
-   // null when the person is in no /profiles row, no list, no connection and no conversation of the owner.
+   // null when the person is in no /profiles row, no list, no connection, no conversation and not on My network.
    public static async detail(userId: string, slug: string) {
-      const [profile, member, suppressed, snapshot, connections, conversations] = await Promise.all([
+      const [profile, member, suppressed, snapshot, connections, conversations, onNetwork] = await Promise.all([
          LinkedInProfileService.bySlug(userId, slug),
          WorkflowListService.memberBySlug(userId, slug),
          PrismaService.client.suppression.findUnique({
@@ -38,11 +38,18 @@ export class PersonService {
          }),
          connectionsOf(userId, slug),
          conversationsWith(userId, slug),
+         PrismaService.client.person.findFirst({
+            where: {
+               userId,
+               slug,
+            },
+            select: { id: true },
+         }),
       ])
       const url =
          profile?.url ??
          member?.url ??
-         (connections.length > 0 || conversations.length > 0 ? profileUrlOf(slug) : undefined)
+         (connections.length > 0 || conversations.length > 0 || onNetwork ? profileUrlOf(slug) : undefined)
 
       if (!url) {
          return null
