@@ -16,12 +16,14 @@ import { DrawerDescription, DrawerTitle } from '@/components/ui/drawer'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { readableError } from '@/lib/trpc-error'
-import { BadgeCheck, Braces, BriefcaseBusiness, ExternalLink, Globe, MousePointerClick, Users } from 'lucide-react'
-import { type ReactNode } from 'react'
+import { BadgeCheck, Braces, BriefcaseBusiness, ExternalLink, Eye, Globe, MousePointerClick, Users } from 'lucide-react'
+import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router'
 
 import { type RouterOutputs, trpc } from '../../trpc'
+import { LabelCell } from '../labels/label-cell'
 import { isLinkStatus, linkStatuses } from '../links/link-statuses'
+import { ViewPageDialog } from '../links/view-page-dialog'
 import { Breakdowns } from './company/breakdowns'
 import { domainOf, factsOf } from './company/facts'
 import { KeyFacts, Offices } from './company/key-facts'
@@ -135,6 +137,15 @@ const Workspace = ({ detail }: { detail: CompanyDetail }) => {
    const restore = trpc.linkedInCompany.restore.useMutation({ onSuccess: refresh })
    const error = [update, archive, restore].find(action => action.error)?.error
    const { company } = detail
+   const [viewing, setViewing] = useState(false)
+   const name = company.name ?? company.slug
+   const saveTags = async (tags: string[]) => {
+      await update.mutateAsync({
+         id: company.id,
+         tags,
+      })
+      await utils.label.list.invalidate()
+   }
 
    return (
       <Section title="In your workspace">
@@ -169,12 +180,27 @@ const Workspace = ({ detail }: { detail: CompanyDetail }) => {
                   Find people here
                </Link>
             </Button>
-            {company.tags.map(tag => (
-               <Badge key={tag} variant="secondary">
-                  {tag}
-               </Badge>
-            ))}
+            {company.archivedAt ? null : (
+               <Button variant="outline" size="sm" onClick={() => setViewing(true)}>
+                  <Eye />
+                  View with an account
+               </Button>
+            )}
          </div>
+         <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-xs">Labels</span>
+            <LabelCell tags={company.tags} kind="companies" name={name} save={saveTags} />
+         </div>
+         {viewing ? (
+            <ViewPageDialog
+               kind="COMPANY"
+               saved={{
+                  id: company.id,
+                  name,
+               }}
+               onClose={() => setViewing(false)}
+            />
+         ) : null}
          <NotesField
             key={company.id}
             id={`notes-company-${company.id}`}

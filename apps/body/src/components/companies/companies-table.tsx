@@ -24,9 +24,7 @@ import { cn } from '@/lib/utils'
 
 import { type Company } from './types'
 
-import { LabelCell } from '../labels/label-cell'
 import { LinkStatusBadge } from '../links/link-status-badge'
-import { RowActions } from '../links/row-actions'
 import { type Selection } from '../links/use-selection'
 import { visitedText } from '../links/visit-form'
 import { SortHeader } from '../table/sort-header'
@@ -47,10 +45,8 @@ const CELL_CLASS: Record<string, string> = {
    followers: 'text-right tabular-nums whitespace-nowrap',
    website: 'max-w-48',
    status: 'w-0',
-   labels: 'min-w-40',
    createdAt: 'whitespace-nowrap text-muted-foreground',
    readAt: 'whitespace-nowrap',
-   actions: 'w-0 text-right',
 }
 
 const features = tableFeatures({
@@ -90,13 +86,6 @@ const CompanyCell = ({ company }: { company: Company }) => (
 
 type Handlers = {
    selection: Selection
-   busyId: string | undefined
-   onEdit: (company: Company) => void
-   onView: (company: Company) => void
-   onArchive: (company: Company) => void
-   onRestore: (company: Company) => void
-   onTag: (tag: string) => void
-   saveTags: (company: Company, tags: string[]) => Promise<unknown>
 }
 
 const columnsOf = (ids: string[], handlers: Handlers) =>
@@ -208,21 +197,6 @@ const columnsOf = (ids: string[], handlers: Handlers) =>
             </span>
          ),
       }),
-      column.display({
-         id: 'labels',
-         header: 'Labels',
-         cell: ({ row }) => (
-            <Stop>
-               <LabelCell
-                  tags={row.original.tags}
-                  kind="companies"
-                  name={nameOf(row.original)}
-                  save={tags => handlers.saveTags(row.original, tags)}
-                  onFilter={handlers.onTag}
-               />
-            </Stop>
-         ),
-      }),
       column.accessor('createdAt', {
          header: ({ column: header }) => (
             <SortHeader label="Added" sorted={header.getIsSorted()} onClick={header.getToggleSortingHandler()} />
@@ -247,24 +221,6 @@ const columnsOf = (ids: string[], handlers: Handlers) =>
                </span>
             )
          },
-      }),
-      column.display({
-         id: 'actions',
-         header: '',
-         cell: ({ row }) => (
-            <Stop>
-               <RowActions
-                  name={nameOf(row.original)}
-                  archived={Boolean(row.original.archivedAt)}
-                  busy={handlers.busyId === row.original.id}
-                  onEdit={() => handlers.onEdit(row.original)}
-                  onView={() => handlers.onView(row.original)}
-                  viewWhat="company page"
-                  onArchive={() => handlers.onArchive(row.original)}
-                  onRestore={() => handlers.onRestore(row.original)}
-               />
-            </Stop>
-         ),
       }),
    ])
 

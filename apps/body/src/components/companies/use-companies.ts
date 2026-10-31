@@ -15,7 +15,6 @@ export const COMPANY_COLUMNS: Array<[string, string]> = [
    ['followers', 'Followers'],
    ['website', 'Website'],
    ['status', 'Status'],
-   ['labels', 'Labels'],
    ['createdAt', 'Added'],
    ['readAt', 'Last read'],
 ]
