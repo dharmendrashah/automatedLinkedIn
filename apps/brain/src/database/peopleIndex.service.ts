@@ -85,10 +85,17 @@ export class PeopleIndexService {
             continue
          }
 
-         await PeopleIndexService.refresh(
-            userId,
-            marks.map(({ slug }) => slug)
-         )
+         try {
+            await PeopleIndexService.refresh(
+               userId,
+               marks.map(({ slug }) => slug)
+            )
+         } catch (error) {
+            // An owner deleted while this ran is gone like one deleted before; anything else is a real failure.
+            if ((await db.user.count({ where: { id: userId } })) > 0) {
+               throw error
+            }
+         }
       }
 
       for (const { userId, slug, createdAt } of marked) {
