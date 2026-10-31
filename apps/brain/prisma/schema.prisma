@@ -468,6 +468,8 @@ model LinkedInCompany {
   website    String?
   size       String?
   location   String?
+  // From the latest company read (.plan/companies-table.md); filters and sorts the Companies table.
+  country    String?
   notes      String?
   tags       String[]
   status     LinkedInCompanyStatus @default(NEW)
@@ -480,6 +482,8 @@ model LinkedInCompany {
 
   @@unique([userId, slug])
   @@index([userId, archivedAt, createdAt])
+  @@index([userId, country])
+  @@index([userId, industry])
 }
 
 enum LinkedInProfileStatus {

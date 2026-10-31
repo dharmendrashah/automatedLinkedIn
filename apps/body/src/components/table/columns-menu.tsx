@@ -10,22 +10,13 @@ import { Columns3 } from 'lucide-react'
 
 import { type HiddenColumns } from './use-hidden-columns'
 
-// Result always shows, so it is not offered.
-const COLUMN_WORDS: Array<[string, string]> = [
-   ['action', 'Action'],
-   ['account', 'Account'],
-   ['trigger', 'Started by'],
-   ['proxy', 'Proxy'],
-   ['detail', 'Detail'],
-   ['startedAt', 'Started'],
-   ['durationMs', 'Took'],
-   ['files', 'Files'],
-]
-
+// The columns the owner may hide, as [id, word]; a column that always shows is left out.
 export const ColumnsMenu = ({
+   columns,
    hidden,
    onChange,
 }: {
+   columns: Array<[string, string]>
    hidden: HiddenColumns
    onChange: (next: HiddenColumns) => void
 }) => (
@@ -38,7 +29,7 @@ export const ColumnsMenu = ({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
          <DropdownMenuLabel>Show columns</DropdownMenuLabel>
-         {COLUMN_WORDS.map(([id, word]) => (
+         {columns.map(([id, word]) => (
             <DropdownMenuCheckboxItem
                key={id}
                checked={hidden[id] !== false}

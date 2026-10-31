@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { companySnapshotFrom, postSnapshotFrom, readCompanySnapshot, readPostSnapshot } from './pageSnapshot'
+import {
+   companyCardOf,
+   companyRowFrom,
+   companySnapshotFrom,
+   postSnapshotFrom,
+   readCompanySnapshot,
+   readPostSnapshot,
+} from './pageSnapshot'
 
 describe('companySnapshotFrom', () => {
    it('should keep the company page fields and the top of each employee breakdown', () => {
@@ -229,6 +236,57 @@ describe('companySnapshotFrom', () => {
       })
 
       expect([snapshot.logo, snapshot.website, snapshot.ctaUrl, snapshot.jobsUrl]).toEqual([null, null, null, null])
+   })
+})
+
+describe('companyRowFrom and companyCardOf', () => {
+   it('should write the values a read has and leave the rest to the row', () => {
+      const snapshot = companySnapshotFrom({
+         companyName: 'Nova Technologies, Inc.',
+         industry: 'Telecommunications',
+         website: 'http://www.nova-tech.us',
+         employeeCountRange: '11–50',
+         hqCity: 'Plymouth',
+         hqState: 'Minnesota',
+         hqCountry: 'United States',
+         logo: 'https://media.licdn.com/nova.png',
+         employeeCount: 19,
+         followers: 2952,
+      })
+
+      expect(companyRowFrom(snapshot)).toEqual({
+         name: 'Nova Technologies, Inc.',
+         industry: 'Telecommunications',
+         website: 'http://www.nova-tech.us',
+         size: '11–50',
+         location: 'Plymouth, Minnesota, United States',
+         country: 'United States',
+      })
+      expect(companyRowFrom(companySnapshotFrom({ companyName: 'Acme' }))).toEqual({
+         name: 'Acme',
+         industry: undefined,
+         website: undefined,
+         size: undefined,
+         location: undefined,
+         country: undefined,
+      })
+      expect(companyCardOf(snapshot)).toEqual({
+         logo: 'https://media.licdn.com/nova.png',
+         tagline: null,
+         employees: 19,
+         followers: 2952,
+      })
+      expect(companyCardOf({ name: 1 })).toBeNull()
+   })
+
+   it('should take the country from the headquarters line of an older read', () => {
+      const old = readCompanySnapshot({
+         ...companySnapshotFrom({}),
+         headquarters: 'Montague Gardens, Western Cape, South Africa',
+         address: undefined,
+      })
+
+      expect(old && companyRowFrom(old).country).toBe('South Africa')
    })
 })
 

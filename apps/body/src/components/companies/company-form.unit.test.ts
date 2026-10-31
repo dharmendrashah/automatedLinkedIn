@@ -13,6 +13,7 @@ const company: Company = {
    website: 'https://elitale.com',
    size: null,
    location: null,
+   country: null,
    notes: null,
    tags: ['partner'],
    visits: [],
@@ -20,6 +21,8 @@ const company: Company = {
    archivedAt: null,
    createdAt: '2026-10-14T00:00:00.000Z',
    updatedAt: '2026-10-14T00:00:00.000Z',
+   card: null,
+   readAt: null,
 }
 
 describe('buildChanges for a company', () => {

@@ -37,6 +37,20 @@ const updateInput = z.object({
 
 const NOUN = 'company'
 
+const values = z.array(z.string().trim().min(1).max(200)).max(50).optional()
+
+const companyListInput = listInput.extend({
+   cursor: z.number().int().min(1).nullish(),
+   industries: values,
+   countries: values,
+   sort: z
+      .object({
+         by: z.enum(['createdAt', 'name']),
+         desc: z.boolean(),
+      })
+      .optional(),
+})
+
 // Every procedure scopes to ctx.user.id, so one user can never reach another's companies by id.
 export const linkedInCompany = router({
    create: ownerProcedure.input(createInput).mutation(async ({ ctx, input }) => {
@@ -49,7 +63,22 @@ export const linkedInCompany = router({
       }
    }),
 
-   list: ownerProcedure.input(listInput).query(({ ctx, input }) => LinkedInCompanyService.list(ctx.user.id, input)),
+   // `cursor` is the page a scrolling table asks for next (TanStack infinite query); `nextCursor` is unset at the end.
+   list: ownerProcedure.input(companyListInput).query(async ({ ctx, input }) => {
+      const { cursor, ...query } = input
+      const page = cursor ?? query.page
+      const result = await LinkedInCompanyService.list(ctx.user.id, {
+         ...query,
+         page,
+      })
+
+      return {
+         ...result,
+         nextCursor: page * query.pageSize < result.total ? page + 1 : undefined,
+      }
+   }),
+
+   facets: ownerProcedure.query(({ ctx }) => LinkedInCompanyService.facets(ctx.user.id)),
 
    get: ownerProcedure
       .input(byId)

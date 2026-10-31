@@ -1,4 +1,4 @@
-import { type LinkedInLink } from 'core'
+import { type CompanySnapshotData, type LinkedInLink, companyCardOf, companyRowFrom } from 'core'
 
 import { type LinkedInCompanyStatus, type Prisma } from 'generated/prisma/client'
 
@@ -28,7 +28,27 @@ export type LinkedInCompanyChanges = {
    status?: LinkedInCompanyStatus
 }
 
-export type LinkedInCompanyListQuery = RecordListQuery
+export type CompanySort = { by: 'createdAt' | 'name'; desc: boolean }
+
+export type LinkedInCompanyListQuery = RecordListQuery & {
+   industries?: string[]
+   countries?: string[]
+   sort?: CompanySort
+}
+
+const orderOf = (sort: CompanySort | undefined): Prisma.LinkedInCompanyOrderByWithRelationInput[] =>
+   sort?.by === 'name'
+      ? [
+           {
+              name: {
+                 sort: sort.desc ? 'desc' : 'asc',
+                 nulls: 'last',
+              },
+           },
+           { slug: sort.desc ? 'desc' : 'asc' },
+           { id: 'desc' },
+        ]
+      : [{ createdAt: sort && !sort.desc ? 'asc' : 'desc' }, { id: sort && !sort.desc ? 'asc' : 'desc' }]
 
 const companySelect = {
    id: true,
@@ -39,6 +59,7 @@ const companySelect = {
    website: true,
    size: true,
    location: true,
+   country: true,
    notes: true,
    tags: true,
    status: true,
@@ -219,21 +240,115 @@ export class LinkedInCompanyService {
    }
 
    public static async list(userId: string, query: LinkedInCompanyListQuery) {
-      const where = recordWhere(userId, query, SEARCHED_FIELDS)
+      const { industries = [], countries = [] } = query
+      const where: Prisma.LinkedInCompanyWhereInput = {
+         ...recordWhere(userId, query, SEARCHED_FIELDS),
+         ...(industries.length > 0 ? { industry: { in: industries } } : {}),
+         ...(countries.length > 0 ? { country: { in: countries } } : {}),
+      }
 
       const [items, total] = await Promise.all([
          PrismaService.client.linkedInCompany.findMany({
             where,
-            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            orderBy: orderOf(query.sort),
             ...pageArgs(query),
             select: companySelect,
          }),
          PrismaService.client.linkedInCompany.count({ where }),
       ])
+      const reads = new Map(
+         (
+            await PrismaService.client.pageSnapshot.findMany({
+               where: {
+                  userId,
+                  kind: 'COMPANY',
+                  slug: { in: items.map(({ slug }) => slug) },
+               },
+               select: {
+                  slug: true,
+                  data: true,
+                  fetchedAt: true,
+               },
+            })
+         ).map(read => [read.slug, read])
+      )
 
       return {
-         items,
+         items: items.map(item => {
+            const read = reads.get(item.slug)
+
+            return {
+               ...item,
+               card: read ? companyCardOf(read.data) : null,
+               readAt: read?.fetchedAt ?? null,
+            }
+         }),
          total,
+      }
+   }
+
+   // A company read overwrites the row's name, industry, website, size, headquarters and country where it has them.
+   public static applyRead(userId: string, slug: string, snapshot: CompanySnapshotData) {
+      return PrismaService.client.linkedInCompany.updateMany({
+         where: {
+            userId,
+            slug,
+         },
+         data: companyRowFrom(snapshot),
+      })
+   }
+
+   // The industries and countries of the owner's companies, for the Companies filters.
+   public static async facets(userId: string) {
+      const where = {
+         userId,
+         archivedAt: null,
+      }
+      const [industries, countries] = await Promise.all([
+         PrismaService.client.linkedInCompany.groupBy({
+            by: ['industry'],
+            where: {
+               ...where,
+               industry: { not: null },
+            },
+            _count: { _all: true },
+         }),
+         PrismaService.client.linkedInCompany.groupBy({
+            by: ['country'],
+            where: {
+               ...where,
+               country: { not: null },
+            },
+            _count: { _all: true },
+         }),
+      ])
+      const counts = (values: Array<{ value: string | null; count: number }>) =>
+         values
+            .flatMap(({ value, count }) =>
+               value
+                  ? [
+                       {
+                          value,
+                          count,
+                       },
+                    ]
+                  : []
+            )
+            .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
+
+      return {
+         industries: counts(
+            industries.map(row => ({
+               value: row.industry,
+               count: row._count._all,
+            }))
+         ),
+         countries: counts(
+            countries.map(row => ({
+               value: row.country,
+               count: row._count._all,
+            }))
+         ),
       }
    }
 

@@ -19,7 +19,7 @@ import {
    useTable,
 } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils'
 import { type Client, type PersonRow } from './types'
 
 import { type RouterInputs } from '../../trpc'
+import { SortHeader } from '../table/sort-header'
 import { isDiscovery } from './row-actions'
 import { RowActions } from './row-actions-cell'
 import { type NextStep, PRIORITY, nextStepOf } from './rows'
@@ -146,30 +147,6 @@ const CELL_CLASS: Record<string, string> = {
    status: 'text-sm',
    step: 'text-right',
    actions: 'w-0 text-right',
-}
-
-const SortHeader = ({
-   label,
-   sorted,
-   onClick,
-}: {
-   label: string
-   sorted: false | 'asc' | 'desc'
-   onClick?: (event: unknown) => void
-}) => {
-   const Arrow = sorted === 'asc' ? ArrowUp : sorted === 'desc' ? ArrowDown : ArrowUpDown
-
-   return (
-      <button
-         type="button"
-         className="hover:text-foreground -ml-1 inline-flex items-center gap-1 rounded px-1"
-         aria-label={`Sort by ${label.toLowerCase()}`}
-         onClick={onClick}
-      >
-         {label}
-         <Arrow className={cn('size-3.5', !sorted && 'opacity-40')} />
-      </button>
-   )
 }
 
 const PersonCell = ({ row, client }: { row: PersonRow; client: string | undefined }) => {
