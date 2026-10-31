@@ -444,6 +444,7 @@ export class LinkedInCompanyService {
                readAt: read?.fetchedAt ?? null,
                people: people.get(item.slug) ?? {
                   count: 0,
+                  former: 0,
                   first: [],
                },
             }

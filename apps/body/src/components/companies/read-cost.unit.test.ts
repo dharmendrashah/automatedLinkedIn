@@ -10,7 +10,9 @@ describe('read-cost', () => {
    })
 
    it('should price only the reads that will be charged and say how many are skipped', () => {
-      expect(readCostLine(300, 12)).toBe('About $1.20 for 300 companies. 12 companies read in the last 30 days are skipped.')
+      expect(readCostLine(300, 12)).toBe(
+         'About $1.20 for 300 companies. 12 companies read in the last 30 days are skipped.'
+      )
       expect(readCostLine(1, 0)).toBe('About $0.004 for 1 company.')
    })
 

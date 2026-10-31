@@ -28,7 +28,9 @@ export const readResultLine = ({ reading, readRecently, paused }: ReadTotals) =>
    [
       reading > 0 ? `Reading ${companies(reading)}; they fill in over the next minutes.` : 'Nothing to read.',
       readRecently > 0 ? `${companies(readRecently)} read in the last 30 days skipped.` : '',
-      paused > 0 ? `${companies(paused)} could not start now (reads are paused for a short while); try again later.` : '',
+      paused > 0
+         ? `${companies(paused)} could not start now (reads are paused for a short while); try again later.`
+         : '',
    ]
       .filter(Boolean)
       .join(' ')

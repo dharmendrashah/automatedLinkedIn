@@ -119,13 +119,87 @@ describe('CompanyPeopleService (database)', () => {
       expect(counts.get('rivulet-iq')?.count).toBe(3)
       expect(counts.get('acme')).toEqual({
          count: 1,
+         former: 0,
          first: [
             {
                slug: 'elsewhere',
                name: 'elsewhere',
                photoUrl: null,
+               relation: 'CURRENT',
             },
          ],
+      })
+   })
+
+   it('should show a former employee from the positions of their profile read, with when they left', async () => {
+      await PrismaService.client.personSnapshot.create({
+         data: {
+            userId,
+            slug: 'purvi',
+            data: {
+               experience: [
+                  {
+                     company: 'Rivulet iQ',
+                     companyUrl: 'https://www.linkedin.com/company/rivulet-iq',
+                     end: null,
+                  },
+                  {
+                     company: 'White Label IQ',
+                     companyUrl: 'https://www.linkedin.com/company/white-label-iq',
+                     end: '2023',
+                  },
+                  {
+                     company: 'Old Name Ltd',
+                     companyUrl: null,
+                     end: '2019',
+                  },
+               ],
+            },
+         },
+      })
+
+      const whiteLabel = await CompanyPeopleService.atCompany(userId, {
+         slug: 'white-label-iq',
+         names: ['White Label IQ'],
+      })
+
+      expect(whiteLabel.people).toEqual([
+         expect.objectContaining({
+            slug: 'purvi',
+            relation: 'FORMER',
+            endedOn: '2023',
+            matchedBy: 'LINK',
+         }),
+      ])
+      await expect(
+         CompanyPeopleService.atCompany(userId, {
+            slug: 'old-name',
+            names: ['old name ltd'],
+         })
+      ).resolves.toMatchObject({
+         people: [
+            expect.objectContaining({
+               relation: 'FORMER',
+               matchedBy: 'NAME',
+            }),
+         ],
+      })
+
+      const counts = await CompanyPeopleService.counts(userId, [
+         RIVULET,
+         {
+            slug: 'white-label-iq',
+            names: [],
+         },
+      ])
+
+      expect(counts.get('rivulet-iq')).toMatchObject({
+         count: 3,
+         former: 0,
+      })
+      expect(counts.get('white-label-iq')).toMatchObject({
+         count: 0,
+         former: 1,
       })
    })
 
