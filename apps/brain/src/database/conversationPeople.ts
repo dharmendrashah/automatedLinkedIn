@@ -24,6 +24,80 @@ const profileSlug = (url: string | undefined) => {
    return slug && !MEMBER_ID.test(slug) ? slug : undefined
 }
 
+// A chat LinkedIn names by member id: the person is the one profile of that name the same account is connected to, invited or
+// was asked by, else the one person of that name on the owner's My network. Two profiles of one name leave it unknown.
+const byName = async (userId: string, chats: Shown[]) => {
+   const named = chats.flatMap(({ id, accountId, participants: [first] }) =>
+      first?.name
+         ? [
+              {
+                 id,
+                 name: first.name,
+                 key: `${accountId}:${first.name}`,
+              },
+           ]
+         : []
+   )
+
+   if (named.length === 0) {
+      return new Map<string, string>()
+   }
+
+   const names = { in: [...new Set(named.map(({ name }) => name))] }
+   const where = {
+      userId,
+      accountId: { in: [...new Set(chats.map(({ accountId }) => accountId))] },
+      name: names,
+   }
+   const select = {
+      accountId: true,
+      name: true,
+      slug: true,
+   }
+   const [connections, invites, requests, people] = await Promise.all([
+      PrismaService.client.linkedInConnection.findMany({
+         where,
+         select,
+      }),
+      PrismaService.client.linkedInInvite.findMany({
+         where,
+         select,
+      }),
+      PrismaService.client.linkedInInvitation.findMany({
+         where,
+         select,
+      }),
+      PrismaService.client.person.findMany({
+         where: {
+            userId,
+            name: names,
+         },
+         select: {
+            name: true,
+            slug: true,
+         },
+      }),
+   ])
+   const found = new Map<string, Set<string>>()
+   const add = (key: string, slug: string) => found.set(key, new Set([...(found.get(key) ?? []), slug]))
+
+   for (const row of [...connections, ...invites, ...requests]) {
+      add(`${row.accountId}:${row.name}`, row.slug)
+   }
+
+   for (const row of people) {
+      add(`*:${row.name ?? ''}`, row.slug)
+   }
+
+   return new Map(
+      named.flatMap(({ id, name, key }) => {
+         const [slug, other] = [...(found.get(key) ?? found.get(`*:${name}`) ?? [])]
+
+         return slug && !other ? [[id, slug] as const] : []
+      })
+   )
+}
+
 // The person of each one-to-one conversation by profile name (`contactSlug`), for the person drawer, and their picture from the
 // account's stored connection when the read gave none. One query each, whatever the number of conversations.
 export const withPeople = async <T extends Shown>(
@@ -58,6 +132,13 @@ export const withPeople = async <T extends Shown>(
       if (conversationId && recipientSlug) {
          slugs.set(conversationId, recipientSlug)
       }
+   }
+
+   for (const [id, slug] of await byName(
+      userId,
+      direct.filter(({ id }) => !slugs.has(id))
+   )) {
+      slugs.set(id, slug)
    }
 
    const bare = direct.filter(item => slugs.has(item.id) && !item.participants[0]?.imageUrl)
