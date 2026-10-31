@@ -29,6 +29,8 @@ import { ListFilter, Search } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 
+import { type Company } from '@/components/companies/types'
+
 import { trpc } from '../trpc'
 
 const SORT_BY: Array<CompanySort['by']> = ['createdAt', 'name']
@@ -135,6 +137,14 @@ export const Companies = () => {
    const labelMany = trpc.linkedInCompany.labelMany.useMutation({ onSuccess: refresh })
    const archiveMany = trpc.linkedInCompany.archiveMany.useMutation({ onSuccess: refresh })
    const more = useCallback(() => void list.fetchNextPage(), [list])
+   const update = trpc.linkedInCompany.update.useMutation()
+   const saveTags = async (company: Company, tags: string[]) => {
+      await update.mutateAsync({
+         id: company.id,
+         tags,
+      })
+      await Promise.all([utils.linkedInCompany.list.invalidate(), utils.label.list.invalidate()])
+   }
 
    const actionError = [labelMany, archiveMany].find(action => action.error)?.error?.message
    const basics: Basics = {
@@ -319,6 +329,8 @@ export const Companies = () => {
             onMore={more}
             onOpen={company => drawer.show('company', company.slug)}
             selection={selection}
+            onTag={state.addTag}
+            saveTags={saveTags}
          />
 
          <p className="text-muted-foreground text-sm">

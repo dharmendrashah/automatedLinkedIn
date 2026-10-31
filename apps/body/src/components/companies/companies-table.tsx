@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils'
 
 import { type Company } from './types'
 
+import { LabelCell } from '../labels/label-cell'
 import { LinkStatusBadge } from '../links/link-status-badge'
 import { type Selection } from '../links/use-selection'
 import { visitedText } from '../links/visit-form'
@@ -45,6 +46,7 @@ const CELL_CLASS: Record<string, string> = {
    followers: 'text-right tabular-nums whitespace-nowrap',
    website: 'max-w-48',
    status: 'w-0',
+   labels: 'min-w-40',
    createdAt: 'whitespace-nowrap text-muted-foreground',
    readAt: 'whitespace-nowrap',
 }
@@ -86,6 +88,8 @@ const CompanyCell = ({ company }: { company: Company }) => (
 
 type Handlers = {
    selection: Selection
+   onTag: (tag: string) => void
+   saveTags: (company: Company, tags: string[]) => Promise<unknown>
 }
 
 const columnsOf = (ids: string[], handlers: Handlers) =>
@@ -195,6 +199,21 @@ const columnsOf = (ids: string[], handlers: Handlers) =>
                <LinkStatusBadge status={row.original.status} />
                {row.original.archivedAt ? <Badge variant="secondary">Archived</Badge> : null}
             </span>
+         ),
+      }),
+      column.display({
+         id: 'labels',
+         header: 'Labels',
+         cell: ({ row }) => (
+            <Stop>
+               <LabelCell
+                  tags={row.original.tags}
+                  kind="companies"
+                  name={nameOf(row.original)}
+                  save={tags => handlers.saveTags(row.original, tags)}
+                  onFilter={handlers.onTag}
+               />
+            </Stop>
          ),
       }),
       column.accessor('createdAt', {
