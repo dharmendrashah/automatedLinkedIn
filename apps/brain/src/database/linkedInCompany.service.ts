@@ -1,7 +1,18 @@
-import { type LinkedInLink } from 'core'
+import { type CompanySnapshotData, type LinkedInLink, companyCardOf, companyRowFrom } from 'core'
 
-import { type LinkedInCompanyStatus, type Prisma } from 'generated/prisma/client'
+import { type LinkedInCompanyStatus, Prisma } from 'generated/prisma/client'
 
+import {
+   type CompanyFilters,
+   type IcpRules,
+   TEAM_KINDS,
+   type TeamKind,
+   companyIdsSql,
+   filterSql,
+   icpSql,
+   visitedWhere,
+} from './companyFilters'
+import { ConflictError } from './conflict'
 import {
    type InputFilter,
    type LabelChange,
@@ -28,7 +39,72 @@ export type LinkedInCompanyChanges = {
    status?: LinkedInCompanyStatus
 }
 
-export type LinkedInCompanyListQuery = RecordListQuery
+export type CompanySort = { by: 'createdAt' | 'name'; desc: boolean }
+
+export type LinkedInCompanyListQuery = RecordListQuery &
+   Omit<CompanyFilters, 'icpId' | 'icpIncludeUnread'> & {
+      industries?: string[]
+      countries?: string[]
+      sort?: CompanySort
+      // The company rules of the saved ICP to match, checked as the owner's by the caller.
+      icp?: { rules: IcpRules; includeUnread: boolean }
+   }
+
+// Matches beyond this are refused rather than sent as one huge id list.
+const MAX_MATCHES = 20_000
+
+const whereOf = async (
+   userId: string,
+   query: Omit<LinkedInCompanyListQuery, 'page' | 'pageSize' | 'sort'>,
+   now: Date
+): Promise<Prisma.LinkedInCompanyWhereInput> => {
+   const { industries = [], countries = [] } = query
+   const conditions = [...filterSql(query, now), ...(query.icp ? icpSql(query.icp.rules, query.icp.includeUnread) : [])]
+   const ids =
+      conditions.length > 0
+         ? (await PrismaService.client.$queryRaw<Array<{ id: string }>>(companyIdsSql(userId, conditions))).map(
+              ({ id }) => id
+           )
+         : undefined
+
+   if (ids && ids.length > MAX_MATCHES) {
+      throw new ConflictError('These filters match too many companies. Add another filter to narrow them.')
+   }
+
+   return {
+      ...recordWhere(
+         userId,
+         {
+            ...query,
+            page: 1,
+            pageSize: 1,
+         },
+         SEARCHED_FIELDS
+      ),
+      ...(industries.length > 0 ? { industry: { in: industries } } : {}),
+      ...(countries.length > 0 ? { country: { in: countries } } : {}),
+      ...visitedWhere(query.visited, now),
+      ...(ids ? { id: { in: ids } } : {}),
+   }
+}
+
+const FACET_LIMIT = 200
+
+export type DrawerFacetKind = TeamKind | 'speciality' | 'place' | 'office' | 'category' | 'size'
+
+const orderOf = (sort: CompanySort | undefined): Prisma.LinkedInCompanyOrderByWithRelationInput[] =>
+   sort?.by === 'name'
+      ? [
+           {
+              name: {
+                 sort: sort.desc ? 'desc' : 'asc',
+                 nulls: 'last',
+              },
+           },
+           { slug: sort.desc ? 'desc' : 'asc' },
+           { id: 'desc' },
+        ]
+      : [{ createdAt: sort && !sort.desc ? 'asc' : 'desc' }, { id: sort && !sort.desc ? 'asc' : 'desc' }]
 
 const companySelect = {
    id: true,
@@ -39,6 +115,7 @@ const companySelect = {
    website: true,
    size: true,
    location: true,
+   country: true,
    notes: true,
    tags: true,
    status: true,
@@ -218,22 +295,167 @@ export class LinkedInCompanyService {
       })
    }
 
-   public static async list(userId: string, query: LinkedInCompanyListQuery) {
-      const where = recordWhere(userId, query, SEARCHED_FIELDS)
+   public static async list(userId: string, query: LinkedInCompanyListQuery, now = new Date()) {
+      const where = await whereOf(userId, query, now)
 
       const [items, total] = await Promise.all([
          PrismaService.client.linkedInCompany.findMany({
             where,
-            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            orderBy: orderOf(query.sort),
             ...pageArgs(query),
             select: companySelect,
          }),
          PrismaService.client.linkedInCompany.count({ where }),
       ])
+      const reads = new Map(
+         (
+            await PrismaService.client.pageSnapshot.findMany({
+               where: {
+                  userId,
+                  kind: 'COMPANY',
+                  slug: { in: items.map(({ slug }) => slug) },
+               },
+               select: {
+                  slug: true,
+                  data: true,
+                  fetchedAt: true,
+               },
+            })
+         ).map(read => [read.slug, read])
+      )
 
       return {
-         items,
+         items: items.map(item => {
+            const read = reads.get(item.slug)
+
+            return {
+               ...item,
+               card: read ? companyCardOf(read.data) : null,
+               readAt: read?.fetchedAt ?? null,
+            }
+         }),
          total,
+      }
+   }
+
+   // How many companies the filters match, for the drawer's button before they are applied.
+   public static async count(userId: string, query: Omit<LinkedInCompanyListQuery, 'page' | 'pageSize' | 'sort'>) {
+      return PrismaService.client.linkedInCompany.count({ where: await whereOf(userId, query, new Date()) })
+   }
+
+   // The values the drawer's pickers offer, read from the owner's company reads, with how many companies hold each.
+   public static async drawerFacets(userId: string) {
+      const team = Object.entries(TEAM_KINDS).map(
+         ([kind, key]) =>
+            Prisma.sql`SELECT ${Prisma.raw(`'${kind}'`)} AS kind, e->>'label' AS value, COUNT(*)::int AS count FROM reads, ${Prisma.raw(`jsonb_array_elements(COALESCE(data->'${key}', '[]'::jsonb))`)} AS e GROUP BY 2`
+      )
+      const rows = await PrismaService.client.$queryRaw<
+         Array<{ kind: DrawerFacetKind; value: string | null; count: number }>
+      >`
+         WITH reads AS (
+            SELECT p."data" AS data FROM "PageSnapshot" AS p
+            JOIN "LinkedInCompany" AS c ON c."userId" = p."userId" AND c."slug" = p."slug"
+            WHERE p."userId" = ${userId} AND p."kind" = 'COMPANY' AND c."archivedAt" IS NULL
+         )
+         ${Prisma.join(team, ' UNION ALL ')}
+         UNION ALL SELECT 'speciality', s, COUNT(*)::int FROM reads, jsonb_array_elements_text(COALESCE(data->'specialities', '[]'::jsonb)) AS s GROUP BY 2
+         UNION ALL SELECT 'place', data->'address'->>'city', COUNT(*)::int FROM reads GROUP BY 2
+         UNION ALL SELECT 'place', data->'address'->>'state', COUNT(*)::int FROM reads GROUP BY 2
+         UNION ALL SELECT 'office', o->>'city', COUNT(*)::int FROM reads, jsonb_array_elements(COALESCE(data->'locations', '[]'::jsonb)) AS o GROUP BY 2
+         UNION ALL SELECT 'category', data->>'industryCategory', COUNT(*)::int FROM reads GROUP BY 2
+         UNION ALL SELECT 'size', data->>'employeeRange', COUNT(*)::int FROM reads GROUP BY 2`
+      const facets: Record<DrawerFacetKind, Array<{ value: string; count: number }>> = {
+         department: [],
+         skill: [],
+         location: [],
+         service: [],
+         school: [],
+         field: [],
+         speciality: [],
+         place: [],
+         office: [],
+         category: [],
+         size: [],
+      }
+
+      for (const { kind, value, count } of rows) {
+         if (value) {
+            facets[kind].push({
+               value,
+               count,
+            })
+         }
+      }
+
+      for (const values of Object.values(facets)) {
+         values.sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)).splice(FACET_LIMIT)
+      }
+
+      return facets
+   }
+
+   // A company read overwrites the row's name, industry, website, size, headquarters and country where it has them.
+   public static applyRead(userId: string, slug: string, snapshot: CompanySnapshotData) {
+      return PrismaService.client.linkedInCompany.updateMany({
+         where: {
+            userId,
+            slug,
+         },
+         data: companyRowFrom(snapshot),
+      })
+   }
+
+   // The industries and countries of the owner's companies, for the Companies filters.
+   public static async facets(userId: string) {
+      const where = {
+         userId,
+         archivedAt: null,
+      }
+      const [industries, countries] = await Promise.all([
+         PrismaService.client.linkedInCompany.groupBy({
+            by: ['industry'],
+            where: {
+               ...where,
+               industry: { not: null },
+            },
+            _count: { _all: true },
+         }),
+         PrismaService.client.linkedInCompany.groupBy({
+            by: ['country'],
+            where: {
+               ...where,
+               country: { not: null },
+            },
+            _count: { _all: true },
+         }),
+      ])
+      const counts = (values: Array<{ value: string | null; count: number }>) =>
+         values
+            .flatMap(({ value, count }) =>
+               value
+                  ? [
+                       {
+                          value,
+                          count,
+                       },
+                    ]
+                  : []
+            )
+            .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
+
+      return {
+         industries: counts(
+            industries.map(row => ({
+               value: row.industry,
+               count: row._count._all,
+            }))
+         ),
+         countries: counts(
+            countries.map(row => ({
+               value: row.country,
+               count: row._count._all,
+            }))
+         ),
       }
    }
 

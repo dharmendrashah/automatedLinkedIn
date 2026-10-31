@@ -89,6 +89,8 @@ describe('company and post pages (database)', () => {
          {
             companyName: 'Stripe',
             tagline: 'Payments',
+            hqCity: 'San Francisco',
+            hqCountry: 'United States',
             employeesByFunction: [
                {
                   function: 'Sales',
@@ -117,6 +119,32 @@ describe('company and post pages (database)', () => {
          people: [expect.objectContaining({ slug: 'ada' })],
       })
       expect(JSON.stringify(company?.snapshot)).not.toContain('internal')
+      // The read is written onto the company row, so the Companies table can show, search and filter it.
+      expect(
+         (
+            await LinkedInCompanyService.list(userId, {
+               countries: ['United States'],
+               search: 'stripe',
+               page: 1,
+               pageSize: 10,
+            })
+         ).items
+      ).toEqual([
+         expect.objectContaining({
+            slug: 'stripe',
+            name: 'Stripe',
+            location: 'San Francisco, United States',
+            country: 'United States',
+            card: expect.objectContaining({ tagline: 'Payments' }),
+            readAt: expect.any(Date),
+         }),
+      ])
+      expect((await LinkedInCompanyService.facets(userId)).countries).toEqual([
+         {
+            value: 'United States',
+            count: 1,
+         },
+      ])
       await expect(CompanyPageService.readFull(userId, 'stripe')).rejects.toBeInstanceOf(ConflictError)
       expect(reader.start).toHaveBeenCalledTimes(1)
       expect(await CompanyPageService.detail(userId, 'nobody')).toBeNull()

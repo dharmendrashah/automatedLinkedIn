@@ -1,11 +1,11 @@
 import { SearchBox } from '@/components/my-network/filters'
 import { MultiPick } from '@/components/my-network/filters/fields'
-import { ColumnsMenu } from '@/components/sessions/columns-menu'
 import { SessionDrawer } from '@/components/sessions/session-drawer'
 import { SessionsTable } from '@/components/sessions/sessions-table'
-import { useHiddenColumns } from '@/components/sessions/use-hidden-columns'
 import { type SessionSort, useSessions } from '@/components/sessions/use-sessions'
 import { useTaskCatalog } from '@/components/sessions/use-task-catalog'
+import { ColumnsMenu } from '@/components/table/columns-menu'
+import { useHiddenColumns } from '@/components/table/use-hidden-columns'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { flagOf } from '@/lib/country-flag'
@@ -33,6 +33,18 @@ import {
 import { trpc } from '../trpc'
 
 const SORT_BY: Array<SessionSort['by']> = ['startedAt', 'durationMs']
+
+// Result always shows, so it is not offered.
+const SESSION_COLUMNS: Array<[string, string]> = [
+   ['action', 'Action'],
+   ['account', 'Account'],
+   ['trigger', 'Started by'],
+   ['proxy', 'Proxy'],
+   ['detail', 'Detail'],
+   ['startedAt', 'Started'],
+   ['durationMs', 'Took'],
+   ['files', 'Files'],
+]
 
 const readSort = (value: string | null): SessionSort | undefined => {
    const [field, direction] = (value ?? '').split('.')
@@ -80,7 +92,7 @@ export const Sessions = () => {
    const [sheetOpen, setSheetOpen] = useState(false)
 
    const { rows, list, waiting, showWaiting } = useSessions(api, sort, atTop)
-   const [hidden, setHidden] = useHiddenColumns()
+   const [hidden, setHidden] = useHiddenColumns('sessions.hiddenColumns')
    const catalog = useTaskCatalog()
    const accounts = trpc.linkedInAccount.list.useQuery(undefined, { retry: false })
    const proxies = trpc.proxyServer.list.useQuery(undefined, { retry: false })
@@ -222,7 +234,7 @@ export const Sessions = () => {
                      {waiting === 1 ? '1 new session' : `${waiting} new sessions`}
                   </Button>
                ) : null}
-               <ColumnsMenu hidden={hidden} onChange={setHidden} />
+               <ColumnsMenu columns={SESSION_COLUMNS} hidden={hidden} onChange={setHidden} />
             </div>
          </div>
 

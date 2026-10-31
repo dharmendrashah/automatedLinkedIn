@@ -15,9 +15,6 @@ import {
 } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
-   ArrowDown,
-   ArrowUp,
-   ArrowUpDown,
    Building2,
    Eye,
    FileText,
@@ -49,9 +46,10 @@ import { cn } from '@/lib/utils'
 
 import { type SessionRow } from './types'
 
+import { SortHeader } from '../table/sort-header'
+import { type HiddenColumns } from '../table/use-hidden-columns'
 import { type Catalog, actionLabel, formatDuration, proxyLabel, timeAgo } from './describe'
 import { SessionStatusBadge } from './session-status-badge'
-import { type HiddenColumns } from './use-hidden-columns'
 import { type SessionSort } from './use-sessions'
 
 type Icon = ComponentType<{ className?: string }>
@@ -149,30 +147,6 @@ const initials = (text: string) =>
       .map(word => word[0] ?? '')
       .join('')
       .toUpperCase()
-
-const SortHeader = ({
-   label,
-   sorted,
-   onClick,
-}: {
-   label: string
-   sorted: false | 'asc' | 'desc'
-   onClick?: (event: unknown) => void
-}) => {
-   const Arrow = sorted === 'asc' ? ArrowUp : sorted === 'desc' ? ArrowDown : ArrowUpDown
-
-   return (
-      <button
-         type="button"
-         className="hover:text-foreground -ml-1 inline-flex items-center gap-1 rounded px-1"
-         aria-label={`Sort by ${label.toLowerCase()}`}
-         onClick={onClick}
-      >
-         {label}
-         <Arrow className={cn('size-3.5', !sorted && 'opacity-40')} />
-      </button>
-   )
-}
 
 const columnsOf = (catalog: Catalog | undefined, onOpen: (id: string) => void) =>
    column.columns([

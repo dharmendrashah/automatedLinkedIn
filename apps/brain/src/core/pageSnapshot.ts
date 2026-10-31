@@ -143,6 +143,38 @@ export const companySnapshotFrom = (row: Row): CompanySnapshotData => {
    }
 }
 
+// The country of a read: its address, or the last part of an older read's headquarters line.
+const countryOf = ({ address, headquarters }: CompanySnapshotData) =>
+   address?.country ?? headquarters?.split(',').at(-1)?.trim() ?? null
+
+// What a company read writes onto the company row; undefined leaves the row's value, so a missing one keeps it.
+export const companyRowFrom = (snapshot: CompanySnapshotData) => {
+   const keep = (value: string | null) => value || undefined
+
+   return {
+      name: keep(snapshot.name),
+      industry: keep(snapshot.industry),
+      website: keep(snapshot.website),
+      size: keep(snapshot.employeeRange),
+      location: keep(snapshot.headquarters),
+      country: keep(countryOf(snapshot)),
+   }
+}
+
+// The few read fields a row of the Companies table shows beside the company's own columns.
+export const companyCardOf = (data: unknown) => {
+   const snapshot = readCompanySnapshot(data)
+
+   return snapshot
+      ? {
+           logo: snapshot.logo,
+           tagline: snapshot.tagline,
+           employees: snapshot.employees,
+           followers: snapshot.followers,
+        }
+      : null
+}
+
 export const postSchema = z.object({
    text: nullable,
    author: z.object({

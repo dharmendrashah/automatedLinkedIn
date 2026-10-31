@@ -1,10 +1,18 @@
 import { z } from 'zod'
 
-import { LinkedInCompanyService } from 'database'
+import {
+   CompanyViewService,
+   IcpService,
+   LinkedInCompanyService,
+   READ_AGES,
+   TEAM_KIND_NAMES,
+   VISIT_AGES,
+} from 'database'
 
 import { ownerProcedure, router } from 'trpc'
 
 import { byId, createInput, found, ids, labelInput, listInput, readLinks, status, tags, text } from '../linkedInRecord'
+import { orConflict, present } from '../owned'
 import { visitProcedure } from '../pageVisit'
 
 const isHttpUrl = (value: string) => {
@@ -37,6 +45,96 @@ const updateInput = z.object({
 
 const NOUN = 'company'
 
+const values = z.array(z.string().trim().min(1).max(200)).max(50).optional()
+const range = z
+   .object({
+      min: z.number().int().min(0).max(10_000_000).optional(),
+      max: z.number().int().min(0).max(10_000_000).optional(),
+   })
+   .optional()
+
+// The Filters drawer (.plan/companies-filter-drawer.md).
+const drawerInput = {
+   icpId: z.string().min(1).optional(),
+   icpIncludeUnread: z.boolean().optional(),
+   sizes: values,
+   founded: range,
+   places: values,
+   offices: values,
+   categories: values,
+   team: z
+      .array(
+         z.object({
+            kind: z.enum(TEAM_KIND_NAMES),
+            values: z.array(z.string().trim().min(1).max(200)).min(1).max(50),
+            min: z.number().int().min(1).max(100_000),
+         })
+      )
+      .max(10)
+      .optional(),
+   specialities: values,
+   words: z
+      .object({
+         values: z.array(z.string().trim().min(1).max(100)).min(1).max(20),
+         match: z.enum(['any', 'all']),
+      })
+      .optional(),
+   read: z.enum(READ_AGES).optional(),
+   visited: z.enum(VISIT_AGES).optional(),
+   notes: z.string().trim().min(1).max(200).optional(),
+   employees: range,
+   followers: range,
+   verified: z.boolean().optional(),
+   active: z.boolean().optional(),
+   showcase: z.boolean().optional(),
+   hasWebsite: z.boolean().optional(),
+   hasJobs: z.boolean().optional(),
+}
+
+const companyListInput = listInput.extend({
+   ...drawerInput,
+   cursor: z.number().int().min(1).nullish(),
+   industries: values,
+   countries: values,
+   sort: z
+      .object({
+         by: z.enum(['createdAt', 'name']),
+         desc: z.boolean(),
+      })
+      .optional(),
+})
+
+const countInput = companyListInput.omit({
+   cursor: true,
+   page: true,
+   pageSize: true,
+   sort: true,
+})
+
+// The saved ICP's company rules, only when it is the owner's.
+const withIcp = async <T extends { icpId?: string; icpIncludeUnread?: boolean }>(userId: string, input: T) => {
+   const { icpId, icpIncludeUnread, ...rest } = input
+
+   if (!icpId) {
+      return rest
+   }
+
+   const icp = present(await IcpService.getForUser(userId, icpId), 'Ideal customer not found')
+
+   return {
+      ...rest,
+      icp: {
+         rules: icp,
+         includeUnread: icpIncludeUnread ?? false,
+      },
+   }
+}
+
+const viewInput = z.object({
+   name: z.string().trim().min(1).max(80),
+   query: z.string().max(4_000),
+})
+
 // Every procedure scopes to ctx.user.id, so one user can never reach another's companies by id.
 export const linkedInCompany = router({
    create: ownerProcedure.input(createInput).mutation(async ({ ctx, input }) => {
@@ -49,7 +147,43 @@ export const linkedInCompany = router({
       }
    }),
 
-   list: ownerProcedure.input(listInput).query(({ ctx, input }) => LinkedInCompanyService.list(ctx.user.id, input)),
+   // `cursor` is the page a scrolling table asks for next (TanStack infinite query); `nextCursor` is unset at the end.
+   list: ownerProcedure.input(companyListInput).query(async ({ ctx, input }) => {
+      const { cursor, ...query } = input
+      const page = cursor ?? query.page
+      const result = await orConflict(
+         LinkedInCompanyService.list(ctx.user.id, {
+            ...(await withIcp(ctx.user.id, query)),
+            page,
+         })
+      )
+
+      return {
+         ...result,
+         nextCursor: page * query.pageSize < result.total ? page + 1 : undefined,
+      }
+   }),
+
+   // How many companies the drawer's filters match, before they are applied.
+   count: ownerProcedure
+      .input(countInput)
+      .query(async ({ ctx, input }) =>
+         orConflict(LinkedInCompanyService.count(ctx.user.id, await withIcp(ctx.user.id, input)))
+      ),
+
+   drawerFacets: ownerProcedure.query(({ ctx }) => LinkedInCompanyService.drawerFacets(ctx.user.id)),
+
+   views: ownerProcedure.query(({ ctx }) => CompanyViewService.list(ctx.user.id)),
+
+   saveView: ownerProcedure
+      .input(viewInput)
+      .mutation(({ ctx, input }) => CompanyViewService.save(ctx.user.id, input.name, input.query)),
+
+   removeView: ownerProcedure
+      .input(byId)
+      .mutation(({ ctx, input }) => orConflict(CompanyViewService.remove(ctx.user.id, input.id))),
+
+   facets: ownerProcedure.query(({ ctx }) => LinkedInCompanyService.facets(ctx.user.id)),
 
    get: ownerProcedure
       .input(byId)

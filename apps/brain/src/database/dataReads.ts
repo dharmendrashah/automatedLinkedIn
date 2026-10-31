@@ -133,7 +133,10 @@ export const DATA_READS: Record<DataReadKind, ReadSpec> = {
       missing: 'No company page was found at this link.',
       wanted: companyWanted,
       store: async ({ userId, slug }, [row]) => {
-         await keepPage(userId, 'COMPANY', slug, companySnapshotFrom(row))
+         const snapshot = companySnapshotFrom(row)
+
+         await keepPage(userId, 'COMPANY', slug, snapshot)
+         await LinkedInCompanyService.applyRead(userId, slug, snapshot)
       },
    },
    POST: {

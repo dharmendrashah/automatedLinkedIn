@@ -16,12 +16,14 @@ import { DrawerDescription, DrawerTitle } from '@/components/ui/drawer'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { readableError } from '@/lib/trpc-error'
-import { BadgeCheck, Braces, BriefcaseBusiness, ExternalLink, Globe, MousePointerClick, Users } from 'lucide-react'
-import { type ReactNode } from 'react'
+import { BadgeCheck, Braces, BriefcaseBusiness, ExternalLink, Eye, Globe, MousePointerClick, Users } from 'lucide-react'
+import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router'
 
 import { type RouterOutputs, trpc } from '../../trpc'
+import { LabelCell } from '../labels/label-cell'
 import { isLinkStatus, linkStatuses } from '../links/link-statuses'
+import { ViewPageDialog } from '../links/view-page-dialog'
 import { Breakdowns } from './company/breakdowns'
 import { domainOf, factsOf } from './company/facts'
 import { KeyFacts, Offices } from './company/key-facts'
@@ -120,30 +122,45 @@ const Header = ({ detail }: { detail: CompanyDetail }) => {
                />
             )}
          </div>
+         <Actions detail={detail} />
       </div>
    )
 }
 
-const Workspace = ({ detail }: { detail: CompanyDetail }) => {
+const useCompanyUpdate = (detail: CompanyDetail) => {
    const utils = trpc.useUtils()
-   const refresh = () => {
-      void utils.companyPage.detail.invalidate({ slug: detail.slug })
-      void utils.linkedInCompany.list.invalidate()
-   }
-   const update = trpc.linkedInCompany.update.useMutation({ onSuccess: refresh })
-   const archive = trpc.linkedInCompany.archive.useMutation({ onSuccess: refresh })
-   const restore = trpc.linkedInCompany.restore.useMutation({ onSuccess: refresh })
-   const error = [update, archive, restore].find(action => action.error)?.error
+
+   return trpc.linkedInCompany.update.useMutation({
+      onSuccess: () => {
+         void utils.companyPage.detail.invalidate({ slug: detail.slug })
+         void utils.linkedInCompany.list.invalidate()
+      },
+   })
+}
+
+// The owner's handling of the company, at the top of the drawer: status, finding people, a visit and labels.
+const Actions = ({ detail }: { detail: CompanyDetail }) => {
+   const utils = trpc.useUtils()
+   const update = useCompanyUpdate(detail)
    const { company } = detail
+   const [viewing, setViewing] = useState(false)
+   const name = company.name ?? company.slug
+   const saveTags = async (tags: string[]) => {
+      await update.mutateAsync({
+         id: company.id,
+         tags,
+      })
+      await utils.label.list.invalidate()
+   }
 
    return (
-      <Section title="In your workspace">
+      <>
          <div className="flex flex-wrap items-center gap-2">
             <Select
                value={company.status}
                onValueChange={status => (isLinkStatus(status) ? update.mutate({ id: company.id, status }) : undefined)}
             >
-               <SelectTrigger className="w-40" aria-label="Company status">
+               <SelectTrigger size="sm" className="w-36" aria-label="Company status">
                   <SelectValue />
                </SelectTrigger>
                <SelectContent>
@@ -154,27 +171,44 @@ const Workspace = ({ detail }: { detail: CompanyDetail }) => {
                   ))}
                </SelectContent>
             </Select>
-            <Button
-               variant="outline"
-               size="sm"
-               onClick={() =>
-                  company.archivedAt ? restore.mutate({ id: company.id }) : archive.mutate({ id: company.id })
-               }
-            >
-               {company.archivedAt ? 'Restore' : 'Archive'}
-            </Button>
             <Button asChild variant="outline" size="sm">
                <Link to="/workflows/new?start=accounts">
                   <Users />
                   Find people here
                </Link>
             </Button>
-            {company.tags.map(tag => (
-               <Badge key={tag} variant="secondary">
-                  {tag}
-               </Badge>
-            ))}
+            {company.archivedAt ? null : (
+               <Button variant="outline" size="sm" onClick={() => setViewing(true)}>
+                  <Eye />
+                  View with an account
+               </Button>
+            )}
+            <span className="flex items-center gap-1.5">
+               <span className="text-muted-foreground text-xs">Labels</span>
+               <LabelCell tags={company.tags} kind="companies" name={name} save={saveTags} />
+            </span>
          </div>
+         {update.error ? <p className="text-destructive text-sm">{readableError(update.error)}</p> : null}
+         {viewing ? (
+            <ViewPageDialog
+               kind="COMPANY"
+               saved={{
+                  id: company.id,
+                  name,
+               }}
+               onClose={() => setViewing(false)}
+            />
+         ) : null}
+      </>
+   )
+}
+
+const Notes = ({ detail }: { detail: CompanyDetail }) => {
+   const update = useCompanyUpdate(detail)
+   const { company } = detail
+
+   return (
+      <Section title="Notes">
          <NotesField
             key={company.id}
             id={`notes-company-${company.id}`}
@@ -182,7 +216,7 @@ const Workspace = ({ detail }: { detail: CompanyDetail }) => {
             placeholder="Why this account, who to reach, what they need"
             onSave={notes => update.mutate({ id: company.id, notes })}
          />
-         {error ? <p className="text-destructive text-sm">{readableError(error)}</p> : null}
+         {update.error ? <p className="text-destructive text-sm">{readableError(update.error)}</p> : null}
       </Section>
    )
 }
@@ -262,7 +296,7 @@ export const CompanyView = ({ slug, onPerson }: { slug: string; onPerson: (slug:
                      </ul>
                   )}
                </Section>
-               <Workspace detail={data} />
+               <Notes detail={data} />
             </TabsContent>
          </Tabs>
       </div>

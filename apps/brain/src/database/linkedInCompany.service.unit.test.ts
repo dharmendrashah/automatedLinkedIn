@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { companySnapshotFrom } from '../core/pageSnapshot'
+
 import { LinkedInCompanyService } from './linkedInCompany.service'
 
 const mocks = vi.hoisted(() => ({
@@ -10,12 +12,19 @@ const mocks = vi.hoisted(() => ({
    updateMany: vi.fn(),
    update: vi.fn(),
    deleteSnapshots: vi.fn(),
+   findSnapshots: vi.fn(),
 }))
+
+// The whole `core` reads the environment; this service only needs the snapshot helpers.
+vi.mock('core', async () => ({ ...(await vi.importActual<object>('../core/pageSnapshot')) }))
 
 vi.mock('./prisma.service', () => ({
    PrismaService: {
       client: {
-         pageSnapshot: { deleteMany: mocks.deleteSnapshots },
+         pageSnapshot: {
+            deleteMany: mocks.deleteSnapshots,
+            findMany: mocks.findSnapshots,
+         },
          linkedInCompany: {
             findMany: mocks.findMany,
             findFirst: mocks.findFirst,
@@ -81,8 +90,31 @@ describe('LinkedInCompanyService', () => {
 
    describe('list', () => {
       it('should scope to the owner, hide archived rows and search name, industry, website and link', async () => {
-         mocks.findMany.mockResolvedValueOnce([{ id: 'c1' }])
+         const readAt = new Date('2026-10-31T10:00:00Z')
+
+         mocks.findMany.mockResolvedValueOnce([
+            {
+               id: 'c1',
+               slug: 'nova',
+            },
+            {
+               id: 'c2',
+               slug: 'unread',
+            },
+         ])
          mocks.count.mockResolvedValueOnce(30)
+         mocks.findSnapshots.mockResolvedValueOnce([
+            {
+               slug: 'nova',
+               fetchedAt: readAt,
+               data: {
+                  ...companySnapshotFrom({
+                     logo: 'https://media.licdn.com/nova.png',
+                     followers: 2952,
+                  }),
+               },
+            },
+         ])
 
          const result = await LinkedInCompanyService.list('u1', {
             search: 'acme',
@@ -98,9 +130,36 @@ describe('LinkedInCompanyService', () => {
          }
 
          expect(result).toEqual({
-            items: [{ id: 'c1' }],
+            items: [
+               {
+                  id: 'c1',
+                  slug: 'nova',
+                  card: {
+                     logo: 'https://media.licdn.com/nova.png',
+                     tagline: null,
+                     employees: null,
+                     followers: 2952,
+                  },
+                  readAt,
+               },
+               {
+                  id: 'c2',
+                  slug: 'unread',
+                  card: null,
+                  readAt: null,
+               },
+            ],
             total: 30,
          })
+         expect(mocks.findSnapshots).toHaveBeenCalledWith(
+            expect.objectContaining({
+               where: {
+                  userId: 'u1',
+                  kind: 'COMPANY',
+                  slug: { in: ['nova', 'unread'] },
+               },
+            })
+         )
          expect(where).toMatchObject({
             userId: 'u1',
             archivedAt: null,
@@ -108,6 +167,40 @@ describe('LinkedInCompanyService', () => {
          expect(where.OR.map(clause => Object.keys(clause)[0])).toEqual(['name', 'industry', 'website', 'slug'])
          expect([skip, take]).toEqual([25, 25])
          expect(orderBy).toEqual([{ createdAt: 'desc' }, { id: 'desc' }])
+      })
+
+      it('should filter by industry and country and sort by name with unnamed companies last', async () => {
+         mocks.findMany.mockResolvedValueOnce([])
+         mocks.count.mockResolvedValueOnce(0)
+         mocks.findSnapshots.mockResolvedValueOnce([])
+
+         await LinkedInCompanyService.list('u1', {
+            industries: ['Maritime'],
+            countries: ['South Africa'],
+            sort: {
+               by: 'name',
+               desc: false,
+            },
+            page: 1,
+            pageSize: 50,
+         })
+
+         expect(mocks.findMany.mock.calls[0][0]).toMatchObject({
+            where: {
+               industry: { in: ['Maritime'] },
+               country: { in: ['South Africa'] },
+            },
+            orderBy: [
+               {
+                  name: {
+                     sort: 'asc',
+                     nulls: 'last',
+                  },
+               },
+               { slug: 'asc' },
+               { id: 'desc' },
+            ],
+         })
       })
    })
 

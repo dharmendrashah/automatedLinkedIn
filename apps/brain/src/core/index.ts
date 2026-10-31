@@ -51,6 +51,8 @@ export { type PersonSnapshotData, companiesOf, profileFacts, readSnapshot, snaps
 export {
    type CompanySnapshotData,
    type PostSnapshotData,
+   companyCardOf,
+   companyRowFrom,
    companySnapshotFrom,
    postSnapshotFrom,
    readCompanySnapshot,
