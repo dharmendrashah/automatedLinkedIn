@@ -9,10 +9,17 @@ import { readableError } from '@/lib/trpc-error'
 import { Loader2, Plus, X } from 'lucide-react'
 import { type ReactNode, useEffect, useId, useState } from 'react'
 
-import { type RouterInputs, type RouterOutputs, trpc } from '../../../trpc'
+import { type LinkStatus } from '../../links/types'
+
+import { type RouterOutputs, trpc } from '../../../trpc'
+import { ADDED_FILTERS, type AddedFilter, addedSince, isAddedFilter } from '../../labels/added'
+import { LabelFilter } from '../../labels/label-filter'
+import { linkStatuses } from '../../links/link-statuses'
 import { Choice, Field, MultiPick, type Option, TextField, YesNo } from '../../my-network/filters/fields'
 import {
+   type Basics,
    type CompanyFilters,
+   NO_BASICS,
    NO_FILTERS,
    READ_AGES,
    READ_WORDS,
@@ -26,7 +33,9 @@ import {
 } from './model'
 
 type Facets = RouterOutputs['linkedInCompany']['drawerFacets']
-type Base = Omit<RouterInputs['linkedInCompany']['count'], keyof ReturnType<typeof apiFilters>>
+
+const ANY = 'any'
+const isStatus = (value: string): value is LinkStatus => value in linkStatuses
 
 const COUNT_WAIT_MS = 300
 const TEAM_MAX = 5
@@ -39,7 +48,7 @@ const optionsOf = (facet: Facets[keyof Facets] | undefined): Option[] =>
    }))
 
 const Group = ({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) => (
-   <section className="grid gap-4">
+   <section className="grid min-w-0 gap-4">
       <div className="grid gap-0.5">
          <h3 className="text-sm font-semibold">{title}</h3>
          {hint ? <p className="text-muted-foreground text-xs">{hint}</p> : null}
@@ -47,6 +56,44 @@ const Group = ({ title, hint, children }: { title: string; hint?: string; childr
       {children}
    </section>
 )
+
+// One answer from a list, or any; a select, so long answers never widen the drawer.
+const Pick = <V extends string>({
+   label,
+   value,
+   options,
+   anyLabel,
+   onChange,
+}: {
+   label: string
+   value: V | undefined
+   options: Array<[V, string]>
+   anyLabel: string
+   onChange: (value: V | undefined) => void
+}) => {
+   const id = useId()
+
+   return (
+      <Field label={label} htmlFor={id}>
+         <Select
+            value={value ?? ANY}
+            onValueChange={next => onChange(options.find(([option]) => option === next)?.[0])}
+         >
+            <SelectTrigger id={id} className="w-full">
+               <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+               <SelectItem value={ANY}>{anyLabel}</SelectItem>
+               {options.map(([option, word]) => (
+                  <SelectItem key={option} value={option}>
+                     {word}
+                  </SelectItem>
+               ))}
+            </SelectContent>
+         </Select>
+      </Field>
+   )
+}
 
 const NumberRange = ({
    label,
@@ -141,25 +188,52 @@ const TeamRow = ({
 type SheetProps = {
    open: boolean
    value: CompanyFilters
-   // The toolbar's own filters, so the count matches what the table will show.
-   base: Base
+   basics: Basics
+   // The search box stays on the page; the count includes it.
+   search: string | undefined
+   industries: Option[]
+   countries: Option[]
    icps: Option[]
    onOpenChange: (open: boolean) => void
-   onApply: (value: CompanyFilters) => void
+   onApply: (value: CompanyFilters, basics: Basics) => void
 }
 
-// Every filter on what a company read holds, grouped the way an ICP list is built. Changes wait in a draft and the button
+const basicsQuery = (basics: Basics) => ({
+   ...(basics.status === 'all' ? {} : { status: basics.status }),
+   ...(basics.tags.length > 0 ? { tags: basics.tags } : {}),
+   ...(basics.tags.length > 1 ? { tagMatch: basics.tagMatch } : {}),
+   ...(basics.added === 'any' ? {} : { addedSince: addedSince(basics.added) }),
+   includeArchived: basics.includeArchived,
+   ...(basics.industries.length > 0 ? { industries: basics.industries } : {}),
+   ...(basics.countries.length > 0 ? { countries: basics.countries } : {}),
+})
+
+// Every filter of the table but the search, grouped the way an ICP list is built. Changes wait in a draft and the button
 // says how many companies they leave before they are applied.
-export const CompanyFiltersSheet = ({ open, value, base, icps, onOpenChange, onApply }: SheetProps) => {
+export const CompanyFiltersSheet = ({
+   open,
+   value,
+   basics,
+   search,
+   industries,
+   countries,
+   icps,
+   onOpenChange,
+   onApply,
+}: SheetProps) => {
    const [draft, setDraft] = useState(value)
-   const [asked, setAsked] = useState(() => apiFilters(value))
+   const [draftBasics, setDraftBasics] = useState(basics)
+   const [asked, setAsked] = useState(() => ({
+      ...basicsQuery(basics),
+      ...apiFilters(value),
+   }))
    const facets = trpc.linkedInCompany.drawerFacets.useQuery(undefined, {
       enabled: open,
       retry: false,
    })
    const count = trpc.linkedInCompany.count.useQuery(
       {
-         ...base,
+         ...(search && { search }),
          ...asked,
       },
       {
@@ -169,24 +243,34 @@ export const CompanyFiltersSheet = ({ open, value, base, icps, onOpenChange, onA
       }
    )
    const set = (change: Partial<CompanyFilters>) => setDraft(current => ({ ...current, ...change }))
+   const setBasics = (change: Partial<Basics>) => setDraftBasics(current => ({ ...current, ...change }))
    const on = chipsOf(draft, id => id).length
    const team = draft.team
 
    useEffect(() => {
-      const timer = window.setTimeout(() => setAsked(apiFilters(draft)), COUNT_WAIT_MS)
+      const timer = window.setTimeout(
+         () =>
+            setAsked({
+               ...basicsQuery(draftBasics),
+               ...apiFilters(draft),
+            }),
+         COUNT_WAIT_MS
+      )
 
       return () => window.clearTimeout(timer)
-   }, [draft])
+   }, [draft, draftBasics])
 
    const changeOpen = (next: boolean) => {
       if (next) {
          setDraft(value)
+         setDraftBasics(basics)
       }
 
       onOpenChange(next)
    }
 
    const unreadId = useId()
+   const archivedId = useId()
 
    return (
       <Sheet open={open} onOpenChange={changeOpen}>
@@ -199,13 +283,69 @@ export const CompanyFiltersSheet = ({ open, value, base, icps, onOpenChange, onA
                      : `${on} on. Companies must match all of them.`}
                </SheetDescription>
             </SheetHeader>
-            <div className="grid gap-6 overflow-y-auto p-4">
+            <div className="grid gap-6 overflow-x-hidden overflow-y-auto p-4">
+               <Group title="Basics">
+                  <Pick
+                     label="Status"
+                     anyLabel="All statuses"
+                     options={Object.entries<{ label: string }>(linkStatuses).flatMap<[LinkStatus, string]>(
+                        ([status, { label }]) => (isStatus(status) ? [[status, label]] : [])
+                     )}
+                     value={draftBasics.status === 'all' ? undefined : draftBasics.status}
+                     onChange={status => setBasics({ status: status ?? 'all' })}
+                  />
+                  <Pick
+                     label="Added"
+                     anyLabel={ADDED_FILTERS.any}
+                     options={Object.entries(ADDED_FILTERS).flatMap<[AddedFilter, string]>(([added, word]) =>
+                        isAddedFilter(added) && added !== 'any' ? [[added, word]] : []
+                     )}
+                     value={draftBasics.added === 'any' ? undefined : draftBasics.added}
+                     onChange={added => setBasics({ added: added ?? 'any' })}
+                  />
+                  <Field label="Labels">
+                     <LabelFilter
+                        id="companies-drawer-label-filter"
+                        kind="companies"
+                        tags={draftBasics.tags}
+                        match={draftBasics.tagMatch}
+                        onTags={tags => setBasics({ tags })}
+                        onMatch={tagMatch => setBasics({ tagMatch })}
+                     />
+                  </Field>
+                  <MultiPick
+                     label="Industry"
+                     placeholder="Any industry"
+                     options={industries}
+                     value={draftBasics.industries}
+                     onChange={next => setBasics({ industries: next })}
+                  />
+                  <MultiPick
+                     label="Country"
+                     placeholder="Any country"
+                     options={countries}
+                     value={draftBasics.countries}
+                     onChange={next => setBasics({ countries: next })}
+                  />
+                  <div className="flex items-center gap-2">
+                     <Checkbox
+                        id={archivedId}
+                        checked={draftBasics.includeArchived}
+                        onCheckedChange={checked => setBasics({ includeArchived: checked === true })}
+                     />
+                     <Label htmlFor={archivedId} className="font-normal">
+                        Show archived companies too
+                     </Label>
+                  </div>
+               </Group>
+               <Separator />
                <Group
                   title="Ideal customer"
                   hint="Its industries, sizes, locations and keywords; titles are about people, so they are left out."
                >
-                  <Choice
+                  <Pick
                      label="Matches ICP"
+                     anyLabel="Any company"
                      options={icps.map(icp => [icp.value, icp.label])}
                      value={draft.icpId}
                      onChange={icpId => set({ icpId })}
@@ -329,14 +469,16 @@ export const CompanyFiltersSheet = ({ open, value, base, icps, onOpenChange, onA
                </Group>
                <Separator />
                <Group title="Activity">
-                  <Choice
+                  <Pick
                      label="Last read"
+                     anyLabel="Any time, or never"
                      options={READ_AGES.map(age => [age, READ_WORDS[age]])}
                      value={draft.read}
                      onChange={read => set({ read })}
                   />
-                  <Choice
+                  <Pick
                      label="Visited by your accounts"
+                     anyLabel="Any time, or never"
                      options={VISIT_AGES.map(age => [age, VISIT_WORDS[age]])}
                      value={draft.visited}
                      onChange={visited => set({ visited })}
@@ -415,12 +557,18 @@ export const CompanyFiltersSheet = ({ open, value, base, icps, onOpenChange, onA
                {count.error ? <p className="text-destructive text-sm">{readableError(count.error)}</p> : null}
             </div>
             <SheetFooter className="flex-row justify-end gap-2 border-t">
-               <Button variant="outline" disabled={on === 0} onClick={() => setDraft(NO_FILTERS)}>
+               <Button
+                  variant="outline"
+                  onClick={() => {
+                     setDraft(NO_FILTERS)
+                     setDraftBasics(NO_BASICS)
+                  }}
+               >
                   Clear filters
                </Button>
                <Button
                   onClick={() => {
-                     onApply(draft)
+                     onApply(draft, draftBasics)
                      onOpenChange(false)
                   }}
                >
@@ -438,12 +586,22 @@ export const CompanyFiltersSheet = ({ open, value, base, icps, onOpenChange, onA
 type ChipsProps = {
    value: CompanyFilters
    icpName: (id: string) => string
+   // Chips of the list's own filters (status, labels, added, industry, country, archived).
+   extra: Array<{ key: string; text: string; onRemove: () => void }>
    onChange: (value: CompanyFilters) => void
+   onClearAll: () => void
 }
 
-// The drawer's filters that are on, each removable, so the owner always sees why the list is short.
-export const CompanyFilterChips = ({ value, icpName, onChange }: ChipsProps) => {
-   const chips = chipsOf(value, icpName)
+// The filters that are on, each removable, so the owner always sees why the list is short.
+export const CompanyFilterChips = ({ value, icpName, extra, onChange, onClearAll }: ChipsProps) => {
+   const chips = [
+      ...extra,
+      ...chipsOf(value, icpName).map(chip => ({
+         key: chip.key,
+         text: chip.text,
+         onRemove: () => onChange({ ...value, ...chip.clear }),
+      })),
+   ]
 
    if (chips.length === 0) {
       return null
@@ -461,13 +619,13 @@ export const CompanyFilterChips = ({ value, icpName, onChange }: ChipsProps) => 
                   type="button"
                   className="hover:bg-primary/15 rounded-full p-0.5"
                   aria-label={`Remove ${chip.text}`}
-                  onClick={() => onChange({ ...value, ...chip.clear })}
+                  onClick={chip.onRemove}
                >
                   <X className="size-3" />
                </button>
             </span>
          ))}
-         <Button variant="link" size="sm" className="h-7 px-2 text-xs" onClick={() => onChange(NO_FILTERS)}>
+         <Button variant="link" size="sm" className="h-7 px-2 text-xs" onClick={onClearAll}>
             Clear all
          </Button>
       </div>

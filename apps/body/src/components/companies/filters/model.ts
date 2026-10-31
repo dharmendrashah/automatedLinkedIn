@@ -1,7 +1,32 @@
 // The Companies drawer's filters (.plan/companies-filter-drawer.md), kept in the address as one JSON value like Sessions'.
 import { z } from 'zod'
 
+import { type LinkStatus } from '../../links/types'
+
 import { type RouterInputs } from '../../../trpc'
+import { type AddedFilter } from '../../labels/added'
+import { type LabelMatch } from '../../links/use-list-state'
+
+// The list's own filters, which the drawer edits too; they live in the list state and the address, not in `filters`.
+export type Basics = {
+   status: LinkStatus | 'all'
+   added: AddedFilter
+   tags: string[]
+   tagMatch: LabelMatch
+   includeArchived: boolean
+   industries: string[]
+   countries: string[]
+}
+
+export const NO_BASICS: Basics = {
+   status: 'all',
+   added: 'any',
+   tags: [],
+   tagMatch: 'any',
+   includeArchived: false,
+   industries: [],
+   countries: [],
+}
 
 export const TEAM_KINDS = ['department', 'skill', 'location', 'service'] as const
 export const READ_AGES = ['never', 'last7', 'last30', 'older30', 'older90'] as const

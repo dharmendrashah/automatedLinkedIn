@@ -3,7 +3,10 @@ import { CompaniesTable } from '@/components/companies/companies-table'
 import { EditCompanyDialog } from '@/components/companies/edit-company-dialog'
 import { CompanyFilterChips, CompanyFiltersSheet } from '@/components/companies/filters/company-filters'
 import {
+   type Basics,
    type CompanyFilters,
+   NO_BASICS,
+   NO_FILTERS,
    apiFilters,
    chipsOf,
    readFilters,
@@ -13,19 +16,19 @@ import { COMPANY_COLUMNS, type CompanySort, useCompanies } from '@/components/co
 import { ViewsMenu } from '@/components/companies/views-menu'
 import { DetailDrawers } from '@/components/details/detail-drawers'
 import { useDetailDrawer } from '@/components/details/use-detail-drawer'
+import { ADDED_FILTERS } from '@/components/labels/added'
 import { LinkBulkBar } from '@/components/links/bulk-bar'
 import { linkStatuses } from '@/components/links/link-statuses'
-import { ListToolbar } from '@/components/links/list-toolbar'
 import { useListState } from '@/components/links/use-list-state'
 import { useSelection } from '@/components/links/use-selection'
 import { ViewPageDialog } from '@/components/links/view-page-dialog'
-import { MultiPick } from '@/components/my-network/filters/fields'
 import { ColumnsMenu } from '@/components/table/columns-menu'
 import { useHiddenColumns } from '@/components/table/use-hidden-columns'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { flagOf } from '@/lib/country-flag'
-import { Eye, ListFilter } from 'lucide-react'
+import { Eye, ListFilter, Search } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 
@@ -175,15 +178,100 @@ export const Companies = () => {
 
    const busyId = archive.isPending ? archive.variables?.id : restore.isPending ? restore.variables?.id : undefined
    const actionError = [archive, restore, labelMany, archiveMany].find(action => action.error)?.error?.message
-   const filtered = Boolean(
-      listQuery.search ||
-      listQuery.status ||
-      listQuery.tags ||
-      listQuery.addedSince ||
-      industries.length ||
-      countries.length ||
-      drawerOn
-   )
+   const basics: Basics = {
+      status: state.status,
+      added: state.added,
+      tags: state.tags,
+      tagMatch: state.tagMatch,
+      includeArchived: state.includeArchived,
+      industries,
+      countries,
+   }
+   const listText = (items: string[]) =>
+      items.length > 2 ? `${items.slice(0, 2).join(', ')} +${items.length - 2}` : items.join(', ')
+   const extraChips = [
+      ...(state.status === 'all'
+         ? []
+         : [
+              {
+                 key: 'status',
+                 text: `Status: ${linkStatuses[state.status].label}`,
+                 onRemove: () => state.setStatus('all'),
+              },
+           ]),
+      ...(state.added === 'any'
+         ? []
+         : [
+              {
+                 key: 'added',
+                 text: ADDED_FILTERS[state.added],
+                 onRemove: () => state.setAdded('any'),
+              },
+           ]),
+      ...(state.tags.length > 0
+         ? [
+              {
+                 key: 'labels',
+                 text: `Labels: ${listText(state.tags)}${state.tags.length > 1 && state.tagMatch === 'all' ? ' (all)' : ''}`,
+                 onRemove: () => state.setTags([]),
+              },
+           ]
+         : []),
+      ...(industries.length > 0
+         ? [
+              {
+                 key: 'industry',
+                 text: `Industry: ${listText(industries)}`,
+                 onRemove: () => setList('industry', []),
+              },
+           ]
+         : []),
+      ...(countries.length > 0
+         ? [
+              {
+                 key: 'country',
+                 text: `Country: ${listText(countries)}`,
+                 onRemove: () => setList('country', []),
+              },
+           ]
+         : []),
+      ...(state.includeArchived
+         ? [
+              {
+                 key: 'archived',
+                 text: 'Including archived',
+                 onRemove: () => state.setIncludeArchived(false),
+              },
+           ]
+         : []),
+   ]
+   const filtersOn = drawerOn + extraChips.length
+
+   // One address change for everything the drawer applies, so no key overwrites another.
+   const applyAll = (next: CompanyFilters, nextBasics: Basics) => {
+      state.setStatus(nextBasics.status)
+      state.setIncludeArchived(nextBasics.includeArchived)
+      setParams(
+         current => {
+            const updated = new URLSearchParams(current)
+            const written = writeFilters(next)
+            const put = (key: string, value: string | null) => (value ? updated.set(key, value) : updated.delete(key))
+
+            put('filters', written)
+            put('labels', nextBasics.tags.join(',') || null)
+            put('match', nextBasics.tags.length > 1 && nextBasics.tagMatch === 'all' ? 'all' : null)
+            put('added', nextBasics.added === 'any' ? null : nextBasics.added)
+            updated.delete('industry')
+            nextBasics.industries.forEach(value => updated.append('industry', value))
+            updated.delete('country')
+            nextBasics.countries.forEach(value => updated.append('country', value))
+
+            return updated
+         },
+         { replace: true }
+      )
+   }
+   const filtered = Boolean(listQuery.search || filtersOn)
 
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
@@ -204,42 +292,21 @@ export const Companies = () => {
          </div>
 
          <div className="flex flex-wrap items-center gap-2">
-            <ListToolbar
-               state={state}
-               statuses={linkStatuses}
-               kind="companies"
-               searchLabel="Search companies"
-               searchPlaceholder="Search name, industry or link"
-            />
-            <MultiPick
-               compact
-               label="Industry"
-               placeholder="Any industry"
-               options={(facets.data?.industries ?? []).map(({ value, count }) => ({
-                  value,
-                  label: value,
-                  hint: String(count),
-               }))}
-               value={industries}
-               onChange={values => setList('industry', values)}
-            />
-            <MultiPick
-               compact
-               label="Country"
-               placeholder="Any country"
-               options={(facets.data?.countries ?? []).map(({ value, count }) => ({
-                  value,
-                  label: value,
-                  hint: String(count),
-                  icon: flagOf(value) ?? undefined,
-               }))}
-               value={countries}
-               onChange={values => setList('country', values)}
-            />
+            <div className="relative">
+               <Search className="text-muted-foreground absolute top-2.5 left-2.5 size-4" />
+               <Input
+                  className="w-72 pl-8"
+                  placeholder="Search name, industry or link"
+                  aria-label="Search companies"
+                  maxLength={100}
+                  value={state.search}
+                  onChange={event => state.setSearch(event.target.value)}
+               />
+            </div>
             <Button variant="outline" onClick={() => setFiltersOpen(true)}>
                <ListFilter />
                Filters
-               {drawerOn > 0 ? <Badge variant="secondary">{drawerOn}</Badge> : null}
+               {filtersOn > 0 ? <Badge variant="secondary">{filtersOn}</Badge> : null}
             </Button>
             <div className="ml-auto flex items-center gap-2">
                <ViewsMenu query={viewQueryOf(params)} onApply={applyView} />
@@ -247,15 +314,33 @@ export const Companies = () => {
             </div>
          </div>
 
-         <CompanyFilterChips value={drawerFilters} icpName={icpName} onChange={setDrawerFilters} />
+         <CompanyFilterChips
+            value={drawerFilters}
+            icpName={icpName}
+            extra={extraChips}
+            onChange={setDrawerFilters}
+            onClearAll={() => applyAll(NO_FILTERS, NO_BASICS)}
+         />
 
          <CompanyFiltersSheet
             open={filtersOpen}
             value={drawerFilters}
-            base={base}
+            basics={basics}
+            search={listQuery.search}
+            industries={(facets.data?.industries ?? []).map(({ value, count }) => ({
+               value,
+               label: value,
+               hint: String(count),
+            }))}
+            countries={(facets.data?.countries ?? []).map(({ value, count }) => ({
+               value,
+               label: value,
+               hint: String(count),
+               icon: flagOf(value) ?? undefined,
+            }))}
             icps={icpOptions}
             onOpenChange={setFiltersOpen}
-            onApply={setDrawerFilters}
+            onApply={applyAll}
          />
 
          {actionError ? <p className="text-destructive text-sm">{actionError}</p> : null}
