@@ -12,6 +12,7 @@ import {
    icpSql,
    visitedWhere,
 } from './companyFilters'
+import { CompanyPeopleService } from './companyPeople.service'
 import { ConflictError } from './conflict'
 import {
    type ImportEntry,
@@ -425,6 +426,13 @@ export class LinkedInCompanyService {
             })
          ).map(read => [read.slug, read])
       )
+      const people = await CompanyPeopleService.counts(
+         userId,
+         items.map(({ slug, name }) => ({
+            slug,
+            names: name ? [name] : [],
+         }))
+      )
 
       return {
          items: items.map(item => {
@@ -434,6 +442,10 @@ export class LinkedInCompanyService {
                ...item,
                card: read ? companyCardOf(read.data) : null,
                readAt: read?.fetchedAt ?? null,
+               people: people.get(item.slug) ?? {
+                  count: 0,
+                  first: [],
+               },
             }
          }),
          total,

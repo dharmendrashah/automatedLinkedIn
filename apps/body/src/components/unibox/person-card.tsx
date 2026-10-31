@@ -8,8 +8,9 @@ import { ContactAvatar } from './account-avatar'
 
 type Props = {
    slug: string
-   // The account of the conversation the card is opened from; the others that talk with the person are named.
-   accountId: string
+   // The account of the conversation the card is opened from; the others that talk with the person are named. Outside a
+   // conversation every account that talks with them is named.
+   accountId?: string
    children: ReactNode
    onOpen: (slug: string) => void
 }
@@ -69,7 +70,7 @@ export const PersonCard = ({ slug, accountId, children, onOpen }: Props) => {
                   {others.length > 0 ? (
                      <p className="flex items-center gap-1 text-xs text-warning">
                         <TriangleAlert className="size-3 shrink-0" aria-hidden />
-                        Also talking from {others.join(', ')}
+                        {accountId ? 'Also talking from' : 'Talking from'} {others.join(', ')}
                      </p>
                   ) : null}
                   {person.member ? <p className="text-xs">In the list {person.member.list.name}</p> : null}

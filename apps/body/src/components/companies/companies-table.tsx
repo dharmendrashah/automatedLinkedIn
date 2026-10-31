@@ -29,6 +29,8 @@ import { type Selection } from '../links/use-selection'
 import { visitedText } from '../links/visit-form'
 import { SortHeader } from '../table/sort-header'
 import { type HiddenColumns } from '../table/use-hidden-columns'
+import { ContactAvatar } from '../unibox/account-avatar'
+import { PersonCard } from '../unibox/person-card'
 import { domainOf } from './company/facts'
 import { type CompanySort } from './use-companies'
 
@@ -44,10 +46,11 @@ const CELL_CLASS: Record<string, string> = {
    size: 'whitespace-nowrap',
    followers: 'text-right tabular-nums whitespace-nowrap',
    website: 'max-w-48',
+   people: 'whitespace-nowrap',
    status: 'w-0',
    labels: 'min-w-40',
    createdAt: 'whitespace-nowrap text-muted-foreground',
-   readAt: 'whitespace-nowrap',
+   readAt: 'max-w-44',
 }
 
 const features = tableFeatures({
@@ -89,7 +92,32 @@ type Handlers = {
    selection: Selection
    onTag: (tag: string) => void
    saveTags: (company: Company, tags: string[]) => Promise<unknown>
+   onPerson: (slug: string) => void
 }
+
+// The company's My network people: up to three photos with a short look on hover, and how many there are.
+const PeopleCell = ({ people, onPerson }: { people: Company['people']; onPerson: (slug: string) => void }) =>
+   people.count === 0 ? (
+      <Muted>—</Muted>
+   ) : (
+      <Stop>
+         <span className="flex items-center gap-2">
+            <span className="flex -space-x-2">
+               {people.first.map(person => (
+                  <PersonCard key={person.slug} slug={person.slug} onOpen={onPerson}>
+                     <ContactAvatar
+                        name={person.name ?? person.slug}
+                        size="sm"
+                        className="ring-background ring-2"
+                        {...(person.photoUrl && { imageUrl: person.photoUrl })}
+                     />
+                  </PersonCard>
+               ))}
+            </span>
+            <span className="text-sm tabular-nums">{people.count}</span>
+         </span>
+      </Stop>
+   )
 
 const columnsOf = (ids: string[], handlers: Handlers) =>
    column.columns([
@@ -191,6 +219,11 @@ const columnsOf = (ids: string[], handlers: Handlers) =>
          },
       }),
       column.display({
+         id: 'people',
+         header: 'People',
+         cell: ({ row }) => <PeopleCell people={row.original.people} onPerson={handlers.onPerson} />,
+      }),
+      column.display({
          id: 'status',
          header: 'Status',
          cell: ({ row }) => <LinkStatusBadge status={row.original.status} />,
@@ -224,13 +257,17 @@ const columnsOf = (ids: string[], handlers: Handlers) =>
             const visited = visitedText(row.original.visits[0])
 
             return (
-               <span className="grid">
+               <span className="grid min-w-0">
                   {row.original.readAt ? (
                      <span title={new Date(row.original.readAt).toLocaleString()}>{timeAgo(row.original.readAt)}</span>
                   ) : (
                      <Muted>Not read</Muted>
                   )}
-                  {visited ? <span className="text-muted-foreground text-xs">{visited}</span> : null}
+                  {visited ? (
+                     <span className="text-muted-foreground truncate text-xs" title={visited}>
+                        {visited}
+                     </span>
+                  ) : null}
                </span>
             )
          },

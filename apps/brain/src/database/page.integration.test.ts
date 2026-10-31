@@ -7,6 +7,7 @@ import { CompanyPageService } from './companyPage.service'
 import { ConflictError } from './conflict'
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
+import { PeopleIndexService } from './peopleIndex.service'
 import { PostPageService } from './postPage.service'
 import { PrismaService } from './prisma.service'
 import { SpendService } from './spend.service'
@@ -84,7 +85,7 @@ describe('company and post pages (database)', () => {
       await PrismaService.disconnect()
    })
 
-   it('should read a company page once a day and show the people from the lists who work there', async () => {
+   it('should read a company page once a day and show the My network people who work there', async () => {
       const reader = readerOf(
          {
             companyName: 'Stripe',
@@ -116,7 +117,18 @@ describe('company and post pages (database)', () => {
                },
             ],
          },
-         people: [expect.objectContaining({ slug: 'ada' })],
+      })
+      expect(company).not.toHaveProperty('people')
+      // Ada is in a list with the company name "STRIPE"; once she is on My network she shows under the read name "Stripe".
+      await PeopleIndexService.refresh(userId, ['ada', 'bob'])
+      await expect(CompanyPageService.people(userId, 'stripe')).resolves.toMatchObject({
+         total: 1,
+         people: [
+            expect.objectContaining({
+               slug: 'ada',
+               matchedBy: 'NAME',
+            }),
+         ],
       })
       expect(JSON.stringify(company?.snapshot)).not.toContain('internal')
       // The read is written onto the company row, so the Companies table can show, search and filter it.

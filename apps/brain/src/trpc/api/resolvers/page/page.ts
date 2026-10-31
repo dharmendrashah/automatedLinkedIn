@@ -21,6 +21,16 @@ export const companyPage = router({
          present(await CompanyPageService.detail(ctx.user.id, input.slug.toLowerCase()), COMPANY_MISSING)
       ),
 
+   // My network people at the company, across the owner's clients or of one (another owner's client simply matches nobody).
+   people: ownerProcedure
+      .input(bySlug.extend({ clientId: z.string().min(1).max(100).optional() }))
+      .query(async ({ ctx, input }) =>
+         present(
+            await CompanyPageService.people(ctx.user.id, input.slug.toLowerCase(), input.clientId),
+            COMPANY_MISSING
+         )
+      ),
+
    readFull: ownerProcedure
       .input(bySlug)
       .mutation(async ({ ctx, input }) =>

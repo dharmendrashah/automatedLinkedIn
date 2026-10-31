@@ -14,6 +14,7 @@ export const COMPANY_COLUMNS: Array<[string, string]> = [
    ['size', 'Size'],
    ['followers', 'Followers'],
    ['website', 'Website'],
+   ['people', 'People'],
    ['status', 'Status'],
    ['labels', 'Labels'],
    ['createdAt', 'Added'],

@@ -4,15 +4,15 @@ import { type Prisma } from 'generated/prisma/client'
 
 import { PRICE_MICROS } from '@automatedLinkedIn/contracts'
 
+import { CompanyPeopleService } from './companyPeople.service'
 import { ConflictError } from './conflict'
 import { DataReadService } from './dataRead.service'
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { PrismaService } from './prisma.service'
 
-// One company of the owner's /companies by slug: their own fields, the page they chose to read, and the people in
-// their lists who work there.
+// One company of the owner's /companies by slug: their own fields, the page they chose to read, and the My network people who
+// work there.
 
-const PEOPLE_SHOWN = 50
 const RECENT_MS = 30 * 24 * 60 * 60 * 1000
 
 const queueRead = (userId: string, slug: string, url: string) =>
@@ -32,61 +32,38 @@ const whereSnapshot = (userId: string, slug: string) => ({
    },
 })
 
+// The owner's company and its stored read; null when it is not in their /companies.
+const companyOf = async (userId: string, slug: string) => {
+   const [company, stored] = await Promise.all([
+      LinkedInCompanyService.bySlug(userId, slug),
+      PrismaService.client.pageSnapshot.findUnique({
+         where: whereSnapshot(userId, slug),
+         select: {
+            data: true,
+            fetchedAt: true,
+         },
+      }),
+   ])
+
+   return company
+      ? {
+           company,
+           stored,
+           page: stored ? readCompanySnapshot(stored.data) : null,
+        }
+      : null
+}
+
 export class CompanyPageService {
    // null when the company is not in the owner's /companies.
    public static async detail(userId: string, slug: string) {
-      const [company, stored] = await Promise.all([
-         LinkedInCompanyService.bySlug(userId, slug),
-         PrismaService.client.pageSnapshot.findUnique({
-            where: whereSnapshot(userId, slug),
-            select: {
-               data: true,
-               fetchedAt: true,
-            },
-         }),
-      ])
+      const found = await companyOf(userId, slug)
 
-      if (!company) {
+      if (!found) {
          return null
       }
 
-      const page = stored ? readCompanySnapshot(stored.data) : null
-      // List members carry the company name as text, so only an exact (case-insensitive) name match counts.
-      const names = [...new Set([page?.name, company.name].filter((name): name is string => Boolean(name)))]
-      const people =
-         names.length === 0
-            ? []
-            : await PrismaService.client.workflowListMember.findMany({
-                 where: {
-                    list: { userId },
-                    OR: names.map(name => ({
-                       company: {
-                          equals: name,
-                          mode: 'insensitive' as const,
-                       },
-                    })),
-                 },
-                 orderBy: [
-                    {
-                       score: {
-                          sort: 'desc',
-                          nulls: 'last',
-                       },
-                    },
-                    { createdAt: 'desc' },
-                 ],
-                 take: PEOPLE_SHOWN,
-                 select: {
-                    slug: true,
-                    name: true,
-                    title: true,
-                    headline: true,
-                    state: true,
-                    status: true,
-                    score: true,
-                    list: { select: { name: true } },
-                 },
-              })
+      const { company, stored, page } = found
 
       return {
          slug,
@@ -99,10 +76,25 @@ export class CompanyPageService {
                     fetchedAt: stored.fetchedAt,
                  }
                : null,
-         people,
          read: await DataReadService.latest(userId, 'COMPANY', slug),
          readPriceMicros: PRICE_MICROS.companyPage,
       }
+   }
+
+   // The My network people who work at the company, matched by its link or by its saved or read name. null when it is not the owner's.
+   public static async people(userId: string, slug: string, clientId?: string) {
+      const found = await companyOf(userId, slug)
+
+      return found
+         ? CompanyPeopleService.atCompany(
+              userId,
+              {
+                 slug,
+                 names: [found.page?.name, found.company.name].filter((name): name is string => Boolean(name)),
+              },
+              clientId
+           )
+         : null
    }
 
    // Queues one company-page read for the worker. null when the company is not the owner's.
