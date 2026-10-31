@@ -28,7 +28,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { flagOf } from '@/lib/country-flag'
-import { Eye, ListFilter, Search } from 'lucide-react'
+import { ListFilter, Search } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 
@@ -283,10 +283,6 @@ export const Companies = () => {
                </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-               <Button variant="outline" onClick={() => setViewing({ company: null })}>
-                  <Eye />
-                  View a company
-               </Button>
                <AddCompaniesDialog />
             </div>
          </div>
