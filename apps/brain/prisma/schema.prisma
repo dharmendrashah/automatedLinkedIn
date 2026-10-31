@@ -46,6 +46,7 @@ model User {
   pageSnapshots     PageSnapshot[]
   dataReads         DataRead[]
   icps              Icp[]
+  companyViews      CompanyView[]
   workflows         Workflow[]
   clients           Client[]
   people            Person[]
@@ -484,6 +485,19 @@ model LinkedInCompany {
   @@index([userId, archivedAt, createdAt])
   @@index([userId, country])
   @@index([userId, industry])
+}
+
+// A named set of Companies filters the owner saved (.plan/companies-filter-drawer.md): the page's address query, applied as it is.
+model CompanyView {
+  id        String   @id @default(uuid(7))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  query     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, name])
 }
 
 enum LinkedInProfileStatus {
@@ -1211,11 +1225,11 @@ enum LinkedInReplyState {
 // send was pressed and the page did not show the message, so it may have gone. A partial unique index (see the migration) allows
 // one `SENDING` reply per account.
 model LinkedInReply {
-  id             String               @id @default(uuid(7))
+  id             String                @id @default(uuid(7))
   userId         String
-  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   accountId      String
-  account        LinkedInAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account        LinkedInAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
   // Empty for a first message to a connection (.plan/message-connections.md) until the run's conversation is stored.
   conversationId String?
   conversation   LinkedInConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -1226,7 +1240,7 @@ model LinkedInReply {
   text           String
   // The files that go with it (name, kind, bytes). They wait under uploads/ until the reply ends, then are moved for good to
   // kept/<user>/<account>/sent/<upload>/ and never deleted (.plan/unibox-keep-messages-and-files.md).
-  attachments    Json                 @default("[]")
+  attachments    Json                  @default("[]")
   uploadId       String?
   // Set once the files were moved to their permanent place.
   filesKeptAt    DateTime?
@@ -1234,12 +1248,12 @@ model LinkedInReply {
   matchedAt      DateTime?
   // Set when the owner dismissed a reply that did not go, so the page stops showing it after a reload.
   dismissedAt    DateTime?
-  state          LinkedInReplyState   @default(SENDING)
+  state          LinkedInReplyState    @default(SENDING)
   // A fixed sentence the owner can read, set when the reply did not go.
   failure        String?
   // The spider run that types it; the run may be deleted before the reply. Empty while the reply is queued.
-  sessionId      String?              @unique
-  createdAt      DateTime             @default(now())
+  sessionId      String?               @unique
+  createdAt      DateTime              @default(now())
   // When its run was asked for; the quiet time between two replies of an account counts from it.
   startedAt      DateTime?
   sentAt         DateTime?
@@ -1553,38 +1567,38 @@ enum PersonLinkKind {
 // client (`PersonLink`). Status, labels, notes and Do not contact are the client's own and survive a rebuild. `search` is a
 // generated full-text column (see the migration).
 model Person {
-  id           String                   @id @default(uuid(7))
-  userId       String
-  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clientId     String
-  client       Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  id             String                   @id @default(uuid(7))
+  userId         String
+  user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   // The profile's public identifier from linkedin.com/in/<slug>, as the rows have it.
-  slug         String
-  name         String?
-  headline     String?
-  company      String?
-  photoUrl     String?
-  status       PersonStatus             @default(NEW)
+  slug           String
+  name           String?
+  headline       String?
+  company        String?
+  photoUrl       String?
+  status         PersonStatus             @default(NEW)
   // Set when the owner chose the status; the index never moves a chosen Not interested or Done.
-  statusSetAt  DateTime?
-  labels       String[]
-  notes        String?
-  doNotContact Boolean                  @default(false)
-  fit          PersonFit                @default(NONE)
-  score        Int?
+  statusSetAt    DateTime?
+  labels         String[]
+  notes          String?
+  doNotContact   Boolean                  @default(false)
+  fit            PersonFit                @default(NONE)
+  score          Int?
   // Why they are here, in one line: what brought them in, their own words when there are some, a link, and when.
-  reasonKind   PersonLinkKind?
-  reasonText   String?
-  reasonUrl    String?
-  reasonAt     DateTime?
+  reasonKind     PersonLinkKind?
+  reasonText     String?
+  reasonUrl      String?
+  reasonAt       DateTime?
   // `request`, `connection`, `target`, or `list:<id>`, for the Found by filter.
-  foundBy      String[]
+  foundBy        String[]
   // 2: a reply waits, 1: a request waits, 0: nothing waits on the client.
-  priority     Int                      @default(0)
+  priority       Int                      @default(0)
   // The client wrote last and no answer came yet.
-  waiting      Boolean                  @default(false)
-  lastTouchAt  DateTime
-  firstSeenAt  DateTime                 @default(now())
+  waiting        Boolean                  @default(false)
+  lastTouchAt    DateTime
+  firstSeenAt    DateTime                 @default(now())
   // For the filters (.plan/network-filters.md), kept by the index. Title and country come from the newest profile read.
   title          String?
   country        String?
@@ -1592,18 +1606,18 @@ model Person {
   companySlug    String?
   // Null until a read or an account's visit says.
   premium        Boolean?
-  profileRead    Boolean                @default(false)
+  profileRead    Boolean                  @default(false)
   // The earliest connection of the client's accounts that still holds; null when not connected.
   connectedAt    DateTime?
   // The newest message of the client's accounts to them, and theirs to the accounts (LinkedIn's wall-clock, see LinkedInConversation).
   lastSentAt     DateTime?
   lastReceivedAt DateTime?
-  inviteState    PersonInviteState      @default(NONE)
+  inviteState    PersonInviteState        @default(NONE)
   // Prisma reads a generated column's expression as its default; written as Postgres prints it, so `migrate dev` sees no change.
-  search       Unsupported("tsvector")? @default(dbgenerated("to_tsvector('simple'::regconfig, ((((((COALESCE(name, ''::text) || ' '::text) || COALESCE(headline, ''::text)) || ' '::text) || COALESCE(company, ''::text)) || ' '::text) || slug))"))
-  createdAt    DateTime                 @default(now())
-  updatedAt    DateTime                 @updatedAt
-  links        PersonLink[]
+  search         Unsupported("tsvector")? @default(dbgenerated("to_tsvector('simple'::regconfig, ((((((COALESCE(name, ''::text) || ' '::text) || COALESCE(headline, ''::text)) || ' '::text) || COALESCE(company, ''::text)) || ' '::text) || slug))"))
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  links          PersonLink[]
 
   @@unique([clientId, slug])
   @@index([clientId, priority, lastTouchAt, id])

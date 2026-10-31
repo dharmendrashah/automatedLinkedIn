@@ -245,6 +245,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-11-01: Companies Filters drawer and saved views (`.plan/companies-filter-drawer.md`): filters on the company read (`PageSnapshot.data`) run as one parameterised SQL query in `database/companyFilters.ts` (LEFT JOIN on `userId` and `slug`, jsonb keys only from code constants, ILIKE escaped) that returns ids for the Prisma list; Matches ICP uses the ICP's industries, sizes, locations and keywords only (unread hidden unless asked). Breakdowns are top 15, so team filters are "at least N" only. Views (`CompanyView`) store the page's address query.
+
 - 2026-11-01: Companies table rebuilt (`.plan/companies-table.md`): a company read now overwrites the row's name, industry, website, size, location and new `country` (`applyRead`, the newest read wins, owner edits included); migration `20261101090000` backfilled from `PageSnapshot`. The list adds `card` (logo, tagline, employees, followers) and `readAt`, Industry and Country filters (`facets`), Name and Added sorting, `cursor`/`nextCursor` for scroll paging. Shared table pieces live in `apps/body/src/components/table/` (`SortHeader`, `ColumnsMenu`, `useHiddenColumns(key)`).
 
 - 2026-10-31: Third-party pictures and videos load only through `/cdn` (owner's call): `mediaSource` no longer falls back to the original address when the cached copy fails, so the initials show instead. Locally `/cdn` answers 500 while the gcloud ADC in `$HOME/.config/gcloud-spider` is expired; log in again (see Gotchas) and restart brain.

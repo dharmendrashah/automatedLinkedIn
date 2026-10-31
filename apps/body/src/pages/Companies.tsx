@@ -1,7 +1,16 @@
 import { AddCompaniesDialog } from '@/components/companies/add-companies-dialog'
 import { CompaniesTable } from '@/components/companies/companies-table'
 import { EditCompanyDialog } from '@/components/companies/edit-company-dialog'
+import { CompanyFilterChips, CompanyFiltersSheet } from '@/components/companies/filters/company-filters'
+import {
+   type CompanyFilters,
+   apiFilters,
+   chipsOf,
+   readFilters,
+   writeFilters,
+} from '@/components/companies/filters/model'
 import { COMPANY_COLUMNS, type CompanySort, useCompanies } from '@/components/companies/use-companies'
+import { ViewsMenu } from '@/components/companies/views-menu'
 import { DetailDrawers } from '@/components/details/detail-drawers'
 import { useDetailDrawer } from '@/components/details/use-detail-drawer'
 import { LinkBulkBar } from '@/components/links/bulk-bar'
@@ -13,9 +22,10 @@ import { ViewPageDialog } from '@/components/links/view-page-dialog'
 import { MultiPick } from '@/components/my-network/filters/fields'
 import { ColumnsMenu } from '@/components/table/columns-menu'
 import { useHiddenColumns } from '@/components/table/use-hidden-columns'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { flagOf } from '@/lib/country-flag'
-import { Eye } from 'lucide-react'
+import { Eye, ListFilter } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 
@@ -24,6 +34,17 @@ import { type Company } from '@/components/companies/types'
 import { trpc } from '../trpc'
 
 const SORT_BY: Array<CompanySort['by']> = ['createdAt', 'name']
+
+// The address keys a saved view keeps; the open drawer and the search box are not part of a view.
+const VIEW_KEYS = ['filters', 'industry', 'country', 'sort', 'labels', 'match', 'added']
+
+const viewQueryOf = (params: URLSearchParams) => {
+   const kept = new URLSearchParams()
+
+   params.forEach((value, key) => (VIEW_KEYS.includes(key) ? kept.append(key, value) : undefined))
+
+   return kept.toString()
+}
 
 // `name.asc`, `createdAt.desc`; nothing is newest first.
 const readSort = (value: string | null): CompanySort | undefined => {
@@ -53,14 +74,57 @@ export const Companies = () => {
    const countries = params.getAll('country')
    const sortParam = params.get('sort')
    const sort = useMemo(() => readSort(sortParam), [sortParam])
+   const filtersParam = params.get('filters')
+   const drawerFilters = useMemo(() => readFilters(filtersParam), [filtersParam])
+   const drawerQuery = useMemo(() => apiFilters(drawerFilters), [drawerFilters])
+   const [filtersOpen, setFiltersOpen] = useState(false)
    const { page: _page, pageSize: _pageSize, ...listQuery } = state.query
-   const { list, rows, total } = useCompanies({
+   const base = {
       ...listQuery,
       ...(industries.length > 0 && { industries }),
       ...(countries.length > 0 && { countries }),
+   }
+   const { list, rows, total } = useCompanies({
+      ...base,
+      ...drawerQuery,
       ...(sort && { sort }),
    })
    const facets = trpc.linkedInCompany.facets.useQuery(undefined, { retry: false })
+   const icps = trpc.icp.list.useQuery(undefined, { retry: false })
+   const icpOptions = (icps.data ?? []).map(icp => ({
+      value: icp.id,
+      label: icp.name,
+   }))
+   const icpName = (id: string) => icps.data?.find(icp => icp.id === id)?.name ?? 'Removed ICP'
+   const drawerOn = chipsOf(drawerFilters, icpName).length
+
+   const setDrawerFilters = (next: CompanyFilters) =>
+      setParams(
+         current => {
+            const updated = new URLSearchParams(current)
+            const written = writeFilters(next)
+
+            if (written) {
+               updated.set('filters', written)
+            } else {
+               updated.delete('filters')
+            }
+
+            return updated
+         },
+         { replace: true }
+      )
+   const applyView = (query: string) =>
+      setParams(
+         current => {
+            const updated = new URLSearchParams(query)
+
+            current.forEach((value, key) => (VIEW_KEYS.includes(key) ? undefined : updated.append(key, value)))
+
+            return updated
+         },
+         { replace: true }
+      )
 
    const setList = (name: string, values: string[]) =>
       setParams(
@@ -117,7 +181,8 @@ export const Companies = () => {
       listQuery.tags ||
       listQuery.addedSince ||
       industries.length ||
-      countries.length
+      countries.length ||
+      drawerOn
    )
 
    return (
@@ -171,10 +236,27 @@ export const Companies = () => {
                value={countries}
                onChange={values => setList('country', values)}
             />
-            <div className="ml-auto">
+            <Button variant="outline" onClick={() => setFiltersOpen(true)}>
+               <ListFilter />
+               Filters
+               {drawerOn > 0 ? <Badge variant="secondary">{drawerOn}</Badge> : null}
+            </Button>
+            <div className="ml-auto flex items-center gap-2">
+               <ViewsMenu query={viewQueryOf(params)} onApply={applyView} />
                <ColumnsMenu columns={COMPANY_COLUMNS} hidden={hidden} onChange={setHidden} />
             </div>
          </div>
+
+         <CompanyFilterChips value={drawerFilters} icpName={icpName} onChange={setDrawerFilters} />
+
+         <CompanyFiltersSheet
+            open={filtersOpen}
+            value={drawerFilters}
+            base={base}
+            icps={icpOptions}
+            onOpenChange={setFiltersOpen}
+            onApply={setDrawerFilters}
+         />
 
          {actionError ? <p className="text-destructive text-sm">{actionError}</p> : null}
 

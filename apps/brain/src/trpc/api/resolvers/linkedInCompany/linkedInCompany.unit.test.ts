@@ -12,9 +12,14 @@ const mocks = vi.hoisted(() => ({
    updateForUser: vi.fn(),
    archiveForUser: vi.fn(),
    restoreForUser: vi.fn(),
+   getIcp: vi.fn(),
 }))
 
-vi.mock('database', () => ({
+vi.mock('database', async () => ({
+   ...(await vi.importActual<object>('../../../../database/companyFilters')),
+   ConflictError: class extends Error {},
+   TaskRefusedError: class extends Error {},
+   IcpService: { getForUser: mocks.getIcp },
    LinkedInCompanyService: {
       addMany: mocks.addMany,
       list: mocks.list,
@@ -126,6 +131,39 @@ describe('linkedInCompany resolvers', () => {
             page: 1,
             pageSize: 25,
          })
+      })
+
+      it('should match only the owner\u2019s ICP and say which page comes next', async () => {
+         const rules = {
+            industries: ['Maritime'],
+            companySizes: [],
+            locations: [],
+            problemKeywords: [],
+         }
+
+         mocks.getIcp.mockResolvedValueOnce(rules).mockResolvedValueOnce(null)
+         mocks.list.mockResolvedValueOnce({
+            items: [],
+            total: 120,
+         })
+
+         await expect(
+            caller(authed()).list({
+               icpId: 'icp-1',
+               cursor: 2,
+               pageSize: 50,
+            })
+         ).resolves.toMatchObject({ nextCursor: 3 })
+         expect(mocks.getIcp).toHaveBeenCalledWith('u1', 'icp-1')
+         expect(mocks.list).toHaveBeenCalledWith('u1', {
+            page: 2,
+            pageSize: 50,
+            icp: {
+               rules,
+               includeUnread: false,
+            },
+         })
+         await expect(caller(authed()).list({ icpId: 'someone-else' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
       })
    })
 
