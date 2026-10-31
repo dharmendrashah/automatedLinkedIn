@@ -13,7 +13,6 @@ export type Basics = {
    added: AddedFilter
    tags: string[]
    tagMatch: LabelMatch
-   includeArchived: boolean
    industries: string[]
    countries: string[]
 }
@@ -23,7 +22,6 @@ export const NO_BASICS: Basics = {
    added: 'any',
    tags: [],
    tagMatch: 'any',
-   includeArchived: false,
    industries: [],
    countries: [],
 }

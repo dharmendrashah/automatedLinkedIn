@@ -1,5 +1,4 @@
 import { Picture } from '@/components/details/detail-parts'
-import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -194,12 +193,7 @@ const columnsOf = (ids: string[], handlers: Handlers) =>
       column.display({
          id: 'status',
          header: 'Status',
-         cell: ({ row }) => (
-            <span className="flex flex-wrap items-center gap-1">
-               <LinkStatusBadge status={row.original.status} />
-               {row.original.archivedAt ? <Badge variant="secondary">Archived</Badge> : null}
-            </span>
-         ),
+         cell: ({ row }) => <LinkStatusBadge status={row.original.status} />,
       }),
       column.display({
          id: 'labels',
@@ -393,7 +387,7 @@ export const CompaniesTable = ({
                         tabIndex={0}
                         aria-label={`Open ${nameOf(row.original)}`}
                         data-state={row.original.slug === selectedSlug ? 'selected' : undefined}
-                        className={cn('cursor-pointer', row.original.archivedAt && 'opacity-60')}
+                        className="cursor-pointer"
                         onClick={() => onOpen(row.original)}
                         onKeyDown={event => {
                            if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {

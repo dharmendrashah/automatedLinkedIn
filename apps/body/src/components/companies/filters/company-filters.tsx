@@ -203,7 +203,6 @@ const basicsQuery = (basics: Basics) => ({
    ...(basics.tags.length > 0 ? { tags: basics.tags } : {}),
    ...(basics.tags.length > 1 ? { tagMatch: basics.tagMatch } : {}),
    ...(basics.added === 'any' ? {} : { addedSince: addedSince(basics.added) }),
-   includeArchived: basics.includeArchived,
    ...(basics.industries.length > 0 ? { industries: basics.industries } : {}),
    ...(basics.countries.length > 0 ? { countries: basics.countries } : {}),
 })
@@ -270,7 +269,6 @@ export const CompanyFiltersSheet = ({
    }
 
    const unreadId = useId()
-   const archivedId = useId()
 
    return (
       <Sheet open={open} onOpenChange={changeOpen}>
@@ -327,16 +325,6 @@ export const CompanyFiltersSheet = ({
                      value={draftBasics.countries}
                      onChange={next => setBasics({ countries: next })}
                   />
-                  <div className="flex items-center gap-2">
-                     <Checkbox
-                        id={archivedId}
-                        checked={draftBasics.includeArchived}
-                        onCheckedChange={checked => setBasics({ includeArchived: checked === true })}
-                     />
-                     <Label htmlFor={archivedId} className="font-normal">
-                        Show archived companies too
-                     </Label>
-                  </div>
                </Group>
                <Separator />
                <Group
@@ -586,7 +574,7 @@ export const CompanyFiltersSheet = ({
 type ChipsProps = {
    value: CompanyFilters
    icpName: (id: string) => string
-   // Chips of the list's own filters (status, labels, added, industry, country, archived).
+   // Chips of the list's own filters (status, labels, added, industry, country).
    extra: Array<{ key: string; text: string; onRemove: () => void }>
    onChange: (value: CompanyFilters) => void
    onClearAll: () => void

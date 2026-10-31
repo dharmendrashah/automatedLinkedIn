@@ -135,7 +135,6 @@ export const Companies = () => {
       void utils.label.list.invalidate()
    }
    const labelMany = trpc.linkedInCompany.labelMany.useMutation({ onSuccess: refresh })
-   const archiveMany = trpc.linkedInCompany.archiveMany.useMutation({ onSuccess: refresh })
    const more = useCallback(() => void list.fetchNextPage(), [list])
    const update = trpc.linkedInCompany.update.useMutation()
    const saveTags = async (company: Company, tags: string[]) => {
@@ -146,13 +145,12 @@ export const Companies = () => {
       await Promise.all([utils.linkedInCompany.list.invalidate(), utils.label.list.invalidate()])
    }
 
-   const actionError = [labelMany, archiveMany].find(action => action.error)?.error?.message
+   const actionError = labelMany.error?.message
    const basics: Basics = {
       status: state.status,
       added: state.added,
       tags: state.tags,
       tagMatch: state.tagMatch,
-      includeArchived: state.includeArchived,
       industries,
       countries,
    }
@@ -204,22 +202,12 @@ export const Companies = () => {
               },
            ]
          : []),
-      ...(state.includeArchived
-         ? [
-              {
-                 key: 'archived',
-                 text: 'Including archived',
-                 onRemove: () => state.setIncludeArchived(false),
-              },
-           ]
-         : []),
    ]
    const filtersOn = drawerOn + extraChips.length
 
    // One address change for everything the drawer applies, so no key overwrites another.
    const applyAll = (next: CompanyFilters, nextBasics: Basics) => {
       state.setStatus(nextBasics.status)
-      state.setIncludeArchived(nextBasics.includeArchived)
       setParams(
          current => {
             const updated = new URLSearchParams(current)
@@ -298,7 +286,7 @@ export const Companies = () => {
 
          {actionError ? <p className="text-destructive text-sm">{actionError}</p> : null}
 
-         <LinkBulkBar kind="companies" selection={selection} labelMany={labelMany} archiveMany={archiveMany} />
+         <LinkBulkBar kind="companies" selection={selection} labelMany={labelMany} />
 
          <CompaniesTable
             companies={rows}

@@ -133,9 +133,7 @@ const Workspace = ({ detail }: { detail: CompanyDetail }) => {
       void utils.linkedInCompany.list.invalidate()
    }
    const update = trpc.linkedInCompany.update.useMutation({ onSuccess: refresh })
-   const archive = trpc.linkedInCompany.archive.useMutation({ onSuccess: refresh })
-   const restore = trpc.linkedInCompany.restore.useMutation({ onSuccess: refresh })
-   const error = [update, archive, restore].find(action => action.error)?.error
+   const { error } = update
    const { company } = detail
    const [viewing, setViewing] = useState(false)
    const name = company.name ?? company.slug
@@ -165,15 +163,6 @@ const Workspace = ({ detail }: { detail: CompanyDetail }) => {
                   ))}
                </SelectContent>
             </Select>
-            <Button
-               variant="outline"
-               size="sm"
-               onClick={() =>
-                  company.archivedAt ? restore.mutate({ id: company.id }) : archive.mutate({ id: company.id })
-               }
-            >
-               {company.archivedAt ? 'Restore' : 'Archive'}
-            </Button>
             <Button asChild variant="outline" size="sm">
                <Link to="/workflows/new?start=accounts">
                   <Users />

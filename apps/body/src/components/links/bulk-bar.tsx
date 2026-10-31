@@ -71,7 +71,7 @@ type Mutation<I, O> = {
    isPending: boolean
 }
 
-// The bulk bar of /profiles, /companies and /posts: labels and archive for the picked rows.
+// The bulk bar of /profiles, /companies and /posts: labels, and archive where the list has it.
 export const LinkBulkBar = ({
    kind,
    selection,
@@ -81,7 +81,7 @@ export const LinkBulkBar = ({
    kind: LabelKind
    selection: Selection
    labelMany: Mutation<{ ids: string[]; add: string[]; remove: string[] }, { changed: number; full: number }>
-   archiveMany: Mutation<{ ids: string[] }, { archived: number }>
+   archiveMany?: Mutation<{ ids: string[] }, { archived: number }>
 }) => {
    const ids = [...selection.selected]
 
@@ -106,24 +106,26 @@ export const LinkBulkBar = ({
          }
          onClear={selection.clear}
       >
-         <Button
-            size="sm"
-            variant="outline"
-            disabled={archiveMany.isPending}
-            onClick={() =>
-               archiveMany.mutate(
-                  { ids },
-                  {
-                     onSuccess: ({ archived }) => {
-                        toast.success(`${archived} archived. Show archived brings them back.`)
-                        selection.clear()
-                     },
-                  }
-               )
-            }
-         >
-            Archive
-         </Button>
+         {archiveMany ? (
+            <Button
+               size="sm"
+               variant="outline"
+               disabled={archiveMany.isPending}
+               onClick={() =>
+                  archiveMany.mutate(
+                     { ids },
+                     {
+                        onSuccess: ({ archived }) => {
+                           toast.success(`${archived} archived. Show archived brings them back.`)
+                           selection.clear()
+                        },
+                     }
+                  )
+               }
+            >
+               Archive
+            </Button>
+         ) : null}
       </BulkBar>
    )
 }
