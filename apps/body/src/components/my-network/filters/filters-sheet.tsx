@@ -10,6 +10,7 @@ import { STATUSES } from '../words'
 import { DateTimeRangeField } from './date-time-range'
 import { Choice, MultiPick, type Option, TextField, YesNo } from './fields'
 import { INVITE_STATES, INVITE_WORDS, NO_FILTERS, type PeopleFilters, chipsOf } from './model'
+import { SkillsPick } from './skills-pick'
 
 export type FilterOptions = {
    companies: Option[]
@@ -20,6 +21,8 @@ export type FilterOptions = {
 
 type Props = {
    open: boolean
+   // The client (or all clients) whose people the Skills picker offers.
+   clientId: string
    value: PeopleFilters
    options: FilterOptions
    // Matches in the chosen tab (null while counting), capped like the tab counts.
@@ -58,6 +61,7 @@ const Tick = ({ label, checked, onChange }: { label: string; checked: boolean; o
 // Every filter beyond the toolbar's, grouped by who they are, how they are tied to the owner, what happened, and the owner's work.
 export const FiltersSheet = ({
    open,
+   clientId,
    value,
    options,
    count,
@@ -105,6 +109,17 @@ export const FiltersSheet = ({
                      options={options.countries}
                      value={value.countries}
                      onChange={countries => set({ countries })}
+                  />
+                  <SkillsPick
+                     clientId={clientId}
+                     value={value.skills}
+                     mode={value.skillsMode}
+                     onChange={(skills, skillsMode) =>
+                        set({
+                           skills,
+                           skillsMode,
+                        })
+                     }
                   />
                   <YesNo
                      label="LinkedIn Premium"

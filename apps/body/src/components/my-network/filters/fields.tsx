@@ -45,6 +45,9 @@ export const TextField = ({
    )
 }
 
+// The typed text of a picker whose options come from the server as the owner types.
+export type PickSearch = { text: string; onText: (text: string) => void; loading: boolean }
+
 // Several values from a list the owner can search, shown as removable tags under the button.
 export const MultiPick = ({
    label,
@@ -53,6 +56,7 @@ export const MultiPick = ({
    value,
    onChange,
    compact = false,
+   search,
 }: {
    label: string
    placeholder: string
@@ -61,10 +65,14 @@ export const MultiPick = ({
    onChange: (value: string[]) => void
    // A toolbar button: no label above and no tags under it (the page shows the filters that are on).
    compact?: boolean
+   // Set when the options are the server's answer to the typed text, not a list to filter here.
+   search?: PickSearch
 }) => {
    const toggle = (option: string) =>
       onChange(value.includes(option) ? value.filter(item => item !== option) : [...value, option])
-   const picked = options.filter(option => value.includes(option.value))
+   // A picked value stays listed even when the current options do not hold it.
+   const picked = value.map(item => options.find(option => option.value === item) ?? { value: item, label: item })
+   const shown = [...picked.filter(option => !options.includes(option)), ...options]
    const pick = (
       <Popover>
          <PopoverTrigger asChild>
@@ -80,12 +88,18 @@ export const MultiPick = ({
             </Button>
          </PopoverTrigger>
          <PopoverContent className="w-(--radix-popover-trigger-width) min-w-60 p-0" align="start">
-            <Command>
-               <CommandInput placeholder={`Search ${label.toLowerCase()}…`} />
+            <Command shouldFilter={!search}>
+               <CommandInput
+                  placeholder={`Search ${label.toLowerCase()}…`}
+                  {...(search && {
+                     value: search.text,
+                     onValueChange: search.onText,
+                  })}
+               />
                <CommandList>
-                  <CommandEmpty>Nothing found.</CommandEmpty>
+                  <CommandEmpty>{search?.loading ? 'Looking…' : 'Nothing found.'}</CommandEmpty>
                   <CommandGroup>
-                     {options.map(option => (
+                     {shown.map(option => (
                         <CommandItem key={option.value} value={option.label} onSelect={() => toggle(option.value)}>
                            <span
                               className={cn(

@@ -124,6 +124,18 @@ describe('peopleWhere', () => {
       expect(where({ labels: ['hot'] })).toEqual([{ labels: { hasSome: ['hot'] } }])
       expect(where({ noLabels: true })).toEqual([{ labels: { isEmpty: true } }])
    })
+
+   it('asks for every picked skill by default, or any of them', () => {
+      expect(where({ skills: ['Salesforce', 'HubSpot'] })).toEqual([
+         { skills: { hasEvery: ['Salesforce', 'HubSpot'] } },
+      ])
+      expect(
+         where({
+            skills: ['Salesforce'],
+            skillsMode: 'any',
+         })
+      ).toEqual([{ skills: { hasSome: ['Salesforce'] } }])
+   })
 })
 
 describe('orderOf', () => {

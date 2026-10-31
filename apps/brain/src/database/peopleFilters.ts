@@ -57,11 +57,15 @@ const when = (on: boolean, where: Where): Where[] => (on ? [where] : [])
 const labelsWhere = ({ labels, labelsMode }: PeopleFilters) =>
    labelsMode === 'all' ? { hasEvery: labels } : { hasSome: labels }
 
+const skillsWhere = ({ skills, skillsMode }: PeopleFilters) =>
+   skillsMode === 'any' ? { hasSome: skills } : { hasEvery: skills }
+
 export const peopleWhere = (filters: PeopleFilters): Where[] => [
    ...when(Boolean(filters.name), { name: contains(filters.name ?? '') }),
    ...when(filters.companies.length > 0, anyOf('company', filters.companies)),
    ...when(Boolean(filters.title), { title: contains(filters.title ?? '') }),
    ...when(filters.countries.length > 0, anyOf('country', filters.countries)),
+   ...when(filters.skills.length > 0, { skills: skillsWhere(filters) }),
    ...when(filters.premium !== undefined, { premium: filters.premium }),
    ...when(filters.connection === 'CONNECTED', { connectedAt: { not: null } }),
    ...when(filters.connection === 'NOT_CONNECTED', { connectedAt: null }),

@@ -108,11 +108,12 @@ describe('profileFacts', () => {
       return profileFacts(snapshot)
    }
 
-   it('should take the title and company of the position that has not ended, and the country', () => {
+   it('should take the title and company of the position that has not ended, the country and the skills', () => {
       expect(
          read({
             city: 'Lyon',
             country: 'France',
+            skills: ['Salesforce', { name: 'HubSpot' }],
             experience: [
                {
                   position: 'Advisor',
@@ -135,6 +136,7 @@ describe('profileFacts', () => {
          companySlug: null,
          country: 'France',
          premium: null,
+         skills: ['Salesforce', 'HubSpot'],
       })
    })
 
@@ -222,6 +224,7 @@ describe('profileFacts', () => {
          companySlug: null,
          country: 'United Kingdom',
          premium: null,
+         skills: [],
       })
    })
 
@@ -235,6 +238,7 @@ describe('profileFacts', () => {
          companySlug: null,
          country: null,
          premium: null,
+         skills: [],
       })
    })
 })

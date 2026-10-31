@@ -31,6 +31,8 @@ export const filtersSchema = z
       companies: values(text),
       title: text.optional(),
       countries: values(text),
+      skills: values(text),
+      skillsMode: z.enum(['all', 'any']).default('all'),
       premium: z.boolean().optional(),
       connection: z.enum(['CONNECTED', 'NOT_CONNECTED', 'DISCOVERY']).optional(),
       connectedTo: z.string().min(1).max(100).optional(),
@@ -140,6 +142,16 @@ export const chipsOf = (filters: PeopleFilters, accountName: (id: string) => str
    if (filters.companies.length) add('companies', `Company: ${listText(filters.companies)}`, { companies: [] })
    if (filters.title) add('title', `Title: ${filters.title}`, { title: undefined })
    if (filters.countries.length) add('countries', `Country: ${listText(filters.countries)}`, { countries: [] })
+   if (filters.skills.length) {
+      add(
+         'skills',
+         `Skills${filters.skills.length > 1 ? ` (${filters.skillsMode})` : ''}: ${listText(filters.skills)}`,
+         {
+            skills: [],
+            skillsMode: 'all',
+         }
+      )
+   }
    if (filters.premium !== undefined) {
       add('premium', filters.premium ? 'Premium' : 'Not Premium', { premium: undefined })
    }

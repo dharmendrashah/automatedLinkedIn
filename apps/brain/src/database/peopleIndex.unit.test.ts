@@ -80,6 +80,7 @@ describe('draftPeople dates LinkedIn did not give', () => {
                companySlug: null,
                country: null,
                premium: null,
+               skills: [],
             },
          })
       ).toMatchObject({
@@ -222,7 +223,7 @@ describe('draftPeople filter fields', () => {
       ).toBe(state)
    })
 
-   it('should take the title, the country, Premium, the company slug and a missing company from the profile read', () => {
+   it('should take the title, the country, Premium, the skills, the company slug and a missing company from the profile read', () => {
       expect(
          draft({
             connections: [connection({})],
@@ -235,6 +236,7 @@ describe('draftPeople filter fields', () => {
                companySlug: 'lumen-labs',
                country: 'France',
                premium: true,
+               skills: ['Salesforce', 'B2B Sales'],
             },
          })
       ).toMatchObject({
@@ -243,6 +245,7 @@ describe('draftPeople filter fields', () => {
          companySlug: 'lumen-labs',
          country: 'France',
          premium: true,
+         skills: ['Salesforce', 'B2B Sales'],
          profileRead: true,
       })
       expect(draft({ connections: [connection({})] })).toMatchObject({

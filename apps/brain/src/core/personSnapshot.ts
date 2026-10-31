@@ -166,5 +166,6 @@ export const profileFacts = (snapshot: PersonSnapshotData) => {
       companySlug: role?.companyUrl ? (parseLinkedInUrl(role.companyUrl, 'company')?.slug ?? null) : null,
       country: snapshot.country ?? (places.length > 1 ? (places.at(-1) ?? null) : null),
       premium: snapshot.premium ?? null,
+      skills: snapshot.skills,
    }
 }

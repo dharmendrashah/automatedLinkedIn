@@ -31,6 +31,9 @@ export const peopleFiltersSchema = z
       // The current job title from a profile read.
       title: text.optional(),
       countries: values(text),
+      // Skills from a profile read, exactly as LinkedIn wrote them; all of them by default.
+      skills: values(text),
+      skillsMode: z.enum(['all', 'any']).default('all'),
       premium: z.boolean().optional(),
       // Discovery: no account of the owner knows them and no invite went yet (an imported profile).
       connection: z.enum(['CONNECTED', 'NOT_CONNECTED', 'DISCOVERY']).optional(),
