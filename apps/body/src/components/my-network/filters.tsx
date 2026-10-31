@@ -19,7 +19,17 @@ const SEARCH_WAIT_MS = 300
 const SOURCES = ['request', 'connection', 'target']
 
 // The search waits for a pause in typing before it changes the address.
-export const SearchBox = ({ value, onSearch }: { value: string; onSearch: (q: string) => void }) => {
+export const SearchBox = ({
+   value,
+   onSearch,
+   placeholder = 'Search name, company, profile link…',
+   label = 'Search people',
+}: {
+   value: string
+   onSearch: (q: string) => void
+   placeholder?: string
+   label?: string
+}) => {
    const [text, setText] = useState(value)
 
    useEffect(() => {
@@ -39,8 +49,8 @@ export const SearchBox = ({ value, onSearch }: { value: string; onSearch: (q: st
             type="search"
             value={text}
             onChange={event => setText(event.target.value)}
-            placeholder="Search name, company, profile link…"
-            aria-label="Search people"
+            placeholder={placeholder}
+            aria-label={label}
             className="pl-8"
          />
       </div>

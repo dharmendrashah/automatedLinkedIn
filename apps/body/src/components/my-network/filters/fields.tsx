@@ -52,56 +52,70 @@ export const MultiPick = ({
    options,
    value,
    onChange,
+   compact = false,
 }: {
    label: string
    placeholder: string
    options: Option[]
    value: string[]
    onChange: (value: string[]) => void
+   // A toolbar button: no label above and no tags under it (the page shows the filters that are on).
+   compact?: boolean
 }) => {
    const toggle = (option: string) =>
       onChange(value.includes(option) ? value.filter(item => item !== option) : [...value, option])
    const picked = options.filter(option => value.includes(option.value))
+   const pick = (
+      <Popover>
+         <PopoverTrigger asChild>
+            <Button variant="outline" className="justify-between font-normal" aria-label={compact ? label : undefined}>
+               <span className={cn('truncate', picked.length === 0 && 'text-muted-foreground')}>
+                  {picked.length === 0
+                     ? placeholder
+                     : compact
+                       ? `${label}: ${picked.length}`
+                       : `${picked.length} chosen`}
+               </span>
+               <ChevronDown className="opacity-50" />
+            </Button>
+         </PopoverTrigger>
+         <PopoverContent className="w-(--radix-popover-trigger-width) min-w-60 p-0" align="start">
+            <Command>
+               <CommandInput placeholder={`Search ${label.toLowerCase()}…`} />
+               <CommandList>
+                  <CommandEmpty>Nothing found.</CommandEmpty>
+                  <CommandGroup>
+                     {options.map(option => (
+                        <CommandItem key={option.value} value={option.label} onSelect={() => toggle(option.value)}>
+                           <span
+                              className={cn(
+                                 'grid size-4 place-items-center rounded-sm border',
+                                 value.includes(option.value) && 'bg-primary border-primary text-primary-foreground'
+                              )}
+                           >
+                              {value.includes(option.value) ? <Check className="size-3 text-current" /> : null}
+                           </span>
+                           {option.icon}
+                           <span className="truncate">{option.label}</span>
+                           {option.hint ? (
+                              <span className="text-muted-foreground ml-auto text-xs">{option.hint}</span>
+                           ) : null}
+                        </CommandItem>
+                     ))}
+                  </CommandGroup>
+               </CommandList>
+            </Command>
+         </PopoverContent>
+      </Popover>
+   )
+
+   if (compact) {
+      return pick
+   }
 
    return (
       <Field label={label}>
-         <Popover>
-            <PopoverTrigger asChild>
-               <Button variant="outline" className="justify-between font-normal">
-                  <span className={cn('truncate', picked.length === 0 && 'text-muted-foreground')}>
-                     {picked.length === 0 ? placeholder : `${picked.length} chosen`}
-                  </span>
-                  <ChevronDown className="opacity-50" />
-               </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
-               <Command>
-                  <CommandInput placeholder={`Search ${label.toLowerCase()}…`} />
-                  <CommandList>
-                     <CommandEmpty>Nothing found.</CommandEmpty>
-                     <CommandGroup>
-                        {options.map(option => (
-                           <CommandItem key={option.value} value={option.label} onSelect={() => toggle(option.value)}>
-                              <span
-                                 className={cn(
-                                    'grid size-4 place-items-center rounded-sm border',
-                                    value.includes(option.value) && 'bg-primary border-primary text-primary-foreground'
-                                 )}
-                              >
-                                 {value.includes(option.value) ? <Check className="size-3 text-current" /> : null}
-                              </span>
-                              {option.icon}
-                              <span className="truncate">{option.label}</span>
-                              {option.hint ? (
-                                 <span className="text-muted-foreground ml-auto text-xs">{option.hint}</span>
-                              ) : null}
-                           </CommandItem>
-                        ))}
-                     </CommandGroup>
-                  </CommandList>
-               </Command>
-            </PopoverContent>
-         </Popover>
+         {pick}
          {picked.length > 0 ? (
             <div className="flex flex-wrap gap-1">
                {picked.map(option => (
