@@ -667,6 +667,46 @@ describe('LinkedInConversationService (database)', () => {
       await PrismaService.client.linkedInConnection.deleteMany({ where: { userId } })
    })
 
+   it('should find the person of a chat named by member id by the one connection of that name, and nobody when two share it', async () => {
+      const chat = (id: string, name: string) =>
+         LinkedInConversationService.store(
+            owner,
+            file({
+               id,
+               title: name,
+               participants: [
+                  {
+                     name,
+                     profileUrl: `https://www.linkedin.com/in/ACoAA${id}`,
+                  },
+               ],
+            })
+         )
+
+      await chat('2-prince', 'Prince Patel')
+      await chat('2-twin', 'Sam Twin')
+      await PrismaService.client.linkedInConnection.createMany({
+         data: [
+            ['princepatel', 'Prince Patel'],
+            ['sam-one', 'Sam Twin'],
+            ['sam-two', 'Sam Twin'],
+         ].map(([slug, name]) => ({
+            userId,
+            accountId,
+            slug: slug ?? '',
+            name: name ?? '',
+            headline: '',
+         })),
+      })
+
+      const listed = await LinkedInConversationService.list(userId)
+
+      expect(listed.find(item => item.title === 'Prince Patel')?.contactSlug).toBe('princepatel')
+      expect(listed.find(item => item.title === 'Sam Twin')).not.toHaveProperty('contactSlug')
+
+      await PrismaService.client.linkedInConnection.deleteMany({ where: { userId } })
+   })
+
    it('should delete the conversations with the account', async () => {
       await PrismaService.client.linkedInAccount.delete({ where: { id: accountId } })
 
