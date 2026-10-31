@@ -108,6 +108,35 @@ describe('draftPeople dates LinkedIn did not give', () => {
       })
       expect(person.lastTouchAt.getFullYear()).toBeGreaterThan(2003)
    })
+   it('should give an accepted request whose connection is not read yet its own reason, not a 1970 "Messaged"', () => {
+      expect(
+         draft({
+            requests: [
+               {
+                  id: 'req-1',
+                  accountId: 'acc-1',
+                  name: 'Ada',
+                  headline: 'Engines',
+                  photoUrl: null,
+                  note: null,
+                  status: 'ACCEPTED',
+                  seenAt: at('2026-10-27'),
+                  createdAt: at('2026-10-27'),
+               },
+            ],
+            invites: [
+               invite({
+                  state: 'QUEUED',
+                  invitedAt: null,
+               }),
+            ],
+         })
+      ).toMatchObject({
+         reasonKind: 'REQUEST',
+         reasonText: 'You accepted their request',
+         reasonAt: at('2026-10-27'),
+      })
+   })
 })
 
 describe('draftPeople filter fields', () => {

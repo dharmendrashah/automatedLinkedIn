@@ -7,6 +7,8 @@ export {
    ALL_CLIENTS,
    COUNT_CAP,
    EXPORT_CAP,
+   IMPORT_BATCH,
+   IMPORT_CAP,
    type PeopleQuery,
    PeopleService,
    type PersonChanges,

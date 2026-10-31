@@ -65,6 +65,11 @@ export const peopleWhere = (filters: PeopleFilters): Where[] => [
    ...when(filters.premium !== undefined, { premium: filters.premium }),
    ...when(filters.connection === 'CONNECTED', { connectedAt: { not: null } }),
    ...when(filters.connection === 'NOT_CONNECTED', { connectedAt: null }),
+   ...when(filters.connection === 'DISCOVERY', {
+      connectedAt: null,
+      inviteState: 'NONE',
+      links: { none: { accountId: { not: null } } },
+   }),
    ...when(Boolean(filters.connectedTo), {
       links: {
          some: {

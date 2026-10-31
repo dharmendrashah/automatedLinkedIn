@@ -1,4 +1,4 @@
-import { type LinkedInLink, toCsv } from 'core'
+import { type LinkedInLink, parseLinkedInUrl, toCsv } from 'core'
 
 import { INVITES_LIVE } from 'env'
 
@@ -8,8 +8,11 @@ import { type PeopleFilters } from '@automatedLinkedIn/contracts'
 
 import { ClientService } from './client.service'
 import { ConflictError } from './conflict'
+import { DataReadService } from './dataRead.service'
+import { LABEL_LIMIT } from './linkedInRecord'
 import { type PeopleSort, type PeopleTab, orderOf, peopleWhere } from './peopleFilters'
 import { PRIORITY } from './peopleIndex'
+import { PeopleIndexService } from './peopleIndex.service'
 import { profileUrlOf } from './personContacts'
 import { PrismaService } from './prisma.service'
 import { WorkflowListService } from './workflowList.service'
@@ -33,6 +36,104 @@ export type PeopleQuery = {
 }
 
 export type ViewQuery = Omit<PeopleQuery, 'tab' | 'sort' | 'cursor' | 'limit'>
+
+// One profile to import: its link, and the labels and notes the CSV gave it.
+export type ImportPerson = {
+   url: string
+   labels?: string[]
+   notes?: string
+}
+
+// One add call takes this many profiles; an import of up to IMPORT_CAP is sent in such batches.
+export const IMPORT_BATCH = 200
+export const IMPORT_CAP = 1_000
+const NOTES_MAX = 5_000
+
+type Imported = LinkedInLink & {
+   labels: string[]
+   notes: string | null
+   // The entries of the import that are this profile, as given.
+   inputs: string[]
+}
+
+type ImportState = 'NEW' | 'ALREADY_HERE' | 'DO_NOT_CONTACT'
+
+// The profiles of an import, once each (labels merged, notes joined), and how many entries were not profile links.
+const importedOf = (people: ImportPerson[]) => {
+   const found = new Map<string, Imported>()
+   let invalid = 0
+
+   for (const person of people) {
+      const link = parseLinkedInUrl(person.url.trim(), 'profile')
+
+      if (!link) {
+         invalid += 1
+         continue
+      }
+
+      const known = found.get(link.slug)
+      const labels = (person.labels ?? []).map(label => label.trim().toLowerCase()).filter(Boolean)
+      const notes = person.notes?.trim() || null
+
+      found.set(link.slug, {
+         ...link,
+         labels: [...new Set([...(known?.labels ?? []), ...labels])].slice(0, LABEL_LIMIT),
+         notes: [known?.notes, notes].filter(Boolean).join('\n') || null,
+         inputs: [...(known?.inputs ?? []), person.url],
+      })
+   }
+
+   return {
+      profiles: [...found.values()],
+      invalid,
+   }
+}
+
+const blockedOf = async (userId: string, slugs: string[]) =>
+   new Set(
+      (
+         await PrismaService.client.suppression.findMany({
+            where: {
+               userId,
+               slug: { in: slugs },
+            },
+            select: { slug: true },
+         })
+      ).map(({ slug }) => slug)
+   )
+
+// The import's labels join the person's own; its notes are added below theirs unless they already hold them.
+const keepOwnFields = async (userId: string, clientId: string, profile: Imported) => {
+   const person = await PrismaService.client.person.findFirst({
+      where: {
+         userId,
+         clientId,
+         slug: profile.slug,
+      },
+      select: {
+         id: true,
+         labels: true,
+         notes: true,
+      },
+   })
+
+   if (!person) {
+      return
+   }
+
+   const notes =
+      profile.notes && !(person.notes ?? '').includes(profile.notes)
+         ? [person.notes, profile.notes].filter(Boolean).join('\n').slice(0, NOTES_MAX)
+         : person.notes
+
+   await PrismaService.client.person.update({
+      where: { id: person.id },
+      data: {
+         labels: [...new Set([...person.labels, ...profile.labels])].slice(0, LABEL_LIMIT),
+         notes,
+      },
+   })
+}
 
 export type PersonChanges = {
    status?: PersonStatus
@@ -802,18 +903,21 @@ export class PeopleService {
       return true
    }
 
-   // Adds pasted profile links to a list of the client, made in the same step when named. People already in a list or the
-   // targets, and people on Do not contact, are skipped with a count; nothing is read or charged.
+   // Adds imported profiles to a list of the client, made in the same step when named (.plan/network-import-people.md). People
+   // on Do not contact are left out; people already in a list or the targets are skipped but still get the labels and notes. When
+   // `read` is set, each person's full profile is read (paid); a read that cannot start now is counted, not failed.
    public static async add(
       userId: string,
       clientId: string,
-      links: LinkedInLink[],
-      list: { id: string } | { name: string }
+      people: ImportPerson[],
+      list: { id: string } | { name: string },
+      read: boolean
    ) {
       const db = PrismaService.client
       const client = clientId === ALL_CLIENTS ? null : await scopeOf(userId, clientId)
+      const [ownClientId] = client?.ids ?? []
 
-      if (!client) {
+      if (!ownClientId) {
          return null
       }
 
@@ -824,7 +928,10 @@ export class PeopleService {
                     id: list.id,
                     userId,
                  },
-                 select: { id: true },
+                 select: {
+                    id: true,
+                    clientId: true,
+                 },
               })
             : await WorkflowListService.createList(userId, list.name)
 
@@ -835,18 +942,25 @@ export class PeopleService {
       if ('name' in list) {
          await db.workflowList.update({
             where: { id: target.id },
-            data: { clientId: client.ids[0] },
+            data: { clientId: ownClientId },
          })
       }
 
+      const listClientId = 'clientId' in target && target.clientId ? target.clientId : ownClientId
+      const { profiles, invalid } = importedOf(people)
+      const blocked = await blockedOf(
+         userId,
+         profiles.map(({ slug }) => slug)
+      )
+      const kept = profiles.filter(({ slug }) => !blocked.has(slug))
       let added = 0
       let skipped = 0
 
-      for (const link of links) {
+      for (const profile of kept) {
          try {
             await WorkflowListService.addMember(userId, target.id, {
-               slug: link.slug,
-               url: link.url,
+               slug: profile.slug,
+               url: profile.url,
                name: null,
                headline: null,
                location: null,
@@ -862,10 +976,96 @@ export class PeopleService {
          }
       }
 
+      if (kept.length > 0) {
+         await PeopleIndexService.refresh(
+            userId,
+            kept.map(({ slug }) => slug)
+         )
+      }
+
+      for (const profile of kept.filter(({ labels, notes }) => labels.length > 0 || notes)) {
+         await keepOwnFields(userId, listClientId, profile)
+      }
+
+      let reading = 0
+
+      for (const { slug } of read ? kept : []) {
+         try {
+            await DataReadService.queue({
+               userId,
+               kind: 'PROFILE',
+               slug,
+               operation: 'profiles',
+               params: { queries: [profileUrlOf(slug)] },
+               clientId: listClientId,
+            })
+            reading += 1
+         } catch (error) {
+            if (!(error instanceof ConflictError)) {
+               throw error
+            }
+         }
+      }
+
       return {
          listId: target.id,
          added,
          skipped,
+         blocked: blocked.size,
+         invalid,
+         reading,
+         notRead: read ? kept.length - reading : 0,
+      }
+   }
+
+   // What an import would do with each link, changing nothing: new, already here (a list, the targets or the client's people),
+   // or on Do not contact. Links that are not profiles are counted; the same profile twice counts once.
+   public static async preview(userId: string, clientId: string, urls: string[]) {
+      const scope = await scopeOf(userId, clientId)
+
+      if (!scope) {
+         return null
+      }
+
+      const { profiles, invalid } = importedOf(urls.map(url => ({ url })))
+      const slugs = profiles.map(({ slug }) => slug)
+      const db = PrismaService.client
+      const [blocked, members, targets, known] = await Promise.all([
+         blockedOf(userId, slugs),
+         db.workflowListMember.findMany({
+            where: {
+               slug: { in: slugs },
+               list: { userId },
+            },
+            select: { slug: true },
+         }),
+         db.linkedInProfile.findMany({
+            where: {
+               userId,
+               slug: { in: slugs },
+            },
+            select: { slug: true },
+         }),
+         db.person.findMany({
+            where: {
+               clientId: { in: scope.ids },
+               slug: { in: slugs },
+            },
+            select: { slug: true },
+         }),
+      ])
+      const here = new Set([...members, ...targets, ...known].map(({ slug }) => slug))
+      const stateOf = (slug: string): ImportState =>
+         blocked.has(slug) ? 'DO_NOT_CONTACT' : here.has(slug) ? 'ALREADY_HERE' : 'NEW'
+
+      return {
+         profiles: profiles.map(({ url, slug, inputs }) => ({
+            url,
+            slug,
+            inputs,
+            state: stateOf(slug),
+         })),
+         invalid,
       }
    }
 

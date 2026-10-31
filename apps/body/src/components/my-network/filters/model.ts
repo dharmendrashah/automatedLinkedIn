@@ -32,7 +32,7 @@ export const filtersSchema = z
       title: text.optional(),
       countries: values(text),
       premium: z.boolean().optional(),
-      connection: z.enum(['CONNECTED', 'NOT_CONNECTED']).optional(),
+      connection: z.enum(['CONNECTED', 'NOT_CONNECTED', 'DISCOVERY']).optional(),
       connectedTo: z.string().min(1).max(100).optional(),
       connectedAt: localRange,
       invites: values(z.enum(INVITE_STATES)),
@@ -50,7 +50,7 @@ export const filtersSchema = z
    })
    .refine(
       filters =>
-         filters.connection !== 'NOT_CONNECTED' ||
+         filters.connection === 'CONNECTED' ||
          (!filters.connectedAt.from && !filters.connectedAt.to && !filters.connectedTo)
    )
 
@@ -148,9 +148,11 @@ export const chipsOf = (filters: PeopleFilters, accountName: (id: string) => str
          'connection',
          filters.connection === 'NOT_CONNECTED'
             ? 'Not connected'
-            : filters.connectedTo
-              ? `Connected to ${accountName(filters.connectedTo)}`
-              : 'Connected',
+            : filters.connection === 'DISCOVERY'
+              ? 'Discovery'
+              : filters.connectedTo
+                ? `Connected to ${accountName(filters.connectedTo)}`
+                : 'Connected',
          {
             connection: undefined,
             connectedTo: undefined,

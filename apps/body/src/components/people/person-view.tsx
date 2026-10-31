@@ -59,11 +59,19 @@ export const ProfileCard = ({
    person,
    clientId,
    actions,
+   known,
    children,
 }: {
    person: PersonDetail
    clientId?: string
    actions?: ReactNode
+   // What My network already shows for them, for what the detail does not have.
+   known?: {
+      name: string | null
+      headline: string | null
+      photoUrl: string | null
+      company: string | null
+   }
    children?: ReactNode
 }) => {
    const utils = trpc.useUtils()
@@ -72,11 +80,12 @@ export const ProfileCard = ({
    })
    const { member, profile, snapshot, connections } = person
    const [connection] = connections
-   const name = snapshot?.name ?? member?.name ?? profile?.fullName ?? connection?.name ?? person.slug
-   const headline = snapshot?.headline ?? member?.headline ?? profile?.headline ?? connection?.headline
+   const name = snapshot?.name ?? member?.name ?? profile?.fullName ?? connection?.name ?? known?.name ?? person.slug
+   const headline =
+      snapshot?.headline ?? member?.headline ?? profile?.headline ?? connection?.headline ?? known?.headline
    const [current] = snapshot?.experience ?? []
    const title = current?.title ?? member?.title
-   const company = current?.company ?? member?.company ?? profile?.company
+   const company = current?.company ?? member?.company ?? profile?.company ?? known?.company
    const location = snapshot?.location ?? member?.location ?? profile?.location
    const followers = snapshot?.followers ?? member?.followers
    const reach = [
@@ -87,7 +96,7 @@ export const ProfileCard = ({
 
    return (
       <Cover image={snapshot?.cover ?? null}>
-         <Picture name={name} image={snapshot?.photo ?? connection?.photoUrl ?? null} />
+         <Picture name={name} image={snapshot?.photo ?? connection?.photoUrl ?? known?.photoUrl ?? null} />
          <div className="grid gap-1">
             <DrawerTitle className="text-xl">{name}</DrawerTitle>
             {headline ? <DrawerDescription className="text-foreground text-sm">{headline}</DrawerDescription> : null}
