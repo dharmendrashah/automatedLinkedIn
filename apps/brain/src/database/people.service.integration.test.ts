@@ -167,6 +167,14 @@ describe('PeopleService (database)', () => {
       expect(await PeopleService.counts(otherUserId, { clientId })).toBeNull()
    })
 
+   it('should find the person of a profile for any page, and nobody of another owner', async () => {
+      const found = await PeopleService.find(userId, 'person-1')
+
+      expect((await PeopleService.get(userId, found?.id ?? ''))?.name).toBe('Ravi Kumar')
+      expect(await PeopleService.find(otherUserId, 'person-1')).toBeNull()
+      expect(await PeopleService.find(userId, 'nobody')).toBeNull()
+   })
+
    it('should show every client of the owner together under All clients, and no one of another owner', async () => {
       const otherClientId = (await ClientService.create(userId, 'Beta')).id
       const betaAccount = await db.linkedInAccount.create({

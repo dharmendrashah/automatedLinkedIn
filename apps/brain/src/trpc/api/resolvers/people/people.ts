@@ -168,6 +168,11 @@ export const people = router({
       .input(z.object({ id }))
       .query(async ({ ctx, input }) => present(await PeopleService.get(ctx.user.id, input.id), NO_PERSON)),
 
+   // The person of a profile on My network, so any page opens the same drawer; null when they are not on it.
+   find: ownerProcedure
+      .input(z.object({ slug: z.string().trim().toLowerCase().min(1).max(200) }))
+      .query(({ ctx, input }) => PeopleService.find(ctx.user.id, input.slug)),
+
    update: ownerProcedure
       .input(
          z.object({

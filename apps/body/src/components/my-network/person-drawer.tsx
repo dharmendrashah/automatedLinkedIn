@@ -66,19 +66,24 @@ import { nextAfter, nextStepOf } from './rows'
 import { type Ask } from './use-answer'
 import { FIT_WORDS, STATUSES, foundByWord, isStatus, nameOf } from './words'
 
-type Props = {
+type PanelProps = {
    id: string
-   // The rows of the table, in order, for Previous and Next.
-   order: string[]
+   // The rows of the table, in order, for Previous and Next; none hides them.
+   order?: string[]
    pane: Pane
    onPane: (pane: Pane) => void
-   onMove: (id: string) => void
-   onClose: () => void
+   onMove?: (id: string) => void
    // The person is gone (erased): the drawer moves on, or closes on the last row.
    onGone: (next: string | null) => void
    onAnswer: (ask: Ask) => void
    // Present once invites are live: opens the invite dialog for the person.
    onInvite?: (id: string) => void
+}
+
+type Props = PanelProps & {
+   order: string[]
+   onMove: (id: string) => void
+   onClose: () => void
 }
 
 const useUpdate = () => {
@@ -474,35 +479,38 @@ const ProfileTab = ({ person }: { person: Person }) => {
    return profile ? <ProfileDetails person={profile} /> : <Skeleton className="h-40 w-full rounded-xl" />
 }
 
-const Body = ({ id, order, pane, onPane, onMove, onGone, onAnswer, onInvite }: Omit<Props, 'onClose'>) => {
+// One person of My network, the same wherever they open: who they are, the owner's handling, notes, and the profile, chat,
+// history and read tabs.
+export const PersonPanel = ({ id, order = [], pane, onPane, onMove, onGone, onAnswer, onInvite }: PanelProps) => {
    const person = trpc.people.get.useQuery({ id }, { retry: false })
    const index = order.indexOf(id)
    const previous = index > 0 ? order[index - 1] : undefined
    const next = index >= 0 ? order[index + 1] : undefined
 
-   const moves = (
-      <div className="flex items-center justify-end gap-1">
-         <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Previous person"
-            disabled={!previous}
-            onClick={() => (previous ? onMove(previous) : undefined)}
-         >
-            <ChevronLeft />
-         </Button>
-         <span className="text-muted-foreground text-xs">{index >= 0 ? `${index + 1} of ${order.length}` : ''}</span>
-         <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Next person"
-            disabled={!next}
-            onClick={() => (next ? onMove(next) : undefined)}
-         >
-            <ChevronRight />
-         </Button>
-      </div>
-   )
+   const moves =
+      order.length > 0 && onMove ? (
+         <div className="flex items-center justify-end gap-1">
+            <Button
+               variant="ghost"
+               size="icon"
+               aria-label="Previous person"
+               disabled={!previous}
+               onClick={() => (previous ? onMove(previous) : undefined)}
+            >
+               <ChevronLeft />
+            </Button>
+            <span className="text-muted-foreground text-xs">{index >= 0 ? `${index + 1} of ${order.length}` : ''}</span>
+            <Button
+               variant="ghost"
+               size="icon"
+               aria-label="Next person"
+               disabled={!next}
+               onClick={() => (next ? onMove(next) : undefined)}
+            >
+               <ChevronRight />
+            </Button>
+         </div>
+      ) : null
 
    if (!person.data) {
       return (
@@ -557,7 +565,7 @@ export const PersonDrawer = ({ onClose, ...props }: Props) => (
    <Drawer direction="right" open onOpenChange={open => (open ? undefined : onClose())}>
       <DrawerContent className={floatingDrawer(WIDE)}>
          <ErrorBoundary where="person-drawer" resetKey={props.id}>
-            <Body {...props} />
+            <PersonPanel {...props} />
          </ErrorBoundary>
       </DrawerContent>
    </Drawer>
