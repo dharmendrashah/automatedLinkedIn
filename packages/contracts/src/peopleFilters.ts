@@ -32,7 +32,8 @@ export const peopleFiltersSchema = z
       title: text.optional(),
       countries: values(text),
       premium: z.boolean().optional(),
-      connection: z.enum(['CONNECTED', 'NOT_CONNECTED']).optional(),
+      // Discovery: no account of the owner knows them and no invite went yet (an imported profile).
+      connection: z.enum(['CONNECTED', 'NOT_CONNECTED', 'DISCOVERY']).optional(),
       // Connected to this account of the client.
       connectedTo: z.string().min(1).max(100).optional(),
       connectedAt: dateRangeSchema.optional(),
@@ -50,7 +51,7 @@ export const peopleFiltersSchema = z
       profileRead: z.boolean().optional(),
    })
    .refine(
-      filters => filters.connection !== 'NOT_CONNECTED' || (!filters.connectedAt && !filters.connectedTo),
+      filters => filters.connection === 'CONNECTED' || (!filters.connectedAt && !filters.connectedTo),
       'Connected dates and an account only go with Connected.'
    )
 

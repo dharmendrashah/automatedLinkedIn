@@ -314,6 +314,28 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string, facts: Profil
          }
       }
 
+      const [anyRequest] = rows.requests
+
+      if (anyRequest) {
+         return {
+            kind: 'REQUEST' as const,
+            text: anyRequest.status === 'ACCEPTED' ? 'You accepted their request' : 'Sent you a request',
+            url: null,
+            at: anyRequest.seenAt,
+         }
+      }
+
+      const [anyInvite] = rows.invites
+
+      if (anyInvite) {
+         return {
+            kind: 'INVITE' as const,
+            text: 'Invite planned',
+            url: null,
+            at: anyInvite.createdAt,
+         }
+      }
+
       return {
          kind: 'CONVERSATION' as const,
          text: 'Messaged',

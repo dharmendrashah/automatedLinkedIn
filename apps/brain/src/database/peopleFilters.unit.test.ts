@@ -81,6 +81,13 @@ describe('peopleWhere', () => {
          { connectedAt: { gte: new Date('2026-10-01T00:00:00.000Z') } },
       ])
       expect(where({ connection: 'NOT_CONNECTED' })).toEqual([{ connectedAt: null }])
+      expect(where({ connection: 'DISCOVERY' })).toEqual([
+         {
+            connectedAt: null,
+            inviteState: 'NONE',
+            links: { none: { accountId: { not: null } } },
+         },
+      ])
    })
 
    it('reads the activity and the owner work filters', () => {

@@ -23,13 +23,15 @@ type Props = {
    personIds: string[]
    // The Found by filter the owner was looking at, credited with the accepts.
    source: string | undefined
+   // The people are Discovery people: nothing is picked for them, the owner chooses the account.
+   pickAccount: boolean
    onClose: () => void
    onDone: () => void
 }
 
-// Invites to one person or a selection: the account (only with several), a note with the person's own name and company put in, and
-// the one sentence of what is safe to send today and how the rest spreads over the days. Brain plans and checks everything again.
-export const InviteDialog = ({ clientId, personIds, source, onClose, onDone }: Props) => {
+// Invites to one person or a selection: the account to send from (always asked), a note with the person's own name and company put
+// in, and the one sentence of what is safe to send today and how the rest spreads over the days. Brain plans and checks everything again.
+export const InviteDialog = ({ clientId, personIds, source, pickAccount, onClose, onDone }: Props) => {
    const utils = trpc.useUtils()
    const [accountId, setAccountId] = useState<string | undefined>()
    const [note, setNote] = useState('')
@@ -84,12 +86,12 @@ export const InviteDialog = ({ clientId, personIds, source, onClose, onDone }: P
                </DialogDescription>
             </DialogHeader>
             <div className="grid gap-3">
-               {plan.data && plan.data.accounts.length > 1 ? (
+               {plan.data && plan.data.accounts.length > 0 ? (
                   <div className="grid gap-1.5">
                      <Label htmlFor="invite-account">Send from</Label>
                      <Select value={chosen} onValueChange={setAccountId}>
                         <SelectTrigger id="invite-account" size="sm">
-                           <SelectValue />
+                           <SelectValue placeholder="Choose a LinkedIn account" />
                         </SelectTrigger>
                         <SelectContent>
                            {plan.data.accounts.map(({ id, name }) => (
@@ -164,7 +166,7 @@ export const InviteDialog = ({ clientId, personIds, source, onClose, onDone }: P
                   Cancel
                </Button>
                <Button
-                  disabled={!plan.data || plan.data.toInvite === 0 || invite.isPending}
+                  disabled={!plan.data || plan.data.toInvite === 0 || invite.isPending || (pickAccount && !chosen)}
                   onClick={() =>
                      invite.mutate({
                         clientId,

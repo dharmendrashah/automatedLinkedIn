@@ -57,13 +57,20 @@ describe('peopleFiltersSchema', () => {
       ).toBe(false)
    })
 
-   it('refuses connected dates or an account with Not connected', () => {
+   it('refuses connected dates or an account with Not connected or Discovery', () => {
       expect(
          peopleFiltersSchema.safeParse({
             connection: 'NOT_CONNECTED',
             connectedAt: { from: '2026-10-01T00:00:00.000Z' },
          }).success
       ).toBe(false)
+      expect(
+         peopleFiltersSchema.safeParse({
+            connection: 'DISCOVERY',
+            connectedTo: 'acc-1',
+         }).success
+      ).toBe(false)
+      expect(peopleFiltersSchema.safeParse({ connection: 'DISCOVERY' }).success).toBe(true)
    })
 
    it('caps the lists and the text', () => {

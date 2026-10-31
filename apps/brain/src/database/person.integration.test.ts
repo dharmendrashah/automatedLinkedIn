@@ -188,7 +188,11 @@ describe('PersonService (database)', () => {
       await RetentionService.run()
 
       expect(await PrismaService.client.personSnapshot.count({ where: { userId } })).toBe(0)
-      expect(await PersonService.detail(userId, 'ada')).toBeNull()
+      // Still on My network (Do not contact), so the drawer opens, without the full profile.
+      expect(await PersonService.detail(userId, 'ada')).toMatchObject({
+         suppressed: true,
+         snapshot: null,
+      })
       await expect(PersonService.readFull(userId, 'bob')).rejects.toBeInstanceOf(ConflictError)
    })
 
@@ -284,7 +288,10 @@ describe('PersonService (database)', () => {
             },
          })
       ).toBe(0)
-      expect(await PersonService.detail(userId, 'carol')).toBeNull()
+      expect(await PersonService.detail(userId, 'carol')).toMatchObject({
+         connections: [],
+         snapshot: null,
+      })
 
       await PrismaService.client.user.delete({ where: { id: otherId } })
    })

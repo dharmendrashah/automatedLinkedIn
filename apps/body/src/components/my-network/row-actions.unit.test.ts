@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { type ActionRow, inviteBlock, messageAction } from './row-actions'
+import { type ActionRow, inviteBlock, isDiscovery, messageAction } from './row-actions'
 
 // Dates reach the page as ISO text.
 const at = (day: string) => `${day}T10:00:00.000Z`
@@ -99,6 +99,29 @@ describe('messageAction', () => {
          kind: 'NONE',
          reason: 'No account to write from',
       })
+   })
+})
+
+describe('isDiscovery', () => {
+   it('is someone no account knows and no invite went to (an imported profile)', () => {
+      expect(isDiscovery(row({}))).toBe(true)
+      expect(isDiscovery(row({ links: [connection('a1', '2026-01-01')] }))).toBe(false)
+      expect(isDiscovery(row({ inviteState: 'PENDING' }))).toBe(false)
+      expect(isDiscovery(row({ connectedAt: at('2026-01-01') }))).toBe(false)
+      expect(
+         isDiscovery(
+            row({
+               links: [
+                  {
+                     kind: 'LIST_MEMBER' as const,
+                     accountId: null,
+                     sourceId: 'm1',
+                     at: at('2026-10-01'),
+                  },
+               ],
+            })
+         )
+      ).toBe(true)
    })
 })
 

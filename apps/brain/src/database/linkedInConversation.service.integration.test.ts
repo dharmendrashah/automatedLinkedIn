@@ -5,6 +5,7 @@ import { KeptFiles } from 'core'
 
 import { type MessagesFile } from '@automatedLinkedIn/contracts'
 
+import { ClientService } from './client.service'
 import { LinkedInConversationService } from './linkedInConversation.service'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
@@ -664,6 +665,59 @@ describe('LinkedInConversationService (database)', () => {
       ).toBe(true)
 
       await PrismaService.client.linkedInReply.deleteMany({ where: { userId } })
+      await PrismaService.client.linkedInConnection.deleteMany({ where: { userId } })
+   })
+
+   it('should find the person of a chat named by member id by the one connection of that name, and nobody when two share it', async () => {
+      const chat = (id: string, name: string) =>
+         LinkedInConversationService.store(
+            owner,
+            file({
+               id,
+               title: name,
+               participants: [
+                  {
+                     name,
+                     profileUrl: `https://www.linkedin.com/in/ACoAA${id}`,
+                  },
+               ],
+            })
+         )
+
+      await chat('2-prince', 'Prince Patel')
+      await chat('2-twin', 'Sam Twin')
+      await chat('2-listed', 'Lena Listed')
+      await PrismaService.client.person.create({
+         data: {
+            userId,
+            clientId: (await ClientService.create(userId, 'Listed')).id,
+            slug: 'lena-l',
+            name: 'Lena Listed',
+            lastTouchAt: new Date(),
+         },
+      })
+      await PrismaService.client.linkedInConnection.createMany({
+         data: [
+            ['princepatel', 'Prince Patel'],
+            ['sam-one', 'Sam Twin'],
+            ['sam-two', 'Sam Twin'],
+         ].map(([slug, name]) => ({
+            userId,
+            accountId,
+            slug: slug ?? '',
+            name: name ?? '',
+            headline: '',
+         })),
+      })
+
+      const listed = await LinkedInConversationService.list(userId)
+
+      expect(listed.find(item => item.title === 'Prince Patel')?.contactSlug).toBe('princepatel')
+      expect(listed.find(item => item.title === 'Sam Twin')).not.toHaveProperty('contactSlug')
+      // Known to no account yet (an accepted invite whose connection is not read): the one person of that name on My network.
+      expect(listed.find(item => item.title === 'Lena Listed')?.contactSlug).toBe('lena-l')
+
+      await PrismaService.client.person.deleteMany({ where: { userId } })
       await PrismaService.client.linkedInConnection.deleteMany({ where: { userId } })
    })
 
