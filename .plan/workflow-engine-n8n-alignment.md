@@ -229,7 +229,7 @@ Each phase is its own PR with its own plan; tests first; the six repros become t
    - [x] L2 and L3: wind down on Stop and on failure (C3); irreversible blocks check the stop at their start; new step status `SKIPPED`.
    - [x] L6: `kind` in the item key (column, backfill from `data->>'kind'`, index swap).
    - [x] Inverted repro tests for L1, L2, L3, L6; engine unit tests for wind down.
-- [ ] Phase 1, one definition per block (plan `workflow-engine-p1-block-definition.md`):
+- [x] Phase 1, one definition per block (done 2026-11-02; plan `workflow-engine-p1-block-definition.md`):
    - [ ] Golden test of `catalog()` and `validateGraph` before the move.
    - [ ] `defineBlock`, flags, derived sets, `version` and `migrate`, `deprecated`; move `blockEstimate`, `PREVIEW_CAPS` and the `validateGraph` special cases into definitions, one group of blocks at a time.
    - [ ] Registry tests (contracts, brain, body) and the made-up block test.

@@ -22,6 +22,11 @@ const block = (type: Block['type'], input: Block['input'], output: Block['output
    costHint: null,
    presets: [],
    api: [],
+   version: 1,
+   deprecated: false,
+   unit: null,
+   flow: null,
+   flags: {},
    input,
    output,
    fields: [],
@@ -73,7 +78,7 @@ const graph: Graph = {
 }
 
 describe('input blocks', () => {
-   const profiles = block('input.profiles', 'start', 'profile')
+   const profiles = { ...block('input.profiles', 'start', 'profile'), unit: 'people' }
 
    it('should say on the card which slice an input block takes', () => {
       expect(summaryOf(profiles, { howMany: 50 })).toBe('Up to 50 people')

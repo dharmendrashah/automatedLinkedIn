@@ -197,6 +197,7 @@ const Editor = ({
                data: {
                   block,
                   config: startConfig(block.type),
+                  version: block.version > 1 ? block.version : undefined,
                   step: null,
                   invalid: false,
                   noted: false,

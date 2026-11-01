@@ -59,27 +59,10 @@ const KINDS: Record<string, string> = {
    company: 'companies',
 }
 
-// "Takes posts, gives people", from what the block reads and passes on.
+// "Takes posts, gives people", from what the block reads and passes on; a block with its own words says them.
 const flowOf = (block: Block) => {
-   if (block.type === 'process.merge') {
-      return 'Takes anything, gives one stream'
-   }
-
-   if (block.type === 'logic.runWorkflow') {
-      return 'Takes anything, gives what it got or the people the other workflow saved'
-   }
-
-   if (
-      block.type === 'account.select' ||
-      block.type === 'account.writePost' ||
-      block.type === 'logic.wait' ||
-      block.type === 'logic.retry'
-   ) {
-      return 'Takes anything, passes it on unchanged'
-   }
-
-   if (block.type === 'logic.taskResult') {
-      return 'Takes anything, gives what worked; an Else after it gets the rest'
+   if (block.flow) {
+      return block.flow
    }
 
    const takes = block.input && KINDS[block.input] ? `Takes ${KINDS[block.input]}` : 'Starts on its own'

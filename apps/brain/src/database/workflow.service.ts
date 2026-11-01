@@ -14,6 +14,7 @@ import {
    postBlocksOfText,
    previewGraph,
    scheduleOf,
+   upgradeGraph,
    validateGraph,
 } from '@automatedLinkedIn/contracts'
 
@@ -121,7 +122,7 @@ const refuseWhileRunning = async (workflowId: string) => {
 
 const listTaken = (name: string) => `You already have a list named "${name}". Pick another workflow name.`
 
-export const readGraph = (value: unknown): Graph => graphSchema.parse(value)
+export const readGraph = (value: unknown): Graph => upgradeGraph(graphSchema.parse(value))
 
 // The posts written in the "Write a post" blocks of a graph; their files belong to the graph.
 const postsOf = (graph: Graph) =>

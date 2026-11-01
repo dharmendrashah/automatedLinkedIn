@@ -7,6 +7,8 @@ import {
    type Graph,
    type GraphNode,
    type ItemKind,
+   RUNS_LAST,
+   SCORING_BLOCKS,
    TAKES_ANYTHING,
    applyApiInput,
    backEdges,
@@ -41,7 +43,8 @@ export { type EngineDeps } from './context'
 
 const PASSED = new Set(['DONE', 'PARTIAL'])
 const FINISHED = new Set(['DONE', 'PARTIAL', 'FAILED', 'SKIPPED'])
-const SCORING_STEPS = new Set(['score.icp', 'collect.profile'])
+const SCORING_STEPS: ReadonlySet<string> = SCORING_BLOCKS
+const RUN_LAST: ReadonlySet<string> = RUNS_LAST
 const UNREADABLE = 'This run could not be read, so it was ended. Run the workflow again.'
 const SKIPPED_AFTER_STOP = 'You stopped the run before this block started, so it did not run.'
 const SKIPPED_AFTER_FAILURE = 'Another block failed before this block started, so it did not run.'
@@ -439,8 +442,7 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
             (!step.waitUntil || step.waitUntil <= new Date() || winding) &&
             parentsPassed &&
             // Posts are marked done only after everything else has finished.
-            (step.type !== 'output.markPosts' ||
-               run.steps.every(other => other.id === step.id || FINISHED.has(other.status)))
+            (!RUN_LAST.has(step.type) || run.steps.every(other => other.id === step.id || FINISHED.has(other.status)))
          )
       })
       let claimed = false
