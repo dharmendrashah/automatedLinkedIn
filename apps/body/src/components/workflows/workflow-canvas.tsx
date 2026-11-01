@@ -632,6 +632,7 @@ const Editor = ({
                        api: {
                           enabled,
                           graph: draft,
+                          catalog,
                        },
                     }
                   : null

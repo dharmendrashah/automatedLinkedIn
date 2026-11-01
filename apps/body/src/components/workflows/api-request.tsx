@@ -16,7 +16,7 @@ import { readableError } from '@/lib/trpc-error'
 import { Check, CircleCheck, CircleDashed, Copy, KeyRound, Loader2, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 
-import { type Graph } from './types'
+import { type Block, type Graph } from './types'
 
 import { createApiUrl } from '../../trpc/config'
 import { apiInputsOf, curlOf, sampleBody } from './api-sample'
@@ -119,14 +119,16 @@ export const TokenControl = ({ workflowId, api }: { workflowId: string; api: Api
 export const ApiRequest = ({
    workflowId,
    graph,
+   catalog,
    token,
 }: {
    workflowId: string
    graph: Graph
+   catalog: readonly Block[]
    token: string | null
 }) => {
    const address = `${createApiUrl(import.meta.env)}/api/workflows/${workflowId}/run`
-   const body = sampleBody(apiInputsOf(graph))
+   const body = sampleBody(apiInputsOf(graph, catalog))
 
    return (
       <>
@@ -172,13 +174,15 @@ export const ApiTriggerInput = ({
    workflowId,
    enabled,
    graph,
+   catalog,
 }: {
    workflowId: string
    enabled: boolean
    graph: Graph
+   catalog: readonly Block[]
 }) => {
    const api = useApiToken(workflowId)
-   const inputs = apiInputsOf(graph)
+   const inputs = apiInputsOf(graph, catalog)
    const header = `Authorization: Bearer ${api.token ?? 'YOUR_API_KEY'}`
 
    return (
@@ -195,14 +199,16 @@ export const ApiTriggerInput = ({
          </div>
          <div className="grid gap-2">
             <p className="text-xs font-medium">Sample request</p>
-            <ApiRequest workflowId={workflowId} graph={graph} token={api.token} />
+            <ApiRequest workflowId={workflowId} graph={graph} catalog={catalog} token={api.token} />
          </div>
          <p className="text-muted-foreground text-xs">
             {inputs.length > 0
                ? `The body follows the blocks after this one: ${inputs
-                    .map(({ field, what }) => `${field} (LinkedIn links of ${what})`)
-                    .join(', ')}. All are optional; left out, a block uses your own list. The links shown are made up.`
-               : 'No input block comes after this one, so a call with no body starts the workflow.'}
+                    .map(({ field, what }) => `${field} (${what})`)
+                    .join(
+                       ', '
+                    )}. All are optional; left out, a block uses its own settings or list. The values shown are made up.`
+               : 'No block after this one takes anything from a call, so a call with no body starts the workflow.'}
          </p>
       </div>
    )

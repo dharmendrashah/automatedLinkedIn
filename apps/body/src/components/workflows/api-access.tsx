@@ -5,7 +5,7 @@ import { type ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
 
-import { type Graph } from './types'
+import { type Block, type Graph } from './types'
 
 import { ApiRequest, TokenControl } from './api-request'
 import { apiInputsOf } from './api-sample'
@@ -31,15 +31,15 @@ const RESPONSES: [string, string][] = [
    ['429', 'Too many calls this hour.'],
 ]
 
-type Props = { workflowId: string; enabled: boolean; graph: Graph }
+type Props = { workflowId: string; enabled: boolean; graph: Graph; catalog: readonly Block[] }
 
 // How another system starts this workflow: what must be ready, the token, a copyable request, and the rules.
-export const ApiAccess = ({ workflowId, enabled, graph }: Props) => {
+export const ApiAccess = ({ workflowId, enabled, graph, catalog }: Props) => {
    const api = useApiToken(workflowId)
    const { status, hasToken } = api
    const ready = enabled && hasToken
    const limits = status.data?.limits
-   const inputs = apiInputsOf(graph)
+   const inputs = apiInputsOf(graph, catalog)
 
    return (
       <div className="grid w-full gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
@@ -72,7 +72,7 @@ export const ApiAccess = ({ workflowId, enabled, graph }: Props) => {
                      <TokenControl workflowId={workflowId} api={api} />
                   </Step>
                   <Step done={false} title="Send a request">
-                     <ApiRequest workflowId={workflowId} graph={graph} token={api.token} />
+                     <ApiRequest workflowId={workflowId} graph={graph} catalog={catalog} token={api.token} />
                   </Step>
                </ol>
             </CardContent>
@@ -88,18 +88,18 @@ export const ApiAccess = ({ workflowId, enabled, graph }: Props) => {
                      <p>Nothing. This workflow finds what it needs itself, so a call with no body starts it.</p>
                   ) : (
                      <>
-                        <p>Links for its inputs, all optional:</p>
+                        <p>What its blocks take from a call, all optional:</p>
                         <ul className="grid gap-1 text-xs">
                            {inputs.map(({ field, what }) => (
                               <li key={field}>
-                                 <code>{field}</code>: LinkedIn links of {what}. Left out, it uses your {what} list.
+                                 <code>{field}</code>: {what}. Left out, the block uses its own settings or list.
                               </li>
                            ))}
                         </ul>
                      </>
                   )}
                   <ul className="text-muted-foreground grid list-disc gap-1 pl-5 text-xs">
-                     {inputs.length > 0 ? <li>Up to {limits?.items ?? 200} links per call in total.</li> : null}
+                     {inputs.length > 0 ? <li>Up to {limits?.items ?? 200} values per call in total.</li> : null}
                      <li>
                         {status.data?.callsLastHour ?? 0} of {limits?.callsPerHour ?? 60} calls used this hour.
                      </li>

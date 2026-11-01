@@ -8,6 +8,7 @@ import {
    type GraphNode,
    type ItemKind,
    TAKES_ANYTHING,
+   applyApiInput,
    backEdges,
    blockOf,
    convertsTo,
@@ -163,7 +164,11 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
       const result = await EXECUTORS[node.type]({
          run,
          graph,
-         node,
+         // A call's values stand in for the settings they replace, for this run only.
+         node: {
+            ...node,
+            config: applyApiInput(node.type, node.config, run.input),
+         },
          step: started,
          at,
          inputs,

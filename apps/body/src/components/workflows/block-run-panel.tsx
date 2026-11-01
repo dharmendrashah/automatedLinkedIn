@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils'
 import { type Block, type ConfigValue, type StepRun, formatUsd, resumeText } from './types'
 
 import { trpc } from '../../trpc'
+import { Code } from './api-request'
+import { KIND_WORDS, sampleOf } from './api-sample'
 import { type BlockRun, adviceOf } from './block-run'
 import { isInputType } from './input-kinds'
 import { InputMatches } from './input-matches'
@@ -160,11 +162,23 @@ type PlannedProps = {
    // The block's settings in one line.
    summary: string
    takes: string
+   // A line leads straight from the "When called by API" block into this one.
+   afterCall: boolean
 }
 
-// What a block takes in when it has not run: where it comes from, what it is set to, and about how much.
-export const PlannedInput = ({ block, workflowId, values, parents, estimate, summary, takes }: PlannedProps) => {
+// What a block takes in when it has not run: where it comes from, a sample, what it is set to, and about how much.
+export const PlannedInput = ({
+   block,
+   workflowId,
+   values,
+   parents,
+   estimate,
+   summary,
+   takes,
+   afterCall,
+}: PlannedProps) => {
    const fed = block.input !== null && block.input !== 'start'
+   const sample = sampleOf(block)
 
    return (
       <div className="grid gap-3 text-sm">
@@ -175,6 +189,36 @@ export const PlannedInput = ({ block, workflowId, values, parents, estimate, sum
                   ? `Comes from: ${parents.map(({ name }) => name).join(', ')}.`
                   : 'Nothing is connected before this block, so it gets nothing. Connect a block into it.'}
             </p>
+         ) : null}
+         {afterCall && block.input !== null && block.input !== 'start' ? (
+            <p className="text-warning flex items-start gap-1 text-xs">
+               <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+               The API call passes nothing on by itself. To let a call send {KIND_WORDS[block.input]}, put an input
+               block between the call and this block.
+            </p>
+         ) : null}
+         {sample ? (
+            <div className="grid gap-1">
+               <p className="text-xs font-medium">A sample of one item it takes (made up)</p>
+               <Code text={sample} label="Copy sample" />
+            </div>
+         ) : null}
+         {block.api.length > 0 ? (
+            <div className="grid gap-1">
+               <p className="text-xs font-medium">A call can send</p>
+               <ul className="text-muted-foreground list-disc pl-5 text-xs">
+                  {block.api.map(({ field, what, example }) => (
+                     <li key={field}>
+                        <code>{field}</code>: {what}, such as {example[0]}
+                     </li>
+                  ))}
+               </ul>
+               {block.api.some(({ setting }) => setting) ? (
+                  <p className="text-muted-foreground text-xs">
+                     What a call sends replaces the saved setting for that run, so a call can change what it costs.
+                  </p>
+               ) : null}
+            </div>
          ) : null}
          <p className="text-muted-foreground">Set to: {summary}</p>
          {estimate && estimate.items > 0 ? (

@@ -557,6 +557,26 @@ export const BLOCK_TYPES = [
 
 export type BlockType = (typeof BLOCK_TYPES)[number]
 
+// What a call to "When called by API" may feed a block that starts a chain on its own (.plan/api-fed-blocks-and-samples.md).
+// Everything that depends on the set of such fields (the body check, the engine, the sample, the API tab) reads these
+// descriptions, so a new block that can be fed needs only its own.
+export type ApiField = {
+   // The name in the call's JSON body.
+   field: string
+   // `list` sends several values, `text` one.
+   shape: 'list' | 'text'
+   // `link` values are LinkedIn links the block reads itself (a bad one is dropped); `text` values are used as typed.
+   check: 'link' | 'text'
+   // In plain words, for the page.
+   what: string
+   // Made-up sample values (a text field uses the first).
+   example: string[]
+   // The most values a list field takes in one call; a link field takes up to the call's total cap.
+   max?: number
+   // The block's own setting a call value replaces for that run. A block that reads the call itself has none.
+   setting?: string
+}
+
 type BlockSpec = {
    group: 'Triggers' | 'Inputs' | 'Collect' | 'Process' | 'Logic' | 'Account Actions' | 'Output'
    label: string
@@ -565,6 +585,8 @@ type BlockSpec = {
    costHint?: string
    // One-click starting points; each sets only its own settings.
    presets?: Preset[]
+   // What a call may feed this block.
+   api?: ApiField[]
    input: ItemKind | null
    output: ItemKind | null
    config: z.ZodType<Record<string, unknown>>
@@ -595,6 +617,15 @@ const BLOCKS = {
       group: 'Inputs',
       label: 'Posts',
       summary: 'Takes posts from your posts list that are not done yet.',
+      api: [
+         {
+            field: 'posts',
+            shape: 'list',
+            check: 'link',
+            what: 'LinkedIn links of posts',
+            example: ['https://www.linkedin.com/posts/ada-lovelace_engines-activity-7452924970042826753-AbCd'],
+         },
+      ],
       input: 'start',
       output: 'post',
       config: inputPickSchema.omit({ statuses: true }).extend({
@@ -904,6 +935,16 @@ const BLOCKS = {
       group: 'Inputs',
       label: 'Profiles',
       summary: 'People from your profiles list, or the links you give.',
+      api: [
+         {
+            field: 'profiles',
+            shape: 'list',
+            check: 'link',
+            what: 'LinkedIn links of people',
+            example: ['https://www.linkedin.com/in/ada-lovelace'],
+            setting: 'links',
+         },
+      ],
       input: 'start',
       output: 'profile',
       config: inputPickSchema.extend({
@@ -928,6 +969,15 @@ const BLOCKS = {
       group: 'Inputs',
       label: 'Companies',
       summary: 'Companies from your companies list.',
+      api: [
+         {
+            field: 'companies',
+            shape: 'list',
+            check: 'link',
+            what: 'LinkedIn links of companies',
+            example: ['https://www.linkedin.com/company/stripe'],
+         },
+      ],
       input: 'start',
       output: 'company',
       config: inputPickSchema.extend({
@@ -961,6 +1011,16 @@ const BLOCKS = {
       ],
       input: 'start',
       output: 'post',
+      api: [
+         {
+            field: 'keywords',
+            shape: 'text',
+            check: 'text',
+            what: 'words to search for',
+            example: ['outbound sales'],
+            setting: 'keywords',
+         },
+      ],
       config: z.object({
          keywords: z.string().trim().min(1).max(200),
          postedWithin: oneOf(POST_AGES, 'month'),
@@ -1430,6 +1490,17 @@ const BLOCKS = {
       costHint: 'about $0.004 per company',
       input: 'start',
       output: 'company',
+      api: [
+         {
+            field: 'domains',
+            shape: 'list',
+            check: 'text',
+            what: 'website addresses, such as stripe.com',
+            example: ['stripe.com', 'acme.io'],
+            max: 100,
+            setting: 'domains',
+         },
+      ],
       config: z.object({
          domains: z.array(z.string().trim().toLowerCase().min(3).max(200)).min(1).max(100),
          howMany: howMany(100, 25),
@@ -1495,6 +1566,43 @@ const BLOCKS = {
       ],
       input: 'start',
       output: 'profile',
+      api: [
+         {
+            field: 'keywords',
+            shape: 'text',
+            check: 'text',
+            what: 'words to search for',
+            example: ['outbound sales'],
+            setting: 'keywords',
+         },
+         {
+            field: 'titles',
+            shape: 'list',
+            check: 'text',
+            what: 'current job titles',
+            example: ['Head of Growth'],
+            max: 50,
+            setting: 'titles',
+         },
+         {
+            field: 'locations',
+            shape: 'list',
+            check: 'text',
+            what: 'cities or countries',
+            example: ['London'],
+            max: 50,
+            setting: 'locations',
+         },
+         {
+            field: 'workingAt',
+            shape: 'list',
+            check: 'text',
+            what: 'company names or LinkedIn company links',
+            example: ['Stripe'],
+            max: 50,
+            setting: 'companies',
+         },
+      ],
       config: z.object({
          keywords: z.string().trim().max(200).default(''),
          titles: words,
@@ -2070,6 +2178,74 @@ const BLOCKS = {
 
 export const blockOf = (type: BlockType): BlockSpec => BLOCKS[type]
 
+// Every field a call may carry, each once (blocks may share a field, such as keywords), in the order of the catalog.
+export const apiFields = (): ApiField[] => {
+   const seen = new Map<string, ApiField>()
+
+   for (const type of BLOCK_TYPES) {
+      for (const field of (BLOCKS[type] as BlockSpec).api ?? []) {
+         if (!seen.has(field.field)) {
+            seen.set(field.field, field)
+         }
+      }
+   }
+
+   return [...seen.values()]
+}
+
+const TEXT_MAX = 200
+const LINK_MAX = 500
+
+// The body of a call, built from the descriptions: only the described fields, nothing else, at most `maxValues` values
+// in all. A link is only checked for its length (the block drops one it cannot read); a text value must not be empty.
+export const apiBodySchema = (maxValues: number) => {
+   const shape = Object.fromEntries(
+      apiFields().map(({ field, shape: kind, check, max }) => {
+         const value = z
+            .string()
+            .trim()
+            .min(1)
+            .max(check === 'link' ? LINK_MAX : TEXT_MAX)
+
+         return [field, (kind === 'text' ? value : z.array(value).max(max ?? maxValues)).optional()]
+      })
+   )
+
+   return z
+      .object(shape)
+      .strict()
+      .refine(
+         body =>
+            Object.values(body).reduce<number>(
+               (total, value) => total + (Array.isArray(value) ? value.length : value === undefined ? 0 : 1),
+               0
+            ) <= maxValues,
+         { message: `Send at most ${maxValues} values in all.` }
+      )
+}
+
+// The block's settings with what a call sent in place of the settings it replaces, for that run only.
+export const applyApiInput = (type: BlockType, config: NodeConfig, input: unknown): NodeConfig => {
+   const sent = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
+   const replaced: NodeConfig = { ...config }
+
+   for (const { field, shape: kind, setting } of (BLOCKS[type] as BlockSpec).api ?? []) {
+      const value = sent[field]
+
+      if (!setting) {
+         continue
+      }
+
+      if (kind === 'text' && typeof value === 'string' && value.trim() !== '') {
+         replaced[setting] = value
+      } else if (kind === 'list' && Array.isArray(value) && value.length > 0) {
+         replaced[setting] = value.map(String)
+      }
+   }
+
+   return replaced
+}
+
 // The catalog as plain data, for the browser's palette and settings forms.
 export const catalog = (): CatalogBlock[] =>
    BLOCK_TYPES.map(type => {
@@ -2083,6 +2259,7 @@ export const catalog = (): CatalogBlock[] =>
          summary,
          costHint: spec.costHint ?? null,
          presets: spec.presets ?? [],
+         api: spec.api ?? [],
          input,
          output,
          fields,
@@ -2112,6 +2289,7 @@ export type CatalogBlock = {
    summary: string
    costHint: string | null
    presets: Preset[]
+   api: ApiField[]
    input: ItemKind | null
    output: ItemKind | null
    fields: Field[]

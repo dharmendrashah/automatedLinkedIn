@@ -21,6 +21,7 @@ const block = (type: Block['type'], input: Block['input'], output: Block['output
    summary: '',
    costHint: null,
    presets: [],
+   api: [],
    input,
    output,
    fields: [],

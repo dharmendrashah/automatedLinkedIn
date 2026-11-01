@@ -16,7 +16,7 @@ export type RunInfo = {
    // What the estimate says the block takes, or null while it is not known.
    estimate: { items: number; costMicros: number } | null
    // The workflow as drawn, and whether it is switched on, for the "When called by API" block's sample call.
-   api: { enabled: boolean; graph: Graph }
+   api: { enabled: boolean; graph: Graph; catalog: readonly Block[] }
 }
 
 type Props = {
@@ -32,6 +32,12 @@ type Props = {
    fileName?: string
    settings: ReactNode
 }
+
+// Whether a line leads straight from the "When called by API" block into this one.
+const afterCall = (graph: Graph, nodeId: string) =>
+   graph.edges.some(
+      ({ from, to }) => to === nodeId && graph.nodes.some(({ id, type }) => id === from && type === 'trigger.api')
+   )
 
 const EXPIRED = 'These results were deleted 14 days after the run ended.'
 
@@ -76,7 +82,12 @@ export const BlockRunTabs = ({
             </TabsList>
             <TabsContent value="input">
                {block.type === 'trigger.api' ? (
-                  <ApiTriggerInput workflowId={workflowId} enabled={run.api.enabled} graph={run.api.graph} />
+                  <ApiTriggerInput
+                     workflowId={workflowId}
+                     enabled={run.api.enabled}
+                     graph={run.api.graph}
+                     catalog={run.api.catalog}
+                  />
                ) : ran ? (
                   <BlockOutput
                      kind="input"
@@ -96,6 +107,7 @@ export const BlockRunTabs = ({
                      estimate={run.estimate}
                      summary={summary}
                      takes={takes}
+                     afterCall={afterCall(run.api.graph, nodeId)}
                   />
                )}
             </TabsContent>
