@@ -8,6 +8,7 @@ import {
    combineRounds,
    hasLoop,
    newNodeId,
+   portOfHandle,
    startConfig,
    summaryOf,
    toFlow,
@@ -27,6 +28,7 @@ const block = (type: Block['type'], input: Block['input'], output: Block['output
    unit: null,
    flow: null,
    flags: {},
+   outputs: ['main'],
    input,
    output,
    fields: [],
@@ -140,6 +142,35 @@ describe('graph-convert', () => {
             toSide: 'top',
          },
       ])
+   })
+
+   it('should draw a line from an output other than main on that output, and save it back as the output', () => {
+      const withPort: Graph = {
+         ...graph,
+         edges: [
+            {
+               from: 'posts',
+               to: 'commenters',
+               fromPort: 'else',
+            },
+         ],
+      }
+      const { nodes, edges } = toFlow(withPort, catalog)
+
+      expect(edges[0]).toMatchObject({
+         sourceHandle: 'port:else',
+         label: 'Else',
+      })
+      expect(toGraph(nodes, edges).edges).toEqual([
+         {
+            from: 'posts',
+            to: 'commenters',
+            fromPort: 'else',
+            toSide: 'top',
+         },
+      ])
+      expect(portOfHandle('bottom')).toBeUndefined()
+      expect(portOfHandle('port:else')).toBe('else')
    })
 
    it('should join any two blocks once, and never a block to itself', () => {

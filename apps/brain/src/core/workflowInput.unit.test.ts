@@ -49,6 +49,32 @@ describe('where the items that reach a block are kept', () => {
       ])
    })
 
+   it('should read what an If kept aside over a line from its else output, with no Else block', () => {
+      const ports: Graph = {
+         nodes: [node('b', 'logic.if'), node('c', 'output.csv'), node('d', 'output.csv')],
+         edges: [
+            {
+               ...line('b', 'c'),
+               fromPort: 'else',
+            },
+            line('b', 'd'),
+         ],
+      }
+
+      expect(inputKeys(ports, node('c', 'output.csv'), 0, ran('b#0'))).toEqual([
+         {
+            nodeId: 'b~else',
+            round: 0,
+         },
+      ])
+      expect(inputKeys(ports, node('d', 'output.csv'), 0, ran('b#0'))).toEqual([
+         {
+            nodeId: 'b',
+            round: 0,
+         },
+      ])
+   })
+
    it('should always read the first round for a For each', () => {
       expect(sourceRound('logic.forEach', 3)).toBe(0)
       expect(sourceRound('output.csv', 3)).toBe(3)

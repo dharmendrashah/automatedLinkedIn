@@ -2462,6 +2462,9 @@ export const POOL_BLOCKS: Set<BlockType> = withFlag('usesAccounts')
 // Blocks that keep what they did not pass on for an Else after them.
 export const ELSE_SOURCES: Set<BlockType> = withFlag('keepsAside')
 
+// The outputs a block has: `main`, and `else` for what a block that keeps items aside did not pass on.
+export const outputsOf = (type: BlockType): string[] => (ELSE_SOURCES.has(type) ? ['main', 'else'] : ['main'])
+
 // Blocks that take items of every kind as they are, so any line into them is fine.
 export const TAKES_ANYTHING: Set<BlockType> = withFlag('takesAnything')
 
@@ -2565,6 +2568,7 @@ export const catalog = (): CatalogBlock[] =>
          unit: spec.unit ?? null,
          flow: spec.flow ?? null,
          flags: spec.flags ?? {},
+         outputs: outputsOf(type),
          input,
          output,
          fields,
@@ -2600,6 +2604,7 @@ export type CatalogBlock = {
    unit: string | null
    flow: string | null
    flags: BlockFlags
+   outputs: string[]
    input: ItemKind | null
    output: ItemKind | null
    fields: Field[]
@@ -2630,6 +2635,8 @@ export const graphSchema = z.object({
             // Where the line leaves and enters on the canvas; drawing only.
             fromSide: side.optional(),
             toSide: side.optional(),
+            // The output of the block the line leaves from; absent means main (see `portOfEdge`).
+            fromPort: z.string().max(20).optional(),
          })
       )
       .max(100),
@@ -2863,9 +2870,13 @@ export const executionOrder = (graph: Graph): string[] => {
    return order
 }
 
-// Which output of its block a line leaves from. An Else reads the "else" output of the block before it.
-export const portOfEdge = (graph: Graph, edge: GraphEdge) =>
-   graph.nodes.find(node => node.id === edge.to)?.type === 'logic.else' ? 'else' : 'main'
+// Which output of its block a line leaves from: the one it names, else "main", except that a line into an Else block
+// leaves from the "else" output (how graphs were saved before lines named an output).
+export const portOfEdge = (graph: Graph, edge: GraphEdge): string =>
+   edge.fromPort ?? (graph.nodes.find(node => node.id === edge.to)?.type === 'logic.else' ? 'else' : 'main')
+
+// Where the items of an output are kept in a run: "main" under the block's id, any other output under `<id>~<output>`.
+export const portKey = (nodeId: string, port: string) => (port === 'main' ? nodeId : `${nodeId}~${port}`)
 
 const downstreamOf = (edges: GraphEdge[], start: string) => {
    const found = new Set([start])
@@ -3025,6 +3036,18 @@ export const validateGraph = (graph: Graph): GraphError[] => {
    }
 
    problems.push(...graph.nodes.flatMap(configErrors), ...edgeNotes(graph, byId))
+
+   for (const edge of graph.edges) {
+      const from = byId.get(edge.from)
+
+      if (from && edge.fromPort !== undefined && !outputsOf(from.type).includes(edge.fromPort)) {
+         problems.push({
+            nodeId: from.id,
+            level: 'error',
+            message: `${BLOCKS[from.type].label} has no "${edge.fromPort}" output.`,
+         })
+      }
+   }
 
    if (!graph.nodes.some(node => isTrigger(node.type))) {
       note('No trigger: Run starts from the blocks with nothing before them.')

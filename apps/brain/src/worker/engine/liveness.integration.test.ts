@@ -153,6 +153,33 @@ describe('a block runs only when something reaches it (database)', () => {
       })
    })
 
+   it('should give a line from the else output what the If kept aside, with no Else block', async () => {
+      const { steps } = await run({
+         nodes: [
+            node('begin', 'trigger.manual'),
+            node('people', 'input.profiles', { links: [ADA, ALAN] }),
+            node('ok', 'logic.if', { minScore: 50 }),
+            node('passed', 'output.csv'),
+            node('rest', 'output.csv'),
+         ],
+         edges: [
+            line('begin', 'people'),
+            line('people', 'ok'),
+            line('ok', 'passed'),
+            {
+               ...line('ok', 'rest'),
+               fromPort: 'else',
+            },
+         ],
+      })
+
+      expect(steps.passed?.status).toBe('SKIPPED')
+      expect(steps.rest).toMatchObject({
+         status: 'DONE',
+         itemsOut: 2,
+      })
+   })
+
    it('should end the branch of an input that found nothing', async () => {
       const { steps, status } = await run({
          nodes: [node('begin', 'trigger.manual'), node('people', 'input.profiles'), node('kept', 'output.csv')],

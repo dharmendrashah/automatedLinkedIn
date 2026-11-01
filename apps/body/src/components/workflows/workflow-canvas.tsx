@@ -48,6 +48,7 @@ import {
    canConnect,
    hasLoop,
    newNodeId,
+   portOfHandle,
    startConfig,
    toFlow,
    toGraph,
@@ -460,7 +461,9 @@ const Editor = ({
                   }))
                }
                onNodeDragStart={() => setHistory(current => record(current, current.present))}
-               isValidConnection={({ source, target }) => canConnect(edges, source, target)}
+               isValidConnection={({ source, target, targetHandle }) =>
+                  portOfHandle(targetHandle) === undefined && canConnect(edges, source, target)
+               }
                connectionMode={ConnectionMode.Loose}
                onConnect={connection =>
                   commit(canvas => ({

@@ -40,6 +40,14 @@ export const OPPOSITE: Record<Side, Side> = {
 
 const sideOf = (handle: string | null | undefined): Side | undefined => SIDES.find(side => side === handle)
 
+// A block's other outputs have their own handle, named `port:<output>`; the four sides are the main output.
+const PORT_HANDLE = 'port:'
+
+export const handleOfPort = (port: string) => `${PORT_HANDLE}${port}`
+
+export const portOfHandle = (handle: string | null | undefined) =>
+   handle?.startsWith(PORT_HANDLE) ? handle.slice(PORT_HANDLE.length) : undefined
+
 const KIND_WORDS = {
    start: 'start',
    post: 'posts',
@@ -137,7 +145,7 @@ export const toFlow = (
            ]
          : []
    })
-   const edges = graph.edges.map(({ from, to, fromSide, toSide }) => {
+   const edges = graph.edges.map(({ from, to, fromSide, toSide, fromPort }) => {
       const source = stepOf.get(from)
       const kind = blockOf(catalog, graph.nodes.find(({ id }) => id === from)?.type ?? '')?.output
 
@@ -145,10 +153,10 @@ export const toFlow = (
          id: `${from}>${to}`,
          source: from,
          target: to,
-         sourceHandle: fromSide ?? 'bottom',
+         sourceHandle: fromPort && fromPort !== 'main' ? handleOfPort(fromPort) : (fromSide ?? 'bottom'),
          targetHandle: toSide ?? 'top',
          animated: source?.status === 'RUNNING',
-         label: source && kind ? `${source.itemsOut} ${KIND_WORDS[kind]}` : undefined,
+         label: fromPort && fromPort !== 'main' ? 'Else' : source && kind ? `${source.itemsOut} ${KIND_WORDS[kind]}` : undefined,
       }
    })
 
@@ -174,6 +182,7 @@ export const toGraph = (nodes: FlowNode[], edges: Edge[], loopRounds?: number): 
       to: target,
       fromSide: sideOf(sourceHandle),
       toSide: sideOf(targetHandle),
+      ...(portOfHandle(sourceHandle) === undefined ? {} : { fromPort: portOfHandle(sourceHandle) }),
    })),
    ...(loopRounds === undefined ? {} : { loopRounds }),
 })

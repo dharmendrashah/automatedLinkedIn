@@ -28,7 +28,15 @@ import {
    WorkflowRunService,
 } from 'database'
 
-import { ALL_CAP, ELSE_SOURCES, type GraphNode, inputPickOf, inputTake } from '@automatedLinkedIn/contracts'
+import {
+   ALL_CAP,
+   ELSE_SOURCES,
+   type GraphNode,
+   inputPickOf,
+   inputTake,
+   portKey,
+   portOfEdge,
+} from '@automatedLinkedIn/contracts'
 
 import {
    ENRICH_BATCH,
@@ -684,21 +692,22 @@ const identity = (item: WorkflowItemData) => `${item.kind}:${item.slug}`
 // others do not. People found on several lines keep every reason.
 const merge = async (ctx: Context): Promise<StepResult> => {
    const config = configOf(ctx.node)
-   const parents = parentsOf(ctx.graph, ctx.node.id)
    const lines = await Promise.all(
-      parents.map(async nodeId => ({
-         nodeId,
-         keys: new Set(
-            (
-               await WorkflowRunService.items(ctx.run.id, [
-                  {
-                     nodeId,
-                     round: ctx.step.round,
-                  },
-               ])
-            ).map(identity)
-         ),
-      }))
+      ctx.graph.edges
+         .filter(({ to }) => to === ctx.node.id)
+         .map(async edge => ({
+            nodeId: edge.from,
+            keys: new Set(
+               (
+                  await WorkflowRunService.items(ctx.run.id, [
+                     {
+                        nodeId: portKey(edge.from, portOfEdge(ctx.graph, edge)),
+                        round: ctx.step.round,
+                     },
+                  ])
+               ).map(identity)
+            ),
+         }))
    )
    const main = lines.find(({ nodeId }) => nodeId === config.main) ?? lines[0]
    const others = lines.filter(line => line !== main)

@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { type BlockType, type Graph, executionOrder, isFired, portOfEdge } from './workflow'
+import {
+   type BlockType,
+   type Graph,
+   catalog,
+   executionOrder,
+   isFired,
+   outputsOf,
+   portKey,
+   portOfEdge,
+   validateGraph,
+} from './workflow'
 
 // What starts a run, in which order blocks go, and which output a line leaves from
 // (.plan/workflow-engine-p2-run-semantics.md).
@@ -119,5 +129,70 @@ describe('portOfEdge', () => {
 
       expect(portOfEdge(graph, line('ok', 'rest'))).toBe('else')
       expect(portOfEdge(graph, line('ok', 'next'))).toBe('main')
+   })
+
+   it('should read the output a line names, even into an Else block', () => {
+      const graph: Graph = {
+         nodes: [node('ok', 'logic.if'), node('rest', 'logic.else'), node('next', 'output.csv')],
+         edges: [],
+      }
+
+      expect(
+         portOfEdge(graph, {
+            ...line('ok', 'next'),
+            fromPort: 'else',
+         })
+      ).toBe('else')
+      expect(
+         portOfEdge(graph, {
+            ...line('ok', 'rest'),
+            fromPort: 'main',
+         })
+      ).toBe('main')
+   })
+})
+
+describe('outputs', () => {
+   it('should give a block that keeps items aside a main and an else output, and any other block main', () => {
+      expect(outputsOf('logic.if')).toEqual(['main', 'else'])
+      expect(outputsOf('logic.runWorkflow')).toEqual(['main', 'else'])
+      expect(outputsOf('output.csv')).toEqual(['main'])
+      expect(catalog().find(({ type }) => type === 'logic.if')?.outputs).toEqual(['main', 'else'])
+   })
+
+   it('should key main under the block and any other output under the block and its name', () => {
+      expect(portKey('ok', 'main')).toBe('ok')
+      expect(portKey('ok', 'else')).toBe('ok~else')
+   })
+
+   it('should refuse a line from an output the block does not have, and accept one it has', () => {
+      const graph = (fromPort: string): Graph => ({
+         nodes: [node('ok', 'logic.if'), node('next', 'output.csv')],
+         edges: [
+            {
+               ...line('ok', 'next'),
+               fromPort,
+            },
+         ],
+      })
+
+      expect(validateGraph(graph('else')).filter(({ level }) => level === 'error')).toEqual([])
+      expect(validateGraph(graph('later')).filter(({ level }) => level === 'error')).toEqual([
+         expect.objectContaining({
+            nodeId: 'ok',
+            message: 'If has no "later" output.',
+         }),
+      ])
+      expect(
+         validateGraph({
+            nodes: [node('a', 'input.profiles'), node('next', 'output.csv')],
+            edges: [
+               {
+                  ...line('a', 'next'),
+                  fromPort: 'else',
+               },
+            ],
+         }).filter(({ level }) => level === 'error')
+      ).toHaveLength(1)
    })
 })

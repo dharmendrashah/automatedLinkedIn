@@ -17,6 +17,7 @@ const described = (type: Block['type'], api: Block['api'], input: Block['input']
    unit: null,
    flow: null,
    flags: {},
+   outputs: ['main'],
    input,
    output: 'profile',
    fields: [],
