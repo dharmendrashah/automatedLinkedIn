@@ -18,6 +18,7 @@ import {
    executionOrder,
    isFired,
    isHandled,
+   isOff,
    isTrigger,
    loopRoundsOf,
    portOfEdge,
@@ -39,6 +40,7 @@ import {
 } from './context'
 import { EXECUTORS } from './executors'
 import { PLAIN_FAILURE, failureOf } from './failure'
+import { switchedOff } from './logicBlocks'
 
 // Runs workflow graphs step by step, keeping every step's output in the database so a stopped worker resumes where it
 // was. A For each or a loop runs its blocks again in a new round. Messages written here are shown to the client, so
@@ -176,13 +178,15 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
       const read = await readInputs(run, graph, node, step)
 
       inputsRead = read
-      const { inputs, passThrough } = RAW_INPUTS.has(node.type)
-         ? {
-              inputs: read,
-              passThrough: [],
-           }
-         : sortInputs(read, blockOf(node.type).input)
-      const result = await EXECUTORS[node.type]({
+      const off = isOff(node)
+      const { inputs, passThrough } =
+         RAW_INPUTS.has(node.type) || off
+            ? {
+                 inputs: read,
+                 passThrough: [],
+              }
+            : sortInputs(read, blockOf(node.type).input)
+      const result = await (off ? switchedOff : EXECUTORS[node.type])({
          run,
          graph,
          // A call's values stand in for the settings they replace, for this run only.

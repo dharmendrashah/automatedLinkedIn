@@ -126,6 +126,7 @@ describe('resuming a failed run (database)', () => {
       expect((await WorkflowService.run(userId, runId))?.status).toBe('FAILED')
 
       state.fixed = true
+      await WorkflowService.dismissAlert(userId, runId)
 
       await expect(WorkflowService.resume(userId, runId)).resolves.toMatchObject({
          id: runId,
@@ -136,6 +137,7 @@ describe('resuming a failed run (database)', () => {
 
       const reopened = await stepsOf(runId)
 
+      expect((await PrismaService.client.workflowRun.findUnique({ where: { id: runId } }))?.alertDismissedAt).toBeNull()
       expect(reopened.begin?.status).toBe('DONE')
       expect(reopened.who).toMatchObject({
          status: 'WAITING',

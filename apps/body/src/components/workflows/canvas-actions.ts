@@ -8,8 +8,11 @@ export const CanvasActions = createContext<{
    addNextTo: (id: string, side: Side) => void
    removeNode: (id: string) => void
    removeEdge: (id: string) => void
+   // Switches a block off (it passes everything on without running) or on again.
+   toggleOff: (id: string) => void
 }>({
    addNextTo: () => undefined,
+   toggleOff: () => undefined,
    removeNode: () => undefined,
    removeEdge: () => undefined,
 })

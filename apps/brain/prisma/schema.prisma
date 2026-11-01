@@ -249,29 +249,42 @@ enum WorkflowStepStatus {
 
 // A graph of catalog blocks (packages/contracts workflow.ts) that finds people and adds them to its output list.
 model Workflow {
-  id           String        @id @default(uuid(7))
+  id           String            @id @default(uuid(7))
   userId       String
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
   goal         String?
   graph        Json
   // A list in use by a workflow cannot be deleted.
   outputListId String
-  outputList   WorkflowList  @relation(fields: [outputListId], references: [id], onDelete: Restrict)
-  qualifyScore Int           @default(60)
-  maybeScore   Int           @default(40)
-  maybeEnabled Boolean       @default(true)
+  outputList   WorkflowList      @relation(fields: [outputListId], references: [id], onDelete: Restrict)
+  qualifyScore Int               @default(60)
+  maybeScore   Int               @default(40)
+  maybeEnabled Boolean           @default(true)
   // Switched on: a schedule, API or chained workflow may start it; nextRunAt is when the schedule job starts it next.
-  enabled      Boolean       @default(false)
+  enabled      Boolean           @default(false)
   nextRunAt    DateTime?
   // SHA-256 of the API token; the token itself is shown once.
   apiTokenHash String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
   runs         WorkflowRun[]
+  versions     WorkflowVersion[]
 
   @@unique([userId, name])
   @@index([enabled, nextRunAt])
+}
+
+// A saved version of a workflow's graph: one for each save that changed it, the newest 50 kept
+// (.plan/workflow-engine-p5-editor.md).
+model WorkflowVersion {
+  id         String   @id @default(uuid(7))
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  graph      Json
+  createdAt  DateTime @default(now())
+
+  @@index([workflowId, createdAt])
 }
 
 // One execution. It keeps a copy of the graph it started with, so editing the workflow never changes it.

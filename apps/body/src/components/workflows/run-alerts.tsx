@@ -31,7 +31,7 @@ export const RunAlerts = () => {
                variant="ghost"
                size="sm"
                className="text-destructive gap-1"
-               aria-label={`${list.length} workflow runs failed`}
+               aria-label={list.length === 1 ? '1 workflow run failed' : `${list.length} workflow runs failed`}
             >
                <TriangleAlert />
                {list.length}

@@ -20,6 +20,8 @@ export type BlockData = {
    // An error stops a run; a note only explains.
    invalid: boolean
    noted: boolean
+   // Switched off: it passes everything on without running.
+   disabled?: boolean
    // Shown with a run that does not have this block: it was added after the run started.
    faded: boolean
    icpName?: string
@@ -135,6 +137,7 @@ export const toFlow = (
                     block,
                     config: node.config,
                     version: node.version,
+                    disabled: node.disabled,
                     step: stepOf.get(node.id) ?? null,
                     invalid: extras.invalid?.has(node.id) ?? false,
                     noted: extras.noted?.has(node.id) ?? false,
@@ -171,6 +174,7 @@ export const toGraph = (nodes: FlowNode[], edges: Edge[], loopRounds?: number): 
       id: node.id,
       type: node.data.block.type,
       ...(node.data.version === undefined ? {} : { version: node.data.version }),
+      ...(node.data.disabled ? { disabled: true } : {}),
       config: node.data.config,
       position: {
          x: Math.round(node.position.x),

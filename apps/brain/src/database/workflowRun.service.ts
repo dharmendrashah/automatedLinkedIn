@@ -3,7 +3,7 @@ import { ELSE_SUFFIX } from 'core/workflowInput'
 
 import { type Prisma, type WorkflowRunStatus, type WorkflowStepStatus } from 'generated/prisma/client'
 
-import { type StepErrorCode } from '@automatedLinkedIn/contracts'
+import { type StepErrorCode, graphSchema, isOff } from '@automatedLinkedIn/contracts'
 
 import { isUniqueViolation } from './conflict'
 import { PrismaService } from './prisma.service'
@@ -527,18 +527,39 @@ export class WorkflowRunService {
       })
    }
 
+   // The blocks the owner switched off in the graph this run started with; what they pass on is not what they keep.
+   private static async offIds(runId: string) {
+      const run = await PrismaService.client.workflowRun.findUnique({
+         where: { id: runId },
+         select: { graph: true },
+      })
+      const graph = graphSchema.safeParse(run?.graph)
+
+      return new Set(graph.success ? graph.data.nodes.filter(isOff).map(({ id }) => id) : [])
+   }
+
+   // The steps of a run's blocks of one type that are not switched off.
+   private static async stepsOfType(runId: string, type: string) {
+      const [steps, off] = await Promise.all([
+         PrismaService.client.workflowStepRun.findMany({
+            where: {
+               runId,
+               type,
+            },
+            select: {
+               nodeId: true,
+               round: true,
+            },
+         }),
+         WorkflowRunService.offIds(runId),
+      ])
+
+      return steps.filter(({ nodeId }) => !off.has(nodeId))
+   }
+
    // Everyone a run's "Add to list" blocks got, once.
    public static async listedPeople(runId: string) {
-      const steps = await PrismaService.client.workflowStepRun.findMany({
-         where: {
-            runId,
-            type: 'output.list',
-         },
-         select: {
-            nodeId: true,
-            round: true,
-         },
-      })
+      const steps = await WorkflowRunService.stepsOfType(runId, 'output.list')
       const items = await WorkflowRunService.items(runId, steps)
 
       return mergeBySlug(items.filter((item): item is PersonItem => item.kind === 'profile'))
@@ -560,6 +581,8 @@ export class WorkflowRunService {
                finishedAt: null,
                message: null,
                stopRequestedAt: null,
+               // Failing again is a new failure to tell the owner about.
+               alertDismissedAt: null,
                startedAt: new Date(),
             },
          })
@@ -613,16 +636,7 @@ export class WorkflowRunService {
    // What a run gives back to whoever started it: what its "Give back" blocks got, of any kind, each once. null when the
    // workflow has none; the caller then reads the people saved to lists (`listedPeople`).
    public static async returned(runId: string) {
-      const steps = await PrismaService.client.workflowStepRun.findMany({
-         where: {
-            runId,
-            type: 'output.return',
-         },
-         select: {
-            nodeId: true,
-            round: true,
-         },
-      })
+      const steps = await WorkflowRunService.stepsOfType(runId, 'output.return')
 
       if (steps.length === 0) {
          return null
