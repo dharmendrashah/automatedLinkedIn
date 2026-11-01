@@ -1,6 +1,6 @@
 # Workflow engine phase 5: switch a block off, workflow history
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: done <!-- draft | locked | in progress | done -->
 - Created: 2026-11-02
 - Locked by user: yes, 2026-11-02 (phase 5 of [workflow-engine-n8n-alignment.md](workflow-engine-n8n-alignment.md), built as the sixth piece on its own branch and PR; the user said to trim it pragmatically and report what was deferred)
 
@@ -27,12 +27,12 @@ Open questions: none. Deferred, with reasons:
 
 ## Approach
 
-- [ ] 1. Tests first: contracts (`isOff`, estimate, validation), brain integration (an off block passes through and spends nothing; an off list and an off Give back do not count), history integration, body graph convert.
-- [ ] 2. Contracts: `disabled`, `isOff`; estimate, validation and notes.
-- [ ] 3. Engine: pass-through executor; `listedPeople` and `returned` skip off blocks.
-- [ ] 4. Body: switch on the card, faded and labelled when off.
-- [ ] 5. History: migration, `WorkflowVersion`, save on create and on a graph change, prune, file keep, `history` and `restore`, tRPC, dialog.
-- [ ] 6. Gates, plans, MEMORY.md, commit, PR.
+- [x] 1. Tests first: contracts (`isOff`, estimate, validation), brain integration (an off block passes through and spends nothing; an off list and an off Give back do not count), history integration, body graph convert.
+- [x] 2. Contracts: `disabled`, `isOff`; estimate, validation and notes.
+- [x] 3. Engine: pass-through executor; `listedPeople` and `returned` skip off blocks.
+- [x] 4. Body: switch on the card, faded and labelled when off.
+- [x] 5. History: migration, `WorkflowVersion`, save on create and on a graph change, prune, file keep, `history` and `restore`, tRPC, dialog.
+- [x] 6. Gates, plans, MEMORY.md, commit, PR.
 
 ## Edge cases and risks
 
@@ -52,4 +52,8 @@ Open questions: none. Deferred, with reasons:
 
 ## Outcome
 
-Filled in when done.
+Shipped: `disabled` on a graph node with `isOff` (never a trigger); an off block passes everything on without running, costs nothing in the estimate, is not checked, and says it is off in a note; `switchedOff` executor in the engine; `listedPeople` and `returned` skip off blocks; a Power switch on the block card (not shown once a run has the block). History: migration `20261102040000_workflow_version` (table, and one first version for every existing workflow), `WorkflowVersion`, a version on create and on every save that changes the graph (not for a rename or the same graph), the newest 50 kept, `history` and `restore` in `WorkflowService` and tRPC, a History dialog on the workflow page that restarts the canvas on a restore. Post files held by any kept version are not deleted (`unheldFiles`), and are deleted with the workflow. Tests: `blocksOff.unit`, `workflowVersion.unit`, `workflow.files.unit` (kept file case), `switchedOff.integration`, `workflowHistory.integration`, body `graph-convert`.
+
+Deviations: none from the locked scope. Deferred, as listed under Requirements: test a block with a sample item, event triggers, wait for an event or approval.
+
+Verified: lint, `ts:check --force`, unit tests, build, all brain integration tests. Not run: the Power switch and the History dialog in a browser; the migration on the dev database (only on the integration template).

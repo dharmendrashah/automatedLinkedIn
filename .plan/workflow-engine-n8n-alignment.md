@@ -237,7 +237,7 @@ Each phase is its own PR with its own plan; tests first; the six repros become t
 - [x] Phase 2, run semantics (plan `workflow-engine-p2-run-semantics.md`, done): `engineVersion`; fired triggers; liveness and `SKIPPED`; fixed order; the run page says why a block was skipped; inverted repro tests for L4, L5, L7.
 - [x] Phase 3, ports (plan `workflow-engine-p3-ports.md`): `outputs`, `fromPort`, port item keys, validation, engine reads, If, Task result, Retry, Run another workflow ports, canvas handles, Else compatibility, tests, `MEMORY.md`.
 - [x] Phase 4, run lifecycle (plan `workflow-engine-p4-lifecycle.md`), each item its own step and go-ahead: queued runs; failure alerts and the stop-with-error block; stuck-run check; the give-back block; resume a failed run; engine parallelism only if measured.
-- [ ] Phase 5 only for what you choose after phase 4.
+- [x] Phase 5 (plan `workflow-engine-p5-editor.md`, own branch and PR): switch a block off, workflow history and restore. Test a block, event triggers and wait for an event or approval deferred.
 
 ## Edge cases and risks
 
