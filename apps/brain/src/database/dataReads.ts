@@ -14,6 +14,7 @@ import { LinkedInPostService } from './linkedInPost.service'
 import { PeopleIndexService } from './peopleIndex.service'
 import { connectionsOf, conversationsWith } from './personContacts'
 import { PersonSnapshotService } from './personSnapshot.service'
+import { PostAuthorService } from './postAuthor.service'
 import { PrismaService } from './prisma.service'
 
 // What each kind of on-demand read is called, keeps when it finishes, and whether it is still wanted. Messages are
@@ -141,7 +142,10 @@ export const DATA_READS: Record<DataReadKind, ReadSpec> = {
       missing: 'No post was found at this link.',
       wanted: postWanted,
       store: async ({ userId, slug }, [row]) => {
-         await keepPage(userId, 'POST', slug, postSnapshotFrom(row))
+         const snapshot = postSnapshotFrom(row)
+
+         await keepPage(userId, 'POST', slug, snapshot)
+         await PostAuthorService.keep(userId, snapshot.author)
       },
    },
    COMMENTS: {

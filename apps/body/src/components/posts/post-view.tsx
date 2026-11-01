@@ -1,42 +1,44 @@
-import { DetailLoading, DetailMissing, PersonRow, ReadButton } from '@/components/details/detail-parts'
+import { DetailLoading, DetailMissing, PersonRow, Picture, ReadButton } from '@/components/details/detail-parts'
 import { pollWhile } from '@/components/details/read-status'
+import { useDetailStack } from '@/components/details/use-detail-stack'
 import { Section } from '@/components/people/person-sections'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DrawerDescription, DrawerTitle } from '@/components/ui/drawer'
+import { timeAgo } from '@/lib/time-ago'
 import { readableError } from '@/lib/trpc-error'
 import { ExternalLink, MessageSquare, ThumbsUp, UserRound } from 'lucide-react'
 import { type ReactNode, useRef, useState } from 'react'
 
+import { formatUsd } from '../workflows/types'
+
 import { type RouterOutputs, trpc } from '../../trpc'
 import { POST_READ } from '../links/read-cost'
-import { formatUsd } from '../workflows/types'
 import { PostAuthor, PostCounts, PostMedia, PostText } from './post-body'
 import { type EngagementKind, PostEngagement } from './post-engagement'
 
 type PostDetail = RouterOutputs['postPage']['detail']
+type Gist = NonNullable<PostDetail['author']>
 
 const ACTION_CLASS = 'text-muted-foreground flex-1 font-semibold'
 
 // The post as it reads on LinkedIn: the author, the text, its media, the counts and an action bar.
-const ThePost = ({
-   detail,
-   onPerson,
-   onEngagement,
-}: {
-   detail: PostDetail
-   onPerson: (slug: string) => void
-   onEngagement: (kind: EngagementKind) => void
-}) => {
+const ThePost = ({ detail, onEngagement }: { detail: PostDetail; onEngagement: (kind: EngagementKind) => void }) => {
    const utils = trpc.useUtils()
    const read = trpc.postPage.readFull.useMutation({
       onSuccess: data => utils.postPage.detail.setData({ slug: detail.slug }, data),
    })
-   const { snapshot, post, authorSlug } = detail
+   const { snapshot, post, author } = detail
    const link = post.expandedUrl ?? post.url
    const openLink: ReactNode = (
       <Button asChild variant="ghost" size="icon" className="shrink-0">
-         <a href={link} target="_blank" rel="noreferrer noopener" aria-label="Open on LinkedIn" title="Open on LinkedIn">
+         <a
+            href={link}
+            target="_blank"
+            rel="noreferrer noopener"
+            aria-label="Open on LinkedIn"
+            title="Open on LinkedIn"
+         >
             <ExternalLink />
          </a>
       </Button>
@@ -96,12 +98,7 @@ const ThePost = ({
                <MessageSquare />
                Comments
             </Button>
-            {authorSlug ? (
-               <Button variant="ghost" size="sm" className={ACTION_CLASS} onClick={() => onPerson(authorSlug)}>
-                  <UserRound />
-                  Author
-               </Button>
-            ) : snapshot?.author.url ? (
+            {!author && snapshot?.author.url ? (
                <Button asChild variant="ghost" size="sm" className={ACTION_CLASS}>
                   <a href={snapshot.author.url} target="_blank" rel="noreferrer noopener">
                      <UserRound />
@@ -121,6 +118,71 @@ const ThePost = ({
             />
          </div>
       </article>
+   )
+}
+
+const AUTHOR_WHERE = {
+   person: 'On My network',
+   company: 'On /companies',
+} as const
+
+// The author as the owner has them, with the state of their read. A click opens their drawer on top of this one, or the
+// page's drawer when there is no stack.
+const AuthorGist = ({
+   author,
+   onPerson,
+   onCompany,
+}: {
+   author: Gist
+   onPerson: (slug: string) => void
+   onCompany: (slug: string) => void
+}) => {
+   const stack = useDetailStack()
+   const isCompany = author.kind === 'company'
+   const name = author.name ?? author.slug
+   const state = author.readAt ? `Read ${timeAgo(author.readAt)}` : author.reading ? 'Reading…' : 'Not read yet'
+   const open = () => {
+      if (stack) {
+         stack(
+            isCompany
+               ? {
+                    kind: 'company',
+                    slug: author.slug,
+                    ...(author.name && { name: author.name }),
+                 }
+               : {
+                    kind: 'person',
+                    slug: author.slug,
+                 }
+         )
+      } else if (isCompany) {
+         onCompany(author.slug)
+      } else {
+         onPerson(author.slug)
+      }
+   }
+
+   return (
+      <button
+         type="button"
+         onClick={open}
+         className="hover:bg-muted flex w-full items-center gap-3 rounded-lg p-2 text-left"
+      >
+         <Picture name={name} image={author.photo} square={isCompany} className="size-12 shrink-0 border-0 text-sm" />
+         <span className="grid min-w-0 flex-1 gap-0.5">
+            <span className="truncate text-sm font-semibold">{name}</span>
+            {author.headline ? (
+               <span className="text-muted-foreground line-clamp-1 text-xs">{author.headline}</span>
+            ) : null}
+            {author.company ? (
+               <span className="text-muted-foreground line-clamp-1 text-xs">{author.company}</span>
+            ) : null}
+            <span className="text-muted-foreground text-xs">{[AUTHOR_WHERE[author.kind], state].join(' · ')}</span>
+            {author.read?.status === 'FAILED' && author.read.message ? (
+               <span className="text-destructive text-xs">{author.read.message}</span>
+            ) : null}
+         </span>
+      </button>
    )
 }
 
@@ -159,12 +221,20 @@ const Workspace = ({ detail }: { detail: PostDetail }) => {
 }
 
 // One post, like on LinkedIn, with the people a workflow found from it.
-export const PostView = ({ slug, onPerson }: { slug: string; onPerson: (slug: string) => void }) => {
+export const PostView = ({
+   slug,
+   onPerson,
+   onCompany,
+}: {
+   slug: string
+   onPerson: (slug: string) => void
+   onCompany: (slug: string) => void
+}) => {
    const detail = trpc.postPage.detail.useQuery(
       { slug },
       {
          retry: false,
-         refetchInterval: query => pollWhile(query.state.data?.read),
+         refetchInterval: query => pollWhile(query.state.data?.read, query.state.data?.author?.read),
       }
    )
    const data = detail.data
@@ -185,7 +255,12 @@ export const PostView = ({ slug, onPerson }: { slug: string; onPerson: (slug: st
 
    return (
       <div className="grid gap-3">
-         <ThePost detail={data} onPerson={onPerson} onEngagement={openEngagement} />
+         <ThePost detail={data} onEngagement={openEngagement} />
+         {data.author ? (
+            <Section title="Author">
+               <AuthorGist author={data.author} onPerson={onPerson} onCompany={onCompany} />
+            </Section>
+         ) : null}
          <div ref={engagement} className="scroll-mt-4">
             <PostEngagement
                slug={data.slug}

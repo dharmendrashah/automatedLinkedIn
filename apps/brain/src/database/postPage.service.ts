@@ -1,10 +1,11 @@
-import { parseLinkedInUrl, readPostSnapshot, readSignals } from 'core'
+import { type PostSnapshotData, parseLinkedInUrl, readPostSnapshot, readSignals } from 'core'
 
-import { type Prisma } from 'generated/prisma/client'
+import { type DataReadKind, type Prisma } from 'generated/prisma/client'
 
 import { PRICE_MICROS } from '@automatedLinkedIn/contracts'
 
 import { DataReadService, RECENT_READ_MS } from './dataRead.service'
+import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
 import { PrismaService } from './prisma.service'
 
@@ -60,6 +61,92 @@ const knownAuthor = async (userId: string, url: string | null) => {
    ])
 
    return profile || member ? slug : null
+}
+
+// The author as the owner has them: a person on My network (or saved, about to be) or a company of /companies, with their read.
+const authorOf = async (userId: string, author: PostSnapshotData['author'] | undefined) => {
+   const kind: 'company' | 'person' = author?.isCompany ? 'company' : 'person'
+   const slug = author?.url ? parseLinkedInUrl(author.url, kind === 'company' ? 'company' : 'profile')?.slug : undefined
+
+   if (!author || !slug) {
+      return null
+   }
+
+   const readKind: DataReadKind = kind === 'company' ? 'COMPANY' : 'PROFILE'
+   const latest = await DataReadService.latest(userId, readKind, slug)
+   const reading = latest?.status === 'QUEUED' || latest?.status === 'RUNNING'
+   const gist = {
+      kind,
+      slug,
+      name: author.name,
+      headline: author.headline,
+      photo: author.avatar,
+      company: null as string | null,
+      reading,
+      read: latest,
+   }
+
+   if (kind === 'company') {
+      const [company, page] = await Promise.all([
+         LinkedInCompanyService.bySlug(userId, slug),
+         PrismaService.client.pageSnapshot.findUnique({
+            where: {
+               userId_kind_slug: {
+                  userId,
+                  kind: 'COMPANY',
+                  slug,
+               },
+            },
+            select: { fetchedAt: true },
+         }),
+      ])
+
+      return company
+         ? {
+              ...gist,
+              name: company.name ?? author.name,
+              headline: company.industry,
+              readAt: page?.fetchedAt ?? null,
+           }
+         : null
+   }
+
+   const [person, profile, snapshot] = await Promise.all([
+      PrismaService.client.person.findFirst({
+         where: {
+            userId,
+            slug,
+         },
+         orderBy: { lastTouchAt: 'desc' },
+         select: {
+            name: true,
+            headline: true,
+            company: true,
+            photoUrl: true,
+         },
+      }),
+      knownAuthor(userId, author.url),
+      PrismaService.client.personSnapshot.findUnique({
+         where: {
+            userId_slug: {
+               userId,
+               slug,
+            },
+         },
+         select: { fetchedAt: true },
+      }),
+   ])
+
+   return person || profile
+      ? {
+           ...gist,
+           name: person?.name ?? author.name,
+           headline: person?.headline ?? author.headline,
+           photo: person?.photoUrl ?? author.avatar,
+           company: person?.company ?? null,
+           readAt: snapshot?.fetchedAt ?? null,
+        }
+      : null
 }
 
 export class PostPageService {
@@ -137,7 +224,7 @@ export class PostPageService {
                     fetchedAt: stored.fetchedAt,
                  }
                : null,
-         authorSlug: await knownAuthor(userId, page?.author.url ?? null),
+         author: await authorOf(userId, page?.author),
          people: members.map(({ signals, ...member }) => ({
             ...member,
             // What they wrote on this post, when they commented.

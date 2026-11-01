@@ -185,7 +185,10 @@ describe('company and post pages (database)', () => {
             text: 'Pipeline is hard.',
             reactions: 4,
          },
-         authorSlug: 'ada',
+         author: expect.objectContaining({
+            kind: 'person',
+            slug: 'ada',
+         }),
       })
       expect(post?.people.map(({ slug, comment }) => [slug, comment])).toEqual([
          ['ada', 'ada says hi'],
