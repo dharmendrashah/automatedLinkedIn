@@ -1,4 +1,5 @@
-import { type LinkedInLink, postCardOf } from 'core'
+import { type LinkedInLink } from 'core/linkedInUrl'
+import { postCardOf } from 'core/pageSnapshot'
 
 import { type LinkedInPostStatus, type Prisma } from 'generated/prisma/client'
 
