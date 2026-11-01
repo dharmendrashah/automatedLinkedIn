@@ -15,7 +15,7 @@
       "build": "tsc -b",
       "test:unit": "vitest .unit.test.ts",
       "test:unit:run": "pnpm test:unit --run",
-      "test:integration": "vitest .integration.test.ts",
+      "test:integration": "vitest --config vitest.integration.config.mts .integration.test.ts",
       "test:integration:run": "pnpm test:integration --run",
       "test:e2e": "vitest .e2e.test.ts",
       "test:e2e:run": "pnpm test:e2e --run",

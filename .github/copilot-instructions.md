@@ -104,6 +104,7 @@ Turborepo behaviour differs between versions: read the docs bundled in the insta
 - Co-locate tests next to the source and write the test first.
 - Write the fewest tests that prove the behaviour: the happy path, the real edge and failure cases, and the contract. No duplicate cases, no tests of framework or trivial code, no assertions on implementation details.
 - Suffixes decide which runner picks a file up: `*.unit.test.ts` (no I/O, mock `env`, Prisma and adapters), `*.integration.test.ts` (real Postgres), `*.e2e.test.ts` (running server).
+- Brain integration tests (`vitest.integration.config.mts`) give every test file its own database, cloned from a template migrated once per run (`testDatabase.ts`); `DATABASE_URL` only names the server and the name prefix. A test that makes a row "due" for a job must date it in the past (for example `nextAttemptAt: new Date(Date.now() - 1000)`): rows are dated by this process and jobs read the database clock, which can lag by a few ms.
 - `apps/brain/vitest.config.mts` is `.mts` on purpose: Vitest's config loader is ESM and brain is CJS. It extends the root `vitest.config.ts`, which resolves tsconfig `paths` natively (`resolve.tsconfigPaths: true`; the `vite-tsconfig-paths` plugin was removed on 2026-10-17).
 - Mock `module-alias` with `vi.mock('module-alias', ...)` and a named `addAliases` import; spying on a namespace import fails under ESM.
 

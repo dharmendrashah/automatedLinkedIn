@@ -82,7 +82,13 @@ const finishedRun = async (verdict: 'DONE' | 'PARTIAL') => {
          finishedAt: new Date(),
       },
    })
-   await PrismaService.client.profileImport.create({ data: { sessionId: id } })
+   // A second in the past: the row's time comes from this process and "due" is read on the database clock, which can lag by a few ms.
+   await PrismaService.client.profileImport.create({
+      data: {
+         sessionId: id,
+         nextAttemptAt: new Date(Date.now() - 1000),
+      },
+   })
 
    return id
 }
