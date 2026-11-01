@@ -1,5 +1,5 @@
 import { Handle, type NodeProps, Position } from '@xyflow/react'
-import { CircleAlert, CircleCheck, CircleDashed, CircleSlash, Info, Loader2, Plus, Trash2 } from 'lucide-react'
+import { CircleAlert, CircleCheck, CircleDashed, CircleSlash, Info, Loader2, Plus, Power, Trash2 } from 'lucide-react'
 import { useContext } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -61,19 +61,20 @@ const Reason = ({ code, failed }: { code: string | null; failed: boolean }) => {
 // One block: icon, title and settings in a line, during a run its state, and a "+" on each side to add a block there. Lines
 // leave and enter on any side.
 export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
-   const { block, config, step, invalid, noted, faded, icpName } = data
-   const { addNextTo, removeNode } = useContext(CanvasActions)
+   const { block, config, step, invalid, noted, faded, icpName, disabled } = data
+   const { addNextTo, removeNode, toggleOff } = useContext(CanvasActions)
    const Icon = BLOCK_ICONS[block.type]
    const StepIcon = step ? STEP_ICONS[step.status] : null
    const progress = step?.progress
 
    return (
-      <div className={cn('group relative', faded && 'opacity-40')} style={{ width: NODE_WIDTH }}>
+      <div className={cn('group relative', faded && 'opacity-40', disabled && 'opacity-60')} style={{ width: NODE_WIDTH }}>
          <div
             className={cn(
                'bg-card flex items-start gap-3 rounded-xl border p-3 text-left shadow-sm transition-shadow hover:shadow-md',
                selected && 'ring-primary ring-2',
                noted && 'border-warning',
+               disabled && 'border-dashed',
                invalid && 'border-destructive'
             )}
          >
@@ -125,6 +126,7 @@ export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
                   </p>
                ) : null}
                {faded ? <p className="text-muted-foreground mt-1 text-xs">Not in this run</p> : null}
+               {disabled ? <p className="text-muted-foreground mt-1 text-xs">Switched off: passes everything on</p> : null}
                {invalid ? (
                   <p className="text-destructive mt-1 flex items-center gap-1 text-xs">
                      <CircleAlert className="size-3.5" aria-hidden />
@@ -138,6 +140,23 @@ export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
                ) : null}
             </div>
          </div>
+         {step || block.input === null ? null : (
+            <button
+               type="button"
+               aria-label={disabled ? `Switch ${block.label} on` : `Switch ${block.label} off`}
+               title={disabled ? 'Switch this block on' : 'Switch this block off: it passes everything on without running'}
+               onClick={event => {
+                  event.stopPropagation()
+                  toggleOff(id)
+               }}
+               className={cn(
+                  'nodrag bg-background hover:bg-primary hover:text-primary-foreground absolute -top-2.5 -left-2.5 grid size-6 place-items-center rounded-full border opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
+                  (selected || disabled) && 'opacity-100'
+               )}
+            >
+               <Power className="size-3.5" />
+            </button>
+         )}
          {step ? null : (
             <button
                type="button"

@@ -2660,6 +2660,8 @@ export const graphSchema = z.object({
             type: z.enum(BLOCK_TYPES),
             // The version of the block the settings were saved for; absent means 1.
             version: z.number().int().min(1).optional(),
+            // Switched off: the block does no work and passes on what reaches it (see `isOff`).
+            disabled: z.boolean().optional(),
             config: configSchema.default({}),
             position: z.object({
                x: z.number(),
@@ -2728,6 +2730,9 @@ export const upgradeGraph = (graph: Graph): Graph => ({
 })
 
 export const isTrigger = (type: BlockType) => BLOCKS[type].input === null
+
+// A block the owner switched off. A trigger cannot be: the workflow's own switch stops it.
+export const isOff = (node: { type: BlockType; disabled?: boolean }) => node.disabled === true && !isTrigger(node.type)
 
 const parentsOf = (graph: Graph, id: string) => graph.edges.filter(edge => edge.to === id).map(edge => edge.from)
 
@@ -3076,7 +3081,7 @@ export const validateGraph = (graph: Graph): GraphError[] => {
       })
    }
 
-   problems.push(...graph.nodes.flatMap(configErrors), ...edgeNotes(graph, byId))
+   problems.push(...graph.nodes.filter(node => !isOff(node)).flatMap(configErrors), ...edgeNotes(graph, byId))
 
    for (const edge of graph.edges) {
       const from = byId.get(edge.from)
@@ -3095,6 +3100,12 @@ export const validateGraph = (graph: Graph): GraphError[] => {
    }
 
    for (const node of graph.nodes) {
+      if (isOff(node)) {
+         note(`${BLOCKS[node.type].label} is switched off, so it passes everything on without running.`, node.id)
+
+         continue
+      }
+
       if (!isTrigger(node.type) && BLOCKS[node.type].input !== 'start' && parentsOf(graph, node.id).length === 0) {
          note(`${BLOCKS[node.type].label} has nothing before it, so it gets nothing.`, node.id)
       }
@@ -3171,7 +3182,7 @@ const reaching = (node: GraphNode, available: Available, total: number) => avail
 // What one block passes on and costs at most, given how many items reach it. A block with no estimate passes on what
 // reaches it for free; triggers start with nothing, and what another workflow passes on is not known before it runs.
 const blockEstimate = (node: GraphNode, incoming: number, available: Available) =>
-   blockOf(node.type).estimate?.(node, incoming, available) ?? {
+   (isOff(node) ? undefined : blockOf(node.type).estimate?.(node, incoming, available)) ?? {
       items: isTrigger(node.type) ? 0 : incoming,
       costMicros: 0,
    }

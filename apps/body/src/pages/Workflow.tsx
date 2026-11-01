@@ -17,6 +17,7 @@ import { RunDialog } from '@/components/workflows/run-dialog'
 import { isLive, runSentence } from '@/components/workflows/run-sentence'
 import { RunDetailView, RunsTable } from '@/components/workflows/runs'
 import { WorkflowCanvas } from '@/components/workflows/workflow-canvas'
+import { WorkflowHistory } from '@/components/workflows/workflow-history'
 import { WorkflowSettings } from '@/components/workflows/workflow-settings'
 import { useDocumentTitle } from '@/lib/page-title'
 import { readableError } from '@/lib/trpc-error'
@@ -42,6 +43,8 @@ export const WorkflowPage = () => {
    const [replay, setReplay] = useState(false)
    const [focus, setFocus] = useState<string | null>(null)
    const [stopping, setStopping] = useState(false)
+   // Counts the restores of an older version: the canvas starts again from the saved graph.
+   const [restores, setRestores] = useState(0)
 
    const workflow = trpc.workflow.get.useQuery({ id }, { retry: false })
    // The tab and a bookmark carry the workflow's own name, which the owner chose.
@@ -189,6 +192,7 @@ export const WorkflowPage = () => {
                      <Label htmlFor="workflow-on">Runs {onLabel.join(' and ')}</Label>
                   </div>
                ) : null}
+               <WorkflowHistory workflowId={id} onRestored={() => setRestores(count => count + 1)} />
                <Button variant="outline" onClick={() => setMode('preview')}>
                   <FlaskConical />
                   Run a preview
@@ -252,7 +256,7 @@ export const WorkflowPage = () => {
                   </p>
                ) : null}
                <WorkflowCanvas
-                  key={id}
+                  key={`${id}:${restores}`}
                   workflowId={id}
                   graph={data.graph}
                   catalog={catalog.data}
