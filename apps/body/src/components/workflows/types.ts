@@ -61,6 +61,27 @@ export const stepLabel = (step: Pick<StepRun, 'status' | 'progress' | 'tries'>) 
    return step.tries > 0 ? `${label} (try ${step.tries + 1})` : label
 }
 
+// When a step that is held back (a Wait, or the pause before a retry) goes on; null when it is not held back.
+export const resumeText = (waitUntil: string | null, now: Date = new Date()) => {
+   const at = waitUntil ? new Date(waitUntil) : null
+
+   if (!at || at <= now) {
+      return null
+   }
+
+   const day = at.toLocaleDateString([], {
+      day: 'numeric',
+      month: 'short',
+      year: at.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+   })
+   const time = at.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+   })
+
+   return `Resumes ${day}, ${time}`
+}
+
 export const triggerLabels: Record<Run['trigger'], string> = {
    MANUAL: 'By hand',
    SCHEDULE: 'Schedule',

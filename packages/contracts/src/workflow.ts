@@ -226,7 +226,31 @@ const WAIT_MODES = optionsOf([
    ['between', 'Between'],
 ])
 
-// The longest wait, or pause between tries, in seconds.
+const WAIT_UNITS = optionsOf([
+   ['seconds', 'Seconds'],
+   ['minutes', 'Minutes'],
+   ['hours', 'Hours'],
+   ['days', 'Days'],
+   ['weeks', 'Weeks'],
+])
+
+// A day is 24 hours and a week is 7 days: no calendar, no time zone.
+const UNIT_SECONDS: Record<string, number> = {
+   seconds: 1,
+   minutes: 60,
+   hours: 3_600,
+   days: 86_400,
+   weeks: 604_800,
+}
+
+export const toSeconds = (amount: number, unit: string) => amount * (UNIT_SECONDS[unit] ?? 1)
+
+// The longest wait of one Wait block; two Waits in a row wait longer.
+export const MAX_WAIT_BLOCK_SECONDS = 365 * 86_400
+// The biggest number a Wait block takes, whatever the unit (the year above is checked on top of it).
+const MAX_WAIT_AMOUNT = 3_600
+
+// The longest pause between tries of a Retry, in seconds.
 export const MAX_WAIT_SECONDS = 3_600
 export const MAX_RETRIES = 5
 const YEARS = optionsOf([
@@ -1802,19 +1826,27 @@ const BLOCKS = {
    'logic.wait': {
       group: 'Logic',
       label: 'Wait',
-      summary: 'Holds the run for a few seconds, then passes everything on. Accurate to about 5 seconds.',
+      summary:
+         'Holds the run for as long as you set, from seconds to a year, then passes everything on. Accurate to about 5 seconds.',
       input: 'profile',
       output: 'profile',
       config: z
          .object({
             mode: oneOf(WAIT_MODES, 'exact'),
-            seconds: z.number().int().min(1).max(MAX_WAIT_SECONDS).default(30),
-            minSeconds: z.number().int().min(1).max(MAX_WAIT_SECONDS).default(20),
-            maxSeconds: z.number().int().min(1).max(MAX_WAIT_SECONDS).default(60),
+            unit: oneOf(WAIT_UNITS, 'seconds'),
+            amount: z.number().int().min(1).max(MAX_WAIT_AMOUNT).default(30),
+            minAmount: z.number().int().min(1).max(MAX_WAIT_AMOUNT).default(20),
+            maxAmount: z.number().int().min(1).max(MAX_WAIT_AMOUNT).default(60),
          })
          .refine(
-            config => config.mode !== 'between' || config.minSeconds <= config.maxSeconds,
+            config => config.mode !== 'between' || config.minAmount <= config.maxAmount,
             'the low end must not be above the high end'
+         )
+         .refine(
+            config =>
+               toSeconds(config.mode === 'between' ? config.maxAmount : config.amount, config.unit) <=
+               MAX_WAIT_BLOCK_SECONDS,
+            'the longest wait is 1 year'
          ),
       fields: [
          {
@@ -1824,34 +1856,41 @@ const BLOCKS = {
             options: WAIT_MODES,
          },
          {
-            key: 'seconds',
-            label: 'Seconds',
+            key: 'unit',
+            label: 'In',
+            kind: 'select',
+            options: WAIT_UNITS,
+         },
+         {
+            key: 'amount',
+            label: 'How long',
             kind: 'int',
             min: 1,
-            max: MAX_WAIT_SECONDS,
+            max: MAX_WAIT_AMOUNT,
+            hint: 'Up to 1 year. A day is 24 hours.',
             showWhen: {
                key: 'mode',
                is: 'exact',
             },
          },
          {
-            key: 'minSeconds',
-            label: 'At least (seconds)',
+            key: 'minAmount',
+            label: 'At least',
             kind: 'int',
             min: 1,
-            max: MAX_WAIT_SECONDS,
+            max: MAX_WAIT_AMOUNT,
             showWhen: {
                key: 'mode',
                is: 'between',
             },
          },
          {
-            key: 'maxSeconds',
-            label: 'At most (seconds)',
+            key: 'maxAmount',
+            label: 'At most',
             kind: 'int',
             min: 1,
-            max: MAX_WAIT_SECONDS,
-            hint: 'A number in this range is picked once for each run.',
+            max: MAX_WAIT_AMOUNT,
+            hint: 'A moment in this range is picked once for each run. Up to 1 year.',
             showWhen: {
                key: 'mode',
                is: 'between',

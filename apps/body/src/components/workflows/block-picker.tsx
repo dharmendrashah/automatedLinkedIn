@@ -13,16 +13,17 @@ import { choicesFor } from './graph-convert'
 type Props = {
    open: boolean
    catalog: Block[]
-   // The block the new one follows, or null for a free block.
+   // The block the new one is added next to, or null for a free block; `before` when the new block feeds it.
    after: Block | null
+   before?: boolean
    onPick: (block: Block) => void
    onClose: () => void
 }
 
-const Choices = ({ catalog, after, onPick }: Omit<Props, 'open' | 'onClose'>) => {
+const Choices = ({ catalog, after, before, onPick }: Omit<Props, 'open' | 'onClose'>) => {
    const [query, setQuery] = useState('')
    const [active, setActive] = useState(0)
-   const choices = choicesFor(catalog, after, query)
+   const choices = choicesFor(catalog, after, query, before)
    const ordered = GROUPS.flatMap(({ group }) => choices.filter(block => block.group === group))
    const current = Math.min(active, ordered.length - 1)
 
@@ -100,14 +101,16 @@ const Choices = ({ catalog, after, onPick }: Omit<Props, 'open' | 'onClose'>) =>
 }
 
 // Search the blocks and pick one; arrows and Enter work from the search box.
-export const BlockPicker = ({ open, catalog, after, onPick, onClose }: Props) => (
+export const BlockPicker = ({ open, catalog, after, before, onPick, onClose }: Props) => (
    <Dialog open={open} onOpenChange={next => (next ? undefined : onClose())}>
       <DialogContent className="sm:max-w-xl">
          <DialogHeader>
-            <DialogTitle>{after ? `Add after "${after.label}"` : 'Add a block'}</DialogTitle>
+            <DialogTitle>
+               {after ? `Add ${before ? 'before' : 'after'} "${after.label}"` : 'Add a block'}
+            </DialogTitle>
             <DialogDescription>Type to search. Use the arrow keys and Enter to pick.</DialogDescription>
          </DialogHeader>
-         {open ? <Choices catalog={catalog} after={after} onPick={onPick} /> : null}
+         {open ? <Choices catalog={catalog} after={after} before={before} onPick={onPick} /> : null}
       </DialogContent>
    </Dialog>
 )

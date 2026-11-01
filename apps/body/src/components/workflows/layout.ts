@@ -2,6 +2,8 @@ import { Graph as Dagre, layout } from '@dagrejs/dagre'
 
 import { type Graph } from './types'
 
+import { type Side } from './graph-convert'
+
 // Room a block takes on the canvas, for laying graphs out.
 export const NODE_WIDTH = 240
 export const NODE_HEIGHT = 96
@@ -12,8 +14,13 @@ type Point = { x: number; y: number }
 
 const positionOf = (graph: Graph, id: string) => graph.nodes.find(node => node.id === id)?.position
 
-// Saved before the canvas ran top to bottom: most lines go to the right rather than down.
+// Saved before lines had sides and before the canvas ran top to bottom: most lines go to the right rather than down.
+// Once any line has a side the owner's own placing is kept, so it is never laid out again.
 export const isLeftToRight = (graph: Graph) => {
+   if (graph.edges.some(({ fromSide, toSide }) => fromSide || toSide)) {
+      return false
+   }
+
    const sideways = graph.edges.filter(({ from, to }) => {
       const a = positionOf(graph, from)
       const b = positionOf(graph, to)
@@ -59,20 +66,33 @@ export const layoutTopToBottom = (graph: Graph): Graph => {
    }
 }
 
-// Below `parent`, moved right until no block is in the way.
-export const placeBelow = (parent: Point, taken: Point[]): Point => {
+// On the chosen side of `parent`, moved along (right for top and bottom, down for left and right) until no block is in
+// the way.
+export const placeBeside = (parent: Point, side: Side, taken: Point[]): Point => {
    const free = (point: Point) =>
       !taken.some(other => Math.abs(other.x - point.x) < NODE_WIDTH && Math.abs(other.y - point.y) < NODE_HEIGHT)
-   let point = {
-      x: parent.x,
-      y: parent.y + STEP_Y,
-   }
+   const vertical = side === 'top' || side === 'bottom'
+   const away = side === 'top' || side === 'left' ? -1 : 1
+   let point = vertical
+      ? {
+           x: parent.x,
+           y: parent.y + away * STEP_Y,
+        }
+      : {
+           x: parent.x + away * BRANCH_X,
+           y: parent.y,
+        }
 
    while (!free(point)) {
-      point = {
-         ...point,
-         x: point.x + BRANCH_X,
-      }
+      point = vertical
+         ? {
+              ...point,
+              x: point.x + BRANCH_X,
+           }
+         : {
+              ...point,
+              y: point.y + STEP_Y,
+           }
    }
 
    return point

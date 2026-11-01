@@ -230,7 +230,7 @@ export const WorkflowPage = () => {
                   </p>
                ) : null}
                <WorkflowCanvas
-                  key={data.updatedAt}
+                  key={id}
                   workflowId={id}
                   graph={data.graph}
                   catalog={catalog.data}
@@ -242,7 +242,7 @@ export const WorkflowPage = () => {
                   saving={update.isPending}
                   saveError={update.error}
                   onSave={graph =>
-                     update.mutate({
+                     update.mutateAsync({
                         id,
                         graph,
                      })

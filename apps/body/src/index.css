@@ -227,3 +227,20 @@
       transition-duration: 0.01ms !important;
    }
 }
+
+/* The workflow canvas's zoom buttons, minimap and credit follow the app's colours in light and dark. */
+.react-flow {
+   --xy-controls-button-background-color: var(--card);
+   --xy-controls-button-background-color-hover: var(--muted);
+   --xy-controls-button-color: var(--foreground);
+   --xy-controls-button-color-hover: var(--foreground);
+   --xy-controls-button-border-color: var(--border);
+   --xy-minimap-background-color: var(--card);
+   --xy-minimap-mask-background-color: color-mix(in oklab, var(--foreground) 10%, transparent);
+   --xy-minimap-node-background-color: color-mix(in oklab, var(--foreground) 25%, transparent);
+   --xy-attribution-background-color: color-mix(in oklab, var(--card) 70%, transparent);
+}
+
+.react-flow__attribution a {
+   color: var(--muted-foreground);
+}

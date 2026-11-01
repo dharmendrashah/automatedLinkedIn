@@ -117,6 +117,7 @@ describe('graph-convert', () => {
                message: null,
                childRunId: null,
                tries: 0,
+               waitUntil: null,
                child: null,
                progress: null,
             },
@@ -162,6 +163,7 @@ describe('graph-convert', () => {
          message: null,
          childRunId: null,
          tries: 0,
+         waitUntil: null,
          child: null,
          id: 'step-each',
          progress: null,
@@ -197,6 +199,14 @@ describe('graph-convert', () => {
 
       expect(types(choicesFor(withTrigger, catalog[0], ''))).toEqual(types(catalog))
       expect(types(choicesFor(withTrigger, null, 'SCORE'))).toEqual(['score.icp'])
+   })
+
+   it('should offer only blocks that give something before a block', () => {
+      const types = (blocks: Block[]) => blocks.map(({ type }) => type)
+      const withExport = [...catalog, block('output.csv', 'profile', null)]
+
+      expect(types(choicesFor(withExport, catalog[1], '', true))).toEqual(types(catalog))
+      expect(types(choicesFor(withExport, catalog[1], ''))).toEqual(types(withExport))
    })
 })
 
@@ -269,10 +279,15 @@ describe('Logic blocks', () => {
    const wait = block('logic.wait', 'profile', 'profile')
    const retry = block('logic.retry', 'profile', 'profile')
 
-   it('should say how long a Wait waits, and what a Retry does', () => {
-      expect(summaryOf(wait, { mode: 'exact', seconds: 30 })).toBe('Waits 30 seconds')
-      expect(summaryOf(wait, { mode: 'exact', seconds: 1 })).toBe('Waits 1 second')
-      expect(summaryOf(wait, { mode: 'between', minSeconds: 20, maxSeconds: 60 })).toBe('Waits 20 to 60 seconds')
+   it('should say how long a Wait waits, in the unit it is set to, and what a Retry does', () => {
+      expect(summaryOf(wait, { mode: 'exact', amount: 30 })).toBe('Waits 30 seconds')
+      expect(summaryOf(wait, { mode: 'exact', amount: 1 })).toBe('Waits 1 second')
+      expect(summaryOf(wait, { mode: 'between', minAmount: 20, maxAmount: 60 })).toBe('Waits 20 to 60 seconds')
+      expect(summaryOf(wait, { mode: 'exact', unit: 'minutes', amount: 5 })).toBe('Waits 5 minutes')
+      expect(summaryOf(wait, { mode: 'exact', unit: 'hours', amount: 1 })).toBe('Waits 1 hour')
+      expect(summaryOf(wait, { mode: 'exact', unit: 'days', amount: 3 })).toBe('Waits 3 days')
+      expect(summaryOf(wait, { mode: 'exact', unit: 'weeks', amount: 1 })).toBe('Waits 1 week')
+      expect(summaryOf(wait, { mode: 'between', unit: 'days', minAmount: 2, maxAmount: 4 })).toBe('Waits 2 to 4 days')
       expect(summaryOf(retry, { times: 3, waitSeconds: 0 })).toBe('Tries up to 3 more times')
       expect(summaryOf(retry, { times: 1, waitSeconds: 30 })).toBe('Tries once more, after 30 seconds')
    })

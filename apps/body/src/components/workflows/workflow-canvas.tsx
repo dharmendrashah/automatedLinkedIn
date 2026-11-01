@@ -18,7 +18,7 @@ import {
    useReactFlow,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { CircleAlert, Info, Keyboard, Loader2, Plus, Redo2, Save, Undo2 } from 'lucide-react'
+import { CircleAlert, Info, Keyboard, Loader2, Maximize2, Minimize2, Plus, Redo2, Save, Undo2 } from 'lucide-react'
 import { useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -34,6 +34,8 @@ import {
    DEFAULT_LOOP_ROUNDS,
    type FlowNode,
    MAX_LOOP_ROUNDS,
+   OPPOSITE,
+   type Side,
    canConnect,
    hasLoop,
    newNodeId,
@@ -42,11 +44,13 @@ import {
    toGraph,
 } from './graph-convert'
 import { type History, record, redo, startHistory, undo } from './history'
-import { isLeftToRight, layoutTopToBottom, neighbourOf, placeBelow } from './layout'
+import { isLeftToRight, layoutTopToBottom, neighbourOf, placeBeside } from './layout'
+import { RemovableEdge } from './removable-edge'
 import { SHORTCUT_HELP, shortcutOf } from './shortcuts'
 
 const NODE_TYPES = { block: BlockNode }
-const EDGE_OPTIONS = { type: 'smoothstep' }
+const EDGE_TYPES = { removable: RemovableEdge }
+const EDGE_OPTIONS = { type: 'removable' }
 const DUPLICATE_OFFSET = 40
 
 type Props = {
@@ -64,7 +68,7 @@ type Props = {
    focus?: string | null
    saving: boolean
    saveError: { message: string } | null
-   onSave: (graph: Graph) => void
+   onSave: (graph: Graph) => Promise<unknown>
 }
 
 type Canvas = { nodes: FlowNode[]; edges: Edge[] }
@@ -93,12 +97,20 @@ const Editor = ({
    const [dirty, setDirty] = useState(relaid)
    const [selectedId, setSelectedId] = useState<string | null>(focus)
    const [openId, setOpenId] = useState<string | null>(focus)
-   const [picker, setPicker] = useState<{ afterId: string | null } | null>(null)
+   // The block a new one is added next to, on which side of it, or null for a free block.
+   const [picker, setPicker] = useState<{ anchorId: string | null; side: Side } | null>(null)
    const [help, setHelp] = useState(false)
+   // Full screen is a fixed layer, not the browser's full screen mode, so the dialogs still show over it.
+   const [fullScreen, setFullScreen] = useState(false)
    const [loopRounds, setLoopRounds] = useState(graph.loopRounds)
    const { nodes, edges } = history.present
 
    const draft = useMemo(() => toGraph(nodes, edges, loopRounds), [nodes, edges, loopRounds])
+   const latest = useRef(draft)
+
+   useEffect(() => {
+      latest.current = draft
+   }, [draft])
    const deferred = useDeferredValue(draft)
    const estimate = trpc.workflow.estimate.useQuery(
       {
@@ -147,11 +159,13 @@ const Editor = ({
    }
 
    const pick = (block: Block) => {
-      const after = nodeOf(picker?.afterId ?? null)
+      const anchor = nodeOf(picker?.anchorId ?? null)
+      const side = picker?.side ?? 'bottom'
       const id = newNodeId(block.type, nodes)
-      const position = after
-         ? placeBelow(
-              after.position,
+      const position = anchor
+         ? placeBeside(
+              anchor.position,
+              side,
               nodes.map(node => node.position)
            )
          : viewCentre()
@@ -173,16 +187,25 @@ const Editor = ({
                },
             },
          ],
-         edges: after
+         edges: anchor
             ? [
                  ...canvas.edges,
-                 {
-                    id: `${after.id}>${id}`,
-                    source: after.id,
-                    target: id,
-                    sourceHandle: 'bottom',
-                    targetHandle: 'top',
-                 },
+                 // From the top the new block feeds this one; from any other side this one feeds it.
+                 side === 'top'
+                    ? {
+                         id: `${id}>${anchor.id}`,
+                         source: id,
+                         target: anchor.id,
+                         sourceHandle: 'bottom',
+                         targetHandle: 'top',
+                      }
+                    : {
+                         id: `${anchor.id}>${id}`,
+                         source: anchor.id,
+                         target: id,
+                         sourceHandle: side,
+                         targetHandle: OPPOSITE[side],
+                      },
               ]
             : canvas.edges,
       }))
@@ -240,13 +263,31 @@ const Editor = ({
       setSelectedId(id)
    }
 
-   const save = () => {
-      if (dirty && !saving) {
-         onSave(draft)
+   const save = async () => {
+      if (!dirty || saving) {
+         return
+      }
+
+      const saved = JSON.stringify(draft)
+
+      try {
+         await onSave(draft)
+      } catch {
+         // The reason is shown through `saveError`; the changes stay unsaved.
+         return
+      }
+
+      // Edits made while it was saving stay unsaved.
+      if (JSON.stringify(latest.current) === saved) {
+         setDirty(false)
       }
    }
 
-   const addBlock = () => setPicker({ afterId: selected?.data.block.output ? selected.id : null })
+   const addBlock = () =>
+      setPicker({
+         anchorId: selected?.data.block.output ? selected.id : null,
+         side: 'bottom',
+      })
 
    const step = (change: (current: History<Canvas>) => History<Canvas>) => {
       setHistory(change)
@@ -276,8 +317,8 @@ const Editor = ({
          add: addBlock,
          open: () => setOpenId(selectedId),
          remove: removeSelection,
-         close: () => setSelectedId(null),
-         save,
+         close: () => (selectedId ? setSelectedId(null) : setFullScreen(false)),
+         save: () => void save(),
          undo: () => step(undo),
          redo: () => step(redo),
          duplicate,
@@ -305,14 +346,44 @@ const Editor = ({
    }, [dirty])
 
    const openNode = nodeOf(openId)
-   const actions = useMemo(() => ({ addAfter: (id: string) => setPicker({ afterId: id }) }), [])
+   const actions = useMemo(
+      () => ({
+         addNextTo: (anchorId: string, side: Side) => setPicker({ anchorId, side }),
+         removeNode: (nodeId: string) => {
+            setHistory(current =>
+               record(current, {
+                  nodes: current.present.nodes.filter(({ id }) => id !== nodeId),
+                  edges: current.present.edges.filter(({ source, target }) => source !== nodeId && target !== nodeId),
+               })
+            )
+            setDirty(true)
+            setSelectedId(current => (current === nodeId ? null : current))
+            setOpenId(current => (current === nodeId ? null : current))
+         },
+         removeEdge: (edgeId: string) => {
+            setHistory(current =>
+               record(current, {
+                  ...current.present,
+                  edges: current.present.edges.filter(({ id }) => id !== edgeId),
+               })
+            )
+            setDirty(true)
+         },
+      }),
+      []
+   )
 
    return (
       <CanvasActions value={actions}>
          <div
             ref={wrapper}
             tabIndex={-1}
-            className="relative h-[calc(100svh-15rem)] min-h-[560px] overflow-hidden rounded-xl border outline-none"
+            className={cn(
+               'relative overflow-hidden border outline-none',
+               fullScreen
+                  ? 'bg-background fixed inset-0 z-40 rounded-none border-0'
+                  : 'h-[calc(100svh-15rem)] min-h-[560px] rounded-xl'
+            )}
          >
             <ReactFlow<FlowNode>
                nodes={shown.nodes.map(node => ({
@@ -325,6 +396,7 @@ const Editor = ({
                   selected: edges.find(({ id }) => id === edge.id)?.selected,
                }))}
                nodeTypes={NODE_TYPES}
+               edgeTypes={EDGE_TYPES}
                defaultEdgeOptions={EDGE_OPTIONS}
                deleteKeyCode={null}
                disableKeyboardA11y
@@ -358,6 +430,11 @@ const Editor = ({
                   wrapper.current?.focus()
                }}
                onNodeDoubleClick={(_, node) => setOpenId(node.id)}
+               onEdgeClick={() => {
+                  // Delete then removes the line, not a block that was selected before.
+                  setSelectedId(null)
+                  wrapper.current?.focus()
+               }}
                onPaneClick={() => {
                   setSelectedId(null)
                   wrapper.current?.focus()
@@ -448,11 +525,20 @@ const Editor = ({
                   <Button variant="outline" size="icon" aria-label="Keyboard shortcuts" onClick={() => setHelp(true)}>
                      <Keyboard />
                   </Button>
+                  <Button
+                     variant="outline"
+                     size="icon"
+                     aria-label={fullScreen ? 'Exit full screen' : 'Full screen'}
+                     title={fullScreen ? 'Exit full screen (Esc)' : 'Full screen'}
+                     onClick={() => setFullScreen(current => !current)}
+                  >
+                     {fullScreen ? <Minimize2 /> : <Maximize2 />}
+                  </Button>
                   <Button variant="outline" onClick={addBlock}>
                      <Plus />
                      Add block
                   </Button>
-                  <Button disabled={!dirty || saving} onClick={save}>
+                  <Button disabled={!dirty || saving} onClick={() => void save()}>
                      {saving ? <Loader2 className="animate-spin" /> : <Save />}
                      Save changes
                   </Button>
@@ -471,7 +557,8 @@ const Editor = ({
          <BlockPicker
             open={picker !== null}
             catalog={catalog}
-            after={nodeOf(picker?.afterId ?? null)?.data.block ?? null}
+            after={nodeOf(picker?.anchorId ?? null)?.data.block ?? null}
+            before={picker?.side === 'top'}
             onPick={pick}
             onClose={() => setPicker(null)}
          />

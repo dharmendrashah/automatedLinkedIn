@@ -8,7 +8,16 @@ import { Link } from 'react-router'
 
 import { cn } from '@/lib/utils'
 
-import { type Block, type Run, type RunDetail, formatUsd, runStatuses, stepLabel, triggerLabels } from './types'
+import {
+   type Block,
+   type Run,
+   type RunDetail,
+   formatUsd,
+   resumeText,
+   runStatuses,
+   stepLabel,
+   triggerLabels,
+} from './types'
 
 import { BlockOutput } from './block-output'
 import { blockOf, combineRounds } from './graph-convert'
@@ -151,6 +160,7 @@ export const RunDetailView = ({ run, catalog, onOpenBlock }: DetailProps) => {
                      <TableCell>{step.costMicros > 0 ? formatUsd(step.costMicros) : '–'}</TableCell>
                      <TableCell className="text-muted-foreground text-xs">
                         {step.message}
+                        {step.status === 'WAITING' ? resumeText(step.waitUntil) : null}
                         {step.child ? (
                            <>
                               {' '}

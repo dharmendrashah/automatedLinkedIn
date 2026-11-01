@@ -29,6 +29,13 @@ export const SIDES = ['top', 'right', 'bottom', 'left'] as const
 
 export type Side = (typeof SIDES)[number]
 
+export const OPPOSITE: Record<Side, Side> = {
+   top: 'bottom',
+   bottom: 'top',
+   left: 'right',
+   right: 'left',
+}
+
 const sideOf = (handle: string | null | undefined): Side | undefined => SIDES.find(side => side === handle)
 
 const KIND_WORDS = {
@@ -40,13 +47,15 @@ const KIND_WORDS = {
 
 export const blockOf = (catalog: Block[], type: string) => catalog.find(block => block.type === type)
 
-// The blocks the picker offers: anything can follow a block except a trigger; then those matching the search.
-export const choicesFor = (catalog: Block[], after: Block | null, query: string) => {
+// The blocks the picker offers: anything can follow a block except a trigger, and only a block that gives something can
+// come before one; then those matching the search.
+export const choicesFor = (catalog: Block[], anchor: Block | null, query: string, before = false) => {
    const words = query.trim().toLowerCase()
 
    return catalog.filter(
       block =>
-         (!after || block.input !== null) && (!words || `${block.label} ${block.summary}`.toLowerCase().includes(words))
+         (!anchor || (before ? block.output !== null : block.input !== null)) &&
+         (!words || `${block.label} ${block.summary}`.toLowerCase().includes(words))
    )
 }
 
@@ -252,6 +261,15 @@ const RUN_WAITS: Record<string, string> = {
    results: 'Waits for the people it saves',
 }
 
+// The one and the many word of each unit of a Wait block.
+const WAIT_UNIT_WORDS: Record<string, [string, string]> = {
+   seconds: ['second', 'seconds'],
+   minutes: ['minute', 'minutes'],
+   hours: ['hour', 'hours'],
+   days: ['day', 'days'],
+   weeks: ['week', 'weeks'],
+}
+
 const ADDED_WORDS: Record<string, string> = {
    today: 'added today',
    week: 'added this week',
@@ -302,11 +320,13 @@ export const summaryOf = (block: Block, config: GraphNode['config'], icpName?: s
    }
 
    if (block.type === 'logic.wait') {
-      const seconds = (value: ConfigValue | undefined) => Number(value ?? 0)
+      const unit = WAIT_UNIT_WORDS[show(values.unit)] ?? WAIT_UNIT_WORDS.seconds
+      const amount = (value: ConfigValue | undefined) => Number(value ?? 0)
+      const words = (count: number) => (count === 1 ? unit[0] : unit[1])
 
       return values.mode === 'between'
-         ? `Waits ${seconds(values.minSeconds)} to ${seconds(values.maxSeconds)} seconds`
-         : `Waits ${seconds(values.seconds)} ${seconds(values.seconds) === 1 ? 'second' : 'seconds'}`
+         ? `Waits ${amount(values.minAmount)} to ${amount(values.maxAmount)} ${unit[1]}`
+         : `Waits ${amount(values.amount)} ${words(amount(values.amount))}`
    }
 
    if (block.type === 'logic.retry') {

@@ -393,8 +393,8 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
          return (
             (step.status === 'WAITING' || step.status === 'RUNNING') &&
             !waiting.has(step.id) &&
-            // A Wait, or the pause before a retry, holds the step back.
-            (!step.waitUntil || step.waitUntil <= new Date()) &&
+            // A Wait, or the pause before a retry, holds the step back; a stop lets it go at once, however long it was.
+            (!step.waitUntil || step.waitUntil <= new Date() || run.stopRequestedAt !== null) &&
             parentsPassed &&
             // Posts are marked done only after everything else has finished.
             (step.type !== 'output.markPosts' ||

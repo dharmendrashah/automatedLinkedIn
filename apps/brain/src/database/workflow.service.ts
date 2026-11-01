@@ -79,6 +79,7 @@ const stepSelect = {
    message: true,
    childRunId: true,
    tries: true,
+   waitUntil: true,
 } satisfies Prisma.WorkflowStepRunSelect
 
 const workflowTaken = (name: string) => `You already have a workflow named "${name}".`

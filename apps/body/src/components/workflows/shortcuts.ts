@@ -66,11 +66,11 @@ export const shortcutOf = (event: Key): Shortcut | null => {
 export const SHORTCUT_HELP = [
    ['Tab', 'Add a block'],
    ['Enter or double-click', 'Open the block’s settings'],
-   ['Delete or Backspace', 'Remove the block'],
+   ['Delete or Backspace', 'Remove the selected block or line'],
    ['Arrow keys', 'Select the next block'],
    ['Ctrl/⌘ + D', 'Duplicate the block'],
    ['Ctrl/⌘ + Z', 'Undo'],
    ['Ctrl/⌘ + Shift + Z', 'Redo'],
    ['Ctrl/⌘ + S', 'Save changes'],
-   ['Esc', 'Close or clear the selection'],
+   ['Esc', 'Clear the selection, then leave full screen'],
 ] as const

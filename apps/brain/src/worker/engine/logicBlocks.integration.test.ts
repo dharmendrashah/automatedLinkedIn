@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { fakeDataClient } from 'core/fakeDataClient'
 
-import { IcpService, PrismaService, UserService, WalletService, WorkflowService } from 'database'
+import { IcpService, PrismaService, RetentionService, UserService, WalletService, WorkflowService } from 'database'
 
 import { type Graph, type GraphNode } from '@automatedLinkedIn/contracts'
 
@@ -265,7 +265,7 @@ describe('Wait, Task result and Retry (database)', () => {
             node('people', 'input.profiles', { links: [profile('ada')] }),
             node('pause', 'logic.wait', {
                mode: 'exact',
-               seconds: 600,
+               amount: 600,
             }),
             node('csv', 'output.csv'),
          ],
@@ -294,5 +294,85 @@ describe('Wait, Task result and Retry (database)', () => {
 
       expect(await slugsAt(runId, 'csv')).toEqual(['ada'])
       expect(await statusOf(runId)).toBe('SUCCEEDED')
+   })
+
+   it('should hold a wait of weeks for that long, and keep what came in while it waits', async () => {
+      const runId = await start({
+         nodes: [
+            node('people', 'input.profiles', { links: [profile('ada')] }),
+            node('pause', 'logic.wait', {
+               unit: 'weeks',
+               amount: 2,
+            }),
+            node('csv', 'output.csv'),
+         ],
+         edges: [line('people', 'pause'), line('pause', 'csv')],
+      })
+
+      await advanceRun(runId, deps())
+      await advanceRun(runId, deps())
+
+      const { waitUntil } = await stepOf(runId, 'pause')
+
+      expect(waitUntil?.getTime()).toBeGreaterThan(Date.now() + 14 * 86_400_000 - 60_000)
+      expect(waitUntil?.getTime()).toBeLessThan(Date.now() + 14 * 86_400_000 + 60_000)
+      expect(await statusOf(runId)).toBe('RUNNING')
+      expect(await slugsAt(runId, 'csv')).toEqual([])
+   })
+
+   it('should end a long wait at once when the owner stops the run, and finish the run as stopped', async () => {
+      const runId = await start({
+         nodes: [
+            node('people', 'input.profiles', { links: [profile('ada')] }),
+            node('pause', 'logic.wait', {
+               unit: 'days',
+               amount: 30,
+            }),
+            node('csv', 'output.csv'),
+         ],
+         edges: [line('people', 'pause'), line('pause', 'csv')],
+      })
+
+      await advanceRun(runId, deps())
+
+      expect(await statusOf(runId)).toBe('RUNNING')
+      expect(await WorkflowService.requestStop(userId, runId)).toBe(true)
+
+      await advanceRun(runId, deps())
+
+      expect(await statusOf(runId)).toBe('STOPPED')
+      expect(await slugsAt(runId, 'csv')).toEqual(['ada'])
+   })
+
+   it('should keep the items of a run that is still waiting past 14 days, and delete them once it ended', async () => {
+      const runId = await start({
+         nodes: [
+            node('people', 'input.profiles', { links: [profile('ada')] }),
+            node('pause', 'logic.wait', {
+               unit: 'weeks',
+               amount: 8,
+            }),
+            node('csv', 'output.csv'),
+         ],
+         edges: [line('people', 'pause'), line('pause', 'csv')],
+      })
+      const aged = () =>
+         PrismaService.client.workflowItem.updateMany({
+            where: { runId },
+            data: { createdAt: new Date(Date.now() - 20 * 86_400_000) },
+         })
+
+      await advanceRun(runId, deps())
+      await aged()
+      await RetentionService.run()
+
+      expect(await slugsAt(runId, 'people')).toEqual(['ada'])
+
+      await WorkflowService.requestStop(userId, runId)
+      await advanceRun(runId, deps())
+      await aged()
+      await RetentionService.run()
+
+      expect(await slugsAt(runId, 'people')).toEqual([])
    })
 })

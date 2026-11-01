@@ -5,6 +5,7 @@ import {
    type BlockType,
    GOALS,
    type Graph,
+   MAX_WAIT_BLOCK_SECONDS,
    type NodeConfig,
    addedSince,
    blockOf,
@@ -24,6 +25,7 @@ import {
    scheduleSchema,
    templateCatalog,
    templateGraph,
+   toSeconds,
    validateGraph,
    workingBlockBefore,
 } from './workflow'
@@ -760,43 +762,108 @@ describe('Wait, Task result and Retry', () => {
       ])
    })
 
-   it('should take a fixed wait or a range, from 1 second to 1 hour, with the low end not above the high end', () => {
+   it('should take a fixed wait or a range in seconds, minutes, hours, days or weeks, up to 1 year', () => {
       const parse = (config: NodeConfig) => blockOf('logic.wait').config.safeParse(config).success
 
       expect(parse({})).toBe(true)
+      expect(catalog().find(({ type }) => type === 'logic.wait')?.defaults).toEqual({
+         mode: 'exact',
+         unit: 'seconds',
+         amount: 30,
+         minAmount: 20,
+         maxAmount: 60,
+      })
+
+      for (const unit of ['seconds', 'minutes', 'hours', 'days', 'weeks']) {
+         expect(
+            parse({
+               unit,
+               amount: 2,
+            })
+         ).toBe(true)
+      }
+
       expect(
          parse({
-            mode: 'exact',
-            seconds: 3600,
+            unit: 'days',
+            amount: 365,
          })
       ).toBe(true)
       expect(
          parse({
-            mode: 'exact',
-            seconds: 0,
-         })
-      ).toBe(false)
-      expect(
-         parse({
-            mode: 'exact',
-            seconds: 3601,
-         })
-      ).toBe(false)
-      expect(
-         parse({
-            mode: 'between',
-            minSeconds: 20,
-            maxSeconds: 60,
+            unit: 'weeks',
+            amount: 52,
          })
       ).toBe(true)
       expect(
          parse({
-            mode: 'between',
-            minSeconds: 61,
-            maxSeconds: 60,
+            unit: 'days',
+            amount: 366,
          })
       ).toBe(false)
+      expect(
+         parse({
+            unit: 'weeks',
+            amount: 53,
+         })
+      ).toBe(false)
+      expect(
+         parse({
+            unit: 'months',
+            amount: 1,
+         })
+      ).toBe(false)
+      expect(parse({ amount: 0 })).toBe(false)
+      expect(parse({ amount: 1.5 })).toBe(false)
       expect(parse({ mode: 'sometimes' })).toBe(false)
+   })
+
+   it('should check the longest end of a range against the year and keep the low end not above the high end', () => {
+      const parse = (config: NodeConfig) => blockOf('logic.wait').config.safeParse(config).success
+
+      expect(
+         parse({
+            mode: 'between',
+            unit: 'days',
+            minAmount: 2,
+            maxAmount: 5,
+         })
+      ).toBe(true)
+      expect(
+         parse({
+            mode: 'between',
+            unit: 'days',
+            minAmount: 6,
+            maxAmount: 5,
+         })
+      ).toBe(false)
+      expect(
+         parse({
+            mode: 'between',
+            unit: 'weeks',
+            minAmount: 1,
+            maxAmount: 53,
+         })
+      ).toBe(false)
+      // The amount of the other mode is not looked at.
+      expect(
+         parse({
+            mode: 'between',
+            unit: 'weeks',
+            amount: 53,
+            minAmount: 1,
+            maxAmount: 4,
+         })
+      ).toBe(true)
+   })
+
+   it('should say how many seconds an amount of a unit is, counting a day as 24 hours and a week as 7 days', () => {
+      expect(toSeconds(30, 'seconds')).toBe(30)
+      expect(toSeconds(2, 'minutes')).toBe(120)
+      expect(toSeconds(3, 'hours')).toBe(10_800)
+      expect(toSeconds(2, 'days')).toBe(172_800)
+      expect(toSeconds(1, 'weeks')).toBe(604_800)
+      expect(MAX_WAIT_BLOCK_SECONDS).toBe(365 * 86_400)
    })
 
    it('should take 1 to 5 more tries and a pause of 0 to 1 hour', () => {
