@@ -251,6 +251,7 @@ export const WorkflowPage = () => {
                   workflows={workflows.data ?? []}
                   replay={live ? live.steps : replay && detail.data ? detail.data.steps : null}
                   lastRun={live ?? detail.data ?? null}
+                  enabled={data.enabled}
                   focus={focus}
                   saving={update.isPending}
                   saveError={update.error}

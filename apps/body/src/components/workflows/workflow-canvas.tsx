@@ -74,6 +74,8 @@ type Props = {
    replay: StepRun[] | null
    // The run being shown, or the newest one: a block's dialog shows its state, error, input and output in it.
    lastRun: RunDetail | null
+   // Whether the workflow is switched on, for the "When called by API" block's checklist.
+   enabled: boolean
    // A block to open on arrival, such as the one a run failed in.
    focus?: string | null
    saving: boolean
@@ -92,6 +94,7 @@ const Editor = ({
    workflows,
    replay,
    lastRun,
+   enabled,
    focus = null,
    saving,
    saveError,
@@ -626,6 +629,10 @@ const Editor = ({
                        blockRun: blockRunOf(openNode.id, openNode.data.config, lastRun),
                        labelOf: id => nodeOf(id)?.data.block.label ?? id,
                        estimate: estimate.data?.nodes[openNode.id] ?? null,
+                       api: {
+                          enabled,
+                          graph: draft,
+                       },
                     }
                   : null
             }

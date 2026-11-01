@@ -1,63 +1,15 @@
-import {
-   AlertDialog,
-   AlertDialogAction,
-   AlertDialogCancel,
-   AlertDialogContent,
-   AlertDialogDescription,
-   AlertDialogFooter,
-   AlertDialogHeader,
-   AlertDialogTitle,
-   AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { readableError } from '@/lib/trpc-error'
-import { Check, CircleCheck, CircleDashed, Copy, KeyRound, Loader2, TriangleAlert } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { CircleCheck, CircleDashed } from 'lucide-react'
+import { type ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
 
 import { type Graph } from './types'
 
-import { trpc } from '../../trpc'
-import { createApiUrl } from '../../trpc/config'
-
-const COPIED_MS = 1_500
-// Ends a line of a shell command that goes on below.
-const BACKSLASH = String.fromCharCode(92)
-
-const CopyButton = ({ text, label }: { text: string; label: string }) => {
-   const [copied, setCopied] = useState(false)
-
-   return (
-      <Button
-         type="button"
-         variant="ghost"
-         size="icon"
-         aria-label={copied ? 'Copied' : label}
-         onClick={() =>
-            void navigator.clipboard.writeText(text).then(() => {
-               setCopied(true)
-               setTimeout(() => setCopied(false), COPIED_MS)
-            })
-         }
-      >
-         {copied ? <Check className="text-success" /> : <Copy />}
-      </Button>
-   )
-}
-
-// A block of code with a copy button.
-const Code = ({ text, label }: { text: string; label: string }) => (
-   <div className="bg-muted relative rounded-md">
-      <pre className="overflow-x-auto p-3 pr-12 font-mono text-xs leading-relaxed">{text}</pre>
-      <div className="absolute top-1 right-1">
-         <CopyButton text={text} label={label} />
-      </div>
-   </div>
-)
+import { ApiRequest, TokenControl } from './api-request'
+import { apiInputsOf } from './api-sample'
+import { useApiToken } from './use-api-token'
 
 const Step = ({ done, title, children }: { done: boolean; title: string; children?: ReactNode }) => (
    <li className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2">
@@ -79,61 +31,15 @@ const RESPONSES: [string, string][] = [
    ['429', 'Too many calls this hour.'],
 ]
 
-// What each input block can take from a call, with an example link.
-const INPUTS = [
-   {
-      type: 'input.profiles',
-      field: 'profiles',
-      what: 'people',
-      example: 'https://www.linkedin.com/in/ada-lovelace',
-   },
-   {
-      type: 'input.posts',
-      field: 'posts',
-      what: 'posts',
-      example: 'https://www.linkedin.com/posts/ada-lovelace_engines-activity-7452924970042826753-AbCd',
-   },
-   {
-      type: 'input.companies',
-      field: 'companies',
-      what: 'companies',
-      example: 'https://www.linkedin.com/company/stripe',
-   },
-] as const
-
 type Props = { workflowId: string; enabled: boolean; graph: Graph }
 
 // How another system starts this workflow: what must be ready, the token, a copyable request, and the rules.
 export const ApiAccess = ({ workflowId, enabled, graph }: Props) => {
-   const [token, setToken] = useState<string | null>(null)
-   const status = trpc.workflow.apiStatus.useQuery({ id: workflowId })
-   const rotate = trpc.workflow.rotateToken.useMutation({
-      onSuccess: data => {
-         setToken(data.token)
-         void status.refetch()
-      },
-   })
-   const address = `${createApiUrl(import.meta.env)}/api/workflows/${workflowId}/run`
-   const hasToken = Boolean(token) || status.data?.hasToken === true
+   const api = useApiToken(workflowId)
+   const { status, hasToken } = api
    const ready = enabled && hasToken
    const limits = status.data?.limits
-   const inputs = INPUTS.filter(({ type }) => graph.nodes.some(node => node.type === type))
-   const body =
-      inputs.length > 0
-         ? JSON.stringify(Object.fromEntries(inputs.map(({ field, example }) => [field, [example]])), null, 2)
-         : null
-   const lines = [
-      `curl -X POST '${address}'`,
-      `  -H 'Authorization: Bearer ${token ?? '<token>'}'`,
-      ...(body ? [`  -H 'Content-Type: application/json'`, `  -d '${body.replace(/\n\s*/g, ' ')}'`] : []),
-   ]
-   const curl = lines.join(` ${BACKSLASH}\n`)
-   const createButton = (onClick?: () => void) => (
-      <Button type="button" variant={hasToken ? 'outline' : 'default'} disabled={rotate.isPending} onClick={onClick}>
-         {rotate.isPending ? <Loader2 className="animate-spin" /> : <KeyRound />}
-         {hasToken ? 'New token' : 'Create token'}
-      </Button>
-   )
+   const inputs = apiInputsOf(graph)
 
    return (
       <div className="grid w-full gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
@@ -163,73 +69,10 @@ export const ApiAccess = ({ workflowId, enabled, graph }: Props) => {
                      )}
                   </Step>
                   <Step done={hasToken} title="Create a token">
-                     {token ? (
-                        <div className="grid gap-2 rounded-md border border-warning/40 bg-warning/5 p-3">
-                           <p className="text-warning flex items-center gap-2 text-xs font-medium">
-                              <TriangleAlert className="size-4" aria-hidden />
-                              Copy it now. It is not shown again.
-                           </p>
-                           <div className="flex items-center gap-2">
-                              <code className="bg-background flex-1 rounded border px-2 py-1.5 font-mono text-xs break-all">
-                                 {token}
-                              </code>
-                              <CopyButton text={token} label="Copy token" />
-                           </div>
-                        </div>
-                     ) : null}
-                     <div className="flex flex-wrap items-center gap-3">
-                        {hasToken ? (
-                           <AlertDialog>
-                              <AlertDialogTrigger asChild>{createButton()}</AlertDialogTrigger>
-                              <AlertDialogContent>
-                                 <AlertDialogHeader>
-                                    <AlertDialogTitle>Make a new token?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                       The current token stops working at once. Update every system that calls this
-                                       workflow.
-                                    </AlertDialogDescription>
-                                 </AlertDialogHeader>
-                                 <AlertDialogFooter>
-                                    <AlertDialogCancel>Keep the current one</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => rotate.mutate({ id: workflowId })}>
-                                       Make a new token
-                                    </AlertDialogAction>
-                                 </AlertDialogFooter>
-                              </AlertDialogContent>
-                           </AlertDialog>
-                        ) : (
-                           createButton(() => rotate.mutate({ id: workflowId }))
-                        )}
-                        <span className="text-muted-foreground text-xs">
-                           {hasToken
-                              ? 'A token is set. Only a hash is stored, so it cannot be shown again.'
-                              : 'No token yet.'}
-                        </span>
-                     </div>
-                     {rotate.error ? <p className="text-destructive">{readableError(rotate.error)}</p> : null}
+                     <TokenControl workflowId={workflowId} api={api} />
                   </Step>
                   <Step done={false} title="Send a request">
-                     <div className="flex items-center gap-2 rounded-md border p-1 pl-2">
-                        <Badge>POST</Badge>
-                        <code className="flex-1 truncate font-mono text-xs" title={address}>
-                           {address}
-                        </code>
-                        <CopyButton text={address} label="Copy address" />
-                     </div>
-                     <Tabs defaultValue="curl">
-                        <TabsList>
-                           <TabsTrigger value="curl">cURL</TabsTrigger>
-                           {body ? <TabsTrigger value="body">JSON body</TabsTrigger> : null}
-                        </TabsList>
-                        <TabsContent value="curl">
-                           <Code text={curl} label="Copy request" />
-                        </TabsContent>
-                        {body ? (
-                           <TabsContent value="body">
-                              <Code text={body} label="Copy body" />
-                           </TabsContent>
-                        ) : null}
-                     </Tabs>
+                     <ApiRequest workflowId={workflowId} graph={graph} token={api.token} />
                   </Step>
                </ol>
             </CardContent>

@@ -1,8 +1,9 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { type ReactNode, useState } from 'react'
 
-import { type Block, type ConfigValue } from './types'
+import { type Block, type ConfigValue, type Graph } from './types'
 
+import { ApiTriggerInput } from './api-request'
 import { BlockOutput } from './block-output'
 import { type BlockRun } from './block-run'
 import { PlannedInput, RunStrip, StepErrorPanel } from './block-run-panel'
@@ -14,6 +15,8 @@ export type RunInfo = {
    labelOf: (nodeId: string) => string
    // What the estimate says the block takes, or null while it is not known.
    estimate: { items: number; costMicros: number } | null
+   // The workflow as drawn, and whether it is switched on, for the "When called by API" block's sample call.
+   api: { enabled: boolean; graph: Graph }
 }
 
 type Props = {
@@ -72,7 +75,9 @@ export const BlockRunTabs = ({
                <TabsTrigger value="settings">Settings</TabsTrigger>
             </TabsList>
             <TabsContent value="input">
-               {ran ? (
+               {block.type === 'trigger.api' ? (
+                  <ApiTriggerInput workflowId={workflowId} enabled={run.api.enabled} graph={run.api.graph} />
+               ) : ran ? (
                   <BlockOutput
                      kind="input"
                      runId={runId}
