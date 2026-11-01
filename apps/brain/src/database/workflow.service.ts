@@ -105,8 +105,21 @@ export const stillGoing = (waits: (Date | null)[]) => {
       : 'A run of this workflow is still going.'
 }
 
-// A live run of the workflow refuses a new start.
-const refuseWhileRunning = async (workflowId: string) => {
+// A failed run is shown as an alert for this long.
+const ALERT_DAYS = 7
+const DAY_MS = 86_400_000
+
+// How many runs of one workflow may wait for the live one.
+export const MAX_QUEUED = 10
+
+// What a start does while a run of the workflow is live: it waits its turn, up to MAX_QUEUED, a schedule tick queues one
+// at a time. A preview, and a start by "Run another workflow" (its parent waits for it, so queuing could make it wait
+// for ever), are refused. Returns the status the new run starts with.
+const admit = async (
+   workflowId: string,
+   trigger: WorkflowTrigger,
+   parentRunId: string | undefined
+): Promise<'RUNNING' | 'QUEUED'> => {
    const running = await PrismaService.client.workflowRun.findFirst({
       where: {
          workflowId,
@@ -115,9 +128,36 @@ const refuseWhileRunning = async (workflowId: string) => {
       select: { steps: { select: { waitUntil: true } } },
    })
 
-   if (running) {
+   if (!running) {
+      return 'RUNNING'
+   }
+
+   if (trigger === 'PREVIEW' || parentRunId) {
       throw new ConflictError(stillGoing(running.steps.map(({ waitUntil }) => waitUntil)))
    }
+
+   const waiting = {
+      workflowId,
+      status: 'QUEUED' as const,
+   }
+
+   if ((await PrismaService.client.workflowRun.count({ where: waiting })) >= MAX_QUEUED) {
+      throw new ConflictError(`${MAX_QUEUED} runs are already waiting for this workflow. Try again later.`)
+   }
+
+   if (
+      trigger === 'SCHEDULE' &&
+      (await PrismaService.client.workflowRun.count({
+         where: {
+            ...waiting,
+            trigger,
+         },
+      })) > 0
+   ) {
+      throw new ConflictError('A scheduled run is already waiting for this workflow.')
+   }
+
+   return 'QUEUED'
 }
 
 const listTaken = (name: string) => `You already have a list named "${name}". Pick another workflow name.`
@@ -563,7 +603,7 @@ export class WorkflowService {
          throw new ConflictError(`Fix the workflow first: ${problem.message}`)
       }
 
-      await refuseWhileRunning(workflowId)
+      const admitted = await admit(workflowId, trigger, options.parentRunId)
 
       if (await WalletService.belowFloor()) {
          throw new ConflictError('New runs are paused for a short while. Please try again later.')
@@ -577,13 +617,14 @@ export class WorkflowService {
          throw new ConflictError('No posts are waiting in your posts list. Add some posts first.')
       }
 
-      try {
-         return await PrismaService.client.workflowRun.create({
+      const save = (status: 'RUNNING' | 'QUEUED') =>
+         PrismaService.client.workflowRun.create({
             data: {
                workflowId,
                userId,
                trigger,
                runKey,
+               status,
                engineVersion: 2,
                graph: runGraph,
                input: options.input,
@@ -604,20 +645,122 @@ export class WorkflowService {
             },
             select: runSelect,
          })
+
+      try {
+         return await save(admitted)
       } catch (error) {
          if (!isUniqueViolation(error)) {
             throw error
          }
 
-         // The key was used before, or another start got in after the check above: the database lets one run be live.
+         // The key was used before, or another start went live between the check above and the save.
          if (await WorkflowRunService.idOfKey(runKey)) {
             throw new ConflictError('This run has already started.')
          }
 
-         await refuseWhileRunning(workflowId)
+         if (admitted === 'QUEUED') {
+            throw error
+         }
+
+         return save(await admit(workflowId, trigger, options.parentRunId))
+      }
+   }
+
+   // Takes the owner's newest run up again from the block that failed. null when it is not the owner's run.
+   public static async resume(userId: string, runId: string) {
+      const run = await PrismaService.client.workflowRun.findFirst({
+         where: {
+            id: runId,
+            userId,
+         },
+         select: {
+            workflowId: true,
+            status: true,
+            trigger: true,
+         },
+      })
+
+      if (!run) {
+         return null
+      }
+
+      if (run.status !== 'FAILED' || run.trigger === 'PREVIEW') {
+         throw new ConflictError('Only a failed run can go on from where it failed.')
+      }
+
+      const newest = await PrismaService.client.workflowRun.findFirst({
+         where: { workflowId: run.workflowId },
+         orderBy: { startedAt: 'desc' },
+         select: { id: true },
+      })
+
+      if (newest?.id !== runId) {
+         throw new ConflictError('Only the newest run of a workflow can go on. Start a new run instead.')
+      }
+
+      if (await WalletService.belowFloor()) {
+         throw new ConflictError('New runs are paused for a short while. Please try again later.')
+      }
+
+      try {
+         await WorkflowRunService.reopen(runId)
+      } catch (error) {
+         if (isUniqueViolation(error)) {
+            throw new ConflictError(stillGoing([]))
+         }
 
          throw error
       }
+
+      return PrismaService.client.workflowRun.findFirst({
+         where: { id: runId },
+         select: runSelect,
+      })
+   }
+
+   // The owner's runs that failed in the last week and were not dismissed, newest first. Previews are left out: the owner
+   // watched them. Only the workflow name and the message the run already shows.
+   public static async alerts(userId: string) {
+      const runs = await PrismaService.client.workflowRun.findMany({
+         where: {
+            userId,
+            status: 'FAILED',
+            trigger: { not: 'PREVIEW' },
+            alertDismissedAt: null,
+            finishedAt: { gt: new Date(Date.now() - ALERT_DAYS * DAY_MS) },
+         },
+         orderBy: { finishedAt: 'desc' },
+         take: 20,
+         select: {
+            id: true,
+            workflowId: true,
+            message: true,
+            finishedAt: true,
+            workflow: { select: { name: true } },
+         },
+      })
+
+      return runs.map(run => ({
+         runId: run.id,
+         workflowId: run.workflowId,
+         workflowName: run.workflow.name,
+         message: run.message,
+         finishedAt: run.finishedAt,
+      }))
+   }
+
+   // False when it is not the owner's failed run.
+   public static async dismissAlert(userId: string, runId: string) {
+      const { count } = await PrismaService.client.workflowRun.updateMany({
+         where: {
+            id: runId,
+            userId,
+            status: 'FAILED',
+         },
+         data: { alertDismissedAt: new Date() },
+      })
+
+      return count === 1
    }
 
    public static runs(userId: string, workflowId: string) {
@@ -632,8 +775,8 @@ export class WorkflowService {
       })
    }
 
-   // Asks a live run to stop; the worker ends it once the jobs already paid for finished. False when it is not the
-   // owner's live run.
+   // Asks a live run to stop; the worker ends it once the jobs already paid for finished. A run still waiting its turn is
+   // cancelled at once. False when it is not the owner's live or waiting run.
    public static async requestStop(userId: string, runId: string) {
       const { count } = await PrismaService.client.workflowRun.updateMany({
          where: {
@@ -645,7 +788,42 @@ export class WorkflowService {
          data: { stopRequestedAt: new Date() },
       })
 
-      return count === 1
+      if (count === 1) {
+         return true
+      }
+
+      return PrismaService.client.$transaction(async tx => {
+         const cancelled = await tx.workflowRun.updateMany({
+            where: {
+               id: runId,
+               userId,
+               status: 'QUEUED',
+            },
+            data: {
+               status: 'STOPPED',
+               finishedAt: new Date(),
+               message: 'You stopped this run before it started.',
+            },
+         })
+
+         if (cancelled.count === 0) {
+            return false
+         }
+
+         await tx.workflowStepRun.updateMany({
+            where: {
+               runId,
+               status: 'WAITING',
+            },
+            data: {
+               status: 'SKIPPED',
+               message: 'You stopped the run before this block started, so it did not run.',
+               finishedAt: new Date(),
+            },
+         })
+
+         return true
+      })
    }
 
    public static run(userId: string, runId: string) {

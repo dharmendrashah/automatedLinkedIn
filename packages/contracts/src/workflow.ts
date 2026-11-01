@@ -229,6 +229,8 @@ const MAX_WAIT_AMOUNT = 3_600
 // The longest pause between tries of a Retry, in seconds.
 export const MAX_WAIT_SECONDS = 3_600
 export const MAX_RETRIES = 5
+export const STOP_MESSAGE = 'The workflow was stopped on purpose.'
+export const STOP_MESSAGE_MAX = 200
 const YEARS = optionsOf([
    ['1', 'Under 1 year'],
    ['2', '1 to 2 years'],
@@ -521,6 +523,7 @@ export const BLOCK_TYPES = [
    'logic.taskResult',
    'logic.retry',
    'logic.forEach',
+   'logic.stop',
    'account.select',
    'account.visitProfile',
    'account.visitCompany',
@@ -529,6 +532,7 @@ export const BLOCK_TYPES = [
    'output.markPosts',
    'output.csv',
    'output.sendApi',
+   'output.return',
 ] as const
 
 // What a block is. A new block says it here and the sets, the checks and the engine follow.
@@ -988,7 +992,7 @@ const BLOCKS = {
       group: 'Triggers',
       liveness: 'always',
       label: 'When another workflow finishes',
-      summary: 'Starts with the people another workflow kept.',
+      summary: 'Starts with what another workflow gave back: the people it kept, or what its Give back block got.',
       input: null,
       output: 'profile',
       config: z.object({ workflowId: z.string().min(1) }),
@@ -2280,6 +2284,28 @@ const BLOCKS = {
          },
       ],
    },
+   'logic.stop': {
+      group: 'Logic',
+      flow: 'Takes anything, ends the run with the message you wrote',
+      flags: {
+         takesAnything: true,
+         passesOn: true,
+      },
+      label: 'Stop with an error',
+      summary:
+         'Ends the run as failed with a message you wrote. Put it where something went wrong, such as after an Else.',
+      input: 'profile',
+      output: null,
+      config: z.object({ message: z.string().trim().min(1).max(STOP_MESSAGE_MAX).default(STOP_MESSAGE) }),
+      fields: [
+         {
+            key: 'message',
+            label: 'Message shown on the run',
+            kind: 'text',
+            hint: 'Plain words for whoever reads the run. Do not put secrets in it.',
+         },
+      ],
+   },
    'account.select': {
       group: 'Account Actions',
       flow: PASSES_UNCHANGED,
@@ -2416,6 +2442,21 @@ const BLOCKS = {
             kind: 'text',
          },
       ],
+   },
+   'output.return': {
+      group: 'Output',
+      flow: 'Takes anything, gives it back to whoever started the run',
+      flags: {
+         takesAnything: true,
+         keepsResults: true,
+      },
+      label: 'Give back',
+      summary:
+         'What reaches it is this run’s result for the workflow that started it, of any kind. Without it a run gives back the people it saved to lists.',
+      input: 'profile',
+      output: null,
+      config: empty,
+      fields: [],
    },
    'output.sendApi': {
       group: 'Output',

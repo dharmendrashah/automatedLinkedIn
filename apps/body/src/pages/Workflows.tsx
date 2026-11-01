@@ -1,7 +1,7 @@
 import { StateRows } from '@/components/links/state-rows'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { runSentence } from '@/components/workflows/run-sentence'
+import { isLive, runSentence } from '@/components/workflows/run-sentence'
 import { RunStatusBadge } from '@/components/workflows/runs'
 import { Plus, Workflow as WorkflowIcon } from 'lucide-react'
 import { Link } from 'react-router'
@@ -28,7 +28,7 @@ const lastRunText = (run: WorkflowSummary['runs'][number]) =>
 export const Workflows = () => {
    const list = trpc.workflow.list.useQuery(undefined, {
       retry: false,
-      refetchInterval: query => (query.state.data?.some(({ runs }) => runs[0]?.status === 'RUNNING') ? POLL_MS : false),
+      refetchInterval: query => (query.state.data?.some(({ runs }) => isLive(runs[0]?.status)) ? POLL_MS : false),
    })
 
    return (
@@ -88,7 +88,7 @@ export const Workflows = () => {
                            </TableCell>
                            <TableCell>
                               {last ? (
-                                 last.status === 'RUNNING' ? (
+                                 isLive(last.status) ? (
                                     <div className="grid gap-1">
                                        <RunStatusBadge status={last.status} />
                                        <span className="text-muted-foreground text-xs">{lastRunText(last)}</span>

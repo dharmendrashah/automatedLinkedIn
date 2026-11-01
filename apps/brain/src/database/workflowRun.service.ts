@@ -3,13 +3,22 @@ import { ELSE_SUFFIX } from 'core/workflowInput'
 
 import { type Prisma, type WorkflowRunStatus, type WorkflowStepStatus } from 'generated/prisma/client'
 
+import { type StepErrorCode } from '@automatedLinkedIn/contracts'
+
+import { isUniqueViolation } from './conflict'
 import { PrismaService } from './prisma.service'
+import { WalletService } from './wallet.service'
 
 // What the engine in the brain worker reads and writes while it runs a workflow. Every write is safe to repeat, so
 // a step cut off by a crash can simply run again.
 
 // A step held longer than this by a worker that stopped is taken again.
 export const STALE_CLAIM_MS = 15 * 60 * 1000
+
+// A run with no progress for this long, and nothing in the future, is ended.
+export const STUCK_HOURS = 36
+const HOUR_MS = 3_600_000
+const STUCK_MESSAGE = `This run made no progress for ${STUCK_HOURS} hours, so it was ended. Run the workflow again.`
 
 const monthOf = (date: Date) => date.toISOString().slice(0, 7)
 
@@ -72,6 +81,48 @@ export class WorkflowRunService {
       })
 
       return runs.map(({ id }) => id)
+   }
+
+   // Starts the oldest queued run of each workflow that has no live run, when the wallet allows new runs. Returns how many
+   // it started. The database lets one run be live, so a start that loses a race is left queued.
+   public static async promoteWaiting() {
+      if (await WalletService.belowFloor()) {
+         return 0
+      }
+
+      const next = await PrismaService.client.workflowRun.findMany({
+         where: {
+            status: 'QUEUED',
+            workflow: { runs: { none: { status: 'RUNNING' } } },
+         },
+         orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
+         distinct: ['workflowId'],
+         select: { id: true },
+      })
+      let started = 0
+
+      for (const { id } of next) {
+         try {
+            const { count } = await PrismaService.client.workflowRun.updateMany({
+               where: {
+                  id,
+                  status: 'QUEUED',
+               },
+               data: {
+                  status: 'RUNNING',
+                  startedAt: new Date(),
+               },
+            })
+
+            started += count
+         } catch (error) {
+            if (!isUniqueViolation(error)) {
+               throw error
+            }
+         }
+      }
+
+      return started
    }
 
    public static load(runId: string) {
@@ -493,6 +544,95 @@ export class WorkflowRunService {
       return mergeBySlug(items.filter((item): item is PersonItem => item.kind === 'profile'))
    }
 
+   // Takes a failed run up again from where it failed: its failed and not-started steps wait to run, finished steps and
+   // their items stay, and failed requests that cost nothing are sent again. Paid requests are never paid for twice, and
+   // the spend stays on the run. False when the run is not failed. The database lets one run be live, so a workflow with
+   // a live run throws a unique violation.
+   public static reopen(runId: string) {
+      return PrismaService.client.$transaction(async tx => {
+         const { count } = await tx.workflowRun.updateMany({
+            where: {
+               id: runId,
+               status: 'FAILED',
+            },
+            data: {
+               status: 'RUNNING',
+               finishedAt: null,
+               message: null,
+               stopRequestedAt: null,
+               startedAt: new Date(),
+            },
+         })
+
+         if (count === 0) {
+            return false
+         }
+
+         await tx.workflowStepCall.updateMany({
+            where: {
+               stepRun: {
+                  runId,
+                  status: 'FAILED',
+               },
+               status: 'FAILED',
+               costMicros: 0,
+            },
+            data: {
+               status: 'STARTED',
+               finishedAt: null,
+               retryAt: null,
+               jobId: null,
+               sentAt: null,
+               error: null,
+            },
+         })
+         await tx.workflowStepRun.updateMany({
+            where: {
+               runId,
+               status: { in: ['FAILED', 'SKIPPED', 'RUNNING'] },
+            },
+            data: {
+               status: 'WAITING',
+               startedAt: null,
+               finishedAt: null,
+               claimedAt: null,
+               waitUntil: null,
+               message: null,
+               errorCode: null,
+               itemsIn: 0,
+               itemsOut: 0,
+               tries: 0,
+               emits: [],
+            },
+         })
+
+         return true
+      })
+   }
+
+   // What a run gives back to whoever started it: what its "Give back" blocks got, of any kind, each once. null when the
+   // workflow has none; the caller then reads the people saved to lists (`listedPeople`).
+   public static async returned(runId: string) {
+      const steps = await PrismaService.client.workflowStepRun.findMany({
+         where: {
+            runId,
+            type: 'output.return',
+         },
+         select: {
+            nodeId: true,
+            round: true,
+         },
+      })
+
+      if (steps.length === 0) {
+         return null
+      }
+
+      const items = await WorkflowRunService.items(runId, steps)
+
+      return [...new Map(items.map(item => [`${item.kind}:${item.slug}`, item])).values()]
+   }
+
    // Steps for the next round of a loop or For each; repeating it creates nothing twice.
    public static addRound(runId: string, steps: { nodeId: string; type: string }[], round: number) {
       return PrismaService.client.workflowStepRun.createMany({
@@ -655,6 +795,86 @@ export class WorkflowRunService {
          where: { id: runId },
          data: bands,
       })
+   }
+
+   // Ends a run that cannot go on: what had not finished fails with the code, and the run fails with the message.
+   public static async failUnfinished(runId: string, message: string, errorCode: StepErrorCode) {
+      await PrismaService.client.workflowStepRun.updateMany({
+         where: {
+            runId,
+            status: { in: ['WAITING', 'RUNNING'] },
+         },
+         data: {
+            status: 'FAILED',
+            message,
+            errorCode,
+            finishedAt: new Date(),
+         },
+      })
+
+      return WorkflowRunService.finishRun(runId, {
+         status: 'FAILED',
+         discarded: 0,
+         message,
+      })
+   }
+
+   // Ends the runs that made no progress for STUCK_HOURS: no step started or finished, no wait or retry still ahead, and
+   // no other run they wait for. Returns their ids.
+   public static async endStuck(now = new Date()) {
+      const cutoff = new Date(now.getTime() - STUCK_HOURS * HOUR_MS)
+      const candidates = await PrismaService.client.workflowRun.findMany({
+         where: {
+            status: 'RUNNING',
+            startedAt: { lt: cutoff },
+            steps: {
+               none: {
+                  OR: [
+                     { startedAt: { gt: cutoff } },
+                     { finishedAt: { gt: cutoff } },
+                     { waitUntil: { gt: now } },
+                     {
+                        calls: {
+                           some: {
+                              finishedAt: null,
+                              retryAt: { gt: now },
+                           },
+                        },
+                     },
+                  ],
+               },
+            },
+         },
+         select: {
+            id: true,
+            steps: { select: { childRunId: true } },
+         },
+      })
+      const ended: string[] = []
+
+      for (const run of candidates) {
+         const children = run.steps.flatMap(({ childRunId }) => (childRunId ? [childRunId] : []))
+
+         if (
+            children.length > 0 &&
+            (await PrismaService.client.workflowRun.count({
+               where: {
+                  id: { in: children },
+                  status: 'RUNNING',
+               },
+            })) > 0
+         ) {
+            continue
+         }
+
+         const { count } = await WorkflowRunService.failUnfinished(run.id, STUCK_MESSAGE, 'RUN_STUCK')
+
+         if (count === 1) {
+            ended.push(run.id)
+         }
+      }
+
+      return ended
    }
 
    public static finishRun(runId: string, result: { status: WorkflowRunStatus; discarded: number; message?: string }) {

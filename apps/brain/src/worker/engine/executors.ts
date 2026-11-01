@@ -80,7 +80,7 @@ import {
    thresholdsOf,
    wordsIn,
 } from './context'
-import { retry, taskResult, wait } from './logicBlocks'
+import { retry, stop, taskResult, wait } from './logicBlocks'
 import { runWorkflow } from './runWorkflow'
 import { sendPages } from './sendApi'
 import { applyProfiles, conditionsOf, filterPeople, matches, scorePeople } from './steps'
@@ -235,25 +235,29 @@ const inputCompanies = async (ctx: Context): Promise<StepResult> => {
    }
 }
 
-// The people the workflow this one listens to kept. They are known: being in its list does not stop them here.
+// What the workflow this one listens to gave back. A person is known: being in its list does not stop them here.
 const afterWorkflow = async (ctx: Context): Promise<StepResult> => {
-   const people = (runInput(ctx).people ?? []).flatMap(data => {
+   const items = (runInput(ctx).people ?? []).flatMap(data => {
       const item = readItem(data)
 
-      return item?.kind === 'profile'
-         ? [
-              {
+      if (!item) {
+         return []
+      }
+
+      return [
+         item.kind === 'profile'
+            ? {
                  ...item,
                  known: true,
                  score: null,
                  band: null,
                  matched: [],
-              },
-           ]
-         : []
+              }
+            : item,
+      ]
    })
 
-   return keepItems(ctx, people, 0)
+   return keepItems(ctx, items, 0)
 }
 
 const engagement = (ctx: Context, kind: 'commenters' | 'reactors') => {
@@ -740,6 +744,9 @@ const exportCsv = async (ctx: Context): Promise<StepResult> => {
    }
 }
 
+// The run's result for whoever started it, of any kind (read through `WorkflowRunService.returned`).
+const giveBack = (ctx: Context): Promise<StepResult> => keepItems(ctx, ctx.inputs, ctx.inputs.length)
+
 const sendApi = async (ctx: Context): Promise<StepResult> => {
    const config = configOf(ctx.node)
 
@@ -851,6 +858,7 @@ export const EXECUTORS: Record<GraphNode['type'], (ctx: Context) => Promise<Step
    'logic.wait': wait,
    'logic.taskResult': taskResult,
    'logic.retry': retry,
+   'logic.stop': stop,
    'account.select': selectAccounts,
    'account.visitProfile': visitProfile,
    'account.visitCompany': visitCompany,
@@ -859,4 +867,5 @@ export const EXECUTORS: Record<GraphNode['type'], (ctx: Context) => Promise<Step
    'output.markPosts': markPosts,
    'output.csv': exportCsv,
    'output.sendApi': sendApi,
+   'output.return': giveBack,
 }

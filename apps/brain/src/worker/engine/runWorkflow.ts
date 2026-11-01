@@ -159,11 +159,11 @@ export const runWorkflow = async (ctx: Context): Promise<StepResult> => {
       throw new StepError(`${name} ${outcome}, so it gave nothing back.`, 'CHILD_ENDED')
    }
 
-   const people = await WorkflowRunService.listedPeople(childId)
-   const result = await keepItems(ctx, people, ctx.inputs.length)
+   const given = (await WorkflowRunService.returned(childId)) ?? (await WorkflowRunService.listedPeople(childId))
+   const result = await keepItems(ctx, given, ctx.inputs.length)
 
    return {
       ...result,
-      message: `${people.length} people back from ${name}, which ${outcome}.`,
+      message: `${given.length} ${given.length === 1 ? 'item' : 'items'} back from ${name}, which ${outcome}.`,
    }
 }

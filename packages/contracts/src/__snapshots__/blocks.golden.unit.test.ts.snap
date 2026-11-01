@@ -18,8 +18,10 @@ exports[`blocks before they became one definition > should keep the sets of bloc
     "account.writePost",
     "logic.retry",
     "logic.runWorkflow",
+    "logic.stop",
     "logic.taskResult",
     "logic.wait",
+    "output.return",
     "process.merge",
   ],
   "visit": [
@@ -477,6 +479,20 @@ exports[`blocks before they became one definition > should keep what every block
       "costMicros": 0,
       "items": 9,
     },
+    "type": "logic.stop",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
     "type": "account.select",
   },
   {
@@ -576,6 +592,20 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 9,
     },
     "type": "output.sendApi",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "output.return",
   },
 ]
 `;

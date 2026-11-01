@@ -227,6 +227,8 @@ enum WorkflowTrigger {
 }
 
 enum WorkflowRunStatus {
+  // Saved while another run of the workflow was live; the engine starts the oldest when that run ended.
+  QUEUED
   RUNNING
   SUCCEEDED
   PARTIAL
@@ -274,39 +276,41 @@ model Workflow {
 
 // One execution. It keeps a copy of the graph it started with, so editing the workflow never changes it.
 model WorkflowRun {
-  id              String            @id @default(uuid(7))
-  workflowId      String
-  workflow        Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  userId          String
-  trigger         WorkflowTrigger
+  id               String            @id @default(uuid(7))
+  workflowId       String
+  workflow         Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  userId           String
+  trigger          WorkflowTrigger
   // Unique per start, so a repeated schedule tick or a double click cannot start the same run twice.
-  runKey          String            @unique
-  status          WorkflowRunStatus @default(RUNNING)
-  graph           Json
-  qualifyScore    Int
-  maybeScore      Int
-  maybeEnabled    Boolean
-  estimateMicros  Int               @default(0)
-  costMicros      Int               @default(0)
-  qualified       Int               @default(0)
-  maybe           Int               @default(0)
-  discarded       Int               @default(0)
+  runKey           String            @unique
+  status           WorkflowRunStatus @default(RUNNING)
+  graph            Json
+  qualifyScore     Int
+  maybeScore       Int
+  maybeEnabled     Boolean
+  estimateMicros   Int               @default(0)
+  costMicros       Int               @default(0)
+  qualified        Int               @default(0)
+  maybe            Int               @default(0)
+  discarded        Int               @default(0)
   // Links sent by an API call, or the people a finished workflow passed on.
-  input           Json?
+  input            Json?
   // How many workflows started this one in a chain.
-  depth           Int               @default(0)
+  depth            Int               @default(0)
   // 1: every block runs (runs from before 2026-11-02). 2: a block runs only when something reaches it, and only the triggers
   // that fired start the run (.plan/workflow-engine-p2-run-semantics.md).
-  engineVersion   Int               @default(1)
+  engineVersion    Int               @default(1)
   // The run whose "Run another workflow" block started this one.
-  parentRunId     String?
+  parentRunId      String?
   // Set when the owner asked to stop: nothing new starts, and the run ends as STOPPED once paid jobs finished.
-  stopRequestedAt DateTime?
-  message         String?
-  startedAt       DateTime          @default(now())
-  finishedAt      DateTime?
-  steps           WorkflowStepRun[]
-  items           WorkflowItem[]
+  stopRequestedAt  DateTime?
+  message          String?
+  // Set when the owner dismissed the alert about this run failing (.plan/workflow-engine-p4-lifecycle.md).
+  alertDismissedAt DateTime?
+  startedAt        DateTime          @default(now())
+  finishedAt       DateTime?
+  steps            WorkflowStepRun[]
+  items            WorkflowItem[]
 
   // One run going at a time: a partial unique index on (workflowId) where status is RUNNING, in the migration
   // workflow_run_one_live (Prisma cannot express it).

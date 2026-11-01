@@ -28,18 +28,18 @@ export class RetentionService {
       ledgerCutoff.setUTCMonth(ledgerCutoff.getUTCMonth() - RETENTION.ledgerMonths)
 
       const itemCutoff = daysBefore(now, RETENTION.itemsDays)
-      // A run that is still going keeps its items, however long a Wait holds it: they are what the next blocks work on.
+      // A run that is still going, or waiting its turn, keeps its items, however long a Wait holds it: they are what the next blocks work on.
       const items = await db.workflowItem.deleteMany({
          where: {
             createdAt: { lt: itemCutoff },
-            run: { status: { not: 'RUNNING' } },
+            run: { status: { notIn: ['RUNNING', 'QUEUED'] } },
             OR: [{ keepUntil: null }, { keepUntil: { lt: now } }],
          },
       })
       // What an API call or another workflow passed in holds personal data too.
       const inputs = await db.workflowRun.updateMany({
          where: {
-            status: { not: 'RUNNING' },
+            status: { notIn: ['RUNNING', 'QUEUED'] },
             startedAt: { lt: itemCutoff },
             input: { not: Prisma.DbNull },
          },
@@ -47,7 +47,7 @@ export class RetentionService {
       })
       const runs = await db.workflowRun.deleteMany({
          where: {
-            status: { not: 'RUNNING' },
+            status: { notIn: ['RUNNING', 'QUEUED'] },
             startedAt: { lt: daysBefore(now, RETENTION.runsDays) },
          },
       })

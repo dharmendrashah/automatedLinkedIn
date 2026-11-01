@@ -3,7 +3,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { fakeDataClient } from 'core/fakeDataClient'
 
-import { IcpService, LinkedInPostService, PrismaService, UserService, WalletService, WorkflowService } from 'database'
+import {
+   IcpService,
+   LinkedInCompanyService,
+   LinkedInPostService,
+   PrismaService,
+   UserService,
+   WalletService,
+   WorkflowService,
+} from 'database'
 
 import { GOALS, type Graph, type GraphNode, TEMPLATE_NUMBERS, templateGraph } from '@automatedLinkedIn/contracts'
 
@@ -344,6 +352,62 @@ describe('free-form workflows (database)', () => {
       for (const { runId } of [sent, own, yes, no, none]) {
          expect((await WorkflowService.run(userId, runId))?.status).toBe('SUCCEEDED')
       }
+   })
+
+   it('should bring back what a Give back block got, of any kind, to the caller and to a chained workflow', async () => {
+      const acme = 'https://www.linkedin.com/company/acme'
+      await LinkedInCompanyService.addMany(userId, [
+         {
+            slug: 'acme',
+            url: acme,
+         },
+      ])
+
+      const worker = await saved({
+         nodes: [
+            node('people', 'input.profiles', { links: [profile('ada')] }),
+            node('firms', 'input.companies'),
+            node('list', 'output.list'),
+            node('back', 'output.return'),
+         ],
+         edges: [line('people', 'list'), line('people', 'back'), line('firms', 'back')],
+      })
+      const listener = await saved({
+         nodes: [node('after', 'trigger.workflow', { workflowId: worker.id })],
+         edges: [],
+      })
+      const kindsAt = async (runId: string, nodeId: string) =>
+         (await itemsAt(runId, nodeId)).map(({ kind, slug }) => [kind, slug])
+
+      await WorkflowService.update(userId, listener.id, { enabled: true })
+
+      const caller = await runOf({
+         nodes: [
+            node('start', 'trigger.manual'),
+            node('call', 'logic.runWorkflow', {
+               workflowId: worker.id,
+               wait: 'results',
+               send: 'nothing',
+            }),
+         ],
+         edges: [line('start', 'call')],
+      })
+      const chained = await PrismaService.client.workflowRun.findFirst({
+         where: {
+            workflowId: listener.id,
+            trigger: 'WORKFLOW',
+         },
+      })
+
+      await advanceRun(chained?.id ?? '', deps(fakeClient()))
+
+      const expected = [
+         ['company', 'acme'],
+         ['profile', 'ada'],
+      ]
+
+      expect(await kindsAt(caller.runId, 'call')).toEqual(expected)
+      expect(await kindsAt(chained?.id ?? '', 'after')).toEqual(expected)
    })
 
    it('should refuse workflows that would run each other in a loop', async () => {

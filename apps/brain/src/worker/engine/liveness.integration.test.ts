@@ -325,3 +325,42 @@ describe('runs from before the rules (database)', () => {
       expect(kept?.status).toBe('DONE')
    })
 })
+
+describe('Stop with an error (database)', () => {
+   const graph = (minScore: number): Graph => ({
+      nodes: [
+         node('begin', 'trigger.manual'),
+         node('people', 'input.profiles', { links: [ADA] }),
+         node('ok', 'logic.if', { minScore }),
+         node('kept', 'output.csv'),
+         node('halt', 'logic.stop', { message: 'Nobody passed the filter.' }),
+      ],
+      edges: [
+         line('begin', 'people'),
+         line('people', 'ok'),
+         line('ok', 'kept'),
+         {
+            ...line('ok', 'halt'),
+            fromPort: 'else',
+         },
+      ],
+   })
+
+   it('should end the run as failed with the owner words when something reaches it', async () => {
+      const { steps, status } = await run(graph(50))
+
+      expect(steps.halt).toMatchObject({
+         status: 'FAILED',
+         message: 'Nobody passed the filter.',
+         errorCode: 'STOPPED_BY_BLOCK',
+      })
+      expect(status).toBe('FAILED')
+   })
+
+   it('should not run when nothing reaches it', async () => {
+      const { steps, status } = await run(graph(0))
+
+      expect(steps.halt?.status).toBe('SKIPPED')
+      expect(status).toBe('SUCCEEDED')
+   })
+})

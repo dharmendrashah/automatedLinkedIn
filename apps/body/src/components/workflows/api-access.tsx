@@ -27,7 +27,7 @@ const RESPONSES: [string, string][] = [
    ['202', 'Started. The body has runId and status.'],
    ['400', 'The body is not valid; error says why.'],
    ['401', 'The token is missing or wrong.'],
-   ['409', 'The workflow is switched off, already running, or cannot start; error says why.'],
+   ['409', 'The workflow is switched off or cannot start; error says why. A call while a run is going is accepted and waits its turn (status QUEUED).'],
    ['429', 'Too many calls this hour.'],
 ]
 

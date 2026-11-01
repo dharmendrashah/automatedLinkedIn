@@ -377,6 +377,8 @@ const finish = async (run: Run, graph: Graph, deps: EngineDeps) => {
       .filter(({ type }) => SCORING_STEPS.has(type))
       .reduce((sum, { itemsIn, itemsOut }) => sum + Math.max(0, itemsIn - itemsOut), 0)
    const people = await listedPeople(run)
+   // Chained workflows get what the run gives back: its "Give back" blocks, else the people it saved to lists.
+   const result = (await WorkflowRunService.returned(run.id)) ?? people
 
    await WorkflowRunService.setBands(run.id, {
       qualified: people.filter(({ band }) => band === 'QUALIFIED').length,
@@ -392,7 +394,7 @@ const finish = async (run: Run, graph: Graph, deps: EngineDeps) => {
    // Only the worker that ended the run starts the workflows listening to it, and never after a preview, a failure or
    // a stop.
    if (count === 1 && !failed && !stopped && run.trigger !== 'PREVIEW') {
-      const started = await WorkflowTriggerService.startAfter(run, people)
+      const started = await WorkflowTriggerService.startAfter(run, result)
 
       if (started > 0) {
          deps.log.info(`workflow run=${run.id} started ${started} chained runs`)
@@ -412,21 +414,7 @@ const readableGraph = (run: Run) => {
 const endUnreadable = async (run: Run, deps: EngineDeps) => {
    deps.log.error(`workflow run=${run.id} has a graph that cannot be read; ending it`)
 
-   for (const step of run.steps.filter(({ status }) => !FINISHED.has(status))) {
-      await WorkflowRunService.finishStep(step.id, {
-         status: 'FAILED',
-         itemsIn: 0,
-         itemsOut: 0,
-         message: UNREADABLE,
-         errorCode: 'RUN_UNREADABLE',
-      })
-   }
-
-   await WorkflowRunService.finishRun(run.id, {
-      status: 'FAILED',
-      discarded: 0,
-      message: UNREADABLE,
-   })
+   await WorkflowRunService.failUnfinished(run.id, UNREADABLE, 'RUN_UNREADABLE')
 }
 
 // Runs every step that is ready, until the run ends or nothing more can start. True when it did something.

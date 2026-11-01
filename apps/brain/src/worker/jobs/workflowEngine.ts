@@ -15,7 +15,8 @@ export const workflowEngine = defineJob({
    startAfterMs: 10_000,
    timeoutMs: 20 * 60 * 1000,
    run: async ({ signal }) => {
-      let moved = 0
+      // A queued run starts when the live run of its workflow ended.
+      let moved = await WorkflowRunService.promoteWaiting()
 
       for (const runId of await WorkflowRunService.activeRunIds()) {
          if (

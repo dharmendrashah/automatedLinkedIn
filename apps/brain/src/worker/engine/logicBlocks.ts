@@ -4,7 +4,7 @@ import { type WorkflowItemData } from 'core'
 
 import { VisitPoolService, WorkflowRunService } from 'database'
 
-import { VISIT_BLOCKS, blockOf, toSeconds, workingBlockBefore } from '@automatedLinkedIn/contracts'
+import { STOP_MESSAGE, VISIT_BLOCKS, blockOf, toSeconds, workingBlockBefore } from '@automatedLinkedIn/contracts'
 
 import {
    type Context,
@@ -147,4 +147,9 @@ export const retry = async (ctx: Context): Promise<StepResult> => {
       )),
       emit: ['main'],
    }
+}
+
+// Ends the run as failed with the owner's words. A preview ends here too, so the owner sees it.
+export const stop = (ctx: Context): Promise<StepResult> => {
+   throw new StepError(textIn(configOf(ctx.node), 'message') || STOP_MESSAGE, 'STOPPED_BY_BLOCK')
 }

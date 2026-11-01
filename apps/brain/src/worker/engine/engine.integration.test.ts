@@ -229,7 +229,7 @@ describe('workflow engine (database)', () => {
       const client = fakeClient()
       const run = await WorkflowService.startRun(userId, workflowId, 'MANUAL', `manual-${randomUUID()}`)
 
-      await expect(WorkflowService.startRun(userId, workflowId, 'MANUAL', `again-${randomUUID()}`)).rejects.toThrow(
+      await expect(WorkflowService.startRun(userId, workflowId, 'PREVIEW', `again-${randomUUID()}`)).rejects.toThrow(
          'still going'
       )
 
