@@ -588,6 +588,9 @@ type BlockSpec = {
    migrate?: Record<number, (config: NodeConfig) => NodeConfig>
    // Retired: hidden from the palette, still runs where it is already used.
    deprecated?: boolean
+   // Whether what leaves the block depends on items: `items` (the default) leaves when it gives at least one, `passes` when
+   // the block itself was live (it waits, selects or acts without needing items), `always` for a trigger that fired.
+   liveness?: 'items' | 'passes' | 'always'
    // What the block passes on and costs at most, given how many items reach it. Without one it passes on what reaches it
    // and is free.
    estimate?: (node: GraphNode, incoming: number, available: Available) => { items: number; costMicros: number }
@@ -635,6 +638,7 @@ const perIncomingPost = (node: GraphNode, incoming: number) => ({
 const BLOCKS = {
    'trigger.manual': {
       group: 'Triggers',
+      liveness: 'always',
       label: 'Run by hand',
       summary: 'Starts when you press Run.',
       input: null,
@@ -644,6 +648,7 @@ const BLOCKS = {
    },
    'trigger.schedule': {
       group: 'Triggers',
+      liveness: 'always',
       label: 'On a schedule',
       summary: 'Starts every few hours, every day or every week.',
       input: null,
@@ -971,6 +976,7 @@ const BLOCKS = {
    },
    'trigger.api': {
       group: 'Triggers',
+      liveness: 'always',
       label: 'When called by API',
       summary: 'Starts when another system calls this workflow with links.',
       input: null,
@@ -980,6 +986,7 @@ const BLOCKS = {
    },
    'trigger.workflow': {
       group: 'Triggers',
+      liveness: 'always',
       label: 'When another workflow finishes',
       summary: 'Starts with the people another workflow kept.',
       input: null,
@@ -2089,6 +2096,7 @@ const BLOCKS = {
    'logic.wait': {
       group: 'Logic',
       flow: PASSES_UNCHANGED,
+      liveness: 'passes',
       flags: {
          takesAnything: true,
          passesOn: true,
@@ -2275,6 +2283,7 @@ const BLOCKS = {
    'account.select': {
       group: 'Account Actions',
       flow: PASSES_UNCHANGED,
+      liveness: 'passes',
       flags: { takesAnything: true },
       validate: (node, graph) => {
          const after = downstreamOf(graph.edges, node.id)
@@ -2341,6 +2350,7 @@ const BLOCKS = {
    'account.writePost': {
       group: 'Account Actions',
       flow: PASSES_UNCHANGED,
+      liveness: 'passes',
       flags: {
          takesAnything: true,
          usesAccounts: true,
@@ -2669,7 +2679,7 @@ export const upgradeGraph = (graph: Graph): Graph => ({
    }),
 })
 
-const isTrigger = (type: BlockType) => BLOCKS[type].input === null
+export const isTrigger = (type: BlockType) => BLOCKS[type].input === null
 
 const parentsOf = (graph: Graph, id: string) => graph.edges.filter(edge => edge.to === id).map(edge => edge.from)
 
@@ -2787,6 +2797,75 @@ export const topoOrder = (graph: Graph) => {
 
    return order
 }
+
+// How a run was started, and the triggers that fire for it. By hand and a preview fire every trigger.
+export type RunStart = 'MANUAL' | 'SCHEDULE' | 'PREVIEW' | 'API' | 'WORKFLOW'
+
+const FIRES: Record<RunStart, readonly BlockType[] | null> = {
+   MANUAL: null,
+   PREVIEW: null,
+   SCHEDULE: ['trigger.schedule'],
+   API: ['trigger.api'],
+   WORKFLOW: ['trigger.workflow'],
+}
+
+// Whether a trigger block starts a run. When the graph has no trigger of the kind that started the run, every trigger
+// fires, so a workflow built before this rule keeps running.
+export const isFired = (graph: Graph, start: RunStart, type: BlockType) => {
+   const wanted = FIRES[start]
+
+   if (wanted === null || !graph.nodes.some(node => wanted.includes(node.type))) {
+      return true
+   }
+
+   return wanted.includes(type)
+}
+
+// The order ready blocks go in: depth first from the blocks with nothing before them, one branch to its end before the
+// next, children from the top of the canvas to the bottom and from the left to the right (as n8n's v1 order).
+export const executionOrder = (graph: Graph): string[] => {
+   const edges = forwardEdges(graph)
+   const spot = new Map(graph.nodes.map(node => [node.id, node.position]))
+   const above = (a: string, b: string) =>
+      (spot.get(a)?.y ?? 0) - (spot.get(b)?.y ?? 0) ||
+      (spot.get(a)?.x ?? 0) - (spot.get(b)?.x ?? 0) ||
+      a.localeCompare(b)
+   const order: string[] = []
+   const seen = new Set<string>()
+   const visit = (id: string) => {
+      if (seen.has(id)) {
+         return
+      }
+
+      seen.add(id)
+      order.push(id)
+
+      for (const to of edges
+         .filter(edge => edge.from === id)
+         .map(edge => edge.to)
+         .sort(above)) {
+         visit(to)
+      }
+   }
+
+   for (const id of graph.nodes
+      .filter(node => !edges.some(edge => edge.to === node.id))
+      .map(({ id: first }) => first)
+      .sort(above)) {
+      visit(id)
+   }
+
+   // A cycle with nothing leading into it.
+   for (const node of graph.nodes) {
+      visit(node.id)
+   }
+
+   return order
+}
+
+// Which output of its block a line leaves from. An Else reads the "else" output of the block before it.
+export const portOfEdge = (graph: Graph, edge: GraphEdge) =>
+   graph.nodes.find(node => node.id === edge.to)?.type === 'logic.else' ? 'else' : 'main'
 
 const downstreamOf = (edges: GraphEdge[], start: string) => {
    const found = new Set([start])

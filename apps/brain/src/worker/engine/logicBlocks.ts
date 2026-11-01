@@ -96,7 +96,10 @@ const failedSide = async (ctx: Context, block: { id: string }, round: number, me
 
    await WorkflowRunService.replaceItems(elseKey(ctx, ctx.node.id), reached)
 
-   return passOn(ctx, [], message)
+   return {
+      ...(await passOn(ctx, [], message)),
+      emit: ['else'],
+   }
 }
 
 export const taskResult = async (ctx: Context): Promise<StepResult> => {
@@ -123,7 +126,10 @@ export const taskResult = async (ctx: Context): Promise<StepResult> => {
 
    await WorkflowRunService.replaceItems(elseKey(ctx, ctx.node.id), no)
 
-   return passOn(ctx, yes, `${yes.length} yes, ${no.length} no.`)
+   return {
+      ...(await passOn(ctx, yes, `${yes.length} yes, ${no.length} no.`)),
+      emit: no.length > 0 ? ['main', 'else'] : ['main'],
+   }
 }
 
 export const retry = async (ctx: Context): Promise<StepResult> => {
@@ -133,5 +139,12 @@ export const retry = async (ctx: Context): Promise<StepResult> => {
       return failedSide(ctx, block, step.round, `${label} failed after ${step.tries + 1} tries.`)
    }
 
-   return passOn(ctx, ctx.inputs, step && step.tries > 0 ? `${label} worked on try ${step.tries + 1}.` : undefined)
+   return {
+      ...(await passOn(
+         ctx,
+         ctx.inputs,
+         step && step.tries > 0 ? `${label} worked on try ${step.tries + 1}.` : undefined
+      )),
+      emit: ['main'],
+   }
 }

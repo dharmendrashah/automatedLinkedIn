@@ -43,6 +43,9 @@ export type StepResult = {
    message?: string
    // Why a step that is done with gaps has them (STEP_ERROR_CODES).
    errorCode?: StepErrorCode
+   // The outputs that are live, when the block knows better than counting its items: Task result says "worked" with no
+   // items too. Without it the engine reads the items each output kept.
+   emit?: string[]
 }
 
 export type Context = {

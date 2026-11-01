@@ -295,6 +295,9 @@ model WorkflowRun {
   input           Json?
   // How many workflows started this one in a chain.
   depth           Int               @default(0)
+  // 1: every block runs (runs from before 2026-11-02). 2: a block runs only when something reaches it, and only the triggers
+  // that fired start the run (.plan/workflow-engine-p2-run-semantics.md).
+  engineVersion   Int               @default(1)
   // The run whose "Run another workflow" block started this one.
   parentRunId     String?
   // Set when the owner asked to stop: nothing new starts, and the run ends as STOPPED once paid jobs finished.
@@ -335,6 +338,8 @@ model WorkflowStepRun {
   waitUntil  DateTime?
   // How many times a Retry has run this step again.
   tries      Int                @default(0)
+  // The outputs that gave something when the step ended (main, else); the blocks after it run only for a live one.
+  emits      String[]           @default([])
   // When a worker first took the step; the time limits of a waiting step count from here (.plan/visit-block-waiting-reasons.md).
   startedAt  DateTime?
   finishedAt DateTime?

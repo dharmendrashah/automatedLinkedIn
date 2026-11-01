@@ -234,7 +234,7 @@ Each phase is its own PR with its own plan; tests first; the six repros become t
    - [ ] `defineBlock`, flags, derived sets, `version` and `migrate`, `deprecated`; move `blockEstimate`, `PREVIEW_CAPS` and the `validateGraph` special cases into definitions, one group of blocks at a time.
    - [ ] Registry tests (contracts, brain, body) and the made-up block test.
    - [ ] Dual build of contracts (if question 5 is yes); `summarize` in definitions; drop body's duplicated logic and its parity tests.
-- [ ] Phase 2, run semantics (plan `workflow-engine-p2-run-semantics.md`): `engineVersion`; fired triggers; liveness and `SKIPPED`; fixed order; the run page says why a block was skipped; inverted repro tests for L4, L5, L7.
+- [x] Phase 2, run semantics (plan `workflow-engine-p2-run-semantics.md`, done): `engineVersion`; fired triggers; liveness and `SKIPPED`; fixed order; the run page says why a block was skipped; inverted repro tests for L4, L5, L7.
 - [ ] Phase 3, ports (plan `workflow-engine-p3-ports.md`): `outputs`, `fromPort`, port item keys, validation, engine reads, If, Task result, Retry, Run another workflow ports, canvas handles, Else compatibility, tests, `MEMORY.md`.
 - [ ] Phase 4, run lifecycle (plan `workflow-engine-p4-lifecycle.md`), each item its own step and go-ahead: queued runs; failure alerts and the stop-with-error block; stuck-run check; the give-back block; resume a failed run; engine parallelism only if measured.
 - [ ] Phase 5 only for what you choose after phase 4.

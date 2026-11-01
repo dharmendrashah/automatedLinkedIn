@@ -114,6 +114,8 @@ export class WorkflowRunService {
          itemsOut: number
          message?: string | null
          errorCode?: string | null
+         // The outputs that gave something, for the blocks after this one.
+         emits?: string[]
       }
    ) {
       return PrismaService.client.workflowStepRun.update({
@@ -283,6 +285,24 @@ export class WorkflowRunService {
             })
          )
       )
+   }
+
+   // A step nothing reached ends here without running. False when it was taken meanwhile.
+   public static async skipStep(stepId: string, message: string) {
+      const { count } = await PrismaService.client.workflowStepRun.updateMany({
+         where: {
+            id: stepId,
+            status: 'WAITING',
+            startedAt: null,
+         },
+         data: {
+            status: 'SKIPPED',
+            message,
+            finishedAt: new Date(),
+         },
+      })
+
+      return count === 1
    }
 
    // Steps never taken end here: the run was stopped, or a block failed, before they started. A step given back while it

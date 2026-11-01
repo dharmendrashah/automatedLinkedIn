@@ -584,6 +584,7 @@ export class WorkflowService {
                userId,
                trigger,
                runKey,
+               engineVersion: 2,
                graph: runGraph,
                input: options.input,
                depth: options.depth ?? 0,

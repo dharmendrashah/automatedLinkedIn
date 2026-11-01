@@ -1,7 +1,7 @@
 import { type WorkflowItemData, parseLinkedInUrl, person } from 'core'
 import { backSources, forwardSources, sourceRound } from 'core/workflowInput'
 
-import { WorkflowRunService, WorkflowTriggerService, readGraph } from 'database'
+import { type ItemKey, WorkflowRunService, WorkflowTriggerService, readGraph } from 'database'
 
 import {
    type Graph,
@@ -15,13 +15,18 @@ import {
    blockOf,
    convertsTo,
    edgeKey,
+   executionOrder,
+   isFired,
    isHandled,
+   isTrigger,
    loopRoundsOf,
+   portOfEdge,
    repeatRegions,
    retriesOf,
 } from '@automatedLinkedIn/contracts'
 
 import {
+   ELSE_SUFFIX,
    type EngineDeps,
    Paused,
    type Run,
@@ -41,7 +46,7 @@ import { PLAIN_FAILURE, failureOf } from './failure'
 
 export { type EngineDeps } from './context'
 
-const PASSED = new Set(['DONE', 'PARTIAL'])
+const PASSED = new Set(['DONE', 'PARTIAL', 'SKIPPED'])
 const FINISHED = new Set(['DONE', 'PARTIAL', 'FAILED', 'SKIPPED'])
 const SCORING_STEPS: ReadonlySet<string> = SCORING_BLOCKS
 const RUN_LAST: ReadonlySet<string> = RUNS_LAST
@@ -201,9 +206,12 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
          await WorkflowRunService.seedItems(at, passThrough)
       }
 
+      const { emit, ...finished } = result
+
       await WorkflowRunService.finishStep(step.id, {
-         ...result,
+         ...finished,
          itemsOut: result.itemsOut + passThrough.length,
+         emits: await emitsOf(node, at, emit),
       })
    } catch (error) {
       if (error instanceof Paused || error instanceof Waiting) {
@@ -238,10 +246,69 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
          itemsIn: 0,
          itemsOut: 0,
          ...failure,
+         // A failure a Task result or Retry looks at lets what stands between them and the failed block run.
+         emits: isHandled(graph, node.id) ? ['main'] : [],
       })
    }
 
    return 'ended'
+}
+
+// Which outputs of a step gave something: what the block says itself, else `main` when it gave items or passes on that it
+// was live, and `else` when it kept items aside.
+const emitsOf = async (node: GraphNode, at: ItemKey, emit: string[] | undefined) => {
+   if (emit) {
+      return emit
+   }
+
+   const { liveness } = blockOf(node.type)
+   const main = liveness === 'passes' || liveness === 'always' || (await WorkflowRunService.countItems(at)) > 0
+   const aside =
+      (await WorkflowRunService.countItems({
+         ...at,
+         nodeId: `${node.id}${ELSE_SUFFIX}`,
+      })) > 0
+
+   return [...(main ? ['main'] : []), ...(aside ? ['else'] : [])]
+}
+
+const NOTHING_REACHED = 'Nothing reached this block, so it did not run.'
+const NOT_FIRED = 'This trigger did not start the run, so it did not run.'
+
+// Why a block that has not started does not run: its trigger did not fire, or no line into it is live (the block before it
+// gave nothing on that output). A block with no line into it, and one that restarts a loop, runs.
+const deadReason = (run: Run, graph: Graph, step: Step, byKey: Map<string, Step>, back: Set<string>) => {
+   const node = graph.nodes.find(({ id }) => id === step.nodeId)
+
+   if (!node) {
+      return null
+   }
+
+   if (isTrigger(node.type)) {
+      return isFired(graph, run.trigger, node.type) ? null : NOT_FIRED
+   }
+
+   const round = sourceRound(node.type, step.round)
+   const reaching = graph.edges
+      .filter(edge => edge.to === node.id && !back.has(edgeKey(edge)))
+      .flatMap(edge => {
+         const parent = byKey.get(keyOf(edge.from, round))
+
+         return parent
+            ? [
+                 {
+                    edge,
+                    parent,
+                 },
+              ]
+            : []
+      })
+
+   if (reaching.length === 0) {
+      return null
+   }
+
+   return reaching.some(({ edge, parent }) => parent.emits.includes(portOfEdge(graph, edge))) ? null : NOTHING_REACHED
 }
 
 // The blocks to run again after `round`: For each blocks with batches left, and loops whose way back found something
@@ -445,6 +512,30 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
             (!RUN_LAST.has(step.type) || run.steps.every(other => other.id === step.id || FINISHED.has(other.status)))
          )
       })
+      const order = new Map(executionOrder(graph).map((id, index) => [id, index]))
+
+      // One branch to its end before the next, the one at the top first.
+      ready.sort((a, b) => a.round - b.round || (order.get(a.nodeId) ?? 0) - (order.get(b.nodeId) ?? 0))
+
+      // A block nothing reaches ends without running (runs of the old rules run every block).
+      if (run.engineVersion >= 2) {
+         let skipped = 0
+
+         for (const step of ready.filter(({ startedAt }) => startedAt === null)) {
+            const reason = deadReason(run, graph, step, byKey, back)
+
+            if (reason && (await WorkflowRunService.skipStep(step.id, reason))) {
+               skipped += 1
+            }
+         }
+
+         if (skipped > 0) {
+            progressed = true
+
+            continue
+         }
+      }
+
       let claimed = false
 
       for (const step of ready) {

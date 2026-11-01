@@ -68,6 +68,7 @@ const startChild = async (ctx: Context, workflowId: string, send: string) => {
 const passOn = async (ctx: Context, message: string): Promise<StepResult> => ({
    ...(await keepItems(ctx, ctx.inputs, ctx.inputs.length)),
    message,
+   emit: ['main'],
 })
 
 // "No": what reached the block goes to an Else after it.
@@ -78,6 +79,7 @@ const answerNo = async (ctx: Context, message: string): Promise<StepResult> => {
    return {
       ...result,
       message,
+      emit: ['else'],
    }
 }
 
