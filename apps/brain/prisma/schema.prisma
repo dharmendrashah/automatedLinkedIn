@@ -319,6 +319,8 @@ model WorkflowStepRun {
   itemsOut   Int                @default(0)
   costMicros Int                @default(0)
   message    String?
+  // Why the step failed or ended with gaps (STEP_ERROR_CODES in the contracts package); null for steps from before codes.
+  errorCode  String?
   // Which repeat of a loop or For each batch this is; 0 for blocks that run once.
   round      Int                @default(0)
   // When a worker took the step; a step held too long is taken again.

@@ -87,15 +87,18 @@ const DONE: StepResult = {
 
 const JOB_BATCH = 10
 
-// What an API call sent, or what a finished workflow passed on.
-const inputSchema = z.object({
-   posts: z.array(z.string()).optional(),
-   profiles: z.array(z.string()).optional(),
-   companies: z.array(z.string()).optional(),
-   people: z.array(z.unknown()).optional(),
-})
+// What a finished workflow passed on. What an API call sent is read through `sentTo`, or put in the block's settings.
+const inputSchema = z.object({ people: z.array(z.unknown()).optional() })
 
 const runInput = (ctx: Context) => inputSchema.safeParse(ctx.run.input).data ?? {}
+
+// The values an API call sent in a field, for a block that reads the call itself. A block with a setting a call replaces
+// is given the values in that setting instead (`applyApiInput`).
+const sentTo = (ctx: Context, field: string) => {
+   const value = z.record(z.string(), z.unknown()).safeParse(ctx.run.input).data?.[field]
+
+   return Array.isArray(value) ? value.filter((each): each is string => typeof each === 'string') : undefined
+}
 
 const linksOf = (urls: string[], kind: 'post' | 'profile' | 'company') =>
    urls.flatMap(url => {
@@ -125,7 +128,7 @@ const pickFilter = (ctx: Context, type: InputType) =>
    InputPickService.filter(ctx.run.userId, inputPickOf(type, ctx.node.config), ctx.run.workflowId)
 
 const inputPosts = async (ctx: Context): Promise<StepResult> => {
-   const sent = runInput(ctx).posts
+   const sent = sentTo(ctx, 'posts')
    const posts = sent
       ? linksOf(sent, 'post').map(link => ({
            ...link,
@@ -161,7 +164,7 @@ const inputPosts = async (ctx: Context): Promise<StepResult> => {
 // /profiles does not stop them later.
 const inputProfiles = async (ctx: Context): Promise<StepResult> => {
    const config = configOf(ctx.node)
-   const links = runInput(ctx).profiles ?? wordsIn(config, 'links')
+   const links = wordsIn(config, 'links')
    const people =
       links.length > 0
          ? linksOf(links, 'profile').map(link =>
@@ -195,7 +198,7 @@ const inputProfiles = async (ctx: Context): Promise<StepResult> => {
 }
 
 const inputCompanies = async (ctx: Context): Promise<StepResult> => {
-   const sent = runInput(ctx).companies
+   const sent = sentTo(ctx, 'companies')
    const companies: CompanyItem[] = sent
       ? linksOf(sent, 'company').map(link => ({
            kind: 'company',

@@ -30,7 +30,7 @@ const makePost = async (ctx: Context, pool: GraphNode, blocks: PostBlock[]) => {
    const usable = accounts.filter(({ status }) => status === 'ACTIVE').map(({ id }) => id)
 
    if (usable.length === 0) {
-      throw new StepError('None of the chosen accounts can post now: they need to be signed in.')
+      throw new StepError('None of the chosen accounts can post now: they need to be signed in.', 'ACCOUNTS_SIGNED_OUT')
    }
 
    let refusal = ''
@@ -62,7 +62,7 @@ const makePost = async (ctx: Context, pool: GraphNode, blocks: PostBlock[]) => {
       }
    }
 
-   throw new StepError(refusal)
+   throw new StepError(refusal, 'POST_REFUSED')
 }
 
 export const writePost = async (ctx: Context): Promise<StepResult> => {
@@ -70,13 +70,13 @@ export const writePost = async (ctx: Context): Promise<StepResult> => {
    const pool = nodeBefore(ctx.graph, node.id, 'account.select')
 
    if (!pool) {
-      throw new StepError('This block needs "Select accounts" before it.')
+      throw new StepError('This block needs "Select accounts" before it.', 'NEEDS_SELECT_ACCOUNTS')
    }
 
    const blocks = postBlocksOfText(node.config.post)
 
    if (!blocks) {
-      throw new StepError('The post cannot be read. Open the block and write it again.')
+      throw new StepError('The post cannot be read. Open the block and write it again.', 'POST_UNREADABLE')
    }
 
    if (ctx.preview) {
@@ -90,7 +90,7 @@ export const writePost = async (ctx: Context): Promise<StepResult> => {
    const unsure = rows.find(({ state }) => state === 'UNKNOWN')
 
    if (unsure) {
-      throw new StepError(unsure.failure ?? 'The post may have gone. Check your posts on LinkedIn.')
+      throw new StepError(unsure.failure ?? 'The post may have gone. Check your posts on LinkedIn.', 'POST_UNSURE')
    }
 
    // Each try of the step makes one post: a Retry gives the step another try after a post that did not go.
@@ -105,7 +105,7 @@ export const writePost = async (ctx: Context): Promise<StepResult> => {
    }
 
    if (latest.state === 'FAILED') {
-      throw new StepError(latest.failure ?? 'The post did not go. Nothing was posted.')
+      throw new StepError(latest.failure ?? 'The post did not go. Nothing was posted.', 'POST_FAILED')
    }
 
    if (PENDING.has(latest.state)) {
@@ -122,5 +122,5 @@ export const writePost = async (ctx: Context): Promise<StepResult> => {
       throw new Waiting()
    }
 
-   throw new StepError('The post did not go. Nothing was posted.')
+   throw new StepError('The post did not go. Nothing was posted.', 'POST_FAILED')
 }

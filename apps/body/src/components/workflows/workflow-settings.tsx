@@ -102,6 +102,7 @@ export const WorkflowSettings = ({ workflow }: { workflow: Workflow }) => {
             qualified score gives fewer, better people and costs less.
          </p>
          {update.error ? <p className="text-destructive text-sm">{readableError(update.error)}</p> : null}
+         {remove.error ? <p className="text-destructive text-sm">{readableError(remove.error)}</p> : null}
          <div className="flex flex-wrap justify-between gap-2">
             <Button type="submit" disabled={update.isPending}>
                {update.isPending ? <Loader2 className="animate-spin" /> : null}

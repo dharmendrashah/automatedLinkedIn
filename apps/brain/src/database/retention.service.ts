@@ -28,9 +28,11 @@ export class RetentionService {
       ledgerCutoff.setUTCMonth(ledgerCutoff.getUTCMonth() - RETENTION.ledgerMonths)
 
       const itemCutoff = daysBefore(now, RETENTION.itemsDays)
+      // A run that is still going keeps its items, however long a Wait holds it: they are what the next blocks work on.
       const items = await db.workflowItem.deleteMany({
          where: {
             createdAt: { lt: itemCutoff },
+            run: { status: { not: 'RUNNING' } },
             OR: [{ keepUntil: null }, { keepUntil: { lt: now } }],
          },
       })

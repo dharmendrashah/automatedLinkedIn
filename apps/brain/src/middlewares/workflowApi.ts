@@ -1,27 +1,15 @@
 import { type Application } from 'express'
 import { Readable } from 'stream'
-import { z } from 'zod'
 
 import { API_LIMITS, ConflictError, WorkflowTriggerService, readGraph } from 'database'
 
+import { apiBodySchema } from '@automatedLinkedIn/contracts'
+
 // The address another system calls to start a workflow (.plan/gtm-phase-3-blocks-triggers.md):
 // POST /api/workflows/:id/run with "Authorization: Bearer <token>". An optional "Idempotency-Key" still makes a
-// repeated call answer with the run it started.
+// repeated call answer with the run it started. The fields a call may carry come from the blocks that describe them.
 
-const links = z.array(z.string().trim().min(1).max(500)).max(API_LIMITS.items)
-
-const bodySchema = z
-   .object({
-      posts: links.optional(),
-      profiles: links.optional(),
-      companies: links.optional(),
-   })
-   .strict()
-   .refine(
-      body =>
-         (body.posts?.length ?? 0) + (body.profiles?.length ?? 0) + (body.companies?.length ?? 0) <= API_LIMITS.items,
-      { message: `Send at most ${API_LIMITS.items} links in posts, profiles or companies.` }
-   )
+const bodySchema = apiBodySchema(API_LIMITS.items)
 
 const KEY = /^[\w-]{1,100}$/
 const MAX_BODY = 64 * 1024

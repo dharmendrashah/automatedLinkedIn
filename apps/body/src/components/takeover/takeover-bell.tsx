@@ -25,7 +25,7 @@ export const TakeoverBell = () => {
    }
 
    return (
-      <div className="ml-auto flex items-center gap-1">
+      <div className="flex items-center gap-1">
          {notifications === 'default' && (
             <Button variant="ghost" size="sm" onClick={() => void askForNotifications()}>
                Allow desktop alerts

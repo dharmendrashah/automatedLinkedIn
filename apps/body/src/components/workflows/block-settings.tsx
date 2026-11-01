@@ -11,7 +11,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronRight, CircleAlert, Trash2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -21,8 +20,8 @@ import { type Block, type ConfigValue, type Field } from './types'
 import { LabelMultiSelect } from '../labels/label-multi-select'
 import { AccountsPick } from './accounts-pick'
 import { BLOCK_ICONS, tileOf } from './block-look'
-import { BlockOutput } from './block-output'
-import { type FlowNode } from './graph-convert'
+import { BlockRunTabs, type RunInfo } from './block-run-tabs'
+import { type FlowNode, summaryOf } from './graph-convert'
 import { INPUT_KINDS, isInputType } from './input-kinds'
 import { InputMatches } from './input-matches'
 import { PostField } from './post-field'
@@ -42,8 +41,8 @@ type Props = {
    onChange: (patch: Record<string, ConfigValue>) => void
    onRemove: () => void
    onClose: () => void
-   // The run shown on the canvas: the dialog then also shows what this block passed on in it.
-   output?: { runId: string; rounds: number } | null
+   // The block in the last run of the workflow: its state, error, input and output.
+   run?: RunInfo | null
 }
 
 const textOf = (value: ConfigValue | undefined) => (Array.isArray(value) ? value.join(', ') : String(value ?? ''))
@@ -100,7 +99,7 @@ export const BlockSettings = ({
    onChange: onPatch,
    onRemove,
    onClose,
-   output,
+   run,
 }: Props) => {
    if (!node) {
       return null
@@ -375,7 +374,7 @@ export const BlockSettings = ({
 
    return (
       <Dialog open onOpenChange={next => (next ? undefined : onClose())}>
-         <DialogContent className={output ? 'sm:max-w-3xl' : 'sm:max-w-xl'}>
+         <DialogContent className={run ? 'sm:max-w-3xl' : 'sm:max-w-xl'}>
             <DialogHeader>
                <div className="flex items-center gap-3">
                   <span className={cn('grid size-10 place-items-center rounded-lg', tileOf(block.group))}>
@@ -406,22 +405,20 @@ export const BlockSettings = ({
                   ))}
                </ul>
             ) : null}
-            {output ? (
-               <Tabs defaultValue="output">
-                  <TabsList>
-                     <TabsTrigger value="output">Output of the run</TabsTrigger>
-                     <TabsTrigger value="settings">Settings</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="output">
-                     <BlockOutput
-                        runId={output.runId}
-                        nodeId={node.id}
-                        rounds={output.rounds}
-                        fileName={typeof config.fileName === 'string' ? config.fileName : undefined}
-                     />
-                  </TabsContent>
-                  <TabsContent value="settings">{settings}</TabsContent>
-               </Tabs>
+            {run ? (
+               <BlockRunTabs
+                  key={node.id}
+                  nodeId={node.id}
+                  workflowId={workflowId}
+                  block={block}
+                  values={values}
+                  parents={parents}
+                  run={run}
+                  summary={summaryOf(block, config, icps.find(icp => icp.id === config.icpId)?.name)}
+                  takes={flowOf(block)}
+                  fileName={typeof config.fileName === 'string' ? config.fileName : undefined}
+                  settings={settings}
+               />
             ) : (
                settings
             )}

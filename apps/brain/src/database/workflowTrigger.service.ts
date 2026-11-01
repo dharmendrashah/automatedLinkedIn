@@ -18,7 +18,8 @@ const HOUR_MS = 60 * 60 * 1000
 
 const digest = (token: string) => createHash('sha256').update(token).digest()
 
-export type ApiInput = { posts?: string[]; profiles?: string[]; companies?: string[] }
+// What a call carries, by the field names the blocks describe (`apiFields` in the contracts package).
+export type ApiInput = Record<string, string | string[] | undefined>
 
 export class WorkflowTriggerService {
    // A new token, shown once; the old one stops working. null when the workflow is not the owner's.

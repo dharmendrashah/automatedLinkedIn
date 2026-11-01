@@ -1,5 +1,5 @@
 import { type WorkflowItemData, parseLinkedInUrl, person } from 'core'
-import { DataServiceError } from 'core/dataClient'
+import { backSources, forwardSources, sourceRound } from 'core/workflowInput'
 
 import { WorkflowRunService, WorkflowTriggerService, readGraph } from 'database'
 
@@ -8,6 +8,7 @@ import {
    type GraphNode,
    type ItemKind,
    TAKES_ANYTHING,
+   applyApiInput,
    backEdges,
    blockOf,
    convertsTo,
@@ -18,18 +19,9 @@ import {
    retriesOf,
 } from '@automatedLinkedIn/contracts'
 
-import {
-   type EngineDeps,
-   Paused,
-   type Run,
-   SERVICE_BUSY,
-   type Step,
-   StepError,
-   WALLET_LOW,
-   Waiting,
-   configOf,
-} from './context'
+import { type EngineDeps, Paused, type Run, SERVICE_BUSY, type Step, WALLET_LOW, Waiting, configOf } from './context'
 import { EXECUTORS } from './executors'
+import { PLAIN_FAILURE, failureOf } from './failure'
 
 // Runs workflow graphs step by step, keeping every step's output in the database so a stopped worker resumes where it
 // was. A For each or a loop runs its blocks again in a new round. Messages written here are shown to the client, so
@@ -40,39 +32,26 @@ export { type EngineDeps } from './context'
 const PASSED = new Set(['DONE', 'PARTIAL'])
 const FINISHED = new Set(['DONE', 'PARTIAL', 'FAILED'])
 const SCORING_STEPS = new Set(['score.icp', 'collect.profile'])
+const UNREADABLE = 'This run could not be read, so it was ended. Run the workflow again.'
 // Blocks that take items of every kind as they are.
 const RAW_INPUTS = TAKES_ANYTHING
 
-const PLAIN_FAILURE = 'Something went wrong in this step. The platform owner has been told.'
-const NOT_CONFIGURED = 'Collecting data is not available right now. The platform owner has been told.'
-
 const keyOf = (nodeId: string, round: number) => `${nodeId}#${round}`
-
-// A For each always reads what reached it in the first round; it hands out one batch per round.
-const sourceRound = (node: GraphNode, round: number) => (node.type === 'logic.forEach' ? 0 : round)
 
 const slugsOf = (items: WorkflowItemData[]) => new Set(items.map(({ slug }) => slug))
 
 // What a step gets: the blocks before it in the same round, and over a loop's way back what the round before found
 // that was new.
 const readInputs = async (run: Run, graph: Graph, node: GraphNode, step: Step) => {
-   const back = backEdges(graph)
    const has = new Set(run.steps.map(({ nodeId, round }) => keyOf(nodeId, round)))
-   const into = graph.edges.filter(({ to }) => to === node.id)
-   const round = sourceRound(node, step.round)
-   const forward = into
-      .filter(edge => !back.has(edgeKey(edge)) && has.has(keyOf(edge.from, round)))
-      .map(({ from }) => ({
-         nodeId: from,
-         round,
-      }))
+   const forward = forwardSources(graph, node, step.round, (nodeId, round) => has.has(keyOf(nodeId, round)))
    const items = await WorkflowRunService.items(run.id, forward)
 
    if (step.round === 0) {
       return items
    }
 
-   for (const { from } of into.filter(edge => back.has(edgeKey(edge)))) {
+   for (const from of backSources(graph, node.id)) {
       const latest = await WorkflowRunService.items(run.id, [
          {
             nodeId: from,
@@ -149,6 +128,7 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
          itemsIn: 0,
          itemsOut: 0,
          message: PLAIN_FAILURE,
+         errorCode: 'UNEXPECTED',
       })
 
       return 'ended'
@@ -184,7 +164,11 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
       const result = await EXECUTORS[node.type]({
          run,
          graph,
-         node,
+         // A call's values stand in for the settings they replace, for this run only.
+         node: {
+            ...node,
+            config: applyApiInput(node.type, node.config, run.input),
+         },
          step: started,
          at,
          inputs,
@@ -212,7 +196,7 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
          return error instanceof Waiting ? 'waiting' : 'ended'
       }
 
-      const notConfigured = error instanceof DataServiceError && error.kind === 'CONFIG'
+      const failure = failureOf(error)
 
       deps.log.error(
          `workflow run=${run.id} step=${step.nodeId} failed: ${error instanceof Error ? error.message : 'unknown error'}`
@@ -237,7 +221,7 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
          status: 'FAILED',
          itemsIn: 0,
          itemsOut: 0,
-         message: error instanceof StepError ? error.message : notConfigured ? NOT_CONFIGURED : PLAIN_FAILURE,
+         ...failure,
       })
    }
 
@@ -336,6 +320,35 @@ const finish = async (run: Run, graph: Graph, deps: EngineDeps) => {
    }
 }
 
+// A run whose stored graph no longer parses cannot go on; it ends instead of failing on every tick.
+const readableGraph = (run: Run) => {
+   try {
+      return readGraph(run.graph)
+   } catch {
+      return null
+   }
+}
+
+const endUnreadable = async (run: Run, deps: EngineDeps) => {
+   deps.log.error(`workflow run=${run.id} has a graph that cannot be read; ending it`)
+
+   for (const step of run.steps.filter(({ status }) => !FINISHED.has(status))) {
+      await WorkflowRunService.finishStep(step.id, {
+         status: 'FAILED',
+         itemsIn: 0,
+         itemsOut: 0,
+         message: UNREADABLE,
+         errorCode: 'RUN_UNREADABLE',
+      })
+   }
+
+   await WorkflowRunService.finishRun(run.id, {
+      status: 'FAILED',
+      discarded: 0,
+      message: UNREADABLE,
+   })
+}
+
 // Runs every step that is ready, until the run ends or nothing more can start. True when it did something.
 export const advanceRun = async (runId: string, deps: EngineDeps) => {
    let progressed = false
@@ -349,7 +362,13 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
          return progressed
       }
 
-      const graph = readGraph(run.graph)
+      const graph = readableGraph(run)
+
+      if (!graph) {
+         await endUnreadable(run, deps)
+
+         return true
+      }
       const back = backEdges(graph)
       const byKey = new Map(run.steps.map(step => [keyOf(step.nodeId, step.round), step]))
       const nodeOf = new Map(graph.nodes.map(node => [node.id, node]))
@@ -377,7 +396,7 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
 
       const ready = run.steps.filter(step => {
          const node = nodeOf.get(step.nodeId)
-         const round = node ? sourceRound(node, step.round) : step.round
+         const round = node ? sourceRound(node.type, step.round) : step.round
          const parentsPassed = graph.edges
             .filter(edge => edge.to === step.nodeId && !back.has(edgeKey(edge)))
             .every(({ from }) => {
@@ -393,8 +412,8 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
          return (
             (step.status === 'WAITING' || step.status === 'RUNNING') &&
             !waiting.has(step.id) &&
-            // A Wait, or the pause before a retry, holds the step back.
-            (!step.waitUntil || step.waitUntil <= new Date()) &&
+            // A Wait, or the pause before a retry, holds the step back; a stop lets it go at once, however long it was.
+            (!step.waitUntil || step.waitUntil <= new Date() || run.stopRequestedAt !== null) &&
             parentsPassed &&
             // Posts are marked done only after everything else has finished.
             (step.type !== 'output.markPosts' ||

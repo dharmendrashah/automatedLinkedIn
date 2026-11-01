@@ -8,7 +8,7 @@ import { useState } from 'react'
 
 import { type RouterOutputs, trpc } from '../../trpc'
 
-type Item = RouterOutputs['workflow']['output']['items'][number]
+type Item = RouterOutputs['workflow']['output']['items'][number] & { from?: string }
 
 const PAGE_SIZE = 25
 const ALL = 'all'
@@ -37,10 +37,16 @@ type Props = {
    // How many rounds the block ran; a filter shows when there were several.
    rounds: number
    fileName?: string
+   // What the block passed on (the default), or what reached it, with the block each item came from.
+   kind?: 'output' | 'input'
+   // The name of a block by its id, for the "From" column.
+   labelOf?: (nodeId: string) => string
+   // Shown when there is nothing to list.
+   emptyText?: string
 }
 
-// What one block passed on in a run, page by page, with the whole of it as a CSV download.
-export const BlockOutput = ({ runId, nodeId, rounds, fileName }: Props) => {
+// What one block passed on in a run, or what reached it, page by page, with the whole of it as a CSV download.
+export const BlockOutput = ({ runId, nodeId, rounds, fileName, kind = 'output', labelOf, emptyText }: Props) => {
    const [page, setPage] = useState(1)
    const [round, setRound] = useState(ALL)
    const query = {
@@ -48,25 +54,39 @@ export const BlockOutput = ({ runId, nodeId, rounds, fileName }: Props) => {
       nodeId,
       round: round === ALL ? undefined : Number(round),
    }
-   const output = trpc.workflow.output.useQuery(
-      {
-         ...query,
-         page,
-         pageSize: PAGE_SIZE,
-      },
-      { placeholderData: previous => previous }
-   )
-   const csv = trpc.workflow.outputCsv.useMutation({
-      onSuccess: file => downloadFile(file.fileName, file.csv, 'text/csv;charset=utf-8'),
+   const paging = {
+      ...query,
+      page,
+      pageSize: PAGE_SIZE,
+   }
+   const keepPrevious = { placeholderData: <T,>(previous: T | undefined) => previous }
+   const passed = trpc.workflow.output.useQuery(paging, {
+      enabled: kind === 'output',
+      ...keepPrevious,
    })
+   const reached = trpc.workflow.input.useQuery(paging, {
+      enabled: kind === 'input',
+      ...keepPrevious,
+   })
+   const output = kind === 'input' ? reached : passed
+   const download = {
+      onSuccess: (file: { fileName: string; csv: string }) =>
+         downloadFile(file.fileName, file.csv, 'text/csv;charset=utf-8'),
+   }
+   const outputCsv = trpc.workflow.outputCsv.useMutation(download)
+   const inputCsv = trpc.workflow.inputCsv.useMutation(download)
+   const csv = kind === 'input' ? inputCsv : outputCsv
    const total = output.data?.total ?? 0
    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
    const error = output.error ?? csv.error
+   const items: Item[] = output.data?.items ?? []
 
    return (
       <div className="grid gap-3">
          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-muted-foreground text-sm">{total} passed on</p>
+            <p className="text-muted-foreground text-sm">
+               {total} {kind === 'input' ? 'came in' : 'passed on'}
+            </p>
             <div className="flex items-center gap-2">
                {rounds > 1 ? (
                   <Select
@@ -112,12 +132,13 @@ export const BlockOutput = ({ runId, nodeId, rounds, fileName }: Props) => {
                      <TableHead>Kind</TableHead>
                      <TableHead>Name</TableHead>
                      <TableHead>Details</TableHead>
+                     {kind === 'input' ? <TableHead>From</TableHead> : null}
                      {rounds > 1 ? <TableHead>Round</TableHead> : null}
                   </TableRow>
                </TableHeader>
                <TableBody>
-                  {output.data?.items.map(row => (
-                     <TableRow key={`${row.round}-${row.item.kind}-${row.item.slug}`}>
+                  {items.map(row => (
+                     <TableRow key={`${row.round}-${row.from ?? ''}-${row.item.kind}-${row.item.slug}`}>
                         <TableCell className="text-muted-foreground">{KIND_LABELS[row.item.kind]}</TableCell>
                         <TableCell>
                            <a
@@ -130,13 +151,18 @@ export const BlockOutput = ({ runId, nodeId, rounds, fileName }: Props) => {
                            </a>
                         </TableCell>
                         <TableCell className="text-muted-foreground max-w-md truncate">{detailOf(row)}</TableCell>
+                        {kind === 'input' ? (
+                           <TableCell className="text-muted-foreground">
+                              {row.from ? (labelOf?.(row.from) ?? row.from) : ''}
+                           </TableCell>
+                        ) : null}
                         {rounds > 1 ? <TableCell>{row.round + 1}</TableCell> : null}
                      </TableRow>
                   ))}
                   {total === 0 && !output.isPending ? (
                      <TableRow>
-                        <TableCell colSpan={4} className="text-muted-foreground py-6 text-center">
-                           Nothing passed through this block in this run, or it is older than its keep time.
+                        <TableCell colSpan={5} className="text-muted-foreground py-6 text-center">
+                           {emptyText ?? 'Nothing here for this run.'}
                         </TableCell>
                      </TableRow>
                   ) : null}

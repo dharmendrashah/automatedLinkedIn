@@ -1,3 +1,5 @@
+import { inputKeys } from 'core/workflowInput'
+
 import { type Prisma, type WorkflowTrigger } from 'generated/prisma/client'
 
 import {
@@ -77,11 +79,30 @@ const stepSelect = {
    itemsOut: true,
    costMicros: true,
    message: true,
+   errorCode: true,
    childRunId: true,
    tries: true,
+   waitUntil: true,
 } satisfies Prisma.WorkflowStepRunSelect
 
 const workflowTaken = (name: string) => `You already have a workflow named "${name}".`
+
+const CHANGED_ELSEWHERE = 'This workflow was changed somewhere else since you opened it.'
+const DELETE_WHILE_RUNNING = 'A run of this workflow is going. Stop it first, then delete the workflow.'
+const NO_AUTOMATIC_TRIGGER = 'No schedule, API or "When another workflow finishes" trigger'
+const SWITCH_ON_NEEDS_TRIGGER =
+   'Add a schedule, an API or a "When another workflow finishes" trigger before switching the workflow on.'
+
+// Why a new run cannot start; a run held by a Wait says when it goes on.
+export const stillGoing = (waits: (Date | null)[]) => {
+   const [next] = waits
+      .filter((at): at is Date => at !== null && at > new Date())
+      .sort((a, b) => a.getTime() - b.getTime())
+
+   return next
+      ? `A run of this workflow is waiting until ${next.toISOString().slice(0, 16).replace('T', ' ')} UTC. Stop it to start another.`
+      : 'A run of this workflow is still going.'
+}
 const listTaken = (name: string) => `You already have a list named "${name}". Pick another workflow name.`
 
 export const readGraph = (value: unknown): Graph => graphSchema.parse(value)
@@ -320,29 +341,53 @@ export class WorkflowService {
       })
    }
 
-   public static async update(userId: string, id: string, changes: WorkflowChanges) {
+   public static async update(
+      userId: string,
+      id: string,
+      changes: WorkflowChanges,
+      // The `updatedAt` the editor loaded; a workflow changed since then is not overwritten.
+      options: { expectedUpdatedAt?: Date } = {}
+   ) {
       const current = await WorkflowService.get(userId, id)
 
       if (!current) {
          return null
       }
 
+      if (options.expectedUpdatedAt && current.updatedAt.getTime() !== options.expectedUpdatedAt.getTime()) {
+         throw new ConflictError(CHANGED_ELSEWHERE)
+      }
+
       const graph = changes.graph ?? readGraph(current.graph)
-      const enabled = changes.enabled ?? current.enabled
+      let enabled = changes.enabled ?? current.enabled
 
       if (!ownsKeys(userId, postsOf(graph))) {
          throw new ConflictError(FOREIGN_FILE)
       }
       const schedule = scheduleOf(graph)
+      let switchedOff: string | null = null
 
-      if (enabled && !graph.nodes.some(({ type }) => AUTOMATIC.has(type))) {
-         throw new ConflictError(
-            'Add a schedule, an API or a "When another workflow finishes" trigger before switching the workflow on.'
-         )
-      }
+      if (enabled) {
+         const [firstProblem] = errorsOf(await WorkflowService.problems(userId, graph, id))
+         const reason = !graph.nodes.some(({ type }) => AUTOMATIC.has(type))
+            ? NO_AUTOMATIC_TRIGGER
+            : firstProblem
+              ? `${firstProblem.message}`
+              : null
 
-      if (enabled && errorsOf(await WorkflowService.problems(userId, graph, id)).length > 0) {
-         throw new ConflictError('Fix the problems in the workflow before switching it on.')
+         if (reason && changes.enabled === true) {
+            throw new ConflictError(
+               reason === NO_AUTOMATIC_TRIGGER
+                  ? SWITCH_ON_NEEDS_TRIGGER
+                  : 'Fix the problems in the workflow before switching it on.'
+            )
+         }
+
+         // Work in progress is kept, but a workflow with a problem must not keep running on its own.
+         if (reason) {
+            enabled = false
+            switchedOff = reason
+         }
       }
 
       const qualifyScore = changes.qualifyScore ?? current.qualifyScore
@@ -372,12 +417,29 @@ export class WorkflowService {
          await dropFiles(keysOf(postsOf(readGraph(current.graph))).filter(key => !kept.has(key)))
       }
 
-      return updated
+      return {
+         ...updated,
+         switchedOff,
+      }
    }
 
-   // Deletes the workflow and its runs; its list and the people in it stay.
+   // Deletes the workflow and its runs; its list and the people in it stay. A workflow with a run going is refused, so the
+   // worker never loses the rows it is working on.
    public static async delete(userId: string, id: string) {
       const before = await WorkflowService.get(userId, id)
+
+      if (
+         before &&
+         (await PrismaService.client.workflowRun.count({
+            where: {
+               workflowId: id,
+               status: 'RUNNING',
+            },
+         })) > 0
+      ) {
+         throw new ConflictError(DELETE_WHILE_RUNNING)
+      }
+
       const { count } = await PrismaService.client.workflow.deleteMany({
          where: {
             id,
@@ -484,15 +546,16 @@ export class WorkflowService {
          throw new ConflictError(`Fix the workflow first: ${problem.message}`)
       }
 
-      const running = await PrismaService.client.workflowRun.count({
+      const running = await PrismaService.client.workflowRun.findFirst({
          where: {
             workflowId,
             status: 'RUNNING',
          },
+         select: { steps: { select: { waitUntil: true } } },
       })
 
-      if (running > 0) {
-         throw new ConflictError('A run of this workflow is still going.')
+      if (running) {
+         throw new ConflictError(stillGoing(running.steps.map(({ waitUntil }) => waitUntil)))
       }
 
       if (await WalletService.belowFloor()) {
@@ -623,6 +686,58 @@ export class WorkflowService {
       })
 
       return run ? WorkflowRunService.page(run.id, query.nodeId, query.round, query.skip, query.take) : null
+   }
+
+   // One page of what reached a block of the owner's run: the output of the blocks before it, read from the same places
+   // the engine reads (`inputKeys`). null when the run is not the owner's.
+   public static async input(
+      userId: string,
+      query: { runId: string; nodeId: string; round?: number; skip: number; take: number }
+   ) {
+      const run = await PrismaService.client.workflowRun.findFirst({
+         where: {
+            id: query.runId,
+            userId,
+         },
+         select: {
+            id: true,
+            graph: true,
+            steps: {
+               select: {
+                  nodeId: true,
+                  round: true,
+               },
+            },
+         },
+      })
+
+      if (!run) {
+         return null
+      }
+
+      const parsed = graphSchema.safeParse(run.graph)
+      const node = parsed.success ? parsed.data.nodes.find(({ id }) => id === query.nodeId) : undefined
+
+      if (!parsed.success || !node) {
+         return {
+            total: 0,
+            items: [],
+         }
+      }
+
+      const has = (nodeId: string, round: number) =>
+         run.steps.some(step => step.nodeId === nodeId && step.round === round)
+      const rounds =
+         query.round === undefined
+            ? run.steps.filter(({ nodeId }) => nodeId === query.nodeId).map(({ round }) => round)
+            : [query.round]
+      const keys = new Map(
+         rounds
+            .flatMap(round => inputKeys(parsed.data, node, round, has))
+            .map(source => [`${source.nodeId}#${source.round}`, source])
+      )
+
+      return WorkflowRunService.pageKeys(run.id, [...keys.values()], query.skip, query.take)
    }
 
    // Scheduled workflows whose time has come.

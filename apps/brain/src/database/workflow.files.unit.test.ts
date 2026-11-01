@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
    findFirst: vi.fn(),
    update: vi.fn(),
    deleteMany: vi.fn(),
+   runCount: vi.fn(),
    dropFiles: vi.fn(),
 }))
 
@@ -20,6 +21,7 @@ vi.mock('./prisma.service', () => ({
             update: mocks.update,
             deleteMany: mocks.deleteMany,
          },
+         workflowRun: { count: mocks.runCount },
       },
    },
 }))
@@ -83,6 +85,7 @@ describe('WorkflowService files of written posts', () => {
    beforeEach(() => {
       vi.resetAllMocks()
       mocks.update.mockResolvedValue({ id: 'w1' })
+      mocks.runCount.mockResolvedValue(0)
       mocks.dropFiles.mockResolvedValue(undefined)
    })
 

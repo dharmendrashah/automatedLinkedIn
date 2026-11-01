@@ -1,12 +1,14 @@
 import { Handle, type NodeProps, Position } from '@xyflow/react'
-import { CircleAlert, CircleCheck, CircleDashed, Info, Loader2, Plus } from 'lucide-react'
+import { CircleAlert, CircleCheck, CircleDashed, Info, Loader2, Plus, Trash2 } from 'lucide-react'
 import { useContext } from 'react'
 
 import { cn } from '@/lib/utils'
 
 import { formatUsd } from './types'
 
+import { trpc } from '../../trpc'
 import { BLOCK_ICONS, tileOf } from './block-look'
+import { adviceOf } from './block-run'
 import { CanvasActions } from './canvas-actions'
 import { type FlowNode, SIDES, summaryOf } from './graph-convert'
 import { NODE_WIDTH } from './layout'
@@ -35,11 +37,30 @@ const POSITIONS = {
    left: Position.Left,
 } as const
 
-// One block: icon, title and settings in a line, during a run its state, and a "+" to add the next block. Lines
+// Where each "+" sits: centred on its side, clear of the line handle.
+const PLUS_PLACES = {
+   top: '-top-9 left-1/2 -translate-x-1/2',
+   right: '-right-9 top-1/2 -translate-y-1/2',
+   bottom: '-bottom-9 left-1/2 -translate-x-1/2',
+   left: '-left-9 top-1/2 -translate-y-1/2',
+} as const
+
+// Why a block failed or ended with gaps, in a few words; the block's dialog has the whole explanation.
+const Reason = ({ code, failed }: { code: string | null; failed: boolean }) => {
+   const catalog = trpc.workflow.stepErrors.useQuery(undefined, { staleTime: Number.POSITIVE_INFINITY })
+
+   return (
+      <p className={cn('mt-0.5 line-clamp-2 text-xs', failed ? 'text-destructive' : 'text-warning')}>
+         {adviceOf(catalog.data ?? [], code)?.title ?? (failed ? 'Failed' : 'Done with gaps')}
+      </p>
+   )
+}
+
+// One block: icon, title and settings in a line, during a run its state, and a "+" on each side to add a block there. Lines
 // leave and enter on any side.
 export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
    const { block, config, step, invalid, noted, faded, icpName } = data
-   const { addAfter } = useContext(CanvasActions)
+   const { addNextTo, removeNode } = useContext(CanvasActions)
    const Icon = BLOCK_ICONS[block.type]
    const StepIcon = step ? STEP_ICONS[step.status] : null
    const progress = step?.progress
@@ -77,6 +98,9 @@ export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
                      {step.costMicros > 0 ? ` · ${formatUsd(step.costMicros)}` : ''}
                   </p>
                ) : null}
+               {step && (step.status === 'FAILED' || (step.status === 'PARTIAL' && step.errorCode)) ? (
+                  <Reason code={step.errorCode} failed={step.status === 'FAILED'} />
+               ) : null}
                {progress && progress.requests > progress.done ? (
                   <p className="text-muted-foreground mt-0.5 text-xs">
                      {progress.done} of {progress.requests} done
@@ -99,20 +123,41 @@ export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
                ) : null}
             </div>
          </div>
-         <button
-            type="button"
-            aria-label={`Add a block after ${block.label}`}
-            onClick={event => {
-               event.stopPropagation()
-               addAfter(id)
-            }}
-            className={cn(
-               'nodrag bg-background hover:bg-primary hover:text-primary-foreground absolute -bottom-9 left-1/2 grid size-6 -translate-x-1/2 place-items-center rounded-full border opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
-               selected && 'opacity-100'
-            )}
-         >
-            <Plus className="size-3.5" />
-         </button>
+         {step ? null : (
+            <button
+               type="button"
+               aria-label={`Remove ${block.label} and its lines`}
+               title="Remove this block"
+               onClick={event => {
+                  event.stopPropagation()
+                  removeNode(id)
+               }}
+               className={cn(
+                  'nodrag bg-background hover:bg-destructive hover:text-destructive-foreground absolute -top-2.5 -right-2.5 grid size-6 place-items-center rounded-full border opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
+                  selected && 'opacity-100'
+               )}
+            >
+               <Trash2 className="size-3.5" />
+            </button>
+         )}
+         {SIDES.filter(side => side !== 'top' || block.input !== null).map(side => (
+            <button
+               key={side}
+               type="button"
+               aria-label={`Add a block ${side === 'top' ? 'before' : 'after'} ${block.label}, on its ${side}`}
+               onClick={event => {
+                  event.stopPropagation()
+                  addNextTo(id, side)
+               }}
+               className={cn(
+                  'nodrag bg-background hover:bg-primary hover:text-primary-foreground absolute grid size-6 place-items-center rounded-full border opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
+                  PLUS_PLACES[side],
+                  selected && 'opacity-100'
+               )}
+            >
+               <Plus className="size-3.5" />
+            </button>
+         ))}
       </div>
    )
 }

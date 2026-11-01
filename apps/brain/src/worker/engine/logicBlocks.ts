@@ -4,7 +4,7 @@ import { type WorkflowItemData } from 'core'
 
 import { VisitPoolService, WorkflowRunService } from 'database'
 
-import { VISIT_BLOCKS, blockOf, workingBlockBefore } from '@automatedLinkedIn/contracts'
+import { VISIT_BLOCKS, blockOf, toSeconds, workingBlockBefore } from '@automatedLinkedIn/contracts'
 
 import {
    type Context,
@@ -44,10 +44,14 @@ export const wait = async (ctx: Context): Promise<StepResult> => {
    const { waitUntil } = ctx.step
 
    if (!waitUntil) {
+      const unit = textIn(config, 'unit')
       const seconds =
          textIn(config, 'mode') === 'between'
-            ? randomInt(numberIn(config, 'minSeconds'), numberIn(config, 'maxSeconds') + 1)
-            : numberIn(config, 'seconds')
+            ? randomInt(
+                 toSeconds(numberIn(config, 'minAmount'), unit),
+                 toSeconds(numberIn(config, 'maxAmount'), unit) + 1
+              )
+            : toSeconds(numberIn(config, 'amount'), unit)
 
       // Saved at once, so a restart waits for the same time and a random wait is never picked again.
       await WorkflowRunService.setWaitUntil(ctx.step.id, new Date(Date.now() + seconds * SECOND_MS))
@@ -67,7 +71,7 @@ const lookedAt = (ctx: Context) => {
    const block = workingBlockBefore(ctx.graph, ctx.node.id)
 
    if (!block) {
-      throw new StepError(`${blockOf(ctx.node.type).label} needs a block before it to look at.`)
+      throw new StepError(`${blockOf(ctx.node.type).label} needs a block before it to look at.`, 'NO_BLOCK_BEFORE')
    }
 
    const step =

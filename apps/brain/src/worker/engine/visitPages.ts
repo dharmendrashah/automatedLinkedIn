@@ -49,7 +49,7 @@ export const selectAccounts = async (ctx: Context): Promise<StepResult> => {
    const owned = await VisitPoolService.accounts(ctx.run.userId, accountIdsOf(ctx.node))
 
    if (owned.length === 0) {
-      throw new StepError('None of the chosen accounts was found.')
+      throw new StepError('None of the chosen accounts was found.', 'ACCOUNTS_MISSING')
    }
 
    return keepItems(ctx, ctx.inputs, ctx.inputs.length)
@@ -80,7 +80,7 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
    const pool = nodeBefore(ctx.graph, ctx.node.id, 'account.select')
 
    if (!pool) {
-      throw new StepError('This block needs "Select accounts" before it.')
+      throw new StepError('This block needs "Select accounts" before it.', 'NEEDS_SELECT_ACCOUNTS')
    }
 
    const { run, node, deps } = ctx
@@ -101,7 +101,7 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
    const rows = await VisitPoolService.ofStep(run.id, node.id)
 
    if (usable.length === 0 && rows.length === 0 && !stopped) {
-      throw new StepError('None of the chosen accounts can act now: they need to be signed in.')
+      throw new StepError('None of the chosen accounts can act now: they need to be signed in.', 'ACCOUNTS_SIGNED_OUT')
    }
 
    const standings = new Map(items.map(({ slug }) => [slug, standing(rows.filter(row => row.slug === slug))] as const))
@@ -269,7 +269,7 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
          (noneSignedIn || (refused.size > 0 && usable.every(id => refused.get(id)?.kind === 'blocked')))
 
       if (blocked && sinceMs > BLOCKED_LIMIT_MS) {
-         throw new StepError(`Visits stopped: ${why}.`)
+         throw new StepError(`Visits stopped: ${why}.`, 'VISITS_STOPPED')
       }
 
       if (deferral) {

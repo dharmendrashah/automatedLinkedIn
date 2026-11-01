@@ -191,7 +191,7 @@ describe('writePost', () => {
 
       mocks.publishFromBlock.mockReset().mockRejectedValue(new mocks.TaskRefusedError('Not today.'))
 
-      await expect(writePost(context())).rejects.toThrow(new StepError('Not today.'))
+      await expect(writePost(context())).rejects.toThrow(new StepError('Not today.', 'POST_REFUSED'))
    })
 
    it('should fail when no account is before it, none is signed in, or the post cannot be read', async () => {

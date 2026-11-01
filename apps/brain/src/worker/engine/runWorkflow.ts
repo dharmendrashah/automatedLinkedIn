@@ -118,7 +118,7 @@ export const runWorkflow = async (ctx: Context): Promise<StepResult> => {
             return answerNo(ctx, `Could not start it: ${error.message} So the answer is no.`)
          }
 
-         throw new StepError(`Could not start the other workflow: ${error.message}`)
+         throw new StepError(`Could not start the other workflow: ${error.message}`, 'CHILD_START_FAILED')
       }
    }
 
@@ -154,7 +154,7 @@ export const runWorkflow = async (ctx: Context): Promise<StepResult> => {
    }
 
    if (child?.status !== 'SUCCEEDED' && child?.status !== 'PARTIAL') {
-      throw new StepError(`${name} ${outcome}, so it gave nothing back.`)
+      throw new StepError(`${name} ${outcome}, so it gave nothing back.`, 'CHILD_ENDED')
    }
 
    const people = await WorkflowRunService.listedPeople(childId)

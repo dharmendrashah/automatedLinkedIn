@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { type Graph } from './types'
 
-import { isLeftToRight, layoutTopToBottom, neighbourOf, placeBelow } from './layout'
+import { isLeftToRight, layoutTopToBottom, neighbourOf, placeBeside } from './layout'
 
 const node = (id: string, x: number, y: number) => ({
    id,
@@ -47,6 +47,19 @@ describe('layout', () => {
       expect(isLeftToRight({ nodes: [node('a', 0, 0)], edges: [] })).toBe(false)
    })
 
+   it('should leave a graph alone once its lines have sides, however its blocks are placed', () => {
+      const placed: Graph = {
+         ...sideways,
+         edges: sideways.edges.map(edge => ({
+            ...edge,
+            fromSide: 'right' as const,
+            toSide: 'left' as const,
+         })),
+      }
+
+      expect(isLeftToRight(placed)).toBe(false)
+   })
+
    it('should lay steps top to bottom with branches side by side, keeping every block and line', () => {
       const laid = layoutTopToBottom(sideways)
 
@@ -57,9 +70,25 @@ describe('layout', () => {
       expect(xOf(laid, 'commenters')).not.toBe(xOf(laid, 'reactors'))
    })
 
-   it('should place a new block below its parent, moved aside when the spot is taken', () => {
-      expect(placeBelow({ x: 0, y: 0 }, [])).toEqual({ x: 0, y: 140 })
-      expect(placeBelow({ x: 0, y: 0 }, [{ x: 0, y: 140 }])).toEqual({ x: 280, y: 140 })
+   it('should place a new block on the chosen side of its parent, moved along when the spot is taken', () => {
+      const origin = {
+         x: 0,
+         y: 0,
+      }
+
+      expect(placeBeside(origin, 'bottom', [])).toEqual({ x: 0, y: 140 })
+      expect(placeBeside(origin, 'top', [])).toEqual({ x: 0, y: -140 })
+      expect(placeBeside(origin, 'right', [])).toEqual({ x: 280, y: 0 })
+      expect(placeBeside(origin, 'left', [])).toEqual({ x: -280, y: 0 })
+      expect(placeBeside(origin, 'bottom', [{ x: 0, y: 140 }])).toEqual({ x: 280, y: 140 })
+      expect(placeBeside(origin, 'top', [{ x: 0, y: -140 }])).toEqual({ x: 280, y: -140 })
+      expect(placeBeside(origin, 'right', [{ x: 280, y: 0 }])).toEqual({ x: 280, y: 140 })
+      expect(
+         placeBeside(origin, 'left', [
+            { x: -280, y: 0 },
+            { x: -280, y: 140 },
+         ])
+      ).toEqual({ x: -280, y: 280 })
    })
 
    it('should move the selection along the lines and across the row', () => {

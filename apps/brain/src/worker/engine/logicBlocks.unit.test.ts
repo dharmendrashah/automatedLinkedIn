@@ -121,8 +121,8 @@ describe('Wait', () => {
    it('should pick its time once, save it, and give the step back until it has passed', async () => {
       const g = graph({
          mode: 'between',
-         minSeconds: 20,
-         maxSeconds: 60,
+         minAmount: 20,
+         maxAmount: 60,
       })
       const before = Date.now()
 
@@ -162,7 +162,7 @@ describe('Wait', () => {
                {},
                graph({
                   mode: 'exact',
-                  seconds: 90,
+                  amount: 90,
                })
             )
          )
@@ -171,6 +171,55 @@ describe('Wait', () => {
       const [[, at]] = mocks.setWaitUntil.mock.calls
 
       expect(Math.round((at.getTime() - Date.now()) / 1000)).toBe(90)
+   })
+
+   it.each([
+      ['minutes', 2, 120],
+      ['hours', 3, 10_800],
+      ['days', 2, 172_800],
+      ['weeks', 1, 604_800],
+   ])('should wait %s in the unit it is set to', async (unit, amount, seconds) => {
+      await expect(
+         wait(
+            context(
+               'pause',
+               [ada],
+               {},
+               graph({
+                  unit,
+                  amount,
+               })
+            )
+         )
+      ).rejects.toBeInstanceOf(Waiting)
+
+      const [[, at]] = mocks.setWaitUntil.mock.calls
+
+      expect(Math.round((at.getTime() - Date.now()) / 1000)).toBe(seconds)
+   })
+
+   it('should pick a range in days to the second and keep it inside the range', async () => {
+      await expect(
+         wait(
+            context(
+               'pause',
+               [ada],
+               {},
+               graph({
+                  mode: 'between',
+                  unit: 'days',
+                  minAmount: 2,
+                  maxAmount: 3,
+               })
+            )
+         )
+      ).rejects.toBeInstanceOf(Waiting)
+
+      const [[, at]] = mocks.setWaitUntil.mock.calls
+      const waited = (at.getTime() - Date.now()) / 1000
+
+      expect(waited).toBeGreaterThanOrEqual(172_800 - 1)
+      expect(waited).toBeLessThanOrEqual(259_200)
    })
 
    it('should pass every item on once its time has passed', async () => {

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { fakeDataClient } from 'core/fakeDataClient'
 
-import { IcpService, PrismaService, UserService, WalletService, WorkflowService } from 'database'
+import { IcpService, PrismaService, RetentionService, UserService, WalletService, WorkflowService } from 'database'
 
 import { type Graph, type GraphNode } from '@automatedLinkedIn/contracts'
 
@@ -143,6 +143,10 @@ describe('Wait, Task result and Retry (database)', () => {
       await advanceRun(runId, deps())
 
       expect(await statusOf(runId)).toBe('FAILED')
+      expect(await stepOf(runId, 'score')).toMatchObject({
+         status: 'FAILED',
+         errorCode: 'ICP_DELETED',
+      })
    })
 
    it('should go on after a failure a Task result looks at, and send what reached the failed block to the Else side', async () => {
@@ -162,6 +166,26 @@ describe('Wait, Task result and Retry (database)', () => {
       expect(await slugsAt(runId, 'list')).toEqual([])
       expect(await slugsAt(runId, 'no')).toEqual(['ada', 'bob'])
       expect(await statusOf(runId)).toBe('PARTIAL')
+
+      const reached = (nodeId: string, who = userId) =>
+         WorkflowService.input(who, {
+            runId,
+            nodeId,
+            skip: 0,
+            take: 25,
+         })
+
+      // An Else reads what the Task result kept aside; the failed block reads what the block before it passed on.
+      expect((await reached('else'))?.items.map(({ from, item }) => `${from}:${item.slug}`)).toEqual([
+         'result:ada',
+         'result:bob',
+      ])
+      expect((await reached('score'))?.items.map(({ from, item }) => `${from}:${item.slug}`)).toEqual([
+         'people:ada',
+         'people:bob',
+      ])
+      expect(await reached('score', randomUUID())).toBeNull()
+      expect((await reached('nope'))?.total).toBe(0)
    })
 
    it('should run a failing block again up to the number of tries, then end with gaps', async () => {
@@ -265,7 +289,7 @@ describe('Wait, Task result and Retry (database)', () => {
             node('people', 'input.profiles', { links: [profile('ada')] }),
             node('pause', 'logic.wait', {
                mode: 'exact',
-               seconds: 600,
+               amount: 600,
             }),
             node('csv', 'output.csv'),
          ],
@@ -294,5 +318,104 @@ describe('Wait, Task result and Retry (database)', () => {
 
       expect(await slugsAt(runId, 'csv')).toEqual(['ada'])
       expect(await statusOf(runId)).toBe('SUCCEEDED')
+   })
+
+   it('should hold a wait of weeks for that long, and keep what came in while it waits', async () => {
+      const runId = await start({
+         nodes: [
+            node('people', 'input.profiles', { links: [profile('ada')] }),
+            node('pause', 'logic.wait', {
+               unit: 'weeks',
+               amount: 2,
+            }),
+            node('csv', 'output.csv'),
+         ],
+         edges: [line('people', 'pause'), line('pause', 'csv')],
+      })
+
+      await advanceRun(runId, deps())
+      await advanceRun(runId, deps())
+
+      const { waitUntil } = await stepOf(runId, 'pause')
+
+      expect(waitUntil?.getTime()).toBeGreaterThan(Date.now() + 14 * 86_400_000 - 60_000)
+      expect(waitUntil?.getTime()).toBeLessThan(Date.now() + 14 * 86_400_000 + 60_000)
+      expect(await statusOf(runId)).toBe('RUNNING')
+      expect(await slugsAt(runId, 'csv')).toEqual([])
+   })
+
+   it('should end a long wait at once when the owner stops the run, and finish the run as stopped', async () => {
+      const runId = await start({
+         nodes: [
+            node('people', 'input.profiles', { links: [profile('ada')] }),
+            node('pause', 'logic.wait', {
+               unit: 'days',
+               amount: 30,
+            }),
+            node('csv', 'output.csv'),
+         ],
+         edges: [line('people', 'pause'), line('pause', 'csv')],
+      })
+
+      await advanceRun(runId, deps())
+
+      expect(await statusOf(runId)).toBe('RUNNING')
+      expect(await WorkflowService.requestStop(userId, runId)).toBe(true)
+
+      await advanceRun(runId, deps())
+
+      expect(await statusOf(runId)).toBe('STOPPED')
+      expect(await slugsAt(runId, 'csv')).toEqual(['ada'])
+   })
+
+   it('should keep the items of a run that is still waiting past 14 days, and delete them once it ended', async () => {
+      const runId = await start({
+         nodes: [
+            node('people', 'input.profiles', { links: [profile('ada')] }),
+            node('pause', 'logic.wait', {
+               unit: 'weeks',
+               amount: 8,
+            }),
+            node('csv', 'output.csv'),
+         ],
+         edges: [line('people', 'pause'), line('pause', 'csv')],
+      })
+      const aged = () =>
+         PrismaService.client.workflowItem.updateMany({
+            where: { runId },
+            data: { createdAt: new Date(Date.now() - 20 * 86_400_000) },
+         })
+
+      await advanceRun(runId, deps())
+      await aged()
+      await RetentionService.run()
+
+      expect(await slugsAt(runId, 'people')).toEqual(['ada'])
+
+      await WorkflowService.requestStop(userId, runId)
+      await advanceRun(runId, deps())
+      await aged()
+      await RetentionService.run()
+
+      expect(await slugsAt(runId, 'people')).toEqual([])
+   })
+
+   it('should end a run whose graph cannot be read, saying so on its steps, instead of failing on every tick', async () => {
+      const runId = await start({
+         nodes: [node('people', 'input.profiles', { links: [profile('ada')] }), node('csv', 'output.csv')],
+         edges: [line('people', 'csv')],
+      })
+
+      await PrismaService.client.workflowRun.update({
+         where: { id: runId },
+         data: { graph: { nodes: 'broken' } },
+      })
+      await advanceRun(runId, deps())
+
+      expect(await statusOf(runId)).toBe('FAILED')
+      expect(await stepOf(runId, 'people')).toMatchObject({
+         status: 'FAILED',
+         errorCode: 'RUN_UNREADABLE',
+      })
    })
 })
