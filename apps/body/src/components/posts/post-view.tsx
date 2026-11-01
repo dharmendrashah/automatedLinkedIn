@@ -92,7 +92,7 @@ const Workspace = ({ detail }: { detail: PostDetail }) => {
    const refresh = () => {
       void utils.postPage.detail.invalidate({ slug: detail.slug })
       void utils.linkedInPost.list.invalidate()
-      void utils.linkedInPost.summary.invalidate()
+      void utils.linkedInPost.counts.invalidate()
    }
    const update = trpc.linkedInPost.update.useMutation({ onSuccess: refresh })
    const { post } = detail

@@ -14,7 +14,7 @@ import {
    orNull,
    relabel,
 } from './linkedInRecord'
-import { type PostListQuery, postCountSql, postPageSql, postPeopleSql, postSummarySql } from './postList'
+import { type PostListQuery, postCountSql, postPageSql, postPeopleSql } from './postList'
 import { PrismaService } from './prisma.service'
 
 export type LinkedInPostListQuery = PostListQuery
@@ -296,18 +296,21 @@ export class LinkedInPostService {
       }
    }
 
-   // The page's line and tab counts.
-   public static async summary(userId: string) {
-      const [row] = await PrismaService.client.$queryRaw<
-         Array<{ toWork: bigint; done: bigint; unread: bigint; found: bigint; qualified: bigint }>
-      >(postSummarySql(userId))
+   // How many posts each tab holds.
+   public static async counts(userId: string) {
+      const groups = await PrismaService.client.linkedInPost.groupBy({
+         by: ['status'],
+         where: {
+            userId,
+            archivedAt: null,
+         },
+         _count: true,
+      })
+      const countOf = (status: LinkedInPostStatus) => groups.find(group => group.status === status)?._count ?? 0
 
       return {
-         toWork: Number(row?.toWork ?? 0),
-         done: Number(row?.done ?? 0),
-         unread: Number(row?.unread ?? 0),
-         found: Number(row?.found ?? 0),
-         qualified: Number(row?.qualified ?? 0),
+         toWork: countOf('UNPROCESSED'),
+         done: countOf('PROCESSED'),
       }
    }
 

@@ -141,7 +141,7 @@ export const linkedInPost = router({
       }
    }),
 
-   summary: ownerProcedure.query(({ ctx }) => LinkedInPostService.summary(ctx.user.id)),
+   counts: ownerProcedure.query(({ ctx }) => LinkedInPostService.counts(ctx.user.id)),
 
    get: ownerProcedure
       .input(byId)

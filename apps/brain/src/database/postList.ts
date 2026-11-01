@@ -98,16 +98,3 @@ export const postPeopleSql = (ids: string[]) => Prisma.sql`
       FROM found
    )
    SELECT "postId", "slug", "name", "found", "qualified" FROM ranked WHERE "rank" <= 3 ORDER BY "postId", "rank"`
-
-// The page's line: posts to work through and done, the ones to work through not read yet, and the people found from any post.
-export const postSummarySql = (userId: string) => Prisma.sql`
-   SELECT
-      (SELECT COUNT(*) FROM ${withRead} WHERE p."userId" = ${userId} AND p."archivedAt" IS NULL AND p."status" = 'UNPROCESSED') AS "toWork",
-      (SELECT COUNT(*) FROM ${withRead} WHERE p."userId" = ${userId} AND p."archivedAt" IS NULL AND p."status" = 'PROCESSED') AS "done",
-      (SELECT COUNT(*) FROM ${withRead} WHERE p."userId" = ${userId} AND p."archivedAt" IS NULL AND p."status" = 'UNPROCESSED' AND s."id" IS NULL) AS "unread",
-      COUNT(*) AS "found",
-      COUNT(*) FILTER (WHERE m."state" = 'QUALIFIED') AS "qualified"
-   FROM ${members}
-   WHERE l."userId" = ${userId} AND EXISTS (
-      SELECT 1 FROM "LinkedInPost" p WHERE p."userId" = ${userId} AND p."archivedAt" IS NULL AND ${memberOfPost}
-   )`

@@ -7,7 +7,6 @@ import { ReadManyButton } from '@/components/links/read-many-button'
 import { useListState } from '@/components/links/use-list-state'
 import { useSelection } from '@/components/links/use-selection'
 import { AddPostsDialog, POST_FILLS } from '@/components/posts/add-posts-dialog'
-import { summaryLine } from '@/components/posts/post-row'
 import { PostsTable } from '@/components/posts/posts-table'
 import {
    POST_COLUMNS,
@@ -71,7 +70,7 @@ export const Posts = () => {
       ...(read !== 'any' && { read: read === 'read' ? ('READ' as const) : ('UNREAD' as const) }),
       ...(sort && { sort }),
    })
-   const summary = trpc.linkedInPost.summary.useQuery(undefined, { retry: false })
+   const tabCounts = trpc.linkedInPost.counts.useQuery(undefined, { retry: false })
 
    const setParam = (key: string, value: string | null) =>
       setParams(
@@ -91,7 +90,7 @@ export const Posts = () => {
 
    const refresh = () => {
       void utils.linkedInPost.list.invalidate()
-      void utils.linkedInPost.summary.invalidate()
+      void utils.linkedInPost.counts.invalidate()
       void utils.label.list.invalidate()
    }
    const update = trpc.linkedInPost.update.useMutation({ onSuccess: refresh })
@@ -125,23 +124,10 @@ export const Posts = () => {
    const actionError = [update, labelMany, setStatusMany].find(action => action.error)?.error?.message
    const picked = rows.filter(({ id }) => selection.selected.has(id))
    const filtered = Boolean(search || tags || addedSince || read !== 'any')
-   const counts = summary.data
+   const counts = tabCounts.data
 
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
-         <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="grid gap-1">
-               <h2 className="text-lg font-semibold">LinkedIn posts</h2>
-               <p className="text-muted-foreground text-sm">
-                  {counts ? summaryLine(counts) : 'The posts whose commenters and reactors you want to find.'}
-               </p>
-            </div>
-            <div className="flex items-center gap-2">
-               <ColumnsMenu columns={POST_COLUMNS} hidden={hidden} onChange={setHidden} />
-               <AddPostsDialog onShow={label => state.setTags([label])} />
-            </div>
-         </div>
-
          <Tabs
             value={status}
             onValueChange={tab => {
@@ -174,6 +160,10 @@ export const Posts = () => {
                   ))}
                </SelectContent>
             </Select>
+            <div className="ml-auto flex items-center gap-2">
+               <ColumnsMenu columns={POST_COLUMNS} hidden={hidden} onChange={setHidden} />
+               <AddPostsDialog onShow={label => state.setTags([label])} />
+            </div>
          </ListToolbar>
 
          {actionError ? <p className="text-destructive text-sm">{actionError}</p> : null}

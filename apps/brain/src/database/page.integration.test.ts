@@ -245,12 +245,9 @@ describe('company and post pages (database)', () => {
             })
          ).total
       ).toBe(0)
-      await expect(LinkedInPostService.summary(userId)).resolves.toEqual({
+      await expect(LinkedInPostService.counts(userId)).resolves.toEqual({
          toWork: 1,
          done: 0,
-         unread: 0,
-         found: 2,
-         qualified: 2,
       })
       await expect(PostPageService.readMany(userId, { slug: POST_SLUG })).resolves.toEqual({
          reading: 0,
