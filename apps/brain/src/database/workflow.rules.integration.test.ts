@@ -121,6 +121,28 @@ describe('workflow save, switch off, delete and start (database)', () => {
       await expect(WorkflowService.delete(userId, id)).resolves.toBe(true)
    })
 
+   it('should leave one live run when two starts with different keys arrive at the same moment', async () => {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+         const { id } = await create()
+         const results = await Promise.allSettled([
+            WorkflowService.startRun(userId, id, 'MANUAL', `rules-${randomUUID()}`),
+            WorkflowService.startRun(userId, id, 'API', `rules-${randomUUID()}`),
+         ])
+         const live = await PrismaService.client.workflowRun.count({
+            where: {
+               workflowId: id,
+               status: 'RUNNING',
+            },
+         })
+         const refused = results.flatMap(result => (result.status === 'rejected' ? [result.reason as unknown] : []))
+
+         expect(live).toBe(1)
+         expect(refused).toHaveLength(1)
+         expect(refused[0]).toBeInstanceOf(ConflictError)
+         expect(String(refused[0])).toContain('still going')
+      }
+   })
+
    it('should say when a waiting run goes on, instead of only that a run is going', async () => {
       const { id } = await create(
          graphOf(

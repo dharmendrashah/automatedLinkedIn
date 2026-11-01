@@ -19,7 +19,17 @@ import {
    retriesOf,
 } from '@automatedLinkedIn/contracts'
 
-import { type EngineDeps, Paused, type Run, SERVICE_BUSY, type Step, WALLET_LOW, Waiting, configOf } from './context'
+import {
+   type EngineDeps,
+   Paused,
+   type Run,
+   SERVICE_BUSY,
+   type Step,
+   WALLET_LOW,
+   Waiting,
+   configOf,
+   unhandledFailure,
+} from './context'
 import { EXECUTORS } from './executors'
 import { PLAIN_FAILURE, failureOf } from './failure'
 
@@ -30,9 +40,12 @@ import { PLAIN_FAILURE, failureOf } from './failure'
 export { type EngineDeps } from './context'
 
 const PASSED = new Set(['DONE', 'PARTIAL'])
-const FINISHED = new Set(['DONE', 'PARTIAL', 'FAILED'])
+const FINISHED = new Set(['DONE', 'PARTIAL', 'FAILED', 'SKIPPED'])
 const SCORING_STEPS = new Set(['score.icp', 'collect.profile'])
 const UNREADABLE = 'This run could not be read, so it was ended. Run the workflow again.'
+const SKIPPED_AFTER_STOP = 'You stopped the run before this block started, so it did not run.'
+const SKIPPED_AFTER_FAILURE = 'Another block failed before this block started, so it did not run.'
+const ENDED_AFTER_FAILURE = 'Ended early because another block failed.'
 // Blocks that take items of every kind as they are.
 const RAW_INPUTS = TAKES_ANYTHING
 
@@ -284,9 +297,6 @@ const nextRound = async (run: Run, graph: Graph, round: number) => {
 const listedPeople = (run: Run) => WorkflowRunService.listedPeople(run.id)
 
 // A failed step that a Task result or a Retry looks at does not end the run: the run goes on and ends with gaps.
-const unhandledFailure = (run: Run, graph: Graph) =>
-   run.steps.find(({ status, nodeId }) => status === 'FAILED' && !isHandled(graph, nodeId))
-
 const finish = async (run: Run, graph: Graph, deps: EngineDeps) => {
    // A stopped run winds down like any other: paid jobs finish and are kept, nothing new is paid for.
    const stopped = run.stopRequestedAt !== null
@@ -373,15 +383,28 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
       const byKey = new Map(run.steps.map(step => [keyOf(step.nodeId, step.round), step]))
       const nodeOf = new Map(graph.nodes.map(node => [node.id, node]))
 
-      if (unhandledFailure(run, graph)) {
-         await finish(run, graph, deps)
+      const failed = unhandledFailure(run, graph)
+      const winding = failed !== undefined || run.stopRequestedAt !== null
 
-         return true
+      // After a Stop or a failure nothing new starts: steps never taken are skipped, and after a failure the steps that wait
+      // on no paid request end. A step with a request still open goes on, so the request is booked, and the run ends when
+      // none is open.
+      if (winding) {
+         const skipped = await WorkflowRunService.skipNotStarted(
+            run.id,
+            failed ? SKIPPED_AFTER_FAILURE : SKIPPED_AFTER_STOP
+         )
+         const ended = failed ? await WorkflowRunService.endStartedWithoutRequests(run.id, ENDED_AFTER_FAILURE) : 0
+
+         if (skipped + ended > 0) {
+            progressed = true
+            continue
+         }
       }
 
       if (run.steps.every(({ status }) => FINISHED.has(status))) {
          const round = Math.max(0, ...run.steps.map(step => step.round))
-         const again = await nextRound(run, graph, round)
+         const again = failed ? [] : await nextRound(run, graph, round)
 
          if (again.length > 0) {
             await WorkflowRunService.addRound(run.id, again, round + 1)
@@ -412,8 +435,8 @@ export const advanceRun = async (runId: string, deps: EngineDeps) => {
          return (
             (step.status === 'WAITING' || step.status === 'RUNNING') &&
             !waiting.has(step.id) &&
-            // A Wait, or the pause before a retry, holds the step back; a stop lets it go at once, however long it was.
-            (!step.waitUntil || step.waitUntil <= new Date() || run.stopRequestedAt !== null) &&
+            // A Wait, or the pause before a retry, holds the step back; a stop or a failure lets it go at once.
+            (!step.waitUntil || step.waitUntil <= new Date() || winding) &&
             parentsPassed &&
             // Posts are marked done only after everything else has finished.
             (step.type !== 'output.markPosts' ||

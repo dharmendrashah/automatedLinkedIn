@@ -59,7 +59,7 @@ export const choicesFor = (catalog: Block[], anchor: Block | null, query: string
    )
 }
 
-const STATUS_ORDER = ['FAILED', 'RUNNING', 'WAITING', 'PARTIAL', 'DONE'] as const
+const STATUS_ORDER = ['FAILED', 'RUNNING', 'WAITING', 'PARTIAL', 'DONE', 'SKIPPED'] as const
 
 type Progress = NonNullable<StepRun['progress']>
 

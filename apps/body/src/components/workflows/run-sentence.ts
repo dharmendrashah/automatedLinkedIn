@@ -14,7 +14,7 @@ type Progress = {
 
 type Step = {
    type: string
-   status: 'WAITING' | 'RUNNING' | 'DONE' | 'PARTIAL' | 'FAILED'
+   status: 'WAITING' | 'RUNNING' | 'DONE' | 'PARTIAL' | 'FAILED' | 'SKIPPED'
    message: string | null
    itemsOut: number
    progress: Progress | null

@@ -5,7 +5,7 @@ import { ELSE_SUFFIX } from 'core/workflowInput'
 
 import { IcpService, type ItemKey, WalletService, WorkflowRunService, floorMicros } from 'database'
 
-import { type Graph, type GraphNode, type StepErrorCode, blockOf } from '@automatedLinkedIn/contracts'
+import { type Graph, type GraphNode, type StepErrorCode, blockOf, isHandled } from '@automatedLinkedIn/contracts'
 
 import { type Post } from './sendApi'
 import { type ScoringRules } from './steps'
@@ -75,6 +75,7 @@ export class Waiting extends Error {}
 
 export const WALLET_LOW = 'Collecting stopped because the data wallet ran low. What was found so far is kept.'
 export const STOPPED_BY_YOU = 'Stopped by you. What was found so far is kept.'
+export const STOPPED_BY_FAILURE = 'Collecting stopped because another block failed. What was found so far is kept.'
 export const SERVICE_BUSY = 'The data service did not answer for some requests. What was found so far is kept.'
 export const DATA_REFUSED =
    'The data service refused some requests, so their results are missing. What was found so far is kept.'
@@ -86,6 +87,10 @@ export const companiesOf = (items: WorkflowItemData[]) =>
    items.filter((item): item is CompanyItem => item.kind === 'company')
 
 export const parentsOf = (graph: Graph, id: string) => graph.edges.filter(edge => edge.to === id).map(edge => edge.from)
+
+// A failed step that no Task result or Retry looks at: the run is winding down, nothing new starts.
+export const unhandledFailure = (run: Run, graph: Graph) =>
+   run.steps.find(({ status, nodeId }) => status === 'FAILED' && !isHandled(graph, nodeId))
 
 export const configOf = (node: GraphNode) => blockOf(node.type).config.parse(node.config)
 
@@ -314,10 +319,11 @@ export type Request = Omit<PaidCall, 'ctx'>
 // ended. After a 'stop' nothing new is started; jobs already running still finish and are booked.
 export const collectEach = async (ctx: Context, requests: Request[]): Promise<StepResult> => {
    const byYou = ctx.run.stopRequestedAt !== null
+   const afterFailure = !byYou && unhandledFailure(ctx.run, ctx.graph) !== undefined
    let failed = 0
    let running = 0
    let later = 0
-   let stopped = byYou
+   let stopped = byYou || afterFailure
 
    for (const request of requests) {
       const outcome = await paidCall({
@@ -340,10 +346,12 @@ export const collectEach = async (ctx: Context, requests: Request[]): Promise<St
    const gap = stopped
       ? byYou
          ? { message: STOPPED_BY_YOU }
-         : {
-              message: WALLET_LOW,
-              errorCode: 'WALLET_LOW' as const,
-           }
+         : afterFailure
+           ? { message: STOPPED_BY_FAILURE }
+           : {
+                message: WALLET_LOW,
+                errorCode: 'WALLET_LOW' as const,
+             }
       : refused
         ? {
              message: DATA_REFUSED,

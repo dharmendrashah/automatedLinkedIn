@@ -17,7 +17,7 @@ import {
    validateGraph,
 } from '@automatedLinkedIn/contracts'
 
-import { ConflictError, uniqueOr } from './conflict'
+import { ConflictError, isUniqueViolation, uniqueOr } from './conflict'
 import { InputPickService } from './inputPick.service'
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
@@ -103,6 +103,22 @@ export const stillGoing = (waits: (Date | null)[]) => {
       ? `A run of this workflow is waiting until ${next.toISOString().slice(0, 16).replace('T', ' ')} UTC. Stop it to start another.`
       : 'A run of this workflow is still going.'
 }
+
+// A live run of the workflow refuses a new start.
+const refuseWhileRunning = async (workflowId: string) => {
+   const running = await PrismaService.client.workflowRun.findFirst({
+      where: {
+         workflowId,
+         status: 'RUNNING',
+      },
+      select: { steps: { select: { waitUntil: true } } },
+   })
+
+   if (running) {
+      throw new ConflictError(stillGoing(running.steps.map(({ waitUntil }) => waitUntil)))
+   }
+}
+
 const listTaken = (name: string) => `You already have a list named "${name}". Pick another workflow name.`
 
 export const readGraph = (value: unknown): Graph => graphSchema.parse(value)
@@ -546,17 +562,7 @@ export class WorkflowService {
          throw new ConflictError(`Fix the workflow first: ${problem.message}`)
       }
 
-      const running = await PrismaService.client.workflowRun.findFirst({
-         where: {
-            workflowId,
-            status: 'RUNNING',
-         },
-         select: { steps: { select: { waitUntil: true } } },
-      })
-
-      if (running) {
-         throw new ConflictError(stillGoing(running.steps.map(({ waitUntil }) => waitUntil)))
-      }
+      await refuseWhileRunning(workflowId)
 
       if (await WalletService.belowFloor()) {
          throw new ConflictError('New runs are paused for a short while. Please try again later.')
@@ -570,8 +576,8 @@ export class WorkflowService {
          throw new ConflictError('No posts are waiting in your posts list. Add some posts first.')
       }
 
-      return uniqueOr(
-         PrismaService.client.workflowRun.create({
+      try {
+         return await PrismaService.client.workflowRun.create({
             data: {
                workflowId,
                userId,
@@ -595,9 +601,21 @@ export class WorkflowService {
                },
             },
             select: runSelect,
-         }),
-         'This run has already started.'
-      )
+         })
+      } catch (error) {
+         if (!isUniqueViolation(error)) {
+            throw error
+         }
+
+         // The key was used before, or another start got in after the check above: the database lets one run be live.
+         if (await WorkflowRunService.idOfKey(runKey)) {
+            throw new ConflictError('This run has already started.')
+         }
+
+         await refuseWhileRunning(workflowId)
+
+         throw error
+      }
    }
 
    public static runs(userId: string, workflowId: string) {

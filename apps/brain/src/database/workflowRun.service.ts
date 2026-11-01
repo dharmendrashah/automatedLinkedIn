@@ -38,17 +38,19 @@ export type StepProgress = {
    nextRetryAt: Date | null
 }
 
-const whereKey = ({ runId, nodeId, round }: ItemKey, slug: string) => ({
-   runId_nodeId_round_slug: {
+const whereKey = ({ runId, nodeId, round }: ItemKey, item: Pick<WorkflowItemData, 'kind' | 'slug'>) => ({
+   runId_nodeId_round_kind_slug: {
       runId,
       nodeId,
       round,
-      slug,
+      kind: item.kind,
+      slug: item.slug,
    },
 })
 
 const rowOf = (at: ItemKey, item: WorkflowItemData, keepUntil: Date | null = null) => ({
    ...at,
+   kind: item.kind,
    slug: item.slug,
    data: json(item),
    keepUntil,
@@ -242,6 +244,7 @@ export class WorkflowRunService {
          const known = await tx.workflowItem.findMany({
             where: {
                ...at,
+               kind: 'profile',
                slug: { in: incoming.map(({ slug }) => slug) },
             },
             select: { data: true },
@@ -253,7 +256,7 @@ export class WorkflowRunService {
 
          for (const item of merged) {
             await tx.workflowItem.upsert({
-               where: whereKey(at, item.slug),
+               where: whereKey(at, item),
                create: rowOf(at, item),
                update: { data: json(item) },
             })
@@ -274,12 +277,51 @@ export class WorkflowRunService {
       return PrismaService.client.$transaction(
          items.map(item =>
             PrismaService.client.workflowItem.upsert({
-               where: whereKey(at, item.slug),
+               where: whereKey(at, item),
                create: rowOf(at, item),
                update: { data: json(item) },
             })
          )
       )
+   }
+
+   // Steps never taken end here: the run was stopped, or a block failed, before they started. A step given back while it
+   // waited has been taken once and is not skipped. Returns how many ended.
+   public static async skipNotStarted(runId: string, message: string) {
+      const { count } = await PrismaService.client.workflowStepRun.updateMany({
+         where: {
+            runId,
+            status: 'WAITING',
+            startedAt: null,
+         },
+         data: {
+            status: 'SKIPPED',
+            message,
+            finishedAt: new Date(),
+         },
+      })
+
+      return count
+   }
+
+   // After a failure, steps taken before it that wait on no paid request end early. One with a request still open is
+   // left: it goes on until the request ends, so what it cost is booked. Returns how many ended.
+   public static async endStartedWithoutRequests(runId: string, message: string) {
+      const { count } = await PrismaService.client.workflowStepRun.updateMany({
+         where: {
+            runId,
+            status: { in: ['WAITING', 'RUNNING'] },
+            startedAt: { not: null },
+            calls: { none: { finishedAt: null } },
+         },
+         data: {
+            status: 'PARTIAL',
+            message,
+            finishedAt: new Date(),
+         },
+      })
+
+      return count
    }
 
    // Gives a step back when the worker has to stop; its finished requests are kept and skipped next time.

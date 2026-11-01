@@ -334,4 +334,23 @@ describe('writePost', () => {
       expect(stopped.status).toBe('PARTIAL')
       expect(stopped.message).toContain('Stopped by you')
    })
+
+   it('should not make a post once the owner stopped the run, a Retry asking again included', async () => {
+      mocks.ofStep.mockResolvedValue([])
+
+      const result = await writePost(
+         context({
+            run: {
+               id: 'r1',
+               userId: 'u1',
+               startedAt: new Date(),
+               stopRequestedAt: new Date(),
+            },
+         } as Partial<Context>)
+      )
+
+      expect(result.status).toBe('PARTIAL')
+      expect(result.message).toContain('nothing was posted')
+      expect(mocks.publishFromBlock).not.toHaveBeenCalled()
+   })
 })

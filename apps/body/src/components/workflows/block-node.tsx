@@ -1,5 +1,5 @@
 import { Handle, type NodeProps, Position } from '@xyflow/react'
-import { CircleAlert, CircleCheck, CircleDashed, Info, Loader2, Plus, Trash2 } from 'lucide-react'
+import { CircleAlert, CircleCheck, CircleDashed, CircleSlash, Info, Loader2, Plus, Trash2 } from 'lucide-react'
 import { useContext } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -20,6 +20,7 @@ const STEP_ICONS = {
    DONE: CircleCheck,
    PARTIAL: CircleAlert,
    FAILED: CircleAlert,
+   SKIPPED: CircleSlash,
 } as const
 
 const STEP_TONES = {
@@ -28,6 +29,7 @@ const STEP_TONES = {
    DONE: 'text-success',
    PARTIAL: 'text-warning',
    FAILED: 'text-destructive',
+   SKIPPED: 'text-muted-foreground',
 } as const
 
 const POSITIONS = {

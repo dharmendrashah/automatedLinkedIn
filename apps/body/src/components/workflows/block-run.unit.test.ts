@@ -93,6 +93,13 @@ describe('blockRunOf', () => {
       }
    })
 
+   it('should call a block that was skipped skipped, and open on its input because nothing passed through it', () => {
+      expect(blockRunOf('a', { howMany: 5 }, run([step({ status: 'SKIPPED' })]), now)).toMatchObject({
+         state: 'skipped',
+         defaultTab: 'input',
+      })
+   })
+
    it('should call a block that is held, or is being worked on, waiting or working and open on its input', () => {
       const live = (steps: StepRun[]) => run(steps, 'RUNNING', null)
 

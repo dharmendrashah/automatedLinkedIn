@@ -55,6 +55,7 @@ export const stepLabel = (step: Pick<StepRun, 'status' | 'progress' | 'tries'>) 
               DONE: 'Done',
               PARTIAL: 'Done with gaps',
               FAILED: 'Failed',
+              SKIPPED: 'Skipped',
            }[step.status]
 
    // A Retry ran the step again.

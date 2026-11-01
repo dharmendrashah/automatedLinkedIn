@@ -95,6 +95,10 @@ export const writePost = async (ctx: Context): Promise<StepResult> => {
 
    // Each try of the step makes one post: a Retry gives the step another try after a post that did not go.
    if (!latest || rows.length <= step.tries) {
+      if (run.stopRequestedAt !== null) {
+         return passOn(ctx, 'PARTIAL', 'Stopped by you; nothing was posted.')
+      }
+
       await makePost(ctx, pool, blocks)
 
       throw new Waiting()
