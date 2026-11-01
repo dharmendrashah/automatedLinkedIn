@@ -1,5 +1,5 @@
 import { Handle, type NodeProps, Position } from '@xyflow/react'
-import { CircleAlert, CircleCheck, CircleDashed, Info, Loader2, Plus, Trash2 } from 'lucide-react'
+import { CircleAlert, CircleCheck, CircleDashed, CircleSlash, Info, Loader2, Plus, Trash2 } from 'lucide-react'
 import { useContext } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -10,7 +10,7 @@ import { trpc } from '../../trpc'
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { adviceOf } from './block-run'
 import { CanvasActions } from './canvas-actions'
-import { type FlowNode, SIDES, summaryOf } from './graph-convert'
+import { type FlowNode, SIDES, handleOfPort, summaryOf } from './graph-convert'
 import { NODE_WIDTH } from './layout'
 import { timeOf } from './run-sentence'
 
@@ -20,6 +20,7 @@ const STEP_ICONS = {
    DONE: CircleCheck,
    PARTIAL: CircleAlert,
    FAILED: CircleAlert,
+   SKIPPED: CircleSlash,
 } as const
 
 const STEP_TONES = {
@@ -28,6 +29,7 @@ const STEP_TONES = {
    DONE: 'text-success',
    PARTIAL: 'text-warning',
    FAILED: 'text-destructive',
+   SKIPPED: 'text-muted-foreground',
 } as const
 
 const POSITIONS = {
@@ -84,6 +86,19 @@ export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
                   className="size-3! opacity-0 transition-opacity group-hover:opacity-100"
                />
             ))}
+            {block.outputs
+               .filter(output => output !== 'main')
+               .map(output => (
+                  <Handle
+                     key={output}
+                     id={handleOfPort(output)}
+                     type="source"
+                     position={Position.Bottom}
+                     title="Drag from here to take what this block did not pass on"
+                     className="bg-warning! size-3! border-0!"
+                     style={{ left: '85%' }}
+                  />
+               ))}
             <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg', tileOf(block.group))}>
                <Icon className="size-5" aria-hidden />
             </span>

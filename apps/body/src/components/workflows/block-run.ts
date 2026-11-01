@@ -11,7 +11,7 @@ export type StepAdvice = RouterOutputs['workflow']['stepErrors'][number]
 export const adviceOf = (catalog: StepAdvice[], code: string | null): StepAdvice | null =>
    catalog.find(advice => advice.code === code) ?? catalog.find(advice => advice.code === 'UNKNOWN') ?? null
 
-export type BlockRunState = 'never' | 'waiting' | 'working' | 'done' | 'gaps' | 'failed'
+export type BlockRunState = 'never' | 'waiting' | 'working' | 'done' | 'gaps' | 'failed' | 'skipped'
 
 export type BlockRun = {
    state: BlockRunState
@@ -72,6 +72,7 @@ export const blockRunOf = (
             DONE: 'done',
             PARTIAL: 'gaps',
             FAILED: 'failed',
+            SKIPPED: 'skipped',
          } as const
       )[step.status]
    })()

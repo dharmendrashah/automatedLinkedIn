@@ -186,35 +186,11 @@ const GIVE_UP_AFTER = optionsOf([
    ['1440', '24 hours'],
 ])
 
-// Blocks that act on LinkedIn with the owner's accounts.
-export const VISIT_BLOCKS = new Set<BlockType>(['account.visitProfile', 'account.visitCompany'])
-
-// Blocks that take their accounts from the nearest "Select accounts" before them.
-export const POOL_BLOCKS = new Set<BlockType>([...VISIT_BLOCKS, 'account.writePost'])
-
 // The most text a written post takes as settings: its words with escapes, and ten photos with their names and keys.
 export const POST_CONFIG_MAX = 40_000
 
 // The most accounts one "Select accounts" block holds.
 export const MAX_POOL = 20
-
-// Blocks that keep what they did not pass on for an Else after them.
-export const ELSE_SOURCES = new Set<BlockType>(['logic.if', 'logic.runWorkflow', 'logic.taskResult', 'logic.retry'])
-
-// Blocks that take items of every kind as they are, so any line into them is fine.
-export const TAKES_ANYTHING = new Set<BlockType>([
-   'process.merge',
-   'logic.runWorkflow',
-   'account.select',
-   'account.writePost',
-   'logic.wait',
-   'logic.taskResult',
-   'logic.retry',
-])
-
-// Blocks that do no work of their own: they wait, judge or repeat. Every other block, including blocks added later, is a
-// "working block" that Task result and Retry can look at.
-const PASSES_ON = new Set<BlockType>(['logic.wait', 'logic.taskResult', 'logic.retry', 'logic.else'])
 
 const VISIBILITIES = optionsOf([
    ['ANYONE', 'Anyone'],
@@ -253,6 +229,8 @@ const MAX_WAIT_AMOUNT = 3_600
 // The longest pause between tries of a Retry, in seconds.
 export const MAX_WAIT_SECONDS = 3_600
 export const MAX_RETRIES = 5
+export const STOP_MESSAGE = 'The workflow was stopped on purpose.'
+export const STOP_MESSAGE_MAX = 200
 const YEARS = optionsOf([
    ['1', 'Under 1 year'],
    ['2', '1 to 2 years'],
@@ -545,6 +523,7 @@ export const BLOCK_TYPES = [
    'logic.taskResult',
    'logic.retry',
    'logic.forEach',
+   'logic.stop',
    'account.select',
    'account.visitProfile',
    'account.visitCompany',
@@ -553,7 +532,28 @@ export const BLOCK_TYPES = [
    'output.markPosts',
    'output.csv',
    'output.sendApi',
+   'output.return',
 ] as const
+
+// What a block is. A new block says it here and the sets, the checks and the engine follow.
+export type BlockFlags = {
+   // Takes items of every kind as they are, so any line into it is fine.
+   takesAnything?: boolean
+   // Keeps what it did not pass on under `<id>~else`, for an Else after it.
+   keepsAside?: boolean
+   // Does no work of its own: it waits, judges or repeats. Task result and Retry look at the block before these.
+   passesOn?: boolean
+   // Acts on LinkedIn with the accounts of the nearest "Select accounts" before it.
+   usesAccounts?: boolean
+   // Visits one page per item; Task result splits its items person by person.
+   visit?: boolean
+   // Keeps results for the owner (a list, a file, an address, the posts marked done).
+   keepsResults?: boolean
+   // Runs only when every other block has finished.
+   runsLast?: boolean
+   // Scores or reads people in a way that can drop some of them.
+   scores?: boolean
+}
 
 export type BlockType = (typeof BLOCK_TYPES)[number]
 
@@ -581,6 +581,27 @@ type BlockSpec = {
    group: 'Triggers' | 'Inputs' | 'Collect' | 'Process' | 'Logic' | 'Account Actions' | 'Output'
    label: string
    summary: string
+   // What the block is, in words the engine and the checks can ask; the sets below are built from them.
+   flags?: BlockFlags
+   // What its "how many" counts, such as "posts per person".
+   unit?: string
+   // "Takes posts, gives people" in words, when the kinds alone do not say it.
+   flow?: string
+   // Raised when a change would alter how saved settings behave; `migrate[n]` turns settings of version n into n + 1.
+   version?: number
+   migrate?: Record<number, (config: NodeConfig) => NodeConfig>
+   // Retired: hidden from the palette, still runs where it is already used.
+   deprecated?: boolean
+   // Whether what leaves the block depends on items: `items` (the default) leaves when it gives at least one, `passes` when
+   // the block itself was live (it waits, selects or acts without needing items), `always` for a trigger that fired.
+   liveness?: 'items' | 'passes' | 'always'
+   // What the block passes on and costs at most, given how many items reach it. Without one it passes on what reaches it
+   // and is free.
+   estimate?: (node: GraphNode, incoming: number, available: Available) => { items: number; costMicros: number }
+   // The most "how many" a preview uses for this block.
+   previewCap?: number
+   // What is wrong, or worth a note, about this block in this graph.
+   validate?: (node: GraphNode, graph: Graph) => GraphError[]
    // What a block costs, in words, such as "about $0.002 per person". Free blocks have none.
    costHint?: string
    // One-click starting points; each sets only its own settings.
@@ -593,9 +614,35 @@ type BlockSpec = {
    fields: Field[]
 }
 
+// How the blocks that wait, repeat or hold a post say what they do with what reaches them.
+const PASSES_UNCHANGED = 'Takes anything, passes it on unchanged'
+
+// The most "how many" a preview uses: one input item or post, at most 20 people.
+export const PREVIEW_LIMITS = {
+   posts: 1,
+   perPost: 20,
+} as const
+
+// What a block that reads or finds a number of things costs, written once for the blocks that share it. They read the
+// block's settings through `settingsOf` and `howManyOf`, defined further down.
+const engagementEstimate = (node: GraphNode, incoming: number) => {
+   const limit = settingsOf(node).all === true ? ALL_CAP : howManyOf(node)
+
+   return {
+      items: incoming * limit,
+      costMicros: incoming * limit * PRICE_MICROS.engagement,
+   }
+}
+
+const perIncomingPost = (node: GraphNode, incoming: number) => ({
+   items: incoming * howManyOf(node),
+   costMicros: incoming * howManyOf(node) * PRICE_MICROS.engagement,
+})
+
 const BLOCKS = {
    'trigger.manual': {
       group: 'Triggers',
+      liveness: 'always',
       label: 'Run by hand',
       summary: 'Starts when you press Run.',
       input: null,
@@ -605,6 +652,7 @@ const BLOCKS = {
    },
    'trigger.schedule': {
       group: 'Triggers',
+      liveness: 'always',
       label: 'On a schedule',
       summary: 'Starts every few hours, every day or every week.',
       input: null,
@@ -615,6 +663,12 @@ const BLOCKS = {
    },
    'input.posts': {
       group: 'Inputs',
+      unit: 'posts',
+      estimate: (node, _incoming, available) => ({
+         items: Math.min(inputTake('input.posts', node.config), reaching(node, available, available.posts)),
+         costMicros: 0,
+      }),
+      previewCap: PREVIEW_LIMITS.posts,
       label: 'Posts',
       summary: 'Takes posts from your posts list that are not done yet.',
       api: [
@@ -638,6 +692,9 @@ const BLOCKS = {
    },
    'collect.commenters': {
       group: 'Collect',
+      unit: 'per post',
+      estimate: engagementEstimate,
+      previewCap: PREVIEW_LIMITS.perPost,
       label: 'Get commenters',
       summary: 'The people who commented on each post, with what they wrote.',
       costHint: 'about $0.002 per comment',
@@ -696,6 +753,9 @@ const BLOCKS = {
    },
    'collect.reactors': {
       group: 'Collect',
+      unit: 'per post',
+      estimate: engagementEstimate,
+      previewCap: PREVIEW_LIMITS.perPost,
       label: 'Get reactors',
       summary: 'The people who reacted to each post.',
       costHint: 'about $0.002 per reaction',
@@ -808,6 +868,7 @@ const BLOCKS = {
    },
    'score.icp': {
       group: 'Process',
+      flags: { scores: true },
       label: 'Score against an ideal customer',
       summary: 'Gives each person a score from 0 to 100 and keeps the qualified and maybe ones.',
       presets: [
@@ -880,6 +941,11 @@ const BLOCKS = {
    },
    'collect.profile': {
       group: 'Collect',
+      flags: { scores: true },
+      estimate: (_node, incoming) => ({
+         items: incoming,
+         costMicros: incoming * PRICE_MICROS.profile,
+      }),
       label: 'Get full profile',
       summary:
          'Reads the full profile of everyone who reaches it (job, company, place) and scores them again if a Score block came before.',
@@ -891,6 +957,7 @@ const BLOCKS = {
    },
    'output.list': {
       group: 'Output',
+      flags: { keepsResults: true },
       label: 'Add to list',
       summary: "Adds people to the workflow's list.",
       input: 'profile',
@@ -900,6 +967,10 @@ const BLOCKS = {
    },
    'output.markPosts': {
       group: 'Output',
+      flags: {
+         keepsResults: true,
+         runsLast: true,
+      },
       label: 'Mark posts done',
       summary: 'Marks the posts as done when everything else has finished.',
       input: 'post',
@@ -909,6 +980,7 @@ const BLOCKS = {
    },
    'trigger.api': {
       group: 'Triggers',
+      liveness: 'always',
       label: 'When called by API',
       summary: 'Starts when another system calls this workflow with links.',
       input: null,
@@ -918,8 +990,9 @@ const BLOCKS = {
    },
    'trigger.workflow': {
       group: 'Triggers',
+      liveness: 'always',
       label: 'When another workflow finishes',
-      summary: 'Starts with the people another workflow kept.',
+      summary: 'Starts with what another workflow gave back: the people it kept, or what its Give back block got.',
       input: null,
       output: 'profile',
       config: z.object({ workflowId: z.string().min(1) }),
@@ -933,6 +1006,15 @@ const BLOCKS = {
    },
    'input.profiles': {
       group: 'Inputs',
+      unit: 'people',
+      estimate: (node, _incoming, available) => ({
+         items: Math.min(
+            inputTake('input.profiles', node.config),
+            countOf(node, 'links') || reaching(node, available, available.profiles)
+         ),
+         costMicros: 0,
+      }),
+      previewCap: 1,
       label: 'Profiles',
       summary: 'People from your profiles list, or the links you give.',
       api: [
@@ -967,6 +1049,12 @@ const BLOCKS = {
    },
    'input.companies': {
       group: 'Inputs',
+      unit: 'companies',
+      estimate: (node, _incoming, available) => ({
+         items: Math.min(inputTake('input.companies', node.config), reaching(node, available, available.companies)),
+         costMicros: 0,
+      }),
+      previewCap: 1,
       label: 'Companies',
       summary: 'Companies from your companies list.',
       api: [
@@ -988,6 +1076,12 @@ const BLOCKS = {
    },
    'collect.findPosts': {
       group: 'Collect',
+      unit: 'posts',
+      estimate: node => ({
+         items: howManyOf(node),
+         costMicros: howManyOf(node) * PRICE_MICROS.engagement,
+      }),
+      previewCap: PREVIEW_LIMITS.posts,
       label: 'Find posts',
       summary: 'Finds posts on LinkedIn that mention your keywords.',
       costHint: 'about $0.002 per post',
@@ -1099,6 +1193,9 @@ const BLOCKS = {
    },
    'collect.postsOfPeople': {
       group: 'Collect',
+      unit: 'posts per person',
+      estimate: perIncomingPost,
+      previewCap: PREVIEW_LIMITS.posts,
       label: 'Posts of people',
       summary: 'The recent posts of each person.',
       costHint: 'about $0.002 per post',
@@ -1133,6 +1230,9 @@ const BLOCKS = {
    },
    'collect.postsOfCompanies': {
       group: 'Collect',
+      unit: 'posts per company',
+      estimate: perIncomingPost,
+      previewCap: PREVIEW_LIMITS.posts,
       label: 'Posts of companies',
       summary: 'The recent posts of each company page.',
       costHint: 'about $0.002 per post',
@@ -1167,6 +1267,12 @@ const BLOCKS = {
    },
    'collect.engagedPosts': {
       group: 'Collect',
+      unit: 'per person',
+      estimate: (node, incoming) => ({
+         items: incoming * howManyOf(node) * 2,
+         costMicros: incoming * howManyOf(node) * 2 * PRICE_MICROS.engagement,
+      }),
+      previewCap: PREVIEW_LIMITS.posts,
       label: 'What this person engages with',
       summary: 'The posts each person recently commented on or reacted to.',
       costHint: 'about $0.002 per post',
@@ -1195,6 +1301,15 @@ const BLOCKS = {
    },
    'collect.employees': {
       group: 'Collect',
+      unit: 'per company',
+      estimate: (node, incoming) => ({
+         items: incoming * howManyOf(node),
+         costMicros:
+            incoming *
+            (howManyOf(node) * PRICE_MICROS.profile +
+               Math.ceil(howManyOf(node) / EMPLOYEE_PAGE) * PRICE_MICROS.employeePage),
+      }),
+      previewCap: PREVIEW_LIMITS.perPost,
       label: 'Find people at a company',
       summary: 'People who work at each company, with their full profile.',
       costHint: 'about $0.004 per person plus $0.10 per 25',
@@ -1354,6 +1469,12 @@ const BLOCKS = {
    },
    'collect.jobs': {
       group: 'Collect',
+      unit: 'jobs per 10 companies',
+      estimate: (node, incoming) => ({
+         items: incoming,
+         costMicros: Math.ceil(incoming / JOB_BATCH) * howManyOf(node) * PRICE_MICROS.job,
+      }),
+      previewCap: 10,
       label: 'Find open jobs',
       summary: 'Marks the companies hiring for a role, a reason to reach out now.',
       costHint: 'about $0.001 per job',
@@ -1485,6 +1606,16 @@ const BLOCKS = {
    },
    'collect.domainLookup': {
       group: 'Collect',
+      unit: 'companies',
+      estimate: node => {
+         const found = Math.min(howManyOf(node), countOf(node, 'domains'))
+
+         return {
+            items: found,
+            costMicros: found * PRICE_MICROS.lookup,
+         }
+      },
+      previewCap: 1,
       label: 'Find a company from its website',
       summary: 'Turns website addresses into company pages.',
       costHint: 'about $0.004 per company',
@@ -1525,6 +1656,13 @@ const BLOCKS = {
    },
    'collect.searchPeople': {
       group: 'Collect',
+      unit: 'people',
+      // Searched in whole pages of 25 people.
+      estimate: node => ({
+         items: howManyOf(node),
+         costMicros: Math.ceil(howManyOf(node) / 25) * 25 * PRICE_MICROS.profile,
+      }),
+      previewCap: PREVIEW_LIMITS.perPost,
       label: 'Search people',
       summary: 'Finds people on LinkedIn by keywords, job title, company, place and more.',
       costHint: 'about $0.004 per person',
@@ -1704,6 +1842,10 @@ const BLOCKS = {
    },
    'process.topN': {
       group: 'Process',
+      estimate: (node, incoming) => ({
+         items: Math.min(incoming, numberOf(node, 'count')),
+         costMicros: 0,
+      }),
       label: 'Keep top N',
       summary: 'Keeps only the best people, by score or by followers.',
       input: 'profile',
@@ -1739,6 +1881,8 @@ const BLOCKS = {
    },
    'process.merge': {
       group: 'Process',
+      flow: 'Takes anything, gives one stream',
+      flags: { takesAnything: true },
       label: 'Merge',
       summary: 'Joins what two or more blocks found into one stream.',
       input: 'profile',
@@ -1791,6 +1935,7 @@ const BLOCKS = {
    },
    'logic.if': {
       group: 'Logic',
+      flags: { keepsAside: true },
       label: 'If',
       summary: 'Passes on the people who match; connect an Else after it for the rest.',
       input: 'profile',
@@ -1881,6 +2026,22 @@ const BLOCKS = {
    },
    'logic.else': {
       group: 'Logic',
+      flags: { passesOn: true },
+      validate: (node, graph) =>
+         parentsOf(graph, node.id).some(id => {
+            const parent = graph.nodes.find(other => other.id === id)
+
+            return parent !== undefined && ELSE_SOURCES.has(parent.type)
+         })
+            ? []
+            : [
+                 {
+                    nodeId: node.id,
+                    level: 'note',
+                    message:
+                       'Else passes on nothing unless an If, Task result, Retry or "Run another workflow" comes right before it.',
+                 },
+              ],
       label: 'Else',
       summary: 'What the If or "Run another workflow" before it did not pass on.',
       input: 'profile',
@@ -1890,6 +2051,11 @@ const BLOCKS = {
    },
    'logic.runWorkflow': {
       group: 'Logic',
+      flow: 'Takes anything, gives what it got or the people the other workflow saved',
+      flags: {
+         takesAnything: true,
+         keepsAside: true,
+      },
       label: 'Run another workflow',
       summary:
          'Starts another of your workflows. Go on at once, wait for a yes or no, or wait for the people it saves.',
@@ -1933,6 +2099,12 @@ const BLOCKS = {
    },
    'logic.wait': {
       group: 'Logic',
+      flow: PASSES_UNCHANGED,
+      liveness: 'passes',
+      flags: {
+         takesAnything: true,
+         passesOn: true,
+      },
       label: 'Wait',
       summary:
          'Holds the run for as long as you set, from seconds to a year, then passes everything on. Accurate to about 5 seconds.',
@@ -2008,6 +2180,22 @@ const BLOCKS = {
    },
    'logic.taskResult': {
       group: 'Logic',
+      flow: 'Takes anything, gives what worked; an Else after it gets the rest',
+      flags: {
+         takesAnything: true,
+         keepsAside: true,
+         passesOn: true,
+      },
+      validate: (node, graph) =>
+         workingBlockBefore(graph, node.id)
+            ? []
+            : [
+                 {
+                    nodeId: node.id,
+                    level: 'error',
+                    message: 'Task result needs a block before it to look at.',
+                 },
+              ],
       label: 'Task result',
       summary:
          'Yes when the block before it worked, no when it failed. Yes goes on; connect an Else after it for the no. Visit blocks are split person by person.',
@@ -2018,6 +2206,39 @@ const BLOCKS = {
    },
    'logic.retry': {
       group: 'Logic',
+      flow: PASSES_UNCHANGED,
+      flags: {
+         takesAnything: true,
+         keepsAside: true,
+         passesOn: true,
+      },
+      validate: (node, graph) => {
+         if (!workingBlockBefore(graph, node.id)) {
+            return [
+               {
+                  nodeId: node.id,
+                  level: 'error',
+                  message: 'Retry needs a block before it to look at.',
+               },
+            ]
+         }
+
+         const rightAfter = parentsOf(graph, node.id).some(id => {
+            const parent = graph.nodes.find(other => other.id === id)
+
+            return parent !== undefined && !PASSES_ON.has(parent.type)
+         })
+
+         return rightAfter
+            ? []
+            : [
+                 {
+                    nodeId: node.id,
+                    level: 'error',
+                    message: 'Retry goes right after the block it repeats.',
+                 },
+              ]
+      },
       label: 'Retry',
       summary:
          'Runs the block right before it again when it failed, up to the number of times you set. It fixes busy services, not wrong settings.',
@@ -2063,8 +2284,46 @@ const BLOCKS = {
          },
       ],
    },
+   'logic.stop': {
+      group: 'Logic',
+      flow: 'Takes anything, ends the run with the message you wrote',
+      flags: {
+         takesAnything: true,
+         passesOn: true,
+      },
+      label: 'Stop with an error',
+      summary:
+         'Ends the run as failed with a message you wrote. Put it where something went wrong, such as after an Else.',
+      input: 'profile',
+      output: null,
+      config: z.object({ message: z.string().trim().min(1).max(STOP_MESSAGE_MAX).default(STOP_MESSAGE) }),
+      fields: [
+         {
+            key: 'message',
+            label: 'Message shown on the run',
+            kind: 'text',
+            hint: 'Plain words for whoever reads the run. Do not put secrets in it.',
+         },
+      ],
+   },
    'account.select': {
       group: 'Account Actions',
+      flow: PASSES_UNCHANGED,
+      liveness: 'passes',
+      flags: { takesAnything: true },
+      validate: (node, graph) => {
+         const after = downstreamOf(graph.edges, node.id)
+
+         return graph.nodes.some(other => POOL_BLOCKS.has(other.type) && other.id !== node.id && after.has(other.id))
+            ? []
+            : [
+                 {
+                    nodeId: node.id,
+                    level: 'note',
+                    message: 'No LinkedIn action comes after this block, so the accounts are not used.',
+                 },
+              ]
+      },
       label: 'Select accounts',
       summary:
          'Picks the accounts that take turns doing the LinkedIn actions after it. Passes everything on unchanged.',
@@ -2088,6 +2347,10 @@ const BLOCKS = {
    },
    'account.visitProfile': {
       group: 'Account Actions',
+      flags: {
+         visit: true,
+         usesAccounts: true,
+      },
       label: 'Visit profile',
       summary:
          'Opens each person’s profile with one of the chosen accounts, waits a few seconds and scrolls down. Passes on the people viewed.',
@@ -2098,6 +2361,10 @@ const BLOCKS = {
    },
    'account.visitCompany': {
       group: 'Account Actions',
+      flags: {
+         visit: true,
+         usesAccounts: true,
+      },
       label: 'Visit company',
       summary:
          'Opens each company page with one of the chosen accounts, waits a few seconds and scrolls down. Passes on the companies viewed.',
@@ -2108,6 +2375,35 @@ const BLOCKS = {
    },
    'account.writePost': {
       group: 'Account Actions',
+      flow: PASSES_UNCHANGED,
+      liveness: 'passes',
+      flags: {
+         takesAnything: true,
+         usesAccounts: true,
+      },
+      validate: node => {
+         const blocks = postBlocksOfText(node.config.post ?? '[]')
+
+         if (blocks && joinedText(blocks) === '' && !mediaBlock(blocks)) {
+            return [
+               {
+                  nodeId: node.id,
+                  level: 'error',
+                  message: 'Write the post: it needs words or a file.',
+               },
+            ]
+         }
+
+         return blocks && postFilesOf(blocks).some(({ key }) => key === undefined)
+            ? [
+                 {
+                    nodeId: node.id,
+                    level: 'error',
+                    message: 'A file of the post is not uploaded. Open the block and attach it again.',
+                 },
+              ]
+            : []
+      },
       label: 'Write a post',
       summary:
          'Posts what you write here on LinkedIn, once per run, from one of the chosen accounts. Passes everything on unchanged.',
@@ -2133,6 +2429,7 @@ const BLOCKS = {
    },
    'output.csv': {
       group: 'Output',
+      flags: { keepsResults: true },
       label: 'Export to CSV',
       summary: 'Keeps what reaches it for 90 days to see and download from the run.',
       input: 'profile',
@@ -2146,8 +2443,24 @@ const BLOCKS = {
          },
       ],
    },
+   'output.return': {
+      group: 'Output',
+      flow: 'Takes anything, gives it back to whoever started the run',
+      flags: {
+         takesAnything: true,
+         keepsResults: true,
+      },
+      label: 'Give back',
+      summary:
+         'What reaches it is this run’s result for the workflow that started it, of any kind. Without it a run gives back the people it saved to lists.',
+      input: 'profile',
+      output: null,
+      config: empty,
+      fields: [],
+   },
    'output.sendApi': {
       group: 'Output',
+      flags: { keepsResults: true },
       label: 'Send via API',
       summary: 'Sends what reaches it as JSON to your HTTPS address.',
       input: 'profile',
@@ -2177,6 +2490,37 @@ const BLOCKS = {
 } as const satisfies Record<BlockType, BlockSpec>
 
 export const blockOf = (type: BlockType): BlockSpec => BLOCKS[type]
+
+const withFlag = (flag: keyof BlockFlags): Set<BlockType> =>
+   new Set<BlockType>(BLOCK_TYPES.filter(type => (BLOCKS[type] as BlockSpec).flags?.[flag] === true))
+
+// Blocks that act on LinkedIn with the owner's accounts, one page at a time.
+export const VISIT_BLOCKS: Set<BlockType> = withFlag('visit')
+
+// Blocks that take their accounts from the nearest "Select accounts" before them.
+export const POOL_BLOCKS: Set<BlockType> = withFlag('usesAccounts')
+
+// Blocks that keep what they did not pass on for an Else after them.
+export const ELSE_SOURCES: Set<BlockType> = withFlag('keepsAside')
+
+// The outputs a block has: `main`, and `else` for what a block that keeps items aside did not pass on.
+export const outputsOf = (type: BlockType): string[] => (ELSE_SOURCES.has(type) ? ['main', 'else'] : ['main'])
+
+// Blocks that take items of every kind as they are, so any line into them is fine.
+export const TAKES_ANYTHING: Set<BlockType> = withFlag('takesAnything')
+
+// Blocks that do no work of their own: they wait, judge or repeat. Every other block, including blocks added later, is a
+// "working block" that Task result and Retry can look at.
+const PASSES_ON: Set<BlockType> = withFlag('passesOn')
+
+// Blocks that keep results for the owner.
+export const OUTPUT_BLOCKS: Set<BlockType> = withFlag('keepsResults')
+
+// Blocks that score or read people and can drop some.
+export const SCORING_BLOCKS: Set<BlockType> = withFlag('scores')
+
+// Blocks that run only after every other block has finished.
+export const RUNS_LAST: Set<BlockType> = withFlag('runsLast')
 
 // Every field a call may carry, each once (blocks may share a field, such as keywords), in the order of the catalog.
 export const apiFields = (): ApiField[] => {
@@ -2260,6 +2604,12 @@ export const catalog = (): CatalogBlock[] =>
          costHint: spec.costHint ?? null,
          presets: spec.presets ?? [],
          api: spec.api ?? [],
+         version: spec.version ?? 1,
+         deprecated: spec.deprecated === true,
+         unit: spec.unit ?? null,
+         flow: spec.flow ?? null,
+         flags: spec.flags ?? {},
+         outputs: outputsOf(type),
          input,
          output,
          fields,
@@ -2290,6 +2640,12 @@ export type CatalogBlock = {
    costHint: string | null
    presets: Preset[]
    api: ApiField[]
+   version: number
+   deprecated: boolean
+   unit: string | null
+   flow: string | null
+   flags: BlockFlags
+   outputs: string[]
    input: ItemKind | null
    output: ItemKind | null
    fields: Field[]
@@ -2302,6 +2658,8 @@ export const graphSchema = z.object({
          z.object({
             id: nodeId,
             type: z.enum(BLOCK_TYPES),
+            // The version of the block the settings were saved for; absent means 1.
+            version: z.number().int().min(1).optional(),
             config: configSchema.default({}),
             position: z.object({
                x: z.number(),
@@ -2318,6 +2676,8 @@ export const graphSchema = z.object({
             // Where the line leaves and enters on the canvas; drawing only.
             fromSide: side.optional(),
             toSide: side.optional(),
+            // The output of the block the line leaves from; absent means main (see `portOfEdge`).
+            fromPort: z.string().max(20).optional(),
          })
       )
       .max(100),
@@ -2333,7 +2693,41 @@ export type GraphError = { nodeId?: string; message: string; level: 'error' | 'n
 
 export const loopRoundsOf = (graph: Graph) => graph.loopRounds ?? DEFAULT_LOOP_ROUNDS
 
-const isTrigger = (type: BlockType) => BLOCKS[type].input === null
+// Settings saved for an older version of a block, brought to the current one: `migrate[n]` turns version n into n + 1.
+export const upgradeConfig = (
+   config: NodeConfig,
+   from: number,
+   to: number,
+   migrate: Record<number, (config: NodeConfig) => NodeConfig> = {}
+): NodeConfig => {
+   let upgraded = config
+
+   for (let version = from; version < to; version += 1) {
+      upgraded = migrate[version]?.(upgraded) ?? upgraded
+   }
+
+   return upgraded
+}
+
+// A saved graph with every block's settings at its block's current version. A block saved by newer code is left alone.
+export const upgradeGraph = (graph: Graph): Graph => ({
+   ...graph,
+   nodes: graph.nodes.map(node => {
+      const spec = blockOf(node.type)
+      const to = spec.version ?? 1
+      const from = node.version ?? 1
+
+      return from >= to
+         ? node
+         : {
+              ...node,
+              config: upgradeConfig(node.config, from, to, spec.migrate),
+              version: to,
+           }
+   }),
+})
+
+export const isTrigger = (type: BlockType) => BLOCKS[type].input === null
 
 const parentsOf = (graph: Graph, id: string) => graph.edges.filter(edge => edge.to === id).map(edge => edge.from)
 
@@ -2452,6 +2846,79 @@ export const topoOrder = (graph: Graph) => {
    return order
 }
 
+// How a run was started, and the triggers that fire for it. By hand and a preview fire every trigger.
+export type RunStart = 'MANUAL' | 'SCHEDULE' | 'PREVIEW' | 'API' | 'WORKFLOW'
+
+const FIRES: Record<RunStart, readonly BlockType[] | null> = {
+   MANUAL: null,
+   PREVIEW: null,
+   SCHEDULE: ['trigger.schedule'],
+   API: ['trigger.api'],
+   WORKFLOW: ['trigger.workflow'],
+}
+
+// Whether a trigger block starts a run. When the graph has no trigger of the kind that started the run, every trigger
+// fires, so a workflow built before this rule keeps running.
+export const isFired = (graph: Graph, start: RunStart, type: BlockType) => {
+   const wanted = FIRES[start]
+
+   if (wanted === null || !graph.nodes.some(node => wanted.includes(node.type))) {
+      return true
+   }
+
+   return wanted.includes(type)
+}
+
+// The order ready blocks go in: depth first from the blocks with nothing before them, one branch to its end before the
+// next, children from the top of the canvas to the bottom and from the left to the right (as n8n's v1 order).
+export const executionOrder = (graph: Graph): string[] => {
+   const edges = forwardEdges(graph)
+   const spot = new Map(graph.nodes.map(node => [node.id, node.position]))
+   const above = (a: string, b: string) =>
+      (spot.get(a)?.y ?? 0) - (spot.get(b)?.y ?? 0) ||
+      (spot.get(a)?.x ?? 0) - (spot.get(b)?.x ?? 0) ||
+      a.localeCompare(b)
+   const order: string[] = []
+   const seen = new Set<string>()
+   const visit = (id: string) => {
+      if (seen.has(id)) {
+         return
+      }
+
+      seen.add(id)
+      order.push(id)
+
+      for (const to of edges
+         .filter(edge => edge.from === id)
+         .map(edge => edge.to)
+         .sort(above)) {
+         visit(to)
+      }
+   }
+
+   for (const id of graph.nodes
+      .filter(node => !edges.some(edge => edge.to === node.id))
+      .map(({ id: first }) => first)
+      .sort(above)) {
+      visit(id)
+   }
+
+   // A cycle with nothing leading into it.
+   for (const node of graph.nodes) {
+      visit(node.id)
+   }
+
+   return order
+}
+
+// Which output of its block a line leaves from: the one it names, else "main", except that a line into an Else block
+// leaves from the "else" output (how graphs were saved before lines named an output).
+export const portOfEdge = (graph: Graph, edge: GraphEdge): string =>
+   edge.fromPort ?? (graph.nodes.find(node => node.id === edge.to)?.type === 'logic.else' ? 'else' : 'main')
+
+// Where the items of an output are kept in a run: "main" under the block's id, any other output under `<id>~<output>`.
+export const portKey = (nodeId: string, port: string) => (port === 'main' ? nodeId : `${nodeId}~${port}`)
+
 const downstreamOf = (edges: GraphEdge[], start: string) => {
    const found = new Set([start])
    const queue = [start]
@@ -2556,7 +3023,7 @@ const edgeNotes = (graph: Graph, byId: Map<string, GraphNode>): GraphError[] =>
       ]
    })
 
-const OUTPUTS = new Set<BlockType>(['output.list', 'output.csv', 'output.sendApi', 'output.markPosts'])
+const OUTPUTS = OUTPUT_BLOCKS
 
 // The blocks that keep results and are reached from a block without a Task result on the way.
 const keptWithoutSplit = (graph: Graph, id: string) => {
@@ -2611,6 +3078,18 @@ export const validateGraph = (graph: Graph): GraphError[] => {
 
    problems.push(...graph.nodes.flatMap(configErrors), ...edgeNotes(graph, byId))
 
+   for (const edge of graph.edges) {
+      const from = byId.get(edge.from)
+
+      if (from && edge.fromPort !== undefined && !outputsOf(from.type).includes(edge.fromPort)) {
+         problems.push({
+            nodeId: from.id,
+            level: 'error',
+            message: `${BLOCKS[from.type].label} has no "${edge.fromPort}" output.`,
+         })
+      }
+   }
+
    if (!graph.nodes.some(node => isTrigger(node.type))) {
       note('No trigger: Run starts from the blocks with nothing before them.')
    }
@@ -2618,40 +3097,6 @@ export const validateGraph = (graph: Graph): GraphError[] => {
    for (const node of graph.nodes) {
       if (!isTrigger(node.type) && BLOCKS[node.type].input !== 'start' && parentsOf(graph, node.id).length === 0) {
          note(`${BLOCKS[node.type].label} has nothing before it, so it gets nothing.`, node.id)
-      }
-
-      if (
-         node.type === 'logic.else' &&
-         !parentsOf(graph, node.id).some(id => ELSE_SOURCES.has(byId.get(id)?.type ?? 'logic.else'))
-      ) {
-         note(
-            'Else passes on nothing unless an If, Task result, Retry or "Run another workflow" comes right before it.',
-            node.id
-         )
-      }
-
-      if ((node.type === 'logic.taskResult' || node.type === 'logic.retry') && !workingBlockBefore(graph, node.id)) {
-         problems.push({
-            nodeId: node.id,
-            level: 'error',
-            message: `${BLOCKS[node.type].label} needs a block before it to look at.`,
-         })
-      }
-
-      if (
-         node.type === 'logic.retry' &&
-         workingBlockBefore(graph, node.id) &&
-         !parentsOf(graph, node.id).some(id => {
-            const parent = byId.get(id)
-
-            return parent && !PASSES_ON.has(parent.type)
-         })
-      ) {
-         problems.push({
-            nodeId: node.id,
-            level: 'error',
-            message: 'Retry goes right after the block it repeats.',
-         })
       }
 
       if (POOL_BLOCKS.has(node.type) && !nodeBefore(graph, node.id, 'account.select')) {
@@ -2662,31 +3107,7 @@ export const validateGraph = (graph: Graph): GraphError[] => {
          })
       }
 
-      if (node.type === 'account.writePost') {
-         const blocks = postBlocksOfText(node.config.post ?? '[]')
-
-         if (blocks && joinedText(blocks) === '' && !mediaBlock(blocks)) {
-            problems.push({
-               nodeId: node.id,
-               level: 'error',
-               message: 'Write the post: it needs words or a file.',
-            })
-         } else if (blocks && postFilesOf(blocks).some(({ key }) => key === undefined)) {
-            problems.push({
-               nodeId: node.id,
-               level: 'error',
-               message: 'A file of the post is not uploaded. Open the block and attach it again.',
-            })
-         }
-      }
-
-      if (node.type === 'account.select') {
-         const after = downstreamOf(graph.edges, node.id)
-
-         if (!graph.nodes.some(other => POOL_BLOCKS.has(other.type) && other.id !== node.id && after.has(other.id))) {
-            note('No LinkedIn action comes after this block, so the accounts are not used.', node.id)
-         }
-      }
+      problems.push(...((BLOCKS[node.type] as BlockSpec).validate?.(node, graph) ?? []))
    }
 
    for (const visit of graph.nodes.filter(node => VISIT_BLOCKS.has(node.type))) {
@@ -2747,97 +3168,13 @@ export const inputTake = (type: InputType, config: unknown) => {
 
 const reaching = (node: GraphNode, available: Available, total: number) => available.byNode?.[node.id] ?? total
 
-// What one block passes on and costs at most, given how many items reach it.
-const blockEstimate = (node: GraphNode, incoming: number, available: Available) => {
-   const many = howManyOf(node)
-
-   switch (node.type) {
-      case 'input.posts':
-         return {
-            items: Math.min(inputTake(node.type, node.config), reaching(node, available, available.posts)),
-            costMicros: 0,
-         }
-      case 'input.profiles':
-         return {
-            items: Math.min(
-               inputTake(node.type, node.config),
-               countOf(node, 'links') || reaching(node, available, available.profiles)
-            ),
-            costMicros: 0,
-         }
-      case 'input.companies':
-         return {
-            items: Math.min(inputTake(node.type, node.config), reaching(node, available, available.companies)),
-            costMicros: 0,
-         }
-      case 'collect.findPosts':
-         return {
-            items: many,
-            costMicros: many * PRICE_MICROS.engagement,
-         }
-      case 'collect.commenters':
-      case 'collect.reactors': {
-         const limit = settingsOf(node).all === true ? ALL_CAP : many
-
-         return {
-            items: incoming * limit,
-            costMicros: incoming * limit * PRICE_MICROS.engagement,
-         }
-      }
-      case 'collect.postsOfPeople':
-      case 'collect.postsOfCompanies':
-         return {
-            items: incoming * many,
-            costMicros: incoming * many * PRICE_MICROS.engagement,
-         }
-      case 'collect.engagedPosts':
-         return {
-            items: incoming * many * 2,
-            costMicros: incoming * many * 2 * PRICE_MICROS.engagement,
-         }
-      case 'collect.employees':
-         return {
-            items: incoming * many,
-            costMicros:
-               incoming * (many * PRICE_MICROS.profile + Math.ceil(many / EMPLOYEE_PAGE) * PRICE_MICROS.employeePage),
-         }
-      case 'collect.jobs':
-         return {
-            items: incoming,
-            costMicros: Math.ceil(incoming / JOB_BATCH) * many * PRICE_MICROS.job,
-         }
-      case 'collect.domainLookup': {
-         const found = Math.min(many, countOf(node, 'domains'))
-
-         return {
-            items: found,
-            costMicros: found * PRICE_MICROS.lookup,
-         }
-      }
-      case 'collect.profile':
-         return {
-            items: incoming,
-            costMicros: incoming * PRICE_MICROS.profile,
-         }
-      case 'collect.searchPeople':
-         // Searched in whole pages of 25 people.
-         return {
-            items: many,
-            costMicros: Math.ceil(many / 25) * 25 * PRICE_MICROS.profile,
-         }
-      case 'process.topN':
-         return {
-            items: Math.min(incoming, numberOf(node, 'count')),
-            costMicros: 0,
-         }
-      default:
-         // Triggers start with nothing; what another workflow passes on is not known before it runs.
-         return {
-            items: isTrigger(node.type) ? 0 : incoming,
-            costMicros: 0,
-         }
+// What one block passes on and costs at most, given how many items reach it. A block with no estimate passes on what
+// reaches it for free; triggers start with nothing, and what another workflow passes on is not known before it runs.
+const blockEstimate = (node: GraphNode, incoming: number, available: Available) =>
+   blockOf(node.type).estimate?.(node, incoming, available) ?? {
+      items: isTrigger(node.type) ? 0 : incoming,
+      costMicros: 0,
    }
-}
 
 // Companies sent to the jobs search in one request.
 export const JOB_BATCH = 10
@@ -2885,33 +3222,11 @@ export const estimateGraph = (graph: Graph, available: Available): Estimate => {
    }
 }
 
-export const PREVIEW_LIMITS = {
-   posts: 1,
-   perPost: 20,
-} as const
-
-// The most "how many" a preview uses per block: one input item or post, at most 20 people.
-const PREVIEW_CAPS: Partial<Record<BlockType, number>> = {
-   'input.posts': PREVIEW_LIMITS.posts,
-   'input.profiles': 1,
-   'input.companies': 1,
-   'collect.findPosts': PREVIEW_LIMITS.posts,
-   'collect.postsOfPeople': PREVIEW_LIMITS.posts,
-   'collect.postsOfCompanies': PREVIEW_LIMITS.posts,
-   'collect.engagedPosts': PREVIEW_LIMITS.posts,
-   'collect.commenters': PREVIEW_LIMITS.perPost,
-   'collect.reactors': PREVIEW_LIMITS.perPost,
-   'collect.employees': PREVIEW_LIMITS.perPost,
-   'collect.jobs': 10,
-   'collect.domainLookup': 1,
-   'collect.searchPeople': PREVIEW_LIMITS.perPost,
-}
-
 // The same workflow on a small sample.
 export const previewGraph = (graph: Graph): Graph => ({
    ...graph,
    nodes: graph.nodes.map(node => {
-      const cap = PREVIEW_CAPS[node.type]
+      const cap = blockOf(node.type).previewCap
 
       return cap === undefined
          ? node

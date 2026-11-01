@@ -4,7 +4,7 @@ import { type WorkflowItemData } from 'core'
 
 import { VisitPoolService, WorkflowRunService } from 'database'
 
-import { VISIT_BLOCKS, blockOf, toSeconds, workingBlockBefore } from '@automatedLinkedIn/contracts'
+import { STOP_MESSAGE, VISIT_BLOCKS, blockOf, toSeconds, workingBlockBefore } from '@automatedLinkedIn/contracts'
 
 import {
    type Context,
@@ -96,7 +96,10 @@ const failedSide = async (ctx: Context, block: { id: string }, round: number, me
 
    await WorkflowRunService.replaceItems(elseKey(ctx, ctx.node.id), reached)
 
-   return passOn(ctx, [], message)
+   return {
+      ...(await passOn(ctx, [], message)),
+      emit: ['else'],
+   }
 }
 
 export const taskResult = async (ctx: Context): Promise<StepResult> => {
@@ -123,7 +126,10 @@ export const taskResult = async (ctx: Context): Promise<StepResult> => {
 
    await WorkflowRunService.replaceItems(elseKey(ctx, ctx.node.id), no)
 
-   return passOn(ctx, yes, `${yes.length} yes, ${no.length} no.`)
+   return {
+      ...(await passOn(ctx, yes, `${yes.length} yes, ${no.length} no.`)),
+      emit: no.length > 0 ? ['main', 'else'] : ['main'],
+   }
 }
 
 export const retry = async (ctx: Context): Promise<StepResult> => {
@@ -133,5 +139,17 @@ export const retry = async (ctx: Context): Promise<StepResult> => {
       return failedSide(ctx, block, step.round, `${label} failed after ${step.tries + 1} tries.`)
    }
 
-   return passOn(ctx, ctx.inputs, step && step.tries > 0 ? `${label} worked on try ${step.tries + 1}.` : undefined)
+   return {
+      ...(await passOn(
+         ctx,
+         ctx.inputs,
+         step && step.tries > 0 ? `${label} worked on try ${step.tries + 1}.` : undefined
+      )),
+      emit: ['main'],
+   }
+}
+
+// Ends the run as failed with the owner's words. A preview ends here too, so the owner sees it.
+export const stop = (ctx: Context): Promise<StepResult> => {
+   throw new StepError(textIn(configOf(ctx.node), 'message') || STOP_MESSAGE, 'STOPPED_BY_BLOCK')
 }

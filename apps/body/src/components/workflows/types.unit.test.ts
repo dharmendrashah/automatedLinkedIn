@@ -42,4 +42,14 @@ describe('stepLabel', () => {
          })
       ).toBe('Waiting (try 3)')
    })
+
+   it('should call a step that never started skipped', () => {
+      expect(
+         stepLabel({
+            status: 'SKIPPED',
+            progress: null,
+            tries: 0,
+         })
+      ).toBe('Skipped')
+   })
 })

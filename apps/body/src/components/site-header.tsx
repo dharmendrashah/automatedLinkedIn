@@ -5,6 +5,7 @@ import { useLocation } from 'react-router'
 
 import { TakeoverBell } from './takeover/takeover-bell'
 import { ThemeMenu } from './theme-menu'
+import { RunAlerts } from './workflows/run-alerts'
 
 export const SiteHeader = () => {
    const { pathname } = useLocation()
@@ -16,6 +17,7 @@ export const SiteHeader = () => {
             <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
             <h1 className="text-base font-medium">{titleFor(pathname) ?? ''}</h1>
             <div className="ml-auto flex items-center gap-1">
+               <RunAlerts />
                <ThemeMenu />
                <TakeoverBell />
             </div>

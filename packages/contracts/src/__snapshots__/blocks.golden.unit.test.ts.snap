@@ -1,0 +1,2366 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`blocks before they became one definition > should keep the sets of blocks with a role 1`] = `
+{
+  "elseSources": [
+    "logic.if",
+    "logic.retry",
+    "logic.runWorkflow",
+    "logic.taskResult",
+  ],
+  "pool": [
+    "account.visitCompany",
+    "account.visitProfile",
+    "account.writePost",
+  ],
+  "takesAnything": [
+    "account.select",
+    "account.writePost",
+    "logic.retry",
+    "logic.runWorkflow",
+    "logic.stop",
+    "logic.taskResult",
+    "logic.wait",
+    "output.return",
+    "process.merge",
+  ],
+  "visit": [
+    "account.visitCompany",
+    "account.visitProfile",
+  ],
+}
+`;
+
+exports[`blocks before they became one definition > should keep what every block costs and passes on, and what a preview keeps of its size 1`] = `
+[
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "trigger.manual",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "trigger.schedule",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "trigger.api",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "trigger.workflow",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 5,
+    },
+    "preview": {
+      "howMany": 0,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 7,
+    },
+    "type": "input.posts",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 0,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 7,
+    },
+    "type": "input.profiles",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 5,
+    },
+    "preview": {
+      "howMany": 0,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 5,
+    },
+    "type": "input.companies",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 0,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "collect.findPosts",
+  },
+  {
+    "plain": {
+      "costMicros": 90000,
+      "items": 45,
+    },
+    "preview": {
+      "howMany": 0,
+    },
+    "sized": {
+      "costMicros": 126000,
+      "items": 63,
+    },
+    "type": "collect.postsOfPeople",
+  },
+  {
+    "plain": {
+      "costMicros": 90000,
+      "items": 45,
+    },
+    "preview": {
+      "howMany": 0,
+    },
+    "sized": {
+      "costMicros": 126000,
+      "items": 63,
+    },
+    "type": "collect.postsOfCompanies",
+  },
+  {
+    "plain": {
+      "costMicros": 360000,
+      "items": 180,
+    },
+    "preview": {
+      "howMany": 0,
+    },
+    "sized": {
+      "costMicros": 252000,
+      "items": 126,
+    },
+    "type": "collect.engagedPosts",
+  },
+  {
+    "plain": {
+      "costMicros": 1800000,
+      "items": 225,
+    },
+    "preview": {
+      "howMany": 20,
+    },
+    "sized": {
+      "costMicros": 1152000,
+      "items": 63,
+    },
+    "type": "collect.employees",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 0,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "collect.jobs",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 0,
+    },
+    "sized": {
+      "costMicros": 8000,
+      "items": 2,
+    },
+    "type": "collect.domainLookup",
+  },
+  {
+    "plain": {
+      "costMicros": 100000,
+      "items": 25,
+    },
+    "preview": {
+      "howMany": 20,
+    },
+    "sized": {
+      "costMicros": 100000,
+      "items": 7,
+    },
+    "type": "collect.searchPeople",
+  },
+  {
+    "plain": {
+      "costMicros": 900000,
+      "items": 450,
+    },
+    "preview": {
+      "howMany": 20,
+    },
+    "sized": {
+      "costMicros": 126000,
+      "items": 63,
+    },
+    "type": "collect.commenters",
+  },
+  {
+    "plain": {
+      "costMicros": 900000,
+      "items": 450,
+    },
+    "preview": {
+      "howMany": 20,
+    },
+    "sized": {
+      "costMicros": 126000,
+      "items": 63,
+    },
+    "type": "collect.reactors",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "process.dedupe",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "process.filter",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "process.topN",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "process.tag",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "process.merge",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "score.icp",
+  },
+  {
+    "plain": {
+      "costMicros": 36000,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 36000,
+      "items": 9,
+    },
+    "type": "collect.profile",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "logic.if",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "logic.else",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "logic.runWorkflow",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "logic.wait",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "logic.taskResult",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "logic.retry",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "logic.forEach",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "logic.stop",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.select",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.visitProfile",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.visitCompany",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.writePost",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "output.list",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "output.markPosts",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "output.csv",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "output.sendApi",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "output.return",
+  },
+]
+`;
+
+exports[`blocks before they became one definition > should keep what every template costs, what its preview is and what it says about itself 1`] = `
+[
+  {
+    "estimate": {
+      "nodes": {
+        "commenters": {
+          "costMicros": 500000,
+          "items": 250,
+        },
+        "dedupe": {
+          "costMicros": 0,
+          "items": 500,
+        },
+        "done": {
+          "costMicros": 0,
+          "items": 5,
+        },
+        "enrich": {
+          "costMicros": 2000000,
+          "items": 500,
+        },
+        "list": {
+          "costMicros": 0,
+          "items": 500,
+        },
+        "posts": {
+          "costMicros": 0,
+          "items": 5,
+        },
+        "reactors": {
+          "costMicros": 500000,
+          "items": 250,
+        },
+        "score": {
+          "costMicros": 0,
+          "items": 500,
+        },
+        "trigger": {
+          "costMicros": 0,
+          "items": 0,
+        },
+      },
+      "totalMicros": 3000000,
+    },
+    "goal": "engagers",
+    "preview": {
+      "edges": [
+        {
+          "from": "trigger",
+          "to": "posts",
+        },
+        {
+          "from": "posts",
+          "to": "done",
+        },
+        {
+          "from": "posts",
+          "to": "commenters",
+        },
+        {
+          "from": "posts",
+          "to": "reactors",
+        },
+        {
+          "from": "commenters",
+          "to": "dedupe",
+        },
+        {
+          "from": "reactors",
+          "to": "dedupe",
+        },
+        {
+          "from": "dedupe",
+          "to": "score",
+        },
+        {
+          "from": "score",
+          "to": "enrich",
+        },
+        {
+          "from": "enrich",
+          "to": "list",
+        },
+      ],
+      "nodes": [
+        {
+          "config": {},
+          "id": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0,
+          },
+          "type": "trigger.manual",
+        },
+        {
+          "config": {
+            "howMany": 1,
+          },
+          "id": "posts",
+          "position": {
+            "x": 0,
+            "y": 140,
+          },
+          "type": "input.posts",
+        },
+        {
+          "config": {},
+          "id": "done",
+          "position": {
+            "x": 560,
+            "y": 280,
+          },
+          "type": "output.markPosts",
+        },
+        {
+          "config": {
+            "howMany": 20,
+          },
+          "id": "commenters",
+          "position": {
+            "x": 0,
+            "y": 420,
+          },
+          "type": "collect.commenters",
+        },
+        {
+          "config": {
+            "howMany": 20,
+          },
+          "id": "reactors",
+          "position": {
+            "x": 280,
+            "y": 420,
+          },
+          "type": "collect.reactors",
+        },
+        {
+          "config": {},
+          "id": "dedupe",
+          "position": {
+            "x": 0,
+            "y": 560,
+          },
+          "type": "process.dedupe",
+        },
+        {
+          "config": {
+            "icpId": "icp1",
+          },
+          "id": "score",
+          "position": {
+            "x": 0,
+            "y": 700,
+          },
+          "type": "score.icp",
+        },
+        {
+          "config": {},
+          "id": "enrich",
+          "position": {
+            "x": 0,
+            "y": 840,
+          },
+          "type": "collect.profile",
+        },
+        {
+          "config": {},
+          "id": "list",
+          "position": {
+            "x": 0,
+            "y": 980,
+          },
+          "type": "output.list",
+        },
+      ],
+    },
+    "problems": [],
+  },
+  {
+    "estimate": {
+      "nodes": {
+        "commenters": {
+          "costMicros": 500000,
+          "items": 250,
+        },
+        "dedupe": {
+          "costMicros": 0,
+          "items": 500,
+        },
+        "enrich": {
+          "costMicros": 2000000,
+          "items": 500,
+        },
+        "list": {
+          "costMicros": 0,
+          "items": 500,
+        },
+        "posts": {
+          "costMicros": 10000,
+          "items": 5,
+        },
+        "reactors": {
+          "costMicros": 500000,
+          "items": 250,
+        },
+        "score": {
+          "costMicros": 0,
+          "items": 500,
+        },
+        "trigger": {
+          "costMicros": 0,
+          "items": 0,
+        },
+      },
+      "totalMicros": 3010000,
+    },
+    "goal": "problem",
+    "preview": {
+      "edges": [
+        {
+          "from": "trigger",
+          "to": "posts",
+        },
+        {
+          "from": "posts",
+          "to": "commenters",
+        },
+        {
+          "from": "posts",
+          "to": "reactors",
+        },
+        {
+          "from": "commenters",
+          "to": "dedupe",
+        },
+        {
+          "from": "reactors",
+          "to": "dedupe",
+        },
+        {
+          "from": "dedupe",
+          "to": "score",
+        },
+        {
+          "from": "score",
+          "to": "enrich",
+        },
+        {
+          "from": "enrich",
+          "to": "list",
+        },
+      ],
+      "nodes": [
+        {
+          "config": {},
+          "id": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0,
+          },
+          "type": "trigger.manual",
+        },
+        {
+          "config": {
+            "howMany": 1,
+            "keywords": "sales",
+          },
+          "id": "posts",
+          "position": {
+            "x": 0,
+            "y": 140,
+          },
+          "type": "collect.findPosts",
+        },
+        {
+          "config": {
+            "howMany": 20,
+          },
+          "id": "commenters",
+          "position": {
+            "x": 0,
+            "y": 280,
+          },
+          "type": "collect.commenters",
+        },
+        {
+          "config": {
+            "howMany": 20,
+          },
+          "id": "reactors",
+          "position": {
+            "x": 280,
+            "y": 280,
+          },
+          "type": "collect.reactors",
+        },
+        {
+          "config": {},
+          "id": "dedupe",
+          "position": {
+            "x": 0,
+            "y": 420,
+          },
+          "type": "process.dedupe",
+        },
+        {
+          "config": {
+            "icpId": "icp1",
+          },
+          "id": "score",
+          "position": {
+            "x": 0,
+            "y": 560,
+          },
+          "type": "score.icp",
+        },
+        {
+          "config": {},
+          "id": "enrich",
+          "position": {
+            "x": 0,
+            "y": 700,
+          },
+          "type": "collect.profile",
+        },
+        {
+          "config": {},
+          "id": "list",
+          "position": {
+            "x": 0,
+            "y": 840,
+          },
+          "type": "output.list",
+        },
+      ],
+    },
+    "problems": [],
+  },
+  {
+    "estimate": {
+      "nodes": {
+        "companies": {
+          "costMicros": 0,
+          "items": 5,
+        },
+        "dedupe": {
+          "costMicros": 0,
+          "items": 250,
+        },
+        "employees": {
+          "costMicros": 2000000,
+          "items": 250,
+        },
+        "list": {
+          "costMicros": 0,
+          "items": 250,
+        },
+        "score": {
+          "costMicros": 0,
+          "items": 250,
+        },
+        "trigger": {
+          "costMicros": 0,
+          "items": 0,
+        },
+      },
+      "totalMicros": 2000000,
+    },
+    "goal": "accounts",
+    "preview": {
+      "edges": [
+        {
+          "from": "trigger",
+          "to": "companies",
+        },
+        {
+          "from": "companies",
+          "to": "employees",
+        },
+        {
+          "from": "employees",
+          "to": "dedupe",
+        },
+        {
+          "from": "dedupe",
+          "to": "score",
+        },
+        {
+          "from": "score",
+          "to": "list",
+        },
+      ],
+      "nodes": [
+        {
+          "config": {},
+          "id": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0,
+          },
+          "type": "trigger.manual",
+        },
+        {
+          "config": {
+            "howMany": 1,
+          },
+          "id": "companies",
+          "position": {
+            "x": 0,
+            "y": 140,
+          },
+          "type": "input.companies",
+        },
+        {
+          "config": {
+            "howMany": 20,
+            "seniority": [
+              "220",
+              "300",
+              "310",
+              "320",
+            ],
+            "titles": [
+              "founder",
+            ],
+          },
+          "id": "employees",
+          "position": {
+            "x": 0,
+            "y": 280,
+          },
+          "type": "collect.employees",
+        },
+        {
+          "config": {},
+          "id": "dedupe",
+          "position": {
+            "x": 0,
+            "y": 420,
+          },
+          "type": "process.dedupe",
+        },
+        {
+          "config": {
+            "icpId": "icp1",
+          },
+          "id": "score",
+          "position": {
+            "x": 0,
+            "y": 560,
+          },
+          "type": "score.icp",
+        },
+        {
+          "config": {},
+          "id": "list",
+          "position": {
+            "x": 0,
+            "y": 700,
+          },
+          "type": "output.list",
+        },
+      ],
+    },
+    "problems": [],
+  },
+  {
+    "estimate": {
+      "nodes": {
+        "commenters": {
+          "costMicros": 1000000,
+          "items": 500,
+        },
+        "customer": {
+          "costMicros": 0,
+          "items": 1,
+        },
+        "dedupe": {
+          "costMicros": 0,
+          "items": 1000,
+        },
+        "enrich": {
+          "costMicros": 4000000,
+          "items": 1000,
+        },
+        "list": {
+          "costMicros": 0,
+          "items": 1000,
+        },
+        "posts": {
+          "costMicros": 20000,
+          "items": 10,
+        },
+        "reactors": {
+          "costMicros": 1000000,
+          "items": 500,
+        },
+        "score": {
+          "costMicros": 0,
+          "items": 1000,
+        },
+        "trigger": {
+          "costMicros": 0,
+          "items": 0,
+        },
+      },
+      "totalMicros": 6020000,
+    },
+    "goal": "lookalikes",
+    "preview": {
+      "edges": [
+        {
+          "from": "trigger",
+          "to": "customer",
+        },
+        {
+          "from": "customer",
+          "to": "posts",
+        },
+        {
+          "from": "posts",
+          "to": "commenters",
+        },
+        {
+          "from": "posts",
+          "to": "reactors",
+        },
+        {
+          "from": "commenters",
+          "to": "dedupe",
+        },
+        {
+          "from": "reactors",
+          "to": "dedupe",
+        },
+        {
+          "from": "dedupe",
+          "to": "score",
+        },
+        {
+          "from": "score",
+          "to": "enrich",
+        },
+        {
+          "from": "enrich",
+          "to": "list",
+        },
+      ],
+      "nodes": [
+        {
+          "config": {},
+          "id": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0,
+          },
+          "type": "trigger.manual",
+        },
+        {
+          "config": {
+            "howMany": 1,
+            "links": [
+              "https://www.linkedin.com/in/ada",
+            ],
+          },
+          "id": "customer",
+          "position": {
+            "x": 0,
+            "y": 140,
+          },
+          "type": "input.profiles",
+        },
+        {
+          "config": {
+            "howMany": 1,
+          },
+          "id": "posts",
+          "position": {
+            "x": 0,
+            "y": 280,
+          },
+          "type": "collect.engagedPosts",
+        },
+        {
+          "config": {
+            "howMany": 20,
+          },
+          "id": "commenters",
+          "position": {
+            "x": 0,
+            "y": 420,
+          },
+          "type": "collect.commenters",
+        },
+        {
+          "config": {
+            "howMany": 20,
+          },
+          "id": "reactors",
+          "position": {
+            "x": 280,
+            "y": 420,
+          },
+          "type": "collect.reactors",
+        },
+        {
+          "config": {},
+          "id": "dedupe",
+          "position": {
+            "x": 0,
+            "y": 560,
+          },
+          "type": "process.dedupe",
+        },
+        {
+          "config": {
+            "icpId": "icp1",
+          },
+          "id": "score",
+          "position": {
+            "x": 0,
+            "y": 700,
+          },
+          "type": "score.icp",
+        },
+        {
+          "config": {},
+          "id": "enrich",
+          "position": {
+            "x": 0,
+            "y": 840,
+          },
+          "type": "collect.profile",
+        },
+        {
+          "config": {},
+          "id": "list",
+          "position": {
+            "x": 0,
+            "y": 980,
+          },
+          "type": "output.list",
+        },
+      ],
+    },
+    "problems": [],
+  },
+  {
+    "estimate": {
+      "nodes": {
+        "commenters": {
+          "costMicros": 1500000,
+          "items": 750,
+        },
+        "dedupe": {
+          "costMicros": 0,
+          "items": 1500,
+        },
+        "enrich": {
+          "costMicros": 6000000,
+          "items": 1500,
+        },
+        "list": {
+          "costMicros": 0,
+          "items": 1500,
+        },
+        "people": {
+          "costMicros": 0,
+          "items": 5,
+        },
+        "posts": {
+          "costMicros": 30000,
+          "items": 15,
+        },
+        "reactors": {
+          "costMicros": 1500000,
+          "items": 750,
+        },
+        "score": {
+          "costMicros": 0,
+          "items": 1500,
+        },
+        "trigger": {
+          "costMicros": 0,
+          "items": 0,
+        },
+      },
+      "totalMicros": 9030000,
+    },
+    "goal": "watch",
+    "preview": {
+      "edges": [
+        {
+          "from": "trigger",
+          "to": "people",
+        },
+        {
+          "from": "people",
+          "to": "posts",
+        },
+        {
+          "from": "posts",
+          "to": "commenters",
+        },
+        {
+          "from": "posts",
+          "to": "reactors",
+        },
+        {
+          "from": "commenters",
+          "to": "dedupe",
+        },
+        {
+          "from": "reactors",
+          "to": "dedupe",
+        },
+        {
+          "from": "dedupe",
+          "to": "score",
+        },
+        {
+          "from": "score",
+          "to": "enrich",
+        },
+        {
+          "from": "enrich",
+          "to": "list",
+        },
+      ],
+      "nodes": [
+        {
+          "config": {
+            "every": "week",
+            "timeZone": "UTC",
+          },
+          "id": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0,
+          },
+          "type": "trigger.schedule",
+        },
+        {
+          "config": {
+            "howMany": 1,
+          },
+          "id": "people",
+          "position": {
+            "x": 0,
+            "y": 140,
+          },
+          "type": "input.profiles",
+        },
+        {
+          "config": {
+            "howMany": 1,
+          },
+          "id": "posts",
+          "position": {
+            "x": 0,
+            "y": 280,
+          },
+          "type": "collect.postsOfPeople",
+        },
+        {
+          "config": {
+            "howMany": 20,
+          },
+          "id": "commenters",
+          "position": {
+            "x": 0,
+            "y": 420,
+          },
+          "type": "collect.commenters",
+        },
+        {
+          "config": {
+            "howMany": 20,
+          },
+          "id": "reactors",
+          "position": {
+            "x": 280,
+            "y": 420,
+          },
+          "type": "collect.reactors",
+        },
+        {
+          "config": {},
+          "id": "dedupe",
+          "position": {
+            "x": 0,
+            "y": 560,
+          },
+          "type": "process.dedupe",
+        },
+        {
+          "config": {
+            "icpId": "icp1",
+          },
+          "id": "score",
+          "position": {
+            "x": 0,
+            "y": 700,
+          },
+          "type": "score.icp",
+        },
+        {
+          "config": {},
+          "id": "enrich",
+          "position": {
+            "x": 0,
+            "y": 840,
+          },
+          "type": "collect.profile",
+        },
+        {
+          "config": {},
+          "id": "list",
+          "position": {
+            "x": 0,
+            "y": 980,
+          },
+          "type": "output.list",
+        },
+      ],
+    },
+    "problems": [],
+  },
+  {
+    "estimate": {
+      "nodes": {
+        "dedupe": {
+          "costMicros": 0,
+          "items": 50,
+        },
+        "list": {
+          "costMicros": 0,
+          "items": 50,
+        },
+        "score": {
+          "costMicros": 0,
+          "items": 50,
+        },
+        "search": {
+          "costMicros": 200000,
+          "items": 50,
+        },
+        "trigger": {
+          "costMicros": 0,
+          "items": 0,
+        },
+      },
+      "totalMicros": 200000,
+    },
+    "goal": "decisionMakers",
+    "preview": {
+      "edges": [
+        {
+          "from": "trigger",
+          "to": "search",
+        },
+        {
+          "from": "search",
+          "to": "dedupe",
+        },
+        {
+          "from": "dedupe",
+          "to": "score",
+        },
+        {
+          "from": "score",
+          "to": "list",
+        },
+      ],
+      "nodes": [
+        {
+          "config": {},
+          "id": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0,
+          },
+          "type": "trigger.manual",
+        },
+        {
+          "config": {
+            "howMany": 20,
+            "seniority": [
+              "220",
+              "300",
+              "310",
+              "320",
+            ],
+          },
+          "id": "search",
+          "position": {
+            "x": 0,
+            "y": 140,
+          },
+          "type": "collect.searchPeople",
+        },
+        {
+          "config": {},
+          "id": "dedupe",
+          "position": {
+            "x": 0,
+            "y": 280,
+          },
+          "type": "process.dedupe",
+        },
+        {
+          "config": {
+            "icpId": "icp1",
+          },
+          "id": "score",
+          "position": {
+            "x": 0,
+            "y": 420,
+          },
+          "type": "score.icp",
+        },
+        {
+          "config": {},
+          "id": "list",
+          "position": {
+            "x": 0,
+            "y": 560,
+          },
+          "type": "output.list",
+        },
+      ],
+    },
+    "problems": [],
+  },
+  {
+    "estimate": {
+      "nodes": {
+        "companies": {
+          "costMicros": 0,
+          "items": 5,
+        },
+        "dedupe": {
+          "costMicros": 0,
+          "items": 125,
+        },
+        "employees": {
+          "costMicros": 1000000,
+          "items": 125,
+        },
+        "jobs": {
+          "costMicros": 25000,
+          "items": 5,
+        },
+        "list": {
+          "costMicros": 0,
+          "items": 125,
+        },
+        "score": {
+          "costMicros": 0,
+          "items": 125,
+        },
+        "trigger": {
+          "costMicros": 0,
+          "items": 0,
+        },
+      },
+      "totalMicros": 1025000,
+    },
+    "goal": "hiring",
+    "preview": {
+      "edges": [
+        {
+          "from": "trigger",
+          "to": "companies",
+        },
+        {
+          "from": "companies",
+          "to": "jobs",
+        },
+        {
+          "from": "jobs",
+          "to": "employees",
+        },
+        {
+          "from": "employees",
+          "to": "dedupe",
+        },
+        {
+          "from": "dedupe",
+          "to": "score",
+        },
+        {
+          "from": "score",
+          "to": "list",
+        },
+      ],
+      "nodes": [
+        {
+          "config": {},
+          "id": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0,
+          },
+          "type": "trigger.manual",
+        },
+        {
+          "config": {
+            "howMany": 1,
+          },
+          "id": "companies",
+          "position": {
+            "x": 0,
+            "y": 140,
+          },
+          "type": "input.companies",
+        },
+        {
+          "config": {
+            "howMany": 10,
+            "jobTitle": "engineer",
+          },
+          "id": "jobs",
+          "position": {
+            "x": 0,
+            "y": 280,
+          },
+          "type": "collect.jobs",
+        },
+        {
+          "config": {
+            "howMany": 20,
+            "seniority": [
+              "220",
+              "300",
+              "310",
+              "320",
+            ],
+          },
+          "id": "employees",
+          "position": {
+            "x": 0,
+            "y": 420,
+          },
+          "type": "collect.employees",
+        },
+        {
+          "config": {},
+          "id": "dedupe",
+          "position": {
+            "x": 0,
+            "y": 560,
+          },
+          "type": "process.dedupe",
+        },
+        {
+          "config": {
+            "icpId": "icp1",
+          },
+          "id": "score",
+          "position": {
+            "x": 0,
+            "y": 700,
+          },
+          "type": "score.icp",
+        },
+        {
+          "config": {},
+          "id": "list",
+          "position": {
+            "x": 0,
+            "y": 840,
+          },
+          "type": "output.list",
+        },
+      ],
+    },
+    "problems": [],
+  },
+  {
+    "estimate": {
+      "nodes": {
+        "csv": {
+          "costMicros": 0,
+          "items": 20,
+        },
+        "dedupe": {
+          "costMicros": 0,
+          "items": 20,
+        },
+        "employees": {
+          "costMicros": 280000,
+          "items": 20,
+        },
+        "list": {
+          "costMicros": 0,
+          "items": 20,
+        },
+        "score": {
+          "costMicros": 0,
+          "items": 20,
+        },
+        "sites": {
+          "costMicros": 8000,
+          "items": 2,
+        },
+        "trigger": {
+          "costMicros": 0,
+          "items": 0,
+        },
+      },
+      "totalMicros": 288000,
+    },
+    "goal": "websites",
+    "preview": {
+      "edges": [
+        {
+          "from": "trigger",
+          "to": "sites",
+        },
+        {
+          "from": "sites",
+          "to": "employees",
+        },
+        {
+          "from": "employees",
+          "to": "dedupe",
+        },
+        {
+          "from": "dedupe",
+          "to": "score",
+        },
+        {
+          "from": "score",
+          "to": "list",
+        },
+        {
+          "from": "list",
+          "to": "csv",
+        },
+      ],
+      "nodes": [
+        {
+          "config": {},
+          "id": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0,
+          },
+          "type": "trigger.manual",
+        },
+        {
+          "config": {
+            "domains": [
+              "a.com",
+              "b.com",
+            ],
+            "howMany": 1,
+          },
+          "id": "sites",
+          "position": {
+            "x": 0,
+            "y": 140,
+          },
+          "type": "collect.domainLookup",
+        },
+        {
+          "config": {
+            "howMany": 10,
+            "seniority": [
+              "220",
+              "300",
+              "310",
+              "320",
+            ],
+          },
+          "id": "employees",
+          "position": {
+            "x": 0,
+            "y": 280,
+          },
+          "type": "collect.employees",
+        },
+        {
+          "config": {},
+          "id": "dedupe",
+          "position": {
+            "x": 0,
+            "y": 420,
+          },
+          "type": "process.dedupe",
+        },
+        {
+          "config": {
+            "icpId": "icp1",
+          },
+          "id": "score",
+          "position": {
+            "x": 0,
+            "y": 560,
+          },
+          "type": "score.icp",
+        },
+        {
+          "config": {},
+          "id": "list",
+          "position": {
+            "x": 0,
+            "y": 700,
+          },
+          "type": "output.list",
+        },
+        {
+          "config": {},
+          "id": "csv",
+          "position": {
+            "x": 0,
+            "y": 840,
+          },
+          "type": "output.csv",
+        },
+      ],
+    },
+    "problems": [],
+  },
+  {
+    "estimate": {
+      "nodes": {
+        "commenters": {
+          "costMicros": 500000,
+          "items": 250,
+        },
+        "competitor": {
+          "costMicros": 0,
+          "items": 1,
+        },
+        "dedupe": {
+          "costMicros": 0,
+          "items": 500,
+        },
+        "enrich": {
+          "costMicros": 2000000,
+          "items": 500,
+        },
+        "list": {
+          "costMicros": 0,
+          "items": 500,
+        },
+        "posts": {
+          "costMicros": 10000,
+          "items": 5,
+        },
+        "reactors": {
+          "costMicros": 500000,
+          "items": 250,
+        },
+        "score": {
+          "costMicros": 0,
+          "items": 500,
+        },
+        "trigger": {
+          "costMicros": 0,
+          "items": 0,
+        },
+      },
+      "totalMicros": 3010000,
+    },
+    "goal": "competitor",
+    "preview": {
+      "edges": [
+        {
+          "from": "trigger",
+          "to": "competitor",
+        },
+        {
+          "from": "competitor",
+          "to": "posts",
+        },
+        {
+          "from": "posts",
+          "to": "commenters",
+        },
+        {
+          "from": "posts",
+          "to": "reactors",
+        },
+        {
+          "from": "commenters",
+          "to": "dedupe",
+        },
+        {
+          "from": "reactors",
+          "to": "dedupe",
+        },
+        {
+          "from": "dedupe",
+          "to": "score",
+        },
+        {
+          "from": "score",
+          "to": "enrich",
+        },
+        {
+          "from": "enrich",
+          "to": "list",
+        },
+      ],
+      "nodes": [
+        {
+          "config": {},
+          "id": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0,
+          },
+          "type": "trigger.manual",
+        },
+        {
+          "config": {
+            "howMany": 1,
+          },
+          "id": "competitor",
+          "position": {
+            "x": 0,
+            "y": 140,
+          },
+          "type": "input.companies",
+        },
+        {
+          "config": {
+            "howMany": 1,
+          },
+          "id": "posts",
+          "position": {
+            "x": 0,
+            "y": 280,
+          },
+          "type": "collect.postsOfCompanies",
+        },
+        {
+          "config": {
+            "howMany": 20,
+          },
+          "id": "commenters",
+          "position": {
+            "x": 0,
+            "y": 420,
+          },
+          "type": "collect.commenters",
+        },
+        {
+          "config": {
+            "howMany": 20,
+          },
+          "id": "reactors",
+          "position": {
+            "x": 280,
+            "y": 420,
+          },
+          "type": "collect.reactors",
+        },
+        {
+          "config": {},
+          "id": "dedupe",
+          "position": {
+            "x": 0,
+            "y": 560,
+          },
+          "type": "process.dedupe",
+        },
+        {
+          "config": {
+            "icpId": "icp1",
+          },
+          "id": "score",
+          "position": {
+            "x": 0,
+            "y": 700,
+          },
+          "type": "score.icp",
+        },
+        {
+          "config": {},
+          "id": "enrich",
+          "position": {
+            "x": 0,
+            "y": 840,
+          },
+          "type": "collect.profile",
+        },
+        {
+          "config": {},
+          "id": "list",
+          "position": {
+            "x": 0,
+            "y": 980,
+          },
+          "type": "output.list",
+        },
+      ],
+    },
+    "problems": [],
+  },
+  {
+    "estimate": {
+      "nodes": {
+        "dedupe": {
+          "costMicros": 0,
+          "items": 25,
+        },
+        "list": {
+          "costMicros": 0,
+          "items": 25,
+        },
+        "score": {
+          "costMicros": 0,
+          "items": 25,
+        },
+        "search": {
+          "costMicros": 100000,
+          "items": 25,
+        },
+        "send": {
+          "costMicros": 0,
+          "items": 25,
+        },
+        "trigger": {
+          "costMicros": 0,
+          "items": 0,
+        },
+      },
+      "totalMicros": 100000,
+    },
+    "goal": "newInJob",
+    "preview": {
+      "edges": [
+        {
+          "from": "trigger",
+          "to": "search",
+        },
+        {
+          "from": "search",
+          "to": "dedupe",
+        },
+        {
+          "from": "dedupe",
+          "to": "score",
+        },
+        {
+          "from": "score",
+          "to": "list",
+        },
+        {
+          "from": "list",
+          "to": "send",
+        },
+      ],
+      "nodes": [
+        {
+          "config": {
+            "every": "week",
+            "timeZone": "UTC",
+          },
+          "id": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0,
+          },
+          "type": "trigger.schedule",
+        },
+        {
+          "config": {
+            "changedJobs": true,
+            "howMany": 20,
+            "seniority": [
+              "220",
+              "300",
+              "310",
+              "320",
+            ],
+          },
+          "id": "search",
+          "position": {
+            "x": 0,
+            "y": 140,
+          },
+          "type": "collect.searchPeople",
+        },
+        {
+          "config": {},
+          "id": "dedupe",
+          "position": {
+            "x": 0,
+            "y": 280,
+          },
+          "type": "process.dedupe",
+        },
+        {
+          "config": {
+            "icpId": "icp1",
+          },
+          "id": "score",
+          "position": {
+            "x": 0,
+            "y": 420,
+          },
+          "type": "score.icp",
+        },
+        {
+          "config": {},
+          "id": "list",
+          "position": {
+            "x": 0,
+            "y": 560,
+          },
+          "type": "output.list",
+        },
+        {
+          "config": {},
+          "id": "send",
+          "position": {
+            "x": 0,
+            "y": 700,
+          },
+          "type": "output.sendApi",
+        },
+      ],
+    },
+    "problems": [
+      {
+        "level": "error",
+        "message": "Send via API: url invalid input: expected string, received undefined",
+        "nodeId": "send",
+      },
+    ],
+  },
+  {
+    "estimate": {
+      "nodes": {
+        "competitor": {
+          "costMicros": 0,
+          "items": 1,
+        },
+        "dedupe": {
+          "costMicros": 0,
+          "items": 500,
+        },
+        "enrich": {
+          "costMicros": 2000000,
+          "items": 500,
+        },
+        "list": {
+          "costMicros": 0,
+          "items": 500,
+        },
+        "merge": {
+          "costMicros": 0,
+          "items": 500,
+        },
+        "mine": {
+          "costMicros": 500000,
+          "items": 250,
+        },
+        "posts": {
+          "costMicros": 0,
+          "items": 5,
+        },
+        "score": {
+          "costMicros": 0,
+          "items": 500,
+        },
+        "theirPosts": {
+          "costMicros": 10000,
+          "items": 5,
+        },
+        "theirs": {
+          "costMicros": 500000,
+          "items": 250,
+        },
+        "trigger": {
+          "costMicros": 0,
+          "items": 0,
+        },
+      },
+      "totalMicros": 3010000,
+    },
+    "goal": "sharedAudience",
+    "preview": {
+      "edges": [
+        {
+          "from": "trigger",
+          "to": "posts",
+        },
+        {
+          "from": "trigger",
+          "to": "competitor",
+        },
+        {
+          "from": "posts",
+          "to": "mine",
+        },
+        {
+          "from": "competitor",
+          "to": "theirPosts",
+        },
+        {
+          "from": "theirPosts",
+          "to": "theirs",
+        },
+        {
+          "from": "mine",
+          "to": "merge",
+        },
+        {
+          "from": "theirs",
+          "to": "merge",
+        },
+        {
+          "from": "merge",
+          "to": "dedupe",
+        },
+        {
+          "from": "dedupe",
+          "to": "score",
+        },
+        {
+          "from": "score",
+          "to": "enrich",
+        },
+        {
+          "from": "enrich",
+          "to": "list",
+        },
+      ],
+      "nodes": [
+        {
+          "config": {},
+          "id": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0,
+          },
+          "type": "trigger.manual",
+        },
+        {
+          "config": {
+            "howMany": 1,
+          },
+          "id": "posts",
+          "position": {
+            "x": 0,
+            "y": 140,
+          },
+          "type": "input.posts",
+        },
+        {
+          "config": {
+            "howMany": 1,
+          },
+          "id": "competitor",
+          "position": {
+            "x": 280,
+            "y": 140,
+          },
+          "type": "input.companies",
+        },
+        {
+          "config": {
+            "howMany": 1,
+          },
+          "id": "theirPosts",
+          "position": {
+            "x": 280,
+            "y": 280,
+          },
+          "type": "collect.postsOfCompanies",
+        },
+        {
+          "config": {
+            "howMany": 20,
+          },
+          "id": "mine",
+          "position": {
+            "x": 0,
+            "y": 280,
+          },
+          "type": "collect.commenters",
+        },
+        {
+          "config": {
+            "howMany": 20,
+          },
+          "id": "theirs",
+          "position": {
+            "x": 280,
+            "y": 420,
+          },
+          "type": "collect.commenters",
+        },
+        {
+          "config": {
+            "mode": "every",
+          },
+          "id": "merge",
+          "position": {
+            "x": 0,
+            "y": 560,
+          },
+          "type": "process.merge",
+        },
+        {
+          "config": {},
+          "id": "dedupe",
+          "position": {
+            "x": 0,
+            "y": 700,
+          },
+          "type": "process.dedupe",
+        },
+        {
+          "config": {
+            "icpId": "icp1",
+          },
+          "id": "score",
+          "position": {
+            "x": 0,
+            "y": 840,
+          },
+          "type": "score.icp",
+        },
+        {
+          "config": {},
+          "id": "enrich",
+          "position": {
+            "x": 0,
+            "y": 980,
+          },
+          "type": "collect.profile",
+        },
+        {
+          "config": {},
+          "id": "list",
+          "position": {
+            "x": 0,
+            "y": 1120,
+          },
+          "type": "output.list",
+        },
+      ],
+    },
+    "problems": [],
+  },
+]
+`;

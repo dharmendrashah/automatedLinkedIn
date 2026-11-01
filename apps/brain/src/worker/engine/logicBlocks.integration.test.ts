@@ -344,7 +344,7 @@ describe('Wait, Task result and Retry (database)', () => {
       expect(await slugsAt(runId, 'csv')).toEqual([])
    })
 
-   it('should end a long wait at once when the owner stops the run, and finish the run as stopped', async () => {
+   it('should end a long wait at once when the owner stops the run, skip what comes after it, and finish the run as stopped', async () => {
       const runId = await start({
          nodes: [
             node('people', 'input.profiles', { links: [profile('ada')] }),
@@ -365,7 +365,27 @@ describe('Wait, Task result and Retry (database)', () => {
       await advanceRun(runId, deps())
 
       expect(await statusOf(runId)).toBe('STOPPED')
-      expect(await slugsAt(runId, 'csv')).toEqual(['ada'])
+      expect(await slugsAt(runId, 'csv')).toEqual([])
+      expect(
+         (
+            await PrismaService.client.workflowStepRun.findFirst({
+               where: {
+                  runId,
+                  nodeId: 'pause',
+               },
+            })
+         )?.status
+      ).toBe('DONE')
+      expect(
+         (
+            await PrismaService.client.workflowStepRun.findFirst({
+               where: {
+                  runId,
+                  nodeId: 'csv',
+               },
+            })
+         )?.status
+      ).toBe('SKIPPED')
    })
 
    it('should keep the items of a run that is still waiting past 14 days, and delete them once it ended', async () => {

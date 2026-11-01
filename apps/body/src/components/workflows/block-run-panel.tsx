@@ -25,6 +25,7 @@ const STATE_TEXT = {
    done: 'Done',
    gaps: 'Done with gaps',
    failed: 'Failed',
+   skipped: 'Skipped',
 } as const
 
 const STATE_TONE = {
@@ -34,6 +35,7 @@ const STATE_TONE = {
    done: 'bg-success/10 text-success',
    gaps: 'bg-warning/10 text-warning',
    failed: 'bg-destructive/10 text-destructive',
+   skipped: 'bg-muted text-muted-foreground',
 } as const
 
 // One line about the block in the last run: its state, how much went in and out, what it cost.
@@ -43,7 +45,10 @@ export const RunStrip = ({ blockRun }: { blockRun: BlockRun }) => {
    const notRun = state === 'never' && blockRun.addedAfter ? 'Added after the last run' : STATE_TEXT[state]
    const parts = [
       held ?? notRun,
-      step && state !== 'never' && state !== 'waiting' ? `${step.itemsIn} in, ${step.itemsOut} out` : null,
+      step && state === 'skipped' ? step.message : null,
+      step && state !== 'never' && state !== 'waiting' && state !== 'skipped'
+         ? `${step.itemsIn} in, ${step.itemsOut} out`
+         : null,
       step && step.costMicros > 0 ? formatUsd(step.costMicros) : null,
       step && step.tries > 0 ? `try ${step.tries + 1}` : null,
    ].filter(Boolean)

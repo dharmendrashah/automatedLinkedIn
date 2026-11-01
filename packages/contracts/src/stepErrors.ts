@@ -15,12 +15,14 @@ export const STEP_ERROR_CODES = [
    'POST_FAILED',
    'CHILD_START_FAILED',
    'CHILD_ENDED',
+   'STOPPED_BY_BLOCK',
    'DATA_NOT_CONFIGURED',
    'DATA_REJECTED',
    'DATA_UNAVAILABLE',
    'WALLET_LOW',
    'SERVICE_BUSY',
    'RUN_UNREADABLE',
+   'RUN_STUCK',
    'UNEXPECTED',
    'UNKNOWN',
 ] as const
@@ -165,6 +167,17 @@ const ADVICE: Record<StepErrorCode, Entry> = {
          { text: 'Add a Task result after this block to handle a "no".' },
       ],
    },
+   STOPPED_BY_BLOCK: {
+      title: 'The workflow was stopped on purpose',
+      why: ['A "Stop with an error" block ended the run with the message written in it.'],
+      fixes: [
+         {
+            text: 'Open the block to change its message, or take it out.',
+            action: 'settings',
+         },
+         { text: 'Look at the block before it to see why the run reached this point.' },
+      ],
+   },
    DATA_NOT_CONFIGURED: {
       title: 'Collecting data is not available right now',
       why: ['The platform has no working connection to its data service at the moment.'],
@@ -210,6 +223,11 @@ const ADVICE: Record<StepErrorCode, Entry> = {
          { text: 'Add a Retry block right after this one so it tries again by itself.' },
          { text: 'Or run again later. What was found so far is kept.' },
       ],
+   },
+   RUN_STUCK: {
+      title: 'The run stopped moving',
+      why: ['Nothing in this run started, finished or was waiting for something for a long time, so it was ended.'],
+      fixes: [{ text: 'Run the workflow again. If it happens again, tell support.' }],
    },
    RUN_UNREADABLE: {
       title: 'The run could not be read',

@@ -14,7 +14,7 @@ type Progress = {
 
 type Step = {
    type: string
-   status: 'WAITING' | 'RUNNING' | 'DONE' | 'PARTIAL' | 'FAILED'
+   status: 'WAITING' | 'RUNNING' | 'DONE' | 'PARTIAL' | 'FAILED' | 'SKIPPED'
    message: string | null
    itemsOut: number
    progress: Progress | null
@@ -23,7 +23,7 @@ type Step = {
 }
 
 type Run = {
-   status: 'RUNNING' | 'SUCCEEDED' | 'PARTIAL' | 'FAILED' | 'STOPPED'
+   status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'PARTIAL' | 'FAILED' | 'STOPPED'
    stopRequestedAt: string | null
    costMicros: number
    estimateMicros: number
@@ -97,7 +97,14 @@ const live = (run: Run, labelOf: (type: string) => string, now: Date) => {
    return [`Running: ${working.join(', ') || 'starting'}${progress}.`, retry, spent].filter(Boolean).join(' ')
 }
 
+// A run that has not ended: going, or waiting for the run before it.
+export const isLive = (status: Run['status'] | undefined) => status === 'RUNNING' || status === 'QUEUED'
+
 export const runSentence = (run: Run, labelOf: (type: string) => string, now: Date = new Date()) => {
+   if (run.status === 'QUEUED') {
+      return 'Waiting for the run before it to finish. It starts by itself.'
+   }
+
    if (run.status === 'RUNNING') {
       return live(run, labelOf, now)
    }

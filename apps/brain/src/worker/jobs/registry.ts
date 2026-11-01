@@ -16,6 +16,7 @@ import { retention } from './retention'
 import { taskDispatch } from './taskDispatch'
 import { dataWallet, workflowEngine } from './workflowEngine'
 import { workflowSchedule } from './workflowSchedule'
+import { workflowWatchdog } from './workflowWatchdog'
 
 // Every scheduled job the worker runs. Adding one is a file in this folder and one line here.
 export const JOBS = unique('job', [
@@ -23,6 +24,7 @@ export const JOBS = unique('job', [
    taskDispatch,
    workflowEngine,
    workflowSchedule,
+   workflowWatchdog,
    dataWallet,
    dataReads,
    retention,

@@ -228,6 +228,20 @@ export const workflow = router({
       }
    }),
 
+   // Takes the newest run up again from the block that failed.
+   resumeRun: ownerProcedure
+      .input(z.object({ runId: z.string().min(1) }))
+      .mutation(async ({ ctx, input }) =>
+         present(await orConflict(WorkflowService.resume(ctx.user.id, input.runId)), RUN_MISSING)
+      ),
+
+   // Runs of the owner that failed lately and were not dismissed.
+   alerts: ownerProcedure.query(({ ctx }) => WorkflowService.alerts(ctx.user.id)),
+
+   dismissAlert: ownerProcedure.input(z.object({ runId: z.string().min(1) })).mutation(async ({ ctx, input }) => {
+      present(await WorkflowService.dismissAlert(ctx.user.id, input.runId), RUN_MISSING)
+   }),
+
    // Nothing new starts; the worker ends the run as Stopped once the jobs already paid for have finished.
    stopRun: ownerProcedure.input(z.object({ runId: z.string().min(1) })).mutation(async ({ ctx, input }) => {
       present(await WorkflowService.requestStop(ctx.user.id, input.runId), RUN_MISSING)

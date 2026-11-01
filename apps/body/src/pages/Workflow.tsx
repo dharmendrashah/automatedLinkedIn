@@ -14,13 +14,13 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ApiAccess } from '@/components/workflows/api-access'
 import { RunDialog } from '@/components/workflows/run-dialog'
-import { runSentence } from '@/components/workflows/run-sentence'
+import { isLive, runSentence } from '@/components/workflows/run-sentence'
 import { RunDetailView, RunsTable } from '@/components/workflows/runs'
 import { WorkflowCanvas } from '@/components/workflows/workflow-canvas'
 import { WorkflowSettings } from '@/components/workflows/workflow-settings'
 import { useDocumentTitle } from '@/lib/page-title'
 import { readableError } from '@/lib/trpc-error'
-import { FlaskConical, Loader2, Play, Square } from 'lucide-react'
+import { FlaskConical, Loader2, Play, RotateCw, Square } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
@@ -51,18 +51,18 @@ export const WorkflowPage = () => {
    const workflows = trpc.workflow.list.useQuery()
    const runs = trpc.workflow.runs.useQuery(
       { workflowId: id },
-      { refetchInterval: query => (query.state.data?.some(run => run.status === 'RUNNING') ? POLL_MS : false) }
+      { refetchInterval: query => (query.state.data?.some(run => isLive(run.status)) ? POLL_MS : false) }
    )
    const shownRunId = runId ?? runs.data?.[0]?.id ?? null
    const detail = trpc.workflow.runDetail.useQuery(
       { runId: shownRunId ?? '' },
       {
          enabled: Boolean(shownRunId),
-         refetchInterval: query => (query.state.data?.status === 'RUNNING' ? POLL_MS : false),
+         refetchInterval: query => (isLive(query.state.data?.status) ? POLL_MS : false),
       }
    )
    // The live run stays in view even while an older run is picked on the Runs tab.
-   const latestRunning = runs.data?.find(run => run.status === 'RUNNING')
+   const latestRunning = runs.data?.find(run => isLive(run.status))
    const liveDetail = trpc.workflow.runDetail.useQuery(
       { runId: latestRunning?.id ?? '' },
       {
@@ -98,6 +98,15 @@ export const WorkflowPage = () => {
          toast.error(readableError(error))
       },
    })
+   const resumeRun = trpc.workflow.resumeRun.useMutation({
+      onSuccess: () => {
+         void utils.workflow.runDetail.invalidate()
+         void utils.workflow.runs.invalidate({ workflowId: id })
+      },
+      onError: error => {
+         toast.error(readableError(error))
+      },
+   })
    const labelOf = (type: string) => catalog.data?.find(block => block.type === type)?.label ?? type
 
    // The newest run that ends while the page is open says how it went.
@@ -105,7 +114,7 @@ export const WorkflowPage = () => {
    const lastStatus = useRef(newest?.status)
 
    useEffect(() => {
-      if (newest && lastStatus.current === 'RUNNING' && newest.status !== 'RUNNING') {
+      if (newest && isLive(lastStatus.current) && !isLive(newest.status)) {
          const found = newest.qualified + newest.maybe > 0
 
          toast(runSentence({ ...newest, steps: [] }, labelOf), {
@@ -146,7 +155,7 @@ export const WorkflowPage = () => {
    ].filter(Boolean)
    const api = triggers.has('trigger.api')
    const live =
-      detail.data?.status === 'RUNNING' ? detail.data : liveDetail.data?.status === 'RUNNING' ? liveDetail.data : null
+      isLive(detail.data?.status) ? detail.data : isLive(liveDetail.data?.status) ? liveDetail.data : null
    const [latest] = runs.data ?? []
    const attention = latest?.status === 'FAILED' || latest?.status === 'PARTIAL'
 
@@ -202,7 +211,7 @@ export const WorkflowPage = () => {
                {live.stopRequestedAt ? null : (
                   <Button variant="outline" size="sm" onClick={() => setStopping(true)}>
                      <Square />
-                     Stop run
+                     {live.status === 'QUEUED' ? 'Cancel run' : 'Stop run'}
                   </Button>
                )}
             </div>
@@ -219,7 +228,7 @@ export const WorkflowPage = () => {
                <TabsTrigger value="canvas">Canvas</TabsTrigger>
                <TabsTrigger value="runs">
                   Runs
-                  {latest?.status === 'RUNNING' ? (
+                  {isLive(latest?.status) ? (
                      <span className="bg-primary size-2 rounded-full" aria-label="A run is live" />
                   ) : latest?.status === 'FAILED' ? (
                      <span className="bg-destructive size-2 rounded-full" aria-label="The last run failed" />
@@ -267,6 +276,22 @@ export const WorkflowPage = () => {
             </TabsContent>
             <TabsContent value="runs" className="grid gap-3">
                <RunsTable runs={runs.data} selectedId={shownRunId} onSelect={run => setRunId(run.id)} />
+               {detail.data?.status === 'FAILED' && detail.data.id === runs.data?.[0]?.id && detail.data.trigger !== 'PREVIEW' ? (
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                     <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={resumeRun.isPending}
+                        onClick={() => resumeRun.mutate({ runId: shownRunId ?? '' })}
+                     >
+                        <RotateCw />
+                        Run again from the failed block
+                     </Button>
+                     <span className="text-muted-foreground">
+                        Blocks that finished are kept, and requests already paid for are not paid again.
+                     </span>
+                  </div>
+               ) : null}
                {detail.data ? (
                   <RunDetailView
                      run={detail.data}

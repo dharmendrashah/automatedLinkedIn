@@ -44,11 +44,13 @@ const EXPIRED = 'These results were deleted 14 days after the run ended.'
 const outputText = (blockRun: BlockRun) =>
    blockRun.expired
       ? EXPIRED
-      : blockRun.state === 'failed'
-        ? 'This block failed, so it passed nothing on.'
-        : blockRun.state === 'working' || blockRun.state === 'waiting'
-          ? 'Nothing passed on yet.'
-          : 'Nothing passed through this block in this run.'
+      : blockRun.state === 'skipped'
+        ? 'This block did not run, so it passed nothing on.'
+        : blockRun.state === 'failed'
+          ? 'This block failed, so it passed nothing on.'
+          : blockRun.state === 'working' || blockRun.state === 'waiting'
+            ? 'Nothing passed on yet.'
+            : 'Nothing passed through this block in this run.'
 
 // A block's state in the last run, its error, and the Input, Output and Settings tabs. It opens on the input for a block that
 // has not run and on the output for one that has.

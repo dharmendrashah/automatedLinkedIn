@@ -14,6 +14,8 @@ import { browserTimeZone, describeSchedule } from './schedule-text'
 export type BlockData = {
    block: Block
    config: GraphNode['config']
+   // The version of the block the settings were saved for; sent back on save so they are not upgraded again.
+   version?: number
    step: StepRun | null
    // An error stops a run; a note only explains.
    invalid: boolean
@@ -38,6 +40,14 @@ export const OPPOSITE: Record<Side, Side> = {
 
 const sideOf = (handle: string | null | undefined): Side | undefined => SIDES.find(side => side === handle)
 
+// A block's other outputs have their own handle, named `port:<output>`; the four sides are the main output.
+const PORT_HANDLE = 'port:'
+
+export const handleOfPort = (port: string) => `${PORT_HANDLE}${port}`
+
+export const portOfHandle = (handle: string | null | undefined) =>
+   handle?.startsWith(PORT_HANDLE) ? handle.slice(PORT_HANDLE.length) : undefined
+
 const KIND_WORDS = {
    start: 'start',
    post: 'posts',
@@ -48,18 +58,19 @@ const KIND_WORDS = {
 export const blockOf = (catalog: Block[], type: string) => catalog.find(block => block.type === type)
 
 // The blocks the picker offers: anything can follow a block except a trigger, and only a block that gives something can
-// come before one; then those matching the search.
+// come before one; then those matching the search. A retired block is not offered.
 export const choicesFor = (catalog: Block[], anchor: Block | null, query: string, before = false) => {
    const words = query.trim().toLowerCase()
 
    return catalog.filter(
       block =>
+         !block.deprecated &&
          (!anchor || (before ? block.output !== null : block.input !== null)) &&
          (!words || `${block.label} ${block.summary}`.toLowerCase().includes(words))
    )
 }
 
-const STATUS_ORDER = ['FAILED', 'RUNNING', 'WAITING', 'PARTIAL', 'DONE'] as const
+const STATUS_ORDER = ['FAILED', 'RUNNING', 'WAITING', 'PARTIAL', 'DONE', 'SKIPPED'] as const
 
 type Progress = NonNullable<StepRun['progress']>
 
@@ -123,6 +134,7 @@ export const toFlow = (
                  data: {
                     block,
                     config: node.config,
+                    version: node.version,
                     step: stepOf.get(node.id) ?? null,
                     invalid: extras.invalid?.has(node.id) ?? false,
                     noted: extras.noted?.has(node.id) ?? false,
@@ -133,7 +145,7 @@ export const toFlow = (
            ]
          : []
    })
-   const edges = graph.edges.map(({ from, to, fromSide, toSide }) => {
+   const edges = graph.edges.map(({ from, to, fromSide, toSide, fromPort }) => {
       const source = stepOf.get(from)
       const kind = blockOf(catalog, graph.nodes.find(({ id }) => id === from)?.type ?? '')?.output
 
@@ -141,10 +153,10 @@ export const toFlow = (
          id: `${from}>${to}`,
          source: from,
          target: to,
-         sourceHandle: fromSide ?? 'bottom',
+         sourceHandle: fromPort && fromPort !== 'main' ? handleOfPort(fromPort) : (fromSide ?? 'bottom'),
          targetHandle: toSide ?? 'top',
          animated: source?.status === 'RUNNING',
-         label: source && kind ? `${source.itemsOut} ${KIND_WORDS[kind]}` : undefined,
+         label: fromPort && fromPort !== 'main' ? 'Else' : source && kind ? `${source.itemsOut} ${KIND_WORDS[kind]}` : undefined,
       }
    })
 
@@ -158,6 +170,7 @@ export const toGraph = (nodes: FlowNode[], edges: Edge[], loopRounds?: number): 
    nodes: nodes.map(node => ({
       id: node.id,
       type: node.data.block.type,
+      ...(node.data.version === undefined ? {} : { version: node.data.version }),
       config: node.data.config,
       position: {
          x: Math.round(node.position.x),
@@ -169,6 +182,7 @@ export const toGraph = (nodes: FlowNode[], edges: Edge[], loopRounds?: number): 
       to: target,
       fromSide: sideOf(sourceHandle),
       toSide: sideOf(targetHandle),
+      ...(portOfHandle(sourceHandle) === undefined ? {} : { fromPort: portOfHandle(sourceHandle) }),
    })),
    ...(loopRounds === undefined ? {} : { loopRounds }),
 })
@@ -179,7 +193,8 @@ export const canConnect = (edges: Edge[], source: string | null, target: string 
       source && target && source !== target && !edges.some(edge => edge.source === source && edge.target === target)
    )
 
-// The same limits the server keeps on how often a loop runs.
+// The same limits the server keeps on how often a loop runs. Importing them from contracts would add the whole package
+// (22 kB gzipped, measured 2026-11-02) to the main chunk, so they are kept here.
 export const DEFAULT_LOOP_ROUNDS = 3
 export const MAX_LOOP_ROUNDS = 10
 
@@ -234,23 +249,6 @@ export const startConfig = (type: string, timeZone: string = browserTimeZone()):
 }
 
 const show = (value: ConfigValue | undefined) => (Array.isArray(value) ? value.join(', ') : String(value ?? ''))
-
-// What a block's "how many" counts.
-const UNITS: Partial<Record<Block['type'], string>> = {
-   'input.posts': 'posts',
-   'input.profiles': 'people',
-   'input.companies': 'companies',
-   'collect.findPosts': 'posts',
-   'collect.searchPeople': 'people',
-   'collect.domainLookup': 'companies',
-   'collect.commenters': 'per post',
-   'collect.reactors': 'per post',
-   'collect.postsOfPeople': 'posts per person',
-   'collect.engagedPosts': 'per person',
-   'collect.postsOfCompanies': 'posts per company',
-   'collect.employees': 'per company',
-   'collect.jobs': 'jobs per 10 companies',
-}
 
 const MERGE_MODES: Record<string, string> = {
    all: 'Everything, each once',
@@ -368,7 +366,7 @@ export const summaryOf = (block: Block, config: GraphNode['config'], icpName?: s
    }
 
    if ('howMany' in values) {
-      const unit = UNITS[block.type] ?? ''
+      const unit = block.unit ?? ''
       const amount = values.all === true ? `All ${unit}`.trim() : `Up to ${show(values.howMany)} ${unit}`.trim()
 
       return [amount, ...pickOf(values)].join(' · ')

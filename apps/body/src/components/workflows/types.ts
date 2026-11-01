@@ -22,6 +22,10 @@ const money = new Intl.NumberFormat('en-US', {
 export const formatUsd = (micros: number) => money.format(micros / 1_000_000)
 
 export const runStatuses: Record<Run['status'], { label: string; className: string }> = {
+   QUEUED: {
+      label: 'Waiting its turn',
+      className: 'bg-muted text-muted-foreground',
+   },
    RUNNING: {
       label: 'Running',
       className: 'bg-warning/10 text-warning',
@@ -55,6 +59,7 @@ export const stepLabel = (step: Pick<StepRun, 'status' | 'progress' | 'tries'>) 
               DONE: 'Done',
               PARTIAL: 'Done with gaps',
               FAILED: 'Failed',
+              SKIPPED: 'Skipped',
            }[step.status]
 
    // A Retry ran the step again.

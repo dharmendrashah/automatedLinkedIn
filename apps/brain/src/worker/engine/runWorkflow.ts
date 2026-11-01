@@ -68,6 +68,7 @@ const startChild = async (ctx: Context, workflowId: string, send: string) => {
 const passOn = async (ctx: Context, message: string): Promise<StepResult> => ({
    ...(await keepItems(ctx, ctx.inputs, ctx.inputs.length)),
    message,
+   emit: ['main'],
 })
 
 // "No": what reached the block goes to an Else after it.
@@ -78,6 +79,7 @@ const answerNo = async (ctx: Context, message: string): Promise<StepResult> => {
    return {
       ...result,
       message,
+      emit: ['else'],
    }
 }
 
@@ -157,11 +159,11 @@ export const runWorkflow = async (ctx: Context): Promise<StepResult> => {
       throw new StepError(`${name} ${outcome}, so it gave nothing back.`, 'CHILD_ENDED')
    }
 
-   const people = await WorkflowRunService.listedPeople(childId)
-   const result = await keepItems(ctx, people, ctx.inputs.length)
+   const given = (await WorkflowRunService.returned(childId)) ?? (await WorkflowRunService.listedPeople(childId))
+   const result = await keepItems(ctx, given, ctx.inputs.length)
 
    return {
       ...result,
-      message: `${people.length} people back from ${name}, which ${outcome}.`,
+      message: `${given.length} ${given.length === 1 ? 'item' : 'items'} back from ${name}, which ${outcome}.`,
    }
 }

@@ -132,7 +132,7 @@ describe('workflow save, switch off, delete and start (database)', () => {
       )
       const run = await WorkflowService.startRun(userId, id, 'MANUAL', `rules-${randomUUID()}`)
 
-      await expect(WorkflowService.startRun(userId, id, 'MANUAL', `rules-${randomUUID()}`)).rejects.toThrow(
+      await expect(WorkflowService.startRun(userId, id, 'PREVIEW', `rules-${randomUUID()}`)).rejects.toThrow(
          'still going'
       )
 
@@ -141,7 +141,7 @@ describe('workflow save, switch off, delete and start (database)', () => {
          data: { waitUntil: new Date(Date.now() + 2 * 86_400_000) },
       })
 
-      await expect(WorkflowService.startRun(userId, id, 'MANUAL', `rules-${randomUUID()}`)).rejects.toThrow(
+      await expect(WorkflowService.startRun(userId, id, 'PREVIEW', `rules-${randomUUID()}`)).rejects.toThrow(
          /waiting until \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC/
       )
    })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { runSentence } from './run-sentence'
+import { isLive, runSentence } from './run-sentence'
 
 const NOW = new Date('2026-10-18T10:00:00')
 
@@ -87,6 +87,15 @@ describe('runSentence', () => {
          /^Waiting to retry 2 requests at 10:15( am)? \(retries are not charged unless they answer\)\./i
       )
       expect(runSentence(waiting('2026-10-19T09:00:00'), labelOf, NOW)).toMatch(/at \S+ 09:00/)
+   })
+
+   it('should say a queued run waits for the run before it, and count it as not ended', () => {
+      expect(runSentence(run({ status: 'QUEUED' }), labelOf, NOW)).toBe(
+         'Waiting for the run before it to finish. It starts by itself.'
+      )
+      expect(['QUEUED', 'RUNNING'].map(status => isLive(status as 'QUEUED' | 'RUNNING'))).toEqual([true, true])
+      expect(isLive('FAILED')).toBe(false)
+      expect(isLive(undefined)).toBe(false)
    })
 
    it('should sum up a finished, gapped, stopping, stopped and failed run in plain words', () => {
