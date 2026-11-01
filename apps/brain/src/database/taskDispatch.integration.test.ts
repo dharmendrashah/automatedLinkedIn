@@ -76,6 +76,8 @@ const startRow = async ({
       data: {
          sessionId: id,
          createdAt: new Date(Date.now() - ageMs),
+         // A second in the past: "due" is read on the database clock, which can lag this process by a few ms.
+         nextAttemptAt: new Date(Date.now() - 1000),
          attempts,
       },
    })
