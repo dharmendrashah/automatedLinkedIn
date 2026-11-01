@@ -623,7 +623,7 @@ const markPosts = async (ctx: Context): Promise<StepResult> => {
       }
    }
 
-   const marked = await LinkedInPostService.markProcessed(ctx.run.userId, ids)
+   const marked = await LinkedInPostService.setStatusMany(ctx.run.userId, ids, 'PROCESSED')
 
    return {
       status: 'DONE',

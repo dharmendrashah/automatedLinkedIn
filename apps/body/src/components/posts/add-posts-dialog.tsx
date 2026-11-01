@@ -1,26 +1,50 @@
 import { trpc } from '../../trpc'
-import { PasteLinksDialog } from '../links/paste-links-dialog'
+import { POST_CSV } from '../links/import-csv'
+import { type ImportKind, ImportLinksDialog } from '../links/import-links-dialog'
+import { POST_READ } from '../links/read-cost'
 
-export const AddPostsDialog = () => {
+export const POST_FILLS = 'Fills the author, the text and how many reacted and commented.'
+
+const KIND: ImportKind = {
+   noun: POST_READ,
+   labelKind: 'posts',
+   csv: POST_CSV,
+   placeholder: 'https://www.linkedin.com/posts/name_title-activity-1234567890123456789-AbCd',
+   csvColumns: 'post_url (or LinkedIn URL) and labels (split by ;)',
+   fills: POST_FILLS,
+   readNow: 'Get their details now',
+   readByDefault: false,
+}
+
+// Add posts on /posts (.plan/posts-page-redesign.md): paste or CSV, reviewed first, read only when ticked.
+export const AddPostsDialog = ({ onShow }: { onShow: (label: string) => void }) => {
    const utils = trpc.useUtils()
-   const create = trpc.linkedInPost.create.useMutation({
-      onSuccess: () => {
-         void utils.linkedInPost.list.invalidate()
-         void utils.label.list.invalidate()
-      },
-   })
+   const preview = trpc.linkedInPost.preview.useMutation()
+   const add = trpc.linkedInPost.import.useMutation()
 
    return (
-      <PasteLinksDialog
-         mutation={create}
-         kind="posts"
-         triggerLabel="Add posts"
-         title="Add LinkedIn posts"
-         description="Paste the links of the posts you want to work through. Only the link is saved. Mark a post as processed when you are done with it."
-         linksLabel="Post links"
-         placeholder="https://www.linkedin.com/posts/name_title-activity-1234567890123456789-AbCd"
-         hint="One link per line, up to 200. Links like linkedin.com/posts/..., linkedin.com/feed/update/urn:li:activity:... and lnkd.in/p/... are accepted."
-         invalidNote="LinkedIn post links"
+      <ImportLinksDialog
+         kind={KIND}
+         preview={async urls => {
+            const { posts, invalid } = await preview.mutateAsync({ urls })
+
+            return {
+               items: posts,
+               invalid,
+            }
+         }}
+         importBatch={(entries, labels, read) =>
+            add.mutateAsync({
+               posts: entries.map(({ url, labels: own }) => ({
+                  url,
+                  labels: own,
+               })),
+               labels,
+               read,
+            })
+         }
+         onDone={() => Promise.all([utils.linkedInPost.invalidate(), utils.label.list.invalidate()])}
+         onShow={onShow}
       />
    )
 }

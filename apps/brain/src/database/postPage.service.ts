@@ -1,9 +1,10 @@
 import { parseLinkedInUrl, readPostSnapshot, readSignals } from 'core'
 
+import { type Prisma } from 'generated/prisma/client'
+
 import { PRICE_MICROS } from '@automatedLinkedIn/contracts'
 
-import { ConflictError } from './conflict'
-import { DataReadService } from './dataRead.service'
+import { DataReadService, RECENT_READ_MS } from './dataRead.service'
 import { LinkedInPostService } from './linkedInPost.service'
 import { PrismaService } from './prisma.service'
 
@@ -11,6 +12,17 @@ import { PrismaService } from './prisma.service'
 // people in their lists a workflow found from it.
 
 const PEOPLE_SHOWN = 50
+
+const readOf = (userId: string, post: { slug: string; url: string; expandedUrl: string | null }) => ({
+   userId,
+   kind: 'POST' as const,
+   slug: post.slug,
+   operation: 'posts',
+   params: {
+      urls: post.expandedUrl ?? post.url,
+      maxResults: 1,
+   },
+})
 
 const whereSnapshot = (userId: string, slug: string) => ({
    userId_kind_slug: {
@@ -144,21 +156,41 @@ export class PostPageService {
          return null
       }
 
-      if (known.post.archivedAt) {
-         throw new ConflictError('Restore the post first.')
-      }
-
-      await DataReadService.queue({
-         userId,
-         kind: 'POST',
-         slug,
-         operation: 'posts',
-         params: {
-            urls: known.post.expandedUrl ?? known.url,
-            maxResults: 1,
-         },
-      })
+      await DataReadService.queue(readOf(userId, known.post))
 
       return PostPageService.detail(userId, slug)
+   }
+
+   // The posts of these read (and paid for) in the last 30 days, which an import or a bulk read leaves alone.
+   public static readRecently(userId: string, slugs: string[], now = new Date()) {
+      return DataReadService.paidSince(userId, 'POST', slugs, new Date(now.getTime() - RECENT_READ_MS))
+   }
+
+   // One read each for the owner's posts matched, except those read in the last 30 days; a read refused now is counted.
+   public static async readMany(userId: string, which: Prisma.LinkedInPostWhereInput) {
+      const posts = await PrismaService.client.linkedInPost.findMany({
+         where: {
+            ...which,
+            userId,
+            archivedAt: null,
+         },
+         select: {
+            slug: true,
+            url: true,
+            expandedUrl: true,
+         },
+      })
+      const recent = await PostPageService.readRecently(
+         userId,
+         posts.map(({ slug }) => slug)
+      )
+      const queued = await DataReadService.queueEach(
+         posts.filter(({ slug }) => !recent.has(slug)).map(post => readOf(userId, post))
+      )
+
+      return {
+         ...queued,
+         readRecently: recent.size,
+      }
    }
 }

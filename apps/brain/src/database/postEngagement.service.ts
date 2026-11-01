@@ -4,7 +4,6 @@ import { type DataReadKind, type PageKind } from 'generated/prisma/client'
 
 import { ALL_CAP, PRICE_MICROS } from '@automatedLinkedIn/contracts'
 
-import { ConflictError } from './conflict'
 import { DataReadService } from './dataRead.service'
 import { LinkedInPostService } from './linkedInPost.service'
 import { PrismaService } from './prisma.service'
@@ -151,10 +150,6 @@ export class PostEngagementService {
 
       if (!post) {
          return null
-      }
-
-      if (post.archivedAt) {
-         throw new ConflictError('Restore the post first.')
       }
 
       await DataReadService.queue({

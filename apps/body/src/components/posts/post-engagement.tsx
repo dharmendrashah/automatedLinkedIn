@@ -352,12 +352,10 @@ const TABS = [
 // Everyone who commented on or reacted to the post, read on demand, with a way to add them to a list.
 export const PostEngagement = ({
    slug,
-   archived,
    counts,
    onPerson,
 }: {
    slug: string
-   archived: boolean
    counts: Record<Kind, number | null>
    onPerson: (slug: string) => void
 }) => {
@@ -417,11 +415,7 @@ export const PostEngagement = ({
             </TabsList>
             {TABS.map(({ kind }) => (
                <TabsContent key={kind} value={kind} className="grid gap-3">
-                  {archived ? (
-                     <p className="text-muted-foreground text-sm">Restore the post to read its {kind}.</p>
-                  ) : (
-                     <ReadChoices slug={slug} kind={kind} count={counts[kind]} engagement={data} />
-                  )}
+                  <ReadChoices slug={slug} kind={kind} count={counts[kind]} engagement={data} />
                   <AddAll kind={kind} shared={shared} />
                   {kind === 'comments' && data.comments ? (
                      <Comments items={data.comments.items} shared={shared} />

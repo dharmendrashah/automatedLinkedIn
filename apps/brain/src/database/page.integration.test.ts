@@ -205,14 +205,72 @@ describe('company and post pages (database)', () => {
       )
    })
 
-   it('should delete the stored page when the company or post is archived', async () => {
+   it('should list a read post with its card and the people found from it, and not read it again within 30 days', async () => {
+      const page = {
+         page: 1,
+         pageSize: 10,
+      }
+      const { items, total } = await LinkedInPostService.list(userId, {
+         ...page,
+         search: 'pipeline',
+         read: 'READ',
+         sort: {
+            by: 'qualified',
+            desc: true,
+         },
+      })
+
+      expect(total).toBe(1)
+      expect(items).toEqual([
+         expect.objectContaining({
+            slug: POST_SLUG,
+            card: expect.objectContaining({
+               author: expect.objectContaining({ name: 'Ada' }),
+               text: 'Pipeline is hard.',
+               reactions: 4,
+            }),
+            readAt: expect.any(Date),
+            people: {
+               found: 2,
+               qualified: 2,
+               first: [expect.objectContaining({ slug: expect.any(String) }), expect.anything()],
+            },
+         }),
+      ])
+      expect(
+         (
+            await LinkedInPostService.list(userId, {
+               ...page,
+               read: 'UNREAD',
+            })
+         ).total
+      ).toBe(0)
+      await expect(LinkedInPostService.summary(userId)).resolves.toEqual({
+         toWork: 1,
+         done: 0,
+         unread: 0,
+         found: 2,
+         qualified: 2,
+      })
+      await expect(PostPageService.readMany(userId, { slug: POST_SLUG })).resolves.toEqual({
+         reading: 0,
+         paused: 0,
+         readRecently: 1,
+      })
+   })
+
+   it('should delete the stored page when the company is archived', async () => {
       const company = await LinkedInCompanyService.bySlug(userId, 'stripe')
-      const post = await LinkedInPostService.bySlug(userId, POST_SLUG)
 
       await LinkedInCompanyService.archiveForUser(userId, company?.id ?? '')
-      await LinkedInPostService.archiveForUser(userId, post?.id ?? '')
 
-      expect(await PrismaService.client.pageSnapshot.count({ where: { userId } })).toBe(0)
-      await expect(PostPageService.readFull(userId, POST_SLUG)).rejects.toThrow('Restore the post first.')
+      expect(
+         await PrismaService.client.pageSnapshot.count({
+            where: {
+               userId,
+               kind: 'COMPANY',
+            },
+         })
+      ).toBe(0)
    })
 })

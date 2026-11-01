@@ -1,8 +1,7 @@
 import { useMemo } from 'react'
 
-import { type Company } from './types'
-
 import { type RouterInputs, trpc } from '../../trpc'
+import { uniqueById } from '../table/sort-param'
 
 export type CompanyQuery = Omit<RouterInputs['linkedInCompany']['list'], 'cursor' | 'page' | 'pageSize'>
 export type CompanySort = NonNullable<CompanyQuery['sort']>
@@ -24,12 +23,6 @@ export const COMPANY_COLUMNS: Array<[string, string]> = [
 // Rows asked for per page while scrolling.
 const PAGE_SIZE = 50
 
-const byId = (rows: Company[]) => {
-   const seen = new Set<string>()
-
-   return rows.filter(({ id }) => !seen.has(id) && Boolean(seen.add(id)))
-}
-
 // The Companies table's rows, page after page as the owner scrolls; a row seen twice (rows added meanwhile) shows once.
 export const useCompanies = (query: CompanyQuery) => {
    const list = trpc.linkedInCompany.list.useInfiniteQuery(
@@ -44,7 +37,7 @@ export const useCompanies = (query: CompanyQuery) => {
          placeholderData: previous => previous,
       }
    )
-   const rows = useMemo(() => byId(list.data?.pages.flatMap(page => page.items) ?? []), [list.data])
+   const rows = useMemo(() => uniqueById(list.data?.pages.flatMap(page => page.items) ?? []), [list.data])
 
    return {
       list,

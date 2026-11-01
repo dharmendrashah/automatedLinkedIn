@@ -68,16 +68,14 @@ const ThePost = ({ detail, onPerson }: { detail: PostDetail; onPerson: (slug: st
                   </a>
                </Button>
             ) : null}
-            {post.archivedAt ? null : (
-               <ReadButton
-                  what="post"
-                  readAt={snapshot?.fetchedAt ?? null}
-                  read={detail.read}
-                  pending={read.isPending}
-                  error={read.error}
-                  onRead={() => read.mutate({ slug: detail.slug })}
-               />
-            )}
+            <ReadButton
+               what="post"
+               readAt={snapshot?.fetchedAt ?? null}
+               read={detail.read}
+               pending={read.isPending}
+               error={read.error}
+               onRead={() => read.mutate({ slug: detail.slug })}
+            />
          </div>
       </Cover>
    )
@@ -94,34 +92,25 @@ const Workspace = ({ detail }: { detail: PostDetail }) => {
    const refresh = () => {
       void utils.postPage.detail.invalidate({ slug: detail.slug })
       void utils.linkedInPost.list.invalidate()
+      void utils.linkedInPost.summary.invalidate()
    }
    const update = trpc.linkedInPost.update.useMutation({ onSuccess: refresh })
-   const archive = trpc.linkedInPost.archive.useMutation({ onSuccess: refresh })
-   const restore = trpc.linkedInPost.restore.useMutation({ onSuccess: refresh })
-   const error = [update, archive, restore].find(action => action.error)?.error
    const { post } = detail
    const done = post.status === 'PROCESSED'
 
    return (
       <Section title="In your workspace">
          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={done ? 'secondary' : 'outline'}>{done ? 'Done' : 'Waiting for a workflow'}</Badge>
+            <Badge variant={done ? 'secondary' : 'outline'}>{done ? 'Done' : 'To work'}</Badge>
             <Button
                variant="outline"
                size="sm"
                onClick={() => update.mutate({ id: post.id, status: done ? 'UNPROCESSED' : 'PROCESSED' })}
             >
-               {done ? 'Mark not done' : 'Mark done'}
-            </Button>
-            <Button
-               variant="outline"
-               size="sm"
-               onClick={() => (post.archivedAt ? restore.mutate({ id: post.id }) : archive.mutate({ id: post.id }))}
-            >
-               {post.archivedAt ? 'Restore' : 'Archive'}
+               {done ? 'Back to work' : 'Mark done'}
             </Button>
          </div>
-         {error ? <p className="text-destructive text-sm">{readableError(error)}</p> : null}
+         {update.error ? <p className="text-destructive text-sm">{readableError(update.error)}</p> : null}
       </Section>
    )
 }
@@ -177,7 +166,6 @@ export const PostView = ({ slug, onPerson }: { slug: string; onPerson: (slug: st
          </Section>
          <PostEngagement
             slug={data.slug}
-            archived={data.post.archivedAt !== null}
             counts={{
                comments: data.snapshot?.comments ?? null,
                reactions: data.snapshot?.reactions ?? null,

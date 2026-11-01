@@ -158,20 +158,4 @@ describe('post comments and reactions (database)', () => {
          ['reacted', null],
       ])
    })
-
-   it('should drop a read whose post was archived before it started, and delete what was kept', async () => {
-      const service = fakeService()
-      const post = await LinkedInPostService.bySlug(userId, POST_SLUG)
-
-      await PostEngagementService.read(userId, POST_SLUG, 'reactions', true)
-      await LinkedInPostService.archiveForUser(userId, post?.id ?? '')
-      await workReads(userId, service)
-
-      expect(service.start).not.toHaveBeenCalled()
-      expect((await PostEngagementService.detail(userId, POST_SLUG))?.reads.reactions?.status).toBe('FAILED')
-      expect(await PrismaService.client.pageSnapshot.count({ where: { userId } })).toBe(0)
-      await expect(PostEngagementService.read(userId, POST_SLUG, 'reactions', true)).rejects.toThrow(
-         'Restore the post first.'
-      )
-   })
 })

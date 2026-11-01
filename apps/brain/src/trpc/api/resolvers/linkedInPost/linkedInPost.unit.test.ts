@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { router } from 'trpc'
 
+import type * as LinkedInRecord from '../../../../database/linkedInRecord'
 import { type Context } from '../../context'
 import { linkedInPost } from './linkedInPost'
 
@@ -10,19 +11,23 @@ const mocks = vi.hoisted(() => ({
    list: vi.fn(),
    getForUser: vi.fn(),
    updateForUser: vi.fn(),
-   archiveForUser: vi.fn(),
-   restoreForUser: vi.fn(),
+   importMany: vi.fn(),
+   readMany: vi.fn(),
 }))
 
-vi.mock('database', () => ({
+vi.mock('database', async () => ({
+   IMPORT_BATCH: 200,
+   IMPORT_CAP: 1_000,
+   POST_SORTS: ['createdAt', 'postedAt', 'comments', 'qualified'],
+   importedOf: (await vi.importActual<typeof LinkedInRecord>('../../../../database/linkedInRecord')).importedOf,
    LinkedInPostService: {
       addMany: mocks.addMany,
       list: mocks.list,
       getForUser: mocks.getForUser,
       updateForUser: mocks.updateForUser,
-      archiveForUser: mocks.archiveForUser,
-      restoreForUser: mocks.restoreForUser,
+      importMany: mocks.importMany,
    },
+   PostPageService: { readMany: mocks.readMany },
 }))
 
 vi.mock('env', () => ({
@@ -175,34 +180,93 @@ describe('linkedInPost resolvers', () => {
 
          await expect(caller(authed()).list(wrongStatus)).rejects.toMatchObject({ code: 'BAD_REQUEST' })
       })
+
+      it('should ask for the cursor page and say whether another follows', async () => {
+         mocks.list.mockResolvedValue({
+            items: [],
+            total: 120,
+         })
+
+         await expect(
+            caller(authed()).list({
+               cursor: 2,
+               pageSize: 50,
+            })
+         ).resolves.toMatchObject({ nextCursor: 3 })
+         await expect(
+            caller(authed()).list({
+               cursor: 3,
+               pageSize: 50,
+            })
+         ).resolves.toMatchObject({ nextCursor: undefined })
+         expect(mocks.list).toHaveBeenLastCalledWith('u1', {
+            page: 3,
+            pageSize: 50,
+         })
+      })
    })
 
-   describe('get, archive and restore', () => {
+   describe('import', () => {
+      it('should save the posts with their labels and read only the new ones when asked', async () => {
+         mocks.importMany.mockResolvedValueOnce({
+            created: 1,
+            restored: 0,
+            skipped: 1,
+            full: 0,
+            slugs: [`activity-${POST_ID}`, 'activity-7000000000000000001'],
+            fresh: [`activity-${POST_ID}`],
+         })
+         mocks.readMany.mockResolvedValueOnce({
+            reading: 1,
+            paused: 0,
+            readRecently: 0,
+         })
+
+         const result = await caller(authed()).import({
+            posts: [
+               {
+                  url: `https://www.linkedin.com/feed/update/urn:li:activity:${POST_ID}`,
+                  labels: ['SaaS'],
+               },
+               { url: 'https://www.linkedin.com/in/ada' },
+            ],
+            read: 'NEW',
+         })
+
+         expect(mocks.importMany).toHaveBeenCalledWith(
+            'u1',
+            [
+               expect.objectContaining({
+                  slug: `activity-${POST_ID}`,
+                  labels: ['saas'],
+                  expandedUrl: null,
+               }),
+            ],
+            []
+         )
+         expect(mocks.readMany).toHaveBeenCalledWith('u1', { slug: { in: [`activity-${POST_ID}`] } })
+         expect(result).toEqual({
+            created: 1,
+            restored: 0,
+            skipped: 1,
+            full: 0,
+            invalid: 1,
+            reading: 1,
+            paused: 0,
+            readRecently: 0,
+         })
+      })
+   })
+
+   describe('get', () => {
       it('should answer NOT_FOUND for a missing or foreign post', async () => {
          mocks.getForUser.mockResolvedValueOnce(null)
-         mocks.archiveForUser.mockResolvedValueOnce(null)
-         mocks.restoreForUser.mockResolvedValueOnce(null)
 
          await expect(caller(authed()).get({ id: 'p9' })).rejects.toMatchObject({
             code: 'NOT_FOUND',
             message: 'LinkedIn post not found',
          })
-         await expect(caller(authed()).archive({ id: 'p9' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
-         await expect(caller(authed()).restore({ id: 'p9' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
-      })
-
-      it('should scope every call to the current user', async () => {
-         mocks.getForUser.mockResolvedValueOnce({ id: 'p1' })
-         mocks.archiveForUser.mockResolvedValueOnce({ id: 'p1' })
-         mocks.restoreForUser.mockResolvedValueOnce({ id: 'p1' })
-
-         await caller(authed()).get({ id: 'p1' })
-         await caller(authed()).archive({ id: 'p1' })
-         await caller(authed()).restore({ id: 'p1' })
-
-         expect(mocks.getForUser).toHaveBeenCalledWith('u1', 'p1')
-         expect(mocks.archiveForUser).toHaveBeenCalledWith('u1', 'p1')
-         expect(mocks.restoreForUser).toHaveBeenCalledWith('u1', 'p1')
+         expect(mocks.getForUser).toHaveBeenCalledWith('u1', 'p9')
       })
    })
 

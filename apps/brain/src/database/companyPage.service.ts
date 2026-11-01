@@ -6,23 +6,20 @@ import { PRICE_MICROS } from '@automatedLinkedIn/contracts'
 
 import { CompanyPeopleService } from './companyPeople.service'
 import { ConflictError } from './conflict'
-import { DataReadService } from './dataRead.service'
+import { DataReadService, RECENT_READ_MS } from './dataRead.service'
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { PrismaService } from './prisma.service'
 
 // One company of the owner's /companies by slug: their own fields, the page they chose to read, and the My network people who
 // work there.
 
-const RECENT_MS = 30 * 24 * 60 * 60 * 1000
-
-const queueRead = (userId: string, slug: string, url: string) =>
-   DataReadService.queue({
-      userId,
-      kind: 'COMPANY',
-      slug,
-      operation: 'companies',
-      params: { companies: [url] },
-   })
+const readOf = (userId: string, slug: string, url: string) => ({
+   userId,
+   kind: 'COMPANY' as const,
+   slug,
+   operation: 'companies',
+   params: { companies: [url] },
+})
 
 const whereSnapshot = (userId: string, slug: string) => ({
    userId_kind_slug: {
@@ -109,14 +106,14 @@ export class CompanyPageService {
          throw new ConflictError('Restore the company first.')
       }
 
-      await queueRead(userId, slug, known.url)
+      await DataReadService.queue(readOf(userId, slug, known.url))
 
       return CompanyPageService.detail(userId, slug)
    }
 
    // The companies of these read (and paid for) in the last 30 days, which an import or a bulk read leaves alone.
    public static readRecently(userId: string, slugs: string[], now = new Date()) {
-      return DataReadService.paidSince(userId, 'COMPANY', slugs, new Date(now.getTime() - RECENT_MS))
+      return DataReadService.paidSince(userId, 'COMPANY', slugs, new Date(now.getTime() - RECENT_READ_MS))
    }
 
    // One read each for the owner's live companies matched, except those read in the last 30 days (.plan/companies-import-csv.md).
@@ -137,26 +134,13 @@ export class CompanyPageService {
          userId,
          companies.map(({ slug }) => slug)
       )
-      let reading = 0
-      let paused = 0
-
-      for (const { slug, url } of companies.filter(({ slug }) => !recent.has(slug))) {
-         try {
-            await queueRead(userId, slug, url)
-            reading += 1
-         } catch (error) {
-            if (!(error instanceof ConflictError)) {
-               throw error
-            }
-
-            paused += 1
-         }
-      }
+      const queued = await DataReadService.queueEach(
+         companies.filter(({ slug }) => !recent.has(slug)).map(({ slug, url }) => readOf(userId, slug, url))
+      )
 
       return {
-         reading,
+         ...queued,
          readRecently: recent.size,
-         paused,
       }
    }
 }

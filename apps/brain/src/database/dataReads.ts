@@ -83,11 +83,7 @@ const companyWanted = async (userId: string, slug: string) => {
    return Boolean(company && !company.archivedAt)
 }
 
-const postWanted = async (userId: string, slug: string) => {
-   const post = await LinkedInPostService.bySlug(userId, slug)
-
-   return Boolean(post && !post.archivedAt)
-}
+const postWanted = async (userId: string, slug: string) => Boolean(await LinkedInPostService.bySlug(userId, slug))
 
 const keepPage = (userId: string, kind: PageKind, slug: string, data: Prisma.InputJsonValue) =>
    PrismaService.client.pageSnapshot.upsert({

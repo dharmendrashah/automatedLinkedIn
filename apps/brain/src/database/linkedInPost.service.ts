@@ -1,23 +1,23 @@
-import { type LinkedInLink } from 'core'
+import { type LinkedInLink, postCardOf } from 'core'
 
 import { type LinkedInPostStatus, type Prisma } from 'generated/prisma/client'
 
 import {
    EVERYTHING,
+   type Imported,
    type InputFilter,
    type LabelChange,
-   type RecordListQuery,
    addLinks,
    inputOrder,
    inputWhere,
+   mergeLabels,
    orNull,
-   pageArgs,
-   recordWhere,
    relabel,
 } from './linkedInRecord'
+import { type PostListQuery, postCountSql, postPageSql, postPeopleSql, postSummarySql } from './postList'
 import { PrismaService } from './prisma.service'
 
-export type LinkedInPostListQuery = RecordListQuery<LinkedInPostStatus>
+export type LinkedInPostListQuery = PostListQuery
 
 const ALL_WAITING: InputFilter<never> = {
    ...EVERYTHING,
@@ -36,7 +36,51 @@ const postSelect = {
    updatedAt: true,
 } satisfies Prisma.LinkedInPostSelect
 
-const SEARCHED_FIELDS = ['slug'] as const
+type PeopleRow = { postId: string; slug: string; name: string | null; found: bigint; qualified: bigint }
+
+const NO_PEOPLE = {
+   found: 0,
+   qualified: 0,
+   first: [],
+}
+
+// Per post: how many people were found from it, how many qualified, and the first three.
+const peopleOf = async (ids: string[]) => {
+   const rows = ids.length > 0 ? await PrismaService.client.$queryRaw<PeopleRow[]>(postPeopleSql(ids)) : []
+   const people = new Map<
+      string,
+      { found: number; qualified: number; first: Array<{ slug: string; name: string | null }> }
+   >()
+
+   for (const { postId, slug, name, found, qualified } of rows) {
+      const known = people.get(postId)
+      const person = {
+         slug,
+         name,
+      }
+
+      people.set(postId, {
+         found: Number(found),
+         qualified: Number(qualified),
+         first: [...(known?.first ?? []), person],
+      })
+   }
+
+   return people
+}
+
+const savedSlugs = async (userId: string, slugs: string[]) =>
+   new Set(
+      (
+         await PrismaService.client.linkedInPost.findMany({
+            where: {
+               userId,
+               slug: { in: slugs },
+            },
+            select: { slug: true },
+         })
+      ).map(({ slug }) => slug)
+   )
 
 const updateOwned = (userId: string, id: string, data: Prisma.LinkedInPostUpdateInput) =>
    orNull(
@@ -134,53 +178,136 @@ export class LinkedInPostService {
       )
    }
 
-   // Their post reads, comments and reactions are deleted with them, as for one.
-   public static archiveMany(userId: string, ids: string[]) {
-      return PrismaService.client.$transaction(async tx => {
-         const where = {
-            userId,
-            id: { in: ids },
-            archivedAt: null,
-         }
-         const slugs = (
-            await tx.linkedInPost.findMany({
-               where,
-               select: { slug: true },
-            })
-         ).map(({ slug }) => slug)
-         const { count } = await tx.linkedInPost.updateMany({
-            where,
-            data: { archivedAt: new Date() },
-         })
+   // Whether each post of an import is new or already here, changing nothing.
+   public static async preview(userId: string, links: Imported[]) {
+      const saved = await savedSlugs(
+         userId,
+         links.map(({ slug }) => slug)
+      )
 
-         await tx.pageSnapshot.deleteMany({
-            where: {
-               userId,
-               kind: { in: ['POST', 'POST_COMMENTS', 'POST_REACTIONS'] },
-               slug: { in: slugs },
-            },
-         })
-
-         return count
-      })
+      return links.map(({ url, slug, inputs }) => ({
+         url,
+         slug,
+         inputs,
+         state: saved.has(slug) ? ('ALREADY_HERE' as const) : ('NEW' as const),
+      }))
    }
 
-   public static async list(userId: string, query: LinkedInPostListQuery) {
-      const where = recordWhere(userId, query, SEARCHED_FIELDS)
+   // Adds the import's posts, then gives each the shared labels and its own. Safe to repeat. `fresh` are the new ones.
+   public static async importMany(
+      userId: string,
+      links: Array<Imported & { expandedUrl: string | null }>,
+      labels: string[]
+   ) {
+      const slugs = links.map(({ slug }) => slug)
+      const before = await savedSlugs(userId, slugs)
+      const saved = await LinkedInPostService.addMany(userId, links)
+      const bySlug = new Map(links.map(link => [link.slug, link]))
+      const full = await PrismaService.client.$transaction(async tx => {
+         const rows = await tx.linkedInPost.findMany({
+            where: {
+               userId,
+               slug: { in: slugs },
+            },
+            select: {
+               id: true,
+               slug: true,
+               tags: true,
+            },
+         })
+         let over = 0
 
-      const [items, total] = await Promise.all([
-         PrismaService.client.linkedInPost.findMany({
-            where,
-            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-            ...pageArgs(query),
-            select: postSelect,
-         }),
-         PrismaService.client.linkedInPost.count({ where }),
-      ])
+         for (const row of rows) {
+            const merged = mergeLabels(row.tags, {
+               add: [...labels, ...(bySlug.get(row.slug)?.labels ?? [])],
+               remove: [],
+            })
+
+            over += merged.full ? 1 : 0
+
+            if (merged.labels.join('\n') !== row.tags.join('\n')) {
+               await tx.linkedInPost.update({
+                  where: { id: row.id },
+                  data: { tags: merged.labels },
+               })
+            }
+         }
+
+         return over
+      })
 
       return {
-         items,
-         total,
+         ...saved,
+         full,
+         slugs,
+         fresh: slugs.filter(slug => !before.has(slug)),
+      }
+   }
+
+   // One page of the table: each post with the few read fields a row shows and the people found from it.
+   public static async list(userId: string, query: LinkedInPostListQuery) {
+      const [ids, [count]] = await Promise.all([
+         PrismaService.client.$queryRaw<Array<{ id: string }>>(postPageSql(userId, query)),
+         PrismaService.client.$queryRaw<Array<{ total: bigint }>>(postCountSql(userId, query)),
+      ])
+      const order = ids.map(({ id }) => id)
+      const rows = await PrismaService.client.linkedInPost.findMany({
+         where: {
+            userId,
+            id: { in: order },
+         },
+         select: postSelect,
+      })
+      const [reads, people] = await Promise.all([
+         PrismaService.client.pageSnapshot.findMany({
+            where: {
+               userId,
+               kind: 'POST',
+               slug: { in: rows.map(({ slug }) => slug) },
+            },
+            select: {
+               slug: true,
+               data: true,
+               fetchedAt: true,
+            },
+         }),
+         peopleOf(order),
+      ])
+      const byId = new Map(rows.map(row => [row.id, row]))
+      const readOf = new Map(reads.map(read => [read.slug, read]))
+
+      return {
+         items: order.flatMap(id => {
+            const row = byId.get(id)
+            const read = row && readOf.get(row.slug)
+
+            return row
+               ? [
+                    {
+                       ...row,
+                       card: read ? postCardOf(read.data) : null,
+                       readAt: read?.fetchedAt ?? null,
+                       people: people.get(id) ?? NO_PEOPLE,
+                    },
+                 ]
+               : []
+         }),
+         total: Number(count?.total ?? 0),
+      }
+   }
+
+   // The page's line and tab counts.
+   public static async summary(userId: string) {
+      const [row] = await PrismaService.client.$queryRaw<
+         Array<{ toWork: bigint; done: bigint; unread: bigint; found: bigint; qualified: bigint }>
+      >(postSummarySql(userId))
+
+      return {
+         toWork: Number(row?.toWork ?? 0),
+         done: Number(row?.done ?? 0),
+         unread: Number(row?.unread ?? 0),
+         found: Number(row?.found ?? 0),
+         qualified: Number(row?.qualified ?? 0),
       }
    }
 
@@ -208,27 +335,6 @@ export class LinkedInPostService {
 
    public static updateForUser(userId: string, id: string, changes: { status?: LinkedInPostStatus; tags?: string[] }) {
       return updateOwned(userId, id, changes)
-   }
-
-   // The post read and its comments and reactions are deleted with it.
-   public static async archiveForUser(userId: string, id: string) {
-      const archived = await updateOwned(userId, id, { archivedAt: new Date() })
-
-      if (archived) {
-         await PrismaService.client.pageSnapshot.deleteMany({
-            where: {
-               userId,
-               kind: { in: ['POST', 'POST_COMMENTS', 'POST_REACTIONS'] },
-               slug: archived.slug,
-            },
-         })
-      }
-
-      return archived
-   }
-
-   public static restoreForUser(userId: string, id: string) {
-      return updateOwned(userId, id, { archivedAt: null })
    }
 
    // The posts a workflow works through next: not done, not archived, oldest first unless the block says otherwise.
@@ -259,13 +365,14 @@ export class LinkedInPostService {
       return PrismaService.client.linkedInPost.count({ where: waitingWhere(userId, filter) })
    }
 
-   public static async markProcessed(userId: string, ids: string[]) {
+   // Rows that are not the owner's are left alone.
+   public static async setStatusMany(userId: string, ids: string[], status: LinkedInPostStatus) {
       const { count } = await PrismaService.client.linkedInPost.updateMany({
          where: {
             userId,
             id: { in: ids },
          },
-         data: { status: 'PROCESSED' },
+         data: { status },
       })
 
       return count
