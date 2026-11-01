@@ -501,6 +501,8 @@ describe('free-form workflows (database)', () => {
          postedLimit: 'month',
          maxResults: 1,
          sortBy: 'date',
+         // The data service includes reposts unless told not to, so an unticked box is sent.
+         includeReposts: false,
       })
       expect(params('post-comments')).toEqual({
          posts: post(1),

@@ -34,9 +34,11 @@ export { TakeoverRateError, TakeoverRelay } from './takeoverRelay'
 export { TaskQueue } from './taskQueue'
 export { parseTotpSecret } from './totp'
 export {
+   type AdItem,
    type Band,
    type CompanyItem,
    EXCERPT_LENGTH,
+   type JobItem,
    type PersonItem,
    type PostItem,
    type Signal,

@@ -55,6 +55,8 @@ const KIND_WORDS = {
    post: 'posts',
    profile: 'people',
    company: 'companies',
+   job: 'job postings',
+   ad: 'ads',
 } as const
 
 export const blockOf = (catalog: Block[], type: string) => catalog.find(block => block.type === type)
@@ -231,6 +233,10 @@ export const newNodeId = (type: string, nodes: { id: string }[]) => {
    return `${base}-${index}`
 }
 
+// The blocks that had no "keep" box before 2026-11-02; blocks saved before keep it off, a block added now starts with it on.
+// The blocks added with it start with it on by themselves.
+const KEEPING_BLOCKS = new Set(['collect.searchPeople', 'collect.findPosts', 'collect.employees', 'collect.domainLookup'])
+
 // What a new block starts with: a schedule and "added today" use the owner's time zone, input blocks take all that match,
 // and profiles and companies take only new ones. Blocks saved before keep their number and every status.
 export const startConfig = (type: string, timeZone: string = browserTimeZone()): GraphNode['config'] => {
@@ -247,6 +253,11 @@ export const startConfig = (type: string, timeZone: string = browserTimeZone()):
          timeZone,
          all: true,
       }
+   }
+
+   // Blocks that can keep what they find in the owner's lists start with that on; blocks saved before it have it off.
+   if (KEEPING_BLOCKS.has(type)) {
+      return { keep: true }
    }
 
    return type === 'trigger.schedule' ? { timeZone } : {}

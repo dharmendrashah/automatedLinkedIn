@@ -106,6 +106,8 @@ describe('input blocks', () => {
          all: true,
       })
       expect(startConfig('collect.commenters', 'Asia/Kolkata')).toEqual({})
+      // A block that existed before the "keep" box starts with it on; the one saved before keeps it off.
+      expect(startConfig('collect.searchPeople', 'Asia/Kolkata')).toEqual({ keep: true })
    })
 })
 

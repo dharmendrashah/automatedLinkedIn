@@ -556,7 +556,8 @@ describe('templates', () => {
       expect(templates.every(({ costMicros }) => costMicros > 0)).toBe(true)
       expect(templates.find(({ id }) => id === 'decisionMakers')).toMatchObject({
          useCaseLabel: 'Find new leads',
-         costMicros: 50 * 4_000,
+         // Two pages of 25: a fee for each page and a profile for each person.
+         costMicros: 2 * (25 * 4_000 + 100_000),
       })
       expect(JSON.stringify(templates).toLowerCase()).not.toMatch(/mindcase|apify/)
    })

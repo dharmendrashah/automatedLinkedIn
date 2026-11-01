@@ -130,7 +130,12 @@ export class WorkflowRunService {
          where: { id: runId },
          include: {
             steps: true,
-            workflow: { select: { outputListId: true } },
+            workflow: {
+               select: {
+                  outputListId: true,
+                  name: true,
+               },
+            },
          },
       })
    }

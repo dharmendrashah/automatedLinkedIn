@@ -17,6 +17,9 @@ const HEADER = [
    'Date found',
    'Author',
    'Hiring roles',
+   'Email',
+   'Company',
+   'Details',
    'Round',
 ]
 
@@ -34,7 +37,7 @@ const rowOf = ({ round, item }: { round: number; item: WorkflowItemData }): (str
    const base = Array<string | null>(HEADER.length).fill(null)
 
    base[4] = item.url
-   base[13] = String(round + 1)
+   base[16] = String(round + 1)
 
    if (item.kind === 'profile') {
       const [signal] = item.signals
@@ -49,9 +52,30 @@ const rowOf = ({ round, item }: { round: number; item: WorkflowItemData }): (str
       base[8] = signal ? REASONS[signal.type] : null
       base[9] = signal?.via ?? null
       base[10] = signal?.at ?? null
+      base[13] = item.email ?? null
    } else if (item.kind === 'post') {
       base[0] = 'Post'
       base[11] = item.author ?? null
+   } else if (item.kind === 'job') {
+      base[0] = 'Job'
+      base[1] = item.title
+      base[3] = item.location
+      base[10] = item.posted
+      base[14] = item.company
+      base[15] = [
+         item.workplace,
+         item.employment,
+         item.salary,
+         item.applicants === null ? null : `${item.applicants} applicants`,
+      ]
+         .filter(Boolean)
+         .join(', ')
+   } else if (item.kind === 'ad') {
+      base[0] = 'Ad'
+      base[1] = item.headline
+      base[10] = item.started
+      base[11] = item.advertiser
+      base[15] = [item.format, item.body, item.clickUrl].filter(Boolean).join(' | ')
    } else {
       base[0] = 'Company'
       base[1] = item.name
