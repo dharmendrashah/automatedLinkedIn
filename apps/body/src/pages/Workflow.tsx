@@ -75,7 +75,20 @@ export const WorkflowPage = () => {
       void utils.workflow.get.invalidate({ id })
       void utils.workflow.list.invalidate()
    }
-   const update = trpc.workflow.update.useMutation({ onSuccess: refresh })
+   const update = trpc.workflow.update.useMutation({
+      onSuccess: saved => {
+         refresh()
+
+         if (saved.switchedOff) {
+            toast.warning(
+               `Saved, and the workflow was switched off: ${saved.switchedOff}. Fix it, then switch it on.`,
+               {
+                  duration: 15_000,
+               }
+            )
+         }
+      },
+   })
    const stopRun = trpc.workflow.stopRun.useMutation({
       onSuccess: () => {
          void utils.workflow.runDetail.invalidate()
@@ -217,7 +230,7 @@ export const WorkflowPage = () => {
                <TabsTrigger value="settings">Settings</TabsTrigger>
                {api ? <TabsTrigger value="api">API</TabsTrigger> : null}
             </TabsList>
-            <TabsContent value="canvas" className="grid gap-3">
+            <TabsContent value="canvas" forceMount className="grid gap-3 data-[state=inactive]:hidden">
                {detail.data && !live ? (
                   <div className="flex items-center gap-2 text-sm">
                      <Checkbox id="replay" checked={replay} onCheckedChange={checked => setReplay(checked === true)} />
@@ -237,14 +250,16 @@ export const WorkflowPage = () => {
                   icps={icps.data ?? []}
                   workflows={workflows.data ?? []}
                   replay={live ? live.steps : replay && detail.data ? detail.data.steps : null}
-                  replayRunId={live ? live.id : replay && detail.data ? detail.data.id : null}
+                  lastRun={live ?? detail.data ?? null}
                   focus={focus}
                   saving={update.isPending}
                   saveError={update.error}
-                  onSave={graph =>
+                  onSave={(graph, options) =>
                      update.mutateAsync({
                         id,
                         graph,
+                        // Saving over someone else's change is the owner's choice, never the default.
+                        ...(options?.force ? {} : { expectedUpdatedAt: data.updatedAt }),
                      })
                   }
                />

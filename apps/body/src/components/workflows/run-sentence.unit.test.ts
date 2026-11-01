@@ -55,6 +55,16 @@ describe('runSentence', () => {
       ).toBe('Running: Get commenters, 3 of 5 requests done. About $1.80 spent of up to $4.00.')
    })
 
+   it('should say when a run held by a Wait goes on', () => {
+      const held = run({ steps: [step({ status: 'WAITING', waitUntil: '2026-11-10T14:30:00' })] })
+
+      expect(runSentence(held, labelOf, NOW)).toMatch(/^Waiting until .+\. About \$1\.80 spent of up to \$4\.00\.$/)
+      // A wait that has passed is not mentioned.
+      expect(
+         runSentence(run({ steps: [step({ status: 'WAITING', waitUntil: '2026-10-18T09:00:00' })] }), labelOf, NOW)
+      ).toMatch(/^Running: starting/)
+   })
+
    it('should say when a retry is due, with the day when it is not today', () => {
       const waiting = (at: string) =>
          run({

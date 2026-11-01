@@ -178,7 +178,7 @@ export const RunDetailView = ({ run, catalog, onOpenBlock }: DetailProps) => {
                            {step.status === 'FAILED' || step.status === 'PARTIAL' ? (
                               <Button variant="outline" size="sm" onClick={() => onOpenBlock(step.nodeId)}>
                                  <Wrench />
-                                 Open the block
+                                 Why, and what to do
                               </Button>
                            ) : null}
                            <Button variant="outline" size="sm" onClick={() => setShownNode(step.nodeId)}>

@@ -1,8 +1,8 @@
 # Workflow hardening, and Input, Output and Error details for every block
 
-- Status: locked <!-- draft | locked | in progress | done -->
+- Status: done <!-- draft | locked | in progress | done -->
 - Created: 2026-11-01
-- Locked by user: yes, 2026-11-01 (answers below; build not started)
+- Locked by user: yes, 2026-11-01 (answers below)
 
 ## Goal
 
@@ -120,14 +120,14 @@ Open questions (must be empty before locking): none. Answered 2026-11-01:
 
 Each step starts with a failing test.
 
-- [ ] 1. Contracts: `STEP_ERRORS` table and codes; a test that every code has a title, a reason and a fix, never names the data supplier, and every `StepError` code is in the table.
-- [ ] 2. Brain: `StepError(code, message)`, engine writes `errorCode` (migration `add_step_error_code`, additive), data errors mapped by kind, `RUN_UNREADABLE`, delete guard, `update` version check, wait-aware conflict sentence, switch-off on save with problems (the answer returns `switchedOff` and the problems).
-- [ ] 3. Brain: shared input helper (extracted from `readInputs`), `workflow.input` and `inputCsv`, tests including loops, For each, Else and Retry.
-- [ ] 4. Body: block dialog state strip, tabs (Input, Output, Settings), default tab rules, input before a run (estimate, matches, connections), error panel, copy details.
-- [ ] 5. Body: canvas failed line, Runs note with Details, "Added after this run" and "changed after the run", unknown block card, expiry texts, waiting sentence.
-- [ ] 6. Body: keep the canvas mounted across tabs, leave guard, save conflict dialog, enabled-workflow sentence.
-- [ ] 7. Verify the "to verify" list with tests; fix what is real.
-- [ ] 8. `pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build`, brain integration tests, run a failing workflow through the real path (tRPC and the page), `MEMORY.md`, plan `done`.
+- [x] 1. Contracts: `STEP_ERRORS` table and codes; a test that every code has a title, a reason and a fix, never names the data supplier, and every `StepError` code is in the table.
+- [x] 2. Brain: `StepError(code, message)`, engine writes `errorCode` (migration `add_step_error_code`, additive), data errors mapped by kind, `RUN_UNREADABLE`, delete guard, `update` version check, wait-aware conflict sentence, switch-off on save with problems (the answer returns `switchedOff` and the problems).
+- [x] 3. Brain: shared input helper (extracted from `readInputs`), `workflow.input` and `inputCsv`, tests including loops, For each, Else and Retry.
+- [x] 4. Body: block dialog state strip, tabs (Input, Output, Settings), default tab rules, input before a run (estimate, matches, connections), error panel, copy details.
+- [x] 5. Body: canvas failed line, Runs note with Details, "Added after this run" and "changed after the run", unknown block card, expiry texts, waiting sentence.
+- [x] 6. Body: keep the canvas mounted across tabs, leave guard, save conflict dialog, enabled-workflow sentence.
+- [x] 7. Verify the "to verify" list with tests; fix what is real.
+- [x] 8. `pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build`, brain integration tests, run a failing workflow through the real path (tRPC and the page), `MEMORY.md`, plan `done`.
 
 ## Edge cases and risks
 
@@ -149,4 +149,18 @@ Each step starts with a failing test.
 
 ## Outcome
 
-Filled in when done.
+Shipped on PR 174 (branch `feat/workflow-wait-units-canvas`):
+
+- **Error codes**: `STEP_ERROR_CODES` and `adviceFor`/`stepErrorCatalog` in `packages/contracts/src/stepErrors.ts` (20 codes with title, reasons and fixes; a test keeps raw text and the supplier's name out). `StepError(message, code)`, `failure.ts` (`failureOf`) maps data service kinds, `errorCode` on `WorkflowStepRun` (migration `20261101230000_add_step_error_code`), partial steps carry `SERVICE_BUSY`, `DATA_REJECTED` or `WALLET_LOW`. Router `workflow.stepErrors`.
+- **Input read**: `core/workflowInput.ts` (`forwardSources`, `backSources`, `inputKeys`) is used by the engine and by `workflow.input` / `inputCsv`; an Else reads what was kept aside for it.
+- **Block dialog**: state strip, error panel (what happened, why, what to do with one-click buttons, a copyable reference), Input / Output / Settings tabs, default tab by state, "changed after the run", expired results, input before a run (connections, settings, estimate, live matches). The canvas card shows the failure title. The block shows the newest run when the replay is off.
+- **Edge cases fixed**: unsaved edits survive the Runs, Settings and API tabs (canvas stays mounted) and a click on a link that leaves the page asks first; a save on an older copy is refused with "Save mine anyway" or "Discard mine and load the latest"; saving a switched-on workflow with a problem keeps the work and switches it off with a notice (`switchedOff`); a workflow with a run going cannot be deleted and the refusal shows; a run whose graph cannot be read ends `FAILED` (`RUN_UNREADABLE`); a waiting run says when it goes on (refused start, live run sentence, Runs note).
+
+Deviations and findings:
+
+- The router is a plain `BrowserRouter`, which has no way to block a move, so the leave guard watches clicks on links (the sidebar and links). The browser's Back button is not guarded (reload and close already are).
+- Edge case 3 (unknown block dropped): `graphSchema` only accepts known types, so such a workflow fails to open instead of losing blocks silently; no card was built. Left as is.
+- Verified, no defect: daylight saving for "every day" and "every few hours between" (a time that does not exist runs at the hour before, a repeated hour runs once); a Task result looking at round 0 for later rounds is the intended rule; a block config invalid through the API, or an edge to a missing block, is refused by `validateGraph` at start.
+- "Not in this run" on the replay stays (the canvas cannot tell a skipped block from one added later); the dialog says "Added after the last run" and "changed after the last run".
+
+Not run: the pages in a browser behind sign-in, a real data service failure (simulated with the fake client and the error mapping unit test).

@@ -6,7 +6,9 @@ import { cn } from '@/lib/utils'
 
 import { formatUsd } from './types'
 
+import { trpc } from '../../trpc'
 import { BLOCK_ICONS, tileOf } from './block-look'
+import { adviceOf } from './block-run'
 import { CanvasActions } from './canvas-actions'
 import { type FlowNode, SIDES, summaryOf } from './graph-convert'
 import { NODE_WIDTH } from './layout'
@@ -42,6 +44,17 @@ const PLUS_PLACES = {
    bottom: '-bottom-9 left-1/2 -translate-x-1/2',
    left: '-left-9 top-1/2 -translate-y-1/2',
 } as const
+
+// Why a block failed or ended with gaps, in a few words; the block's dialog has the whole explanation.
+const Reason = ({ code, failed }: { code: string | null; failed: boolean }) => {
+   const catalog = trpc.workflow.stepErrors.useQuery(undefined, { staleTime: Number.POSITIVE_INFINITY })
+
+   return (
+      <p className={cn('mt-0.5 line-clamp-2 text-xs', failed ? 'text-destructive' : 'text-warning')}>
+         {adviceOf(catalog.data ?? [], code)?.title ?? (failed ? 'Failed' : 'Done with gaps')}
+      </p>
+   )
+}
 
 // One block: icon, title and settings in a line, during a run its state, and a "+" on each side to add a block there. Lines
 // leave and enter on any side.
@@ -84,6 +97,9 @@ export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
                      {step.itemsIn} in, {step.itemsOut} out
                      {step.costMicros > 0 ? ` · ${formatUsd(step.costMicros)}` : ''}
                   </p>
+               ) : null}
+               {step && (step.status === 'FAILED' || (step.status === 'PARTIAL' && step.errorCode)) ? (
+                  <Reason code={step.errorCode} failed={step.status === 'FAILED'} />
                ) : null}
                {progress && progress.requests > progress.done ? (
                   <p className="text-muted-foreground mt-0.5 text-xs">

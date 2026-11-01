@@ -105,9 +105,7 @@ export const BlockPicker = ({ open, catalog, after, before, onPick, onClose }: P
    <Dialog open={open} onOpenChange={next => (next ? undefined : onClose())}>
       <DialogContent className="sm:max-w-xl">
          <DialogHeader>
-            <DialogTitle>
-               {after ? `Add ${before ? 'before' : 'after'} "${after.label}"` : 'Add a block'}
-            </DialogTitle>
+            <DialogTitle>{after ? `Add ${before ? 'before' : 'after'} "${after.label}"` : 'Add a block'}</DialogTitle>
             <DialogDescription>Type to search. Use the arrow keys and Enter to pick.</DialogDescription>
          </DialogHeader>
          {open ? <Choices catalog={catalog} after={after} before={before} onPick={onPick} /> : null}

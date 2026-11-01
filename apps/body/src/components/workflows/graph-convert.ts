@@ -93,6 +93,9 @@ export const combineRounds = (steps: StepRun[]) => {
                  costMicros: known.costMicros + step.costMicros,
                  round: Math.max(known.round, step.round),
                  message: step.message ?? known.message,
+                 errorCode: step.errorCode ?? known.errorCode,
+                 waitUntil: step.waitUntil ?? known.waitUntil,
+                 tries: Math.max(known.tries, step.tries),
                  progress: addProgress(known.progress, step.progress),
               }
             : step

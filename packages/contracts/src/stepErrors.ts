@@ -44,8 +44,14 @@ const ADVICE: Record<StepErrorCode, Entry> = {
       title: 'The ideal customer was deleted',
       why: ['This workflow scores people against an ideal customer that no longer exists.'],
       fixes: [
-         { text: 'Open the block and pick another ideal customer.', action: 'settings' },
-         { text: 'Or create the ideal customer again.', action: 'icps' },
+         {
+            text: 'Open the block and pick another ideal customer.',
+            action: 'settings',
+         },
+         {
+            text: 'Or create the ideal customer again.',
+            action: 'icps',
+         },
       ],
    },
    NO_BLOCK_BEFORE: {
@@ -70,7 +76,10 @@ const ADVICE: Record<StepErrorCode, Entry> = {
          'An account that is paused or still being checked cannot act.',
       ],
       fixes: [
-         { text: 'Check the accounts, sign them in again, and wait for the status to turn active.', action: 'accounts' },
+         {
+            text: 'Check the accounts, sign them in again, and wait for the status to turn active.',
+            action: 'accounts',
+         },
          { text: 'Then run the workflow again.' },
       ],
    },
@@ -81,14 +90,25 @@ const ADVICE: Record<StepErrorCode, Entry> = {
          'The accounts may be outside their working hours.',
       ],
       fixes: [
-         { text: 'Look at the account status and its browsing time.', action: 'accounts' },
-         { text: 'Run again later, or add more accounts to "Select accounts".', action: 'settings' },
+         {
+            text: 'Look at the account status and its browsing time.',
+            action: 'accounts',
+         },
+         {
+            text: 'Run again later, or add more accounts to "Select accounts".',
+            action: 'settings',
+         },
       ],
    },
    POST_UNREADABLE: {
       title: 'The post could not be read',
       why: ['The text saved in the block is damaged or was changed in a way the post writer cannot read.'],
-      fixes: [{ text: 'Open the block and write the post again.', action: 'settings' }],
+      fixes: [
+         {
+            text: 'Open the block and write the post again.',
+            action: 'settings',
+         },
+      ],
    },
    POST_REFUSED: {
       title: 'The post was not allowed',
@@ -97,8 +117,14 @@ const ADVICE: Record<StepErrorCode, Entry> = {
          'The account may not be signed in.',
       ],
       fixes: [
-         { text: 'Change the words, or wait until the account may post again.', action: 'settings' },
-         { text: 'Check the account is signed in.', action: 'accounts' },
+         {
+            text: 'Change the words, or wait until the account may post again.',
+            action: 'settings',
+         },
+         {
+            text: 'Check the account is signed in.',
+            action: 'accounts',
+         },
       ],
    },
    POST_UNSURE: {
@@ -110,7 +136,10 @@ const ADVICE: Record<StepErrorCode, Entry> = {
       title: 'The post did not go',
       why: ['LinkedIn did not accept the post, or the account could not open the editor.'],
       fixes: [
-         { text: 'Nothing was posted. Check the account is signed in.', action: 'accounts' },
+         {
+            text: 'Nothing was posted. Check the account is signed in.',
+            action: 'accounts',
+         },
          { text: 'Add a Retry block after this one, or run again later.' },
       ],
    },
@@ -122,7 +151,10 @@ const ADVICE: Record<StepErrorCode, Entry> = {
       ],
       fixes: [
          { text: 'Open the other workflow and fix what it shows, or wait for its run to end.' },
-         { text: 'Pick another workflow in this block.', action: 'settings' },
+         {
+            text: 'Pick another workflow in this block.',
+            action: 'settings',
+         },
       ],
    },
    CHILD_ENDED: {
@@ -148,7 +180,10 @@ const ADVICE: Record<StepErrorCode, Entry> = {
          'A number may be above what the service allows.',
       ],
       fixes: [
-         { text: 'Open the block and check the links, keywords and numbers.', action: 'settings' },
+         {
+            text: 'Open the block and check the links, keywords and numbers.',
+            action: 'settings',
+         },
          { text: 'Remove special characters, then run again. Retrying does not help here.' },
       ],
    },

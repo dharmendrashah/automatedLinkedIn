@@ -1,5 +1,12 @@
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+   Dialog,
+   DialogContent,
+   DialogDescription,
+   DialogFooter,
+   DialogHeader,
+   DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import {
    Background,
@@ -20,14 +27,16 @@ import {
 import '@xyflow/react/dist/style.css'
 import { CircleAlert, Info, Keyboard, Loader2, Maximize2, Minimize2, Plus, Redo2, Save, Undo2 } from 'lucide-react'
 import { useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
 
 import { cn } from '@/lib/utils'
 
-import { type Block, type ConfigValue, type Graph, type StepRun, formatUsd } from './types'
+import { type Block, type ConfigValue, type Graph, type RunDetail, type StepRun, formatUsd } from './types'
 
 import { trpc } from '../../trpc'
 import { BlockNode } from './block-node'
 import { BlockPicker } from './block-picker'
+import { blockRunOf } from './block-run'
 import { BlockSettings } from './block-settings'
 import { CanvasActions } from './canvas-actions'
 import {
@@ -45,6 +54,7 @@ import {
 } from './graph-convert'
 import { type History, record, redo, startHistory, undo } from './history'
 import { isLeftToRight, layoutTopToBottom, neighbourOf, placeBeside } from './layout'
+import { isChangedElsewhere, leaveTarget } from './leave-guard'
 import { RemovableEdge } from './removable-edge'
 import { SHORTCUT_HELP, shortcutOf } from './shortcuts'
 
@@ -62,13 +72,14 @@ type Props = {
    workflows: { id: string; name: string }[]
    // A run to show on the canvas: each block's state and what passed along each line.
    replay: StepRun[] | null
-   // The run being shown, so a block's dialog can show what it passed on.
-   replayRunId: string | null
+   // The run being shown, or the newest one: a block's dialog shows its state, error, input and output in it.
+   lastRun: RunDetail | null
    // A block to open on arrival, such as the one a run failed in.
    focus?: string | null
    saving: boolean
    saveError: { message: string } | null
-   onSave: (graph: Graph) => Promise<unknown>
+   // `force` saves over a copy someone else changed in the meantime.
+   onSave: (graph: Graph, options?: { force?: boolean }) => Promise<unknown>
 }
 
 type Canvas = { nodes: FlowNode[]; edges: Edge[] }
@@ -80,7 +91,7 @@ const Editor = ({
    icps,
    workflows,
    replay,
-   replayRunId,
+   lastRun,
    focus = null,
    saving,
    saveError,
@@ -102,6 +113,9 @@ const Editor = ({
    const [help, setHelp] = useState(false)
    // Full screen is a fixed layer, not the browser's full screen mode, so the dialogs still show over it.
    const [fullScreen, setFullScreen] = useState(false)
+   // Where a click on a link was about to go while changes were unsaved.
+   const [leaveTo, setLeaveTo] = useState<string | null>(null)
+   const navigate = useNavigate()
    const [loopRounds, setLoopRounds] = useState(graph.loopRounds)
    const { nodes, edges } = history.present
 
@@ -263,7 +277,7 @@ const Editor = ({
       setSelectedId(id)
    }
 
-   const save = async () => {
+   const save = async (force = false) => {
       if (!dirty || saving) {
          return
       }
@@ -271,7 +285,7 @@ const Editor = ({
       const saved = JSON.stringify(draft)
 
       try {
-         await onSave(draft)
+         await onSave(draft, { force })
       } catch {
          // The reason is shown through `saveError`; the changes stay unsaved.
          return
@@ -343,6 +357,31 @@ const Editor = ({
       window.addEventListener('beforeunload', warn)
 
       return () => window.removeEventListener('beforeunload', warn)
+   }, [dirty])
+
+   // A click on a link that leaves the page asks first while there are unsaved changes.
+   useEffect(() => {
+      if (!dirty) {
+         return undefined
+      }
+
+      const guard = (event: MouseEvent) => {
+         const link = event.target instanceof Element ? event.target.closest('a[href]') : null
+         const to =
+            link instanceof HTMLAnchorElement
+               ? leaveTarget({ ...event, href: link.href, target: link.target }, window.location)
+               : null
+
+         if (to) {
+            event.preventDefault()
+            event.stopPropagation()
+            setLeaveTo(to)
+         }
+      }
+
+      document.addEventListener('click', guard, true)
+
+      return () => document.removeEventListener('click', guard, true)
    }, [dirty])
 
    const openNode = nodeOf(openId)
@@ -501,7 +540,21 @@ const Editor = ({
                         />
                      </label>
                   ) : null}
-                  {saveError ? <p className="text-destructive text-xs">{saveError.message}</p> : null}
+                  {saveError ? (
+                     <div className="grid gap-1">
+                        <p className="text-destructive text-xs">{saveError.message}</p>
+                        {isChangedElsewhere(saveError.message) ? (
+                           <div className="flex flex-wrap gap-2">
+                              <Button size="sm" variant="outline" onClick={() => void save(true)}>
+                                 Save mine anyway
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+                                 Discard mine and load the latest
+                              </Button>
+                           </div>
+                        ) : null}
+                     </div>
+                  ) : null}
                </Panel>
                <Panel position="top-right" className="flex items-center gap-1">
                   <Button
@@ -566,14 +619,13 @@ const Editor = ({
             node={openNode}
             workflowId={workflowId}
             problems={problems.filter(({ nodeId }) => nodeId === openId)}
-            output={
-               replayRunId && openId
+            run={
+               openNode
                   ? {
-                       runId: replayRunId,
-                       rounds: Math.max(
-                          1,
-                          ...(replay ?? []).filter(({ nodeId }) => nodeId === openId).map(({ round }) => round + 1)
-                       ),
+                       runId: lastRun?.id ?? null,
+                       blockRun: blockRunOf(openNode.id, openNode.data.config, lastRun),
+                       labelOf: id => nodeOf(id)?.data.block.label ?? id,
+                       estimate: estimate.data?.nodes[openNode.id] ?? null,
                     }
                   : null
             }
@@ -600,6 +652,33 @@ const Editor = ({
                wrapper.current?.focus()
             }}
          />
+         <Dialog open={leaveTo !== null} onOpenChange={next => (next ? undefined : setLeaveTo(null))}>
+            <DialogContent>
+               <DialogHeader>
+                  <DialogTitle>Leave without saving?</DialogTitle>
+                  <DialogDescription>Your changes to this workflow are not saved yet.</DialogDescription>
+               </DialogHeader>
+               <DialogFooter>
+                  <Button variant="outline" onClick={() => setLeaveTo(null)}>
+                     Stay
+                  </Button>
+                  <Button
+                     variant="destructive"
+                     onClick={() => {
+                        const to = leaveTo
+
+                        setLeaveTo(null)
+
+                        if (to) {
+                           void navigate(to)
+                        }
+                     }}
+                  >
+                     Leave
+                  </Button>
+               </DialogFooter>
+            </DialogContent>
+         </Dialog>
          <Dialog open={help} onOpenChange={setHelp}>
             <DialogContent>
                <DialogHeader>

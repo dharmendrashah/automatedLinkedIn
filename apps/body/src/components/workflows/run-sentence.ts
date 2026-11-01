@@ -1,4 +1,4 @@
-import { formatUsd } from './types'
+import { formatUsd, whenText } from './types'
 
 // One plain sentence for where a run stands, for the Runs tab, the canvas and the workflows list. Counts and money
 // only; it never names the data supplier.
@@ -18,6 +18,8 @@ type Step = {
    message: string | null
    itemsOut: number
    progress: Progress | null
+   // When a step held by a Wait goes on.
+   waitUntil?: string | null
 }
 
 type Run = {
@@ -79,6 +81,15 @@ const live = (run: Run, labelOf: (type: string) => string, now: Date) => {
 
    if (working.length === 0 && retry) {
       return `${retry} ${spent}`
+   }
+
+   const [heldUntil] = run.steps
+      .map(step => whenText(step.waitUntil ?? null, now))
+      .filter((when): when is string => when !== null)
+      .sort()
+
+   if (working.length === 0 && heldUntil) {
+      return `Waiting until ${heldUntil}. ${spent}`
    }
 
    const progress = requests > 0 ? `, ${done} of ${plural(requests, 'request')} done` : ''
