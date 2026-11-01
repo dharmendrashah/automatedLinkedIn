@@ -177,6 +177,14 @@ describe('company and post pages (database)', () => {
          )
       )
 
+      await PrismaService.client.person.updateMany({
+         where: {
+            userId,
+            slug: 'ada',
+         },
+         data: { photoUrl: 'https://media.licdn.com/dms/image/ada.jpg' },
+      })
+
       const post = await PostPageService.detail(userId, POST_SLUG)
       const [month] = await SpendService.usage(userId)
 
@@ -190,9 +198,9 @@ describe('company and post pages (database)', () => {
             slug: 'ada',
          }),
       })
-      expect(post?.people.map(({ slug, comment }) => [slug, comment])).toEqual([
-         ['ada', 'ada says hi'],
-         ['bob', 'bob says hi'],
+      expect(post?.people.map(({ slug, comment, photo }) => [slug, comment, photo])).toEqual([
+         ['ada', 'ada says hi', 'https://media.licdn.com/dms/image/ada.jpg'],
+         ['bob', 'bob says hi', null],
       ])
       expect(month?.workflows).toEqual(
          expect.arrayContaining([

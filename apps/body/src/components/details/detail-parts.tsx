@@ -123,16 +123,37 @@ export const DetailMissing = ({ error }: { error: { message: string } }) => (
    </DrawerHeader>
 )
 
-// A person row inside a company or post drawer; opens their own drawer.
-export const PersonRow = ({ name, lines, onOpen }: { name: string; lines: (string | null)[]; onOpen: () => void }) => (
+// A person row inside a company or post drawer; opens their own drawer. A photo and badges show like a comment's on LinkedIn.
+export const PersonRow = ({
+   name,
+   photo,
+   badges,
+   lines,
+   children,
+   onOpen,
+}: {
+   name: string
+   photo: string | null
+   badges?: ReactNode
+   lines: (string | null)[]
+   children?: ReactNode
+   onOpen: () => void
+}) => (
    <li>
-      <button type="button" onClick={onOpen} className="hover:bg-muted grid w-full gap-0.5 rounded-md p-2 text-left">
-         <span className="text-sm font-medium">{name}</span>
-         {lines.filter(Boolean).map(line => (
-            <span key={line} className="text-muted-foreground text-xs">
-               {line}
+      <button type="button" onClick={onOpen} className="hover:bg-muted flex w-full gap-3 rounded-md p-2 text-left">
+         <Picture name={name} image={photo} className="size-9 shrink-0 border-0 text-xs" />
+         <span className="grid min-w-0 flex-1 gap-0.5">
+            <span className="flex flex-wrap items-center gap-1.5">
+               <span className="text-sm font-medium">{name}</span>
+               {badges}
             </span>
-         ))}
+            {lines.filter(Boolean).map(line => (
+               <span key={line} className="text-muted-foreground text-xs">
+                  {line}
+               </span>
+            ))}
+            {children}
+         </span>
       </button>
    </li>
 )

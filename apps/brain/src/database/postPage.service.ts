@@ -213,6 +213,26 @@ export class PostPageService {
          },
       })
 
+      const pictures = await PrismaService.client.person.findMany({
+         where: {
+            userId,
+            slug: { in: members.map(({ slug }) => slug) },
+            photoUrl: { not: null },
+         },
+         orderBy: { lastTouchAt: 'desc' },
+         select: {
+            slug: true,
+            photoUrl: true,
+         },
+      })
+      const photoOf = new Map<string, string>()
+
+      for (const { slug: memberSlug, photoUrl } of pictures) {
+         if (photoUrl && !photoOf.has(memberSlug)) {
+            photoOf.set(memberSlug, photoUrl)
+         }
+      }
+
       return {
          slug,
          url: post.url,
@@ -227,6 +247,9 @@ export class PostPageService {
          author: await authorOf(userId, page?.author),
          people: members.map(({ signals, ...member }) => ({
             ...member,
+            // The photo of their My network person, when there is one.
+            photo: photoOf.get(member.slug) ?? null,
+
             // What they wrote on this post, when they commented.
             comment: readSignals(signals).find(signal => urls.includes(signal.via))?.excerpt ?? null,
          })),

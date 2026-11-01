@@ -282,19 +282,18 @@ export const PostView = ({
                      <PersonRow
                         key={person.slug}
                         name={person.name ?? person.slug}
-                        lines={[
-                           person.headline,
-                           [
-                              STATES[person.state],
-                              person.score !== null ? `score ${person.score}` : null,
-                              person.list.name,
-                           ]
-                              .filter(Boolean)
-                              .join(' · '),
-                           person.comment ? `"${person.comment}"` : null,
-                        ]}
+                        photo={person.photo}
+                        badges={
+                           <>
+                              <Badge variant="outline">{STATES[person.state]}</Badge>
+                              <Badge variant="secondary">In {person.list.name}</Badge>
+                           </>
+                        }
+                        lines={[person.headline, person.score !== null ? `score ${person.score}` : null]}
                         onOpen={() => onPerson(person.slug)}
-                     />
+                     >
+                        {person.comment ? <span className="text-sm whitespace-pre-line">{person.comment}</span> : null}
+                     </PersonRow>
                   ))}
                </ul>
             )}
