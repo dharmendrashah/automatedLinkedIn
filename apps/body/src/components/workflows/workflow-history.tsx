@@ -21,10 +21,11 @@ export const WorkflowHistory = ({ workflowId, onRestored }: { workflowId: string
    const utils = trpc.useUtils()
    const history = trpc.workflow.history.useQuery({ id: workflowId }, { enabled: open })
    const restore = trpc.workflow.restore.useMutation({
-      onSuccess: () => {
-         void utils.workflow.get.invalidate({ id: workflowId })
+      onSuccess: async () => {
          void utils.workflow.history.invalidate({ id: workflowId })
          void utils.workflow.list.invalidate()
+         // The canvas restarts from the saved graph, so it must be the restored one.
+         await utils.workflow.get.invalidate({ id: workflowId })
          setOpen(false)
          onRestored()
          toast.success('The version was restored.')

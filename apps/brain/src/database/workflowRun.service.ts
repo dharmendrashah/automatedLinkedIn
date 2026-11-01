@@ -581,6 +581,8 @@ export class WorkflowRunService {
                finishedAt: null,
                message: null,
                stopRequestedAt: null,
+               // Failing again is a new failure to tell the owner about.
+               alertDismissedAt: null,
                startedAt: new Date(),
             },
          })

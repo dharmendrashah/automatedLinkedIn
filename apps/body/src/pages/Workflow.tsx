@@ -332,16 +332,17 @@ export const WorkflowPage = () => {
          <AlertDialog open={stopping} onOpenChange={setStopping}>
             <AlertDialogContent>
                <AlertDialogHeader>
-                  <AlertDialogTitle>Stop this run?</AlertDialogTitle>
+                  <AlertDialogTitle>{live?.status === 'QUEUED' ? 'Cancel this run?' : 'Stop this run?'}</AlertDialogTitle>
                   <AlertDialogDescription>
-                     Nothing new is paid for. Requests already paid for finish first, and what they find is kept, so the
-                     cost shown is what was really charged. People found so far stay in the list.
+                     {live?.status === 'QUEUED'
+                        ? 'It has not started, so nothing is paid for. The run before it is not touched.'
+                        : 'Nothing new is paid for. Requests already paid for finish first, and what they find is kept, so the cost shown is what was really charged. People found so far stay in the list.'}
                   </AlertDialogDescription>
                </AlertDialogHeader>
                <AlertDialogFooter>
-                  <AlertDialogCancel>Keep running</AlertDialogCancel>
+                  <AlertDialogCancel>{live?.status === 'QUEUED' ? 'Keep it waiting' : 'Keep running'}</AlertDialogCancel>
                   <AlertDialogAction onClick={() => (live ? stopRun.mutate({ runId: live.id }) : undefined)}>
-                     Stop run
+                     {live?.status === 'QUEUED' ? 'Cancel run' : 'Stop run'}
                   </AlertDialogAction>
                </AlertDialogFooter>
             </AlertDialogContent>

@@ -1937,7 +1937,8 @@ const BLOCKS = {
       group: 'Logic',
       flags: { keepsAside: true },
       label: 'If',
-      summary: 'Passes on the people who match; connect an Else after it for the rest.',
+      summary:
+         'Passes on the people who match. Draw a line from its orange Else dot, or add an Else block, for the rest.',
       input: 'profile',
       output: 'profile',
       config: z.object({
