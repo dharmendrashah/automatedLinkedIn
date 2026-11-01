@@ -4,6 +4,7 @@ import {
    companyCardOf,
    companyRowFrom,
    companySnapshotFrom,
+   postCardOf,
    postSnapshotFrom,
    readCompanySnapshot,
    readPostSnapshot,
@@ -334,5 +335,37 @@ describe('postSnapshotFrom', () => {
       })
       expect(readPostSnapshot(snapshot)).toEqual(snapshot)
       expect(JSON.stringify(snapshot)).not.toContain('internal')
+   })
+})
+
+describe('postCardOf', () => {
+   it('should keep what a row shows, with the start of the text, and nothing for a read that does not fit', () => {
+      const snapshot = postSnapshotFrom({
+         postText: 'x'.repeat(400),
+         authorName: 'Ada Lovelace',
+         authorUrl: 'https://www.linkedin.com/in/ada',
+         authorAvatar: 'https://media.example/ada.jpg',
+         authorHeadline: 'Engines',
+         authorFollowers: 1200,
+         authorType: 'company',
+         reactions: 40,
+         comments: 12,
+         shares: 3,
+         postedDate: '2026-10-01',
+      })
+
+      expect(postCardOf(snapshot)).toEqual({
+         author: {
+            name: 'Ada Lovelace',
+            avatar: 'https://media.example/ada.jpg',
+            headline: 'Engines',
+            isCompany: true,
+         },
+         text: 'x'.repeat(280),
+         postedAt: '2026-10-01',
+         reactions: 40,
+         comments: 12,
+      })
+      expect(postCardOf({ text: 1 })).toBeNull()
    })
 })

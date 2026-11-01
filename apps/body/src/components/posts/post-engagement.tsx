@@ -15,7 +15,8 @@ import { formatUsd } from '@/components/workflows/types'
 import { type RouterOutputs, trpc } from '../../trpc'
 
 type Engagement = RouterOutputs['postPage']['engagement']
-type Kind = 'comments' | 'reactions'
+export type EngagementKind = 'comments' | 'reactions'
+type Kind = EngagementKind
 type Comment = NonNullable<Engagement['comments']>['items'][number]
 type Reaction = NonNullable<Engagement['reactions']>['items'][number]
 
@@ -352,12 +353,14 @@ const TABS = [
 // Everyone who commented on or reacted to the post, read on demand, with a way to add them to a list.
 export const PostEngagement = ({
    slug,
-   archived,
+   tab,
+   onTab,
    counts,
    onPerson,
 }: {
    slug: string
-   archived: boolean
+   tab: Kind
+   onTab: (tab: Kind) => void
    counts: Record<Kind, number | null>
    onPerson: (slug: string) => void
 }) => {
@@ -405,7 +408,7 @@ export const PostEngagement = ({
          ) : (
             <p className="text-muted-foreground text-xs">Create a list on the Lists page to add people from here.</p>
          )}
-         <Tabs defaultValue="comments" className="gap-3">
+         <Tabs value={tab} onValueChange={value => onTab(value === 'reactions' ? 'reactions' : 'comments')} className="gap-3">
             <TabsList>
                {TABS.map(({ kind, title, Icon }) => (
                   <TabsTrigger key={kind} value={kind}>
@@ -417,11 +420,7 @@ export const PostEngagement = ({
             </TabsList>
             {TABS.map(({ kind }) => (
                <TabsContent key={kind} value={kind} className="grid gap-3">
-                  {archived ? (
-                     <p className="text-muted-foreground text-sm">Restore the post to read its {kind}.</p>
-                  ) : (
-                     <ReadChoices slug={slug} kind={kind} count={counts[kind]} engagement={data} />
-                  )}
+                  <ReadChoices slug={slug} kind={kind} count={counts[kind]} engagement={data} />
                   <AddAll kind={kind} shared={shared} />
                   {kind === 'comments' && data.comments ? (
                      <Comments items={data.comments.items} shared={shared} />

@@ -36,6 +36,17 @@ export const COMPANY_CSV: CsvKind = {
    ].join('\n'),
 }
 
+export const POST_CSV: CsvKind = {
+   columns: ['post_url', 'linkedin_url', 'url'],
+   noun: 'posts',
+   example: [
+      'post_url,labels',
+      'https://www.linkedin.com/feed/update/urn:li:activity:7000000000000000001/,hiring;saas',
+      'https://www.linkedin.com/feed/update/urn:li:activity:7000000000000000002/,',
+      '',
+   ].join('\n'),
+}
+
 export type ImportRow = {
    url: string
    labels: string[]

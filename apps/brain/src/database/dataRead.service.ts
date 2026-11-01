@@ -17,6 +17,8 @@ type Log = { error: (message: string) => void }
 
 // A read held this long by a worker that stopped is taken again.
 const STALE_CLAIM_MS = 2 * 60 * 1000
+// An import or a bulk read leaves alone an item with a paid read this recent.
+export const RECENT_READ_MS = 30 * 24 * 60 * 60 * 1000
 // After an unexpected error the read is looked at again a minute later.
 const ERROR_PAUSE_MS = 60_000
 const DUE_BATCH = 20
@@ -86,6 +88,30 @@ export class DataReadService {
          }
 
          return PrismaService.client.dataRead.findUniqueOrThrow({ where: { activeKey } })
+      }
+   }
+
+   // Queues each read; one refused now (reads are paused, or it was read today) is counted, not failed.
+   public static async queueEach(reads: QueueInput[]) {
+      let reading = 0
+      let paused = 0
+
+      for (const read of reads) {
+         try {
+            await DataReadService.queue(read)
+            reading += 1
+         } catch (error) {
+            if (!(error instanceof ConflictError)) {
+               throw error
+            }
+
+            paused += 1
+         }
+      }
+
+      return {
+         reading,
+         paused,
       }
    }
 

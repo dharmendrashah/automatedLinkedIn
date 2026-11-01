@@ -1,9 +1,11 @@
-import { parseLinkedInUrl, readPostSnapshot, readSignals } from 'core'
+import { type PostSnapshotData, parseLinkedInUrl, readPostSnapshot, readSignals } from 'core'
+
+import { type DataReadKind, type Prisma } from 'generated/prisma/client'
 
 import { PRICE_MICROS } from '@automatedLinkedIn/contracts'
 
-import { ConflictError } from './conflict'
-import { DataReadService } from './dataRead.service'
+import { DataReadService, RECENT_READ_MS } from './dataRead.service'
+import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
 import { PrismaService } from './prisma.service'
 
@@ -11,6 +13,17 @@ import { PrismaService } from './prisma.service'
 // people in their lists a workflow found from it.
 
 const PEOPLE_SHOWN = 50
+
+const readOf = (userId: string, post: { slug: string; url: string; expandedUrl: string | null }) => ({
+   userId,
+   kind: 'POST' as const,
+   slug: post.slug,
+   operation: 'posts',
+   params: {
+      urls: post.expandedUrl ?? post.url,
+      maxResults: 1,
+   },
+})
 
 const whereSnapshot = (userId: string, slug: string) => ({
    userId_kind_slug: {
@@ -48,6 +61,92 @@ const knownAuthor = async (userId: string, url: string | null) => {
    ])
 
    return profile || member ? slug : null
+}
+
+// The author as the owner has them: a person on My network (or saved, about to be) or a company of /companies, with their read.
+const authorOf = async (userId: string, author: PostSnapshotData['author'] | undefined) => {
+   const kind: 'company' | 'person' = author?.isCompany ? 'company' : 'person'
+   const slug = author?.url ? parseLinkedInUrl(author.url, kind === 'company' ? 'company' : 'profile')?.slug : undefined
+
+   if (!author || !slug) {
+      return null
+   }
+
+   const readKind: DataReadKind = kind === 'company' ? 'COMPANY' : 'PROFILE'
+   const latest = await DataReadService.latest(userId, readKind, slug)
+   const reading = latest?.status === 'QUEUED' || latest?.status === 'RUNNING'
+   const gist = {
+      kind,
+      slug,
+      name: author.name,
+      headline: author.headline,
+      photo: author.avatar,
+      company: null as string | null,
+      reading,
+      read: latest,
+   }
+
+   if (kind === 'company') {
+      const [company, page] = await Promise.all([
+         LinkedInCompanyService.bySlug(userId, slug),
+         PrismaService.client.pageSnapshot.findUnique({
+            where: {
+               userId_kind_slug: {
+                  userId,
+                  kind: 'COMPANY',
+                  slug,
+               },
+            },
+            select: { fetchedAt: true },
+         }),
+      ])
+
+      return company
+         ? {
+              ...gist,
+              name: company.name ?? author.name,
+              headline: company.industry,
+              readAt: page?.fetchedAt ?? null,
+           }
+         : null
+   }
+
+   const [person, profile, snapshot] = await Promise.all([
+      PrismaService.client.person.findFirst({
+         where: {
+            userId,
+            slug,
+         },
+         orderBy: { lastTouchAt: 'desc' },
+         select: {
+            name: true,
+            headline: true,
+            company: true,
+            photoUrl: true,
+         },
+      }),
+      knownAuthor(userId, author.url),
+      PrismaService.client.personSnapshot.findUnique({
+         where: {
+            userId_slug: {
+               userId,
+               slug,
+            },
+         },
+         select: { fetchedAt: true },
+      }),
+   ])
+
+   return person || profile
+      ? {
+           ...gist,
+           name: person?.name ?? author.name,
+           headline: person?.headline ?? author.headline,
+           photo: person?.photoUrl ?? author.avatar,
+           company: person?.company ?? null,
+           readAt: snapshot?.fetchedAt ?? null,
+        }
+      : null
 }
 
 export class PostPageService {
@@ -114,6 +213,26 @@ export class PostPageService {
          },
       })
 
+      const pictures = await PrismaService.client.person.findMany({
+         where: {
+            userId,
+            slug: { in: members.map(({ slug }) => slug) },
+            photoUrl: { not: null },
+         },
+         orderBy: { lastTouchAt: 'desc' },
+         select: {
+            slug: true,
+            photoUrl: true,
+         },
+      })
+      const photoOf = new Map<string, string>()
+
+      for (const { slug: memberSlug, photoUrl } of pictures) {
+         if (photoUrl && !photoOf.has(memberSlug)) {
+            photoOf.set(memberSlug, photoUrl)
+         }
+      }
+
       return {
          slug,
          url: post.url,
@@ -125,9 +244,12 @@ export class PostPageService {
                     fetchedAt: stored.fetchedAt,
                  }
                : null,
-         authorSlug: await knownAuthor(userId, page?.author.url ?? null),
+         author: await authorOf(userId, page?.author),
          people: members.map(({ signals, ...member }) => ({
             ...member,
+            // The photo of their My network person, when there is one.
+            photo: photoOf.get(member.slug) ?? null,
+
             // What they wrote on this post, when they commented.
             comment: readSignals(signals).find(signal => urls.includes(signal.via))?.excerpt ?? null,
          })),
@@ -144,21 +266,41 @@ export class PostPageService {
          return null
       }
 
-      if (known.post.archivedAt) {
-         throw new ConflictError('Restore the post first.')
-      }
-
-      await DataReadService.queue({
-         userId,
-         kind: 'POST',
-         slug,
-         operation: 'posts',
-         params: {
-            urls: known.post.expandedUrl ?? known.url,
-            maxResults: 1,
-         },
-      })
+      await DataReadService.queue(readOf(userId, known.post))
 
       return PostPageService.detail(userId, slug)
+   }
+
+   // The posts of these read (and paid for) in the last 30 days, which an import or a bulk read leaves alone.
+   public static readRecently(userId: string, slugs: string[], now = new Date()) {
+      return DataReadService.paidSince(userId, 'POST', slugs, new Date(now.getTime() - RECENT_READ_MS))
+   }
+
+   // One read each for the owner's posts matched, except those read in the last 30 days; a read refused now is counted.
+   public static async readMany(userId: string, which: Prisma.LinkedInPostWhereInput) {
+      const posts = await PrismaService.client.linkedInPost.findMany({
+         where: {
+            ...which,
+            userId,
+            archivedAt: null,
+         },
+         select: {
+            slug: true,
+            url: true,
+            expandedUrl: true,
+         },
+      })
+      const recent = await PostPageService.readRecently(
+         userId,
+         posts.map(({ slug }) => slug)
+      )
+      const queued = await DataReadService.queueEach(
+         posts.filter(({ slug }) => !recent.has(slug)).map(post => readOf(userId, post))
+      )
+
+      return {
+         ...queued,
+         readRecently: recent.size,
+      }
    }
 }

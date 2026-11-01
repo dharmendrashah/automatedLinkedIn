@@ -441,7 +441,7 @@ model LinkedInPost {
   expandedUrl String?
   status      LinkedInPostStatus @default(UNPROCESSED)
   tags        String[]           @default([])
-  // Set when the owner removes the post; it can be restored.
+  // No longer set: posts cannot be archived since 2026-11-01 (migration restore_archived_posts brought them back).
   archivedAt  DateTime?
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt

@@ -1,8 +1,7 @@
-import { AddCompaniesDialog } from '@/components/companies/add-companies-dialog'
+import { AddCompaniesDialog, COMPANY_FILLS } from '@/components/companies/add-companies-dialog'
 import { CompaniesTable } from '@/components/companies/companies-table'
 import { CompanyFilterChips, CompanyFiltersSheet } from '@/components/companies/filters/company-filters'
 import { SpecialitiesPick } from '@/components/companies/filters/specialities-pick'
-import { ReadManyButton } from '@/components/companies/read-many-button'
 import {
    type Basics,
    type CompanyFilters,
@@ -19,36 +18,28 @@ import { useDetailDrawer } from '@/components/details/use-detail-drawer'
 import { ADDED_FILTERS } from '@/components/labels/added'
 import { LinkBulkBar } from '@/components/links/bulk-bar'
 import { linkStatuses } from '@/components/links/link-statuses'
+import { COMPANY_READ, readResultLine } from '@/components/links/read-cost'
+import { ReadManyButton } from '@/components/links/read-many-button'
 import { useListState } from '@/components/links/use-list-state'
 import { useSelection } from '@/components/links/use-selection'
 import { ColumnsMenu } from '@/components/table/columns-menu'
+import { readSort, writeSort } from '@/components/table/sort-param'
 import { useHiddenColumns } from '@/components/table/use-hidden-columns'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { flagOf } from '@/lib/country-flag'
+import { readableError } from '@/lib/trpc-error'
 import { ListFilter, Search } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
+import { toast } from 'sonner'
 
 import { type Company } from '@/components/companies/types'
 
 import { trpc } from '../trpc'
 
 const SORT_BY: Array<CompanySort['by']> = ['createdAt', 'name']
-
-// `name.asc`, `createdAt.desc`; nothing is newest first.
-const readSort = (value: string | null): CompanySort | undefined => {
-   const [field, direction] = (value ?? '').split('.')
-   const by = SORT_BY.find(item => item === field)
-
-   return by
-      ? {
-           by,
-           desc: direction === 'desc',
-        }
-      : undefined
-}
 
 export const Companies = () => {
    const utils = trpc.useUtils()
@@ -61,7 +52,7 @@ export const Companies = () => {
    const industries = params.getAll('industry')
    const countries = params.getAll('country')
    const sortParam = params.get('sort')
-   const sort = useMemo(() => readSort(sortParam), [sortParam])
+   const sort = useMemo(() => readSort(sortParam, SORT_BY), [sortParam])
    const filtersParam = params.get('filters')
    const drawerFilters = useMemo(() => readFilters(filtersParam), [filtersParam])
    const drawerQuery = useMemo(() => apiFilters(drawerFilters), [drawerFilters])
@@ -119,9 +110,10 @@ export const Companies = () => {
       setParams(
          current => {
             const updated = new URLSearchParams(current)
+            const written = writeSort(next)
 
-            if (next) {
-               updated.set('sort', `${next.by}.${next.desc ? 'desc' : 'asc'}`)
+            if (written) {
+               updated.set('sort', written)
             } else {
                updated.delete('sort')
             }
@@ -137,6 +129,13 @@ export const Companies = () => {
       void utils.label.list.invalidate()
    }
    const labelMany = trpc.linkedInCompany.labelMany.useMutation({ onSuccess: refresh })
+   const readMany = trpc.linkedInCompany.readMany.useMutation({
+      onSuccess: totals => {
+         toast.success(readResultLine(COMPANY_READ, totals))
+         void utils.linkedInCompany.list.invalidate()
+      },
+      onError: error => toast.error(readableError(error)),
+   })
    const more = useCallback(() => void list.fetchNextPage(), [list])
    const update = trpc.linkedInCompany.update.useMutation()
    const saveTags = async (company: Company, tags: string[]) => {
@@ -301,7 +300,13 @@ export const Companies = () => {
          {actionError ? <p className="text-destructive text-sm">{actionError}</p> : null}
 
          <LinkBulkBar kind="companies" selection={selection} labelMany={labelMany}>
-            <ReadManyButton picked={rows.filter(({ id }) => selection.selected.has(id))} />
+            <ReadManyButton
+               noun={COMPANY_READ}
+               fills={COMPANY_FILLS}
+               picked={rows.filter(({ id, archivedAt }) => selection.selected.has(id) && !archivedAt)}
+               pending={readMany.isPending}
+               onRead={ids => readMany.mutate({ ids })}
+            />
          </LinkBulkBar>
 
          <CompaniesTable

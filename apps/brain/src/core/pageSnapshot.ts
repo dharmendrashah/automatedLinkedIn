@@ -234,3 +234,26 @@ export const readCompanySnapshot = (data: unknown): CompanySnapshotData | null =
    companySchema.safeParse(data).data ?? null
 
 export const readPostSnapshot = (data: unknown): PostSnapshotData | null => postSchema.safeParse(data).data ?? null
+
+// Characters of a post's text a row of the Posts table gets.
+const CARD_TEXT = 280
+
+// The read fields a row of the Posts table shows: who wrote it, the start of the text, when, and how people engaged.
+export const postCardOf = (data: unknown) => {
+   const snapshot = readPostSnapshot(data)
+
+   return snapshot
+      ? {
+           author: {
+              name: snapshot.author.name,
+              avatar: snapshot.author.avatar,
+              headline: snapshot.author.headline,
+              isCompany: snapshot.author.isCompany,
+           },
+           text: snapshot.text?.slice(0, CARD_TEXT) ?? null,
+           postedAt: snapshot.postedAt,
+           reactions: snapshot.reactions,
+           comments: snapshot.comments,
+        }
+      : null
+}

@@ -28,6 +28,7 @@ export const DetailDrawers = ({ kind, order }: Props) => {
    const previous = index > 0 ? order[index - 1] : undefined
    const next = index >= 0 && index < order.length - 1 ? order[index + 1] : undefined
    const toPerson = (slug: string) => (open ? show('person', slug, open) : undefined)
+   const toCompany = (slug: string) => (open ? show('company', slug, open) : undefined)
 
    return (
       <Drawer direction="right" open={Boolean(open)} onOpenChange={isOpen => (isOpen ? undefined : close())}>
@@ -46,7 +47,9 @@ export const DetailDrawers = ({ kind, order }: Props) => {
                ) : null}
                {open?.kind === 'person' ? <PersonBySlug key={open.slug} slug={open.slug} onClose={close} /> : null}
                {open?.kind === 'company' ? <CompanyView key={open.slug} slug={open.slug} onPerson={toPerson} /> : null}
-               {open?.kind === 'post' ? <PostView key={open.slug} slug={open.slug} onPerson={toPerson} /> : null}
+               {open?.kind === 'post' ? (
+                  <PostView key={open.slug} slug={open.slug} onPerson={toPerson} onCompany={toCompany} />
+               ) : null}
             </div>
             {order.length > 0 ? (
                <DrawerFooter className="flex-row justify-between border-t">

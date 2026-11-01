@@ -54,6 +54,7 @@ export {
    companyCardOf,
    companyRowFrom,
    companySnapshotFrom,
+   postCardOf,
    postSnapshotFrom,
    readCompanySnapshot,
    readPostSnapshot,
