@@ -1,6 +1,6 @@
 # Workflow engine, blocks and connections: learn from n8n, close the loopholes
 
-- Status: locked <!-- draft | locked | in progress | done -->
+- Status: done <!-- draft | locked | in progress | done -->
 - Created: 2026-11-01
 - Locked by user: yes, 2026-11-02 ("yes and continue with defaults": every recommended answer below was accepted)
 
@@ -230,10 +230,10 @@ Each phase is its own PR with its own plan; tests first; the six repros become t
    - [x] L6: `kind` in the item key (column, backfill from `data->>'kind'`, index swap).
    - [x] Inverted repro tests for L1, L2, L3, L6; engine unit tests for wind down.
 - [x] Phase 1, one definition per block (done 2026-11-02; plan `workflow-engine-p1-block-definition.md`):
-   - [ ] Golden test of `catalog()` and `validateGraph` before the move.
-   - [ ] `defineBlock`, flags, derived sets, `version` and `migrate`, `deprecated`; move `blockEstimate`, `PREVIEW_CAPS` and the `validateGraph` special cases into definitions, one group of blocks at a time.
-   - [ ] Registry tests (contracts, brain, body) and the made-up block test.
-   - [ ] Dual build of contracts (if question 5 is yes); `summarize` in definitions; drop body's duplicated logic and its parity tests.
+   - [x] Golden test of `catalog()` and `validateGraph` before the move.
+   - [x] Flags, `estimate`, `previewCap`, `validate`, `version`, `migrate`, `deprecated` in the definitions (no `defineBlock` wrapper: the typed `BLOCKS` record does the job); flags, derived sets, `version` and `migrate`, `deprecated`; move `blockEstimate`, `PREVIEW_CAPS` and the `validateGraph` special cases into definitions, one group of blocks at a time.
+   - [x] Registry tests (contracts, brain, body) and the made-up block test.
+   - [x] Dual build of contracts: tried and dropped (bundle size, see the phase 1 plan); `summarize` stays in body.
 - [x] Phase 2, run semantics (plan `workflow-engine-p2-run-semantics.md`, done): `engineVersion`; fired triggers; liveness and `SKIPPED`; fixed order; the run page says why a block was skipped; inverted repro tests for L4, L5, L7.
 - [x] Phase 3, ports (plan `workflow-engine-p3-ports.md`): `outputs`, `fromPort`, port item keys, validation, engine reads, If, Task result, Retry, Run another workflow ports, canvas handles, Else compatibility, tests, `MEMORY.md`.
 - [x] Phase 4, run lifecycle (plan `workflow-engine-p4-lifecycle.md`), each item its own step and go-ahead: queued runs; failure alerts and the stop-with-error block; stuck-run check; the give-back block; resume a failed run; engine parallelism only if measured.
@@ -265,4 +265,10 @@ Each phase is its own PR with its own plan; tests first; the six repros become t
 
 ## Outcome
 
-Filled in when done: what shipped, deviations, follow-ups (also copy durable ones to `MEMORY.md`).
+Shipped 2026-11-02 in six pieces: phases 0 to 4 on `feat/workflow-engine-p0-safety` (PR 175), phase 5 on `feat/workflow-engine-p5-editor` (PR 176, stacked on it). Each has its own plan with its outcome; the decisions and gotchas are in `MEMORY.md`.
+
+Deviations: the dual ESM and CommonJS contracts build was dropped (bundle size); `outputs` is derived from the `keepsAside` flag instead of a field on every definition; a PARTIAL run cannot be resumed (only FAILED); a child started by "Run another workflow" refuses instead of queuing (deadlock); phase 5 shipped only switch-a-block-off and history.
+
+Follow-ups, none started: engine parallelism (measure the `workflow-engine` tick first), email or webhook alerts and an error workflow, resume of a PARTIAL run, test a block with a sample item, event triggers and "Wait for an event or approval", an input contract on a child workflow.
+
+Not verified: the compiled worker on a long real run, the real data supplier and LinkedIn accounts, and the new screens (alerts popover, Cancel, resume, Power switch, History, Else handle) in a browser. New migrations (`QUEUED`, `alertDismissedAt`, `WorkflowVersion`) were applied to the integration test database only.
