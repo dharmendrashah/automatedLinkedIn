@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
-import { postedText } from './post-row'
+import { mediaKind, postedText } from './post-row'
 
 describe('post-row', () => {
+   it('should show a picture inline, play a video and open anything else as a file', () => {
+      expect(['image', 'Photo', 'video', 'document', null].map(mediaKind)).toEqual([
+         'image',
+         'image',
+         'video',
+         'file',
+         'file',
+      ])
+   })
+
    it('should show a posting date as time ago and keep any other text', () => {
       const now = new Date('2026-11-01T12:00:00Z')
 

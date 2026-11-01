@@ -253,6 +253,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-11-01: Post drawer looks like a LinkedIn post (`.plan/post-drawer-linkedin-look.md`, done; not seen in a browser): `PostAuthor`, `PostMedia` (image, video, file and article tiles, all through `/cdn`), `PostCounts` in `posts/post-body.tsx`, shared with the person drawer's `PostCard`; the counts and the action bar open the Comments or Reactions tab (controlled by the drawer) where the paid reads are.
 - 2026-11-01: Posts page redesign (`.plan/posts-page-redesign.md`, done; not seen in a browser behind sign-in). Needs migration `20261101200000_restore_archived_posts` on staging (data only). Verified: lint, ts:check, unit tests, build, all brain integration tests against local Postgres.
 - 2026-11-01: Brain integration tests run each file in its own database cloned from a migrated template, and due rows are dated in the past (flaky CI from shared rows and app vs database clock skew). Verified with 8 sequential local runs.
 
