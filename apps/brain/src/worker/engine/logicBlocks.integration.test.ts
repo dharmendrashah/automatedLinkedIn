@@ -143,6 +143,10 @@ describe('Wait, Task result and Retry (database)', () => {
       await advanceRun(runId, deps())
 
       expect(await statusOf(runId)).toBe('FAILED')
+      expect(await stepOf(runId, 'score')).toMatchObject({
+         status: 'FAILED',
+         errorCode: 'ICP_DELETED',
+      })
    })
 
    it('should go on after a failure a Task result looks at, and send what reached the failed block to the Else side', async () => {
@@ -162,6 +166,26 @@ describe('Wait, Task result and Retry (database)', () => {
       expect(await slugsAt(runId, 'list')).toEqual([])
       expect(await slugsAt(runId, 'no')).toEqual(['ada', 'bob'])
       expect(await statusOf(runId)).toBe('PARTIAL')
+
+      const reached = (nodeId: string, who = userId) =>
+         WorkflowService.input(who, {
+            runId,
+            nodeId,
+            skip: 0,
+            take: 25,
+         })
+
+      // An Else reads what the Task result kept aside; the failed block reads what the block before it passed on.
+      expect((await reached('else'))?.items.map(({ from, item }) => `${from}:${item.slug}`)).toEqual([
+         'result:ada',
+         'result:bob',
+      ])
+      expect((await reached('score'))?.items.map(({ from, item }) => `${from}:${item.slug}`)).toEqual([
+         'people:ada',
+         'people:bob',
+      ])
+      expect(await reached('score', randomUUID())).toBeNull()
+      expect((await reached('nope'))?.total).toBe(0)
    })
 
    it('should run a failing block again up to the number of tries, then end with gaps', async () => {
@@ -374,5 +398,24 @@ describe('Wait, Task result and Retry (database)', () => {
       await RetentionService.run()
 
       expect(await slugsAt(runId, 'people')).toEqual([])
+   })
+
+   it('should end a run whose graph cannot be read, saying so on its steps, instead of failing on every tick', async () => {
+      const runId = await start({
+         nodes: [node('people', 'input.profiles', { links: [profile('ada')] }), node('csv', 'output.csv')],
+         edges: [line('people', 'csv')],
+      })
+
+      await PrismaService.client.workflowRun.update({
+         where: { id: runId },
+         data: { graph: { nodes: 'broken' } },
+      })
+      await advanceRun(runId, deps())
+
+      expect(await statusOf(runId)).toBe('FAILED')
+      expect(await stepOf(runId, 'people')).toMatchObject({
+         status: 'FAILED',
+         errorCode: 'RUN_UNREADABLE',
+      })
    })
 })

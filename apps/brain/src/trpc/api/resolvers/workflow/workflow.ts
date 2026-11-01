@@ -14,6 +14,7 @@ import {
    inputPickSchema,
    nextScheduledRuns,
    scheduleSchema,
+   stepErrorCatalog,
    templateCatalog,
    templateGraph,
 } from '@automatedLinkedIn/contracts'
@@ -50,6 +51,8 @@ const updateInput = byId.extend({
    maybeScore: score.optional(),
    maybeEnabled: z.boolean().optional(),
    enabled: z.boolean().optional(),
+   // The `updatedAt` the editor loaded: a workflow changed since then is not overwritten. Leave it out to save anyway.
+   expectedUpdatedAt: z.string().datetime().optional(),
 })
 
 // A saved workflow with its graph parsed and what still stops it from running.
@@ -69,6 +72,9 @@ export const workflow = router({
    catalog: ownerProcedure.query(() => catalog()),
 
    templates: ownerProcedure.query(() => templateCatalog()),
+
+   // What each step error code means and what to do about it, for the block dialog.
+   stepErrors: ownerProcedure.query(() => stepErrorCatalog()),
 
    // The next three starts of a schedule being edited, so the owner sees what it means. Invalid settings give none.
    nextRuns: ownerProcedure.input(z.object({ schedule: z.record(z.string(), z.unknown()) })).query(({ input }) => {
@@ -141,14 +147,15 @@ export const workflow = router({
    }),
 
    update: ownerProcedure.input(updateInput).mutation(async ({ ctx, input }) => {
-      const { id, ...changes } = input
-      const updated = present(await orConflict(WorkflowService.update(ctx.user.id, id, changes)), MISSING)
+      const { id, expectedUpdatedAt, ...changes } = input
+      const options = { expectedUpdatedAt: expectedUpdatedAt ? new Date(expectedUpdatedAt) : undefined }
+      const updated = present(await orConflict(WorkflowService.update(ctx.user.id, id, changes, options)), MISSING)
 
       return withProblems(ctx.user.id, updated)
    }),
 
    delete: ownerProcedure.input(byId).mutation(async ({ ctx, input }) => {
-      present(await WorkflowService.delete(ctx.user.id, input.id), MISSING)
+      present(await orConflict(WorkflowService.delete(ctx.user.id, input.id)), MISSING)
    }),
 
    // A new token for the workflow's API address. Shown once; the old one stops working.
@@ -245,6 +252,47 @@ export const workflow = router({
             }),
             RUN_MISSING
          )
+      }),
+
+   // One page of what reached a block in a run: the output of the blocks before it, with the block each item came from.
+   input: ownerProcedure
+      .input(
+         outputInput.extend({
+            page: z.number().int().min(1).default(1),
+            pageSize: z.number().int().min(1).max(100).default(25),
+         })
+      )
+      .query(async ({ ctx, input }) => {
+         const { page, pageSize, ...query } = input
+
+         return present(
+            await WorkflowService.input(ctx.user.id, {
+               ...query,
+               skip: (page - 1) * pageSize,
+               take: pageSize,
+            }),
+            RUN_MISSING
+         )
+      }),
+
+   inputCsv: ownerProcedure
+      .input(outputInput.extend({ fileName: z.string().trim().max(80).optional() }))
+      .mutation(async ({ ctx, input }) => {
+         const { fileName, ...query } = input
+         const { items, total } = present(
+            await WorkflowService.input(ctx.user.id, {
+               ...query,
+               skip: 0,
+               take: CSV_MAX_ROWS,
+            }),
+            RUN_MISSING
+         )
+         const base = (fileName || `${input.nodeId}-input`).replace(/[^\p{L}\p{N}_-]+/gu, '-')
+
+         return {
+            fileName: `${base}.csv`,
+            csv: itemsCsv(items, total),
+         }
       }),
 
    // A mutation so the file is only built when asked for and never cached.

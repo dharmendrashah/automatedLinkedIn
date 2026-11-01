@@ -1,10 +1,11 @@
 import { type CompanyItem, type PersonItem, type PostItem, type WorkflowItemData, readSeniorities } from 'core'
 import { type DataClient, DataServiceError } from 'core/dataClient'
 import { advanceJob } from 'core/dataJob'
+import { ELSE_SUFFIX } from 'core/workflowInput'
 
 import { IcpService, type ItemKey, WalletService, WorkflowRunService, floorMicros } from 'database'
 
-import { type Graph, type GraphNode, blockOf } from '@automatedLinkedIn/contracts'
+import { type Graph, type GraphNode, type StepErrorCode, blockOf } from '@automatedLinkedIn/contracts'
 
 import { type Post } from './sendApi'
 import { type ScoringRules } from './steps'
@@ -25,7 +26,7 @@ export type EngineDeps = {
 }
 
 // Where an If keeps the people it did not pass on, for an Else after it.
-export const ELSE_SUFFIX = '~else'
+export { ELSE_SUFFIX }
 
 // The side output of an If or a "Run another workflow" block, read by an Else after it.
 export const elseKey = (ctx: { at: ItemKey }, sourceId: string) => ({
@@ -40,6 +41,8 @@ export type StepResult = {
    itemsIn: number
    itemsOut: number
    message?: string
+   // Why a step that is done with gaps has them (STEP_ERROR_CODES).
+   errorCode?: StepErrorCode
 }
 
 export type Context = {
@@ -54,8 +57,15 @@ export type Context = {
    deps: EngineDeps
 }
 
-// A step that cannot go on, with the sentence the client reads.
-export class StepError extends Error {}
+// A step that cannot go on, with the sentence the client reads and the code that explains it (STEP_ERROR_CODES).
+export class StepError extends Error {
+   public readonly code: StepErrorCode
+
+   public constructor(message: string, code: StepErrorCode) {
+      super(message)
+      this.code = code
+   }
+}
 
 // The worker is stopping; the step is given back and resumes later.
 export class Paused extends Error {}
@@ -66,6 +76,8 @@ export class Waiting extends Error {}
 export const WALLET_LOW = 'Collecting stopped because the data wallet ran low. What was found so far is kept.'
 export const STOPPED_BY_YOU = 'Stopped by you. What was found so far is kept.'
 export const SERVICE_BUSY = 'The data service did not answer for some requests. What was found so far is kept.'
+export const DATA_REFUSED =
+   'The data service refused some requests, so their results are missing. What was found so far is kept.'
 
 export const peopleOf = (items: WorkflowItemData[]) =>
    items.filter((item): item is PersonItem => item.kind === 'profile')
@@ -141,7 +153,7 @@ export const rulesOf = async (userId: string, node: GraphNode | null): Promise<S
    const icp = typeof icpId === 'string' ? await IcpService.getForUser(userId, icpId) : null
 
    if (!icp) {
-      throw new StepError('The ideal customer this workflow scores against was deleted.')
+      throw new StepError('The ideal customer this workflow scores against was deleted.', 'ICP_DELETED')
    }
 
    return {
@@ -324,11 +336,31 @@ export const collectEach = async (ctx: Context, requests: Request[]): Promise<St
       throw new Waiting()
    }
 
+   const refused = failed > 0 && !stopped && (await WorkflowRunService.refusedCalls(ctx.step.id)) > 0
+   const gap = stopped
+      ? byYou
+         ? { message: STOPPED_BY_YOU }
+         : {
+              message: WALLET_LOW,
+              errorCode: 'WALLET_LOW' as const,
+           }
+      : refused
+        ? {
+             message: DATA_REFUSED,
+             errorCode: 'DATA_REJECTED' as const,
+          }
+        : failed > 0
+          ? {
+               message: SERVICE_BUSY,
+               errorCode: 'SERVICE_BUSY' as const,
+            }
+          : {}
+
    return {
       status: stopped || failed > 0 ? 'PARTIAL' : 'DONE',
       itemsIn: ctx.inputs.length,
       itemsOut: await WorkflowRunService.countItems(ctx.at),
-      message: stopped ? (byYou ? STOPPED_BY_YOU : WALLET_LOW) : failed > 0 ? SERVICE_BUSY : undefined,
+      ...gap,
    }
 }
 

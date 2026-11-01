@@ -71,7 +71,7 @@ const lookedAt = (ctx: Context) => {
    const block = workingBlockBefore(ctx.graph, ctx.node.id)
 
    if (!block) {
-      throw new StepError(`${blockOf(ctx.node.type).label} needs a block before it to look at.`)
+      throw new StepError(`${blockOf(ctx.node.type).label} needs a block before it to look at.`, 'NO_BLOCK_BEFORE')
    }
 
    const step =

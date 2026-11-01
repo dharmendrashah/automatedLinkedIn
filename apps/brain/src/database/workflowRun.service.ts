@@ -1,4 +1,5 @@
 import { type PersonItem, type WorkflowItemData, mergeBySlug, readItem } from 'core'
+import { ELSE_SUFFIX } from 'core/workflowInput'
 
 import { type Prisma, type WorkflowRunStatus, type WorkflowStepStatus } from 'generated/prisma/client'
 
@@ -105,7 +106,13 @@ export class WorkflowRunService {
 
    public static finishStep(
       stepId: string,
-      result: { status: WorkflowStepStatus; itemsIn: number; itemsOut: number; message?: string | null }
+      result: {
+         status: WorkflowStepStatus
+         itemsIn: number
+         itemsOut: number
+         message?: string | null
+         errorCode?: string | null
+      }
    ) {
       return PrismaService.client.workflowStepRun.update({
          where: { id: stepId },
@@ -163,6 +170,52 @@ export class WorkflowRunService {
                ? [
                     {
                        round: itemRound,
+                       item,
+                    },
+                 ]
+               : []
+         }),
+      }
+   }
+
+   // One page of what several places hold (what reached a block), with the block each item came from.
+   public static async pageKeys(runId: string, keys: { nodeId: string; round: number }[], skip: number, take: number) {
+      if (keys.length === 0) {
+         return {
+            total: 0,
+            items: [],
+         }
+      }
+
+      const where = {
+         runId,
+         OR: keys,
+      }
+      const [rows, total] = await Promise.all([
+         PrismaService.client.workflowItem.findMany({
+            where,
+            orderBy: [{ nodeId: 'asc' }, { round: 'asc' }, { slug: 'asc' }],
+            skip,
+            take,
+            select: {
+               nodeId: true,
+               round: true,
+               data: true,
+            },
+         }),
+         PrismaService.client.workflowItem.count({ where }),
+      ])
+
+      return {
+         total,
+         items: rows.flatMap(({ nodeId, round, data }) => {
+            const item = readItem(data)
+
+            return item
+               ? [
+                    {
+                       round,
+                       from: nodeId.replace(ELSE_SUFFIX, ''),
                        item,
                     },
                  ]
@@ -309,6 +362,7 @@ export class WorkflowRunService {
                   claimedAt: null,
                   finishedAt: null,
                   message: null,
+                  errorCode: null,
                   tries: { increment: 1 },
                   waitUntil: retry.waitSeconds > 0 ? new Date(Date.now() + retry.waitSeconds * 1000) : null,
                },
@@ -410,6 +464,17 @@ export class WorkflowRunService {
       return PrismaService.client.workflowStepCall.update({
          where: { id: callId },
          data: { jobId },
+      })
+   }
+
+   // How many requests of a step the data service refused as invalid (a retry cannot fix them).
+   public static refusedCalls(stepRunId: string) {
+      return PrismaService.client.workflowStepCall.count({
+         where: {
+            stepRunId,
+            status: 'FAILED',
+            error: 'BAD_REQUEST',
+         },
       })
    }
 
