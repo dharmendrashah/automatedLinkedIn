@@ -228,6 +228,15 @@ export const workflow = router({
       }
    }),
 
+   // The saved versions of a workflow, and putting one back.
+   history: ownerProcedure
+      .input(byId)
+      .query(async ({ ctx, input }) => present(await WorkflowService.history(ctx.user.id, input.id), MISSING)),
+
+   restore: ownerProcedure.input(byId.extend({ versionId: z.string().min(1) })).mutation(async ({ ctx, input }) => {
+      present(await orConflict(WorkflowService.restore(ctx.user.id, input.id, input.versionId)), MISSING)
+   }),
+
    // Takes the newest run up again from the block that failed.
    resumeRun: ownerProcedure
       .input(z.object({ runId: z.string().min(1) }))

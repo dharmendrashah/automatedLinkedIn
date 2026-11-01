@@ -1,6 +1,6 @@
 # Workflow engine, blocks and connections: learn from n8n, close the loopholes
 
-- Status: locked <!-- draft | locked | in progress | done -->
+- Status: done <!-- draft | locked | in progress | done -->
 - Created: 2026-11-01
 - Locked by user: yes, 2026-11-02 ("yes and continue with defaults": every recommended answer below was accepted)
 
@@ -230,14 +230,14 @@ Each phase is its own PR with its own plan; tests first; the six repros become t
    - [x] L6: `kind` in the item key (column, backfill from `data->>'kind'`, index swap).
    - [x] Inverted repro tests for L1, L2, L3, L6; engine unit tests for wind down.
 - [x] Phase 1, one definition per block (done 2026-11-02; plan `workflow-engine-p1-block-definition.md`):
-   - [ ] Golden test of `catalog()` and `validateGraph` before the move.
-   - [ ] `defineBlock`, flags, derived sets, `version` and `migrate`, `deprecated`; move `blockEstimate`, `PREVIEW_CAPS` and the `validateGraph` special cases into definitions, one group of blocks at a time.
-   - [ ] Registry tests (contracts, brain, body) and the made-up block test.
-   - [ ] Dual build of contracts (if question 5 is yes); `summarize` in definitions; drop body's duplicated logic and its parity tests.
+   - [x] Golden test of `catalog()` and `validateGraph` before the move.
+   - [x] Flags, `estimate`, `previewCap`, `validate`, `version`, `migrate`, `deprecated` in the definitions (no `defineBlock` wrapper: the typed `BLOCKS` record does the job); flags, derived sets, `version` and `migrate`, `deprecated`; move `blockEstimate`, `PREVIEW_CAPS` and the `validateGraph` special cases into definitions, one group of blocks at a time.
+   - [x] Registry tests (contracts, brain, body) and the made-up block test.
+   - [x] Dual build of contracts: tried and dropped (bundle size, see the phase 1 plan); `summarize` stays in body.
 - [x] Phase 2, run semantics (plan `workflow-engine-p2-run-semantics.md`, done): `engineVersion`; fired triggers; liveness and `SKIPPED`; fixed order; the run page says why a block was skipped; inverted repro tests for L4, L5, L7.
 - [x] Phase 3, ports (plan `workflow-engine-p3-ports.md`): `outputs`, `fromPort`, port item keys, validation, engine reads, If, Task result, Retry, Run another workflow ports, canvas handles, Else compatibility, tests, `MEMORY.md`.
 - [x] Phase 4, run lifecycle (plan `workflow-engine-p4-lifecycle.md`), each item its own step and go-ahead: queued runs; failure alerts and the stop-with-error block; stuck-run check; the give-back block; resume a failed run; engine parallelism only if measured.
-- [ ] Phase 5 only for what you choose after phase 4.
+- [x] Phase 5 (plan `workflow-engine-p5-editor.md`, own branch and PR): switch a block off, workflow history and restore. Test a block, event triggers and wait for an event or approval deferred.
 
 ## Edge cases and risks
 
@@ -265,4 +265,10 @@ Each phase is its own PR with its own plan; tests first; the six repros become t
 
 ## Outcome
 
-Filled in when done: what shipped, deviations, follow-ups (also copy durable ones to `MEMORY.md`).
+Shipped 2026-11-02 in six pieces: phases 0 to 4 on `feat/workflow-engine-p0-safety` (PR 175), phase 5 on `feat/workflow-engine-p5-editor` (PR 176, stacked on it). Each has its own plan with its outcome; the decisions and gotchas are in `MEMORY.md`.
+
+Deviations: the dual ESM and CommonJS contracts build was dropped (bundle size); `outputs` is derived from the `keepsAside` flag instead of a field on every definition; a PARTIAL run cannot be resumed (only FAILED); a child started by "Run another workflow" refuses instead of queuing (deadlock); phase 5 shipped only switch-a-block-off and history.
+
+Follow-ups, none started: engine parallelism (measure the `workflow-engine` tick first), email or webhook alerts and an error workflow, resume of a PARTIAL run, test a block with a sample item, event triggers and "Wait for an event or approval", an input contract on a child workflow.
+
+Real path run 2026-11-02: the three pending migrations were applied to both local databases (backups in `/tmp`, schema diff clean, 10 workflows got 10 first versions), all 92 migrations applied to an empty scratch database, and the compiled worker (jobs only, no data supplier key) ran 9 scenarios through the database: free chain, queued start and promotion, refused preview, Stop during a Wait, else port into Stop with an error, alert and dismiss, resume (twice), a failing data block, a switched-off block, Give back to a caller, history and restore, and the stuck-run check; all passed, and the cron monitor recorded `workflow-engine` and `workflow-watchdog`. Browser run 2026-11-02 (signed in as the local test user, dev worker): Power switch (toggle, save, reload, note), History (restore), Else handle (drawn line labelled Else, undone), failed run in the header alerts and its dismiss, resume from the run page (Running, then Failed again), a queued start ("Waiting its turn", Cancel run), Stop on the live run; the Else line and the off flag survived a UI save. Found and fixed (`1ffae0e`): the canvas restarted from the stale graph after a restore, a resumed run that failed again stayed dismissed, the cancel dialog used the stop text, "1 workflow runs failed". One capped supplier preview (one profile, $0.004 estimate and cost) ran through the dev worker and was booked once in the ledger. Larger real run (budget $1, through the dev worker, owner account, a lead-finding graph: saved posts, commenters and reactors, scored against the ideal customer "gtms", kept in a list): the first start took the one unprocessed saved post (8 commenters and 33 reactions, $0.082); a second start fed five saved posts through the run's input (34 comments and 173 reactions, 194 people, $0.452 against a worst case of $0.80), both ended SUCCEEDED with the booked cost matching the steps, and the "Add to list" block was skipped because nobody was kept (an empty branch writes nothing). Nobody was kept because the dev ideal customer "gtms" lists "gtm" as both an included and an excluded title, so every GTM headline is disqualified; re-scored offline with the excluded title removed the same 207 rows give 9 qualified and 21 maybe. Not verified: real LinkedIn accounts and Write a post, the cancel dialog wording after the fix.

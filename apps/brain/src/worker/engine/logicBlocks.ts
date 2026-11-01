@@ -153,3 +153,9 @@ export const retry = async (ctx: Context): Promise<StepResult> => {
 export const stop = (ctx: Context): Promise<StepResult> => {
    throw new StepError(textIn(configOf(ctx.node), 'message') || STOP_MESSAGE, 'STOPPED_BY_BLOCK')
 }
+
+// A block the owner switched off: what reaches it goes on, of any kind, and nothing else happens.
+export const switchedOff = async (ctx: Context): Promise<StepResult> => ({
+   ...(await keepItems(ctx, ctx.inputs, ctx.inputs.length)),
+   message: 'This block is switched off, so it passed everything on without running.',
+})

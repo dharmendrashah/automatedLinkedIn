@@ -173,6 +173,25 @@ describe('graph-convert', () => {
       expect(portOfHandle('port:else')).toBe('else')
    })
 
+   it('should carry a block that is switched off through the canvas and back, and leave the flag out when it is on', () => {
+      const off: Graph = {
+         ...graph,
+         nodes: graph.nodes.map(node => (node.id === 'commenters' ? { ...node, disabled: true } : node)),
+      }
+      const { nodes, edges } = toFlow(off, catalog)
+
+      expect(nodes.map(({ id, data }) => [id, data.disabled])).toEqual([
+         ['posts', undefined],
+         ['commenters', true],
+         ['score', undefined],
+      ])
+      expect(toGraph(nodes, edges).nodes.map(({ id, disabled }) => [id, disabled])).toEqual([
+         ['posts', undefined],
+         ['commenters', true],
+         ['score', undefined],
+      ])
+   })
+
    it('should join any two blocks once, and never a block to itself', () => {
       const { edges } = toFlow(graph, catalog)
 

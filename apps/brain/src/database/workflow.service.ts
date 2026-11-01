@@ -11,7 +11,6 @@ import {
    estimateGraph,
    graphSchema,
    nextScheduledRun,
-   postBlocksOfText,
    previewGraph,
    scheduleOf,
    upgradeGraph,
@@ -23,10 +22,11 @@ import { InputPickService } from './inputPick.service'
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
 import { LinkedInProfileService } from './linkedInProfile.service'
-import { dropFiles, keysOf, ownsKeys } from './postFileKeys'
+import { dropFiles, filesOf, ownsKeys, postsOf } from './postFileKeys'
 import { PrismaService } from './prisma.service'
 import { WalletService } from './wallet.service'
 import { WorkflowRunService } from './workflowRun.service'
+import { MAX_VERSIONS, sameGraph, unheldFiles } from './workflowVersion'
 
 export type WorkflowChanges = {
    name?: string
@@ -163,12 +163,6 @@ const admit = async (
 const listTaken = (name: string) => `You already have a list named "${name}". Pick another workflow name.`
 
 export const readGraph = (value: unknown): Graph => upgradeGraph(graphSchema.parse(value))
-
-// The posts written in the "Write a post" blocks of a graph; their files belong to the graph.
-const postsOf = (graph: Graph) =>
-   graph.nodes.flatMap(({ type, config }) =>
-      type === 'account.writePost' ? (postBlocksOfText(config.post) ?? []) : []
-   )
 
 const FOREIGN_FILE = 'A file of a post is not yours. Attach it again.'
 
@@ -382,7 +376,7 @@ export class WorkflowService {
             listTaken(input.name)
          )
 
-         return uniqueOr(
+         const workflow = await uniqueOr(
             tx.workflow.create({
                data: {
                   userId,
@@ -395,6 +389,15 @@ export class WorkflowService {
             }),
             workflowTaken(input.name)
          )
+
+         await tx.workflowVersion.create({
+            data: {
+               workflowId: workflow.id,
+               graph: input.graph,
+            },
+         })
+
+         return workflow
       })
    }
 
@@ -467,17 +470,109 @@ export class WorkflowService {
          workflowTaken(changes.name ?? current.name)
       )
 
-      // The files the saved graph no longer holds are deleted from the bucket.
+      // The files nothing holds any more (not the saved graph, not a kept version) are deleted from the bucket.
       if (changes.graph) {
-         const kept = new Set(keysOf(postsOf(changes.graph)))
+         const { staying, pruned } = await WorkflowService.keepVersion(id, changes.graph)
 
-         await dropFiles(keysOf(postsOf(readGraph(current.graph))).filter(key => !kept.has(key)))
+         await dropFiles(
+            unheldFiles(
+               [...filesOf(readGraph(current.graph)), ...pruned.flatMap(filesOf)],
+               [...filesOf(changes.graph), ...staying.flatMap(filesOf)]
+            )
+         )
       }
 
       return {
          ...updated,
          switchedOff,
       }
+   }
+
+   // Keeps the graph just saved as a version unless it is the one already kept, and drops the versions beyond the newest
+   // MAX_VERSIONS. Returns the graphs that stay and the ones dropped, for the files they hold.
+   private static async keepVersion(workflowId: string, graph: Graph) {
+      const versions = PrismaService.client.workflowVersion
+      const newest = graphSchema.safeParse(
+         (
+            await versions.findFirst({
+               where: { workflowId },
+               orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+               select: { graph: true },
+            })
+         )?.graph
+      )
+
+      if (!newest.success || !sameGraph(newest.data, graph)) {
+         await versions.create({
+            data: {
+               workflowId,
+               graph,
+            },
+         })
+      }
+
+      const all = await versions.findMany({
+         where: { workflowId },
+         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+         select: {
+            id: true,
+            graph: true,
+         },
+      })
+      const dropped = all.slice(MAX_VERSIONS)
+      const read = (rows: { graph: unknown }[]) =>
+         rows.flatMap(row => {
+            const parsed = graphSchema.safeParse(row.graph)
+
+            return parsed.success ? [parsed.data] : []
+         })
+
+      if (dropped.length > 0) {
+         await versions.deleteMany({ where: { id: { in: dropped.map(({ id }) => id) } } })
+      }
+
+      return {
+         staying: read(all.slice(0, MAX_VERSIONS)),
+         pruned: read(dropped),
+      }
+   }
+
+   // The saved versions of the owner's workflow, newest first. null when it is not the owner's.
+   public static async history(userId: string, id: string) {
+      if (!(await WorkflowService.get(userId, id))) {
+         return null
+      }
+
+      const versions = await PrismaService.client.workflowVersion.findMany({
+         where: { workflowId: id },
+         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+         select: {
+            id: true,
+            graph: true,
+            createdAt: true,
+         },
+      })
+
+      return versions.map(version => ({
+         id: version.id,
+         createdAt: version.createdAt,
+         blocks: graphSchema.safeParse(version.graph).data?.nodes.length ?? 0,
+      }))
+   }
+
+   // Saves a version of the graph again, as any save: the name and the switch stay as they are. null when the workflow or
+   // the version is not the owner's.
+   public static async restore(userId: string, id: string, versionId: string) {
+      const version = await PrismaService.client.workflowVersion.findFirst({
+         where: {
+            id: versionId,
+            workflowId: id,
+            workflow: { userId },
+         },
+         select: { graph: true },
+      })
+
+      return version ? WorkflowService.update(userId, id, { graph: readGraph(version.graph) }) : null
    }
 
    // Deletes the workflow and its runs; its list and the people in it stay. A workflow with a run going is refused, so the
@@ -497,6 +592,12 @@ export class WorkflowService {
          throw new ConflictError(DELETE_WHILE_RUNNING)
       }
 
+      const versions = before
+         ? await PrismaService.client.workflowVersion.findMany({
+              where: { workflowId: id },
+              select: { graph: true },
+           })
+         : []
       const { count } = await PrismaService.client.workflow.deleteMany({
          where: {
             id,
@@ -505,7 +606,16 @@ export class WorkflowService {
       })
 
       if (count > 0 && before) {
-         await dropFiles(keysOf(postsOf(readGraph(before.graph))))
+         await dropFiles([
+            ...new Set([
+               ...filesOf(readGraph(before.graph)),
+               ...versions.flatMap(({ graph }) => {
+                  const parsed = graphSchema.safeParse(graph)
+
+                  return parsed.success ? filesOf(parsed.data) : []
+               }),
+            ]),
+         ])
       }
 
       return count > 0
