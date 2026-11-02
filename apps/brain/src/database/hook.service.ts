@@ -481,6 +481,90 @@ export class HookService {
       return row?.hostRunId ? WorkflowRunService.items(row.hostRunId, targetsOf(row.targets).keys) : []
    }
 
+   // What the hooks of one run did, one line for each hook: how many fired, how many of those runs failed or still go, and why the
+   // others did not start. Ids and fixed sentences only.
+   public static async summaryOf(userId: string, hostRunId: string) {
+      const rows = await PrismaService.client.workflowDelivery.findMany({
+         where: {
+            userId,
+            hostRunId,
+            source: 'BLOCK',
+         },
+         orderBy: { createdAt: 'asc' },
+         take: HOOK_LIMITS.firesPerRun + 1,
+         select: {
+            hostNodeId: true,
+            phase: true,
+            status: true,
+            reason: true,
+            runId: true,
+         },
+      })
+      const runs = await PrismaService.client.workflowRun.findMany({
+         where: {
+            userId,
+            id: { in: rows.flatMap(({ runId }) => (runId ? [runId] : [])) },
+         },
+         select: {
+            id: true,
+            status: true,
+            message: true,
+         },
+      })
+      const statusOf = new Map(
+         runs.map(({ id, status, message }) => [
+            id,
+            {
+               status,
+               message,
+            },
+         ])
+      )
+      const lines = new Map<
+         string,
+         {
+            nodeId: string
+            phase: string
+            fired: number
+            running: number
+            failed: number
+            skipped: number
+            reason: string | null
+            firstRunId: string | null
+         }
+      >()
+
+      for (const row of rows) {
+         const key = `${row.hostNodeId}:${row.phase}`
+         const line = lines.get(key) ?? {
+            nodeId: row.hostNodeId ?? '',
+            phase: row.phase,
+            fired: 0,
+            running: 0,
+            failed: 0,
+            skipped: 0,
+            reason: null,
+            firstRunId: null,
+         }
+         const run = row.runId ? statusOf.get(row.runId) : undefined
+
+         if (row.status === 'STARTED') {
+            line.fired += 1
+            line.firstRunId ??= row.runId
+            line.running += run?.status === 'RUNNING' ? 1 : 0
+            line.failed += run?.status === 'FAILED' ? 1 : 0
+            line.reason = run?.status === 'FAILED' ? (run.message ?? line.reason) : line.reason
+         } else if (row.status !== 'PENDING') {
+            line.skipped += 1
+            line.reason = row.reason ?? line.reason
+         }
+
+         lines.set(key, line)
+      }
+
+      return [...lines.values()]
+   }
+
    // The owner's Stop on a run reaches the hook runs it started that are still live.
    public static async stopOf(hostRunId: string) {
       await PrismaService.client.workflowRun.updateMany({

@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ChevronRight, CircleAlert, Trash2 } from 'lucide-react'
+import { type ComponentProps } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -23,6 +24,7 @@ import { AccountPick } from './account-pick'
 import { AccountsPick } from './accounts-pick'
 import { ApiWorkflowButton } from './api-workflow-button'
 import { BLOCK_ICONS, tileOf } from './block-look'
+import { BlockHooks } from './block-hooks'
 import { BlockRunTabs, type RunInfo } from './block-run-tabs'
 import { CompanyFiltersField } from './company-filters-field'
 import { DraftPick } from './draft-pick'
@@ -45,6 +47,8 @@ type Props = {
    // The blocks connected before this one.
    parents: Choice[]
    onChange: (patch: Record<string, ConfigValue>) => void
+   // The name and the hooks of the block, kept beside its settings.
+   hooks: ComponentProps<typeof BlockHooks> | null
    onRemove: () => void
    onClose: () => void
    // The block in the last run of the workflow: its state, error, input and output.
@@ -87,6 +91,7 @@ export const BlockSettings = ({
    workflows,
    parents,
    onChange: onPatch,
+   hooks,
    onRemove,
    onClose,
    run,
@@ -458,6 +463,7 @@ export const BlockSettings = ({
             ) : (
                settings
             )}
+            {hooks ? <BlockHooks {...hooks} /> : null}
             {block.group === 'Account Actions' && block.flags.usesAccounts ? (
                <ApiWorkflowButton type={block.type} />
             ) : null}

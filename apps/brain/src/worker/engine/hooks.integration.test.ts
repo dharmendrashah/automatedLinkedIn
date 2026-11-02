@@ -144,6 +144,18 @@ describe('block hooks (database)', () => {
 
       expect(next?.status).toBe('RUNNING')
       expect((await WorkflowService.runs(userId, workflowId)).map(({ id }) => id)).not.toContain(hook.id)
+      expect(await HookService.summaryOf(userId, runId)).toEqual([
+         {
+            nodeId: 'tag',
+            phase: 'after',
+            fired: 1,
+            running: 1,
+            failed: 0,
+            skipped: 0,
+            reason: null,
+            firstRunId: hook.id,
+         },
+      ])
 
       await advanceRun(hook.id, deps())
 

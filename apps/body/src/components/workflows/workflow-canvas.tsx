@@ -45,7 +45,10 @@ import {
    MAX_LOOP_ROUNDS,
    OPPOSITE,
    type Side,
+   attachedTo,
    canConnect,
+   canHook,
+   isHookPhase,
    hasLoop,
    newNodeId,
    portOfHandle,
@@ -239,6 +242,12 @@ const Editor = ({
          nodes: canvas.nodes.map(node =>
             node.id === openId ? { ...node, data: { ...node.data, config: { ...node.data.config, ...patch } } } : node
          ),
+      }))
+
+   const setData = (patch: Partial<Pick<FlowNode['data'], 'label' | 'hooks'>>) =>
+      commit(canvas => ({
+         ...canvas,
+         nodes: canvas.nodes.map(node => (node.id === openId ? { ...node, data: { ...node.data, ...patch } } : node)),
       }))
 
    const removeSelection = () => {
@@ -472,16 +481,24 @@ const Editor = ({
                   }))
                }
                onNodeDragStart={() => setHistory(current => record(current, current.present))}
-               isValidConnection={({ source, target, targetHandle }) =>
-                  portOfHandle(targetHandle) === undefined && canConnect(edges, source, target)
+               isValidConnection={({ source, target, targetHandle, sourceHandle }) =>
+                  portOfHandle(targetHandle) === undefined &&
+                  (isHookPhase(portOfHandle(sourceHandle))
+                     ? canHook(edges, source, target, sourceHandle)
+                     : canConnect(edges, source, target))
                }
                connectionMode={ConnectionMode.Loose}
-               onConnect={connection =>
+               onConnect={connection => {
+                  const phase = portOfHandle(connection.sourceHandle)
+                  const id = isHookPhase(phase)
+                     ? `${connection.source}:${phase}>${connection.target}`
+                     : `${connection.source}>${connection.target}`
+
                   commit(canvas => ({
                      ...canvas,
-                     edges: addEdge({ ...connection, id: `${connection.source}>${connection.target}` }, canvas.edges),
+                     edges: addEdge({ ...connection, id }, canvas.edges),
                   }))
-               }
+               }}
                onNodeClick={(_, node) => {
                   setSelectedId(node.id)
                   wrapper.current?.focus()
@@ -669,6 +686,22 @@ const Editor = ({
                })}
             workflows={workflows.filter(({ id }) => id !== workflowId)}
             onChange={setConfig}
+            hooks={
+               openNode
+                  ? {
+                       nodeId: openNode.id,
+                       label: openNode.data.label ?? '',
+                       hooks: openNode.data.hooks,
+                       attached: {
+                          before: attachedTo(edges, openNode.id, 'before'),
+                          on: attachedTo(edges, openNode.id, 'on'),
+                          after: attachedTo(edges, openNode.id, 'after'),
+                       },
+                       onLabel: label => setData({ label: label === '' ? undefined : label }),
+                       onHooks: hooks => setData({ hooks }),
+                    }
+                  : null
+            }
             onRemove={removeSelection}
             onClose={() => {
                setOpenId(null)

@@ -124,12 +124,37 @@ export const RunDetailView = ({ run, catalog, onOpenBlock }: DetailProps) => {
          {run.message && run.status !== 'FAILED' ? <p className="text-destructive text-sm">{run.message}</p> : null}
          {run.parent ? (
             <p className="text-muted-foreground text-sm">
-               Started by{' '}
+               {run.kind === 'HOOK' ? 'A hook of ' : 'Started by '}
                <Link className="underline" to={`/workflows/${run.parent.workflowId}?run=${run.parent.runId}`}>
-                  a run of "{run.parent.workflowName}"
+                  {run.kind === 'HOOK' ? 'this run' : `a run of "${run.parent.workflowName}"`}
                </Link>
                .
             </p>
+         ) : null}
+         {run.hooks.length > 0 ? (
+            <div className="grid gap-1 text-sm">
+               <p className="font-medium">Hooks</p>
+               <ul className="text-muted-foreground grid gap-0.5">
+                  {run.hooks.map(hook => (
+                     <li key={`${hook.nodeId}:${hook.phase}`}>
+                        {blockOf(catalog, run.graph.nodes.find(({ id }) => id === hook.nodeId)?.type ?? '')?.label ??
+                           hook.nodeId}
+                        , {hook.phase}: {hook.fired} started
+                        {hook.running > 0 ? `, ${hook.running} still running` : ''}
+                        {hook.failed > 0 ? `, ${hook.failed} failed${hook.reason ? ` (${hook.reason})` : ''}` : ''}
+                        {hook.skipped > 0 ? `, ${hook.skipped} did not start${hook.reason ? ` (${hook.reason})` : ''}` : ''}
+                        {hook.firstRunId ? (
+                           <>
+                              {' '}
+                              <Link className="underline" to={`/workflows/${run.workflowId}?run=${hook.firstRunId}`}>
+                                 Open
+                              </Link>
+                           </>
+                        ) : null}
+                     </li>
+                  ))}
+               </ul>
+            </div>
          ) : null}
          <Table>
             <TableHeader>

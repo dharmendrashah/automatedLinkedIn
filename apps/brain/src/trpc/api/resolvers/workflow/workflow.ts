@@ -6,6 +6,7 @@ import { CSV_MAX_ROWS, itemsCsv } from 'core'
 import {
    ConflictError,
    EventDispatchService,
+   HookService,
    InputPickService,
    WorkflowRunService,
    WorkflowService,
@@ -275,9 +276,10 @@ export const workflow = router({
 
    runDetail: ownerProcedure.input(z.object({ runId: z.string().min(1) })).query(async ({ ctx, input }) => {
       const run = present(await WorkflowService.run(ctx.user.id, input.runId), RUN_MISSING)
-      const [links, progress] = await Promise.all([
+      const [links, progress, hooks] = await Promise.all([
          WorkflowService.runLinks(ctx.user.id, [run.parentRunId, ...run.steps.map(({ childRunId }) => childRunId)]),
          WorkflowRunService.progress(run.id),
+         HookService.summaryOf(ctx.user.id, run.id),
       ])
       const linkOf = (id: string | null) => (id ? (links.get(id) ?? null) : null)
 
@@ -285,6 +287,7 @@ export const workflow = router({
          ...run,
          graph: readGraph(run.graph),
          parent: linkOf(run.parentRunId),
+         hooks,
          steps: run.steps.map(step => ({
             ...step,
             child: linkOf(step.childRunId),

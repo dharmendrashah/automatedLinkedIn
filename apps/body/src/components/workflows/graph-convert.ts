@@ -22,6 +22,9 @@ export type BlockData = {
    noted: boolean
    // Switched off: it passes everything on without running.
    disabled?: boolean
+   // A name the owner gave the block, and how its hooks behave (the chains hang on lines from its before, on and after dots).
+   label?: string
+   hooks?: GraphNode['hooks']
    // Shown with a run that does not have this block: it was added after the run started.
    faded: boolean
    icpName?: string
@@ -49,6 +52,20 @@ export const handleOfPort = (port: string) => `${PORT_HANDLE}${port}`
 
 export const portOfHandle = (handle: string | null | undefined) =>
    handle?.startsWith(PORT_HANDLE) ? handle.slice(PORT_HANDLE.length) : undefined
+
+// The three moments of a block that can have a chain attached; the same words live in the contracts package.
+export const HOOK_PHASES = ['before', 'on', 'after'] as const
+
+export type HookPhase = (typeof HOOK_PHASES)[number]
+
+export const HOOK_WORDS: Record<HookPhase, string> = {
+   before: 'Before',
+   on: 'On',
+   after: 'After',
+}
+
+export const isHookPhase = (port: string | null | undefined): port is HookPhase =>
+   HOOK_PHASES.some(phase => phase === port)
 
 const KIND_WORDS = {
    start: 'start',
@@ -141,6 +158,8 @@ export const toFlow = (
                     config: node.config,
                     version: node.version,
                     disabled: node.disabled,
+                    label: node.label,
+                    hooks: node.hooks,
                     step: stepOf.get(node.id) ?? null,
                     invalid: extras.invalid?.has(node.id) ?? false,
                     noted: extras.noted?.has(node.id) ?? false,
@@ -156,13 +175,21 @@ export const toFlow = (
       const kind = blockOf(catalog, graph.nodes.find(({ id }) => id === from)?.type ?? '')?.output
 
       return {
-         id: `${from}>${to}`,
+         // A hook line and the main line between the same two blocks are different lines.
+         id: isHookPhase(fromPort) ? `${from}:${fromPort}>${to}` : `${from}>${to}`,
          source: from,
          target: to,
          sourceHandle: fromPort && fromPort !== 'main' ? handleOfPort(fromPort) : (fromSide ?? 'bottom'),
          targetHandle: toSide ?? 'top',
          animated: source?.status === 'RUNNING',
-         label: fromPort && fromPort !== 'main' ? 'Else' : source && kind ? `${source.itemsOut} ${KIND_WORDS[kind]}` : undefined,
+         ...(isHookPhase(fromPort) && { style: { strokeDasharray: '6 4' } }),
+         label: isHookPhase(fromPort)
+            ? `${HOOK_WORDS[fromPort]} hook`
+            : fromPort && fromPort !== 'main'
+              ? 'Else'
+              : source && kind
+                ? `${source.itemsOut} ${KIND_WORDS[kind]}`
+                : undefined,
       }
    })
 
@@ -178,6 +205,8 @@ export const toGraph = (nodes: FlowNode[], edges: Edge[], loopRounds?: number): 
       type: node.data.block.type,
       ...(node.data.version === undefined ? {} : { version: node.data.version }),
       ...(node.data.disabled ? { disabled: true } : {}),
+      ...(node.data.label ? { label: node.data.label } : {}),
+      ...(node.data.hooks ? { hooks: node.data.hooks } : {}),
       config: node.data.config,
       position: {
          x: Math.round(node.position.x),
@@ -195,6 +224,19 @@ export const toGraph = (nodes: FlowNode[], edges: Edge[], loopRounds?: number): 
 })
 
 // Any block joins any other once; a block never joins itself. What a block cannot use passes through it.
+// How many blocks hang on one hook of a block.
+export const attachedTo = (edges: Edge[], id: string, phase: HookPhase) =>
+   edges.filter(edge => edge.source === id && edge.sourceHandle === handleOfPort(phase)).length
+
+// A hook line leaves a block's before, on or after dot; a block may hang one chain on several of its hooks.
+export const canHook = (edges: Edge[], source: string | null, target: string | null, handle: string | null | undefined) =>
+   Boolean(
+      source &&
+         target &&
+         source !== target &&
+         !edges.some(edge => edge.source === source && edge.target === target && edge.sourceHandle === handle)
+   )
+
 export const canConnect = (edges: Edge[], source: string | null, target: string | null) =>
    Boolean(
       source && target && source !== target && !edges.some(edge => edge.source === source && edge.target === target)

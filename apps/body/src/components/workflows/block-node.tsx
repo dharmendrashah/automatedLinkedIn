@@ -1,4 +1,4 @@
-import { Handle, type NodeProps, Position } from '@xyflow/react'
+import { Handle, type NodeProps, Position, useEdges } from '@xyflow/react'
 import { CircleAlert, CircleCheck, CircleDashed, CircleSlash, Info, Loader2, Plus, Power, Trash2 } from 'lucide-react'
 import { useContext } from 'react'
 
@@ -10,7 +10,7 @@ import { trpc } from '../../trpc'
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { adviceOf } from './block-run'
 import { CanvasActions } from './canvas-actions'
-import { type FlowNode, SIDES, handleOfPort, summaryOf } from './graph-convert'
+import { type FlowNode, HOOK_PHASES, HOOK_WORDS, SIDES, handleOfPort, summaryOf } from './graph-convert'
 import { NODE_WIDTH } from './layout'
 import { timeOf } from './run-sentence'
 
@@ -61,8 +61,9 @@ const Reason = ({ code, failed }: { code: string | null; failed: boolean }) => {
 // One block: icon, title and settings in a line, during a run its state, and a "+" on each side to add a block there. Lines
 // leave and enter on any side.
 export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
-   const { block, config, step, invalid, noted, faded, icpName, disabled } = data
+   const { block, config, step, invalid, noted, faded, icpName, disabled, label } = data
    const { addNextTo, removeNode, toggleOff } = useContext(CanvasActions)
+   const edges = useEdges()
    const Icon = BLOCK_ICONS[block.type]
    const StepIcon = step ? STEP_ICONS[step.status] : null
    const progress = step?.progress
@@ -100,11 +101,30 @@ export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
                      style={{ left: '85%' }}
                   />
                ))}
+            {HOOK_PHASES.map((phase, index) => {
+               const chains = edges.filter(edge => edge.source === id && edge.sourceHandle === handleOfPort(phase)).length
+
+               return (
+                  <Handle
+                     key={phase}
+                     id={handleOfPort(phase)}
+                     type="source"
+                     position={Position.Bottom}
+                     aria-label={`${HOOK_WORDS[phase]} hook of ${label ?? block.label}${chains > 0 ? `, ${chains} attached` : ''}`}
+                     title={`${HOOK_WORDS[phase]} hook: drag to a block that should run ${phase === 'before' ? 'when this block is about to start' : phase === 'on' ? 'when it is working' : 'when it has finished'}`}
+                     className={cn(
+                        'size-2.5! rounded-full! border-dashed! transition-opacity',
+                        chains > 0 ? 'bg-primary! opacity-100' : 'bg-muted! opacity-40 group-hover:opacity-100'
+                     )}
+                     style={{ left: `${12 + index * 14}%` }}
+                  />
+               )
+            })}
             <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg', tileOf(block.group))}>
                <Icon className="size-5" aria-hidden />
             </span>
             <div className="min-w-0">
-               <p className="truncate text-sm font-medium">{block.label}</p>
+               <p className="truncate text-sm font-medium">{label ?? block.label}</p>
                <p className="text-muted-foreground line-clamp-2 text-xs">{summaryOf(block, config, icpName)}</p>
                {step && StepIcon ? (
                   <p className={cn('mt-1 flex items-center gap-1 text-xs', STEP_TONES[step.status])}>
