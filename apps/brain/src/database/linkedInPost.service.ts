@@ -3,6 +3,7 @@ import { postCardOf } from 'core/pageSnapshot'
 
 import { type LinkedInPostStatus, type Prisma } from 'generated/prisma/client'
 
+import { ConflictError } from './conflict'
 import {
    EVERYTHING,
    type Imported,
@@ -15,10 +16,13 @@ import {
    orNull,
    relabel,
 } from './linkedInRecord'
-import { type PostListQuery, postCountSql, postPageSql, postPeopleSql } from './postList'
+import { type PostListQuery, postCountSql, postIdsSql, postPageSql, postPeopleSql } from './postList'
 import { PrismaService } from './prisma.service'
 
 export type LinkedInPostListQuery = PostListQuery
+
+// Matches beyond this are refused rather than sent as one huge id list.
+const MAX_MATCHES = 20_000
 
 const ALL_WAITING: InputFilter<never> = {
    ...EVERYTHING,
@@ -367,6 +371,19 @@ export class LinkedInPostService {
 
    public static countWaiting(userId: string, filter: InputFilter<never> = ALL_WAITING) {
       return PrismaService.client.linkedInPost.count({ where: waitingWhere(userId, filter) })
+   }
+
+   // The ids of the posts the Posts page's own query finds, for an input block to keep.
+   public static async matchingIds(userId: string, query: Omit<LinkedInPostListQuery, 'page' | 'pageSize' | 'sort'>) {
+      const rows = await PrismaService.client.$queryRaw<Array<{ id: string }>>(
+         postIdsSql(userId, query, MAX_MATCHES + 1)
+      )
+
+      if (rows.length > MAX_MATCHES) {
+         throw new ConflictError('These filters match too many posts. Add another filter to narrow them.')
+      }
+
+      return rows.map(({ id }) => id)
    }
 
    // Rows that are not the owner's are left alone.

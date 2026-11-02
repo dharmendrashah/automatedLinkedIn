@@ -115,6 +115,15 @@ describe('input blocks', () => {
       )
       expect(say({ filters: '{"hasJobs":true}' })).toBe('Up to 5 people · 1 more filter')
       expect(say({ filters: 'oops' })).toBe('Up to 5 people')
+      expect(
+         summaryOf(profiles, {
+            howMany: 5,
+            author: 'Ada',
+            postRead: 'read',
+            minComments: 10,
+            hasQualified: true,
+         })
+      ).toBe('Up to 5 people · by Ada · read only · 10+ comments · with qualified people')
       expect(summaryOf(profiles, { howMany: 5, source: 'network', statuses: ['NEW'] })).toBe(
          'Up to 5 people · from My network'
       )

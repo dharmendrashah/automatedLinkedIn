@@ -16,6 +16,12 @@ export type PostListQuery = {
    tagMatch?: LabelMatch
    addedSince?: Date
    read?: 'READ' | 'UNREAD'
+   // From the post's read; a post that was not read has none of them.
+   minComments?: number
+   minReactions?: number
+   author?: string
+   // Some person found from the post is Qualified.
+   hasQualified?: boolean
    sort?: PostSort
    page: number
    pageSize: number
@@ -32,7 +38,18 @@ const withRead = Prisma.sql`"LinkedInPost" p
    LEFT JOIN "PageSnapshot" s ON s."userId" = p."userId" AND s."kind" = 'POST' AND s."slug" = p."slug"`
 
 const whereOf = (userId: string, query: Omit<PostListQuery, 'page' | 'pageSize' | 'sort'>) => {
-   const { search, status, tags = [], tagMatch, addedSince, read } = query
+   const {
+      search,
+      status,
+      tags = [],
+      tagMatch,
+      addedSince,
+      read,
+      minComments,
+      minReactions,
+      author,
+      hasQualified,
+   } = query
    const like = search ? likeOf(search) : null
 
    return Prisma.join(
@@ -45,6 +62,14 @@ const whereOf = (userId: string, query: Omit<PostListQuery, 'page' | 'pageSize' 
             : []),
          ...(addedSince ? [Prisma.sql`p."createdAt" >= ${addedSince}`] : []),
          ...(read ? [read === 'READ' ? Prisma.sql`s."id" IS NOT NULL` : Prisma.sql`s."id" IS NULL`] : []),
+         ...(minComments ? [Prisma.sql`(s."data"->>'comments')::numeric >= ${minComments}`] : []),
+         ...(minReactions ? [Prisma.sql`(s."data"->>'reactions')::numeric >= ${minReactions}`] : []),
+         ...(author ? [Prisma.sql`s."data"->'author'->>'name' ILIKE ${likeOf(author)}`] : []),
+         ...(hasQualified
+            ? [
+                 Prisma.sql`EXISTS (SELECT 1 FROM ${members} WHERE l."userId" = p."userId" AND m."state" = 'QUALIFIED' AND ${memberOfPost})`,
+              ]
+            : []),
          ...(like
             ? [
                  Prisma.sql`(p."slug" ILIKE ${like} OR p."url" ILIKE ${like} OR p."expandedUrl" ILIKE ${like}
@@ -81,6 +106,10 @@ export const postPageSql = (userId: string, query: PostListQuery) => Prisma.sql`
 
 export const postCountSql = (userId: string, query: PostListQuery) => Prisma.sql`
    SELECT COUNT(*) AS "total" FROM ${withRead} WHERE ${whereOf(userId, query)}`
+
+// The ids of the owner's posts that match, at most `limit`, for an input block to keep.
+export const postIdsSql = (userId: string, query: Omit<PostListQuery, 'page' | 'pageSize' | 'sort'>, limit: number) =>
+   Prisma.sql`SELECT p."id" FROM ${withRead} WHERE ${whereOf(userId, query)} LIMIT ${limit}`
 
 // How many people were found from each of these posts, how many qualified, and the first three (qualified first).
 export const postPeopleSql = (ids: string[]) => Prisma.sql`
