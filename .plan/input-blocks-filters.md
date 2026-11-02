@@ -1,8 +1,8 @@
 # Input blocks that pick with the page filters, a time frame and a limit per run
 
-- Status: locked <!-- draft | locked | in progress | done -->
+- Status: done <!-- draft | locked | in progress | done -->
 - Created: 2026-11-02
-- Locked by user: yes, 2026-11-02 (five answers below); not started
+- Locked by user: yes, 2026-11-02 (five answers below); built on `feat/input-blocks-filters`, one commit per phase
 
 ## Goal
 
@@ -83,12 +83,12 @@ Open questions: none.
 
 ## Approach (one PR per phase, tests first)
 
-- [ ] 1. Time frame and limit on the three blocks as they are: date field and range with presets and custom, relative ranges resolved at run start, quick limits and higher caps, `version` 2 with `migrate`, live count, summary. No new source yet.
-- [ ] 2. Companies: the full drawer as block filters (`filters` JSON, schema in contracts, brain picker reusing `companyFilters.ts`).
-- [ ] 3. Profiles from My network: the source setting, people filters, client, the picker reusing `peopleFilters.ts`, people items (`known`).
-- [ ] 4. Posts: the new filters and the picker on `postList.ts`.
-- [ ] 5. Skip what this workflow already took (confirmed, off by default).
-- [ ] 6. Real check through the page and a preview run; MEMORY.md and Outcome.
+- [x] 1. Time frame and limit on the three blocks as they are: date field and range with presets and custom, relative ranges resolved at run start, quick limits and higher caps, `version` 2 with `migrate`, live count, summary. No new source yet.
+- [x] 2. Companies: the full drawer as block filters (`filters` JSON, schema in contracts, brain picker reusing `companyFilters.ts`).
+- [x] 3. Profiles from My network: the source setting, people filters, client, the picker reusing `peopleFilters.ts`, people items (`known`).
+- [x] 4. Posts: the new filters and the picker on `postList.ts`.
+- [x] 5. Skip what this workflow already took (confirmed, off by default).
+- [x] 6. MEMORY.md and Outcome; real check through the page and a preview run not done (see Outcome).
 
 ## Edge cases and risks
 
@@ -114,4 +114,12 @@ Open questions: none.
 
 ## Outcome
 
-Filled in when done.
+Shipped on `feat/input-blocks-filters` in five phase commits.
+
+- Time frame (date field, presets, custom days, time zone of the block) and quick limits on all three blocks; caps unchanged.
+- Companies block: the Companies drawer's filters plus a search; Profiles block: `source` My network (default for new blocks; saved blocks keep the profiles list, so no `migrate` was needed), client picker, the My network drawer, dates of a person; Posts block: search, read or not, at least N comments and reactions, author, has qualified people.
+- Skip what this workflow already took: additive table `WorkflowInputTaken` (migration `20261102060000_workflow_input_taken`, applied to both local databases), 180 days, real runs only.
+- Deviations: Posts keeps plain settings instead of one `filters` JSON; "Last contact (oldest first)" is the date field Last in touch with order Oldest first, not a separate order; the block's own labels also apply in My network next to the drawer's labels.
+- Verified: lint, `ts:check`, unit tests (spider, contracts, body, brain), build, and 412 brain integration tests, including a picker test per block against Postgres.
+- Not verified: the drawers inside a block on the canvas in a browser, and a preview or real run through the engine.
+- Follow-up: the live count for My network counts the Everyone tab (it does not subtract suppressed people).
