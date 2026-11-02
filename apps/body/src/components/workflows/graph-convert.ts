@@ -233,8 +233,8 @@ export const newNodeId = (type: string, nodes: { id: string }[]) => {
    return `${base}-${index}`
 }
 
-// The blocks that had no "keep" box before 2026-11-02; blocks saved before keep it off, a block added now starts with it on.
-// The blocks added with it start with it on by themselves.
+// The blocks that had no "keep" box and a bigger "how many" before 2026-11-02. Blocks saved before keep both; a block added
+// now starts with keep on and 10. The blocks added with them start that way by themselves.
 const KEEPING_BLOCKS = new Set(['collect.searchPeople', 'collect.findPosts', 'collect.employees', 'collect.domainLookup'])
 
 // What a new block starts with: a schedule and "added today" use the owner's time zone, input blocks take all that match,
@@ -255,9 +255,12 @@ export const startConfig = (type: string, timeZone: string = browserTimeZone()):
       }
    }
 
-   // Blocks that can keep what they find in the owner's lists start with that on; blocks saved before it have it off.
+   // Blocks that can keep what they find in the owner's lists start with that on and with 10; saved blocks keep theirs.
    if (KEEPING_BLOCKS.has(type)) {
-      return { keep: true }
+      return {
+         keep: true,
+         howMany: 10,
+      }
    }
 
    return type === 'trigger.schedule' ? { timeZone } : {}
