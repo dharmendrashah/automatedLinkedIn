@@ -1,16 +1,13 @@
 import { PostPublicationService, TaskRefusedError, VisitPoolService, idleFirst } from 'database'
 
-import { type GraphNode, type PostBlock, nodeBefore, postBlocksOfText } from '@automatedLinkedIn/contracts'
+import { type PostBlock, postBlocksOfText } from '@automatedLinkedIn/contracts'
 
-import { type Context, StepError, type StepResult, Waiting, configOf, keepItems, wordsIn } from './context'
+import { accountIdsOf, timeLimitMs } from './accountPool'
+import { type Context, StepError, type StepResult, Waiting, keepItems } from './context'
 
 // "Write a post" (.plan/write-a-post-block.md). The block holds a post and posts it once per run from one of the chosen accounts,
 // the one that went longest without a post first, then waits for the post to end. Everything that reached it goes on unchanged.
 // The post is made by `PostPublicationService`, so the same limits and checks apply as on the Posting page. Messages are shown to the client.
-
-const HOUR_MS = 60 * 60 * 1000
-// The step passes on after this long; the post goes on by itself and shows on the Posting page.
-const WAIT_LIMIT_MS = HOUR_MS
 
 const PENDING = new Set(['SCHEDULED', 'QUEUED', 'SENDING'])
 
@@ -24,9 +21,9 @@ const passOn = async (ctx: Context, status: StepResult['status'], message: strin
 })
 
 // Asks the chosen accounts in turn until one takes the post; fails with the last sentence when none can.
-const makePost = async (ctx: Context, pool: GraphNode, blocks: PostBlock[]) => {
+const makePost = async (ctx: Context, accountIds: string[], blocks: PostBlock[]) => {
    const { run, node, deps } = ctx
-   const accounts = await VisitPoolService.accounts(run.userId, wordsIn(configOf(pool), 'accounts'))
+   const accounts = await VisitPoolService.accounts(run.userId, accountIds)
    const usable = accounts.filter(({ status }) => status === 'ACTIVE').map(({ id }) => id)
 
    if (usable.length === 0) {
@@ -67,11 +64,7 @@ const makePost = async (ctx: Context, pool: GraphNode, blocks: PostBlock[]) => {
 
 export const writePost = async (ctx: Context): Promise<StepResult> => {
    const { run, node, step } = ctx
-   const pool = nodeBefore(ctx.graph, node.id, 'account.select')
-
-   if (!pool) {
-      throw new StepError('This block needs "Select accounts" before it.', 'NEEDS_SELECT_ACCOUNTS')
-   }
+   const accountIds = accountIdsOf(ctx)
 
    const blocks = postBlocksOfText(node.config.post)
 
@@ -99,7 +92,7 @@ export const writePost = async (ctx: Context): Promise<StepResult> => {
          return passOn(ctx, 'PARTIAL', 'Stopped by you; nothing was posted.')
       }
 
-      await makePost(ctx, pool, blocks)
+      await makePost(ctx, accountIds, blocks)
 
       throw new Waiting()
    }
@@ -115,7 +108,7 @@ export const writePost = async (ctx: Context): Promise<StepResult> => {
    if (PENDING.has(latest.state)) {
       const stopped = run.stopRequestedAt !== null
 
-      if (stopped || Date.now() - (step.startedAt ?? run.startedAt).getTime() > WAIT_LIMIT_MS) {
+      if (stopped || Date.now() - (step.startedAt ?? run.startedAt).getTime() > timeLimitMs(ctx)) {
          return passOn(
             ctx,
             'PARTIAL',

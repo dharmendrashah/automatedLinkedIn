@@ -9,7 +9,7 @@ import { joinedText, mediaBlock, postBlocksOfText, postFilesOf } from './posting
 // The closed catalog of workflow blocks, the graph they form, and the pure rules on it (.plan/gtm-workflows.md).
 // Ids and labels are neutral: no data supplier is named here, because the browser shows these.
 
-export type ItemKind = 'start' | 'post' | 'profile' | 'company' | 'job' | 'ad'
+export type ItemKind = 'start' | 'post' | 'profile' | 'company' | 'job' | 'ad' | 'conversation'
 
 export const KIND_LABELS: Record<ItemKind, string> = {
    start: 'a start',
@@ -18,6 +18,7 @@ export const KIND_LABELS: Record<ItemKind, string> = {
    company: 'companies',
    job: 'job postings',
    ad: 'ads',
+   conversation: 'conversations',
 }
 
 // Per row, in millionths of a dollar.
@@ -85,6 +86,8 @@ export type Field = (
    | { key: string; label: string; kind: 'workflow' }
    // One or more of the owner's LinkedIn accounts.
    | { key: string; label: string; kind: 'accounts' }
+   // One of the owner's LinkedIn accounts.
+   | { key: string; label: string; kind: 'account' }
    // A LinkedIn post written in the block, kept as text.
    | { key: string; label: string; kind: 'post' }
 ) & {
@@ -218,6 +221,61 @@ export const POST_CONFIG_MAX = 40_000
 
 // The most accounts one "Select accounts" block holds.
 export const MAX_POOL = 20
+
+// Where an Account Actions block gets its accounts: the nearest "Select accounts" before it (the default, so saved blocks keep
+// working), or one account named on the block; and how long it waits before it leaves the rest for the next run
+// (.plan/account-action-blocks.md). `hours` is the block's own default.
+export const accountSettings = (hours: number) => ({
+   accountMode: z.enum(['pool', 'one']).default('pool'),
+   account: z.string().max(100).default(''),
+   timeLimitHours: z.number().int().min(1).max(48).default(hours),
+})
+
+// The wait each Account Actions block starts with, in hours.
+export const ACCOUNT_BLOCK_HOURS = {
+   'account.visitProfile': 8,
+   'account.visitCompany': 8,
+   'account.writePost': 1,
+} as const
+
+// What a block's account settings say; text that does not fit reads as the defaults, so a bad value elsewhere in the block never
+// hides them from the engine.
+export const accountSettingsOf = (type: string, config: unknown) => {
+   const hours = Object.entries(ACCOUNT_BLOCK_HOURS).find(([key]) => key === type)?.[1] ?? 8
+   const schema = z.object(accountSettings(hours))
+
+   return schema.safeParse(config).data ?? schema.parse({})
+}
+
+export const accountFields = (hours: number): Field[] => [
+   {
+      key: 'accountMode',
+      label: 'Accounts',
+      kind: 'select',
+      options: optionsOf([
+         ['pool', 'From "Select accounts" before it'],
+         ['one', 'One account'],
+      ]),
+   },
+   {
+      key: 'account',
+      label: 'Account',
+      kind: 'account',
+      showWhen: {
+         key: 'accountMode',
+         is: 'one',
+      },
+   },
+   {
+      key: 'timeLimitHours',
+      label: 'Stop waiting after (hours)',
+      kind: 'int',
+      min: 1,
+      max: 48,
+      advanced: true,
+      hint: `What is not done by then is left for the next run. Starts at ${hours}.`,
+   },
+]
 
 const VISIBILITIES = optionsOf([
    ['ANYONE', 'Anyone'],
@@ -3463,8 +3521,8 @@ const BLOCKS = {
          'Opens each person’s profile with one of the chosen accounts, waits a few seconds and scrolls down. Passes on the people viewed.',
       input: 'profile',
       output: 'profile',
-      config: empty,
-      fields: [],
+      config: z.object(accountSettings(ACCOUNT_BLOCK_HOURS['account.visitProfile'])),
+      fields: accountFields(ACCOUNT_BLOCK_HOURS['account.visitProfile']),
    },
    'account.visitCompany': {
       group: 'Account Actions',
@@ -3477,8 +3535,8 @@ const BLOCKS = {
          'Opens each company page with one of the chosen accounts, waits a few seconds and scrolls down. Passes on the companies viewed.',
       input: 'company',
       output: 'company',
-      config: empty,
-      fields: [],
+      config: z.object(accountSettings(ACCOUNT_BLOCK_HOURS['account.visitCompany'])),
+      fields: accountFields(ACCOUNT_BLOCK_HOURS['account.visitCompany']),
    },
    'account.writePost': {
       group: 'Account Actions',
@@ -3524,6 +3582,7 @@ const BLOCKS = {
             .refine(value => postBlocksOfText(value) !== null, 'is not a post'),
          audience: oneOf(VISIBILITIES, 'ANYONE'),
          comments: oneOf(VISIBILITIES, 'ANYONE'),
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.writePost']),
       }),
       fields: [
          {
@@ -3532,6 +3591,7 @@ const BLOCKS = {
             kind: 'post',
             hint: 'Posted once per run, never more than the account’s limits allow. A preview posts nothing.',
          },
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.writePost']),
       ],
    },
    'output.csv': {
@@ -4217,12 +4277,24 @@ export const validateGraph = (graph: Graph): GraphError[] => {
          note(`${BLOCKS[node.type].label} has nothing before it, so it gets nothing.`, node.id)
       }
 
-      if (POOL_BLOCKS.has(node.type) && !nodeBefore(graph, node.id, 'account.select')) {
-         problems.push({
-            nodeId: node.id,
-            level: 'error',
-            message: `${BLOCKS[node.type].label} needs "Select accounts" before it.`,
-         })
+      if (POOL_BLOCKS.has(node.type)) {
+         const { accountMode, account } = settingsOf(node)
+
+         if (accountMode === 'one') {
+            if (typeof account !== 'string' || account === '') {
+               problems.push({
+                  nodeId: node.id,
+                  level: 'error',
+                  message: `${BLOCKS[node.type].label}: pick the account it uses.`,
+               })
+            }
+         } else if (!nodeBefore(graph, node.id, 'account.select')) {
+            problems.push({
+               nodeId: node.id,
+               level: 'error',
+               message: `${BLOCKS[node.type].label} needs "Select accounts" before it, or one account picked on the block.`,
+            })
+         }
       }
 
       problems.push(...((BLOCKS[node.type] as BlockSpec).validate?.(node, graph) ?? []))

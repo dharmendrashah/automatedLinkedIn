@@ -84,6 +84,14 @@ const SAMPLE_BY_KIND = {
       headline: 'Payments for the internet',
       link: 'https://www.linkedin.com/ad-library/detail/1',
    },
+   conversation: {
+      name: 'Ada Lovelace',
+      headline: 'Founder at Analytical Engines',
+      lastMessage: 'Thanks for connecting. Could we talk next week?',
+      lastFrom: 'THEM',
+      unread: true,
+      link: 'https://www.linkedin.com/messaging/thread/2-SAMPLE/',
+   },
 } as const
 
 // A sample of one item the block takes in, as JSON; null for a block that takes none (it starts a chain).
@@ -97,4 +105,5 @@ export const KIND_WORDS = {
    company: 'companies',
    job: 'job postings',
    ad: 'ads',
+   conversation: 'conversations',
 } as const

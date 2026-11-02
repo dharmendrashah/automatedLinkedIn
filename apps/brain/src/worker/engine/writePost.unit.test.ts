@@ -63,7 +63,7 @@ const node = (id: string, type: Graph['nodes'][number]['type'], config: Graph['n
    },
 })
 
-const graph = (post = JSON.stringify(BLOCKS), settings: Record<string, string> = {}): Graph => ({
+const graph = (post = JSON.stringify(BLOCKS), settings: Record<string, string | number> = {}): Graph => ({
    nodes: [
       node('pool', 'account.select', { accounts: ['a1', 'a2'] }),
       node('write', 'account.writePost', {
@@ -89,7 +89,7 @@ const context = (
       post?: string
       tries?: number
       startedAt?: Date
-      settings?: Record<string, string>
+      settings?: Record<string, string | number>
    } = {}
 ) => {
    const { post, tries = 0, startedAt = new Date(), settings, ...rest } = overrides
@@ -213,6 +213,55 @@ describe('writePost', () => {
       await expect(writePost(context())).rejects.toThrow('need to be signed in')
       await expect(writePost(context({ post: 'not json' }))).rejects.toThrow('cannot be read')
       expect(mocks.publishFromBlock).not.toHaveBeenCalled()
+   })
+
+   it('should use the one account the block names, without Select accounts, and refuse one that is not picked', async () => {
+      const lonely = context({
+         settings: {
+            accountMode: 'one',
+            account: 'a2',
+         },
+      })
+
+      lonely.graph = {
+         nodes: [lonely.node],
+         edges: [],
+      }
+
+      await expect(writePost(lonely)).rejects.toBeInstanceOf(Waiting)
+      expect(mocks.accounts).toHaveBeenCalledWith('u1', ['a2'])
+
+      const none = context({ settings: { accountMode: 'one' } })
+
+      none.graph = {
+         nodes: [none.node],
+         edges: [],
+      }
+
+      await expect(writePost(none)).rejects.toThrow('Pick the account')
+   })
+
+   it('should wait for the post as long as the block says, one hour when it says nothing', async () => {
+      mocks.ofStep.mockResolvedValue([
+         {
+            id: 'p1',
+            state: 'SENDING',
+            failure: null,
+            link: null,
+         },
+      ])
+
+      const twoHoursAgo = new Date(Date.now() - 2 * HOUR_MS)
+
+      await expect(
+         writePost(
+            context({
+               startedAt: twoHoursAgo,
+               settings: { timeLimitHours: 3 },
+            })
+         )
+      ).rejects.toBeInstanceOf(Waiting)
+      expect(await writePost(context({ startedAt: twoHoursAgo }))).toMatchObject({ status: 'PARTIAL' })
    })
 
    it('should post nothing in a preview, and pass on what reached it', async () => {

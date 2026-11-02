@@ -21,6 +21,7 @@ const HEADER = [
    'Company',
    'Details',
    'Round',
+   'Result',
 ]
 
 const REASONS: Record<Signal['type'], string> = {
@@ -38,6 +39,7 @@ const rowOf = ({ round, item }: { round: number; item: WorkflowItemData }): (str
 
    base[4] = item.url
    base[16] = String(round + 1)
+   base[17] = item.result ? [item.result.status, item.result.reason].filter(Boolean).join(': ') : null
 
    if (item.kind === 'profile') {
       const [signal] = item.signals
@@ -76,6 +78,17 @@ const rowOf = ({ round, item }: { round: number; item: WorkflowItemData }): (str
       base[10] = item.started
       base[11] = item.advertiser
       base[15] = [item.format, item.body, item.clickUrl].filter(Boolean).join(' | ')
+   } else if (item.kind === 'conversation') {
+      base[0] = 'Conversation'
+      base[1] = item.name
+      base[2] = item.headline
+      base[10] = item.lastAt
+      base[15] = [
+         item.lastFrom === 'ME' ? 'You wrote last' : item.lastFrom === 'THEM' ? 'They wrote last' : null,
+         item.lastText,
+      ]
+         .filter(Boolean)
+         .join(': ')
    } else {
       base[0] = 'Company'
       base[1] = item.name

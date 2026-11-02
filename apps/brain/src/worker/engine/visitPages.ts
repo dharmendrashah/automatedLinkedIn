@@ -1,4 +1,4 @@
-import { type WorkflowItemData } from 'core'
+import { type ItemResult, type WorkflowItemData } from 'core'
 
 import {
    PageVisitRefusedError,
@@ -9,8 +9,9 @@ import {
    idleFirst,
 } from 'database'
 
-import { nodeBefore, retriesOf } from '@automatedLinkedIn/contracts'
+import { retriesOf } from '@automatedLinkedIn/contracts'
 
+import { accountIdsOf, timeLimitMs } from './accountPool'
 import {
    type Context,
    StepError,
@@ -30,9 +31,6 @@ import { type Refusal, deferralOf, refusalOf } from './visitRefusal'
 
 type Kind = 'PROFILE' | 'COMPANY'
 
-const HOUR_MS = 60 * 60 * 1000
-// A visit block gives up after this long (from its own start) and leaves the rest for the next run.
-const TIME_LIMIT_MS = 8 * HOUR_MS
 // When no account can take a visit for a reason that waiting does not fix, the block ends after this long.
 const BLOCKED_LIMIT_MS = 10 * 60_000
 
@@ -43,10 +41,10 @@ const NOUNS: Record<Kind, string> = {
 
 const bySlug = <T extends { slug: string }>(items: T[]) => [...new Map(items.map(item => [item.slug, item])).values()]
 
-const accountIdsOf = (node: Context['node']) => wordsIn(configOf(node), 'accounts')
+const accountIdsOfSelect = (node: Context['node']) => wordsIn(configOf(node), 'accounts')
 
 export const selectAccounts = async (ctx: Context): Promise<StepResult> => {
-   const owned = await VisitPoolService.accounts(ctx.run.userId, accountIdsOf(ctx.node))
+   const owned = await VisitPoolService.accounts(ctx.run.userId, accountIdsOfSelect(ctx.node))
 
    if (owned.length === 0) {
       throw new StepError('None of the chosen accounts was found.', 'ACCOUNTS_MISSING')
@@ -77,11 +75,7 @@ const standing = (rows: Row[]) => {
 const count = (n: number, text: string) => (n > 0 ? [`${n} ${text}`] : [])
 
 const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
-   const pool = nodeBefore(ctx.graph, ctx.node.id, 'account.select')
-
-   if (!pool) {
-      throw new StepError('This block needs "Select accounts" before it.', 'NEEDS_SELECT_ACCOUNTS')
-   }
+   const poolIds = accountIdsOf(ctx)
 
    const { run, node, deps } = ctx
    const retry = retriesOf(ctx.graph, node.id)
@@ -96,7 +90,7 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
    }
 
    const stopped = run.stopRequestedAt !== null
-   const accounts = await VisitPoolService.accounts(run.userId, accountIdsOf(pool))
+   const accounts = await VisitPoolService.accounts(run.userId, poolIds)
    const usable = accounts.filter(({ status }) => status === 'ACTIVE').map(({ id }) => id)
    const rows = await VisitPoolService.ofStep(run.id, node.id)
 
@@ -129,7 +123,7 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
    ])
    // The step's own start; a step taken before it was saved counts from the run's start.
    const sinceMs = Date.now() - (ctx.step.startedAt ?? run.startedAt).getTime()
-   const expired = sinceMs > TIME_LIMIT_MS
+   const expired = sinceMs > timeLimitMs(ctx)
    const open = pending.filter(({ slug }) => !suppressed.has(slug) && !viewed.has(slug))
    const ask = !stopped && !expired
    const unavailable = new Set<string>()
@@ -299,6 +293,19 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
       reasons.length > 0 ? `: ${reasons.join(', ')}` : ''
    }.`
 
+   // What each handled item shows the blocks after it.
+   const resultOf = (slug: string): ItemResult => {
+      const state = stateOf(slug)
+
+      return {
+         action: kind === 'PROFILE' ? 'visitProfile' : 'visitCompany',
+         status: state.done ? 'VISITED' : state.unavailable ? 'NOT_AVAILABLE' : 'FAILED',
+         account: null,
+         at: null,
+         reason: null,
+      }
+   }
+
    // Everyone the block handled goes on, viewed or not, for a Task result to split (.plan/logic-wait-result-retry.md).
    const handled = items.filter(({ slug }) => {
       const state = stateOf(slug)
@@ -307,7 +314,14 @@ const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
    })
 
    return {
-      ...(await keepItems(ctx, handled, items.length)),
+      ...(await keepItems(
+         ctx,
+         handled.map(item => ({
+            ...item,
+            result: resultOf(item.slug),
+         })),
+         items.length
+      )),
       status: notAvailable + failed + left > 0 ? 'PARTIAL' : 'DONE',
       message,
    }

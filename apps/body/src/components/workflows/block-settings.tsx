@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import { type Block, type ConfigValue, type Field } from './types'
 
 import { LabelMultiSelect } from '../labels/label-multi-select'
+import { AccountPick } from './account-pick'
 import { AccountsPick } from './accounts-pick'
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { BlockRunTabs, type RunInfo } from './block-run-tabs'
@@ -60,6 +61,7 @@ const KINDS: Record<string, string> = {
    post: 'posts',
    profile: 'people',
    company: 'companies',
+   conversation: 'conversations',
 }
 
 // "Takes posts, gives people", from what the block reads and passes on; a block with its own words says them.
@@ -175,6 +177,10 @@ export const BlockSettings = ({
                onChange={next => onChange(item.key, next)}
             />
          )
+      }
+
+      if (item.kind === 'account') {
+         return <AccountPick id={id} value={textOf(value)} onChange={next => onChange(item.key, next)} />
       }
 
       if (item.kind === 'post') {
