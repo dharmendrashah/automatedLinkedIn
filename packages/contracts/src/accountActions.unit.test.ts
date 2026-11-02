@@ -192,6 +192,43 @@ describe('Send and Withdraw connection request', () => {
    })
 })
 
+describe('Write a post from a saved draft, now or after a wait', () => {
+   it('should need a draft picked when it posts one, and not need words written then', () => {
+      const messages = (config: NodeConfig) =>
+         validateGraph({
+            nodes: [
+               node('post', 'account.writePost', {
+                  accountMode: 'one',
+                  account: 'a1',
+                  ...config,
+               }),
+            ],
+            edges: [],
+         }).map(({ message }) => message)
+
+      expect(messages({ source: 'draft' })).toContain('Write a post: pick the saved draft it posts.')
+      expect(
+         messages({
+            source: 'draft',
+            draft: 'd1',
+         })
+      ).not.toContain('Write the post: it needs words or a file.')
+      expect(messages({})).toContain('Write the post: it needs words or a file.')
+   })
+
+   it('should start posting now from words written in the block, and take a wait of 1 to 168 hours', () => {
+      const schema = blockOf('account.writePost').config
+
+      expect(schema.parse({})).toMatchObject({
+         source: 'write',
+         when: 'now',
+      })
+      expect(schema.safeParse({ afterHours: 0 }).success).toBe(false)
+      expect(schema.safeParse({ afterHours: 169 }).success).toBe(false)
+      expect(schema.safeParse({ source: 'elsewhere' }).success).toBe(false)
+   })
+})
+
 describe('Send message and Reply in a conversation', () => {
    it('should take people and conversations, start with Act for real off, and wait 8 hours', () => {
       expect(blockOf('account.sendMessage')).toMatchObject({

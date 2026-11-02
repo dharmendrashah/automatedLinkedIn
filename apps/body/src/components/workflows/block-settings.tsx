@@ -25,6 +25,7 @@ import { BLOCK_ICONS, tileOf } from './block-look'
 import { BlockRunTabs, type RunInfo } from './block-run-tabs'
 import { ClientPick } from './client-pick'
 import { CompanyFiltersField } from './company-filters-field'
+import { DraftPick } from './draft-pick'
 import { type FlowNode, summaryOf } from './graph-convert'
 import { INPUT_KINDS, isInputType } from './input-kinds'
 import { InputMatches } from './input-matches'
@@ -187,6 +188,10 @@ export const BlockSettings = ({
 
       if (item.kind === 'account') {
          return <AccountPick id={id} value={textOf(value)} onChange={next => onChange(item.key, next)} />
+      }
+
+      if (item.kind === 'draft') {
+         return <DraftPick id={id} value={textOf(value)} onChange={next => onChange(item.key, next)} />
       }
 
       if (item.kind === 'post') {

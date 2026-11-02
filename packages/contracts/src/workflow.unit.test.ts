@@ -626,9 +626,13 @@ describe('Account Actions', () => {
       ])
 
       expect(blockOf('account.writePost').config.safeParse({}).data).toEqual({
+         source: 'write',
+         draft: '',
          post: '[]',
          audience: 'ANYONE',
          comments: 'ANYONE',
+         when: 'now',
+         afterHours: 1,
          accountMode: 'pool',
          account: '',
          timeLimitHours: 1,
@@ -641,7 +645,11 @@ describe('Account Actions', () => {
       ).toBe(true)
       // The writer holds the two choices next to the post, so the form lists the post only.
       expect(blockOf('account.writePost').fields.map(({ key }) => key)).toEqual([
+         'source',
          'post',
+         'draft',
+         'when',
+         'afterHours',
          'accountMode',
          'account',
          'timeLimitHours',

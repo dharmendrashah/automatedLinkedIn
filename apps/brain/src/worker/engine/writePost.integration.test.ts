@@ -184,7 +184,11 @@ describe('Write a post block (database)', () => {
       })
       await advanceRun(first, deps())
 
-      expect(await passedOn(first)).toEqual(['ada', 'bob'])
+      const passed = await passedOn(first)
+
+      // The people, and the post that went, which a block after can use through its link.
+      expect(passed.filter(slug => !slug.includes('7520195721216827392'))).toEqual(['ada', 'bob'])
+      expect(passed).toHaveLength(3)
       expect((await run(first))?.status).toBe('SUCCEEDED')
 
       const second = await start(graphOf('Second post from a workflow'))

@@ -93,6 +93,8 @@ export type Field = (
    | { key: string; label: string; kind: 'account' }
    // A LinkedIn post written in the block, kept as text.
    | { key: string; label: string; kind: 'post' }
+   // One of the owner's saved drafts of the Posting page.
+   | { key: string; label: string; kind: 'draft' }
 ) & {
    hint?: string
    advanced?: boolean
@@ -345,6 +347,16 @@ const ANSWER_ACTIONS = optionsOf([
 const VISIBILITIES = optionsOf([
    ['ANYONE', 'Anyone'],
    ['CONNECTIONS', 'Connections only'],
+])
+
+const POST_SOURCES = optionsOf([
+   ['write', 'Written here'],
+   ['draft', 'A saved draft'],
+])
+
+const POST_WHEN = optionsOf([
+   ['now', 'Now'],
+   ['after', 'After a wait'],
 ])
 
 const WAIT_MODES = optionsOf([
@@ -3654,6 +3666,20 @@ const BLOCKS = {
          usesAccounts: true,
       },
       validate: node => {
+         const settings = settingsOf(node)
+
+         if (settings.source === 'draft') {
+            return typeof settings.draft === 'string' && settings.draft !== ''
+               ? []
+               : [
+                    {
+                       nodeId: node.id,
+                       level: 'error',
+                       message: 'Write a post: pick the saved draft it posts.',
+                    },
+                 ]
+         }
+
          const blocks = postBlocksOfText(node.config.post ?? '[]')
 
          if (blocks && joinedText(blocks) === '' && !mediaBlock(blocks)) {
@@ -3678,10 +3704,12 @@ const BLOCKS = {
       },
       label: 'Write a post',
       summary:
-         'Posts what you write here on LinkedIn, once per run, from one of the chosen accounts. Passes everything on unchanged.',
+         'Posts what you write here, or a saved draft of the Posting page, once per run from one of the chosen accounts, now or after a wait. Passes everything on unchanged, and the post too once it has a link.',
       input: 'profile',
       output: 'profile',
       config: z.object({
+         source: oneOf(POST_SOURCES, 'write'),
+         draft: z.string().max(100).default(''),
          post: z
             .string()
             .max(POST_CONFIG_MAX)
@@ -3689,14 +3717,54 @@ const BLOCKS = {
             .refine(value => postBlocksOfText(value) !== null, 'is not a post'),
          audience: oneOf(VISIBILITIES, 'ANYONE'),
          comments: oneOf(VISIBILITIES, 'ANYONE'),
+         when: oneOf(POST_WHEN, 'now'),
+         afterHours: z.number().int().min(1).max(168).default(1),
          ...accountSettings(ACCOUNT_BLOCK_HOURS['account.writePost']),
       }),
       fields: [
+         {
+            key: 'source',
+            label: 'Where the post comes from',
+            kind: 'select',
+            options: POST_SOURCES,
+         },
          {
             key: 'post',
             label: 'Post',
             kind: 'post',
             hint: 'Posted once per run, never more than the account’s limits allow. A preview posts nothing.',
+            showWhen: {
+               key: 'source',
+               is: 'write',
+            },
+         },
+         {
+            key: 'draft',
+            label: 'Draft',
+            kind: 'draft',
+            hint: 'The words and file of the draft are copied each run; the draft stays and is never posted by itself. Keep the draft while this block uses it.',
+            showWhen: {
+               key: 'source',
+               is: 'draft',
+            },
+         },
+         {
+            key: 'when',
+            label: 'When',
+            kind: 'select',
+            options: POST_WHEN,
+         },
+         {
+            key: 'afterHours',
+            label: 'Wait (hours)',
+            kind: 'int',
+            min: 1,
+            max: 168,
+            hint: 'The post is planned for this long after the block runs, through the Posting page’s planner and its limits. The block ends once it is planned.',
+            showWhen: {
+               key: 'when',
+               is: 'after',
+            },
          },
          ...accountFields(ACCOUNT_BLOCK_HOURS['account.writePost']),
       ],
