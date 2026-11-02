@@ -50,7 +50,7 @@ export const CopyButton = ({ text, label }: { text: string; label: string }) => 
 
 // A block of code with a copy button.
 export const Code = ({ text, label }: { text: string; label: string }) => (
-   <div className="bg-muted relative rounded-md">
+   <div className="bg-muted relative min-w-0 rounded-md">
       <pre className="overflow-x-auto p-3 pr-12 font-mono text-xs leading-relaxed">{text}</pre>
       <div className="absolute top-1 right-1">
          <CopyButton text={text} label={label} />
@@ -186,18 +186,18 @@ export const ApiTriggerInput = ({
    const header = `Authorization: Bearer ${api.token ?? 'YOUR_API_KEY'}`
 
    return (
-      <div className="grid gap-4 text-sm">
+      <div className="grid min-w-0 gap-4 text-sm *:min-w-0">
          <p>Another system starts this workflow by sending a request. Each call starts one run.</p>
          <ul className="grid gap-1">
             <Readiness done={enabled}>The workflow is switched on (the switch at the top of the page)</Readiness>
             <Readiness done={api.hasToken}>A token is set</Readiness>
          </ul>
-         <div className="grid gap-2">
+         <div className="grid gap-2 *:min-w-0">
             <p className="text-xs font-medium">Header</p>
             <Code text={header} label="Copy header" />
             <TokenControl workflowId={workflowId} api={api} />
          </div>
-         <div className="grid gap-2">
+         <div className="grid gap-2 *:min-w-0">
             <p className="text-xs font-medium">Sample request</p>
             <ApiRequest workflowId={workflowId} graph={graph} catalog={catalog} token={api.token} />
          </div>
