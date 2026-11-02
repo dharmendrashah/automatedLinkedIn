@@ -14,18 +14,18 @@ enum Role {
 }
 
 model User {
-  id          String    @id @default(uuid(7))
-  email       String    @unique
-  name        String?
-  role        Role      @default(USER)
+  id           String    @id @default(uuid(7))
+  email        String    @unique
+  name         String?
+  role         Role      @default(USER)
   // Subject (`sub`) of the authentik account linked to this user.
-  authentikId String?   @unique
+  authentikId  String?   @unique
   // When the owner last left the leads inbox; people added after it are marked new.
-  inboxSeenAt DateTime?
+  inboxSeenAt  DateTime?
   // When the owner last left My network; people first seen after it are new.
   peopleSeenAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   linkedInAccounts  LinkedInAccount[]
   linkedInCompanies LinkedInCompany[]
@@ -53,6 +53,7 @@ model User {
   companyViews      CompanyView[]
   workflows         Workflow[]
   people            Person[]
+  messageTemplates  MessageTemplate[]
 }
 
 enum WorkflowListMemberState {
@@ -222,6 +223,10 @@ enum WorkflowTrigger {
   PREVIEW
   API
   WORKFLOW
+  // Started by a task event (.plan/workflow-events-and-hooks.md).
+  EVENT
+  // A hook of a block: a small run of the same workflow, started by the host run's block.
+  HOOK
 }
 
 enum WorkflowRunStatus {
@@ -247,28 +252,30 @@ enum WorkflowStepStatus {
 
 // A graph of catalog blocks (packages/contracts workflow.ts) that finds people and adds them to its output list.
 model Workflow {
-  id           String            @id @default(uuid(7))
+  id           String               @id @default(uuid(7))
   userId       String
-  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
   goal         String?
   graph        Json
   // A list in use by a workflow cannot be deleted.
   outputListId String
-  outputList   WorkflowList      @relation(fields: [outputListId], references: [id], onDelete: Restrict)
-  qualifyScore Int               @default(60)
-  maybeScore   Int               @default(40)
-  maybeEnabled Boolean           @default(true)
+  outputList   WorkflowList         @relation(fields: [outputListId], references: [id], onDelete: Restrict)
+  qualifyScore Int                  @default(60)
+  maybeScore   Int                  @default(40)
+  maybeEnabled Boolean              @default(true)
   // Switched on: a schedule, API or chained workflow may start it; nextRunAt is when the schedule job starts it next.
-  enabled      Boolean           @default(false)
+  enabled      Boolean              @default(false)
   nextRunAt    DateTime?
   // SHA-256 of the API token; the token itself is shown once.
   apiTokenHash String?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
   runs         WorkflowRun[]
   versions     WorkflowVersion[]
   taken        WorkflowInputTaken[]
+  listeners    WorkflowListener[]
+  deliveries   WorkflowDelivery[]
 
   @@unique([userId, name])
   @@index([enabled, nextRunAt])
@@ -286,6 +293,92 @@ model WorkflowInputTaken {
   createdAt  DateTime @default(now())
 
   @@unique([workflowId, kind, slug])
+  @@index([createdAt])
+}
+
+// One moment (before, on or after) of one task of one of the owner's accounts (.plan/workflow-events-and-hooks.md). It holds no
+// personal text: the JSON is built from the session and the task's rows when it is delivered. `readyAt` is null until the task's
+// data is stored; an after event older than 15 minutes goes without it.
+model TaskEvent {
+  id           String             @id @default(uuid(7))
+  userId       String
+  sessionId    String
+  session      SpiderSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  accountId    String
+  task         String
+  phase        String
+  at           DateTime           @default(now())
+  readyAt      DateTime?
+  // A lease, so two workers never take the same event.
+  claimedUntil DateTime?
+  dispatchedAt DateTime?
+  attempts     Int                @default(0)
+  // An error class, never content.
+  lastError    String?
+  deliveries   WorkflowDelivery[]
+
+  @@unique([sessionId, phase])
+  @@index([dispatchedAt, readyAt])
+  @@index([userId, at])
+}
+
+// One trigger block of a switched-on workflow that listens to task events, kept in step with the graph. `task` is empty for any.
+model WorkflowListener {
+  id         String   @id @default(uuid(7))
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  nodeId     String
+  userId     String
+  phase      String
+  task       String   @default("")
+
+  @@unique([workflowId, nodeId])
+  @@index([userId, phase, task])
+}
+
+// A task event matched to a workflow that listens to it: the log, the retry and the caps for event runs. PENDING waits for its
+// turn, STARTED has a run, SKIPPED never will (the reason is a fixed sentence), DROPPED waited too long.
+model WorkflowDelivery {
+  id          String    @id @default(uuid(7))
+  userId      String
+  workflowId  String
+  workflow    Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  // TASK: a task event matched a trigger block. BLOCK: a block's hook fired in a run (host columns below).
+  source      String    @default("TASK")
+  taskEventId String?
+  taskEvent   TaskEvent? @relation(fields: [taskEventId], references: [id], onDelete: Cascade)
+  hostRunId   String?
+  hostNodeId  String?
+  phase       String
+  round       Int       @default(0)
+  tries       Int       @default(0)
+  resumes     Int       @default(0)
+  // The trigger blocks that matched; they start the run. For a hook, the host and where its items are.
+  targets     Json
+  status      String    @default("PENDING")
+  reason      String?
+  runId       String?
+  attempts    Int       @default(0)
+  retryAt     DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+
+  @@unique([taskEventId, workflowId])
+  @@unique([hostRunId, hostNodeId, phase, round, tries, resumes])
+  @@index([status, retryAt])
+  @@index([userId, workflowId, createdAt])
+}
+
+// The workflow that took an event when its trigger says "only one workflow takes an event". The first to write the key wins; rows are
+// removed after 7 days (.plan/workflow-events-and-hooks.md).
+model WorkflowEventClaim {
+  id         String   @id @default(uuid(7))
+  userId     String
+  key        String
+  workflowId String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, key])
   @@index([createdAt])
 }
 
@@ -323,30 +416,36 @@ model WorkflowVersion {
 
 // One execution. It keeps a copy of the graph it started with, so editing the workflow never changes it.
 model WorkflowRun {
-  id               String            @id @default(uuid(7))
+  id               String              @id @default(uuid(7))
   workflowId       String
-  workflow         Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflow         Workflow            @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   userId           String
   trigger          WorkflowTrigger
   // Unique per start, so a repeated schedule tick or a double click cannot start the same run twice.
-  runKey           String            @unique
-  status           WorkflowRunStatus @default(RUNNING)
+  runKey           String              @unique
+  status           WorkflowRunStatus   @default(RUNNING)
   graph            Json
   qualifyScore     Int
   maybeScore       Int
   maybeEnabled     Boolean
-  estimateMicros   Int               @default(0)
-  costMicros       Int               @default(0)
-  qualified        Int               @default(0)
-  maybe            Int               @default(0)
-  discarded        Int               @default(0)
+  estimateMicros   Int                 @default(0)
+  costMicros       Int                 @default(0)
+  qualified        Int                 @default(0)
+  maybe            Int                 @default(0)
+  discarded        Int                 @default(0)
   // Links sent by an API call, or the people a finished workflow passed on.
   input            Json?
+  // MAIN, or HOOK for the small run a block's hook starts. Only MAIN runs hold the one live-run slot.
+  kind             String              @default("MAIN")
+  // The hook chains split off the graph when the run started: [{ host, phase, options, graph }].
+  hooks            Json?
+  // How many times the owner took the run up again; part of a hook's key, so a resumed block fires again.
+  resumes          Int                 @default(0)
   // How many workflows started this one in a chain.
-  depth            Int               @default(0)
+  depth            Int                 @default(0)
   // 1: every block runs (runs from before 2026-11-02). 2: a block runs only when something reaches it, and only the triggers
   // that fired start the run (.plan/workflow-engine-p2-run-semantics.md).
-  engineVersion    Int               @default(1)
+  engineVersion    Int                 @default(1)
   // The run whose "Run another workflow" block started this one.
   parentRunId      String?
   // Set when the owner asked to stop: nothing new starts, and the run ends as STOPPED once paid jobs finished.
@@ -354,7 +453,7 @@ model WorkflowRun {
   message          String?
   // Set when the owner dismissed the alert about this run failing (.plan/workflow-engine-p4-lifecycle.md).
   alertDismissedAt DateTime?
-  startedAt        DateTime          @default(now())
+  startedAt        DateTime            @default(now())
   finishedAt       DateTime?
   steps            WorkflowStepRun[]
   items            WorkflowItem[]
@@ -365,6 +464,7 @@ model WorkflowRun {
   @@index([workflowId, startedAt])
   @@index([status])
   @@index([parentRunId])
+  @@index([kind, status])
 }
 
 model WorkflowStepRun {
@@ -450,7 +550,7 @@ model SpendLedger {
   runId        String?
   callId       String   @unique
   amountMicros Int
-  // Names spend outside a workflow on the statement, such as "Company reads".
+  // Names spend outside a workflow on the statement, such as "Company reads", and tells hook and event runs apart.
   label        String?
   // Calendar month in UTC, such as 2026-10.
   month        String
@@ -458,6 +558,21 @@ model SpendLedger {
 
   @@index([userId, month])
   @@index([month])
+}
+
+// A text the owner saved to start an invite note, a message or a reply from (.plan/message-composer.md). `use` is invite, message or reply.
+model MessageTemplate {
+  id        String   @id @default(uuid(7))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  use       String
+  name      String
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, use, name])
+  @@index([userId, use])
 }
 
 // The shared data wallet as the worker last saw it. One row.
@@ -1007,6 +1122,11 @@ model SpiderSession {
   taskVersion       Int?
   // manual, automatic or retry.
   trigger           String?
+  // When the worker really began the run (the `tasks.started` message); null until then.
+  runStartedAt      DateTime?
+  // Who asked for it: ids only (`originSchema` in contracts).
+  origin            Json?
+  events            TaskEvent[]
   // The task's own verdict code (also copied to `outcome`), which brain stores and never interprets.
   verdict           String?
   // The task's own readable report, shown as text.
@@ -1794,37 +1914,43 @@ enum LinkedInInviteState {
 // it was asked for, kept for the owner and deleted with the account. A partial unique index (see the migration) allows one live
 // invite per person.
 model LinkedInInvite {
-  id          String              @id @default(uuid(7))
-  userId      String
-  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accountId   String
-  account     LinkedInAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  slug        String
+  id               String              @id @default(uuid(7))
+  userId           String
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId        String
+  account          LinkedInAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  slug             String
   // LinkedIn's own number of the member, from the Connect button.
-  memberId    String?
-  name        String
-  note        String?
+  memberId         String?
+  name             String
+  note             String?
   // The Found by source that led to it (`request`, `connection`, `target`, `list:<id>`), credited with an accept.
-  source      String?
-  state       LinkedInInviteState @default(QUEUED)
+  source           String?
+  state            LinkedInInviteState @default(QUEUED)
   // A fixed sentence the owner can read: why it was skipped, failed or withdrawn.
-  reason      String?
+  reason           String?
   // The earliest it may go, as planned when it was asked for (20 a day, 100 a week per account).
-  plannedAt   DateTime
+  plannedAt        DateTime
   // Runs that did not get to it; after a few it fails.
-  tries       Int                 @default(0)
+  tries            Int                 @default(0)
   // The run that sends or withdraws it; the run may be deleted before the invite.
-  sessionId   String?
+  sessionId        String?
   // Why it has not started and the earliest it may (the account resting, outside its hours), and the zone of its hours.
-  waitReason  String?
-  waitUntil   DateTime?
-  waitZone    String?
-  createdAt   DateTime            @default(now())
+  waitReason       String?
+  waitUntil        DateTime?
+  waitZone         String?
+  createdAt        DateTime            @default(now())
   // When its send run was asked for; the account's limits count from it.
-  startedAt   DateTime?
-  invitedAt   DateTime?
-  acceptedAt  DateTime?
-  withdrawnAt DateTime?
+  startedAt        DateTime?
+  invitedAt        DateTime?
+  acceptedAt       DateTime?
+  withdrawnAt      DateTime?
+  // Whether the note went with it: set where the invite settles; null when not known.
+  noteSent         Boolean?
+  // The workflow block that planned it, so campaigns can be told apart; null for an invite made by hand or before this existed.
+  originWorkflowId String?
+  originRunId      String?
+  originNodeId     String?
 
   @@index([accountId, state, plannedAt])
   @@index([accountId, startedAt])

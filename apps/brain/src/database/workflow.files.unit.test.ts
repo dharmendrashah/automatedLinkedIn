@@ -41,6 +41,8 @@ vi.mock('./postFileKeys', async () => ({
    dropFiles: mocks.dropFiles,
 }))
 
+vi.mock('./workflowListener.service', () => ({ WorkflowListenerService: { sync: vi.fn() } }))
+
 vi.mock('env', () => ({
    DATA_WALLET_FLOOR_USD: 5,
    DATA_WALLET_WARN_USD: 25,

@@ -117,6 +117,17 @@ export const taskResultSchema = z.strictObject({
 
 export const verdictToneSchema = z.enum(['success', 'failure', 'neutral'])
 
+// The worker really began a run: brain keeps the time and writes the "on" event of the task.
+export const taskStartedSchema = z.strictObject({
+   contract: z.literal(TASK_CONTRACT_VERSION),
+   task_id: z.uuid(),
+   task: taskNameSchema,
+   started_at: z.iso.datetime(),
+   worker: z.strictObject({ build: z.string().min(1).max(64) }),
+})
+
+export type TaskStarted = z.infer<typeof taskStartedSchema>
+
 // What the worker announces about each task it can run, so brain and the web app never import spider code.
 export const taskCatalogEntrySchema = z.strictObject({
    contract: z.literal(TASK_CONTRACT_VERSION),

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { TASK_CATALOG_QUEUE, TASK_DONE_QUEUE } from '@automatedLinkedIn/contracts'
+import { TASK_CATALOG_QUEUE, TASK_DONE_QUEUE, TASK_STARTED_QUEUE } from '@automatedLinkedIn/contracts'
 
 import { CONSUMERS } from './registry'
 import { catalogHandler, taskCatalog } from './taskCatalog'
@@ -45,10 +45,11 @@ describe('worker consumers', () => {
       vi.resetAllMocks()
    })
 
-   it('should register the result and catalog consumers, each on its own queue', () => {
+   it('should register the result, catalog and started consumers, each on its own queue', () => {
       expect(CONSUMERS.map(({ name, queue }) => [name, queue])).toEqual([
          ['task-results', TASK_DONE_QUEUE],
          ['task-catalog', TASK_CATALOG_QUEUE],
+         ['task-started', TASK_STARTED_QUEUE],
       ])
    })
 

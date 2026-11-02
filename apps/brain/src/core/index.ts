@@ -40,6 +40,7 @@ export {
    CONVERSATION_EXCERPT,
    type ConversationItem,
    EXCERPT_LENGTH,
+   type ItemFacts,
    type ItemResult,
    type JobItem,
    type PersonItem,
@@ -53,6 +54,7 @@ export {
    readSignals,
 } from './workflowItem'
 export { type PersonSnapshotData, companiesOf, profileFacts, readSnapshot, snapshotFrom } from './personSnapshot'
+export { type PersonFacts, aboutSnippet, templateValues } from './templateValues'
 export {
    type CompanySnapshotData,
    type PostSnapshotData,

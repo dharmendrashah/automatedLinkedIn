@@ -1,11 +1,14 @@
 import { z } from 'zod'
 
 import { readCompanyFilters } from './companyFilters'
+import { EVENT_PHASES, type EventTriggerSettings, ORIGIN_KINDS, factsOf } from './events'
 import { FILTERS_TEXT_MAX } from './filtersText'
+import { HOOK_START_ID, hooksSchema, splitHooks } from './hooks'
 import { INDUSTRY_PAIRS } from './industries'
 import { INVITE_LIMITS } from './invites'
 import { readPeopleFilters } from './peopleFilters'
 import { joinedText, mediaBlock, postBlocksOfText, postFilesOf } from './posting'
+import { type MessageUse, TEMPLATE_RAW_MAX, templateProblems } from './template'
 
 // The closed catalog of workflow blocks, the graph they form, and the pure rules on it (.plan/gtm-workflows.md).
 // Ids and labels are neutral: no data supplier is named here, because the browser shows these.
@@ -93,6 +96,8 @@ export type Field = (
    | { key: string; label: string; kind: 'post' }
    // One of the owner's saved drafts of the Posting page.
    | { key: string; label: string; kind: 'draft' }
+   // The words of an invite note, a message or a reply, written with variables and spintax (.plan/message-composer.md).
+   | { key: string; label: string; kind: 'composer'; use: MessageUse; max: number }
 ) & {
    hint?: string
    advanced?: boolean
@@ -231,7 +236,7 @@ export const MAX_POOL = 20
 // working), or one account named on the block; and how long it waits before it leaves the rest for the next run
 // (.plan/account-action-blocks.md). `hours` is the block's own default.
 export const accountSettings = (hours: number) => ({
-   accountMode: z.enum(['pool', 'one']).default('pool'),
+   accountMode: z.enum(['pool', 'one', 'event']).default('pool'),
    account: z.string().max(100).default(''),
    timeLimitHours: z.number().int().min(1).max(48).default(hours),
 })
@@ -360,6 +365,7 @@ export const accountFields = (hours: number): Field[] => [
       options: optionsOf([
          ['pool', 'From "Select accounts" before it'],
          ['one', 'One account'],
+         ['event', 'The account of the event'],
       ]),
    },
    {
@@ -927,6 +933,9 @@ export const BLOCK_TYPES = [
    'trigger.schedule',
    'trigger.api',
    'trigger.workflow',
+   'trigger.taskEvent',
+   'trigger.messageArrived',
+   'trigger.hook',
    'input.posts',
    'input.profiles',
    'input.companies',
@@ -956,10 +965,12 @@ export const BLOCK_TYPES = [
    'process.filter',
    'process.topN',
    'process.tag',
+   'process.messageMood',
    'process.merge',
    'score.icp',
    'collect.profile',
    'logic.if',
+   'logic.ifEvent',
    'logic.else',
    'logic.runWorkflow',
    'logic.wait',
@@ -1296,6 +1307,178 @@ const PROFILE_LANGUAGES = optionsOf(
 )
 
 const JOB_SALARIES = SALARIES.filter(({ value }) => value !== 'any')
+
+// "If the event says": a few rows, each a fact, is or is not (or not known), and a value (.plan/workflow-events-and-hooks.md).
+export const EVENT_CONDITION_ROWS = 3
+
+const conditionKey = (name: 'fact' | 'is' | 'value', row: number) => (row === 1 ? name : `${name}${row}`)
+
+const FACT_OPTIONS = factsOf().map(({ scope, key, label }) => ({
+   value: `${scope}.${key}`,
+   label,
+}))
+
+const conditionRows = Array.from({ length: EVENT_CONDITION_ROWS }, (_unused, index) => index + 1)
+
+export const EVENT_STARTERS = [
+   {
+      value: 'owner',
+      label: 'Me, by hand',
+   },
+   {
+      value: 'automation',
+      label: 'The system on its own',
+   },
+   {
+      value: 'workflow',
+      label: 'A workflow',
+   },
+   {
+      value: 'retry',
+      label: 'A retry',
+   },
+   {
+      value: 'event',
+      label: 'A workflow started by an event',
+   },
+]
+
+const ifEventConfig = z.object({
+   match: z.enum(['all', 'any']).default('all'),
+   ...Object.fromEntries(
+      conditionRows.flatMap(row => [
+         [conditionKey('fact', row), z.string().max(80).default('')],
+         [conditionKey('is', row), z.enum(['is', 'isNot', 'unknown']).default('is')],
+         [conditionKey('value', row), z.string().max(100).default('')],
+      ])
+   ),
+})
+
+const ifEventFields: Field[] = [
+   {
+      key: 'match',
+      label: 'Match',
+      kind: 'select',
+      options: [
+         {
+            value: 'all',
+            label: 'All conditions (and)',
+         },
+         {
+            value: 'any',
+            label: 'Any condition (or)',
+         },
+      ],
+   },
+   ...conditionRows.flatMap((row): Field[] => [
+      {
+         key: conditionKey('fact', row),
+         label: row === 1 ? 'Condition' : `Condition ${row}`,
+         kind: 'select',
+         options: [
+            {
+               value: '',
+               label: row === 1 ? 'Pick a fact' : 'Not used',
+            },
+            ...FACT_OPTIONS,
+         ],
+      },
+      {
+         key: conditionKey('is', row),
+         label: 'is',
+         kind: 'select',
+         options: [
+            {
+               value: 'is',
+               label: 'is',
+            },
+            {
+               value: 'isNot',
+               label: 'is not',
+            },
+            {
+               value: 'unknown',
+               label: 'is not known',
+            },
+         ],
+      },
+      {
+         key: conditionKey('value', row),
+         label: 'Value',
+         kind: 'text',
+         placeholder: 'For example false, SENT or negative',
+      },
+   ]),
+]
+
+const taskEventConfig = z.object({
+   phase: z.enum(EVENT_PHASES).default('after'),
+   task: z.string().trim().max(60).default(''),
+   accounts: z.array(z.string().min(1).max(100)).max(MAX_POOL).default([]),
+   startedBy: z.array(z.enum(ORIGIN_KINDS)).default([...ORIGIN_KINDS]),
+   verdicts: z.array(z.string().trim().toUpperCase().min(1).max(40)).max(20).default([]),
+   plannedBy: z.array(z.string().min(1).max(60)).max(20).default([]),
+   ownTasks: z.boolean().default(false),
+   maxPerHour: z.number().int().min(1).max(200).default(30),
+   batchMinutes: z.number().int().min(0).max(60).default(0),
+   claim: z.boolean().default(false),
+})
+
+const messageArrivedConfig = z.object({
+   accounts: z.array(z.string().min(1).max(100)).max(MAX_POOL).default([]),
+   maxPerHour: z.number().int().min(1).max(200).default(30),
+   batchMinutes: z.number().int().min(0).max(60).default(0),
+   claim: z.boolean().default(false),
+})
+
+const maxPerHourField: Field = {
+   key: 'maxPerHour',
+   label: 'At most this many runs an hour',
+   kind: 'int',
+   min: 1,
+   max: 200,
+   hint: 'More wait their turn instead of being lost.',
+}
+
+// The text of a writing block, checked for broken braces, unknown variables and a version over the limit.
+const wordsProblems = (name: string, key: 'note' | 'text', max: number) => (node: GraphNode) => {
+   const words = settingsOf(node)[key]
+
+   return typeof words === 'string'
+      ? templateProblems(words, { maxChars: max }).map(message => ({
+           nodeId: node.id,
+           level: 'error' as const,
+           message: `${name}: ${message}`,
+        }))
+      : []
+}
+
+const skipMissingField: Field = {
+   key: 'skipMissing',
+   label: 'Skip people I have no value for',
+   kind: 'toggle',
+   disarms: true,
+   hint: 'A person with no value for a variable you used, and no fallback for it, is not written to.',
+}
+
+const batchFields: Field[] = [
+   {
+      key: 'batchMinutes',
+      label: 'Collect events for this many minutes (0 for one run for each event)',
+      kind: 'int',
+      min: 0,
+      max: 60,
+      hint: 'Events that arrive inside the window start one run with all their people, each person once.',
+      advanced: true,
+   },
+   {
+      key: 'claim',
+      label: 'Only one workflow takes an event',
+      kind: 'toggle',
+      hint: 'When another workflow with this setting took the event first, this one skips it.',
+      advanced: true,
+   },
+]
 
 const BLOCKS = {
    'trigger.manual': {
@@ -1765,6 +1948,106 @@ const BLOCKS = {
             label: 'After this workflow',
             kind: 'workflow',
          },
+      ],
+   },
+   // The start of a hook run: made when a run is split, never offered in the palette ("retired" hides it and keeps it running).
+   'trigger.hook': {
+      group: 'Triggers',
+      liveness: 'always',
+      deprecated: true,
+      label: 'When a hook fires',
+      summary: 'Starts a hook run with what the block it hangs on had at that moment.',
+      input: null,
+      output: 'profile',
+      config: empty,
+      fields: [],
+   },
+   'trigger.taskEvent': {
+      group: 'Triggers',
+      liveness: 'always',
+      label: 'When an account runs a task',
+      summary:
+         'Starts when one of your accounts is about to run, is running, or has finished a task, for example after a connection request went. Gives the people the task was about.',
+      input: null,
+      output: 'profile',
+      config: taskEventConfig,
+      fields: [
+         {
+            key: 'phase',
+            label: 'Moment',
+            kind: 'select',
+            options: [
+               {
+                  value: 'before',
+                  label: 'Before it starts',
+               },
+               {
+                  value: 'on',
+                  label: 'While it works',
+               },
+               {
+                  value: 'after',
+                  label: 'When it finishes',
+               },
+            ],
+         },
+         {
+            key: 'task',
+            label: 'Task (empty for any)',
+            kind: 'text',
+            placeholder: 'linkedin-invite',
+         },
+         {
+            key: 'accounts',
+            label: 'Accounts (empty for any)',
+            kind: 'accounts',
+         },
+         {
+            key: 'startedBy',
+            label: 'Started by',
+            kind: 'multi',
+            options: EVENT_STARTERS,
+            hint: 'Untick what should not start this workflow, for example the tasks you start by hand.',
+         },
+         {
+            key: 'verdicts',
+            label: 'Only when the verdict is (finished only)',
+            kind: 'words',
+            hint: 'For example DONE. Empty for any.',
+         },
+         {
+            key: 'ownTasks',
+            label: 'Also react to tasks this workflow started',
+            kind: 'toggle',
+            advanced: true,
+         },
+         {
+            ...maxPerHourField,
+            advanced: true,
+         },
+         ...batchFields,
+      ],
+   },
+   'trigger.messageArrived': {
+      group: 'Triggers',
+      liveness: 'always',
+      label: 'When a message arrives',
+      summary:
+         'Starts when a read of your messages stores a new message from someone. Gives the conversations, with the new words. The first read of an account gives none.',
+      input: null,
+      output: 'conversation',
+      config: messageArrivedConfig,
+      fields: [
+         {
+            key: 'accounts',
+            label: 'Accounts (empty for any)',
+            kind: 'accounts',
+         },
+         {
+            ...maxPerHourField,
+            advanced: true,
+         },
+         ...batchFields,
       ],
    },
    'input.profiles': {
@@ -3316,6 +3599,61 @@ const BLOCKS = {
          },
       ],
    },
+   'logic.ifEvent': {
+      group: 'Logic',
+      flags: {
+         takesAnything: true,
+         keepsAside: true,
+      },
+      flow: 'Takes anything, gives what the event says matches; an Else after it gets the rest',
+      validate: node => {
+         const settings = settingsOf(node)
+         const used = conditionRows.some(
+            row => settings[conditionKey('fact', row)] !== '' && settings[conditionKey('fact', row)] !== undefined
+         )
+
+         return used
+            ? []
+            : [
+                 {
+                    nodeId: node.id,
+                    level: 'error' as const,
+                    message: 'If the event says: pick a fact to look at.',
+                 },
+              ]
+      },
+      label: 'If the event says',
+      summary:
+         'Passes on what the event says matches, for example "the note was not sent" or "the mood is negative". Draw a line from its Else dot for the rest. A fact that is not known matches neither is nor is not.',
+      input: 'profile',
+      output: 'profile',
+      config: ifEventConfig,
+      fields: ifEventFields,
+   },
+   'process.messageMood': {
+      group: 'Process',
+      label: 'Read the mood of a message',
+      flow: 'Takes conversations, gives them with a mood',
+      summary:
+         'Reads the newest words of each conversation by rules (interest, a no, a question, an away reply, a request to stop) and keeps the mood next to it. It reads words, not intent, and can be wrong; "neutral" means no rule matched.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            lastText: 'Sounds good, can we talk next week?',
+            lastFrom: 'THEM',
+            link: 'https://www.linkedin.com/messaging/thread/2-SAMPLE/',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            facts: { 'item.mood': 'positive' },
+            link: 'https://www.linkedin.com/messaging/thread/2-SAMPLE/',
+         },
+      },
+      input: 'conversation',
+      output: 'conversation',
+      config: empty,
+      fields: [],
+   },
    'logic.else': {
       group: 'Logic',
       flags: { passesOn: true },
@@ -4008,12 +4346,15 @@ const BLOCKS = {
       group: 'Account Actions',
       flags: { usesAccounts: true },
       unit: 'invites',
-      validate: actOffNote('Send connection request', 'sends'),
+      validate: node => [
+         ...actOffNote('Send connection request', 'sends')(node),
+         ...wordsProblems('Send connection request', 'note', INVITE_LIMITS.noteChars)(node),
+      ],
       label: 'Send connection request',
       api: [
          peopleApi,
          wordsApi(
-            'the note to send with each request; {first_name} and {company} are filled in',
+            'the note to send with each request; variables like {first_name} and spintax like {Hi|Hello} are filled in',
             'note',
             INVITE_LIMITS.noteChars,
             'Hi {first_name}, I liked your work at {company}.'
@@ -4040,7 +4381,8 @@ const BLOCKS = {
       input: 'profile',
       output: 'profile',
       config: z.object({
-         note: z.string().trim().max(INVITE_LIMITS.noteChars).default(''),
+         note: z.string().trim().max(TEMPLATE_RAW_MAX.note).default(''),
+         skipMissing: z.boolean().default(false),
          ...actSettings,
          ...accountSettings(ACCOUNT_BLOCK_HOURS['account.sendInvite']),
       }),
@@ -4048,11 +4390,13 @@ const BLOCKS = {
          {
             key: 'note',
             label: 'Note (optional)',
-            kind: 'text',
-            placeholder: 'Hi {first_name}, I liked your work at {company}.',
+            kind: 'composer',
+            use: 'invite',
+            max: INVITE_LIMITS.noteChars,
             disarms: true,
-            hint: `Up to ${INVITE_LIMITS.noteChars} characters; {first_name} and {company} are filled in for each person. A free account has only a few notes a month; later invites then go without one.`,
+            hint: `Up to ${INVITE_LIMITS.noteChars} characters. A free account has only a few notes a month; later invites then go without one.`,
          },
+         skipMissingField,
          actField,
          ...accountFields(ACCOUNT_BLOCK_HOURS['account.sendInvite']),
       ],
@@ -4090,6 +4434,7 @@ const BLOCKS = {
       unit: 'messages',
       validate: node => [
          ...actOffNote('Send message', 'sends')(node),
+         ...wordsProblems('Send message', 'text', MESSAGE_MAX_CHARS)(node),
          ...(typeof settingsOf(node).text === 'string' && settingsOf(node).text !== ''
             ? []
             : [
@@ -4104,7 +4449,7 @@ const BLOCKS = {
       api: [
          peopleApi,
          wordsApi(
-            'the message to send; {first_name} and {company} are filled in',
+            'the message to send; variables like {first_name} and spintax like {Hi|Hello} are filled in',
             'text',
             MESSAGE_MAX_CHARS,
             'Hi {first_name}, thanks for connecting.'
@@ -4131,7 +4476,8 @@ const BLOCKS = {
       input: 'profile',
       output: 'profile',
       config: z.object({
-         text: z.string().trim().max(MESSAGE_MAX_CHARS).default(''),
+         text: z.string().trim().max(TEMPLATE_RAW_MAX.text).default(''),
+         skipMissing: z.boolean().default(false),
          notAgainHours: z.number().int().min(0).max(720).default(24),
          ...actSettings,
          ...accountSettings(ACCOUNT_BLOCK_HOURS['account.sendMessage']),
@@ -4140,11 +4486,13 @@ const BLOCKS = {
          {
             key: 'text',
             label: 'Message',
-            kind: 'textarea',
-            placeholder: 'Hi {first_name}, thanks for connecting.',
+            kind: 'composer',
+            use: 'message',
+            max: MESSAGE_MAX_CHARS,
             disarms: true,
-            hint: '{first_name} and {company} are filled in for each person. Only people connected to the chosen accounts get it; at most 15 first messages a day for each account.',
+            hint: 'Only people connected to the chosen accounts get it; at most 15 first messages a day for each account.',
          },
+         skipMissingField,
          {
             key: 'notAgainHours',
             label: 'Not again within (hours)',
@@ -4164,6 +4512,7 @@ const BLOCKS = {
       unit: 'replies',
       validate: node => [
          ...actOffNote('Reply in a conversation', 'replies')(node),
+         ...wordsProblems('Reply in a conversation', 'text', MESSAGE_MAX_CHARS)(node),
          ...(typeof settingsOf(node).text === 'string' && settingsOf(node).text !== ''
             ? []
             : [
@@ -4177,7 +4526,7 @@ const BLOCKS = {
       label: 'Reply in a conversation',
       api: [
          wordsApi(
-            'the reply to send; {first_name} and {company} are filled in',
+            'the reply to send; variables like {first_name} and spintax like {Hi|Hello} are filled in',
             'text',
             MESSAGE_MAX_CHARS,
             'Hi {first_name}, thanks for your message.'
@@ -4207,7 +4556,8 @@ const BLOCKS = {
       input: 'conversation',
       output: 'conversation',
       config: z.object({
-         text: z.string().trim().max(MESSAGE_MAX_CHARS).default(''),
+         text: z.string().trim().max(TEMPLATE_RAW_MAX.text).default(''),
+         skipMissing: z.boolean().default(false),
          onlyIfTheyWroteLast: z.boolean().default(true),
          notAgainHours: z.number().int().min(0).max(720).default(24),
          ...actSettings,
@@ -4217,11 +4567,12 @@ const BLOCKS = {
          {
             key: 'text',
             label: 'Reply',
-            kind: 'textarea',
-            placeholder: 'Hi {first_name}, thanks for your message.',
+            kind: 'composer',
+            use: 'reply',
+            max: MESSAGE_MAX_CHARS,
             disarms: true,
-            hint: '{first_name} and {company} are filled in for each person.',
          },
+         skipMissingField,
          {
             key: 'onlyIfTheyWroteLast',
             label: 'Only where they wrote last',
@@ -4517,6 +4868,10 @@ export const graphSchema = z.object({
             version: z.number().int().min(1).optional(),
             // Switched off: the block does no work and passes on what reaches it (see `isOff`).
             disabled: z.boolean().optional(),
+            // A name the owner gave it, shown on the canvas, in run views and in the hook list.
+            label: z.string().trim().min(1).max(60).optional(),
+            // How its before, on and after hooks behave; the chains hang on lines from those outputs.
+            hooks: hooksSchema.optional(),
             config: configSchema.default({}),
             position: z.object({
                x: z.number(),
@@ -4707,7 +5062,7 @@ export const topoOrder = (graph: Graph) => {
 }
 
 // How a run was started, and the triggers that fire for it. By hand and a preview fire every trigger.
-export type RunStart = 'MANUAL' | 'SCHEDULE' | 'PREVIEW' | 'API' | 'WORKFLOW'
+export type RunStart = 'MANUAL' | 'SCHEDULE' | 'PREVIEW' | 'API' | 'WORKFLOW' | 'EVENT' | 'HOOK'
 
 const FIRES: Record<RunStart, readonly BlockType[] | null> = {
    MANUAL: null,
@@ -4715,6 +5070,8 @@ const FIRES: Record<RunStart, readonly BlockType[] | null> = {
    SCHEDULE: ['trigger.schedule'],
    API: ['trigger.api'],
    WORKFLOW: ['trigger.workflow'],
+   EVENT: ['trigger.taskEvent', 'trigger.messageArrived'],
+   HOOK: ['trigger.hook'],
 }
 
 // Whether a trigger block starts a run. When the graph has no trigger of the kind that started the run, every trigger
@@ -4727,6 +5084,38 @@ export const isFired = (graph: Graph, start: RunStart, type: BlockType) => {
    }
 
    return wanted.includes(type)
+}
+
+// What a trigger block that listens to task events asks, in one shape; null for any other block or settings that do not read.
+export type EventTrigger = EventTriggerSettings & { maxPerHour: number; batchMinutes: number; claim: boolean }
+
+export const eventTriggerOf = (node: GraphNode): EventTrigger | null => {
+   if (node.type === 'trigger.taskEvent') {
+      const settings = taskEventConfig.safeParse(node.config)
+
+      return settings.success ? settings.data : null
+   }
+
+   if (node.type === 'trigger.messageArrived') {
+      const settings = messageArrivedConfig.safeParse(node.config)
+
+      return settings.success
+         ? {
+              phase: 'after',
+              task: 'linkedin-messages',
+              accounts: settings.data.accounts,
+              startedBy: [],
+              verdicts: [],
+              plannedBy: [],
+              ownTasks: true,
+              maxPerHour: settings.data.maxPerHour,
+              batchMinutes: settings.data.batchMinutes,
+              claim: settings.data.claim,
+           }
+         : null
+   }
+
+   return null
 }
 
 // The order ready blocks go in: depth first from the blocks with nothing before them, one branch to its end before the
@@ -4913,7 +5302,8 @@ const keptWithoutSplit = (graph: Graph, id: string) => {
 }
 
 // Only an error stops a run. Notes explain what will happen with a free-form graph.
-export const validateGraph = (graph: Graph): GraphError[] => {
+// The rules for one flow of blocks: the main flow, or one hook chain on its own.
+const validateFlow = (graph: Graph): GraphError[] => {
    const byId = new Map(graph.nodes.map(node => [node.id, node]))
    const problems: GraphError[] = []
    const note = (message: string, nodeId?: string) =>
@@ -4969,7 +5359,15 @@ export const validateGraph = (graph: Graph): GraphError[] => {
       if (POOL_BLOCKS.has(node.type)) {
          const { accountMode, account } = settingsOf(node)
 
-         if (accountMode === 'one') {
+         if (accountMode === 'event') {
+            if (!graph.nodes.some(other => eventTriggerOf(other) !== null || other.type === 'trigger.hook')) {
+               problems.push({
+                  nodeId: node.id,
+                  level: 'error',
+                  message: `${BLOCKS[node.type].label} uses the account of the event, so the workflow needs a trigger that starts from an event.`,
+               })
+            }
+         } else if (accountMode === 'one') {
             if (typeof account !== 'string' || account === '') {
                problems.push({
                   nodeId: node.id,
@@ -5009,6 +5407,35 @@ export const validateGraph = (graph: Graph): GraphError[] => {
    }
 
    return problems
+}
+
+// The main flow and each hook chain are checked as workflows of their own, so a chain block that needs "Select accounts" must have it
+// inside the chain. A chain's notes are left out (it has no trigger or output of its own to remark on); its errors count.
+export const validateGraph = (graph: Graph): GraphError[] => {
+   const { main, attachments, problems } = splitHooks(graph)
+   const reserved = graph.nodes
+      .filter(({ id }) => id.startsWith('__'))
+      .map((node): GraphError => ({
+         nodeId: node.id,
+         level: 'error',
+         message: 'Block ids starting with __ are reserved.',
+      }))
+
+   if (attachments.length === 0 && problems.length === 0) {
+      return [...validateFlow(graph), ...reserved]
+   }
+
+   const chains = new Map<string, GraphError>()
+
+   for (const { graph: chain } of attachments) {
+      for (const error of errorsOf(validateFlow(chain))) {
+         if (error.nodeId !== HOOK_START_ID) {
+            chains.set(`${error.nodeId}:${error.message}`, error)
+         }
+      }
+   }
+
+   return [...validateFlow(main), ...problems, ...reserved, ...chains.values()]
 }
 
 export const errorsOf = (problems: GraphError[]) => problems.filter(({ level }) => level === 'error')

@@ -1,3 +1,5 @@
+import { type PersonFacts, templateValues } from 'core'
+
 import { type LinkedInInviteState, type Prisma } from 'generated/prisma/client'
 
 import { INVITE_LIMITS, type InvitesFile } from '@automatedLinkedIn/contracts'
@@ -9,6 +11,7 @@ import {
    type SkipReason,
    fillNote,
    inviteSentence,
+   noteSentOf,
    notesBackAt,
    planInvites,
    sendChange,
@@ -16,6 +19,7 @@ import {
    withdrawChange,
 } from './inviteRules'
 import { INVITE_TASK } from './linkedInInvite.hooks'
+import { MessageValuesService } from './messageValues.service'
 import { budgetWait } from './postPublication.rules'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
@@ -48,7 +52,11 @@ export type InviteRequest = {
    note?: string
    // The Found by source the owner was looking at, credited with the accepts.
    source?: string
+   // The workflow block that plans it, so campaigns can be told apart.
+   origin?: InviteOrigin
 }
+
+export type InviteOrigin = { workflowId: string; runId: string; nodeId: string }
 
 // Someone to invite: what My network or the block knows of them.
 type Prospect = { slug: string; name: string | null; company: string | null; doNotContact: boolean; foundBy: string[] }
@@ -128,19 +136,43 @@ export class LinkedInInviteService {
          },
       })
       const personOf = new Map(people.map(person => [`${person.userId}:${person.slug}`, person]))
+      const owners = [...new Set(sends.map(({ userId }) => userId))]
+      // What else the database knows about each person, for the variables of a note written with them.
+      const facts = new Map<string, PersonFacts>(
+         (
+            await Promise.all(
+               owners.map(async userId => {
+                  const found = await MessageValuesService.factsFor(
+                     userId,
+                     sends.filter(send => send.userId === userId && send.note).map(({ slug }) => slug)
+                  )
+
+                  return [...found].map(([slug, one]) => [`${userId}:${slug}`, one] as const)
+               })
+            )
+         ).flat()
+      )
 
       return sends.map(invite => {
-         const person = personOf.get(`${invite.userId}:${invite.slug}`)
+         const key = `${invite.userId}:${invite.slug}`
+         const person = personOf.get(key)
          const name = person?.name ?? invite.name
 
          return {
             id: invite.id,
             slug: invite.slug,
             name,
-            note: fillNote(invite.note ?? undefined, {
-               name: name === invite.slug ? null : name,
-               company: person?.company ?? null,
-            }),
+            note: fillNote(
+               invite.note ?? undefined,
+               templateValues(
+                  {
+                     ...facts.get(key),
+                     name: name === invite.slug ? null : name,
+                     company: person?.company ?? facts.get(key)?.company,
+                  },
+                  { slug: invite.slug }
+               )
+            ),
          }
       })
    }
@@ -312,7 +344,14 @@ export class LinkedInInviteService {
    }
 
    // What "Send connection request" asks: the people go out from one account. Null when the account is not the owner's.
-   public static async inviteFrom(userId: string, accountId: string, people: Link[], note: string, now = new Date()) {
+   public static async inviteFrom(
+      userId: string,
+      accountId: string,
+      people: Link[],
+      note: string,
+      now = new Date(),
+      origin?: InviteOrigin
+   ) {
       const account = await PrismaService.client.linkedInAccount.findFirst({
          where: {
             id: accountId,
@@ -331,6 +370,7 @@ export class LinkedInInviteService {
             accountId,
             note,
             people,
+            ...(origin && { origin }),
          },
          now
       )
@@ -382,6 +422,11 @@ export class LinkedInInviteService {
                   ? request.source
                   : (person.foundBy.find(source => source.startsWith('list:')) ?? person.foundBy[0] ?? null),
             plannedAt: times[index] ?? now,
+            ...(request.origin && {
+               originWorkflowId: request.origin.workflowId,
+               originRunId: request.origin.runId,
+               originNodeId: request.origin.nodeId,
+            }),
          }))
          const made = await tx.linkedInInvite.createMany({
             data: rows,
@@ -817,6 +862,7 @@ export class LinkedInInviteService {
             accountId: true,
             state: true,
             tries: true,
+            note: true,
          },
       })
       const byId = new Map(rows.map(row => [row.id, row]))
@@ -840,7 +886,14 @@ export class LinkedInInviteService {
             const row = byId.get(id)
 
             if (row && (row.state === 'SENDING' || row.state === 'UNKNOWN')) {
-               await apply(id, sendChange(outcome, row.tries, now, memberId), ['SENDING', 'UNKNOWN'])
+               await apply(
+                  id,
+                  {
+                     ...sendChange(outcome, row.tries, now, memberId),
+                     ...noteSentOf(outcome, row.note),
+                  },
+                  ['SENDING', 'UNKNOWN']
+               )
             }
          }
 

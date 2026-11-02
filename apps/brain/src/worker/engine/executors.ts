@@ -103,6 +103,7 @@ import {
    thresholdsOf,
    wordsIn,
 } from './context'
+import { eventTrigger, hookTrigger, ifEvent, messageMood, runEvent } from './eventBlocks'
 import { sendInvites, withdrawInvites } from './inviteBlocks'
 import { retry, stop, taskResult, wait } from './logicBlocks'
 import { replyToConversations, sendMessages } from './replyBlocks'
@@ -909,6 +910,7 @@ const sendApi = async (ctx: Context): Promise<StepResult> => {
       }
    }
 
+   const event = await runEvent(ctx)
    const sent = await sendPages(
       {
          url: textIn(config, 'url'),
@@ -918,6 +920,7 @@ const sendApi = async (ctx: Context): Promise<StepResult> => {
       {
          workflowId: ctx.run.workflowId,
          runId: ctx.run.id,
+         ...(event && { event }),
       },
       ctx.inputs
    )
@@ -1498,6 +1501,9 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'trigger.schedule': async () => DONE,
    'trigger.api': async () => DONE,
    'trigger.workflow': afterWorkflow,
+   'trigger.taskEvent': eventTrigger,
+   'trigger.messageArrived': eventTrigger,
+   'trigger.hook': hookTrigger,
    'input.posts': inputPosts,
    'input.profiles': inputProfiles,
    'input.companies': inputCompanies,
@@ -1554,6 +1560,7 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
       return keepItems(ctx, best, people.length)
    },
    'process.merge': merge,
+   'process.messageMood': messageMood,
    'process.tag': async ctx => {
       const people = mergeBySlug(peopleOf(ctx.inputs))
       const tags = wordsIn(configOf(ctx.node), 'tags')
@@ -1572,6 +1579,7 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
       return keepItems(ctx, kept, people.length)
    },
    'logic.if': ifBlock,
+   'logic.ifEvent': ifEvent,
    'logic.else': elseBlock,
    'logic.forEach': forEach,
    'logic.runWorkflow': runWorkflow,

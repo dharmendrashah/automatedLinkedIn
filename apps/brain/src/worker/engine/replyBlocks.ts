@@ -1,25 +1,16 @@
 import { LinkedInReplyService, ReplyActService, WorkflowListService } from 'database'
 
+import { missingSentence } from '@automatedLinkedIn/contracts'
+
 import { actFrame } from './actFrame'
 import { type Context, type StepResult, configOf, conversationsOf, numberIn, peopleOf, textIn } from './context'
 import { type Driver, type Plan, runQueued } from './queuedActs'
+import { wordsWriter } from './words'
 
 // "Send message" and "Reply in a conversation" (.plan/account-action-blocks.md): both write through the owner's reply queue, which keeps
 // the daily limits (40 replies and 15 first messages a day for an account, 5 waiting at a time) and sends one by one with a quiet gap.
 // So the step asks as many as the queue takes, waits for them to go, and asks the rest on its next tick. A message that may have gone
 // ends as UNKNOWN and is never asked again. Nothing goes in a preview, or until "Act for real" is switched on.
-
-// The words with the person's name and company put in; an empty one leaves no gap.
-export const fillWords = (text: string, who: { name: string | null; company: string | null }) => {
-   const [first = ''] = (who.name ?? '').trim().split(/\s+/)
-
-   return text
-      .replaceAll('{first_name}', first)
-      .replaceAll('{company}', who.company ?? '')
-      .replace(/[ \t]{2,}/g, ' ')
-      .replace(/ +([,.!?;:])/g, '$1')
-      .trim()
-}
 
 const MESSAGES: Driver = {
    standing: (userId, refs) => ReplyActService.standing(userId, refs),
@@ -69,6 +60,7 @@ export const sendMessages = async (ctx: Context): Promise<StepResult> => {
             skips: new Map(),
             targets: [],
          }
+         const write = await wordsWriter(run.userId, text, people, usable)
 
          for (const person of people) {
             const accountId = via.get(person.slug)
@@ -80,20 +72,25 @@ export const sendMessages = async (ctx: Context): Promise<StepResult> => {
             } else if (recent.has(`${accountId}:${person.slug}`)) {
                plan.skips.set(person.slug, `Written to in the last ${hours} hours.`)
             } else {
-               plan.targets.push({
-                  slug: person.slug,
-                  accountId,
-                  ask: () =>
-                     LinkedInReplyService.start(
-                        run.userId,
-                        accountId,
-                        person.slug,
-                        fillWords(text, {
-                           name: person.name,
-                           company: person.company ?? companies.get(person.slug) ?? null,
-                        })
-                     ),
-               })
+               const words = write(
+                  {
+                     ...person,
+                     company: person.company ?? companies.get(person.slug) ?? null,
+                  },
+                  accountId
+               )
+
+               if (words.text === '') {
+                  plan.skips.set(person.slug, 'The message came out empty.')
+               } else if (config.skipMissing === true && words.missing.length > 0) {
+                  plan.skips.set(person.slug, missingSentence(words.missing))
+               } else {
+                  plan.targets.push({
+                     slug: person.slug,
+                     accountId,
+                     ask: () => LinkedInReplyService.start(run.userId, accountId, person.slug, words.text),
+                  })
+               }
             }
          }
 
@@ -144,6 +141,12 @@ export const replyToConversations = async (ctx: Context): Promise<StepResult> =>
             skips: new Map(),
             targets: [],
          }
+         const write = await wordsWriter(
+            run.userId,
+            text,
+            conversations.map(({ slug, personSlug }) => ({ slug: personSlug ?? slug })),
+            usable
+         )
 
          for (const conversation of conversations) {
             const row = rowOf.get(conversation.slug)
@@ -159,19 +162,27 @@ export const replyToConversations = async (ctx: Context): Promise<StepResult> =>
             } else if (recent.has(conversation.slug)) {
                plan.skips.set(conversation.slug, `Written in the last ${hours} hours.`)
             } else {
-               plan.targets.push({
-                  slug: conversation.slug,
-                  accountId: row.accountId,
-                  ask: () =>
-                     LinkedInReplyService.send(
-                        run.userId,
-                        conversation.slug,
-                        fillWords(text, {
-                           name: conversation.name,
-                           company: conversation.personSlug ? (companies.get(conversation.personSlug) ?? null) : null,
-                        })
-                     ),
-               })
+               const words = write(
+                  {
+                     slug: conversation.personSlug ?? conversation.slug,
+                     name: conversation.name,
+                     headline: conversation.headline,
+                     company: conversation.personSlug ? (companies.get(conversation.personSlug) ?? null) : null,
+                  },
+                  row.accountId
+               )
+
+               if (words.text === '') {
+                  plan.skips.set(conversation.slug, 'The reply came out empty.')
+               } else if (config.skipMissing === true && words.missing.length > 0) {
+                  plan.skips.set(conversation.slug, missingSentence(words.missing))
+               } else {
+                  plan.targets.push({
+                     slug: conversation.slug,
+                     accountId: row.accountId,
+                     ask: () => LinkedInReplyService.send(run.userId, conversation.slug, words.text),
+                  })
+               }
             }
          }
 

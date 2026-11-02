@@ -12,6 +12,10 @@ const DAY_MS = 24 * 60 * 60 * 1000
 export const RETENTION = {
    itemsDays: 14,
    runsDays: 90,
+   // Task events and what became of them (.plan/workflow-events-and-hooks.md).
+   eventsDays: 30,
+   hookRunsDays: 14,
+   claimsDays: 7,
    maybeDays: 30,
    reviewAfterDays: 180,
    reviewGraceDays: 30,
@@ -49,6 +53,24 @@ export class RetentionService {
          where: {
             status: { notIn: ['RUNNING', 'QUEUED'] },
             startedAt: { lt: daysBefore(now, RETENTION.runsDays) },
+         },
+      })
+      // A delivery goes with its event.
+      const events = await db.taskEvent.deleteMany({ where: { at: { lt: daysBefore(now, RETENTION.eventsDays) } } })
+      // Hook runs are short-lived records of their host run; the host keeps the counts.
+      const hookRuns = await db.workflowRun.deleteMany({
+         where: {
+            kind: 'HOOK',
+            status: { notIn: ['RUNNING', 'QUEUED'] },
+            startedAt: { lt: daysBefore(now, RETENTION.hookRunsDays) },
+         },
+      })
+      const claimCutoff = daysBefore(now, RETENTION.claimsDays)
+      const claims = await db.workflowEventClaim.deleteMany({ where: { createdAt: { lt: claimCutoff } } })
+      const hookDeliveries = await db.workflowDelivery.deleteMany({
+         where: {
+            source: 'BLOCK',
+            createdAt: { lt: daysBefore(now, RETENTION.eventsDays) },
          },
       })
       const maybe = await db.workflowListMember.deleteMany({
@@ -122,6 +144,8 @@ export class RetentionService {
          items: items.count,
          inputs: inputs.count,
          runs: runs.count,
+         events: events.count + hookDeliveries.count + claims.count,
+         hookRuns: hookRuns.count,
          maybe: maybe.count,
          reviewed: reviewed.count,
          marked: marked.count,

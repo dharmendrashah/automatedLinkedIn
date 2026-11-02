@@ -249,7 +249,7 @@ describe('Send and Withdraw connection request', () => {
          actForReal: false,
          timeLimitHours: 1,
       })
-      expect(blockOf('account.sendInvite').config.safeParse({ note: 'x'.repeat(201) }).success).toBe(false)
+      expect(blockOf('account.sendInvite').config.safeParse({ note: 'x'.repeat(1_001) }).success).toBe(false)
       expect(blockOf('account.sendInvite').fields.find(({ key }) => key === 'note')).toMatchObject({ disarms: true })
    })
 
@@ -362,11 +362,9 @@ describe('Send message and Reply in a conversation', () => {
    })
 
    it('should refuse a message longer than the queue takes, and mark what goes out as switching Act for real off', () => {
-      expect(blockOf('account.sendMessage').config.safeParse({ text: 'x'.repeat(MESSAGE_MAX_CHARS + 1) }).success).toBe(
-         false
-      )
+      expect(blockOf('account.sendMessage').config.safeParse({ text: 'x'.repeat(12_001) }).success).toBe(false)
       expect(blockOf('account.sendMessage').fields.find(({ key }) => key === 'text')).toMatchObject({
-         kind: 'textarea',
+         kind: 'composer',
          disarms: true,
       })
 
@@ -400,6 +398,35 @@ describe('Send message and Reply in a conversation', () => {
             actForReal: true,
          }).map(({ message }) => message)
       ).not.toEqual(expect.arrayContaining([expect.stringContaining('Act for real')]))
+   })
+
+   it('should refuse broken braces, an unknown variable and a note whose longest version is over 200 characters', () => {
+      const errors = (type: 'account.sendMessage' | 'account.sendInvite', config: NodeConfig) =>
+         validateGraph({
+            nodes: [
+               node('one', type, {
+                  accountMode: 'one',
+                  account: 'a1',
+                  actForReal: true,
+                  ...config,
+               }),
+            ],
+            edges: [],
+         })
+            .filter(({ level, message }) => level === 'error' && /^Send (message|connection request): /.test(message))
+            .map(({ message }) => message)
+
+      expect(errors('account.sendMessage', { text: 'Hi {nickname}' })).toEqual([
+         'Send message: {nickname} is not a variable. Pick one from the list.',
+      ])
+      expect(errors('account.sendMessage', { text: 'Hi {first_name' })).toEqual(['Send message: A { is not closed.'])
+      expect(errors('account.sendMessage', { text: 'x'.repeat(MESSAGE_MAX_CHARS + 1) })).toEqual([
+         'Send message: The longest version is 4001 characters, over the 4000 allowed.',
+      ])
+      expect(errors('account.sendInvite', { note: `{${'a'.repeat(190)}|b} {full_name}` })).toEqual([
+         'Send connection request: The longest version is 203 characters, over the 200 allowed.',
+      ])
+      expect(errors('account.sendInvite', { note: '{Hi|Hello} {first_name:there}, lets connect.' })).toEqual([])
    })
 })
 

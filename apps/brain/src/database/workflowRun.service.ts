@@ -93,7 +93,14 @@ export class WorkflowRunService {
       const next = await PrismaService.client.workflowRun.findMany({
          where: {
             status: 'QUEUED',
-            workflow: { runs: { none: { status: 'RUNNING' } } },
+            workflow: {
+               runs: {
+                  none: {
+                     status: 'RUNNING',
+                     kind: 'MAIN',
+                  },
+               },
+            },
          },
          orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
          distinct: ['workflowId'],
@@ -588,6 +595,7 @@ export class WorkflowRunService {
                stopRequestedAt: null,
                // Failing again is a new failure to tell the owner about.
                alertDismissedAt: null,
+               resumes: { increment: 1 },
                startedAt: new Date(),
             },
          })
@@ -788,6 +796,14 @@ export class WorkflowRunService {
             return
          }
 
+         const run = await tx.workflowRun.findUnique({
+            where: { id: booking.runId },
+            select: {
+               kind: true,
+               trigger: true,
+            },
+         })
+
          await tx.spendLedger.create({
             data: {
                userId: booking.userId,
@@ -796,6 +812,8 @@ export class WorkflowRunService {
                callId,
                amountMicros: outcome.costMicros,
                month: monthOf(new Date()),
+               // Told apart on the Usage page; the run rows are removed sooner than the ledger.
+               label: run?.kind === 'HOOK' ? 'hook runs' : run?.trigger === 'EVENT' ? 'event runs' : null,
             },
          })
          await tx.workflowStepRun.update({

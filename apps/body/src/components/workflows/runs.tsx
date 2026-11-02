@@ -63,7 +63,7 @@ export const RunsTable = ({ runs, selectedId, onSelect }: ListProps) => (
             {runs?.map(run => (
                <TableRow key={run.id} className={cn(run.id === selectedId && 'bg-muted/50')}>
                   <TableCell>{formatTime(run.startedAt)}</TableCell>
-                  <TableCell>{triggerLabels[run.trigger]}</TableCell>
+                  <TableCell>{run.kind === 'HOOK' ? 'Hook' : triggerLabels[run.trigger]}</TableCell>
                   <TableCell>
                      <RunStatusBadge status={run.status} />
                   </TableCell>
@@ -89,11 +89,13 @@ type DetailProps = {
    run: RunDetail
    catalog: Block[]
    onOpenBlock: (nodeId: string) => void
+   // Stops a live hook run on its own; the main run has its Stop above the tabs.
+   onStop?: (runId: string) => void
 }
 
 // One run step by step: how many went in and out of each block, the pass rate, what each block cost, and what it
 // passed on.
-export const RunDetailView = ({ run, catalog, onOpenBlock }: DetailProps) => {
+export const RunDetailView = ({ run, catalog, onOpenBlock, onStop }: DetailProps) => {
    const [shownNode, setShownNode] = useState<string | null>(null)
    const order = run.graph.nodes.map(({ id }) => id)
    const combined = combineRounds(run.steps)
@@ -106,7 +108,12 @@ export const RunDetailView = ({ run, catalog, onOpenBlock }: DetailProps) => {
          <p className="text-sm font-medium">{runSentence(run, type => blockOf(catalog, type)?.label ?? type)}</p>
          <div className="text-muted-foreground flex flex-wrap items-center gap-3 text-sm">
             <RunStatusBadge status={run.status} />
-            <span>{triggerLabels[run.trigger]}</span>
+            <span>{run.kind === 'HOOK' ? 'Hook' : triggerLabels[run.trigger]}</span>
+            {run.kind === 'HOOK' && run.status === 'RUNNING' && !run.stopRequestedAt && onStop ? (
+               <Button variant="outline" size="sm" onClick={() => onStop(run.id)}>
+                  Stop this hook run
+               </Button>
+            ) : null}
             <span>
                Data cost {formatUsd(run.costMicros)} of up to {formatUsd(run.estimateMicros)}
             </span>
@@ -124,12 +131,37 @@ export const RunDetailView = ({ run, catalog, onOpenBlock }: DetailProps) => {
          {run.message && run.status !== 'FAILED' ? <p className="text-destructive text-sm">{run.message}</p> : null}
          {run.parent ? (
             <p className="text-muted-foreground text-sm">
-               Started by{' '}
+               {run.kind === 'HOOK' ? 'A hook of ' : 'Started by '}
                <Link className="underline" to={`/workflows/${run.parent.workflowId}?run=${run.parent.runId}`}>
-                  a run of "{run.parent.workflowName}"
+                  {run.kind === 'HOOK' ? 'this run' : `a run of "${run.parent.workflowName}"`}
                </Link>
                .
             </p>
+         ) : null}
+         {run.hooks.length > 0 ? (
+            <div className="grid gap-1 text-sm">
+               <p className="font-medium">Hooks</p>
+               <ul className="text-muted-foreground grid gap-0.5">
+                  {run.hooks.map(hook => (
+                     <li key={`${hook.nodeId}:${hook.phase}`}>
+                        {blockOf(catalog, run.graph.nodes.find(({ id }) => id === hook.nodeId)?.type ?? '')?.label ??
+                           hook.nodeId}
+                        , {hook.phase}: {hook.fired} started
+                        {hook.running > 0 ? `, ${hook.running} still running` : ''}
+                        {hook.failed > 0 ? `, ${hook.failed} failed${hook.reason ? ` (${hook.reason})` : ''}` : ''}
+                        {hook.skipped > 0 ? `, ${hook.skipped} did not start${hook.reason ? ` (${hook.reason})` : ''}` : ''}
+                        {hook.firstRunId ? (
+                           <>
+                              {' '}
+                              <Link className="underline" to={`/workflows/${run.workflowId}?run=${hook.firstRunId}`}>
+                                 Open
+                              </Link>
+                           </>
+                        ) : null}
+                     </li>
+                  ))}
+               </ul>
+            </div>
          ) : null}
          <Table>
             <TableHeader>

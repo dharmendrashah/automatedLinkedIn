@@ -42,10 +42,16 @@ import { CanvasActions } from './canvas-actions'
 import {
    DEFAULT_LOOP_ROUNDS,
    type FlowNode,
+   type HookPhase,
    MAX_LOOP_ROUNDS,
    OPPOSITE,
    type Side,
    canConnect,
+   canHook,
+   chainNodeIds,
+   chainRoots,
+   handleOfPort,
+   isHookPhase,
    hasLoop,
    newNodeId,
    portOfHandle,
@@ -54,6 +60,7 @@ import {
    toGraph,
 } from './graph-convert'
 import { type History, record, redo, startHistory, undo } from './history'
+import { HooksOverview } from './hooks-overview'
 import { isLeftToRight, layoutTopToBottom, neighbourOf, placeBeside } from './layout'
 import { isChangedElsewhere, leaveTarget } from './leave-guard'
 import { RemovableEdge } from './removable-edge'
@@ -161,6 +168,20 @@ const Editor = ({
 
    const nodeOf = (id: string | null) => nodes.find(node => node.id === id) ?? null
    const selected = nodeOf(selectedId)
+   const [showHooks, setShowHooks] = useState(true)
+   const chainIds = useMemo(() => chainNodeIds(edges), [edges])
+   const hookEdgeIds = useMemo(
+      () => new Set(edges.filter(edge => isHookPhase(portOfHandle(edge.sourceHandle))).map(({ id }) => id)),
+      [edges]
+   )
+   const choiceOf = (id: string) => ({
+      id,
+      name: nodeOf(id)?.data.label ?? nodeOf(id)?.data.block.label ?? id,
+   })
+   const attachedChoices = (id: string, phase: HookPhase) =>
+      edges
+         .filter(edge => edge.source === id && edge.sourceHandle === handleOfPort(phase))
+         .map(edge => choiceOf(edge.target))
 
    const viewCentre = () => {
       const box = wrapper.current?.getBoundingClientRect()
@@ -239,6 +260,12 @@ const Editor = ({
          nodes: canvas.nodes.map(node =>
             node.id === openId ? { ...node, data: { ...node.data, config: { ...node.data.config, ...patch } } } : node
          ),
+      }))
+
+   const setData = (patch: Partial<Pick<FlowNode['data'], 'label' | 'hooks'>>) =>
+      commit(canvas => ({
+         ...canvas,
+         nodes: canvas.nodes.map(node => (node.id === openId ? { ...node, data: { ...node.data, ...patch } } : node)),
       }))
 
    const removeSelection = () => {
@@ -445,10 +472,12 @@ const Editor = ({
                   ...node,
                   measured: nodeOf(node.id)?.measured,
                   selected: node.id === selectedId,
+                  hidden: !showHooks && chainIds.has(node.id),
                }))}
                edges={shown.edges.map(edge => ({
                   ...edge,
                   selected: edges.find(({ id }) => id === edge.id)?.selected,
+                  hidden: !showHooks && (hookEdgeIds.has(edge.id) || chainIds.has(edge.source)),
                }))}
                nodeTypes={NODE_TYPES}
                edgeTypes={EDGE_TYPES}
@@ -472,16 +501,24 @@ const Editor = ({
                   }))
                }
                onNodeDragStart={() => setHistory(current => record(current, current.present))}
-               isValidConnection={({ source, target, targetHandle }) =>
-                  portOfHandle(targetHandle) === undefined && canConnect(edges, source, target)
+               isValidConnection={({ source, target, targetHandle, sourceHandle }) =>
+                  portOfHandle(targetHandle) === undefined &&
+                  (isHookPhase(portOfHandle(sourceHandle))
+                     ? canHook(edges, source, target, sourceHandle)
+                     : canConnect(edges, source, target))
                }
                connectionMode={ConnectionMode.Loose}
-               onConnect={connection =>
+               onConnect={connection => {
+                  const phase = portOfHandle(connection.sourceHandle)
+                  const id = isHookPhase(phase)
+                     ? `${connection.source}:${phase}>${connection.target}`
+                     : `${connection.source}>${connection.target}`
+
                   commit(canvas => ({
                      ...canvas,
-                     edges: addEdge({ ...connection, id: `${connection.source}>${connection.target}` }, canvas.edges),
+                     edges: addEdge({ ...connection, id }, canvas.edges),
                   }))
-               }
+               }}
                onNodeClick={(_, node) => {
                   setSelectedId(node.id)
                   wrapper.current?.focus()
@@ -542,6 +579,17 @@ const Editor = ({
                         <span aria-hidden>✅ </span>Ready to run
                      </p>
                   ) : null}
+                  <HooksOverview
+                     nodes={nodes}
+                     edges={edges}
+                     fires={lastRun?.hooks}
+                     show={showHooks}
+                     onShow={setShowHooks}
+                     onFocus={id => {
+                        setSelectedId(id)
+                        setOpenId(id)
+                     }}
+                  />
                   {hasLoop(edges) ? (
                      <label className="flex items-center gap-2 text-xs">
                         <span aria-hidden>🔁</span> Loop rounds
@@ -669,6 +717,42 @@ const Editor = ({
                })}
             workflows={workflows.filter(({ id }) => id !== workflowId)}
             onChange={setConfig}
+            hooks={
+               openNode
+                  ? {
+                       nodeId: openNode.id,
+                       label: openNode.data.label ?? '',
+                       hooks: openNode.data.hooks,
+                       attached: {
+                          before: attachedChoices(openNode.id, 'before'),
+                          on: attachedChoices(openNode.id, 'on'),
+                          after: attachedChoices(openNode.id, 'after'),
+                       },
+                       chains: chainRoots(edges).map(chainId => choiceOf(chainId)),
+                       onLabel: label => setData({ label: label === '' ? undefined : label }),
+                       onHooks: hooks => setData({ hooks }),
+                       onAttach: (phase, chainId) =>
+                          commit(canvas => ({
+                             ...canvas,
+                             edges: addEdge(
+                                {
+                                   source: openNode.id,
+                                   target: chainId,
+                                   sourceHandle: handleOfPort(phase),
+                                   targetHandle: 'top',
+                                   id: `${openNode.id}:${phase}>${chainId}`,
+                                },
+                                canvas.edges
+                             ),
+                          })),
+                       onDetach: (phase, chainId) =>
+                          commit(canvas => ({
+                             ...canvas,
+                             edges: canvas.edges.filter(edge => edge.id !== `${openNode.id}:${phase}>${chainId}`),
+                          })),
+                    }
+                  : null
+            }
             onRemove={removeSelection}
             onClose={() => {
                setOpenId(null)

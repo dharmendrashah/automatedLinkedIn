@@ -41,6 +41,7 @@ import {
    Workflow,
 } from 'lucide-react'
 import { type ComponentType, useEffect, useMemo, useRef } from 'react'
+import { Link } from 'react-router'
 
 import { cn } from '@/lib/utils'
 
@@ -206,7 +207,7 @@ const columnsOf = (catalog: Catalog | undefined, onOpen: (id: string) => void) =
          id: 'trigger',
          header: 'Started by',
          cell: ({ row }) => {
-            const { trigger, retryOfId, retriesCount } = row.original
+            const { trigger, retryOfId, retriesCount, startedBy } = row.original
             const known = trigger ? TRIGGER_ICONS[trigger] : undefined
 
             return (
@@ -216,6 +217,15 @@ const columnsOf = (catalog: Catalog | undefined, onOpen: (id: string) => void) =
                         <known.icon className="size-4 shrink-0" />
                         {known.word}
                      </span>
+                  ) : null}
+                  {startedBy ? (
+                     <Link
+                        to={`/workflows/${startedBy.workflowId}`}
+                        className="text-xs underline-offset-4 hover:underline"
+                        onClick={event => event.stopPropagation()}
+                     >
+                        {startedBy.kind === 'event' ? 'a workflow an event started' : 'a workflow'}
+                     </Link>
                   ) : null}
                   {retryOfId ? (
                      <button

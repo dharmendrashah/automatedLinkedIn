@@ -5,7 +5,7 @@ import { person } from 'core/workflowItem'
 import { type Graph } from '@automatedLinkedIn/contracts'
 
 import { type Context, StepError, Waiting } from './context'
-import { fillWords, replyToConversations, sendMessages } from './replyBlocks'
+import { replyToConversations, sendMessages } from './replyBlocks'
 
 const mocks = vi.hoisted(() => {
    class Refusal extends Error {}
@@ -33,6 +33,8 @@ const mocks = vi.hoisted(() => {
       recent: vi.fn(),
       setNote: vi.fn(),
       replaceItems: vi.fn(),
+      factsFor: vi.fn(),
+      accountNames: vi.fn(),
    }
 })
 
@@ -40,6 +42,7 @@ vi.mock('env', () => ({}))
 
 vi.mock('core', async () => ({
    ...(await vi.importActual<object>('core/workflowItem')),
+   ...(await vi.importActual<object>('core/templateValues')),
    readSeniorities: vi.fn(),
 }))
 vi.mock('core/dataClient', () => ({ DataServiceError: class DataServiceError extends Error {} }))
@@ -75,6 +78,10 @@ vi.mock('database', async () => ({
    WorkflowRunService: {
       setNote: mocks.setNote,
       replaceItems: mocks.replaceItems,
+   },
+   MessageValuesService: {
+      factsFor: mocks.factsFor,
+      accountFirstNames: mocks.accountNames,
    },
    IcpService: {},
    WalletService: {},
@@ -196,23 +203,8 @@ beforeEach(() => {
    mocks.recent.mockResolvedValue(new Set())
    mocks.start.mockResolvedValue({ id: 'm-ada' })
    mocks.send.mockResolvedValue({ id: 'm-c1' })
-})
-
-describe('fillWords', () => {
-   it("should put in the person's first name and company, and leave no gap for what is missing", () => {
-      expect(
-         fillWords('Hi {first_name} at {company}, ok', {
-            name: 'Ada Lovelace',
-            company: 'Engines',
-         })
-      ).toBe('Hi Ada at Engines, ok')
-      expect(
-         fillWords('Hi {first_name} at {company}, ok', {
-            name: null,
-            company: null,
-         })
-      ).toBe('Hi at, ok')
-   })
+   mocks.factsFor.mockResolvedValue(new Map())
+   mocks.accountNames.mockResolvedValue(new Map())
 })
 
 describe('sendMessages', () => {
@@ -262,6 +254,76 @@ describe('sendMessages', () => {
       expect(mocks.ask).toHaveBeenCalledWith('r1', 'n1', 'cat', '', 'DONE', {
          status: 'SKIPPED',
          reason: 'On your do-not-contact list.',
+      })
+   })
+
+   it('should pick one option of the spintax, use the stored profile for earlier job and account name, and fall back when a value is missing', async () => {
+      mocks.connectedVia.mockResolvedValue(new Map([['ada', 'a1']]))
+      mocks.accountNames.mockResolvedValue(new Map([['a1', 'Sam']]))
+      mocks.factsFor.mockResolvedValue(
+         new Map([
+            [
+               'ada',
+               {
+                  experience: [
+                     {
+                        title: 'Founder',
+                        company: 'Analytical Engines',
+                        end: null,
+                     },
+                     {
+                        title: 'Mathematician',
+                        company: 'Babbage and Co',
+                        end: '2020',
+                     },
+                  ],
+               },
+            ],
+         ])
+      )
+      mocks.ofStep.mockResolvedValueOnce([]).mockResolvedValue([call('ada', 'ASKED', { ref: 'm-ada' })])
+
+      await expect(
+         sendMessages(
+            context('account.sendMessage', [ada], {
+               settings: {
+                  ...armed,
+                  text: '{Hi|Hello} {first_name}, from {previous_company} to {company}. {top_skill:Cheers}, {account_first_name}',
+               },
+            })
+         )
+      ).rejects.toBeInstanceOf(Waiting)
+
+      expect(mocks.start.mock.calls[0]?.[3]).toMatch(
+         /^(Hi|Hello) Ada, from Babbage and Co to Analytical Engines\. Cheers, Sam$/
+      )
+   })
+
+   it('should skip a person with no value for a variable used, when asked to, and say which', async () => {
+      mocks.connectedVia.mockResolvedValue(
+         new Map([
+            ['ada', 'a1'],
+            ['bob', 'a1'],
+         ])
+      )
+      mocks.ofStep.mockResolvedValueOnce([]).mockResolvedValue([call('ada', 'ASKED', { ref: 'm-ada' })])
+
+      await expect(
+         sendMessages(
+            context('account.sendMessage', [ada, bob], {
+               settings: {
+                  ...armed,
+                  skipMissing: true,
+                  text: 'Hi {first_name} at {company}',
+               },
+            })
+         )
+      ).rejects.toBeInstanceOf(Waiting)
+
+      expect(mocks.start).toHaveBeenCalledTimes(1)
+      expect(mocks.ask).toHaveBeenCalledWith('r1', 'n1', 'bob', '', 'DONE', {
+         status: 'SKIPPED',
+         reason: 'No value for current company, so it was skipped.',
       })
    })
 

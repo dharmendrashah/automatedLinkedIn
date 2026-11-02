@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ChevronRight, CircleAlert, Trash2 } from 'lucide-react'
+import { type ComponentProps } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -23,12 +24,14 @@ import { AccountPick } from './account-pick'
 import { AccountsPick } from './accounts-pick'
 import { ApiWorkflowButton } from './api-workflow-button'
 import { BLOCK_ICONS, tileOf } from './block-look'
+import { BlockHooks } from './block-hooks'
 import { BlockRunTabs, type RunInfo } from './block-run-tabs'
 import { CompanyFiltersField } from './company-filters-field'
 import { DraftPick } from './draft-pick'
 import { type FlowNode, summaryOf } from './graph-convert'
 import { INPUT_KINDS, isInputType } from './input-kinds'
 import { InputMatches } from './input-matches'
+import { MessageComposer } from './message-composer'
 import { NetworkFiltersField } from './network-filters-field'
 import { PostField } from './post-field'
 import { ScheduleSettings } from './schedule-settings'
@@ -45,6 +48,8 @@ type Props = {
    // The blocks connected before this one.
    parents: Choice[]
    onChange: (patch: Record<string, ConfigValue>) => void
+   // The name and the hooks of the block, kept beside its settings.
+   hooks: ComponentProps<typeof BlockHooks> | null
    onRemove: () => void
    onClose: () => void
    // The block in the last run of the workflow: its state, error, input and output.
@@ -87,6 +92,7 @@ export const BlockSettings = ({
    workflows,
    parents,
    onChange: onPatch,
+   hooks,
    onRemove,
    onClose,
    run,
@@ -188,6 +194,10 @@ export const BlockSettings = ({
 
       if (item.kind === 'account') {
          return <AccountPick id={id} value={textOf(value)} onChange={next => onChange(item.key, next)} />
+      }
+
+      if (item.kind === 'composer') {
+         return <MessageComposer id={id} use={item.use} value={textOf(value)} onChange={next => onChange(item.key, next)} />
       }
 
       if (item.kind === 'draft') {
@@ -410,7 +420,7 @@ export const BlockSettings = ({
 
    return (
       <Dialog open onOpenChange={next => (next ? undefined : onClose())}>
-         <DialogContent className={run ? 'sm:max-w-3xl' : 'sm:max-w-xl'}>
+         <DialogContent className={cn('max-h-[calc(100svh-2rem)] overflow-y-auto', run ? 'sm:max-w-3xl' : 'sm:max-w-xl')}>
             <DialogHeader>
                <div className="flex items-center gap-3">
                   <span className={cn('grid size-10 place-items-center rounded-lg', tileOf(block.group))}>
@@ -458,6 +468,7 @@ export const BlockSettings = ({
             ) : (
                settings
             )}
+            {hooks ? <BlockHooks {...hooks} /> : null}
             {block.group === 'Account Actions' && block.flags.usesAccounts ? (
                <ApiWorkflowButton type={block.type} />
             ) : null}

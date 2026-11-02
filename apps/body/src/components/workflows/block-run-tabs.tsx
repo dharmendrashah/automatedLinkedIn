@@ -7,6 +7,7 @@ import { ApiTriggerInput } from './api-request'
 import { BlockOutput } from './block-output'
 import { type BlockRun } from './block-run'
 import { PlannedInput, PlannedOutput, RunStrip, StepErrorPanel } from './block-run-panel'
+import { EventTriggerInput } from './event-trigger-input'
 
 export type RunInfo = {
    // The run the block's state is read from; null when the workflow has no run yet.
@@ -90,6 +91,8 @@ export const BlockRunTabs = ({
                      graph={run.api.graph}
                      catalog={run.api.catalog}
                   />
+               ) : block.type === 'trigger.taskEvent' || block.type === 'trigger.messageArrived' ? (
+                  <EventTriggerInput workflowId={workflowId} type={block.type} values={values} />
                ) : ran ? (
                   <BlockOutput
                      kind="input"

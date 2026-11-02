@@ -3,10 +3,12 @@ import { SESSION_RECORDING_RETENTION_DAYS } from 'env'
 import { type Prisma, type ProxyProtocol, type SpiderSessionStatus } from 'generated/prisma/client'
 
 import {
+   type Origin,
    type TaskReport,
    type TaskResult,
    type TaskTrigger,
    artifactPathUnder,
+   originSchema,
    runPrefix,
 } from '@automatedLinkedIn/contracts'
 
@@ -76,6 +78,8 @@ type StartTaskInput = {
    // The time of the command, which the worker uses for the folder of the run.
    startedAt: Date
    retryOfId?: string
+   // Who asked for it (ids only).
+   origin?: Origin
 }
 
 type SessionRequestParams =
@@ -111,6 +115,7 @@ const listSelect = {
    recordingPrefix: true,
    retryOfId: true,
    trigger: true,
+   origin: true,
    taskVersion: true,
    workerBuild: true,
    proxyServerId: true,
@@ -165,12 +170,25 @@ const present = <T extends { recordingPrefix: string | null; startedAt: Date; st
    }
 }
 
+// Which workflow started the task, when one did; ids only.
+const startedByOf = (origin: unknown) => {
+   const by = originSchema.safeParse(origin).data
+
+   return by?.workflowId
+      ? {
+           kind: by.kind,
+           workflowId: by.workflowId,
+        }
+      : null
+}
+
 // A row of the Sessions table: the kinds of file it kept and how often it was retried, instead of the raw relations.
 const presentRow = (row: ListRow) => {
-   const { artifacts, _count, workerBuild, ...rest } = present(row)
+   const { artifacts, _count, workerBuild, origin, ...rest } = present(row)
 
    return {
       ...rest,
+      startedBy: startedByOf(origin),
       workerBuild: workerBuild?.slice(0, 7) ?? null,
       files: artifacts.map(({ kind }) => kind),
       retriesCount: _count.retries,
@@ -196,7 +214,19 @@ export class SpiderSessionService {
    // Notes a task that is about to be queued. Unlike `start` it throws when the row cannot be saved: a run nobody can see
    // the result of must not happen. `client` is the transaction the task is saved in.
    public static async startTask(
-      { id, userId, linkedInAccountId, proxy, task, taskVersion, trigger, input, startedAt, retryOfId }: StartTaskInput,
+      {
+         id,
+         userId,
+         linkedInAccountId,
+         proxy,
+         task,
+         taskVersion,
+         trigger,
+         input,
+         startedAt,
+         retryOfId,
+         origin,
+      }: StartTaskInput,
       client: Prisma.TransactionClient = PrismaService.client
    ) {
       const params: SessionRequestParams = {
@@ -227,6 +257,7 @@ export class SpiderSessionService {
             }),
             requestParams: params as unknown as Prisma.InputJsonObject,
             ...(retryOfId && { retryOfId }),
+            ...(origin && { origin }),
          },
       })
    }
@@ -532,8 +563,11 @@ export class SpiderSessionService {
 
       // The column only ever holds what `start` wrote. Prisma's recursive Json type would make the API's output too
       // deep for the web app to infer.
+      const { origin, ...rest } = present(row)
+
       return {
-         ...present(row),
+         ...rest,
+         startedBy: startedByOf(origin),
          requestParams: row.requestParams as unknown as SessionRequestParams,
          report: row.report as unknown as TaskReport | null,
       }

@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest'
 import { type Block, type Graph } from './types'
 
 import {
+   attachedTo,
    canConnect,
+   canHook,
+   chainNodeIds,
+   chainRoots,
    choicesFor,
    combineRounds,
    hasLoop,
@@ -240,6 +244,69 @@ describe('graph-convert', () => {
          ['commenters', true],
          ['score', undefined],
       ])
+   })
+
+   it('should keep a name and hook settings through the canvas, and draw each hook line on its own dot', () => {
+      const hooked: Graph = {
+         nodes: graph.nodes.map(node =>
+            node.id === 'commenters'
+               ? {
+                    ...node,
+                    label: 'Ask for comments',
+                    hooks: { after: { when: 'always' } },
+                 }
+               : node
+         ),
+         edges: [
+            {
+               from: 'commenters',
+               to: 'score',
+               fromPort: 'before',
+            },
+            {
+               from: 'commenters',
+               to: 'score',
+               fromPort: 'after',
+            },
+         ],
+      }
+      const { nodes, edges } = toFlow(hooked, catalog)
+
+      expect(edges.map(({ id, sourceHandle, label }) => [id, sourceHandle, label])).toEqual([
+         ['commenters:before>score', 'port:before', 'Before hook'],
+         ['commenters:after>score', 'port:after', 'After hook'],
+      ])
+      expect(attachedTo(edges, 'commenters', 'after')).toBe(1)
+      expect(attachedTo(edges, 'posts', 'after')).toBe(0)
+      expect(canHook(edges, 'commenters', 'score', 'port:on')).toBe(true)
+      expect(canHook(edges, 'commenters', 'score', 'port:after')).toBe(false)
+
+      const saved = toGraph(nodes, edges)
+
+      expect(saved.nodes[1]).toMatchObject({
+         label: 'Ask for comments',
+         hooks: { after: { when: 'always' } },
+      })
+      expect(saved.nodes[0]).not.toHaveProperty('label')
+      expect(saved.edges.map(({ fromPort }) => fromPort)).toEqual(['before', 'after'])
+   })
+
+   it('should find the blocks that only run in a hook, from the first block of each chain onward', () => {
+      const line = (source: string, target: string, sourceHandle?: string) => ({
+         id: `${source}>${target}${sourceHandle ?? ''}`,
+         source,
+         target,
+         sourceHandle,
+      })
+      const edges = [
+         line('a', 'b'),
+         line('b', 'c', 'port:after'),
+         line('c', 'd'),
+         line('a', 'c', 'port:before'),
+      ]
+
+      expect(chainRoots(edges)).toEqual(['c'])
+      expect([...chainNodeIds(edges)].sort()).toEqual(['c', 'd'])
    })
 
    it('should join any two blocks once, and never a block to itself', () => {

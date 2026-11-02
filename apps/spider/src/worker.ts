@@ -32,7 +32,14 @@ import { lookupExit } from './identity/lookupExit'
 import { Broker } from './messaging/broker'
 import { type ConsumerOptions, consumeOnce, consumeQueue, consumeTasks } from './messaging/consumer'
 import { answerDeadTasks, drainDeadTasks } from './messaging/deadLetters'
-import { publishCatalog, publishResult, publishRunResult, republishRun, republishTask } from './messaging/publisher'
+import {
+   publishCatalog,
+   publishResult,
+   publishRunResult,
+   publishStarted,
+   republishRun,
+   republishTask,
+} from './messaging/publisher'
 import { listenForInput, publishFrame } from './messaging/takeover'
 import { assertTopology } from './messaging/topology'
 import { Recorder } from './recording/recorder'
@@ -180,6 +187,7 @@ const main = async () => {
                        })
                      : Promise.resolve(undefined),
                publishResult: async result => publishRunResult(await broker.publishChannel(), result),
+               publishStarted: async started => publishStarted(await broker.publishChannel(), started),
                workerBuild: GIT_SHA,
             })
          ),

@@ -6,10 +6,12 @@ import { CloudRunJob } from 'core'
 import { type Prisma } from 'generated/prisma/client'
 
 import {
+   type Origin,
    type TaskCatalog,
    type TaskCatalogEntry,
    type TaskResult,
    type TaskTrigger,
+   originOfTrigger,
 } from '@automatedLinkedIn/contracts'
 
 import { BrowseBudgetService, DEFAULT_BUDGET } from './browseBudget.service'
@@ -28,6 +30,7 @@ import {
    TaskSkippedError,
    TaskUnavailableError,
 } from './taskErrors'
+import { TaskEventService } from './taskEvent.service'
 import { TASK_HOOKS } from './taskHooks'
 import { applyTaskResult } from './taskResult'
 
@@ -49,6 +52,8 @@ type RequestOptions = {
    input?: Record<string, unknown>
    trigger: TaskTrigger
    retryOfId?: string
+   // Who asked for it; without one it follows `trigger` (by hand is the owner, automatic is the system).
+   origin?: Origin
    // For an automatic request: the task ran inside this many milliseconds already, so there is nothing to do.
    everyMs?: number
    // The owner changed the connection since the last run, which makes `everyMs` not apply.
@@ -225,8 +230,20 @@ export class TaskService {
                input,
                startedAt: requestedAt,
                ...(options.retryOfId && { retryOfId: options.retryOfId }),
+               origin: options.origin ?? originOfTrigger(trigger),
             },
             tx
+         )
+         await TaskEventService.record(
+            tx,
+            {
+               id,
+               userId,
+               linkedInAccountId: accountId,
+               task,
+            },
+            'before',
+            definition.needs.account
          )
          await tx.taskDispatch.create({ data: { sessionId: id } })
          await options.onStart?.(id, tx)

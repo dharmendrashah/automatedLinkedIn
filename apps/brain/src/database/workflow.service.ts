@@ -13,11 +13,13 @@ import {
    nextScheduledRun,
    previewGraph,
    scheduleOf,
+   splitHooks,
    upgradeGraph,
    validateGraph,
 } from '@automatedLinkedIn/contracts'
 
 import { ConflictError, isUniqueViolation, uniqueOr } from './conflict'
+import { HookService } from './hook.service'
 import { InputPickService } from './inputPick.service'
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
@@ -25,6 +27,7 @@ import { LinkedInProfileService } from './linkedInProfile.service'
 import { dropFiles, filesOf, ownsKeys, postsOf } from './postFileKeys'
 import { PrismaService } from './prisma.service'
 import { WalletService } from './wallet.service'
+import { WorkflowListenerService } from './workflowListener.service'
 import { WorkflowRunService } from './workflowRun.service'
 import { MAX_VERSIONS, sameGraph, unheldFiles } from './workflowVersion'
 
@@ -58,6 +61,7 @@ const runSelect = {
    id: true,
    workflowId: true,
    trigger: true,
+   kind: true,
    status: true,
    estimateMicros: true,
    costMicros: true,
@@ -124,6 +128,7 @@ const admit = async (
       where: {
          workflowId,
          status: 'RUNNING',
+         kind: 'MAIN',
       },
       select: { steps: { select: { waitUntil: true } } },
    })
@@ -169,7 +174,13 @@ const FOREIGN_FILE = 'A file of a post is not yours. Attach it again.'
 const usesPosts = (graph: Graph) => graph.nodes.some(({ type }) => type === 'input.posts')
 
 // Triggers that start a workflow without a person pressing Run; the on/off switch governs them.
-const AUTOMATIC = new Set(['trigger.schedule', 'trigger.api', 'trigger.workflow'])
+const AUTOMATIC = new Set([
+   'trigger.schedule',
+   'trigger.api',
+   'trigger.workflow',
+   'trigger.taskEvent',
+   'trigger.messageArrived',
+])
 
 // How many workflows may start one another in a row.
 export const MAX_CHAIN_DEPTH = 5
@@ -470,6 +481,8 @@ export class WorkflowService {
          workflowTaken(changes.name ?? current.name)
       )
 
+      await WorkflowListenerService.sync(id)
+
       // The files nothing holds any more (not the saved graph, not a kept version) are deleted from the bucket.
       if (changes.graph) {
          const { staying, pruned } = await WorkflowService.keepVersion(id, changes.graph)
@@ -714,14 +727,16 @@ export class WorkflowService {
       }
 
       const admitted = await admit(workflowId, trigger, options.parentRunId)
+      // The run works on the main flow only; each hook chain is kept apart and starts as a run of its own when its moment comes.
+      const { main, attachments } = splitHooks(graph)
 
       if (await WalletService.belowFloor()) {
          throw new ConflictError('New runs are paused for a short while. Please try again later.')
       }
 
-      const runGraph = trigger === 'PREVIEW' ? previewGraph(graph) : graph
+      const runGraph = trigger === 'PREVIEW' ? previewGraph(main) : main
       const { posts, totalMicros } = await WorkflowService.estimate(userId, runGraph, false, workflowId)
-      const fromOutside = trigger === 'API' || trigger === 'WORKFLOW'
+      const fromOutside = trigger === 'API' || trigger === 'WORKFLOW' || trigger === 'EVENT'
 
       if (usesPosts(graph) && posts === 0 && !fromOutside) {
          throw new ConflictError('No posts are waiting in your posts list. Add some posts first.')
@@ -737,6 +752,7 @@ export class WorkflowService {
                status,
                engineVersion: 2,
                graph: runGraph,
+               ...(attachments.length > 0 && { hooks: attachments }),
                input: options.input,
                depth: options.depth ?? 0,
                parentRunId: options.parentRunId,
@@ -799,7 +815,10 @@ export class WorkflowService {
       }
 
       const newest = await PrismaService.client.workflowRun.findFirst({
-         where: { workflowId: run.workflowId },
+         where: {
+            workflowId: run.workflowId,
+            kind: 'MAIN',
+         },
          orderBy: { startedAt: 'desc' },
          select: { id: true },
       })
@@ -835,6 +854,7 @@ export class WorkflowService {
          where: {
             userId,
             status: 'FAILED',
+            kind: 'MAIN',
             trigger: { not: 'PREVIEW' },
             alertDismissedAt: null,
             finishedAt: { gt: new Date(Date.now() - ALERT_DAYS * DAY_MS) },
@@ -850,17 +870,28 @@ export class WorkflowService {
          },
       })
 
-      return runs.map(run => ({
-         runId: run.id,
-         workflowId: run.workflowId,
-         workflowName: run.workflow.name,
-         message: run.message,
-         finishedAt: run.finishedAt,
-      }))
+      const hooks = await HookService.alerts(userId, new Date(Date.now() - ALERT_DAYS * DAY_MS))
+
+      return [
+         ...runs.map(run => ({
+            runId: run.id,
+            workflowId: run.workflowId,
+            workflowName: run.workflow.name,
+            message: run.message,
+            finishedAt: run.finishedAt,
+         })),
+         ...hooks,
+      ]
+         .sort((a, b) => (b.finishedAt?.getTime() ?? 0) - (a.finishedAt?.getTime() ?? 0))
+         .slice(0, 20)
    }
 
    // False when it is not the owner's failed run.
    public static async dismissAlert(userId: string, runId: string) {
+      if (await HookService.dismiss(userId, runId)) {
+         return true
+      }
+
       const { count } = await PrismaService.client.workflowRun.updateMany({
          where: {
             id: runId,
@@ -873,11 +904,12 @@ export class WorkflowService {
       return count === 1
    }
 
-   public static runs(userId: string, workflowId: string) {
+   public static runs(userId: string, workflowId: string, includeHooks = false) {
       return PrismaService.client.workflowRun.findMany({
          where: {
             userId,
             workflowId,
+            ...(!includeHooks && { kind: 'MAIN' }),
          },
          orderBy: { startedAt: 'desc' },
          take: 50,
@@ -899,6 +931,8 @@ export class WorkflowService {
       })
 
       if (count === 1) {
+         await HookService.stopOf(runId)
+
          return true
       }
 

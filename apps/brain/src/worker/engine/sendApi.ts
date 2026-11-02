@@ -131,7 +131,7 @@ type Target = { url: string; secret: string; post?: Post; sleep?: (ms: number) =
 // Sends the items in pages of 1,000, each tried up to three times. The secret is only ever put in the header.
 export const sendPages = async (
    { url, secret, post = httpsPost, sleep = wait }: Target,
-   meta: { workflowId: string; runId: string },
+   meta: { workflowId: string; runId: string; event?: unknown },
    items: WorkflowItemData[]
 ) => {
    const pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))

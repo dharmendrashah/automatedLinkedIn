@@ -65,6 +65,7 @@ The order every account task runs in:
 - [ ] Verdict labels show correctly in the app (catalog entry parses: `registry.unit.test.ts`).
 - [ ] A task that uses an account has an entry in `ACCOUNT_ACTION_TASKS` (`packages/contracts/src/workflow.ts`): its block or blocks in the Account Actions group, with a made-up `sample`, an `api` description and a `usesAccounts` flag, or a `none` line with the reason. `registry.unit.test.ts` fails for a task that has neither. A block that changes something on LinkedIn also has "Act for real" (off by default) and a test for it.
 - [ ] The spider worker was restarted so brain sees the task (`TaskDefinition.seenAt`).
+- [ ] Optional: when a workflow would branch on what the task did (who was invited, whether a note went), declare it for task events: a builder in `database/taskEventDetails.ts` (counts for the JSON, items with `facts`) and an entry in `TASK_EVENT_DETAILS` (`packages/contracts/src/events.ts`). The before, on and after events themselves need nothing: every task that needs an account gets them from the catalog.
 
 ## 7. Verify
 

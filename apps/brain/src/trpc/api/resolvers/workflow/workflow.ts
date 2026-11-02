@@ -5,7 +5,12 @@ import { CSV_MAX_ROWS, itemsCsv } from 'core'
 
 import {
    ConflictError,
+   EventDispatchService,
+   EventToolsService,
+   HookService,
    InputPickService,
+   MessagePreviewService,
+   MessageTemplateService,
    WorkflowRunService,
    WorkflowService,
    WorkflowTriggerService,
@@ -14,14 +19,19 @@ import {
 
 import {
    BLOCK_TYPES,
+   EVENT_PHASES,
    GOALS,
+   MESSAGE_SAMPLES,
+   MESSAGE_USES,
    TEMPLATE_NUMBERS,
+   TEMPLATE_VARIABLES,
    apiWorkflowOf,
    blankGraph,
    catalog,
    graphSchema,
    inputPickSchema,
    nextScheduledRuns,
+   sampleEvent,
    scheduleSchema,
    stepErrorCatalog,
    templateCatalog,
@@ -86,6 +96,85 @@ export const workflow = router({
 
    // What each step error code means and what to do about it, for the block dialog.
    stepErrors: ownerProcedure.query(() => stepErrorCatalog()),
+
+   // What happened to the task events this workflow listens to, for its trigger block.
+   events: ownerProcedure
+      .input(byId)
+      .query(async ({ ctx, input }) => present(await EventDispatchService.activity(ctx.user.id, input.id), MISSING)),
+
+   // The newest events the workflow's triggers look at, and what became of each.
+   eventsRecent: ownerProcedure
+      .input(byId)
+      .query(async ({ ctx, input }) => present(await EventToolsService.recent(ctx.user.id, input.id), MISSING)),
+
+   // Which trigger filters pass or fail for one event.
+   eventCheck: ownerProcedure
+      .input(byId.extend({ eventId: z.string().min(1) }))
+      .query(async ({ ctx, input }) =>
+         present(await EventToolsService.check(ctx.user.id, input.id, input.eventId), 'Event not found.')
+      ),
+
+   // Runs the workflow on a real event: a preview, or a replay (a real run, confirmed in the browser).
+   eventRun: ownerProcedure
+      .input(
+         byId.extend({
+            eventId: z.string().min(1),
+            mode: z.enum(['preview', 'replay']),
+         })
+      )
+      .mutation(async ({ ctx, input }) =>
+         present(
+            await orConflict(EventToolsService.runOn(ctx.user.id, input.id, input.eventId, input.mode)),
+            'Event not found.'
+         )
+      ),
+
+   // The variables, the built-in sample texts and the owner's own, for the composer of a note, a message or a reply.
+   messageLibrary: ownerProcedure.query(async ({ ctx }) => ({
+      variables: TEMPLATE_VARIABLES,
+      samples: MESSAGE_SAMPLES,
+      mine: await MessageTemplateService.list(ctx.user.id),
+   })),
+
+   // A few of the owner's people to see a text on.
+   messagePeople: ownerProcedure
+      .input(z.object({ search: z.string().trim().max(60) }))
+      .query(({ ctx, input }) => MessagePreviewService.people(ctx.user.id, input.search)),
+
+   // The text as one person would get it: a few random versions, every version, and what is missing or wrong. Sends nothing.
+   messagePreview: ownerProcedure
+      .input(
+         z.object({
+            use: z.enum(MESSAGE_USES),
+            text: z.string().max(12_000),
+            slug: z.string().trim().min(1).max(200).optional(),
+         })
+      )
+      .query(({ ctx, input }) => MessagePreviewService.preview(ctx.user.id, input)),
+
+   messageTemplateSave: ownerProcedure
+      .input(
+         z.object({
+            use: z.enum(MESSAGE_USES),
+            name: z.string().trim().min(1).max(60),
+            text: z.string().trim().min(1).max(12_000),
+         })
+      )
+      .mutation(({ ctx, input }) => orConflict(MessageTemplateService.save(ctx.user.id, input))),
+
+   messageTemplateDelete: ownerProcedure.input(byId).mutation(async ({ ctx, input }) => {
+      present(await MessageTemplateService.remove(ctx.user.id, input.id), 'Template not found.')
+   }),
+
+   // A made-up event for a task and moment, so the trigger shows what its JSON looks like before one has happened.
+   eventSample: ownerProcedure
+      .input(
+         z.object({
+            task: z.string().trim().max(60),
+            phase: z.enum(EVENT_PHASES),
+         })
+      )
+      .query(({ input }) => sampleEvent(input.task || 'linkedin-invite', input.phase)),
 
    // The next three starts of a schedule being edited, so the owner sees what it means. Invalid settings give none.
    nextRuns: ownerProcedure.input(z.object({ schedule: z.record(z.string(), z.unknown()) })).query(({ input }) => {
@@ -252,14 +341,20 @@ export const workflow = router({
       }),
 
    runs: ownerProcedure
-      .input(z.object({ workflowId: z.string().min(1) }))
-      .query(({ ctx, input }) => WorkflowService.runs(ctx.user.id, input.workflowId)),
+      .input(
+         z.object({
+            workflowId: z.string().min(1),
+            includeHooks: z.boolean().optional(),
+         })
+      )
+      .query(({ ctx, input }) => WorkflowService.runs(ctx.user.id, input.workflowId, input.includeHooks)),
 
    runDetail: ownerProcedure.input(z.object({ runId: z.string().min(1) })).query(async ({ ctx, input }) => {
       const run = present(await WorkflowService.run(ctx.user.id, input.runId), RUN_MISSING)
-      const [links, progress] = await Promise.all([
+      const [links, progress, hooks] = await Promise.all([
          WorkflowService.runLinks(ctx.user.id, [run.parentRunId, ...run.steps.map(({ childRunId }) => childRunId)]),
          WorkflowRunService.progress(run.id),
+         HookService.summaryOf(ctx.user.id, run.id),
       ])
       const linkOf = (id: string | null) => (id ? (links.get(id) ?? null) : null)
 
@@ -267,6 +362,7 @@ export const workflow = router({
          ...run,
          graph: readGraph(run.graph),
          parent: linkOf(run.parentRunId),
+         hooks,
          steps: run.steps.map(step => ({
             ...step,
             child: linkOf(step.childRunId),
