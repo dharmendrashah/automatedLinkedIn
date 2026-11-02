@@ -197,6 +197,8 @@ type SheetProps = {
    icps: Option[]
    onOpenChange: (open: boolean) => void
    onApply: (value: CompanyFilters, basics: Basics) => void
+   // A workflow block has its own status, labels and dates, so only industry and country stay in Basics.
+   block?: boolean
 }
 
 const basicsQuery = (basics: Basics) => ({
@@ -220,6 +222,7 @@ export const CompanyFiltersSheet = ({
    icps,
    onOpenChange,
    onApply,
+   block = false,
 }: SheetProps) => {
    const [draft, setDraft] = useState(value)
    const [draftBasics, setDraftBasics] = useState(basics)
@@ -284,34 +287,38 @@ export const CompanyFiltersSheet = ({
             </SheetHeader>
             <div className="grid gap-6 overflow-x-hidden overflow-y-auto p-4">
                <Group title="Basics">
-                  <Pick
-                     label="Status"
-                     anyLabel="All statuses"
-                     options={Object.entries<{ label: string }>(linkStatuses).flatMap<[LinkStatus, string]>(
-                        ([status, { label }]) => (isStatus(status) ? [[status, label]] : [])
-                     )}
-                     value={draftBasics.status === 'all' ? undefined : draftBasics.status}
-                     onChange={status => setBasics({ status: status ?? 'all' })}
-                  />
-                  <Pick
-                     label="Added"
-                     anyLabel={ADDED_FILTERS.any}
-                     options={Object.entries(ADDED_FILTERS).flatMap<[AddedFilter, string]>(([added, word]) =>
-                        isAddedFilter(added) && added !== 'any' ? [[added, word]] : []
-                     )}
-                     value={draftBasics.added === 'any' ? undefined : draftBasics.added}
-                     onChange={added => setBasics({ added: added ?? 'any' })}
-                  />
-                  <Field label="Labels">
-                     <LabelFilter
-                        id="companies-drawer-label-filter"
-                        kind="companies"
-                        tags={draftBasics.tags}
-                        match={draftBasics.tagMatch}
-                        onTags={tags => setBasics({ tags })}
-                        onMatch={tagMatch => setBasics({ tagMatch })}
-                     />
-                  </Field>
+                  {block ? null : (
+                     <>
+                        <Pick
+                           label="Status"
+                           anyLabel="All statuses"
+                           options={Object.entries<{ label: string }>(linkStatuses).flatMap<[LinkStatus, string]>(
+                              ([status, { label }]) => (isStatus(status) ? [[status, label]] : [])
+                           )}
+                           value={draftBasics.status === 'all' ? undefined : draftBasics.status}
+                           onChange={status => setBasics({ status: status ?? 'all' })}
+                        />
+                        <Pick
+                           label="Added"
+                           anyLabel={ADDED_FILTERS.any}
+                           options={Object.entries(ADDED_FILTERS).flatMap<[AddedFilter, string]>(([added, word]) =>
+                              isAddedFilter(added) && added !== 'any' ? [[added, word]] : []
+                           )}
+                           value={draftBasics.added === 'any' ? undefined : draftBasics.added}
+                           onChange={added => setBasics({ added: added ?? 'any' })}
+                        />
+                        <Field label="Labels">
+                           <LabelFilter
+                              id="companies-drawer-label-filter"
+                              kind="companies"
+                              tags={draftBasics.tags}
+                              match={draftBasics.tagMatch}
+                              onTags={tags => setBasics({ tags })}
+                              onMatch={tagMatch => setBasics({ tagMatch })}
+                           />
+                        </Field>
+                     </>
+                  )}
                   <MultiPick
                      label="Industry"
                      placeholder="Any industry"
@@ -565,9 +572,11 @@ export const CompanyFiltersSheet = ({
                   }}
                >
                   {count.isFetching ? <Loader2 className="animate-spin" /> : null}
-                  {count.data === undefined
-                     ? 'Show companies'
-                     : `Show ${count.data.toLocaleString()} ${count.data === 1 ? 'company' : 'companies'}`}
+                  {block
+                     ? 'Use these filters'
+                     : count.data === undefined
+                       ? 'Show companies'
+                       : `Show ${count.data.toLocaleString()} ${count.data === 1 ? 'company' : 'companies'}`}
                </Button>
             </SheetFooter>
          </SheetContent>

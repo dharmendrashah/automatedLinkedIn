@@ -107,6 +107,16 @@ describe('input blocks', () => {
       expect(frame({ added: 'custom' })).toBe('Up to 5 people')
    })
 
+   it('should say the words and the number of more filters a block keeps, none for text that is not filters', () => {
+      const say = (values: Record<string, string>) => summaryOf(profiles, { howMany: 5, ...values })
+
+      expect(say({ search: ' acme ', filters: '{"sizes":["11-50"],"hasJobs":true}' })).toBe(
+         'Up to 5 people · containing "acme" · 2 more filters'
+      )
+      expect(say({ filters: '{"hasJobs":true}' })).toBe('Up to 5 people · 1 more filter')
+      expect(say({ filters: 'oops' })).toBe('Up to 5 people')
+   })
+
    it('should start new input blocks on All, profiles and companies on new ones only, in the owner time zone', () => {
       expect(startConfig('input.profiles', 'Asia/Kolkata')).toEqual({
          timeZone: 'Asia/Kolkata',

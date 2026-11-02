@@ -1,5 +1,13 @@
-import { type Graph, type InputPick, type InputType, inputPickOf, timeFrameOf } from '@automatedLinkedIn/contracts'
+import {
+   type Graph,
+   type InputPick,
+   type InputType,
+   inputPickOf,
+   readCompanyFilters,
+   timeFrameOf,
+} from '@automatedLinkedIn/contracts'
 
+import { IcpService } from './icp.service'
 import { slugsInWindow } from './inputWindow'
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
@@ -17,12 +25,14 @@ type Statuses = 'NEW' | 'CONTACTED' | 'REPLIED'
 const filterOf = (
    pick: InputPick,
    frame: { from: Date | null; until: Date | null },
-   slugs: string[] | null
+   slugs: string[] | null,
+   ids: string[] | null
 ): InputFilter<Statuses> => ({
    since: frame.from,
    until: frame.until,
    field: pick.dateField,
    slugs,
+   ids,
    labels: pick.labels,
    labelMatch: pick.labelMatch,
    withoutLabels: pick.withoutLabels,
@@ -64,7 +74,40 @@ export class InputPickService {
             ? await slugsInWindow(userId, type, pick.dateField, frame)
             : null
 
-      return filterOf(pick, frame, slugs)
+      return filterOf(pick, frame, slugs, type ? await InputPickService.idsOf(userId, pick, type) : null)
+   }
+
+   // The items the page's own filters find for this block, or null when the block has none of them on.
+   private static async idsOf(userId: string, pick: InputPick, type: InputType) {
+      if (type !== 'input.companies') {
+         return null
+      }
+
+      const { icpId, icpIncludeUnread, ...filters } = readCompanyFilters(pick.filters).filters ?? {}
+
+      if (!icpId && Object.keys(filters).length === 0 && pick.search === '') {
+         return null
+      }
+
+      const icp = icpId ? await IcpService.getForUser(userId, icpId) : null
+
+      // An ideal customer that is gone matches nothing, rather than everything.
+      if (icpId && !icp) {
+         return []
+      }
+
+      return LinkedInCompanyService.matchingIds(userId, {
+         ...filters,
+         ...(pick.search === '' ? {} : { search: pick.search }),
+         ...(icp
+            ? {
+                 icp: {
+                    rules: icp,
+                    includeUnread: icpIncludeUnread ?? false,
+                 },
+              }
+            : {}),
+      })
    }
 
    // How many items each input block of a graph would take now, after its filters, for the estimate.

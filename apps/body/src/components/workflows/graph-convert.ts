@@ -339,20 +339,35 @@ const STATUS_WORDS: Record<string, string> = {
 
 const listOf = (value: ConfigValue | undefined) => (Array.isArray(value) ? value : [])
 
+// How many filters a block keeps as text; text that is not JSON counts as none.
+const filtersOn = (value: ConfigValue | undefined) => {
+   try {
+      const parsed: unknown = JSON.parse(typeof value === 'string' && value !== '' ? value : '{}')
+
+      return typeof parsed === 'object' && parsed !== null ? Object.keys(parsed).length : 0
+   } catch {
+      return 0
+   }
+}
+
 // An input block's filters in a few words, such as "labelled fintech · added this week · new only".
 const pickOf = (values: Record<string, ConfigValue | undefined>) => {
    const labels = listOf(values.labels)
    const without = listOf(values.withoutLabels)
    const statuses = listOf(values.statuses)
    const joiner = values.labelMatch === 'all' ? ' and ' : ', '
+   const more = filtersOn(values.filters)
+   const search = show(values.search).trim()
 
    return [
+      search === '' ? null : `containing "${search}"`,
       labels.length > 0 ? `labelled ${labels.join(joiner)}` : null,
       without.length > 0 ? `not ${without.join(', ')}` : null,
       whenOf(values),
       statuses.length > 0 && statuses.length < 3
          ? `${statuses.map(status => STATUS_WORDS[status] ?? status).join(' or ')} only`
          : null,
+      more > 0 ? `${more} more ${more === 1 ? 'filter' : 'filters'}` : null,
    ].filter((part): part is string => part !== null)
 }
 

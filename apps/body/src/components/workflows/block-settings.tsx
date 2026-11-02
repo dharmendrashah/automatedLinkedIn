@@ -21,6 +21,7 @@ import { LabelMultiSelect } from '../labels/label-multi-select'
 import { AccountsPick } from './accounts-pick'
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { BlockRunTabs, type RunInfo } from './block-run-tabs'
+import { CompanyFiltersField } from './company-filters-field'
 import { type FlowNode, summaryOf } from './graph-convert'
 import { INPUT_KINDS, isInputType } from './input-kinds'
 import { InputMatches } from './input-matches'
@@ -184,6 +185,16 @@ export const BlockSettings = ({
                comments={values.comments === 'CONNECTIONS' ? 'CONNECTIONS' : 'ANYONE'}
                onAudience={next => onChange('audience', next)}
                onComments={next => onChange('comments', next)}
+            />
+         )
+      }
+
+      if (item.kind === 'filters') {
+         return (
+            <CompanyFiltersField
+               value={textOf(value)}
+               search={textOf(values.search)}
+               onChange={next => onChange(item.key, next)}
             />
          )
       }

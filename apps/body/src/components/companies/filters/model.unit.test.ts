@@ -1,8 +1,61 @@
 import { describe, expect, it } from 'vitest'
 
-import { NO_FILTERS, apiFilters, chipsOf, readFilters, writeFilters } from './model'
+import { NO_BASICS, NO_FILTERS, apiFilters, blockFiltersText, chipsOf, readBlockFilters, readFilters, writeFilters } from './model'
 
 const icpName = () => 'EU MSPs'
+
+describe('company filters of a workflow block', () => {
+   it('should keep the drawer as brain takes it, and open the drawer on it again', () => {
+      const filters = {
+         ...NO_FILTERS,
+         sizes: ['11-50'],
+         words: 'saas, b2b',
+         wordsMatch: 'all' as const,
+         schools: ['MIT'],
+         team: [
+            {
+               kind: 'skill' as const,
+               values: ['Go'],
+               min: 2,
+            },
+         ],
+         hasJobs: false,
+      }
+      const basics = {
+         ...NO_BASICS,
+         industries: ['Software'],
+         countries: ['India'],
+      }
+      const text = blockFiltersText(filters, basics)
+
+      expect(JSON.parse(text)).toMatchObject({
+         sizes: ['11-50'],
+         words: {
+            values: ['saas', 'b2b'],
+            match: 'all',
+         },
+         industries: ['Software'],
+         countries: ['India'],
+         hasJobs: false,
+      })
+      expect(readBlockFilters(text)).toEqual({
+         filters,
+         basics,
+      })
+   })
+
+   it('should keep nothing for no filters, and read text that is not filters as none', () => {
+      expect(blockFiltersText(NO_FILTERS, NO_BASICS)).toBe('')
+      expect(readBlockFilters('')).toEqual({
+         filters: NO_FILTERS,
+         basics: NO_BASICS,
+      })
+      expect(readBlockFilters('oops')).toEqual({
+         filters: NO_FILTERS,
+         basics: NO_BASICS,
+      })
+   })
+})
 
 describe('company filters', () => {
    it('should keep only what is on in the address and read it back', () => {

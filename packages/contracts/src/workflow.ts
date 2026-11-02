@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { FILTERS_TEXT_MAX, readCompanyFilters } from './companyFilters'
 import { INDUSTRY_PAIRS } from './industries'
 import { joinedText, mediaBlock, postBlocksOfText, postFilesOf } from './posting'
 
@@ -51,7 +52,10 @@ export type Field = (
    | { key: string; label: string; kind: 'int'; min: number; max: number }
    | { key: string; label: string; kind: 'words'; suggest?: Suggest }
    | { key: string; label: string; kind: 'icp' }
+   // A time to the minute, such as 09:00.
    | { key: string; label: string; kind: 'time' }
+   // The filters of the owner's page for the items this block takes, kept as text; the browser draws the page's own drawer.
+   | { key: string; label: string; kind: 'filters' }
    // A day, written as YYYY-MM-DD; empty for none.
    | { key: string; label: string; kind: 'date' }
    | { key: string; label: string; kind: 'text'; placeholder?: string }
@@ -402,6 +406,9 @@ export const inputPickSchema = z.object({
    // The days of "Custom dates"; the whole of the last day counts.
    from: isoDay,
    to: isoDay,
+   // Words the item holds, and the page's own filters for it, as the page keeps them (see `inputErrors`).
+   search: z.string().trim().max(100).default(''),
+   filters: z.string().max(FILTERS_TEXT_MAX).default(''),
    labels: labelList,
    labelMatch: z.enum(['any', 'all']).default('any'),
    withoutLabels: labelList,
@@ -445,8 +452,8 @@ export const INPUT_DATE_OPTIONS: Record<InputType, Option[]> = {
    ]),
 }
 
-// What is wrong with the time frame of an input block, if anything.
-const timeFrameErrors =
+// What is wrong with the time frame and the filters of an input block, if anything.
+const inputErrors =
    (type: InputType, label: string) =>
    (node: GraphNode): GraphError[] => {
       const pick = inputPickSchema.safeParse(node.config)
@@ -462,7 +469,7 @@ const timeFrameErrors =
          return []
       }
 
-      const { dateField, added, from, to } = pick.data
+      const { dateField, added, from, to, filters } = pick.data
 
       if (!INPUT_DATE_OPTIONS[type].some(({ value }) => value === dateField)) {
          return problem('this block cannot look at that date.')
@@ -472,7 +479,13 @@ const timeFrameErrors =
          return problem('pick the first or the last day of the custom dates.')
       }
 
-      return from !== '' && to !== '' && from > to ? problem('the custom dates end before they start.') : []
+      if (from !== '' && to !== '' && from > to) {
+         return problem('the custom dates end before they start.')
+      }
+
+      const { error } = type === 'input.companies' ? readCompanyFilters(filters) : { error: null }
+
+      return error ? problem(error) : []
    }
 
 const pickFields = (type: InputType, order: Option[]): Field[] => [
@@ -1077,7 +1090,7 @@ const BLOCKS = {
          costMicros: 0,
       }),
       previewCap: PREVIEW_LIMITS.posts,
-      validate: timeFrameErrors('input.posts', 'Posts'),
+      validate: inputErrors('input.posts', 'Posts'),
       label: 'Posts',
       summary: 'Takes posts from your posts list that are not done yet.',
       api: [
@@ -1480,7 +1493,7 @@ const BLOCKS = {
          costMicros: 0,
       }),
       previewCap: 1,
-      validate: timeFrameErrors('input.profiles', 'Profiles'),
+      validate: inputErrors('input.profiles', 'Profiles'),
       label: 'Profiles',
       summary: 'People from your profiles list, or the links you give.',
       api: [
@@ -1521,7 +1534,7 @@ const BLOCKS = {
          costMicros: 0,
       }),
       previewCap: 1,
-      validate: timeFrameErrors('input.companies', 'Companies'),
+      validate: inputErrors('input.companies', 'Companies'),
       label: 'Companies',
       summary: 'Companies from your companies list.',
       api: [
@@ -1541,8 +1554,20 @@ const BLOCKS = {
       }),
       fields: [
          inputHowMany('input.companies', 'companies'),
+         {
+            key: 'search',
+            label: 'Name, notes or link contain',
+            kind: 'text',
+            placeholder: 'acme',
+         },
          statusField,
          ...pickFields('input.companies', NEWEST_FIRST),
+         {
+            key: 'filters',
+            label: 'More filters',
+            kind: 'filters',
+            hint: 'The same filters as the Companies page: size, place, team, specialities, what their page says, read and visited, and more.',
+         },
       ],
    },
    'collect.findPosts': {

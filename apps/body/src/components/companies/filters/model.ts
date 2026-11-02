@@ -206,6 +206,51 @@ export const apiFilters = (filters: CompanyFilters): ApiFilters => {
    }
 }
 
+// What a workflow's Companies block keeps as text: the drawer's filters as brain takes them, with the two pickers of its basics.
+type BlockFilters = ApiFilters & Partial<Pick<Basics, 'industries' | 'countries'>>
+
+export const blockFiltersText = (filters: CompanyFilters, { industries, countries }: Basics) => {
+   const kept: BlockFilters = {
+      ...apiFilters(filters),
+      ...(industries.length > 0 && { industries }),
+      ...(countries.length > 0 && { countries }),
+   }
+
+   return Object.keys(kept).length > 0 ? JSON.stringify(kept) : ''
+}
+
+// The inverse of `blockFiltersText`, so the drawer opens on what the block keeps; text that does not parse is none.
+export const readBlockFilters = (text: string): { filters: CompanyFilters; basics: Basics } => {
+   try {
+      const { industries = [], countries = [], team = [], words, ...rest }: BlockFilters = JSON.parse(text || '{}')
+      const kindOf = (kind: 'school' | 'field') => team.find(rule => rule.kind === kind)?.values ?? []
+      const filters = filtersSchema.safeParse({
+         ...rest,
+         team: team.filter(rule => rule.kind !== 'school' && rule.kind !== 'field'),
+         schools: kindOf('school'),
+         fields: kindOf('field'),
+         ...(words && {
+            words: words.values.join(', '),
+            wordsMatch: words.match,
+         }),
+      })
+
+      return {
+         filters: filters.data ?? NO_FILTERS,
+         basics: {
+            ...NO_BASICS,
+            industries,
+            countries,
+         },
+      }
+   } catch {
+      return {
+         filters: NO_FILTERS,
+         basics: NO_BASICS,
+      }
+   }
+}
+
 export type Chip = { key: string; text: string; clear: Partial<CompanyFilters> }
 
 const listText = (items: string[], max = 2) =>

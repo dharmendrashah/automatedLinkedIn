@@ -1,6 +1,7 @@
 export * from './attachments'
 export * from './browse'
 export * from './connections'
+export * from './companyFilters'
 export * from './invitations'
 export * from './invites'
 export * from './liAt'

@@ -1,10 +1,11 @@
 import { Prisma } from 'generated/prisma/client'
 
+import type { COMPANY_READ_AGES, COMPANY_TEAM_KINDS, COMPANY_VISIT_AGES } from '@automatedLinkedIn/contracts'
+
 // The Companies drawer's filters (.plan/companies-filter-drawer.md). Read data lives in `PageSnapshot.data`, so these run as one
 // parameterised SQL query over the owner's companies and their reads; the list then keeps the ids it found.
 
-export const TEAM_KIND_NAMES = ['department', 'skill', 'location', 'service', 'school', 'field'] as const
-export type TeamKind = (typeof TEAM_KIND_NAMES)[number]
+export type TeamKind = (typeof COMPANY_TEAM_KINDS)[number]
 
 // The breakdowns of a read a team filter looks in; constants, so they are safe to put into the SQL text.
 export const TEAM_KINDS: Record<TeamKind, string> = {
@@ -15,9 +16,6 @@ export const TEAM_KINDS: Record<TeamKind, string> = {
    school: 'bySchool',
    field: 'byFieldOfStudy',
 }
-
-export const READ_AGES = ['never', 'last7', 'last30', 'older30', 'older90'] as const
-export const VISIT_AGES = ['never', 'last7', 'last30'] as const
 
 type Range = { min?: number; max?: number }
 
@@ -34,8 +32,8 @@ export type CompanyFilters = {
    // All of the picked specialities (the default) or any of them.
    specialitiesMode?: 'all' | 'any'
    words?: { values: string[]; match: 'any' | 'all' }
-   read?: (typeof READ_AGES)[number]
-   visited?: (typeof VISIT_AGES)[number]
+   read?: (typeof COMPANY_READ_AGES)[number]
+   visited?: (typeof COMPANY_VISIT_AGES)[number]
    notes?: string
    employees?: Range
    followers?: Range

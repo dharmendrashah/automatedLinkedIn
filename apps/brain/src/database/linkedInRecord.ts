@@ -62,6 +62,8 @@ export type InputFilter<S extends string = string> = {
    field: string
    // When set, only these items (the ones whose own date fits the time frame).
    slugs: string[] | null
+   // When set, only these items, by id (the ones the page's own filters found).
+   ids: string[] | null
    labels: string[]
    labelMatch: LabelMatch
    withoutLabels: string[]
@@ -74,6 +76,7 @@ export const EVERYTHING: InputFilter<never> = {
    until: null,
    field: 'added',
    slugs: null,
+   ids: null,
    labels: [],
    labelMatch: 'any',
    withoutLabels: [],
@@ -93,6 +96,7 @@ export const inputWhere = <S extends string>(userId: string, filter: InputFilter
         }
       : {}),
    ...(filter.slugs ? { slug: { in: filter.slugs } } : {}),
+   ...(filter.ids ? { id: { in: filter.ids } } : {}),
    ...(filter.statuses.length > 0 ? { status: { in: filter.statuses } } : {}),
    ...labelWhere(filter.labels, filter.labelMatch, filter.withoutLabels),
 })
