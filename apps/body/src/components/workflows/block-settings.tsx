@@ -209,13 +209,23 @@ export const BlockSettings = ({
                   onToggle={option => onChange(item.allKey, option === 'all')}
                />
                {all ? null : (
-                  <Stepper
-                     id={`${id}-count`}
-                     value={Number(value ?? item.min)}
-                     min={item.min}
-                     max={item.max}
-                     onChange={next => onChange(item.key, next)}
-                  />
+                  <>
+                     <Stepper
+                        id={`${id}-count`}
+                        value={Number(value ?? item.min)}
+                        min={item.min}
+                        max={item.max}
+                        onChange={next => onChange(item.key, next)}
+                     />
+                     {item.quick ? (
+                        <Chips
+                           id={`${id}-quick`}
+                           options={item.quick.map(number => ({ value: String(number), label: String(number) }))}
+                           isOn={option => Number(value ?? item.min) === Number(option)}
+                           onToggle={option => onChange(item.key, Number(option))}
+                        />
+                     ) : null}
+                  </>
                )}
             </div>
          )
@@ -267,7 +277,7 @@ export const BlockSettings = ({
       return (
          <Input
             id={id}
-            type={item.kind === 'time' ? 'time' : 'text'}
+            type={item.kind === 'time' ? 'time' : item.kind === 'date' ? 'date' : 'text'}
             placeholder={item.kind === 'text' ? item.placeholder : undefined}
             value={textOf(value)}
             onChange={event => onChange(item.key, event.target.value)}

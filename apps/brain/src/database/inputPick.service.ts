@@ -1,5 +1,6 @@
-import { type Graph, type InputPick, type InputType, addedSince, inputPickOf } from '@automatedLinkedIn/contracts'
+import { type Graph, type InputPick, type InputType, inputPickOf, timeFrameOf } from '@automatedLinkedIn/contracts'
 
+import { slugsInWindow } from './inputWindow'
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
 import { LinkedInProfileService } from './linkedInProfile.service'
@@ -13,8 +14,15 @@ const isInput = (type: string): type is InputType =>
 
 type Statuses = 'NEW' | 'CONTACTED' | 'REPLIED'
 
-const filterOf = (pick: InputPick, since: Date | null): InputFilter<Statuses> => ({
-   since,
+const filterOf = (
+   pick: InputPick,
+   frame: { from: Date | null; until: Date | null },
+   slugs: string[] | null
+): InputFilter<Statuses> => ({
+   since: frame.from,
+   until: frame.until,
+   field: pick.dateField,
+   slugs,
    labels: pick.labels,
    labelMatch: pick.labelMatch,
    withoutLabels: pick.withoutLabels,
@@ -40,11 +48,23 @@ export class InputPickService {
       return run?.startedAt ?? null
    }
 
-   public static async filter(userId: string, pick: InputPick, workflowId: string | null, now = new Date()) {
+   // `type` lets a time frame look at a date of the item itself (a post's posted date, a company's last read).
+   public static async filter(
+      userId: string,
+      pick: InputPick,
+      workflowId: string | null,
+      type?: InputType,
+      now = new Date()
+   ) {
       const lastRunAt =
          pick.added === 'lastRun' && workflowId ? await InputPickService.lastRunAt(userId, workflowId) : null
+      const frame = timeFrameOf(pick, now, lastRunAt)
+      const slugs =
+         type && pick.dateField !== 'added' && (frame.from || frame.until)
+            ? await slugsInWindow(userId, type, pick.dateField, frame)
+            : null
 
-      return filterOf(pick, addedSince(pick, now, lastRunAt))
+      return filterOf(pick, frame, slugs)
    }
 
    // How many items each input block of a graph would take now, after its filters, for the estimate.
@@ -61,7 +81,7 @@ export class InputPickService {
       )
       const counted = await Promise.all(
          inputs.map(async ({ id, type, config }) => {
-            const filter = await InputPickService.filter(userId, inputPickOf(type, config), workflowId)
+            const filter = await InputPickService.filter(userId, inputPickOf(type, config), workflowId, type)
 
             return [id, await InputPickService.count(userId, type, filter)] as const
          })

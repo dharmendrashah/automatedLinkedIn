@@ -151,7 +151,7 @@ const sendableUrl = async (post: { id: string | null; url: string; expandedUrl: 
 
 // The slice of the owner's list the block's settings pick.
 const pickFilter = (ctx: Context, type: InputType) =>
-   InputPickService.filter(ctx.run.userId, inputPickOf(type, ctx.node.config), ctx.run.workflowId)
+   InputPickService.filter(ctx.run.userId, inputPickOf(type, ctx.node.config), ctx.run.workflowId, type)
 
 const inputPosts = async (ctx: Context): Promise<StepResult> => {
    const sent = sentTo(ctx, 'posts')

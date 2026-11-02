@@ -95,6 +95,18 @@ describe('input blocks', () => {
       ).toBe('Up to 50 people · labelled acme and fintech · added this week · new only')
    })
 
+   it('should say the time frame in words, from the date it is about, custom days included', () => {
+      const frame = (values: Record<string, string>) => summaryOf(profiles, { howMany: 5, ...values })
+
+      expect(frame({ added: 'yesterday' })).toBe('Up to 5 people · added yesterday')
+      expect(frame({ added: 'lastMonth', dateField: 'posted' })).toBe('Up to 5 people · posted last month')
+      expect(frame({ added: 'custom', from: '2026-10-01', to: '2026-10-31', dateField: 'lastRead' })).toBe(
+         'Up to 5 people · read from 2026-10-01 to 2026-10-31'
+      )
+      expect(frame({ added: 'custom', to: '2026-10-31' })).toBe('Up to 5 people · added until 2026-10-31')
+      expect(frame({ added: 'custom' })).toBe('Up to 5 people')
+   })
+
    it('should start new input blocks on All, profiles and companies on new ones only, in the owner time zone', () => {
       expect(startConfig('input.profiles', 'Asia/Kolkata')).toEqual({
          timeZone: 'Asia/Kolkata',

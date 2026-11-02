@@ -52,6 +52,8 @@ export type Field = (
    | { key: string; label: string; kind: 'words'; suggest?: Suggest }
    | { key: string; label: string; kind: 'icp' }
    | { key: string; label: string; kind: 'time' }
+   // A day, written as YYYY-MM-DD; empty for none.
+   | { key: string; label: string; kind: 'date' }
    | { key: string; label: string; kind: 'text'; placeholder?: string }
    | { key: string; label: string; kind: 'select'; options: Option[] }
    | { key: string; label: string; kind: 'multi'; options: Option[] }
@@ -59,7 +61,16 @@ export type Field = (
    | { key: string; label: string; kind: 'search'; options: Option[]; max: number }
    | { key: string; label: string; kind: 'toggle' }
    // "All" (the boolean `allKey`, capped at `allCap`, ALL_CAP when not set) or "Up to" the number in `key`.
-   | { key: string; label: string; kind: 'limit'; allKey: string; min: number; max: number; allCap?: number }
+   | {
+        key: string
+        label: string
+        kind: 'limit'
+        allKey: string
+        min: number
+        max: number
+        allCap?: number
+        quick?: number[]
+     }
    // One of the blocks connected before this one.
    | { key: string; label: string; kind: 'parent' }
    // Another workflow of the same owner.
@@ -351,15 +362,46 @@ export const scheduleSchema = z
 
 export type Schedule = z.infer<typeof scheduleSchema>
 
-// Which part of the owner's posts, profiles or companies an input block takes (.plan/labels-and-input-filters.md).
-export const ADDED_WINDOWS = ['any', 'today', 'week', '7d', '30d', 'lastRun'] as const
+// Which part of the owner's posts, profiles or companies an input block takes (.plan/input-blocks-filters.md).
+export const ADDED_WINDOWS = [
+   'any',
+   'today',
+   'yesterday',
+   'week',
+   '7d',
+   'month',
+   '30d',
+   'lastMonth',
+   '3months',
+   'lastRun',
+   'custom',
+] as const
+
+// The date a time frame is about: when the item was added to the owner's list, or a date of the item itself.
+export const INPUT_DATE_FIELDS = [
+   'added',
+   'posted',
+   'lastRead',
+   'firstSeen',
+   'lastContact',
+   'connected',
+   'lastSent',
+   'lastReply',
+] as const
 
 export const LABEL_MAX = 20
 
 const labelList = z.array(z.string().trim().toLowerCase().min(1).max(30)).max(LABEL_MAX).default([])
 
+// A day as the owner's browser writes it, or empty for open ended.
+const isoDay = z.union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).default('')
+
 export const inputPickSchema = z.object({
    added: z.enum(ADDED_WINDOWS).default('any'),
+   dateField: z.enum(INPUT_DATE_FIELDS).default('added'),
+   // The days of "Custom dates"; the whole of the last day counts.
+   from: isoDay,
+   to: isoDay,
    labels: labelList,
    labelMatch: z.enum(['any', 'all']).default('any'),
    withoutLabels: labelList,
@@ -377,18 +419,98 @@ export type InputPick = z.infer<typeof inputPickSchema>
 const ADDED = optionsOf([
    ['any', 'Any time'],
    ['today', 'Today'],
+   ['yesterday', 'Yesterday'],
    ['week', 'This week'],
    ['7d', 'Last 7 days'],
+   ['month', 'This month'],
    ['30d', 'Last 30 days'],
+   ['lastMonth', 'Last month'],
+   ['3months', 'Last 3 months'],
    ['lastRun', "Since this workflow's last run"],
+   ['custom', 'Custom dates'],
 ])
 
-const pickFields = (order: Option[]): Field[] => [
+export type InputType = 'input.posts' | 'input.profiles' | 'input.companies'
+
+// The dates each block can look at (.plan/input-blocks-filters.md); the first is when the item joined the owner's list.
+export const INPUT_DATE_OPTIONS: Record<InputType, Option[]> = {
+   'input.posts': optionsOf([
+      ['added', 'Added to my posts'],
+      ['posted', 'Posted on LinkedIn'],
+   ]),
+   'input.profiles': optionsOf([['added', 'Added to my profiles']]),
+   'input.companies': optionsOf([
+      ['added', 'Added to my companies'],
+      ['lastRead', 'Last read'],
+   ]),
+}
+
+// What is wrong with the time frame of an input block, if anything.
+const timeFrameErrors =
+   (type: InputType, label: string) =>
+   (node: GraphNode): GraphError[] => {
+      const pick = inputPickSchema.safeParse(node.config)
+      const problem = (message: string): GraphError[] => [
+         {
+            nodeId: node.id,
+            level: 'error',
+            message: `${label}: ${message}`,
+         },
+      ]
+
+      if (!pick.success) {
+         return []
+      }
+
+      const { dateField, added, from, to } = pick.data
+
+      if (!INPUT_DATE_OPTIONS[type].some(({ value }) => value === dateField)) {
+         return problem('this block cannot look at that date.')
+      }
+
+      if (added === 'custom' && from === '' && to === '') {
+         return problem('pick the first or the last day of the custom dates.')
+      }
+
+      return from !== '' && to !== '' && from > to ? problem('the custom dates end before they start.') : []
+   }
+
+const pickFields = (type: InputType, order: Option[]): Field[] => [
+   ...(INPUT_DATE_OPTIONS[type].length > 1
+      ? [
+           {
+              key: 'dateField',
+              label: 'Date to look at',
+              kind: 'select' as const,
+              options: INPUT_DATE_OPTIONS[type],
+           },
+        ]
+      : []),
    {
       key: 'added',
-      label: 'Added',
+      label: 'When',
       kind: 'select',
       options: ADDED,
+      hint: 'Today, last week and the like follow the day the workflow runs; custom dates stay as typed.',
+   },
+   {
+      key: 'from',
+      label: 'From',
+      kind: 'date',
+      showWhen: {
+         key: 'added',
+         is: 'custom',
+      },
+   },
+   {
+      key: 'to',
+      label: 'To',
+      kind: 'date',
+      hint: 'The whole of this day counts. Leave a day empty for no limit on that side.',
+      showWhen: {
+         key: 'added',
+         is: 'custom',
+      },
    },
    {
       key: 'labels',
@@ -426,8 +548,6 @@ const pickFields = (order: Option[]): Field[] => [
    },
 ]
 
-export type InputType = 'input.posts' | 'input.profiles' | 'input.companies'
-
 // "All" on an input block takes at most this many, the same as the biggest "Up to".
 export const INPUT_MAX: Record<InputType, number> = {
    'input.posts': 50,
@@ -435,14 +555,22 @@ export const INPUT_MAX: Record<InputType, number> = {
    'input.companies': 100,
 }
 
+// The numbers offered as one click next to "Up to a number".
+const QUICK_LIMITS: Record<InputType, number[]> = {
+   'input.posts': [5, 10, 25, 50],
+   'input.profiles': [10, 25, 50, 100, 200],
+   'input.companies': [10, 25, 50, 100],
+}
+
 const inputHowMany = (type: InputType, noun: string): Field => ({
    key: 'howMany',
    allKey: 'all',
-   label: `How many ${noun}`,
+   label: `How many ${noun} in a run`,
    kind: 'limit',
    min: 1,
    max: INPUT_MAX[type],
    allCap: INPUT_MAX[type],
+   quick: QUICK_LIMITS[type],
    hint: `"All" takes every match, up to ${INPUT_MAX[type]}.`,
 })
 
@@ -477,27 +605,90 @@ export const inputPickOf = (type: InputType, config: unknown): InputPick =>
 
 const DAY_MS = 86_400_000
 
-// The first moment an item may have been added to be taken; null takes any.
-export const addedSince = (pick: Pick<InputPick, 'added' | 'timeZone'>, now: Date, lastRunAt: Date | null) => {
+type TimeFramePick = Pick<InputPick, 'added' | 'timeZone'> & Partial<Pick<InputPick, 'from' | 'to'>>
+
+// The days of a month, for a month counted back.
+const daysIn = (year: number, month: number) => new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+
+// The time frame of an input block as it is now: from this moment (inclusive) until that one (not included); null is open
+// ended. Days follow the time zone saved on the block and weeks start on Monday.
+export const timeFrameOf = (
+   pick: TimeFramePick,
+   now: Date,
+   lastRunAt: Date | null
+): { from: Date | null; until: Date | null } => {
+   const wall = new Date(wallClock(now, pick.timeZone))
+   const [year, month, day] = [wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate()]
+   const dayStart = (offset: number) => zonedToUtc(Date.UTC(year, month, day + offset), pick.timeZone)
+   const monthStart = (offset: number) => zonedToUtc(Date.UTC(year, month + offset, 1), pick.timeZone)
+   const dayOfText = (text: string) => {
+      const [y = 0, m = 1, d = 1] = text.split('-').map(Number)
+
+      return Date.UTC(y, m - 1, d)
+   }
+
    switch (pick.added) {
       case 'any':
-         return null
+         return {
+            from: null,
+            until: null,
+         }
       case 'lastRun':
-         return lastRunAt
+         return {
+            from: lastRunAt,
+            until: null,
+         }
       case '7d':
-         return new Date(now.getTime() - 7 * DAY_MS)
       case '30d':
-         return new Date(now.getTime() - 30 * DAY_MS)
-      default: {
-         const wall = new Date(wallClock(now, pick.timeZone))
-         const midnight = Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate())
-         // Weeks start on Monday.
-         const back = pick.added === 'week' ? (wall.getUTCDay() + 6) % 7 : 0
+         return {
+            from: new Date(now.getTime() - (pick.added === '7d' ? 7 : 30) * DAY_MS),
+            until: null,
+         }
+      case 'yesterday':
+         return {
+            from: dayStart(-1),
+            until: dayStart(0),
+         }
+      case 'week':
+         return {
+            from: dayStart(-((wall.getUTCDay() + 6) % 7)),
+            until: null,
+         }
+      case 'month':
+         return {
+            from: monthStart(0),
+            until: null,
+         }
+      case 'lastMonth':
+         return {
+            from: monthStart(-1),
+            until: monthStart(0),
+         }
+      case '3months': {
+         const target = new Date(Date.UTC(year, month - 3, 1))
+         const back = Math.min(day, daysIn(target.getUTCFullYear(), target.getUTCMonth()))
 
-         return zonedToUtc(midnight - back * DAY_MS, pick.timeZone)
+         return {
+            from: zonedToUtc(Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), back), pick.timeZone),
+            until: null,
+         }
       }
+      case 'custom':
+         return {
+            from: pick.from ? zonedToUtc(dayOfText(pick.from), pick.timeZone) : null,
+            until: pick.to ? zonedToUtc(dayOfText(pick.to) + DAY_MS, pick.timeZone) : null,
+         }
+      default:
+         return {
+            from: dayStart(0),
+            until: null,
+         }
    }
 }
+
+// The first moment an item may have been added to be taken; null takes any.
+export const addedSince = (pick: TimeFramePick, now: Date, lastRunAt: Date | null) =>
+   timeFrameOf(pick, now, lastRunAt).from
 
 export const BLOCK_TYPES = [
    'trigger.manual',
@@ -886,6 +1077,7 @@ const BLOCKS = {
          costMicros: 0,
       }),
       previewCap: PREVIEW_LIMITS.posts,
+      validate: timeFrameErrors('input.posts', 'Posts'),
       label: 'Posts',
       summary: 'Takes posts from your posts list that are not done yet.',
       api: [
@@ -905,7 +1097,7 @@ const BLOCKS = {
          howMany: howMany(50, 5),
          order: z.enum(['newest', 'oldest']).default('oldest'),
       }),
-      fields: [inputHowMany('input.posts', 'posts'), ...pickFields(OLDEST_FIRST)],
+      fields: [inputHowMany('input.posts', 'posts'), ...pickFields('input.posts', OLDEST_FIRST)],
    },
    'collect.commenters': {
       group: 'Collect',
@@ -1288,6 +1480,7 @@ const BLOCKS = {
          costMicros: 0,
       }),
       previewCap: 1,
+      validate: timeFrameErrors('input.profiles', 'Profiles'),
       label: 'Profiles',
       summary: 'People from your profiles list, or the links you give.',
       api: [
@@ -1317,7 +1510,7 @@ const BLOCKS = {
             hint: 'Paste one or many. Empty takes people from your profiles list, filtered below.',
          },
          statusField,
-         ...pickFields(NEWEST_FIRST),
+         ...pickFields('input.profiles', NEWEST_FIRST),
       ],
    },
    'input.companies': {
@@ -1328,6 +1521,7 @@ const BLOCKS = {
          costMicros: 0,
       }),
       previewCap: 1,
+      validate: timeFrameErrors('input.companies', 'Companies'),
       label: 'Companies',
       summary: 'Companies from your companies list.',
       api: [
@@ -1345,7 +1539,11 @@ const BLOCKS = {
          all: z.boolean().default(false),
          howMany: howMany(100, 10),
       }),
-      fields: [inputHowMany('input.companies', 'companies'), statusField, ...pickFields(NEWEST_FIRST)],
+      fields: [
+         inputHowMany('input.companies', 'companies'),
+         statusField,
+         ...pickFields('input.companies', NEWEST_FIRST),
+      ],
    },
    'collect.findPosts': {
       group: 'Collect',

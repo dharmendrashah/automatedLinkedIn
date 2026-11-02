@@ -51,6 +51,9 @@ describe('input picks', () => {
          statuses: [],
          order: 'newest',
          timeZone: 'UTC',
+         dateField: 'added',
+         from: '',
+         to: '',
       })
       expect(inputPickOf('input.posts', {}).order).toBe('oldest')
       const labelled = blockOf('input.posts').config.safeParse({ labels: ['Fintech '] }).data

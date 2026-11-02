@@ -56,6 +56,12 @@ export const pageArgs = ({ page, pageSize }: Pick<RecordListQuery, 'page' | 'pag
 // The slice of a list a workflow's input block takes. Empty statuses means every status.
 export type InputFilter<S extends string = string> = {
    since: Date | null
+   // Not included; null is open ended.
+   until: Date | null
+   // The date `since` and `until` are about; anything but `added` looks at the item's read, which `slugs` already holds.
+   field: string
+   // When set, only these items (the ones whose own date fits the time frame).
+   slugs: string[] | null
    labels: string[]
    labelMatch: LabelMatch
    withoutLabels: string[]
@@ -65,6 +71,9 @@ export type InputFilter<S extends string = string> = {
 
 export const EVERYTHING: InputFilter<never> = {
    since: null,
+   until: null,
+   field: 'added',
+   slugs: null,
    labels: [],
    labelMatch: 'any',
    withoutLabels: [],
@@ -75,7 +84,15 @@ export const EVERYTHING: InputFilter<never> = {
 export const inputWhere = <S extends string>(userId: string, filter: InputFilter<S>) => ({
    userId,
    archivedAt: null,
-   ...(filter.since ? { createdAt: { gte: filter.since } } : {}),
+   ...(filter.field === 'added' && (filter.since || filter.until)
+      ? {
+           createdAt: {
+              ...(filter.since ? { gte: filter.since } : {}),
+              ...(filter.until ? { lt: filter.until } : {}),
+           },
+        }
+      : {}),
+   ...(filter.slugs ? { slug: { in: filter.slugs } } : {}),
    ...(filter.statuses.length > 0 ? { status: { in: filter.statuses } } : {}),
    ...labelWhere(filter.labels, filter.labelMatch, filter.withoutLabels),
 })
