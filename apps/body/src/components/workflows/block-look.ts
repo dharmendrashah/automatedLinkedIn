@@ -37,6 +37,8 @@ import {
    ThumbsUp,
    Timer,
    UserCog,
+   UserMinus,
+   UserPlus,
    UserRound,
    UserSearch,
    Users,
@@ -102,6 +104,8 @@ export const BLOCK_ICONS: Record<Block['type'], LucideIcon> = {
    'account.getRequests': UserRound,
    'account.getConversations': MessageSquare,
    'account.answerRequests': CheckCheck,
+   'account.sendInvite': UserPlus,
+   'account.withdrawInvite': UserMinus,
    'output.csv': FileDown,
    'output.sendApi': Send,
 }

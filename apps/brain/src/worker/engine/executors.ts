@@ -102,6 +102,7 @@ import {
    thresholdsOf,
    wordsIn,
 } from './context'
+import { sendInvites, withdrawInvites } from './inviteBlocks'
 import { retry, stop, taskResult, wait } from './logicBlocks'
 import { runWorkflow } from './runWorkflow'
 import { sendPages } from './sendApi'
@@ -1584,6 +1585,8 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'account.getRequests': getRequests,
    'account.getConversations': getConversations,
    'account.answerRequests': answerRequests,
+   'account.sendInvite': sendInvites,
+   'account.withdrawInvite': withdrawInvites,
    'output.list': addToList,
    'output.markPosts': markPosts,
    'output.csv': exportCsv,

@@ -13,8 +13,10 @@ exports[`blocks before they became one definition > should keep the sets of bloc
     "account.getConnections",
     "account.getConversations",
     "account.getRequests",
+    "account.sendInvite",
     "account.visitCompany",
     "account.visitProfile",
+    "account.withdrawInvite",
     "account.writePost",
   ],
   "takesAnything": [
@@ -765,6 +767,34 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 9,
     },
     "type": "account.answerRequests",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.sendInvite",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.withdrawInvite",
   },
   {
     "plain": {

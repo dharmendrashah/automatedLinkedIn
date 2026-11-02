@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { readCompanyFilters } from './companyFilters'
 import { FILTERS_TEXT_MAX } from './filtersText'
 import { INDUSTRY_PAIRS } from './industries'
+import { INVITE_LIMITS } from './invites'
 import { readPeopleFilters } from './peopleFilters'
 import { joinedText, mediaBlock, postBlocksOfText, postFilesOf } from './posting'
 
@@ -242,6 +243,8 @@ export const ACCOUNT_BLOCK_HOURS = {
    'account.getRequests': 2,
    'account.getConversations': 2,
    'account.answerRequests': 8,
+   'account.sendInvite': 1,
+   'account.withdrawInvite': 1,
 } as const
 
 // Every spider task and the block or blocks that run it (.plan/account-action-blocks.md): `blocks` are built, `planned` are on the
@@ -258,7 +261,7 @@ export const ACCOUNT_ACTION_TASKS: Record<string, { blocks: string[] } | { plann
    'linkedin-message': { planned: 'Send message (phase 4)' },
    'linkedin-invitations': { blocks: ['account.getRequests', 'account.answerRequests'] },
    'linkedin-connections': { blocks: ['account.getConnections'] },
-   'linkedin-invite': { planned: 'Send connection request, Withdraw connection request (phase 3)' },
+   'linkedin-invite': { blocks: ['account.sendInvite', 'account.withdrawInvite'] },
    'linkedin-view-profile': { blocks: ['account.visitProfile'] },
    'linkedin-view-company': { blocks: ['account.visitCompany'] },
 }
@@ -282,6 +285,20 @@ export const actField: Field = {
    kind: 'toggle',
    hint: 'Off: a run shows what would go out and does nothing on LinkedIn. Switch it on after a preview. Changing what goes out switches it off again.',
 }
+
+// The note a block with "Act for real" shows while it is off: `verb` is what the run would do ("answers").
+const actOffNote =
+   (label: string, verb: string) =>
+   (node: GraphNode): GraphError[] =>
+      settingsOf(node).actForReal === true
+         ? []
+         : [
+              {
+                 nodeId: node.id,
+                 level: 'note',
+                 message: `${label}: "Act for real" is off, so a run ${verb} nothing yet.`,
+              },
+           ]
 
 export const accountFields = (hours: number): Field[] => [
    {
@@ -897,6 +914,8 @@ export const BLOCK_TYPES = [
    'account.getRequests',
    'account.getConversations',
    'account.answerRequests',
+   'account.sendInvite',
+   'account.withdrawInvite',
    'output.list',
    'output.markPosts',
    'output.csv',
@@ -3823,19 +3842,7 @@ const BLOCKS = {
       group: 'Account Actions',
       flags: { usesAccounts: true },
       unit: 'requests',
-      validate: node => {
-         const { actForReal } = settingsOf(node)
-
-         return actForReal === true
-            ? []
-            : [
-                 {
-                    nodeId: node.id,
-                    level: 'note',
-                    message: 'Answer connection requests: "Act for real" is off, so a run answers nothing yet.',
-                 },
-              ]
-      },
+      validate: actOffNote('Answer connection requests', 'answers'),
       label: 'Answer connection requests',
       summary:
          'Accepts or ignores the connection requests of the people that reach it, with the account that received each. Passes the people on with what came of it.',
@@ -3873,6 +3880,75 @@ const BLOCKS = {
          actField,
          ...accountFields(ACCOUNT_BLOCK_HOURS['account.answerRequests']),
       ],
+   },
+   'account.sendInvite': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'invites',
+      validate: actOffNote('Send connection request', 'sends'),
+      label: 'Send connection request',
+      summary:
+         'Invites the people that reach it to connect, through your invite plan: spread over the days, at most 20 a day and 100 a week for each account. Passes the people on with when each goes. They join My network.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            headline: 'Founder at Analytical Engines',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            result: {
+               action: 'sendInvite',
+               status: 'PLANNED',
+            },
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         note: z.string().trim().max(INVITE_LIMITS.noteChars).default(''),
+         ...actSettings,
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.sendInvite']),
+      }),
+      fields: [
+         {
+            key: 'note',
+            label: 'Note (optional)',
+            kind: 'text',
+            placeholder: 'Hi {first_name}, I liked your work at {company}.',
+            disarms: true,
+            hint: `Up to ${INVITE_LIMITS.noteChars} characters; {first_name} and {company} are filled in for each person. A free account has only a few notes a month; later invites then go without one.`,
+         },
+         actField,
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.sendInvite']),
+      ],
+   },
+   'account.withdrawInvite': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'withdrawals',
+      label: 'Withdraw connection request',
+      summary:
+         'Takes back the connection requests your chosen accounts sent to the people that reach it: one that has not gone yet is cancelled, one sent is withdrawn on the account’s next run. Passes the people on with what came of it.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            result: {
+               action: 'withdrawInvite',
+               status: 'PLANNED',
+            },
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object(accountSettings(ACCOUNT_BLOCK_HOURS['account.withdrawInvite'])),
+      fields: accountFields(ACCOUNT_BLOCK_HOURS['account.withdrawInvite']),
    },
    'output.csv': {
       group: 'Output',

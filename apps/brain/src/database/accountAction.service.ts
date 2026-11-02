@@ -8,12 +8,13 @@ import { PrismaService } from './prisma.service'
 export type CallState = 'ASKED' | 'DONE' | 'FAILED'
 
 // What a call keeps: the id the domain service knows the request by, and how it ended, as fixed words and one fixed sentence.
-export type CallResult = { ref?: string; status?: string; reason?: string | null }
+export type CallResult = { ref?: string; status?: string; reason?: string | null; at?: string | null }
 
 const resultSchema = z.object({
    ref: z.string().optional(),
    status: z.string().optional(),
    reason: z.string().nullable().optional(),
+   at: z.string().nullable().optional(),
 })
 
 export class AccountActionService {

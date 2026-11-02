@@ -86,7 +86,7 @@ export { LinkedInConnectionService, RECIPIENT_STATUSES } from './linkedInConnect
 export { type InvitationList, type InvitationRefresh, LinkedInInvitationService } from './linkedInInvitation.service'
 export { InvitationImportService } from './invitationImport.service'
 export { InviteImportService } from './inviteImport.service'
-export { type InviteRequest, LinkedInInviteService } from './linkedInInvite.service'
+export { type InviteOutcome, type InviteRequest, LinkedInInviteService } from './linkedInInvite.service'
 export { INVITE_TASK } from './linkedInInvite.hooks'
 export { ProfileImportService } from './profileImport.service'
 export { MessagesRefresh, type RefreshResult } from './messagesRefresh'

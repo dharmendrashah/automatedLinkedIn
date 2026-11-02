@@ -153,6 +153,44 @@ describe('Answer connection requests', () => {
    })
 })
 
+describe('Send and Withdraw connection request', () => {
+   it('should take people and give them back, start with Act for real off, and keep a note of at most 200 characters', () => {
+      expect(blockOf('account.sendInvite')).toMatchObject({
+         input: 'profile',
+         output: 'profile',
+      })
+      expect(blockOf('account.sendInvite').config.parse({})).toMatchObject({
+         note: '',
+         actForReal: false,
+         timeLimitHours: 1,
+      })
+      expect(blockOf('account.sendInvite').config.safeParse({ note: 'x'.repeat(201) }).success).toBe(false)
+      expect(blockOf('account.sendInvite').fields.find(({ key }) => key === 'note')).toMatchObject({ disarms: true })
+   })
+
+   it('should say a run sends nothing while Act for real is off, and have no such setting on Withdraw', () => {
+      const note = (type: 'account.sendInvite', actForReal: boolean) =>
+         validateGraph({
+            nodes: [
+               node('one', type, {
+                  accountMode: 'one',
+                  account: 'a1',
+                  actForReal,
+               }),
+            ],
+            edges: [],
+         }).map(({ message }) => message)
+
+      expect(note('account.sendInvite', false)).toContain(
+         'Send connection request: "Act for real" is off, so a run sends nothing yet.'
+      )
+      expect(note('account.sendInvite', true)).not.toContain(
+         'Send connection request: "Act for real" is off, so a run sends nothing yet.'
+      )
+      expect(blockOf('account.withdrawInvite').fields.some(({ key }) => key === 'actForReal')).toBe(false)
+   })
+})
+
 describe('Get my connection requests and Get my conversations', () => {
    it('should give people and conversations, start a chain on their own, and wait 2 hours', () => {
       expect(blockOf('account.getRequests')).toMatchObject({
