@@ -48,7 +48,7 @@ const address = z.object({
 })
 
 // Fields added after the first company reads default, so a snapshot kept before them still opens.
-const companySchema = z.object({
+export const companySchema = z.object({
    name: nullable,
    tagline: nullable,
    about: nullable,

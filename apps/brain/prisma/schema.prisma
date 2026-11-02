@@ -29,6 +29,8 @@ model User {
   linkedInCompanies LinkedInCompany[]
   linkedInPosts     LinkedInPost[]
   linkedInProfiles  LinkedInProfile[]
+  companyJobs       LinkedInCompanyJob[]
+  collectSearches   CollectSearchCache[]
   spiderSessions    SpiderSession[]
   conversations     LinkedInConversation[]
   replies           LinkedInReply[]
@@ -249,29 +251,42 @@ enum WorkflowStepStatus {
 
 // A graph of catalog blocks (packages/contracts workflow.ts) that finds people and adds them to its output list.
 model Workflow {
-  id           String        @id @default(uuid(7))
+  id           String            @id @default(uuid(7))
   userId       String
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
   goal         String?
   graph        Json
   // A list in use by a workflow cannot be deleted.
   outputListId String
-  outputList   WorkflowList  @relation(fields: [outputListId], references: [id], onDelete: Restrict)
-  qualifyScore Int           @default(60)
-  maybeScore   Int           @default(40)
-  maybeEnabled Boolean       @default(true)
+  outputList   WorkflowList      @relation(fields: [outputListId], references: [id], onDelete: Restrict)
+  qualifyScore Int               @default(60)
+  maybeScore   Int               @default(40)
+  maybeEnabled Boolean           @default(true)
   // Switched on: a schedule, API or chained workflow may start it; nextRunAt is when the schedule job starts it next.
-  enabled      Boolean       @default(false)
+  enabled      Boolean           @default(false)
   nextRunAt    DateTime?
   // SHA-256 of the API token; the token itself is shown once.
   apiTokenHash String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
   runs         WorkflowRun[]
+  versions     WorkflowVersion[]
 
   @@unique([userId, name])
   @@index([enabled, nextRunAt])
+}
+
+// A saved version of a workflow's graph: one for each save that changed it, the newest 50 kept
+// (.plan/workflow-engine-p5-editor.md).
+model WorkflowVersion {
+  id         String   @id @default(uuid(7))
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  graph      Json
+  createdAt  DateTime @default(now())
+
+  @@index([workflowId, createdAt])
 }
 
 // One execution. It keeps a copy of the graph it started with, so editing the workflow never changes it.
@@ -525,31 +540,75 @@ enum LinkedInProfileStatus {
 
 // A person the user wants to reach, saved from a pasted profile link. Nothing here is scraped.
 model LinkedInProfile {
-  id         String                @id @default(uuid(7))
-  userId     String
-  user       User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String                @id @default(uuid(7))
+  userId       String
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Lowercase public identifier from linkedin.com/in/<slug>; unique per owner.
-  slug       String
-  url        String
-  fullName   String?
-  headline   String?
-  company    String?
-  location   String?
-  notes      String?
-  tags       String[]
-  status     LinkedInProfileStatus @default(NEW)
+  slug         String
+  url          String
+  fullName     String?
+  headline     String?
+  company      String?
+  location     String?
+  notes        String?
+  tags         String[]
+  status       LinkedInProfileStatus @default(NEW)
   // Set when the owner removes the profile; it can be restored.
-  archivedAt DateTime?
+  archivedAt   DateTime?
   // The client the target belongs to on My network; null is the owner's default client.
-  clientId   String?
-  client     Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  createdAt  DateTime              @default(now())
-  updatedAt  DateTime              @updatedAt
+  clientId     String?
+  client       Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  // A work email a workflow found for the person, and when; it is not paid for again.
+  email        String?
+  emailFoundAt DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
 
   visits LinkedInPageVisit[]
 
   @@unique([userId, slug])
   @@index([userId, archivedAt, createdAt])
+}
+
+// A job posting a workflow found and kept under its company (.plan/workflow-collect-blocks.md). Unique by LinkedIn's job
+// id per owner and refreshed when seen again; `tags` are the names of the workflows that found it.
+model LinkedInCompanyJob {
+  id          String   @id @default(uuid(7))
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId       String
+  url         String
+  title       String?
+  companySlug String?
+  companyName String?
+  location    String?
+  posted      String?
+  workplace   String?
+  employment  String?
+  applicants  Int?
+  salary      String?
+  tags        String[]
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  @@unique([userId, jobId])
+  @@index([userId, companySlug])
+}
+
+// The items a search found, so the same search within a week is not paid for twice (.plan/workflow-collect-blocks.md).
+// `items` are the workflow's own allow-listed items, never the data service's rows.
+model CollectSearchCache {
+  id         String   @id @default(uuid(7))
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // The data service operation and a hash of the settings it was asked with.
+  operation  String
+  paramsHash String
+  items      Json
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, operation, paramsHash])
+  @@index([createdAt])
 }
 
 enum PageVisitStatus {

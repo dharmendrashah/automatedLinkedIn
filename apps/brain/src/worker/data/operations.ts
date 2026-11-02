@@ -1,9 +1,12 @@
 import {
+   type AdItem,
    type CompanyItem,
    EXCERPT_LENGTH,
+   type JobItem,
    type PersonItem,
    type PersonSnapshotData,
    type PostItem,
+   companySnapshotFrom,
    parseLinkedInUrl,
    person,
    postSnapshotFrom,
@@ -209,28 +212,32 @@ export const findPostsParams = (config: {
    includeQuotePosts?: boolean
    authors?: string[]
    mentioning?: string[]
-}) =>
-   sent({
+}) => ({
+   ...sent({
       queries: config.keywords,
       postedLimit: config.postedWithin,
       maxResults: config.howMany,
       sortBy: config.sortBy,
       contentType: config.contentType === 'all' ? undefined : config.contentType,
-      includeReposts: config.includeReposts,
       includeQuotePosts: config.includeQuotePosts,
       authors: config.authors,
       mentioning: config.mentioning,
-   })
+   }),
+   ...(config.includeReposts === undefined ? {} : { includeReposts: config.includeReposts }),
+})
 
-type PostsOf = { howMany: number; postedWithin?: string; includeReposts?: boolean }
+type PostsOf = { howMany: number; postedWithin?: string; includeReposts?: boolean; includeQuotePosts?: boolean }
 
-export const postsOfParams = (url: string, config: PostsOf) =>
-   sent({
+// The data service includes reposts unless told not to, so an unticked box is sent as false.
+export const postsOfParams = (url: string, config: PostsOf) => ({
+   ...sent({
       urls: url,
       maxResults: config.howMany,
       postedLimit: config.postedWithin,
-      includeReposts: config.includeReposts,
-   })
+      includeQuotePosts: config.includeQuotePosts,
+   }),
+   ...(config.includeReposts === undefined ? {} : { includeReposts: config.includeReposts }),
+})
 
 export const engagedParams = (person: PersonItem, config: { howMany: number; postedWithin?: string }) =>
    sent({
@@ -282,6 +289,13 @@ type SearchPeople = {
    changedJobs: boolean
    postedRecently: boolean
    howMany: number
+   yearsAtCompany?: string[]
+   pastCompanies?: string[]
+   pastTitles?: string[]
+   schools?: string[]
+   names?: string[]
+   companyHQLocations?: string[]
+   profileLanguages?: string[]
 }
 
 // A search reads whole pages of 25 people.
@@ -300,6 +314,13 @@ export const searchPeopleParams = (config: SearchPeople) =>
       yearsOfExperience: config.yearsOfExperience,
       recentlyChangedJobs: config.changedJobs,
       recentlyPostedOnLinkedIn: config.postedRecently,
+      yearsAtCompany: config.yearsAtCompany,
+      pastCompanies: config.pastCompanies,
+      pastJobTitles: config.pastTitles,
+      schools: config.schools,
+      names: config.names,
+      companyHQLocations: config.companyHQLocations,
+      profileLanguages: config.profileLanguages,
       maxProfiles: Math.ceil(config.howMany / SEARCH_PAGE) * SEARCH_PAGE,
    })
 
@@ -418,6 +439,151 @@ export const companiesFromDomains = (rows: Row[]): CompanyItem[] =>
                  ...link,
                  name: text(row.domain),
                  hiring: [],
+              },
+           ]
+         : []
+   })
+
+export const companiesLinksParams = (urls: string[]) => ({ companies: urls })
+
+type SearchCompanies = {
+   query: string
+   locations: string[]
+   companySize: string[]
+   industries: string[]
+   howMany: number
+}
+
+export const searchCompaniesParams = (config: SearchCompanies) =>
+   sent({
+      query: config.query,
+      locations: config.locations,
+      companySize: config.companySize,
+      industries: config.industries,
+      maxResults: config.howMany,
+   })
+
+// A company page the data service returned, with the page itself so it can be remembered.
+export const companiesFrom = (rows: Row[]): CompanyItem[] =>
+   rows.flatMap(row => {
+      const link = companyLinkOf(row.linkedinUrl)
+
+      return link
+         ? [
+              {
+                 kind: 'company' as const,
+                 ...link,
+                 name: text(row.companyName),
+                 hiring: [],
+                 preview: companySnapshotFrom(row),
+              },
+           ]
+         : []
+   })
+
+type JobPostings = {
+   jobTitles: string
+   howMany: number
+   locations: string
+   companies: string[]
+   workplaceType: string[]
+   employmentType: string[]
+   experienceLevel: string[]
+   salary: string[]
+   postedWithin: string
+   sortBy: string
+   industries: string[]
+   easyApply: boolean
+   fewApplicants: boolean
+}
+
+export const jobPostingsParams = (config: JobPostings) =>
+   sent({
+      jobTitles: config.jobTitles,
+      maxResults: config.howMany,
+      locations: config.locations,
+      company: config.companies,
+      workplaceType: config.workplaceType,
+      employmentType: config.employmentType,
+      experienceLevel: config.experienceLevel,
+      salary: config.salary,
+      postedLimit: config.postedWithin,
+      sortBy: config.sortBy,
+      industryIds: config.industries,
+      easyApply: config.easyApply,
+      under10Applicants: config.fewApplicants,
+   })
+
+const salaryOf = (row: Row) => {
+   const [low, high] = [count(row.salaryMin), count(row.salaryMax)]
+   const range = low !== null && high !== null ? `${low} to ${high}` : String(low ?? high ?? '')
+
+   return range ? [text(row.salaryCurrency), range, text(row.salaryPeriod)].filter(Boolean).join(' ') : null
+}
+
+export const jobPostingsFrom = (rows: Row[]): JobItem[] =>
+   rows.flatMap(row => {
+      const slug = text(row.jobId)
+      const url = text(row.jobUrl)
+
+      return slug && url
+         ? [
+              {
+                 kind: 'job' as const,
+                 slug,
+                 url,
+                 title: text(row.jobTitle),
+                 company: text(row.companyName),
+                 companySlug: companyLinkOf(row.companyUrl)?.slug ?? text(row.companySlug)?.toLowerCase() ?? null,
+                 location: [text(row.city), text(row.state), text(row.country)].filter(Boolean).join(', ') || null,
+                 posted: text(row.posted),
+                 workplace: text(row.workplaceType),
+                 employment: text(row.employmentType),
+                 applicants: count(row.applicants),
+                 salary: salaryOf(row),
+              },
+           ]
+         : []
+   })
+
+export const emailsParams = (people: PersonItem[]) => ({ urls: people.map(({ url }) => url) })
+
+// The work email of each person the data service found one for, by the person's slug.
+export const emailsFrom = (rows: Row[]) =>
+   new Map(
+      rows.flatMap(row => {
+         const slug = linkOf(row.profileUrl)?.slug
+         const email = text(row.email)
+
+         return slug && email ? [[slug, email] as const] : []
+      })
+   )
+
+export const adsParams = (url: string, howMany: number) => ({
+   urls: url,
+   maxResults: howMany,
+})
+
+const AD_BODY_LENGTH = 300
+
+export const adsFrom = (rows: Row[]): AdItem[] =>
+   rows.flatMap(row => {
+      const slug = text(row.adId)
+      const url = text(row.adUrl)
+
+      return slug && url
+         ? [
+              {
+                 kind: 'ad' as const,
+                 slug,
+                 url,
+                 advertiser: text(row.paidBy),
+                 headline: text(row.headline),
+                 body: text(row.body)?.slice(0, AD_BODY_LENGTH) ?? null,
+                 format: text(row.format),
+                 started: text(row.started),
+                 ended: text(row.ended),
+                 clickUrl: text(row.clickUrl),
               },
            ]
          : []

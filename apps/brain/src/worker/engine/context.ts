@@ -193,6 +193,9 @@ type PaidCall = {
    params: Record<string, unknown>
    // What to do with the rows of a finished request.
    use: (rows: Record<string, unknown>[]) => Promise<void>
+   // Fills the step from what the same request found before and answers true, so nothing is paid: a search kept for a
+   // week. Asked only before the request is first sent.
+   recall?: () => Promise<boolean>
 }
 
 // One paid request, recorded before it is sent and moved one step per tick (see `advanceJob`): started, looked at,
@@ -203,6 +206,7 @@ const paidCall = async ({
    slug,
    params,
    use,
+   recall,
    mayStart,
 }: PaidCall & { mayStart: boolean }): Promise<CallOutcome> => {
    const { run, step, deps } = ctx
@@ -221,6 +225,27 @@ const paidCall = async ({
    }
 
    const fresh = !call.jobId && !call.sentAt
+   const booking = {
+      userId: run.userId,
+      workflowId: run.workflowId,
+      runId: run.id,
+      stepId: step.id,
+   }
+
+   if (fresh && recall && (await recall())) {
+      await WorkflowRunService.finishCall(
+         call.id,
+         {
+            status: 'DONE',
+            rows: 0,
+            costMicros: 0,
+            error: null,
+         },
+         booking
+      )
+
+      return 'done'
+   }
 
    if (fresh && !mayStart) {
       return 'later'
@@ -230,12 +255,6 @@ const paidCall = async ({
       return 'stop'
    }
 
-   const booking = {
-      userId: run.userId,
-      workflowId: run.workflowId,
-      runId: run.id,
-      stepId: step.id,
-   }
    const fail = (error: string) =>
       WorkflowRunService.finishCall(
          call.id,

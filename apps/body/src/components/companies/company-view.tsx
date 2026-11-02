@@ -25,6 +25,7 @@ import { LabelCell } from '../labels/label-cell'
 import { isLinkStatus, linkStatuses } from '../links/link-statuses'
 import { ViewPageDialog } from '../links/view-page-dialog'
 import { Breakdowns } from './company/breakdowns'
+import { CompanyJobs } from './company/company-jobs'
 import { CompanyPeople } from './company/company-people'
 import { domainOf, factsOf } from './company/facts'
 import { KeyFacts, Offices } from './company/key-facts'
@@ -256,6 +257,7 @@ export const CompanyView = ({ slug, onPerson }: { slug: string; onPerson: (slug:
                   name={snapshot?.name ?? data.company.name ?? data.slug}
                   onPerson={onPerson}
                />
+               <CompanyJobs jobs={data.jobs} />
                {snapshot && !snapshot.detailed && !data.company.archivedAt ? (
                   <p className="text-muted-foreground rounded-xl border border-dashed p-3 text-xs">
                      Read again to see the full address, skills, schools and more.

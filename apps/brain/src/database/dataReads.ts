@@ -86,7 +86,7 @@ const companyWanted = async (userId: string, slug: string) => {
 
 const postWanted = async (userId: string, slug: string) => Boolean(await LinkedInPostService.bySlug(userId, slug))
 
-const keepPage = (userId: string, kind: PageKind, slug: string, data: Prisma.InputJsonValue) =>
+export const keepPage = (userId: string, kind: PageKind, slug: string, data: Prisma.InputJsonValue) =>
    PrismaService.client.pageSnapshot.upsert({
       where: {
          userId_kind_slug: {

@@ -105,7 +105,13 @@ describe('input blocks', () => {
          timeZone: 'Asia/Kolkata',
          all: true,
       })
+      expect(startConfig('collect.profile', 'Asia/Kolkata')).toEqual({ keep: true })
       expect(startConfig('collect.commenters', 'Asia/Kolkata')).toEqual({})
+      // A block that existed before the "keep" box starts with it on and with 10; a saved one keeps what it has.
+      expect(startConfig('collect.searchPeople', 'Asia/Kolkata')).toEqual({
+         keep: true,
+         howMany: 10,
+      })
    })
 })
 
@@ -171,6 +177,25 @@ describe('graph-convert', () => {
       ])
       expect(portOfHandle('bottom')).toBeUndefined()
       expect(portOfHandle('port:else')).toBe('else')
+   })
+
+   it('should carry a block that is switched off through the canvas and back, and leave the flag out when it is on', () => {
+      const off: Graph = {
+         ...graph,
+         nodes: graph.nodes.map(node => (node.id === 'commenters' ? { ...node, disabled: true } : node)),
+      }
+      const { nodes, edges } = toFlow(off, catalog)
+
+      expect(nodes.map(({ id, data }) => [id, data.disabled])).toEqual([
+         ['posts', undefined],
+         ['commenters', true],
+         ['score', undefined],
+      ])
+      expect(toGraph(nodes, edges).nodes.map(({ id, disabled }) => [id, disabled])).toEqual([
+         ['posts', undefined],
+         ['commenters', true],
+         ['score', undefined],
+      ])
    })
 
    it('should join any two blocks once, and never a block to itself', () => {

@@ -13,6 +13,8 @@ import { PrismaService } from './prisma.service'
 // One company of the owner's /companies by slug: their own fields, the page they chose to read, and the My network people who
 // work there.
 
+const JOBS_SHOWN = 25
+
 const readOf = (userId: string, slug: string, url: string) => ({
    userId,
    kind: 'COMPANY' as const,
@@ -66,6 +68,28 @@ export class CompanyPageService {
          slug,
          url: company.url,
          company,
+         // The job postings workflows found for it, newest seen first.
+         jobs: await PrismaService.client.linkedInCompanyJob.findMany({
+            where: {
+               userId,
+               companySlug: slug,
+            },
+            orderBy: { lastSeenAt: 'desc' },
+            take: JOBS_SHOWN,
+            select: {
+               id: true,
+               url: true,
+               title: true,
+               location: true,
+               workplace: true,
+               employment: true,
+               applicants: true,
+               salary: true,
+               posted: true,
+               tags: true,
+               lastSeenAt: true,
+            },
+         }),
          snapshot:
             page && stored
                ? {

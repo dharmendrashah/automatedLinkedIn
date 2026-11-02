@@ -196,6 +196,14 @@ export const Workspace = ({ person }: { person: PersonDetail }) => {
                   <span className="text-sm">In your profiles</span>
                   {profile.archivedAt ? <Badge variant="secondary">Archived</Badge> : null}
                </div>
+               {profile.email ? (
+                  <p className="text-sm">
+                     <span className="text-muted-foreground">Work email </span>
+                     <a className="underline-offset-4 hover:underline" href={`mailto:${profile.email}`}>
+                        {profile.email}
+                     </a>
+                  </p>
+               ) : null}
                <div className="flex flex-wrap gap-2">
                   <Select
                      value={profile.status}

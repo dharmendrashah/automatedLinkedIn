@@ -181,6 +181,22 @@ const stateOf = (saved: Map<string, Date | null>, slug: string) =>
    !saved.has(slug) ? ('NEW' as const) : saved.get(slug) ? ('ARCHIVED' as const) : ('ALREADY_HERE' as const)
 
 export class LinkedInCompanyService {
+   // Fills a name the owner left empty; a name already there is never overwritten.
+   public static async fillNames(userId: string, companies: { slug: string; name: string | null }[]) {
+      for (const { slug, name } of companies) {
+         if (name) {
+            await PrismaService.client.linkedInCompany.updateMany({
+               where: {
+                  userId,
+                  slug,
+                  name: null,
+               },
+               data: { name },
+            })
+         }
+      }
+   }
+
    // Every company a profile read found: added once, an archived one left archived, a name filled only where none is set.
    public static async saveFound(userId: string, companies: Array<{ slug: string; name: string | null }>) {
       const table = PrismaService.client.linkedInCompany

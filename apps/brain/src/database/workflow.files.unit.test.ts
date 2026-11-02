@@ -11,6 +11,10 @@ const mocks = vi.hoisted(() => ({
    deleteMany: vi.fn(),
    runCount: vi.fn(),
    dropFiles: vi.fn(),
+   versionFindFirst: vi.fn(),
+   versionCreate: vi.fn(),
+   versionFindMany: vi.fn(),
+   versionDeleteMany: vi.fn(),
 }))
 
 vi.mock('./prisma.service', () => ({
@@ -22,6 +26,12 @@ vi.mock('./prisma.service', () => ({
             deleteMany: mocks.deleteMany,
          },
          workflowRun: { count: mocks.runCount },
+         workflowVersion: {
+            findFirst: mocks.versionFindFirst,
+            create: mocks.versionCreate,
+            findMany: mocks.versionFindMany,
+            deleteMany: mocks.versionDeleteMany,
+         },
       },
    },
 }))
@@ -87,6 +97,10 @@ describe('WorkflowService files of written posts', () => {
       mocks.update.mockResolvedValue({ id: 'w1' })
       mocks.runCount.mockResolvedValue(0)
       mocks.dropFiles.mockResolvedValue(undefined)
+      mocks.versionFindFirst.mockResolvedValue(null)
+      mocks.versionCreate.mockResolvedValue({})
+      mocks.versionFindMany.mockResolvedValue([])
+      mocks.versionDeleteMany.mockResolvedValue({ count: 0 })
    })
 
    it('should delete the files a saved graph no longer holds, and keep the ones it still does', async () => {
@@ -123,5 +137,27 @@ describe('WorkflowService files of written posts', () => {
 
       await expect(WorkflowService.delete(USER, 'w1')).resolves.toBe(false)
       expect(mocks.dropFiles).not.toHaveBeenCalled()
+   })
+
+   it('should keep a file a saved version still holds, and delete it with the workflow', async () => {
+      mocks.findFirst.mockResolvedValue(current(graphWith(USER, FILE)))
+      mocks.versionFindMany.mockResolvedValue([
+         {
+            id: 'v1',
+            graph: graphWith(USER, FILE),
+         },
+      ])
+
+      await WorkflowService.update(USER, 'w1', { graph: graphWith(USER, OTHER_FILE) })
+
+      expect(mocks.dropFiles).toHaveBeenCalledWith([])
+
+      mocks.dropFiles.mockClear()
+      mocks.versionFindMany.mockResolvedValue([{ graph: graphWith(USER, OTHER_FILE) }])
+      mocks.deleteMany.mockResolvedValue({ count: 1 })
+
+      await WorkflowService.delete(USER, 'w1')
+
+      expect(mocks.dropFiles).toHaveBeenCalledWith([postKey(USER, FILE, 'a.pdf'), postKey(USER, OTHER_FILE, 'a.pdf')])
    })
 })

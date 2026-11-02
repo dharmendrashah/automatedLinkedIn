@@ -74,6 +74,16 @@ const SAMPLE_BY_KIND = {
       website: 'stripe.com',
       link: 'https://www.linkedin.com/company/stripe',
    },
+   job: {
+      title: 'Product manager',
+      company: 'Stripe',
+      link: 'https://www.linkedin.com/jobs/view/4001',
+   },
+   ad: {
+      advertiser: 'Stripe',
+      headline: 'Payments for the internet',
+      link: 'https://www.linkedin.com/ad-library/detail/1',
+   },
 } as const
 
 // A sample of one item the block takes in, as JSON; null for a block that takes none (it starts a chain).
@@ -85,4 +95,6 @@ export const KIND_WORDS = {
    post: 'posts',
    profile: 'people',
    company: 'companies',
+   job: 'job postings',
+   ad: 'ads',
 } as const

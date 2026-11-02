@@ -6,13 +6,15 @@ import { joinedText, mediaBlock, postBlocksOfText, postFilesOf } from './posting
 // The closed catalog of workflow blocks, the graph they form, and the pure rules on it (.plan/gtm-workflows.md).
 // Ids and labels are neutral: no data supplier is named here, because the browser shows these.
 
-export type ItemKind = 'start' | 'post' | 'profile' | 'company'
+export type ItemKind = 'start' | 'post' | 'profile' | 'company' | 'job' | 'ad'
 
 export const KIND_LABELS: Record<ItemKind, string> = {
    start: 'a start',
    post: 'posts',
    profile: 'people',
    company: 'companies',
+   job: 'job postings',
+   ad: 'ads',
 }
 
 // Per row, in millionths of a dollar.
@@ -25,9 +27,15 @@ export const PRICE_MICROS = {
    lookup: 4_000,
    // One company page read on demand.
    companyPage: 4_000,
+   company: 4_000,
+   email: 20_000,
+   ad: 2_000,
 } as const
 
 export const EMPLOYEE_PAGE = 25
+
+// A search of people is read in whole pages of 25: each page costs a fee and every person on it a profile.
+export const SEARCH_PAGE_SIZE = 25
 
 // "All" comments or reactions still stops here per post, so a run's cost has an upper bound.
 export const ALL_CAP = 1_000
@@ -509,6 +517,18 @@ export const BLOCK_TYPES = [
    'collect.searchPeople',
    'collect.commenters',
    'collect.reactors',
+   'collect.profilesFromLinks',
+   'collect.searchCompanies',
+   'collect.companiesFromLinks',
+   'collect.postsFromLinks',
+   'collect.employeesFromLinks',
+   'collect.searchJobs',
+   'collect.emailsFromLinks',
+   'collect.commentersFromLinks',
+   'collect.reactorsFromLinks',
+   'collect.profileCommentsFromLinks',
+   'collect.profileReactionsFromLinks',
+   'collect.adsFromLinks',
    'process.dedupe',
    'process.filter',
    'process.topN',
@@ -638,6 +658,203 @@ const perIncomingPost = (node: GraphNode, incoming: number) => ({
    items: incoming * howManyOf(node),
    costMicros: incoming * howManyOf(node) * PRICE_MICROS.engagement,
 })
+
+// The longest label a workflow's name leaves on what it keeps; the same as the longest label an input block filters by.
+export const KEEP_LABEL_MAX = 30
+
+export const keepLabelOf = (workflowName: string) =>
+   workflowName.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, KEEP_LABEL_MAX).trim() || 'workflow'
+
+// Blocks that find people, companies or posts can keep them in the owner's lists under the workflow's name and
+// remember them. Blocks saved before it have it off; blocks added from now on start with it on.
+const KEEP_FIELD: Field = {
+   key: 'keep',
+   label: 'Keep what it finds in my lists and remember it',
+   kind: 'toggle',
+   hint: "Saves what it finds under this workflow's name and does not pay for it twice. Later workflows that take all new people may pick them up; people on Do not contact are never added.",
+}
+
+// Links pasted in a block belong to that workflow only: they are not added to any list.
+const linkList = (max: number) => z.array(z.string().trim().min(1).max(300)).max(max).default([])
+
+const LINKS_MAX = 100
+
+const linksField = (label: string, hint: string = LINKS_HINT): Field => ({
+   key: 'links',
+   label,
+   kind: 'words',
+   suggest: 'links',
+   hint,
+})
+
+const linkCount = (node: GraphNode) => countOf(node, 'links')
+
+// A block that works from pasted links has nothing to do without one.
+const needsLinks =
+   (label: string) =>
+   (node: GraphNode): GraphError[] =>
+      linkCount(node) === 0
+         ? [
+              {
+                 nodeId: node.id,
+                 level: 'error',
+                 message: `${label}: paste at least one link.`,
+              },
+           ]
+         : []
+
+// What a block that reads `perLink` rows for each pasted link costs at most.
+const perLinkEstimate = (price: number) => (node: GraphNode) => ({
+   items: linkCount(node) * howManyOf(node),
+   costMicros: linkCount(node) * howManyOf(node) * price,
+})
+
+// People at companies: the filters the data service takes, shared by the block that takes companies from the block
+// before it and the one that takes pasted links.
+const EMPLOYEE_FILTERS = {
+   titles: words,
+   seniority: z
+      .array(z.enum(['120', '200', '210', '220', '300', '310', '320']))
+      .max(7)
+      .default([]),
+   functions: someOf(FUNCTIONS),
+   locations: words,
+   pastTitles: words,
+   yearsAtCompany: someOf(YEARS),
+   yearsOfExperience: someOf(YEARS),
+   headcount: someOf(HEADCOUNTS),
+   changedJobs: toggle(false),
+   industries: someOf(INDUSTRIES, 50),
+}
+
+const EMPLOYEE_FIELDS: Field[] = [
+   {
+      key: 'titles',
+      label: 'Current job titles',
+      kind: 'words',
+      suggest: 'titles',
+      hint: 'Empty takes any title.',
+   },
+   {
+      key: 'seniority',
+      label: 'Seniority',
+      kind: 'multi',
+      options: [
+         {
+            value: '320',
+            label: 'Owner or partner',
+         },
+         {
+            value: '310',
+            label: 'C-level',
+         },
+         {
+            value: '300',
+            label: 'VP',
+         },
+         {
+            value: '220',
+            label: 'Director',
+         },
+         {
+            value: '210',
+            label: 'Experienced manager',
+         },
+         {
+            value: '200',
+            label: 'Manager',
+         },
+         {
+            value: '120',
+            label: 'Senior',
+         },
+      ],
+   },
+   {
+      key: 'functions',
+      label: 'Department',
+      kind: 'multi',
+      options: FUNCTIONS,
+      advanced: true,
+   },
+   {
+      key: 'locations',
+      label: 'Located in',
+      kind: 'words',
+      suggest: 'locations',
+      hint: 'Cities or countries, such as London or Germany.',
+      advanced: true,
+   },
+   {
+      key: 'pastTitles',
+      label: 'Past job titles',
+      kind: 'words',
+      suggest: 'titles',
+      advanced: true,
+   },
+   {
+      key: 'yearsAtCompany',
+      label: 'Years at the company',
+      kind: 'multi',
+      options: YEARS,
+      advanced: true,
+   },
+   {
+      key: 'yearsOfExperience',
+      label: 'Years of experience',
+      kind: 'multi',
+      options: YEARS,
+      advanced: true,
+   },
+   {
+      key: 'headcount',
+      label: 'Company size',
+      kind: 'multi',
+      options: HEADCOUNTS,
+      advanced: true,
+   },
+   {
+      key: 'industries',
+      label: 'Industry',
+      kind: 'search',
+      options: INDUSTRIES,
+      max: 50,
+      advanced: true,
+   },
+   {
+      key: 'changedJobs',
+      label: 'Only people who changed jobs recently',
+      kind: 'toggle',
+      advanced: true,
+   },
+]
+
+const PROFILE_LANGUAGES = optionsOf(
+   [
+      'Arabic',
+      'English',
+      'Spanish',
+      'Portuguese',
+      'Chinese',
+      'French',
+      'Italian',
+      'Russian',
+      'German',
+      'Dutch',
+      'Turkish',
+      'Tagalog',
+      'Polish',
+      'Korean',
+      'Japanese',
+      'Malay',
+      'Norwegian',
+      'Danish',
+      'Romanian',
+      'Swedish',
+   ].map(language => [language, language])
+)
+
+const JOB_SALARIES = SALARIES.filter(({ value }) => value !== 'any')
 
 const BLOCKS = {
    'trigger.manual': {
@@ -941,19 +1158,75 @@ const BLOCKS = {
    },
    'collect.profile': {
       group: 'Collect',
-      flags: { scores: true },
-      estimate: (_node, incoming) => ({
-         items: incoming,
-         costMicros: incoming * PRICE_MICROS.profile,
+      // Takes people, companies and posts as they are (posts become their authors in the block) and starts on its own
+      // from pasted links.
+      flags: {
+         scores: true,
+         takesAnything: true,
+      },
+      unit: 'profiles and companies',
+      estimate: (node, incoming) => ({
+         items: incoming + linkCount(node),
+         costMicros: (incoming + linkCount(node)) * PRICE_MICROS.profile,
       }),
+      previewCap: 1,
+      validate: (node, graph) =>
+         linkCount(node) === 0 && parentsOf(graph, node.id).length === 0
+            ? [
+                 {
+                    nodeId: node.id,
+                    level: 'note',
+                    message:
+                       'Get full profile has nothing before it, so it gets nothing. Paste links or connect a block.',
+                 },
+              ]
+            : [],
       label: 'Get full profile',
       summary:
-         'Reads the full profile of everyone who reaches it (job, company, place) and scores them again if a Score block came before.',
-      costHint: 'about $0.004 per person',
-      input: 'profile',
+         'Reads the full details of every person and company that reaches it or whose link you paste, and scores people again if a Score block came before.',
+      flow: 'Takes people, companies or pasted links, gives them with their full details',
+      costHint: 'about $0.004 per person or company',
+      // Blocks saved before companies were read keep passing them through.
+      version: 2,
+      migrate: {
+         1: config => ({
+            ...config,
+            readCompanies: false,
+         }),
+      },
+      input: 'start',
       output: 'profile',
-      config: empty,
-      fields: [],
+      config: z.object({
+         links: linkList(LINKS_MAX),
+         readCompanies: toggle(true),
+         keep: toggle(false),
+         reread: toggle(false),
+      }),
+      fields: [
+         linksField(
+            'Profile or company links (optional)',
+            'Read as well as what reaches this block: LinkedIn profile or company links.'
+         ),
+         {
+            key: 'readCompanies',
+            label: 'Also read companies that reach it',
+            kind: 'toggle',
+            hint: 'A company that already has its page, from a search, is not read again.',
+         },
+         {
+            key: 'keep',
+            label: 'Update my lists with what it reads',
+            kind: 'toggle',
+            hint: "New people join My network and new companies join Companies under this workflow's name; the ones already there get what was read. People on Do not contact are never added.",
+         },
+         {
+            key: 'reread',
+            label: 'Read again even if read in the last 30 days',
+            kind: 'toggle',
+            hint: 'Costs again. Leave off to use the stored read.',
+            advanced: true,
+         },
+      ],
    },
    'output.list': {
       group: 'Output',
@@ -1125,6 +1398,7 @@ const BLOCKS = {
          includeQuotePosts: toggle(false),
          authors: z.array(z.string().trim().min(1).max(300)).max(20).default([]),
          mentioning: z.array(z.string().trim().min(1).max(300)).max(20).default([]),
+         keep: toggle(false),
       }),
       fields: [
          {
@@ -1189,6 +1463,7 @@ const BLOCKS = {
             hint: LINKS_HINT,
             advanced: true,
          },
+         KEEP_FIELD,
       ],
    },
    'collect.postsOfPeople': {
@@ -1344,19 +1619,8 @@ const BLOCKS = {
       output: 'profile',
       config: z.object({
          howMany: howMany(500, 25),
-         titles: words,
-         seniority: z
-            .array(z.enum(['120', '200', '210', '220', '300', '310', '320']))
-            .max(7)
-            .default([]),
-         functions: someOf(FUNCTIONS),
-         locations: words,
-         pastTitles: words,
-         yearsAtCompany: someOf(YEARS),
-         yearsOfExperience: someOf(YEARS),
-         headcount: someOf(HEADCOUNTS),
-         changedJobs: toggle(false),
-         industries: someOf(INDUSTRIES, 50),
+         ...EMPLOYEE_FILTERS,
+         keep: toggle(false),
       }),
       fields: [
          {
@@ -1366,105 +1630,8 @@ const BLOCKS = {
             min: 1,
             max: 500,
          },
-         {
-            key: 'titles',
-            label: 'Current job titles',
-            kind: 'words',
-            suggest: 'titles',
-            hint: 'Empty takes any title.',
-         },
-         {
-            key: 'seniority',
-            label: 'Seniority',
-            kind: 'multi',
-            options: [
-               {
-                  value: '320',
-                  label: 'Owner or partner',
-               },
-               {
-                  value: '310',
-                  label: 'C-level',
-               },
-               {
-                  value: '300',
-                  label: 'VP',
-               },
-               {
-                  value: '220',
-                  label: 'Director',
-               },
-               {
-                  value: '210',
-                  label: 'Experienced manager',
-               },
-               {
-                  value: '200',
-                  label: 'Manager',
-               },
-               {
-                  value: '120',
-                  label: 'Senior',
-               },
-            ],
-         },
-         {
-            key: 'functions',
-            label: 'Department',
-            kind: 'multi',
-            options: FUNCTIONS,
-            advanced: true,
-         },
-         {
-            key: 'locations',
-            label: 'Located in',
-            kind: 'words',
-            suggest: 'locations',
-            hint: 'Cities or countries, such as London or Germany.',
-            advanced: true,
-         },
-         {
-            key: 'pastTitles',
-            label: 'Past job titles',
-            kind: 'words',
-            suggest: 'titles',
-            advanced: true,
-         },
-         {
-            key: 'yearsAtCompany',
-            label: 'Years at the company',
-            kind: 'multi',
-            options: YEARS,
-            advanced: true,
-         },
-         {
-            key: 'yearsOfExperience',
-            label: 'Years of experience',
-            kind: 'multi',
-            options: YEARS,
-            advanced: true,
-         },
-         {
-            key: 'headcount',
-            label: 'Company size',
-            kind: 'multi',
-            options: HEADCOUNTS,
-            advanced: true,
-         },
-         {
-            key: 'industries',
-            label: 'Industry',
-            kind: 'search',
-            options: INDUSTRIES,
-            max: 50,
-            advanced: true,
-         },
-         {
-            key: 'changedJobs',
-            label: 'Only people who changed jobs recently',
-            kind: 'toggle',
-            advanced: true,
-         },
+         ...EMPLOYEE_FIELDS,
+         KEEP_FIELD,
       ],
    },
    'collect.jobs': {
@@ -1635,6 +1802,7 @@ const BLOCKS = {
       config: z.object({
          domains: z.array(z.string().trim().toLowerCase().min(3).max(200)).min(1).max(100),
          howMany: howMany(100, 25),
+         keep: toggle(false),
       }),
       fields: [
          {
@@ -1652,20 +1820,25 @@ const BLOCKS = {
             max: 100,
             advanced: true,
          },
+         KEEP_FIELD,
       ],
    },
    'collect.searchPeople': {
       group: 'Collect',
       unit: 'people',
-      // Searched in whole pages of 25 people.
-      estimate: node => ({
-         items: howManyOf(node),
-         costMicros: Math.ceil(howManyOf(node) / 25) * 25 * PRICE_MICROS.profile,
-      }),
+      // Searched in whole pages of 25 people: a fee for each page and a profile for each person on it.
+      estimate: node => {
+         const pages = Math.ceil(howManyOf(node) / SEARCH_PAGE_SIZE)
+
+         return {
+            items: howManyOf(node),
+            costMicros: pages * (SEARCH_PAGE_SIZE * PRICE_MICROS.profile + PRICE_MICROS.employeePage),
+         }
+      },
       previewCap: PREVIEW_LIMITS.perPost,
       label: 'Search people',
       summary: 'Finds people on LinkedIn by keywords, job title, company, place and more.',
-      costHint: 'about $0.004 per person',
+      costHint: 'about $0.004 per person plus $0.10 per 25',
       presets: [
          {
             label: 'Decision makers',
@@ -1754,6 +1927,14 @@ const BLOCKS = {
          changedJobs: toggle(false),
          postedRecently: toggle(false),
          howMany: howMany(500, 25),
+         yearsAtCompany: someOf(YEARS),
+         pastCompanies: words,
+         pastTitles: words,
+         schools: words,
+         names: words,
+         companyHQLocations: words,
+         profileLanguages: someOf(PROFILE_LANGUAGES),
+         keep: toggle(false),
       }),
       fields: [
          {
@@ -1837,6 +2018,582 @@ const BLOCKS = {
             label: 'Only people who posted recently',
             kind: 'toggle',
             advanced: true,
+         },
+         {
+            key: 'yearsAtCompany',
+            label: 'Years at their company',
+            kind: 'multi',
+            options: YEARS,
+            advanced: true,
+         },
+         {
+            key: 'pastCompanies',
+            label: 'Worked before at',
+            kind: 'words',
+            hint: 'Company names.',
+            advanced: true,
+         },
+         {
+            key: 'pastTitles',
+            label: 'Past job titles',
+            kind: 'words',
+            suggest: 'titles',
+            advanced: true,
+         },
+         {
+            key: 'schools',
+            label: 'Studied at',
+            kind: 'words',
+            hint: 'School names, such as Stanford.',
+            advanced: true,
+         },
+         {
+            key: 'names',
+            label: 'Named',
+            kind: 'words',
+            hint: 'A full name, or just a first or last name.',
+            advanced: true,
+         },
+         {
+            key: 'companyHQLocations',
+            label: 'Company headquarters in',
+            kind: 'words',
+            suggest: 'locations',
+            advanced: true,
+         },
+         {
+            key: 'profileLanguages',
+            label: 'Profile written in',
+            kind: 'multi',
+            options: PROFILE_LANGUAGES,
+            advanced: true,
+         },
+         KEEP_FIELD,
+      ],
+   },
+   'collect.profilesFromLinks': {
+      group: 'Collect',
+      unit: 'profiles',
+      estimate: node => ({
+         items: linkCount(node),
+         costMicros: linkCount(node) * PRICE_MICROS.profile,
+      }),
+      previewCap: 1,
+      validate: needsLinks('Get profiles from links'),
+      label: 'Get profiles from links',
+      summary: 'Reads the full profile of each LinkedIn profile link you paste: job, company, place and skills.',
+      costHint: 'about $0.004 per profile',
+      input: 'start',
+      output: 'profile',
+      config: z.object({
+         links: linkList(LINKS_MAX),
+         keep: toggle(true),
+      }),
+      fields: [linksField('Profile links'), KEEP_FIELD],
+   },
+   'collect.searchCompanies': {
+      group: 'Collect',
+      unit: 'companies',
+      estimate: node => ({
+         items: howManyOf(node),
+         costMicros: howManyOf(node) * PRICE_MICROS.company,
+      }),
+      previewCap: PREVIEW_LIMITS.perPost,
+      validate: node =>
+         ['query', 'locations', 'companySize', 'industries'].some(
+            key => countOf(node, key) > 0 || textOf(node, key) !== ''
+         )
+            ? []
+            : [
+                 {
+                    nodeId: node.id,
+                    level: 'error',
+                    message: 'Search companies: give keywords, a place, a size or an industry.',
+                 },
+              ],
+      label: 'Search companies',
+      summary: 'Finds companies on LinkedIn by keywords, place, size and industry, with their full company page.',
+      costHint: 'about $0.004 per company',
+      input: 'start',
+      output: 'company',
+      config: z.object({
+         query: z.string().trim().max(200).default(''),
+         locations: words,
+         companySize: someOf(HEADCOUNTS),
+         industries: someOf(INDUSTRIES, 50),
+         howMany: howMany(1_000, 10),
+         keep: toggle(true),
+      }),
+      fields: [
+         {
+            key: 'query',
+            label: 'Keywords',
+            kind: 'text',
+            placeholder: 'fintech startup',
+         },
+         {
+            key: 'locations',
+            label: 'Located in',
+            kind: 'words',
+            suggest: 'locations',
+            hint: 'Cities or countries, such as London or Germany.',
+         },
+         {
+            key: 'howMany',
+            label: 'How many companies',
+            kind: 'int',
+            min: 1,
+            max: 1_000,
+         },
+         {
+            key: 'companySize',
+            label: 'Company size',
+            kind: 'multi',
+            options: HEADCOUNTS,
+            advanced: true,
+         },
+         {
+            key: 'industries',
+            label: 'Industry',
+            kind: 'search',
+            options: INDUSTRIES,
+            max: 50,
+            advanced: true,
+         },
+         KEEP_FIELD,
+      ],
+   },
+   'collect.companiesFromLinks': {
+      group: 'Collect',
+      unit: 'companies',
+      estimate: node => ({
+         items: linkCount(node),
+         costMicros: linkCount(node) * PRICE_MICROS.company,
+      }),
+      previewCap: 1,
+      validate: needsLinks('Get companies from links'),
+      label: 'Get companies from links',
+      summary: 'Reads the full company page of each LinkedIn company link you paste.',
+      costHint: 'about $0.004 per company',
+      input: 'start',
+      output: 'company',
+      config: z.object({
+         links: linkList(LINKS_MAX),
+         keep: toggle(true),
+      }),
+      fields: [linksField('Company links'), KEEP_FIELD],
+   },
+   'collect.postsFromLinks': {
+      group: 'Collect',
+      unit: 'posts per link',
+      estimate: perLinkEstimate(PRICE_MICROS.engagement),
+      previewCap: PREVIEW_LIMITS.posts,
+      validate: needsLinks('Get posts from links'),
+      label: 'Get posts from links',
+      summary: 'The recent posts behind each link you paste: a profile, a company, a post or a feed.',
+      costHint: 'about $0.002 per post',
+      input: 'start',
+      output: 'post',
+      config: z.object({
+         links: linkList(LINKS_MAX),
+         howMany: howMany(100, 10),
+         postedWithin: oneOf(POST_AGES, 'any'),
+         includeReposts: toggle(true),
+         includeQuotePosts: toggle(false),
+         keep: toggle(true),
+      }),
+      fields: [
+         linksField('Links', 'Profiles, companies, posts or feeds on LinkedIn.'),
+         {
+            key: 'howMany',
+            label: 'How many posts per link',
+            kind: 'int',
+            min: 1,
+            max: 100,
+         },
+         {
+            key: 'postedWithin',
+            label: 'Posted within',
+            kind: 'select',
+            options: POST_AGES,
+            advanced: true,
+         },
+         {
+            key: 'includeReposts',
+            label: 'Include reposts',
+            kind: 'toggle',
+            advanced: true,
+         },
+         {
+            key: 'includeQuotePosts',
+            label: 'Include quote posts',
+            kind: 'toggle',
+            advanced: true,
+         },
+         KEEP_FIELD,
+      ],
+   },
+   'collect.employeesFromLinks': {
+      group: 'Collect',
+      unit: 'per company',
+      estimate: node => ({
+         items: linkCount(node) * howManyOf(node),
+         costMicros:
+            linkCount(node) *
+            (howManyOf(node) * PRICE_MICROS.profile +
+               Math.ceil(howManyOf(node) / EMPLOYEE_PAGE) * PRICE_MICROS.employeePage),
+      }),
+      previewCap: PREVIEW_LIMITS.perPost,
+      validate: needsLinks('People at companies from links'),
+      label: 'People at companies from links',
+      summary: 'People who work at each company link you paste, with their full profile.',
+      costHint: 'about $0.004 per person plus $0.10 per 25',
+      input: 'start',
+      output: 'profile',
+      config: z.object({
+         links: linkList(LINKS_MAX),
+         howMany: howMany(500, 10),
+         ...EMPLOYEE_FILTERS,
+         keep: toggle(true),
+      }),
+      fields: [
+         linksField('Company links'),
+         {
+            key: 'howMany',
+            label: 'How many people per company',
+            kind: 'int',
+            min: 1,
+            max: 500,
+         },
+         ...EMPLOYEE_FIELDS,
+         KEEP_FIELD,
+      ],
+   },
+   'collect.searchJobs': {
+      group: 'Collect',
+      unit: 'jobs',
+      estimate: node => ({
+         items: howManyOf(node),
+         costMicros: howManyOf(node) * PRICE_MICROS.job,
+      }),
+      previewCap: 10,
+      validate: node =>
+         textOf(node, 'jobTitles') === ''
+            ? [
+                 {
+                    nodeId: node.id,
+                    level: 'error',
+                    message: 'Search job postings: give the job title to look for.',
+                 },
+              ]
+            : [],
+      label: 'Search job postings',
+      summary: 'Finds open job postings on LinkedIn, with the company behind each, a reason to reach out now.',
+      costHint: 'about $0.001 per job',
+      input: 'start',
+      output: 'job',
+      config: z.object({
+         jobTitles: z.string().trim().max(200).default(''),
+         howMany: howMany(500, 10),
+         locations: z.string().trim().max(200).default(''),
+         companies: z.array(z.string().trim().min(1).max(200)).max(10).default([]),
+         workplaceType: someOf(WORKPLACES.filter(({ value }) => value !== 'any')),
+         employmentType: someOf(EMPLOYMENT.filter(({ value }) => value !== 'any')),
+         experienceLevel: someOf(EXPERIENCE.filter(({ value }) => value !== 'any')),
+         salary: someOf(JOB_SALARIES),
+         postedWithin: oneOf(JOB_AGES, 'any'),
+         sortBy: oneOf(SORTS, 'relevance'),
+         industries: someOf(INDUSTRIES, 20),
+         easyApply: toggle(false),
+         fewApplicants: toggle(false),
+         keep: toggle(true),
+      }),
+      fields: [
+         {
+            key: 'jobTitles',
+            label: 'Job title',
+            kind: 'text',
+            placeholder: 'product manager',
+         },
+         {
+            key: 'locations',
+            label: 'Located in',
+            kind: 'text',
+            placeholder: 'London',
+         },
+         {
+            key: 'howMany',
+            label: 'How many jobs',
+            kind: 'int',
+            min: 1,
+            max: 500,
+         },
+         {
+            key: 'companies',
+            label: 'Only at these companies',
+            kind: 'words',
+            hint: 'Company names, up to 10.',
+            advanced: true,
+         },
+         {
+            key: 'workplaceType',
+            label: 'Where the work happens',
+            kind: 'multi',
+            options: WORKPLACES.filter(({ value }) => value !== 'any'),
+            advanced: true,
+         },
+         {
+            key: 'employmentType',
+            label: 'Kind of job',
+            kind: 'multi',
+            options: EMPLOYMENT.filter(({ value }) => value !== 'any'),
+            advanced: true,
+         },
+         {
+            key: 'experienceLevel',
+            label: 'Experience level',
+            kind: 'multi',
+            options: EXPERIENCE.filter(({ value }) => value !== 'any'),
+            advanced: true,
+         },
+         {
+            key: 'salary',
+            label: 'Pays at least',
+            kind: 'multi',
+            options: JOB_SALARIES,
+            advanced: true,
+         },
+         {
+            key: 'postedWithin',
+            label: 'Posted within',
+            kind: 'select',
+            options: JOB_AGES,
+            advanced: true,
+         },
+         {
+            key: 'sortBy',
+            label: 'Show first',
+            kind: 'select',
+            options: SORTS,
+            advanced: true,
+         },
+         {
+            key: 'industries',
+            label: 'Industry',
+            kind: 'search',
+            options: INDUSTRIES,
+            max: 20,
+            advanced: true,
+         },
+         {
+            key: 'easyApply',
+            label: 'Only jobs with Easy Apply',
+            kind: 'toggle',
+            advanced: true,
+         },
+         {
+            key: 'fewApplicants',
+            label: 'Only jobs with under 10 applicants',
+            kind: 'toggle',
+            advanced: true,
+         },
+         KEEP_FIELD,
+      ],
+   },
+   'collect.emailsFromLinks': {
+      group: 'Collect',
+      unit: 'emails',
+      estimate: node => ({
+         items: linkCount(node),
+         costMicros: linkCount(node) * PRICE_MICROS.email,
+      }),
+      previewCap: 1,
+      validate: needsLinks('Find work emails'),
+      label: 'Find work emails',
+      summary: 'Finds the verified work email of each LinkedIn profile link you paste.',
+      costHint: 'about $0.02 per email found',
+      input: 'start',
+      output: 'profile',
+      config: z.object({
+         links: linkList(LINKS_MAX),
+         keep: toggle(true),
+      }),
+      fields: [linksField('Profile links'), KEEP_FIELD],
+   },
+   'collect.commentersFromLinks': {
+      group: 'Collect',
+      unit: 'per post',
+      estimate: perLinkEstimate(PRICE_MICROS.engagement),
+      previewCap: PREVIEW_LIMITS.perPost,
+      validate: needsLinks('Commenters from post links'),
+      label: 'Commenters from post links',
+      summary: 'The people who commented on each post link you paste, with what they wrote.',
+      costHint: 'about $0.002 per comment',
+      input: 'start',
+      output: 'profile',
+      config: z.object({
+         links: linkList(LINKS_MAX),
+         howMany: howMany(500, 10),
+         postedWithin: oneOf(COMMENT_AGES, 'any'),
+         includeReplies: toggle(false),
+         keep: toggle(false),
+      }),
+      fields: [
+         linksField('Post links'),
+         {
+            key: 'howMany',
+            label: 'How many comments per post',
+            kind: 'int',
+            min: 1,
+            max: 500,
+         },
+         {
+            key: 'postedWithin',
+            label: 'Only comments from',
+            kind: 'select',
+            options: COMMENT_AGES,
+            advanced: true,
+         },
+         {
+            key: 'includeReplies',
+            label: 'Also people who replied to a comment',
+            kind: 'toggle',
+            advanced: true,
+         },
+         KEEP_FIELD,
+      ],
+   },
+   'collect.reactorsFromLinks': {
+      group: 'Collect',
+      unit: 'per post',
+      estimate: perLinkEstimate(PRICE_MICROS.engagement),
+      previewCap: PREVIEW_LIMITS.perPost,
+      validate: needsLinks('Reactors from post links'),
+      label: 'Reactors from post links',
+      summary: 'The people who reacted to each post link you paste.',
+      costHint: 'about $0.002 per reaction',
+      input: 'start',
+      output: 'profile',
+      config: z.object({
+         links: linkList(LINKS_MAX),
+         howMany: howMany(500, 10),
+         reactionType: oneOf(REACTION_TYPES, 'any'),
+         keep: toggle(false),
+      }),
+      fields: [
+         linksField('Post links'),
+         {
+            key: 'howMany',
+            label: 'How many reactions per post',
+            kind: 'int',
+            min: 1,
+            max: 500,
+         },
+         {
+            key: 'reactionType',
+            label: 'Only this reaction',
+            kind: 'select',
+            options: REACTION_TYPES,
+            advanced: true,
+         },
+         KEEP_FIELD,
+      ],
+   },
+   'collect.profileCommentsFromLinks': {
+      group: 'Collect',
+      unit: 'per person',
+      estimate: perLinkEstimate(PRICE_MICROS.engagement),
+      previewCap: PREVIEW_LIMITS.posts,
+      validate: needsLinks('Comments by profile links'),
+      label: 'Comments by profile links',
+      summary: 'The posts each profile link you paste recently commented on.',
+      costHint: 'about $0.002 per comment',
+      input: 'start',
+      output: 'post',
+      config: z.object({
+         links: linkList(LINKS_MAX),
+         howMany: howMany(50, 10),
+         postedWithin: oneOf(COMMENT_AGES, 'any'),
+         keep: toggle(true),
+      }),
+      fields: [
+         linksField('Profile links'),
+         {
+            key: 'howMany',
+            label: 'How many comments per person',
+            kind: 'int',
+            min: 1,
+            max: 50,
+         },
+         {
+            key: 'postedWithin',
+            label: 'Only from',
+            kind: 'select',
+            options: COMMENT_AGES,
+            advanced: true,
+         },
+         KEEP_FIELD,
+      ],
+   },
+   'collect.profileReactionsFromLinks': {
+      group: 'Collect',
+      unit: 'per person',
+      estimate: perLinkEstimate(PRICE_MICROS.engagement),
+      previewCap: PREVIEW_LIMITS.posts,
+      validate: needsLinks('Reactions by profile links'),
+      label: 'Reactions by profile links',
+      summary: 'The posts each profile link you paste recently reacted to.',
+      costHint: 'about $0.002 per reaction',
+      input: 'start',
+      output: 'post',
+      config: z.object({
+         links: linkList(LINKS_MAX),
+         howMany: howMany(50, 10),
+         postedWithin: oneOf(COMMENT_AGES, 'any'),
+         keep: toggle(true),
+      }),
+      fields: [
+         linksField('Profile links'),
+         {
+            key: 'howMany',
+            label: 'How many reactions per person',
+            kind: 'int',
+            min: 1,
+            max: 50,
+         },
+         {
+            key: 'postedWithin',
+            label: 'Only from',
+            kind: 'select',
+            options: COMMENT_AGES,
+            advanced: true,
+         },
+         KEEP_FIELD,
+      ],
+   },
+   'collect.adsFromLinks': {
+      group: 'Collect',
+      unit: 'ads per link',
+      estimate: perLinkEstimate(PRICE_MICROS.ad),
+      previewCap: PREVIEW_LIMITS.perPost,
+      validate: needsLinks('Ads from links'),
+      label: 'Ads from links',
+      summary: 'The ads a company runs on LinkedIn: copy, link, format and dates, from its Ad Library or company link.',
+      costHint: 'about $0.002 per ad',
+      input: 'start',
+      output: 'ad',
+      config: z.object({
+         links: linkList(LINKS_MAX),
+         howMany: howMany(200, 10),
+      }),
+      fields: [
+         linksField('Ad Library or company links', 'Paste a LinkedIn Ad Library link or a company link.'),
+         {
+            key: 'howMany',
+            label: 'How many ads per link',
+            kind: 'int',
+            min: 1,
+            max: 200,
          },
       ],
    },
@@ -1937,7 +2694,8 @@ const BLOCKS = {
       group: 'Logic',
       flags: { keepsAside: true },
       label: 'If',
-      summary: 'Passes on the people who match; connect an Else after it for the rest.',
+      summary:
+         'Passes on the people who match. Draw a line from its orange Else dot, or add an Else block, for the rest.',
       input: 'profile',
       output: 'profile',
       config: z.object({
@@ -2660,6 +3418,8 @@ export const graphSchema = z.object({
             type: z.enum(BLOCK_TYPES),
             // The version of the block the settings were saved for; absent means 1.
             version: z.number().int().min(1).optional(),
+            // Switched off: the block does no work and passes on what reaches it (see `isOff`).
+            disabled: z.boolean().optional(),
             config: configSchema.default({}),
             position: z.object({
                x: z.number(),
@@ -2728,6 +3488,9 @@ export const upgradeGraph = (graph: Graph): Graph => ({
 })
 
 export const isTrigger = (type: BlockType) => BLOCKS[type].input === null
+
+// A block the owner switched off. A trigger cannot be: the workflow's own switch stops it.
+export const isOff = (node: { type: BlockType; disabled?: boolean }) => node.disabled === true && !isTrigger(node.type)
 
 const parentsOf = (graph: Graph, id: string) => graph.edges.filter(edge => edge.to === id).map(edge => edge.from)
 
@@ -3076,7 +3839,7 @@ export const validateGraph = (graph: Graph): GraphError[] => {
       })
    }
 
-   problems.push(...graph.nodes.flatMap(configErrors), ...edgeNotes(graph, byId))
+   problems.push(...graph.nodes.filter(node => !isOff(node)).flatMap(configErrors), ...edgeNotes(graph, byId))
 
    for (const edge of graph.edges) {
       const from = byId.get(edge.from)
@@ -3095,6 +3858,12 @@ export const validateGraph = (graph: Graph): GraphError[] => {
    }
 
    for (const node of graph.nodes) {
+      if (isOff(node)) {
+         note(`${BLOCKS[node.type].label} is switched off, so it passes everything on without running.`, node.id)
+
+         continue
+      }
+
       if (!isTrigger(node.type) && BLOCKS[node.type].input !== 'start' && parentsOf(graph, node.id).length === 0) {
          note(`${BLOCKS[node.type].label} has nothing before it, so it gets nothing.`, node.id)
       }
@@ -3156,6 +3925,12 @@ const countOf = (node: GraphNode, key: string) => {
    return Array.isArray(value) ? value.length : 0
 }
 
+const textOf = (node: GraphNode, key: string) => {
+   const value = settingsOf(node)[key]
+
+   return typeof value === 'string' ? value : ''
+}
+
 // How many items reach each input block now, after its filters; the per-kind totals are used when a block is missing.
 export type Available = { posts: number; profiles: number; companies: number; byNode?: Record<string, number> }
 
@@ -3171,7 +3946,7 @@ const reaching = (node: GraphNode, available: Available, total: number) => avail
 // What one block passes on and costs at most, given how many items reach it. A block with no estimate passes on what
 // reaches it for free; triggers start with nothing, and what another workflow passes on is not known before it runs.
 const blockEstimate = (node: GraphNode, incoming: number, available: Available) =>
-   blockOf(node.type).estimate?.(node, incoming, available) ?? {
+   (isOff(node) ? undefined : blockOf(node.type).estimate?.(node, incoming, available)) ?? {
       items: isTrigger(node.type) ? 0 : incoming,
       costMicros: 0,
    }
@@ -3234,9 +4009,13 @@ export const previewGraph = (graph: Graph): Graph => ({
               ...node,
               config: {
                  ...node.config,
-                 howMany: Math.min(howManyOf(node), cap),
-                 // A preview never reads "all".
+                 // Only a block that has a "how many" is given one.
+                 ...(typeof settingsOf(node).howMany === 'number' ? { howMany: Math.min(howManyOf(node), cap) } : {}),
+                 // A preview never reads "all", and a block that pays for each pasted link reads only the first.
                  ...(node.config.all === true ? { all: false } : {}),
+                 ...(blockOf(node.type).group === 'Collect' && Array.isArray(node.config.links)
+                    ? { links: node.config.links.slice(0, PREVIEW_LIMITS.posts) }
+                    : {}),
               },
            }
    }),

@@ -132,6 +132,8 @@ export {
 } from './taskErrors'
 export { PersonService } from './person.service'
 export { PersonSnapshotService, RECENT_DAYS } from './personSnapshot.service'
+export { CollectKeepService, COMPANY_REMEMBER_DAYS, EMAIL_REMEMBER_DAYS, type Kept } from './collectKeep.service'
+export { CollectCacheService } from './collectCache.service'
 export { CompanyPageService } from './companyPage.service'
 export { DataReadService, type ReadClient } from './dataRead.service'
 export { PostPageService } from './postPage.service'

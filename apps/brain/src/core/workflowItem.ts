@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { type PostSnapshotData, postSchema } from './pageSnapshot'
+import { type CompanySnapshotData, type PostSnapshotData, companySchema, postSchema } from './pageSnapshot'
 
 // What flows between workflow steps and is saved per step. Only the minimal person fields are kept.
 
@@ -35,6 +35,8 @@ export type PersonItem = {
    // Came from the owner's own /profiles, so the Seen set lets the person through.
    known: boolean
    tags: string[]
+   // A work email found for the person.
+   email?: string | null
 }
 
 export type PostItem = {
@@ -56,9 +58,42 @@ export type CompanyItem = {
    name: string | null
    // Open roles found for the company.
    hiring: string[]
+   // The company page as the run read it, when a block found it.
+   preview?: CompanySnapshotData | null
 }
 
-export type WorkflowItemData = PersonItem | PostItem | CompanyItem
+// A job posting a search found; it belongs to a company when LinkedIn names one.
+export type JobItem = {
+   kind: 'job'
+   // LinkedIn's job id.
+   slug: string
+   url: string
+   title: string | null
+   company: string | null
+   companySlug: string | null
+   location: string | null
+   posted: string | null
+   workplace: string | null
+   employment: string | null
+   applicants: number | null
+   salary: string | null
+}
+
+// An ad a company runs; kept in the run only.
+export type AdItem = {
+   kind: 'ad'
+   slug: string
+   url: string
+   advertiser: string | null
+   headline: string | null
+   body: string | null
+   format: string | null
+   started: string | null
+   ended: string | null
+   clickUrl: string | null
+}
+
+export type WorkflowItemData = PersonItem | PostItem | CompanyItem | JobItem | AdItem
 
 export const EXCERPT_LENGTH = 140
 
@@ -91,6 +126,7 @@ export const mergePeople = (a: PersonItem, b: PersonItem): PersonItem => ({
    followers: a.followers ?? b.followers,
    title: a.title ?? b.title,
    company: a.company ?? b.company,
+   email: a.email ?? b.email,
    known: a.known || b.known,
    tags: [...new Set([...a.tags, ...b.tags])],
    signals: [...a.signals, ...b.signals.filter(signal => !a.signals.some(known => sameSignal(known, signal)))],
@@ -137,6 +173,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       // Items saved before Phase 3 have neither.
       known: z.boolean().default(false),
       tags: z.array(z.string()).default([]),
+      email: nullableText.optional(),
    }),
    z.object({
       kind: z.literal('post'),
@@ -152,6 +189,33 @@ const itemSchema = z.discriminatedUnion('kind', [
       url: z.string(),
       name: nullableText,
       hiring: z.array(z.string()),
+      preview: companySchema.nullable().optional(),
+   }),
+   z.object({
+      kind: z.literal('job'),
+      slug: z.string(),
+      url: z.string(),
+      title: nullableText,
+      company: nullableText,
+      companySlug: nullableText,
+      location: nullableText,
+      posted: nullableText,
+      workplace: nullableText,
+      employment: nullableText,
+      applicants: z.number().nullable(),
+      salary: nullableText,
+   }),
+   z.object({
+      kind: z.literal('ad'),
+      slug: z.string(),
+      url: z.string(),
+      advertiser: nullableText,
+      headline: nullableText,
+      body: nullableText,
+      format: nullableText,
+      started: nullableText,
+      ended: nullableText,
+      clickUrl: nullableText,
    }),
 ])
 

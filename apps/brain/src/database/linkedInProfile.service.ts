@@ -41,6 +41,8 @@ const profileSelect = {
    tags: true,
    status: true,
    archivedAt: true,
+   // A work email a workflow found.
+   email: true,
    createdAt: true,
    updatedAt: true,
    // The latest visit an account of the owner made to this person that was asked for or went through (.plan/visit-profile-task.md).
@@ -71,6 +73,79 @@ const updateOwned = (userId: string, id: string, data: Prisma.LinkedInProfileUpd
    )
 
 export class LinkedInProfileService {
+   // Fills what the owner left empty from what a workflow found; a value already there is never overwritten.
+   public static async fillDetails(
+      userId: string,
+      people: {
+         slug: string
+         name: string | null
+         headline: string | null
+         company: string | null
+         location: string | null
+         email?: string | null
+      }[]
+   ) {
+      const table = PrismaService.client.linkedInProfile
+
+      for (const { slug, name, headline, company, location, email } of people) {
+         const where = {
+            userId,
+            slug,
+         }
+
+         await Promise.all([
+            name
+               ? table.updateMany({
+                    where: {
+                       ...where,
+                       fullName: null,
+                    },
+                    data: { fullName: name },
+                 })
+               : null,
+            headline
+               ? table.updateMany({
+                    where: {
+                       ...where,
+                       headline: null,
+                    },
+                    data: { headline },
+                 })
+               : null,
+            company
+               ? table.updateMany({
+                    where: {
+                       ...where,
+                       company: null,
+                    },
+                    data: { company },
+                 })
+               : null,
+            location
+               ? table.updateMany({
+                    where: {
+                       ...where,
+                       location: null,
+                    },
+                    data: { location },
+                 })
+               : null,
+            email
+               ? table.updateMany({
+                    where: {
+                       ...where,
+                       email: null,
+                    },
+                    data: {
+                       email,
+                       emailFoundAt: new Date(),
+                    },
+                 })
+               : null,
+         ])
+      }
+   }
+
    // New links get the labels; links already saved get them added to theirs.
    public static async addMany(userId: string, profiles: LinkedInLink[], labels: string[] = []) {
       const table = PrismaService.client.linkedInProfile

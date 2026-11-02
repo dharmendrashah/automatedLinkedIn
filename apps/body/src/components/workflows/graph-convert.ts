@@ -20,6 +20,8 @@ export type BlockData = {
    // An error stops a run; a note only explains.
    invalid: boolean
    noted: boolean
+   // Switched off: it passes everything on without running.
+   disabled?: boolean
    // Shown with a run that does not have this block: it was added after the run started.
    faded: boolean
    icpName?: string
@@ -53,6 +55,8 @@ const KIND_WORDS = {
    post: 'posts',
    profile: 'people',
    company: 'companies',
+   job: 'job postings',
+   ad: 'ads',
 } as const
 
 export const blockOf = (catalog: Block[], type: string) => catalog.find(block => block.type === type)
@@ -135,6 +139,7 @@ export const toFlow = (
                     block,
                     config: node.config,
                     version: node.version,
+                    disabled: node.disabled,
                     step: stepOf.get(node.id) ?? null,
                     invalid: extras.invalid?.has(node.id) ?? false,
                     noted: extras.noted?.has(node.id) ?? false,
@@ -171,6 +176,7 @@ export const toGraph = (nodes: FlowNode[], edges: Edge[], loopRounds?: number): 
       id: node.id,
       type: node.data.block.type,
       ...(node.data.version === undefined ? {} : { version: node.data.version }),
+      ...(node.data.disabled ? { disabled: true } : {}),
       config: node.data.config,
       position: {
          x: Math.round(node.position.x),
@@ -227,6 +233,10 @@ export const newNodeId = (type: string, nodes: { id: string }[]) => {
    return `${base}-${index}`
 }
 
+// The blocks that had no "keep" box and a bigger "how many" before 2026-11-02. Blocks saved before keep both; a block added
+// now starts with keep on and 10. The blocks added with them start that way by themselves.
+const KEEPING_BLOCKS = new Set(['collect.searchPeople', 'collect.findPosts', 'collect.employees', 'collect.domainLookup'])
+
 // What a new block starts with: a schedule and "added today" use the owner's time zone, input blocks take all that match,
 // and profiles and companies take only new ones. Blocks saved before keep their number and every status.
 export const startConfig = (type: string, timeZone: string = browserTimeZone()): GraphNode['config'] => {
@@ -242,6 +252,19 @@ export const startConfig = (type: string, timeZone: string = browserTimeZone()):
       return {
          timeZone,
          all: true,
+      }
+   }
+
+   // Get full profile has no "how many"; it starts with its tick on.
+   if (type === 'collect.profile') {
+      return { keep: true }
+   }
+
+   // Blocks that can keep what they find in the owner's lists start with that on and with 10; saved blocks keep theirs.
+   if (KEEPING_BLOCKS.has(type)) {
+      return {
+         keep: true,
+         howMany: 10,
       }
    }
 

@@ -404,6 +404,17 @@ const Editor = ({
             setSelectedId(current => (current === nodeId ? null : current))
             setOpenId(current => (current === nodeId ? null : current))
          },
+         toggleOff: (nodeId: string) => {
+            setHistory(current =>
+               record(current, {
+                  ...current.present,
+                  nodes: current.present.nodes.map(node =>
+                     node.id === nodeId ? { ...node, data: { ...node.data, disabled: !node.data.disabled } } : node
+                  ),
+               })
+            )
+            setDirty(true)
+         },
          removeEdge: (edgeId: string) => {
             setHistory(current =>
                record(current, {

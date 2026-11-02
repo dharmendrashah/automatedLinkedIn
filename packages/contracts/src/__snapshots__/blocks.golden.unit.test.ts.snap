@@ -16,6 +16,7 @@ exports[`blocks before they became one definition > should keep the sets of bloc
   "takesAnything": [
     "account.select",
     "account.writePost",
+    "collect.profile",
     "logic.retry",
     "logic.runWorkflow",
     "logic.stop",
@@ -95,7 +96,7 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 5,
     },
     "preview": {
-      "howMany": 0,
+      "howMany": 500,
     },
     "sized": {
       "costMicros": 0,
@@ -109,7 +110,7 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 9,
     },
     "preview": {
-      "howMany": 0,
+      "howMany": 500,
     },
     "sized": {
       "costMicros": 0,
@@ -123,7 +124,7 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 5,
     },
     "preview": {
-      "howMany": 0,
+      "howMany": 500,
     },
     "sized": {
       "costMicros": 0,
@@ -137,7 +138,7 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 0,
     },
     "preview": {
-      "howMany": 0,
+      "howMany": 500,
     },
     "sized": {
       "costMicros": 0,
@@ -151,7 +152,7 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 45,
     },
     "preview": {
-      "howMany": 0,
+      "howMany": 500,
     },
     "sized": {
       "costMicros": 126000,
@@ -165,7 +166,7 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 45,
     },
     "preview": {
-      "howMany": 0,
+      "howMany": 500,
     },
     "sized": {
       "costMicros": 126000,
@@ -179,7 +180,7 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 180,
     },
     "preview": {
-      "howMany": 0,
+      "howMany": 500,
     },
     "sized": {
       "costMicros": 252000,
@@ -207,7 +208,7 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 9,
     },
     "preview": {
-      "howMany": 0,
+      "howMany": 500,
     },
     "sized": {
       "costMicros": 0,
@@ -221,7 +222,7 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 0,
     },
     "preview": {
-      "howMany": 0,
+      "howMany": 500,
     },
     "sized": {
       "costMicros": 8000,
@@ -231,14 +232,14 @@ exports[`blocks before they became one definition > should keep what every block
   },
   {
     "plain": {
-      "costMicros": 100000,
+      "costMicros": 200000,
       "items": 25,
     },
     "preview": {
       "howMany": 20,
     },
     "sized": {
-      "costMicros": 100000,
+      "costMicros": 200000,
       "items": 7,
     },
     "type": "collect.searchPeople",
@@ -270,6 +271,174 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 63,
     },
     "type": "collect.reactors",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "collect.profilesFromLinks",
+  },
+  {
+    "plain": {
+      "costMicros": 40000,
+      "items": 10,
+    },
+    "preview": {
+      "howMany": 20,
+    },
+    "sized": {
+      "costMicros": 28000,
+      "items": 7,
+    },
+    "type": "collect.searchCompanies",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "collect.companiesFromLinks",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "collect.postsFromLinks",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 20,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "collect.employeesFromLinks",
+  },
+  {
+    "plain": {
+      "costMicros": 10000,
+      "items": 10,
+    },
+    "preview": {
+      "howMany": 10,
+    },
+    "sized": {
+      "costMicros": 7000,
+      "items": 7,
+    },
+    "type": "collect.searchJobs",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "collect.emailsFromLinks",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 20,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "collect.commentersFromLinks",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 20,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "collect.reactorsFromLinks",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "collect.profileCommentsFromLinks",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "collect.profileReactionsFromLinks",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "collect.adsFromLinks",
   },
   {
     "plain": {
@@ -1454,7 +1623,7 @@ exports[`blocks before they became one definition > should keep what every templ
           "items": 50,
         },
         "search": {
-          "costMicros": 200000,
+          "costMicros": 400000,
           "items": 50,
         },
         "trigger": {
@@ -1462,7 +1631,7 @@ exports[`blocks before they became one definition > should keep what every templ
           "items": 0,
         },
       },
-      "totalMicros": 200000,
+      "totalMicros": 400000,
     },
     "goal": "decisionMakers",
     "preview": {
@@ -2029,7 +2198,7 @@ exports[`blocks before they became one definition > should keep what every templ
           "items": 25,
         },
         "search": {
-          "costMicros": 100000,
+          "costMicros": 200000,
           "items": 25,
         },
         "send": {
@@ -2041,7 +2210,7 @@ exports[`blocks before they became one definition > should keep what every templ
           "items": 0,
         },
       },
-      "totalMicros": 100000,
+      "totalMicros": 200000,
     },
     "goal": "newInJob",
     "preview": {

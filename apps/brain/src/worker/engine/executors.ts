@@ -3,6 +3,7 @@ import { z } from 'zod'
 import {
    type CompanyItem,
    type PersonItem,
+   type PersonSnapshotData,
    type PostItem,
    type WorkflowItemData,
    expandShortPostLink,
@@ -15,8 +16,13 @@ import {
 } from 'core'
 
 import {
+   COMPANY_REMEMBER_DAYS,
+   CollectCacheService,
+   CollectKeepService,
+   EMAIL_REMEMBER_DAYS,
    InputPickService,
    type InputType,
+   type Kept,
    LinkedInCompanyService,
    LinkedInPostService,
    LinkedInProfileService,
@@ -34,22 +40,31 @@ import {
    type GraphNode,
    inputPickOf,
    inputTake,
+   keepLabelOf,
    portKey,
    portOfEdge,
 } from '@automatedLinkedIn/contracts'
 
 import {
    ENRICH_BATCH,
+   adsFrom,
+   adsParams,
    cardFromSnapshot,
    commentersFrom,
    commentersParams,
+   companiesFrom,
    companiesFromDomains,
+   companiesLinksParams,
    domainParams,
+   emailsFrom,
+   emailsParams,
    employeesFrom,
    employeesParams,
    engagedParams,
    findPostsParams,
    hiringFrom,
+   jobPostingsFrom,
+   jobPostingsParams,
    jobsParams,
    postsFrom,
    postsOfParams,
@@ -58,13 +73,16 @@ import {
    profilesParams,
    reactorsFrom,
    reactorsParams,
+   searchCompaniesParams,
    searchPeopleParams,
    searchedPeopleFrom,
 } from '../data/operations'
 import {
    type Context,
    DAY_MS,
+   type Request,
    type StepResult,
+   Waiting,
    collectEach,
    companiesOf,
    configOf,
@@ -289,6 +307,66 @@ const engagement = (ctx: Context, kind: 'commenters' | 'reactors') => {
    )
 }
 
+type Executor = (ctx: Context) => Promise<StepResult>
+type Row = Record<string, unknown>
+
+// Whether the block keeps what it finds in the owner's lists and remembers it. A preview keeps nothing.
+const keeps = (ctx: Context) => configOf(ctx.node).keep === true && !ctx.preview
+
+// Whether the block reads again what was read in the last 30 days.
+const rereads = (ctx: Context) => configOf(ctx.node).reread === true
+
+// A request whose items are kept for a week when the block keeps what it finds: the same request asked again gives them
+// back for nothing. `save` writes items into the step's output.
+const remembering = (
+   ctx: Context,
+   spec: {
+      inputKey: string
+      slug: string
+      params: Record<string, unknown>
+      map: (rows: Row[]) => WorkflowItemData[]
+      save: (items: WorkflowItemData[]) => Promise<unknown>
+      // What else a finished request stores, such as the full profiles it came with.
+      also?: (rows: Row[]) => Promise<void>
+   }
+): Request => ({
+   inputKey: spec.inputKey,
+   slug: spec.slug,
+   params: spec.params,
+   recall: async () => {
+      const items = keeps(ctx) ? await CollectCacheService.find(ctx.run.userId, spec.slug, spec.params) : null
+
+      if (!items) {
+         return false
+      }
+
+      await spec.save(items)
+
+      return true
+   },
+   use: async rows => {
+      const items = spec.map(rows)
+
+      await spec.save(items)
+
+      if (keeps(ctx)) {
+         await spec.also?.(rows)
+         await CollectCacheService.put(ctx.run.userId, spec.slug, spec.params, items)
+      }
+   },
+})
+
+const seed = (ctx: Context) => (items: WorkflowItemData[]) => WorkflowRunService.seedItems(ctx.at, items)
+
+const mergeIn = (ctx: Context) => (items: WorkflowItemData[]) => WorkflowRunService.mergePeople(ctx.at, peopleOf(items))
+
+// Full profiles that came with a search are kept, so reading them later is not paid for again.
+const rememberProfiles = (ctx: Context) => async (rows: Row[]) => {
+   for (const [slug, row] of profileRowsFrom(rows)) {
+      await PersonSnapshotService.save(ctx.run.userId, slug, snapshotFrom(row))
+   }
+}
+
 const savePosts = (ctx: Context) => async (rows: Record<string, unknown>[]) => {
    await WorkflowRunService.seedItems(ctx.at, postsFrom(rows))
 }
@@ -297,7 +375,7 @@ const findPosts = (ctx: Context) => {
    const config = configOf(ctx.node)
 
    return collectEach(ctx, [
-      {
+      remembering(ctx, {
          inputKey: 'search',
          slug: 'posts',
          params: findPostsParams({
@@ -311,8 +389,9 @@ const findPosts = (ctx: Context) => {
             authors: wordsIn(config, 'authors'),
             mentioning: wordsIn(config, 'mentioning'),
          }),
-         use: savePosts(ctx),
-      },
+         map: postsFrom,
+         save: seed(ctx),
+      }),
    ])
 }
 
@@ -373,14 +452,16 @@ const employees = (ctx: Context) => {
 
    return collectEach(
       ctx,
-      companiesOf(ctx.inputs).map(company => ({
-         inputKey: company.slug,
-         slug: 'company-employees',
-         params: employeesParams(company, settings),
-         use: async rows => {
-            await WorkflowRunService.mergePeople(ctx.at, employeesFrom(rows, company))
-         },
-      }))
+      companiesOf(ctx.inputs).map(company =>
+         remembering(ctx, {
+            inputKey: company.slug,
+            slug: 'company-employees',
+            params: employeesParams(company, settings),
+            map: rows => employeesFrom(rows, company),
+            save: mergeIn(ctx),
+            also: rememberProfiles(ctx),
+         })
+      )
    )
 }
 
@@ -441,14 +522,13 @@ const domainLookup = (ctx: Context) => {
    const config = configOf(ctx.node)
 
    return collectEach(ctx, [
-      {
+      remembering(ctx, {
          inputKey: 'lookup',
          slug: 'domain-lookup',
          params: domainParams(wordsIn(config, 'domains'), numberIn(config, 'howMany')),
-         use: async rows => {
-            await WorkflowRunService.seedItems(ctx.at, companiesFromDomains(rows))
-         },
-      },
+         map: companiesFromDomains,
+         save: seed(ctx),
+      }),
    ])
 }
 
@@ -456,7 +536,7 @@ const searchPeople = (ctx: Context) => {
    const config = configOf(ctx.node)
 
    return collectEach(ctx, [
-      {
+      remembering(ctx, {
          inputKey: 'search',
          slug: 'profiles',
          params: searchPeopleParams({
@@ -472,28 +552,37 @@ const searchPeople = (ctx: Context) => {
             changedJobs: config.changedJobs === true,
             postedRecently: config.postedRecently === true,
             howMany: numberIn(config, 'howMany'),
+            yearsAtCompany: wordsIn(config, 'yearsAtCompany'),
+            pastCompanies: wordsIn(config, 'pastCompanies'),
+            pastTitles: wordsIn(config, 'pastTitles'),
+            schools: wordsIn(config, 'schools'),
+            names: wordsIn(config, 'names'),
+            companyHQLocations: wordsIn(config, 'companyHQLocations'),
+            profileLanguages: wordsIn(config, 'profileLanguages'),
          }),
-         use: async rows => {
-            await WorkflowRunService.mergePeople(ctx.at, searchedPeopleFrom(rows).slice(0, numberIn(config, 'howMany')))
-         },
-      },
+         map: rows => searchedPeopleFrom(rows).slice(0, numberIn(config, 'howMany')),
+         save: mergeIn(ctx),
+         also: rememberProfiles(ctx),
+      }),
    ])
 }
 
 // Reads the full profile of everyone it gets who was not read yet. A full profile the owner got in the last 30 days
-// is used again instead of paid for, and every one it pays for is kept so the drawer shows it. After a Score block
-// they are scored again and the ones that no longer fit are dropped; without one they keep no score.
-const enrich = async (ctx: Context): Promise<StepResult> => {
+// is used again instead of paid for (unless the block reads again), and every one it pays for is kept so the drawer
+// shows it. After a Score block they are scored again and the ones that no longer fit are dropped; without one they
+// keep no score. It leaves the step's output to its caller.
+const readPeople = async (ctx: Context, people: PersonItem[]) => {
    const { run, node, graph, at } = ctx
-   const people = mergeBySlug(peopleOf(ctx.inputs))
    const scoring = scoringNodeBefore(graph, node.id)
    const rules = scoring ? await rulesOf(run.userId, scoring) : null
    const thresholds = thresholdsOf(run, scoring)
    const pending = people.filter(({ enriched }) => !enriched)
-   const stored = await PersonSnapshotService.recent(
-      run.userId,
-      pending.map(({ slug }) => slug)
-   )
+   const stored = rereads(ctx)
+      ? new Map<string, PersonSnapshotData>()
+      : await PersonSnapshotService.recent(
+           run.userId,
+           pending.map(({ slug }) => slug)
+        )
    const reused = pending.filter(({ slug }) => stored.has(slug))
    const toRead = pending.filter(({ slug }) => !stored.has(slug)).sort((a, b) => a.slug.localeCompare(b.slug))
    const batches = Array.from({ length: Math.ceil(toRead.length / ENRICH_BATCH) }, (_, index) =>
@@ -529,8 +618,19 @@ const enrich = async (ctx: Context): Promise<StepResult> => {
    )
    const read = peopleOf(await WorkflowRunService.items(run.id, [at]))
    const kept = rules ? read.filter(({ band }) => band !== null) : read
-   const result = await keepItems(ctx, kept, people.length)
    const note = reused.length > 0 ? `${reused.length} read in the last ${RECENT_DAYS} days, not paid again.` : null
+
+   return {
+      kept,
+      collected,
+      note,
+   }
+}
+
+const enrich = async (ctx: Context): Promise<StepResult> => {
+   const people = mergeBySlug(peopleOf(ctx.inputs))
+   const { kept, collected, note } = await readPeople(ctx, people)
+   const result = await keepItems(ctx, kept, people.length)
 
    return {
       ...result,
@@ -785,7 +885,567 @@ const sendApi = async (ctx: Context): Promise<StepResult> => {
    }
 }
 
-export const EXECUTORS: Record<GraphNode['type'], (ctx: Context) => Promise<StepResult>> = {
+// What a block that keeps its finds says it kept.
+const keptNote = ({ people, companies, posts, jobs, skipped }: Kept) => {
+   const parts = [
+      people > 0 ? `${people} people` : null,
+      companies > 0 ? `${companies} companies` : null,
+      posts > 0 ? `${posts} posts` : null,
+      jobs > 0 ? `${jobs} jobs` : null,
+   ].filter(Boolean)
+
+   return [
+      parts.length > 0 ? `Kept ${parts.join(', ')} in your lists.` : null,
+      skipped > 0 ? `${skipped} left out because you removed them or they are on Do not contact.` : null,
+   ]
+      .filter(Boolean)
+      .join(' ')
+}
+
+const addNote = (result: StepResult, ...notes: (string | null | undefined)[]): StepResult => ({
+   ...result,
+   message: [result.message, ...notes].filter(Boolean).join(' ') || undefined,
+})
+
+// A block that finds people, companies, posts or jobs keeps them in the owner's lists under the workflow's name when its
+// box is ticked (.plan/workflow-collect-blocks.md). It runs when the step has everything, so a step still waiting for
+// its requests keeps nothing yet.
+const withKeep =
+   (run: Executor): Executor =>
+   async ctx => {
+      const result = await run(ctx)
+
+      if (!keeps(ctx)) {
+         return result
+      }
+
+      const kept = await CollectKeepService.keep(
+         ctx.run.userId,
+         keepLabelOf(ctx.run.workflow.name),
+         await WorkflowRunService.items(ctx.run.id, [ctx.at])
+      )
+
+      return addNote(result, keptNote(kept))
+   }
+
+const LINK_NOUNS = {
+   profile: 'LinkedIn profile',
+   company: 'LinkedIn company',
+   post: 'LinkedIn post',
+} as const
+
+// The links pasted in the block, read as one kind. One that is not that kind is dropped and counted.
+const pastedLinks = (ctx: Context, kind: keyof typeof LINK_NOUNS) => {
+   const urls = wordsIn(configOf(ctx.node), 'links')
+   const links = [...new Map(linksOf(urls, kind).map(link => [link.slug, link])).values()]
+
+   return {
+      links,
+      note:
+         links.length < urls.length
+            ? `${urls.length - links.length} links were not ${LINK_NOUNS[kind]} links and were skipped.`
+            : null,
+   }
+}
+
+// People from pasted links. They are "known": a workflow that asks for them by name is not stopped by lists. Anyone on
+// Do not contact is left out before anything is paid.
+const pastedPeople = async (ctx: Context) => {
+   const { links, note } = pastedLinks(ctx, 'profile')
+   const blocked = await CollectKeepService.blocked(
+      ctx.run.userId,
+      links.map(({ slug }) => slug)
+   )
+
+   return {
+      people: links
+         .filter(({ slug }) => !blocked.has(slug))
+         .map(link =>
+            person({
+               ...link,
+               known: true,
+            })
+         ),
+      notes: [note, blocked.size > 0 ? `${blocked.size} people are on Do not contact and were skipped.` : null],
+   }
+}
+
+const pastedPosts = async (ctx: Context) => {
+   const { links, note } = pastedLinks(ctx, 'post')
+   const posts: PostItem[] = await Promise.all(
+      links.map(async link => ({
+         kind: 'post' as const,
+         slug: link.slug,
+         url: await sendableUrl({
+            id: null,
+            url: link.url,
+            expandedUrl: null,
+         }),
+         postId: null,
+      }))
+   )
+
+   return {
+      posts,
+      note,
+   }
+}
+
+const pastedCompanies = (ctx: Context) => {
+   const { links, note } = pastedLinks(ctx, 'company')
+   const companies: CompanyItem[] = links.map(link => ({
+      kind: 'company',
+      ...link,
+      name: null,
+      hiring: [],
+   }))
+
+   return {
+      companies,
+      note,
+   }
+}
+
+const COMPANY_BATCH = 25
+
+// Company pages: one read in the last 30 days is used again (unless the block reads again), the rest are read in batches.
+const readCompanyPages = async (ctx: Context, companies: CompanyItem[]) => {
+   const remembered =
+      keeps(ctx) && !rereads(ctx)
+         ? await CollectKeepService.rememberedCompanies(
+              ctx.run.userId,
+              companies.map(({ slug }) => slug)
+           )
+         : new Map()
+   const toRead = companies.filter(({ slug }) => !remembered.has(slug))
+   const batches = Array.from({ length: Math.ceil(toRead.length / COMPANY_BATCH) }, (_, index) =>
+      toRead.slice(index * COMPANY_BATCH, (index + 1) * COMPANY_BATCH)
+   )
+
+   await WorkflowRunService.seedItems(
+      ctx.at,
+      companies.flatMap(company => {
+         const preview = remembered.get(company.slug)
+
+         return preview
+            ? [
+                 {
+                    ...company,
+                    name: preview.name ?? null,
+                    preview,
+                 },
+              ]
+            : []
+      })
+   )
+
+   const result = await collectEach(
+      ctx,
+      batches.map((batch, index) => ({
+         inputKey: `companies-${index}`,
+         slug: 'companies',
+         params: companiesLinksParams(batch.map(({ url }) => url)),
+         use: async rows => {
+            await WorkflowRunService.seedItems(ctx.at, companiesFrom(rows))
+         },
+      }))
+   )
+
+   return addNote(
+      result,
+      remembered.size > 0 ? `${remembered.size} read in the last ${COMPANY_REMEMBER_DAYS} days, not paid again.` : null
+   )
+}
+
+const companiesFromLinks = async (ctx: Context): Promise<StepResult> => {
+   const { companies, note } = pastedCompanies(ctx)
+
+   return addNote(await readCompanyPages(ctx, companies), note)
+}
+
+const searchCompanies = (ctx: Context) => {
+   const config = configOf(ctx.node)
+
+   return collectEach(ctx, [
+      remembering(ctx, {
+         inputKey: 'search',
+         slug: 'companies',
+         params: searchCompaniesParams({
+            query: textIn(config, 'query'),
+            locations: wordsIn(config, 'locations'),
+            companySize: wordsIn(config, 'companySize'),
+            industries: wordsIn(config, 'industries'),
+            howMany: numberIn(config, 'howMany'),
+         }),
+         map: companiesFrom,
+         save: seed(ctx),
+      }),
+   ])
+}
+
+const searchJobs = (ctx: Context) => {
+   const config = configOf(ctx.node)
+
+   return collectEach(ctx, [
+      remembering(ctx, {
+         inputKey: 'search',
+         slug: 'jobs',
+         params: jobPostingsParams({
+            jobTitles: textIn(config, 'jobTitles'),
+            howMany: numberIn(config, 'howMany'),
+            locations: textIn(config, 'locations'),
+            companies: wordsIn(config, 'companies'),
+            workplaceType: wordsIn(config, 'workplaceType'),
+            employmentType: wordsIn(config, 'employmentType'),
+            experienceLevel: wordsIn(config, 'experienceLevel'),
+            salary: wordsIn(config, 'salary'),
+            postedWithin: textIn(config, 'postedWithin'),
+            sortBy: textIn(config, 'sortBy'),
+            industries: wordsIn(config, 'industries'),
+            easyApply: config.easyApply === true,
+            fewApplicants: config.fewApplicants === true,
+         }),
+         map: jobPostingsFrom,
+         save: seed(ctx),
+      }),
+   ])
+}
+
+// The links a block takes that may be a profile, a company or a post: each is read as the first kind it fits.
+const POSTS_LINK_KINDS = ['post', 'profile', 'company'] as const
+
+const postsFromLinks = async (ctx: Context): Promise<StepResult> => {
+   const config = configOf(ctx.node)
+   const urls = wordsIn(config, 'links')
+   const links = [
+      ...new Map(
+         urls.flatMap(url =>
+            POSTS_LINK_KINDS.flatMap(kind => {
+               const link = parseLinkedInUrl(url, kind)
+
+               return link ? [[`${kind}:${link.slug}`, link] as const] : []
+            }).slice(0, 1)
+         )
+      ).entries(),
+   ]
+   const settings = {
+      howMany: numberIn(config, 'howMany'),
+      postedWithin: textIn(config, 'postedWithin'),
+      includeReposts: config.includeReposts === true,
+      includeQuotePosts: config.includeQuotePosts === true,
+   }
+   const requests = await Promise.all(
+      links.map(async ([inputKey, link]) =>
+         remembering(ctx, {
+            inputKey,
+            slug: 'posts',
+            params: postsOfParams(
+               await sendableUrl({
+                  id: null,
+                  url: link.url,
+                  expandedUrl: null,
+               }),
+               settings
+            ),
+            map: postsFrom,
+            save: seed(ctx),
+         })
+      )
+   )
+   const result = await collectEach(ctx, requests)
+
+   return addNote(
+      result,
+      links.length < urls.length
+         ? `${urls.length - links.length} links were not LinkedIn profile, company or post links and were skipped.`
+         : null
+   )
+}
+
+const EMAIL_BATCH = 25
+
+// Work emails of the people whose links are pasted. An email found in the last 90 days is used again; only a person an
+// email was found for is passed on.
+const emailsFromLinks = async (ctx: Context): Promise<StepResult> => {
+   const { people, notes } = await pastedPeople(ctx)
+   const known = keeps(ctx)
+      ? await CollectKeepService.knownEmails(
+           ctx.run.userId,
+           people.map(({ slug }) => slug)
+        )
+      : new Map<string, string>()
+   const toAsk = people.filter(({ slug }) => !known.has(slug))
+   const batches = Array.from({ length: Math.ceil(toAsk.length / EMAIL_BATCH) }, (_, index) =>
+      toAsk.slice(index * EMAIL_BATCH, (index + 1) * EMAIL_BATCH)
+   )
+
+   await WorkflowRunService.seedItems(
+      ctx.at,
+      people.flatMap(item => {
+         const email = known.get(item.slug)
+
+         return email
+            ? [
+                 {
+                    ...item,
+                    email,
+                 },
+              ]
+            : []
+      })
+   )
+
+   const result = await collectEach(
+      ctx,
+      batches.map((batch, index) => ({
+         inputKey: `batch-${index}`,
+         slug: 'emails',
+         params: emailsParams(batch),
+         use: async rows => {
+            const found = emailsFrom(rows)
+
+            await WorkflowRunService.seedItems(
+               ctx.at,
+               batch.flatMap(item => {
+                  const email = found.get(item.slug)
+
+                  return email
+                     ? [
+                          {
+                             ...item,
+                             email,
+                          },
+                       ]
+                     : []
+               })
+            )
+         },
+      }))
+   )
+   const missing = people.length - result.itemsOut
+
+   return addNote(
+      result,
+      ...notes,
+      known.size > 0 ? `${known.size} emails found in the last ${EMAIL_REMEMBER_DAYS} days, not paid for again.` : null,
+      missing > 0 ? `No email was found for ${missing} of ${people.length} people.` : null
+   )
+}
+
+// A link of any LinkedIn page, such as an Ad Library search.
+const linkedInPages = (urls: string[]) =>
+   urls.filter(url => {
+      try {
+         const { protocol, hostname } = new URL(url)
+
+         return protocol === 'https:' && (hostname === 'linkedin.com' || hostname.endsWith('.linkedin.com'))
+      } catch {
+         return false
+      }
+   })
+
+const adsFromLinks = async (ctx: Context): Promise<StepResult> => {
+   const config = configOf(ctx.node)
+   const urls = wordsIn(config, 'links')
+   const links = [...new Set(linkedInPages(urls))]
+   const result = await collectEach(
+      ctx,
+      links.map(url => ({
+         inputKey: `link:${url}`,
+         slug: 'ads-library',
+         params: adsParams(url, numberIn(config, 'howMany')),
+         use: async rows => {
+            await WorkflowRunService.seedItems(ctx.at, adsFrom(rows))
+         },
+      }))
+   )
+
+   return addNote(
+      result,
+      links.length < urls.length
+         ? `${urls.length - links.length} links were not LinkedIn links and were skipped.`
+         : null
+   )
+}
+
+// Blocks that take what they work on from pasted links run their usual work on those items.
+const fromPastedPeople =
+   (run: Executor): Executor =>
+   async ctx => {
+      const { people, notes } = await pastedPeople(ctx)
+
+      return addNote(
+         await run({
+            ...ctx,
+            inputs: people,
+         }),
+         ...notes
+      )
+   }
+
+const fromPastedPosts =
+   (run: Executor): Executor =>
+   async ctx => {
+      const { posts, note } = await pastedPosts(ctx)
+
+      return addNote(
+         await run({
+            ...ctx,
+            inputs: posts,
+         }),
+         note
+      )
+   }
+
+const fromPastedCompanies =
+   (run: Executor): Executor =>
+   async ctx => {
+      const { companies, note } = pastedCompanies(ctx)
+
+      return addNote(
+         await run({
+            ...ctx,
+            inputs: companies,
+         }),
+         note
+      )
+   }
+
+// Pasted links of either kind: a profile link is a person, a company link a company, anything else is dropped.
+const pastedPeopleAndCompanies = (urls: string[]) => {
+   const people: PersonItem[] = []
+   const companies: CompanyItem[] = []
+
+   for (const url of urls) {
+      const profileLink = parseLinkedInUrl(url, 'profile')
+      const companyLink = profileLink ? null : parseLinkedInUrl(url, 'company')
+
+      if (profileLink) {
+         people.push(
+            person({
+               ...profileLink,
+               known: true,
+            })
+         )
+      } else if (companyLink) {
+         companies.push({
+            kind: 'company',
+            ...companyLink,
+            name: null,
+            hiring: [],
+         })
+      }
+   }
+
+   return {
+      people,
+      companies,
+      dropped: urls.length - people.length - companies.length,
+   }
+}
+
+// Reads the full details of the people and companies that reach it and of the links pasted in it. Posts become their
+// authors; companies it does not read, and anything else, pass through. The output is written once, when both reads
+// are done, because the engine runs a step again until its requests have finished.
+const readFull = async (ctx: Context): Promise<StepResult> => {
+   const config = configOf(ctx.node)
+   const pasted = pastedPeopleAndCompanies(wordsIn(config, 'links'))
+   const blocked = await CollectKeepService.blocked(
+      ctx.run.userId,
+      pasted.people.map(({ slug }) => slug)
+   )
+   const authors = postsOf(ctx.inputs).flatMap(({ author }) => {
+      const link = author ? parseLinkedInUrl(author, 'profile') : null
+
+      return link ? [person(link)] : []
+   })
+   const people = mergeBySlug([
+      ...peopleOf(ctx.inputs),
+      ...authors,
+      ...pasted.people.filter(({ slug }) => !blocked.has(slug)),
+   ])
+   const readsCompanies = config.readCompanies !== false
+   const companies = [
+      ...new Map(
+         [...(readsCompanies ? companiesOf(ctx.inputs) : []), ...pasted.companies].map(company => [
+            company.slug,
+            company,
+         ])
+      ).values(),
+   ]
+   const passThrough = ctx.inputs.filter(
+      item => item.kind !== 'profile' && item.kind !== 'post' && (item.kind !== 'company' || !readsCompanies)
+   )
+   const settled = async <T>(work: () => Promise<T>) => {
+      try {
+         return await work()
+      } catch (error) {
+         if (error instanceof Waiting) {
+            return error
+         }
+
+         throw error
+      }
+   }
+
+   // Both reads are started before the step waits for either.
+   const read = await settled(() => readPeople(ctx, people))
+
+   // A company that already has its page, from a search, is not read again.
+   await WorkflowRunService.seedItems(
+      ctx.at,
+      companies.filter(({ preview }) => preview)
+   )
+
+   const pages = await settled(() =>
+      readCompanyPages(
+         ctx,
+         companies.filter(({ preview }) => !preview)
+      )
+   )
+
+   if (read instanceof Waiting || pages instanceof Waiting) {
+      throw new Waiting()
+   }
+   const kept = [...read.kept, ...companiesOf(await WorkflowRunService.items(ctx.run.id, [ctx.at])), ...passThrough]
+   const result = await keepItems(ctx, kept, people.length + companies.length)
+
+   return addNote(
+      {
+         ...result,
+         status: read.collected.status === 'PARTIAL' || pages.status === 'PARTIAL' ? 'PARTIAL' : 'DONE',
+         message: [read.collected.message, pages.message].filter(Boolean).join(' ') || undefined,
+      },
+      read.note,
+      pasted.dropped > 0
+         ? `${pasted.dropped} links were not LinkedIn profile or company links and were skipped.`
+         : null,
+      blocked.size > 0 ? `${blocked.size} people are on Do not contact and were skipped.` : null
+   )
+}
+
+const engagedBy = (slug: 'profile-comments' | 'profile-reactions') => (ctx: Context) => {
+   const config = configOf(ctx.node)
+   const settings = {
+      howMany: numberIn(config, 'howMany'),
+      postedWithin: textIn(config, 'postedWithin'),
+   }
+
+   return collectEach(
+      ctx,
+      peopleOf(ctx.inputs).map(item =>
+         remembering(ctx, {
+            inputKey: item.slug,
+            slug,
+            params: engagedParams(item, settings),
+            map: postsFrom,
+            save: seed(ctx),
+         })
+      )
+   )
+}
+
+export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'trigger.manual': async () => DONE,
    'trigger.schedule': async () => DONE,
    'trigger.api': async () => DONE,
@@ -795,15 +1455,27 @@ export const EXECUTORS: Record<GraphNode['type'], (ctx: Context) => Promise<Step
    'input.companies': inputCompanies,
    'collect.commenters': ctx => engagement(ctx, 'commenters'),
    'collect.reactors': ctx => engagement(ctx, 'reactors'),
-   'collect.findPosts': findPosts,
+   'collect.findPosts': withKeep(findPosts),
    'collect.postsOfPeople': ctx => postsOfEach(ctx, peopleOf(ctx.inputs)),
    'collect.postsOfCompanies': ctx => postsOfEach(ctx, companiesOf(ctx.inputs)),
    'collect.engagedPosts': engagedPosts,
-   'collect.employees': employees,
+   'collect.employees': withKeep(employees),
    'collect.jobs': jobs,
-   'collect.domainLookup': domainLookup,
-   'collect.searchPeople': searchPeople,
-   'collect.profile': enrich,
+   'collect.domainLookup': withKeep(domainLookup),
+   'collect.searchPeople': withKeep(searchPeople),
+   'collect.profile': withKeep(readFull),
+   'collect.profilesFromLinks': withKeep(fromPastedPeople(enrich)),
+   'collect.searchCompanies': withKeep(searchCompanies),
+   'collect.companiesFromLinks': withKeep(companiesFromLinks),
+   'collect.postsFromLinks': withKeep(postsFromLinks),
+   'collect.employeesFromLinks': withKeep(fromPastedCompanies(employees)),
+   'collect.searchJobs': withKeep(searchJobs),
+   'collect.emailsFromLinks': withKeep(emailsFromLinks),
+   'collect.commentersFromLinks': withKeep(fromPastedPosts(ctx => engagement(ctx, 'commenters'))),
+   'collect.reactorsFromLinks': withKeep(fromPastedPosts(ctx => engagement(ctx, 'reactors'))),
+   'collect.profileCommentsFromLinks': withKeep(fromPastedPeople(engagedBy('profile-comments'))),
+   'collect.profileReactionsFromLinks': withKeep(fromPastedPeople(engagedBy('profile-reactions'))),
+   'collect.adsFromLinks': adsFromLinks,
    'process.dedupe': async ctx => {
       const people = mergeBySlug(peopleOf(ctx.inputs))
       const config = configOf(ctx.node)

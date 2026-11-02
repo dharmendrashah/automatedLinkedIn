@@ -17,18 +17,38 @@ const KIND_LABELS = {
    profile: 'Person',
    post: 'Post',
    company: 'Company',
+   job: 'Job',
+   ad: 'Ad',
 } as const
 
-const nameOf = ({ item }: Item) => (item.kind === 'post' ? item.slug : (item.name ?? item.slug))
+const nameOf = ({ item }: Item) => {
+   switch (item.kind) {
+      case 'post':
+         return item.slug
+      case 'job':
+         return item.title ?? item.slug
+      case 'ad':
+         return item.headline ?? item.slug
+      default:
+         return item.name ?? item.slug
+   }
+}
 
 const detailOf = ({ item }: Item) => {
-   if (item.kind === 'profile') {
-      return [item.headline, item.score === null ? null : `score ${item.score}`, ...item.tags]
-         .filter(Boolean)
-         .join(' · ')
+   switch (item.kind) {
+      case 'profile':
+         return [item.headline, item.email, item.score === null ? null : `score ${item.score}`, ...item.tags]
+            .filter(Boolean)
+            .join(' · ')
+      case 'company':
+         return item.hiring.join(', ')
+      case 'job':
+         return [item.company, item.location, item.salary].filter(Boolean).join(' · ')
+      case 'ad':
+         return [item.advertiser, item.format].filter(Boolean).join(' · ')
+      default:
+         return item.author ?? ''
    }
-
-   return item.kind === 'company' ? item.hiring.join(', ') : (item.author ?? '')
 }
 
 type Props = {
