@@ -7,7 +7,9 @@ const DELETED = 'Deleted workflow'
 const PROFILE_READS = 'Profile reads'
 
 const nameOf = (group: { workflowId: string | null; label: string | null }, names: Map<string, string>) =>
-   group.workflowId ? names.get(group.workflowId) || DELETED : (group.label ?? PROFILE_READS)
+   group.workflowId
+      ? `${names.get(group.workflowId) || DELETED}${group.label ? ` (${group.label})` : ''}`
+      : (group.label ?? PROFILE_READS)
 
 const namesOf = async (workflowIds: string[]) => {
    const workflows = await PrismaService.client.workflow.findMany({

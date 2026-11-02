@@ -8,6 +8,7 @@ import {
    type TaskResult,
    type TaskTrigger,
    artifactPathUnder,
+   originSchema,
    runPrefix,
 } from '@automatedLinkedIn/contracts'
 
@@ -114,6 +115,7 @@ const listSelect = {
    recordingPrefix: true,
    retryOfId: true,
    trigger: true,
+   origin: true,
    taskVersion: true,
    workerBuild: true,
    proxyServerId: true,
@@ -168,12 +170,25 @@ const present = <T extends { recordingPrefix: string | null; startedAt: Date; st
    }
 }
 
+// Which workflow started the task, when one did; ids only.
+const startedByOf = (origin: unknown) => {
+   const by = originSchema.safeParse(origin).data
+
+   return by?.workflowId
+      ? {
+           kind: by.kind,
+           workflowId: by.workflowId,
+        }
+      : null
+}
+
 // A row of the Sessions table: the kinds of file it kept and how often it was retried, instead of the raw relations.
 const presentRow = (row: ListRow) => {
-   const { artifacts, _count, workerBuild, ...rest } = present(row)
+   const { artifacts, _count, workerBuild, origin, ...rest } = present(row)
 
    return {
       ...rest,
+      startedBy: startedByOf(origin),
       workerBuild: workerBuild?.slice(0, 7) ?? null,
       files: artifacts.map(({ kind }) => kind),
       retriesCount: _count.retries,
@@ -548,8 +563,11 @@ export class SpiderSessionService {
 
       // The column only ever holds what `start` wrote. Prisma's recursive Json type would make the API's output too
       // deep for the web app to infer.
+      const { origin, ...rest } = present(row)
+
       return {
-         ...present(row),
+         ...rest,
+         startedBy: startedByOf(origin),
          requestParams: row.requestParams as unknown as SessionRequestParams,
          report: row.report as unknown as TaskReport | null,
       }

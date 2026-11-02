@@ -796,6 +796,14 @@ export class WorkflowRunService {
             return
          }
 
+         const run = await tx.workflowRun.findUnique({
+            where: { id: booking.runId },
+            select: {
+               kind: true,
+               trigger: true,
+            },
+         })
+
          await tx.spendLedger.create({
             data: {
                userId: booking.userId,
@@ -804,6 +812,8 @@ export class WorkflowRunService {
                callId,
                amountMicros: outcome.costMicros,
                month: monthOf(new Date()),
+               // Told apart on the Usage page; the run rows are removed sooner than the ledger.
+               label: run?.kind === 'HOOK' ? 'hook runs' : run?.trigger === 'EVENT' ? 'event runs' : null,
             },
          })
          await tx.workflowStepRun.update({

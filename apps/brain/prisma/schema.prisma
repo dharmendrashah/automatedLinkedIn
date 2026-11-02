@@ -549,7 +549,7 @@ model SpendLedger {
   runId        String?
   callId       String   @unique
   amountMicros Int
-  // Names spend outside a workflow on the statement, such as "Company reads".
+  // Names spend outside a workflow on the statement, such as "Company reads", and tells hook and event runs apart.
   label        String?
   // Calendar month in UTC, such as 2026-10.
   month        String

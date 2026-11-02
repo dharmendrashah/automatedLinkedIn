@@ -7,6 +7,7 @@ import {
    HookService,
    IcpService,
    PrismaService,
+   SpendService,
    UserService,
    WalletService,
    WorkflowRunService,
@@ -314,6 +315,40 @@ describe('block hooks (database)', () => {
       expect(
          (await PrismaService.client.workflowRun.findUniqueOrThrow({ where: { id: live.id } })).stopRequestedAt
       ).not.toBeNull()
+   })
+
+   it('should tell the spend of hook runs from the rest of a workflow on the Usage page', async () => {
+      const { workflowId } = await start({
+         nodes: [people(), node('csv', 'output.csv')],
+         edges: [line('people', 'csv')],
+      })
+      const workflow = await PrismaService.client.workflow.findUniqueOrThrow({ where: { id: workflowId } })
+      const month = new Date().toISOString().slice(0, 7)
+
+      await PrismaService.client.spendLedger.createMany({
+         data: [
+            {
+               userId,
+               workflowId,
+               callId: randomUUID(),
+               amountMicros: 3_000,
+               month,
+            },
+            {
+               userId,
+               workflowId,
+               callId: randomUUID(),
+               amountMicros: 1_000,
+               month,
+               label: 'hook runs',
+            },
+         ],
+      })
+
+      const names = (await SpendService.usage(userId))[0].workflows.map(({ name }) => name)
+
+      expect(names).toContain(workflow.name)
+      expect(names).toContain(`${workflow.name} (hook runs)`)
    })
 
    it('should show failed fires of one hook as one alert a day, and dismiss them together', async () => {
