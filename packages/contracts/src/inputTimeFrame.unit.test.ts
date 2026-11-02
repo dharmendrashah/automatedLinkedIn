@@ -156,12 +156,15 @@ describe('the settings of the time frame', () => {
       ).toHaveLength(1)
    })
 
-   it('should offer the date to look at only where there is a choice, and quick numbers for the limit', () => {
-      const keys = (type: 'input.posts' | 'input.profiles' | 'input.companies') =>
-         blockOf(type).fields.map(({ key }) => key)
+   it('should offer the date to look at where there is a choice (profiles only from My network), and quick numbers for the limit', () => {
+      const field = (type: 'input.posts' | 'input.profiles' | 'input.companies') =>
+         blockOf(type).fields.find(({ key }) => key === 'dateField')
 
-      expect(keys('input.posts')).toContain('dateField')
-      expect(keys('input.profiles')).not.toContain('dateField')
+      expect(field('input.posts')).toBeDefined()
+      expect(field('input.profiles')?.showWhen).toEqual({
+         key: 'source',
+         is: 'network',
+      })
 
       const limit = blockOf('input.profiles').fields.find(({ key }) => key === 'howMany')
       const quick = [10, 25, 50, 100, 200]

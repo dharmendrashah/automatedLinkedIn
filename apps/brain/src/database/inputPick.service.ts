@@ -8,6 +8,7 @@ import {
 } from '@automatedLinkedIn/contracts'
 
 import { IcpService } from './icp.service'
+import { InputPeopleService, type NetworkPick } from './inputPeople.service'
 import { slugsInWindow } from './inputWindow'
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
@@ -26,13 +27,15 @@ const filterOf = (
    pick: InputPick,
    frame: { from: Date | null; until: Date | null },
    slugs: string[] | null,
-   ids: string[] | null
+   ids: string[] | null,
+   network: NetworkPick | null
 ): InputFilter<Statuses> => ({
    since: frame.from,
    until: frame.until,
    field: pick.dateField,
    slugs,
    ids,
+   network,
    labels: pick.labels,
    labelMatch: pick.labelMatch,
    withoutLabels: pick.withoutLabels,
@@ -74,7 +77,15 @@ export class InputPickService {
             ? await slugsInWindow(userId, type, pick.dateField, frame)
             : null
 
-      return filterOf(pick, frame, slugs, type ? await InputPickService.idsOf(userId, pick, type) : null)
+      return filterOf(
+         pick,
+         frame,
+         slugs,
+         type ? await InputPickService.idsOf(userId, pick, type) : null,
+         type === 'input.profiles' && pick.source === 'network'
+            ? await InputPeopleService.scope(userId, pick.client, pick.filters)
+            : null
+      )
    }
 
    // The items the page's own filters find for this block, or null when the block has none of them on.

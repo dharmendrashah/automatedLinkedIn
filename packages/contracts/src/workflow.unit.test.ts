@@ -56,6 +56,8 @@ describe('input picks', () => {
          to: '',
          search: '',
          filters: '',
+         source: 'profiles',
+         client: '',
       })
       expect(inputPickOf('input.posts', {}).order).toBe('oldest')
       const labelled = blockOf('input.posts').config.safeParse({ labels: ['Fintech '] }).data

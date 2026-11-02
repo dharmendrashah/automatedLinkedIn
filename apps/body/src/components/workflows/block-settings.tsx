@@ -21,10 +21,12 @@ import { LabelMultiSelect } from '../labels/label-multi-select'
 import { AccountsPick } from './accounts-pick'
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { BlockRunTabs, type RunInfo } from './block-run-tabs'
+import { ClientPick } from './client-pick'
 import { CompanyFiltersField } from './company-filters-field'
 import { type FlowNode, summaryOf } from './graph-convert'
 import { INPUT_KINDS, isInputType } from './input-kinds'
 import { InputMatches } from './input-matches'
+import { NetworkFiltersField } from './network-filters-field'
 import { PostField } from './post-field'
 import { ScheduleSettings } from './schedule-settings'
 import { Chips, ChipsInput, SearchPick, Stepper } from './setting-inputs'
@@ -190,13 +192,23 @@ export const BlockSettings = ({
       }
 
       if (item.kind === 'filters') {
-         return (
+         return block.type === 'input.profiles' ? (
+            <NetworkFiltersField
+               value={textOf(value)}
+               client={textOf(values.client)}
+               onChange={next => onChange(item.key, next)}
+            />
+         ) : (
             <CompanyFiltersField
                value={textOf(value)}
                search={textOf(values.search)}
                onChange={next => onChange(item.key, next)}
             />
          )
+      }
+
+      if (item.kind === 'client') {
+         return <ClientPick id={id} value={textOf(value)} onChange={next => onChange(item.key, next)} />
       }
 
       if (item.kind === 'toggle') {

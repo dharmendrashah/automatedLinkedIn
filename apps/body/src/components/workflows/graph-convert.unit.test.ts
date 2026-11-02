@@ -115,10 +115,19 @@ describe('input blocks', () => {
       )
       expect(say({ filters: '{"hasJobs":true}' })).toBe('Up to 5 people · 1 more filter')
       expect(say({ filters: 'oops' })).toBe('Up to 5 people')
+      expect(summaryOf(profiles, { howMany: 5, source: 'network', statuses: ['NEW'] })).toBe(
+         'Up to 5 people · from My network'
+      )
    })
 
    it('should start new input blocks on All, profiles and companies on new ones only, in the owner time zone', () => {
       expect(startConfig('input.profiles', 'Asia/Kolkata')).toEqual({
+         timeZone: 'Asia/Kolkata',
+         all: true,
+         statuses: ['NEW'],
+         source: 'network',
+      })
+      expect(startConfig('input.companies', 'Asia/Kolkata')).toEqual({
          timeZone: 'Asia/Kolkata',
          all: true,
          statuses: ['NEW'],

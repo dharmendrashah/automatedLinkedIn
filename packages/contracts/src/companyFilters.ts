@@ -1,14 +1,13 @@
 import { z } from 'zod'
 
+import { readFiltersText } from './filtersText'
+
 // The filters of the Companies drawer (.plan/companies-filter-drawer.md) as brain's `linkedInCompany.list` takes them. One
 // schema for the page's requests and for the filters an input block keeps (.plan/input-blocks-filters.md).
 
 export const COMPANY_TEAM_KINDS = ['department', 'skill', 'location', 'service', 'school', 'field'] as const
 export const COMPANY_READ_AGES = ['never', 'last7', 'last30', 'older30', 'older90'] as const
 export const COMPANY_VISIT_AGES = ['never', 'last7', 'last30'] as const
-
-// The most text an input block keeps for its filters.
-export const FILTERS_TEXT_MAX = 8_000
 
 const values = z.array(z.string().trim().min(1).max(200)).max(50).optional()
 const range = z
@@ -66,30 +65,4 @@ export const companyFiltersSchema = z.strictObject({
 export type CompanyFiltersInput = z.infer<typeof companyFiltersSchema>
 
 // The filters an input block keeps as text; empty or text that is not valid means none, and `error` says why.
-export const readCompanyFilters = (text: string): { filters: CompanyFiltersInput | null; error: string | null } => {
-   if (text.trim() === '') {
-      return {
-         filters: null,
-         error: null,
-      }
-   }
-
-   try {
-      const parsed = companyFiltersSchema.safeParse(JSON.parse(text))
-
-      return parsed.success
-         ? {
-              filters: parsed.data,
-              error: null,
-           }
-         : {
-              filters: null,
-              error: 'the filters are not valid.',
-           }
-   } catch {
-      return {
-         filters: null,
-         error: 'the filters are not valid.',
-      }
-   }
-}
+export const readCompanyFilters = (text: string) => readFiltersText(companyFiltersSchema, text)

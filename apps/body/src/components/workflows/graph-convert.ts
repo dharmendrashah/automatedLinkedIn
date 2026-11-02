@@ -240,7 +240,17 @@ const KEEPING_BLOCKS = new Set(['collect.searchPeople', 'collect.findPosts', 'co
 // What a new block starts with: a schedule and "added today" use the owner's time zone, input blocks take all that match,
 // and profiles and companies take only new ones. Blocks saved before keep their number and every status.
 export const startConfig = (type: string, timeZone: string = browserTimeZone()): GraphNode['config'] => {
-   if (type === 'input.profiles' || type === 'input.companies') {
+   // New profile blocks take people from My network; blocks saved before keep their profiles list.
+   if (type === 'input.profiles') {
+      return {
+         timeZone,
+         all: true,
+         statuses: ['NEW'],
+         source: 'network',
+      }
+   }
+
+   if (type === 'input.companies') {
       return {
          timeZone,
          all: true,
@@ -358,13 +368,15 @@ const pickOf = (values: Record<string, ConfigValue | undefined>) => {
    const joiner = values.labelMatch === 'all' ? ' and ' : ', '
    const more = filtersOn(values.filters)
    const search = show(values.search).trim()
+   const network = values.source === 'network'
 
    return [
+      network ? 'from My network' : null,
       search === '' ? null : `containing "${search}"`,
       labels.length > 0 ? `labelled ${labels.join(joiner)}` : null,
       without.length > 0 ? `not ${without.join(', ')}` : null,
       whenOf(values),
-      statuses.length > 0 && statuses.length < 3
+      statuses.length > 0 && statuses.length < 3 && !network
          ? `${statuses.map(status => STATUS_WORDS[status] ?? status).join(' or ')} only`
          : null,
       more > 0 ? `${more} more ${more === 1 ? 'filter' : 'filters'}` : null,

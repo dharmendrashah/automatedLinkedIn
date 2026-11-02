@@ -249,6 +249,51 @@ export const writeFilters = (filters: PeopleFilters) => {
    return Object.keys(on).length > 0 ? JSON.stringify(on) : null
 }
 
+// What a workflow's Profiles block keeps as text: the filters as brain takes them, only what is on.
+export const blockFiltersText = (filters: PeopleFilters) => {
+   const none = apiFilters(NO_FILTERS)
+   const kept = Object.fromEntries(
+      Object.entries(apiFilters(filters)).filter(
+         ([key, value]) => value !== undefined && JSON.stringify(value) !== JSON.stringify(none[key as keyof ApiFilters])
+      )
+   )
+
+   return Object.keys(kept).length > 0 ? JSON.stringify(kept) : ''
+}
+
+const RANGES: readonly string[] = RANGE_KEYS
+
+// The inverse of `blockFiltersText`: exact instants become the owner's own day and time, so the drawer opens on what the
+// block keeps; text that does not fit is none.
+export const readBlockFilters = (text: string): PeopleFilters => {
+   try {
+      const parsed: unknown = JSON.parse(text || '{}')
+
+      if (typeof parsed !== 'object' || parsed === null) {
+         return NO_FILTERS
+      }
+
+      const moment = (value: unknown) => (typeof value === 'string' ? local(new Date(value)) : undefined)
+      const read = Object.fromEntries(
+         Object.entries(parsed).map(([key, value]) =>
+            RANGES.includes(key) && typeof value === 'object' && value !== null
+               ? [
+                    key,
+                    {
+                       from: moment('from' in value ? value.from : undefined),
+                       to: moment('to' in value ? value.to : undefined),
+                    },
+                 ]
+               : [key, value]
+         )
+      )
+
+      return filtersSchema.safeParse(read).data ?? NO_FILTERS
+   } catch {
+      return NO_FILTERS
+   }
+}
+
 // My network showing the people connected to one LinkedIn account (the account's "Connections").
 export const connectionsPage = (accountId: string) =>
    `/network/${encodeURIComponent(accountId)}?${new URLSearchParams({

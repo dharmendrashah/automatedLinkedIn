@@ -3,6 +3,8 @@ import { type LinkKind, type LinkedInLink, parseLinkedInUrl } from 'core/linkedI
 
 import { LABEL_MAX } from '@automatedLinkedIn/contracts'
 
+import { type NetworkPick } from './inputPeople.service'
+
 // Rules shared by the services that keep lists of pasted LinkedIn links (profiles, companies, posts). Each service
 // passes in what is specific to its table: the fields to search and the three calls on its own Prisma delegate.
 
@@ -64,6 +66,8 @@ export type InputFilter<S extends string = string> = {
    slugs: string[] | null
    // When set, only these items, by id (the ones the page's own filters found).
    ids: string[] | null
+   // Profiles only: take people from My network instead of the profiles list.
+   network: NetworkPick | null
    labels: string[]
    labelMatch: LabelMatch
    withoutLabels: string[]
@@ -77,6 +81,7 @@ export const EVERYTHING: InputFilter<never> = {
    field: 'added',
    slugs: null,
    ids: null,
+   network: null,
    labels: [],
    labelMatch: 'any',
    withoutLabels: [],

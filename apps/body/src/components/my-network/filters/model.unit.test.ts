@@ -7,10 +7,12 @@ import {
    INVITE_STATES,
    NO_FILTERS,
    apiFilters,
+   blockFiltersText,
    chipsOf,
    connectionsPage,
    filtersSchema,
    rangeText,
+   readBlockFilters,
    readFilters,
    writeFilters,
 } from './model'
@@ -90,6 +92,32 @@ describe('filters in the address', () => {
       ['dates with Not connected', '{"connection":"NOT_CONNECTED","connectedAt":{"from":"2026-10-01T00:00"}}'],
    ])('drops %s', (_, value) => {
       expect(readFilters(value)).toEqual(NO_FILTERS)
+   })
+})
+
+describe('filters of a workflow block', () => {
+   it('should keep only what is on, as exact instants brain accepts, and open the drawer on it again', () => {
+      const filters = filtersSchema.parse({
+         countries: ['France'],
+         connection: 'CONNECTED',
+         connectedAt: {
+            from: '2026-10-01T00:00',
+            to: '2026-10-30T23:59',
+         },
+         replyWaiting: true,
+      })
+      const text = blockFiltersText(filters)
+
+      expect(Object.keys(JSON.parse(text)).sort()).toEqual(['connectedAt', 'connection', 'countries', 'replyWaiting'])
+      expect(peopleFiltersSchema.safeParse(JSON.parse(text)).success).toBe(true)
+      expect(readBlockFilters(text)).toEqual(filters)
+   })
+
+   it('should keep nothing for no filters, and read text that is not filters as none', () => {
+      expect(blockFiltersText(NO_FILTERS)).toBe('')
+      expect(readBlockFilters('')).toEqual(NO_FILTERS)
+      expect(readBlockFilters('oops')).toEqual(NO_FILTERS)
+      expect(readBlockFilters('{"connectedAt":{"from":"not a date"}}')).toEqual(NO_FILTERS)
    })
 })
 

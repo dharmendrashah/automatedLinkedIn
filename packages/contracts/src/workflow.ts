@@ -1,7 +1,9 @@
 import { z } from 'zod'
 
-import { FILTERS_TEXT_MAX, readCompanyFilters } from './companyFilters'
+import { readCompanyFilters } from './companyFilters'
+import { FILTERS_TEXT_MAX } from './filtersText'
 import { INDUSTRY_PAIRS } from './industries'
+import { readPeopleFilters } from './peopleFilters'
 import { joinedText, mediaBlock, postBlocksOfText, postFilesOf } from './posting'
 
 // The closed catalog of workflow blocks, the graph they form, and the pure rules on it (.plan/gtm-workflows.md).
@@ -56,6 +58,8 @@ export type Field = (
    | { key: string; label: string; kind: 'time' }
    // The filters of the owner's page for the items this block takes, kept as text; the browser draws the page's own drawer.
    | { key: string; label: string; kind: 'filters' }
+   // One of the owner's clients, or all of them when empty.
+   | { key: string; label: string; kind: 'client' }
    // A day, written as YYYY-MM-DD; empty for none.
    | { key: string; label: string; kind: 'date' }
    | { key: string; label: string; kind: 'text'; placeholder?: string }
@@ -386,7 +390,6 @@ export const INPUT_DATE_FIELDS = [
    'added',
    'posted',
    'lastRead',
-   'firstSeen',
    'lastContact',
    'connected',
    'lastSent',
@@ -409,6 +412,9 @@ export const inputPickSchema = z.object({
    // Words the item holds, and the page's own filters for it, as the page keeps them (see `inputErrors`).
    search: z.string().trim().max(100).default(''),
    filters: z.string().max(FILTERS_TEXT_MAX).default(''),
+   // Profiles only: take from the owner's profiles list, or from My network (one client or all) with its filters.
+   source: z.enum(['profiles', 'network']).default('profiles'),
+   client: z.string().max(100).default(''),
    labels: labelList,
    labelMatch: z.enum(['any', 'all']).default('any'),
    withoutLabels: labelList,
@@ -445,7 +451,13 @@ export const INPUT_DATE_OPTIONS: Record<InputType, Option[]> = {
       ['added', 'Added to my posts'],
       ['posted', 'Posted on LinkedIn'],
    ]),
-   'input.profiles': optionsOf([['added', 'Added to my profiles']]),
+   'input.profiles': optionsOf([
+      ['added', 'Added (first seen in My network)'],
+      ['connected', 'Connected'],
+      ['lastContact', 'Last in touch'],
+      ['lastSent', 'Last message from you'],
+      ['lastReply', 'Last reply from them'],
+   ]),
    'input.companies': optionsOf([
       ['added', 'Added to my companies'],
       ['lastRead', 'Last read'],
@@ -469,10 +481,14 @@ const inputErrors =
          return []
       }
 
-      const { dateField, added, from, to, filters } = pick.data
+      const { dateField, added, from, to, filters, source } = pick.data
 
       if (!INPUT_DATE_OPTIONS[type].some(({ value }) => value === dateField)) {
          return problem('this block cannot look at that date.')
+      }
+
+      if (type === 'input.profiles' && source === 'profiles' && dateField !== 'added') {
+         return problem('your profiles list only has the day people were added; use My network for other dates.')
       }
 
       if (added === 'custom' && from === '' && to === '') {
@@ -483,7 +499,12 @@ const inputErrors =
          return problem('the custom dates end before they start.')
       }
 
-      const { error } = type === 'input.companies' ? readCompanyFilters(filters) : { error: null }
+      const { error } =
+         type === 'input.companies'
+            ? readCompanyFilters(filters)
+            : type === 'input.profiles' && source === 'network'
+              ? readPeopleFilters(filters)
+              : { error: null }
 
       return error ? problem(error) : []
    }
@@ -496,6 +517,13 @@ const pickFields = (type: InputType, order: Option[]): Field[] => [
               label: 'Date to look at',
               kind: 'select' as const,
               options: INPUT_DATE_OPTIONS[type],
+              // Your profiles list only knows the day a person was added.
+              ...(type === 'input.profiles' && {
+                 showWhen: {
+                    key: 'source',
+                    is: 'network',
+                 },
+              }),
            },
         ]
       : []),
@@ -1520,9 +1548,45 @@ const BLOCKS = {
             label: 'Only these profile links',
             kind: 'words',
             suggest: 'links',
-            hint: 'Paste one or many. Empty takes people from your profiles list, filtered below.',
+            hint: 'Paste one or many. Empty takes people from the list below, filtered.',
          },
-         statusField,
+         {
+            key: 'source',
+            label: 'Take people from',
+            kind: 'select',
+            options: optionsOf([
+               ['network', 'My network'],
+               ['profiles', 'My profiles list'],
+            ]),
+            hint: 'My network has every filter of its page. People on Do not contact are never taken.',
+         },
+         {
+            key: 'client',
+            label: 'Client',
+            kind: 'client',
+            showWhen: {
+               key: 'source',
+               is: 'network',
+            },
+            hint: 'All clients takes each person once.',
+         },
+         {
+            key: 'filters',
+            label: 'More filters',
+            kind: 'filters',
+            showWhen: {
+               key: 'source',
+               is: 'network',
+            },
+            hint: 'The same filters as My network. Filters about a read only match people whose profile was read.',
+         },
+         {
+            ...statusField,
+            showWhen: {
+               key: 'source',
+               is: 'profiles',
+            },
+         },
          ...pickFields('input.profiles', NEWEST_FIRST),
       ],
    },

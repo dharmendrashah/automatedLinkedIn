@@ -219,7 +219,10 @@ const inputProfiles = async (ctx: Context): Promise<StepResult> => {
 
    return {
       ...result,
-      message: people.length === 0 ? 'No profiles in your profiles list match this block.' : undefined,
+      message:
+         people.length === 0
+            ? `No profiles in ${ctx.node.config.source === 'network' ? 'My network' : 'your profiles list'} match this block.`
+            : undefined,
    }
 }
 
