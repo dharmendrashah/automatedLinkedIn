@@ -43,6 +43,7 @@ import {
    UserPlus,
    UserRound,
    UserSearch,
+   UserX,
    Users,
    Webhook,
    Workflow,
@@ -110,6 +111,7 @@ export const BLOCK_ICONS: Record<Block['type'], LucideIcon> = {
    'account.withdrawInvite': UserMinus,
    'account.sendMessage': MessageSquarePlus,
    'account.replyToConversation': Reply,
+   'account.removeConnection': UserX,
    'output.csv': FileDown,
    'output.sendApi': Send,
 }

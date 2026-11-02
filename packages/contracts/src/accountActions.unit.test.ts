@@ -192,6 +192,31 @@ describe('Send and Withdraw connection request', () => {
    })
 })
 
+describe('Remove connection', () => {
+   it('should take people and give them back, start with Act for real off, and say so while it is off', () => {
+      expect(blockOf('account.removeConnection')).toMatchObject({
+         input: 'profile',
+         output: 'profile',
+      })
+      expect(blockOf('account.removeConnection').config.parse({})).toMatchObject({
+         actForReal: false,
+         timeLimitHours: 8,
+      })
+
+      const messages = validateGraph({
+         nodes: [
+            node('one', 'account.removeConnection', {
+               accountMode: 'one',
+               account: 'a1',
+            }),
+         ],
+         edges: [],
+      }).map(({ message }) => message)
+
+      expect(messages).toContain('Remove connection: "Act for real" is off, so a run removes nothing yet.')
+   })
+})
+
 describe('Write a post from a saved draft, now or after a wait', () => {
    it('should need a draft picked when it posts one, and not need words written then', () => {
       const messages = (config: NodeConfig) =>

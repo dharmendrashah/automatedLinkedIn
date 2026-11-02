@@ -81,6 +81,7 @@ import {
 } from '../data/operations'
 import { getConnections, getConversations, getRequests } from './accountRead'
 import { answerRequests } from './answerRequests'
+import { removeConnections } from './connectionBlocks'
 import {
    type Context,
    DAY_MS,
@@ -1590,6 +1591,7 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'account.withdrawInvite': withdrawInvites,
    'account.sendMessage': sendMessages,
    'account.replyToConversation': replyToConversations,
+   'account.removeConnection': removeConnections,
    'output.list': addToList,
    'output.markPosts': markPosts,
    'output.csv': exportCsv,

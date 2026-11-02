@@ -251,6 +251,7 @@ export const ACCOUNT_BLOCK_HOURS = {
    'account.withdrawInvite': 1,
    'account.sendMessage': 8,
    'account.replyToConversation': 8,
+   'account.removeConnection': 8,
 } as const
 
 // The most characters of a message or reply: the command that carries it may not pass 8 KB as JSON (the task limits it the same).
@@ -262,14 +263,17 @@ export const MESSAGE_MAX_CHARS = 4000
 export const ACCOUNT_ACTION_TASKS: Record<string, { blocks: string[] } | { planned: string } | { none: string }> = {
    'browser-detection': { none: 'Left for later by the owner: it has no account.' },
    'linkedin-login': { none: 'Left for later by the owner: the system keeps accounts signed in.' },
-   'linkedin-browse': { planned: 'Get my feed posts (phase 5)' },
+   'linkedin-browse': {
+      planned:
+         'Get my feed posts: the task keeps nothing of the feed it reads, so it needs a file of the posts it saw first',
+   },
    'linkedin-messages': { blocks: ['account.getConversations'] },
    'linkedin-profile': { planned: 'Get my profile: reads the account\u2019s own profile (phase 2, later)' },
    'linkedin-post': { blocks: ['account.writePost'] },
    'linkedin-reply': { blocks: ['account.replyToConversation'] },
    'linkedin-message': { blocks: ['account.sendMessage'] },
    'linkedin-invitations': { blocks: ['account.getRequests', 'account.answerRequests'] },
-   'linkedin-connections': { blocks: ['account.getConnections'] },
+   'linkedin-connections': { blocks: ['account.getConnections', 'account.removeConnection'] },
    'linkedin-invite': { blocks: ['account.sendInvite', 'account.withdrawInvite'] },
    'linkedin-view-profile': { blocks: ['account.visitProfile'] },
    'linkedin-view-company': { blocks: ['account.visitCompany'] },
@@ -937,6 +941,7 @@ export const BLOCK_TYPES = [
    'account.withdrawInvite',
    'account.sendMessage',
    'account.replyToConversation',
+   'account.removeConnection',
    'output.list',
    'output.markPosts',
    'output.csv',
@@ -4163,6 +4168,42 @@ const BLOCKS = {
          },
          actField,
          ...accountFields(ACCOUNT_BLOCK_HOURS['account.replyToConversation']),
+      ],
+   },
+   'account.removeConnection': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'removals',
+      validate: actOffNote('Remove connection', 'removes'),
+      label: 'Remove connection',
+      summary:
+         'Takes each person that reaches it off the list of connections of the account they are on, one at a time with a rest between two and a few a day for each account. Passes the people on with what came of it.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            result: {
+               action: 'removeConnection',
+               status: 'REMOVED',
+            },
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         ...actSettings,
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.removeConnection']),
+      }),
+      fields: [
+         {
+            ...actField,
+            hint: 'Off: a run shows what would go out and does nothing on LinkedIn. Switch it on after a preview. Removing a connection cannot be undone from here.',
+         },
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.removeConnection']),
       ],
    },
    'output.csv': {
