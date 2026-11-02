@@ -348,6 +348,10 @@ export const templateProblems = (text: string, options: { maxChars?: number } = 
    return [...new Set(found)]
 }
 
+// "No value for first name and company, so it was skipped." for the variables a person lacks; fixed words, never the person's data.
+export const missingSentence = (keys: string[]) =>
+   `No value for ${keys.map(key => TEMPLATE_VARIABLES.find(known => known.key === key)?.label.toLowerCase() ?? key).join(' and ')}, so it was skipped.`
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 const dateOf = (value: Date | string) => {
@@ -405,7 +409,9 @@ export const humanDate = (value: Date | string) => {
    return date ? `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}` : null
 }
 
-export type MessageUse = 'invite' | 'message' | 'reply'
+export const MESSAGE_USES = ['invite', 'message', 'reply'] as const
+
+export type MessageUse = (typeof MESSAGE_USES)[number]
 
 export type MessageSample = { id: string; use: MessageUse; title: string; text: string }
 

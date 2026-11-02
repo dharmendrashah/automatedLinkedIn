@@ -45,14 +45,14 @@ Decisions (owner answers, 2026-11-03):
 
 Each step starts with failing tests.
 
-- [ ] 1. Contracts: `template.ts` (also `humanAgo`, `humanDate`, `renderAll` that lists every variant, and about 30 short samples) with `parseTemplate`, `renderTemplate(text, values, { seed })`, `templateProblems(text, { maxChars, known })`, `countVariations`, the variable catalogue (key, label, where it comes from, example) and the per-block sample templates. Unit tests: syntax, nesting, fallbacks, unknown variable, unbalanced braces, pipes inside variables, deterministic pick, length after fill, variation count cap.
-- [ ] 2. Brain: `MessageValuesService.valuesFor(userId, slugs, accountFirstName)` and the overlay of the run item; `templateValues(item, snapshot, account)` building the variable values from the person item, the `PersonSnapshot` and the signals (ids and text the owner already holds; nothing is logged). One fill function used by `sendMessages`, the reply block and the invite plan; `fillWords` removed; the filled text is the one stored for the act, so a retry never re-picks.
-- [ ] 3. Brain: validation of the block settings through `validateGraph` (unknown variable, unbalanced braces, a variant over the limit once filled), and "skip people who lack a value" with a fixed reason.
-- [ ] 4. Model: table `MessageTemplate` (userId, name, use, text) with `MessageTemplateService` (list, save, delete; 50 an owner).
-- [ ] 4b. API: `workflow.messagePreview` (owner only; a person from the owner's lists or My network, or a made-up one; returns text, missing, length, variations) and `workflow.messageTemplates`.
-- [ ] 5. Body: `MessageComposer` replacing the plain field for the three blocks: chips, spintax helper, templates, preview with "next example", warnings, "add Read full profile first" hint; accessible (labelled controls, keyboard insert).
-- [ ] 6. Integration tests: a run through each of the three blocks with spintax and variables from a snapshot and signals (preview does nothing, acts only with "Act for real"); same person gets the same text on retry; missing value with fallback, without it, and with "skip".
-- [ ] 7. `MEMORY.md`, this plan's Outcome.
+- [x] 1. Contracts: `template.ts` (also `humanAgo`, `humanDate`, `renderAll` that lists every variant, and about 30 short samples) with `parseTemplate`, `renderTemplate(text, values, { seed })`, `templateProblems(text, { maxChars, known })`, `countVariations`, the variable catalogue (key, label, where it comes from, example) and the per-block sample templates. Unit tests: syntax, nesting, fallbacks, unknown variable, unbalanced braces, pipes inside variables, deterministic pick, length after fill, variation count cap.
+- [x] 2. Brain: `MessageValuesService.valuesFor(userId, slugs, accountFirstName)` and the overlay of the run item; `templateValues(item, snapshot, account)` building the variable values from the person item, the `PersonSnapshot` and the signals (ids and text the owner already holds; nothing is logged). One fill function used by `sendMessages`, the reply block and the invite plan; `fillWords` removed; the filled text is the one stored for the act, so a retry never re-picks.
+- [x] 3. Brain: validation of the block settings through `validateGraph` (unknown variable, unbalanced braces, a variant over the limit once filled), and "skip people who lack a value" with a fixed reason.
+- [x] 4. Model: table `MessageTemplate` (userId, name, use, text) with `MessageTemplateService` (list, save, delete; 50 an owner).
+- [x] 4b. API: `workflow.messagePreview` (owner only; a person from the owner's lists or My network, or a made-up one; returns text, missing, length, variations) and `workflow.messageTemplates`.
+- [x] 5. Body: `MessageComposer` replacing the plain field for the three blocks: chips, spintax helper, templates, preview with "next example", warnings, "add Read full profile first" hint; accessible (labelled controls, keyboard insert).
+- [x] 6. Integration tests: a run through each of the three blocks with spintax and variables from a snapshot and signals (preview does nothing, acts only with "Act for real"); same person gets the same text on retry; missing value with fallback, without it, and with "skip".
+- [x] 7. `MEMORY.md`, this plan's Outcome.
 
 ## Edge cases and risks
 
@@ -75,4 +75,4 @@ Each step starts with failing tests.
 
 ## Outcome
 
-To fill in when done.
+Shipped on the same branch and PR #181 (2026-11-03): the engine, 33 samples, the composer in the three blocks, "Skip people I have no value for", saved templates, previews on made-up or real people from My network with every version listed, and validation of the text in `validateGraph`. Deviations: an invite note is filled at send time from stored data only (see `MEMORY.md`); `account_first_name` for invites is empty (the account is not known at fill time). Not built: a retry-stable spintax pick (the owner chose random), InMail, `recent_post`, per-block "Read full profile" auto-insert (the composer only suggests it). Not run: a browser pass of the composer (typing, cursor insert, popovers, keyboard and screen reader).

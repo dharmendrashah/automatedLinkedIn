@@ -2,10 +2,13 @@ import { type ItemResult } from 'core'
 
 import { AccountActionService, LinkedInInviteService, VisitPoolService, WorkflowListService } from 'database'
 
+import { missingSentence } from '@automatedLinkedIn/contracts'
+
 import { accountIdsOf } from './accountPool'
 import { actFrame } from './actFrame'
 import { type Context, StepError, type StepResult, configOf, peopleOf, textIn } from './context'
 import { refusalOf } from './visitRefusal'
+import { wordsWriter } from './words'
 
 // "Send connection request" and "Withdraw connection request" (.plan/account-action-blocks.md): both go through the invite planner
 // of My network, which spreads the sending over the days inside the account's limits, so a step ends when the invites are planned
@@ -69,7 +72,35 @@ export const sendInvites = async (ctx: Context): Promise<StepResult> => {
       results.set(slug, result('SKIPPED', 'On your do-not-contact list.'))
    }
 
-   const askable = rest.filter(({ slug }) => !blocked.has(slug))
+   let askable = rest.filter(({ slug }) => !blocked.has(slug))
+
+   // The note is filled when the invite goes, from what My network holds then; a person who would lack a value now is left out.
+   if (configOf(node).skipMissing === true && note !== '') {
+      const write = await wordsWriter(
+         run.userId,
+         note,
+         askable.map(({ slug, name, company }) => ({
+            slug,
+            name,
+            company,
+         })),
+         []
+      )
+
+      askable = askable.filter(({ slug, name, company }) => {
+         const { missing } = write({
+            slug,
+            name,
+            company,
+         })
+
+         if (missing.length > 0) {
+            results.set(slug, result('SKIPPED', missingSentence(missing)))
+         }
+
+         return missing.length === 0
+      })
+   }
 
    // The accounts take turns: each person goes to one account, spread evenly.
    for (const [index, accountId] of usable.entries()) {

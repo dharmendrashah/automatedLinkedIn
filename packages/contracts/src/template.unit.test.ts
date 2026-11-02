@@ -7,6 +7,7 @@ import {
    countVariants,
    humanAgo,
    humanDate,
+   missingSentence,
    renderAll,
    renderTemplate,
    templateProblems,
@@ -102,6 +103,15 @@ describe('templateProblems', () => {
          'company',
          'nope',
       ])
+   })
+})
+
+describe('missingSentence', () => {
+   it('should name the variables in words', () => {
+      expect(missingSentence(['first_name'])).toBe('No value for first name, so it was skipped.')
+      expect(missingSentence(['company', 'previous_company'])).toBe(
+         'No value for current company and previous company, so it was skipped.'
+      )
    })
 })
 

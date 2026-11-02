@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => {
       inviteFrom: vi.fn(),
       withdraw: vi.fn(),
       replaceItems: vi.fn(),
+      factsFor: vi.fn(),
+      accountNames: vi.fn(),
    }
 })
 
@@ -33,6 +35,7 @@ vi.mock('env', () => ({}))
 
 vi.mock('core', async () => ({
    ...(await vi.importActual<object>('core/workflowItem')),
+   ...(await vi.importActual<object>('core/templateValues')),
    readSeniorities: vi.fn(),
 }))
 vi.mock('core/dataClient', () => ({ DataServiceError: class DataServiceError extends Error {} }))
@@ -58,6 +61,10 @@ vi.mock('database', async () => ({
       withdraw: mocks.withdraw,
    },
    WorkflowRunService: { replaceItems: mocks.replaceItems },
+   MessageValuesService: {
+      factsFor: mocks.factsFor,
+      accountFirstNames: mocks.accountNames,
+   },
    IcpService: {},
    WalletService: {},
    floorMicros: () => 0,
@@ -166,6 +173,8 @@ beforeEach(() => {
    ])
    mocks.seenAmong.mockResolvedValue(new Set())
    mocks.ofStep.mockResolvedValue([])
+   mocks.factsFor.mockResolvedValue(new Map())
+   mocks.accountNames.mockResolvedValue(new Map())
 })
 
 describe('sendInvites', () => {
@@ -242,6 +251,38 @@ describe('sendInvites', () => {
          bob: 'SKIPPED',
       })
       expect(result.status).toBe('PARTIAL')
+   })
+
+   it('should leave out a person with no value for a variable of the note, when asked to, and say which', async () => {
+      mocks.inviteFrom.mockResolvedValue({
+         outcomes: [
+            {
+               slug: 'ada',
+               state: 'QUEUED',
+               reason: null,
+               plannedAt: new Date('2026-11-03T09:00:00.000Z'),
+            },
+         ],
+      })
+
+      await sendInvites(
+         context('account.sendInvite', {
+            settings: {
+               actForReal: true,
+               skipMissing: true,
+               note: 'Hi {first_name}, how is {company}?',
+            },
+         })
+      )
+
+      expect(mocks.inviteFrom.mock.calls[0]?.[2]).toEqual([
+         {
+            slug: 'ada',
+            name: 'Ada Lovelace',
+            company: 'Analytical Engines',
+         },
+      ])
+      expect(resultsOf()).toMatchObject({ bob: 'SKIPPED' })
    })
 
    it('should not plan again what an earlier pass of the step already planned', async () => {

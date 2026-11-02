@@ -53,6 +53,7 @@ model User {
   companyViews      CompanyView[]
   workflows         Workflow[]
   people            Person[]
+  messageTemplates  MessageTemplate[]
 }
 
 enum WorkflowListMemberState {
@@ -557,6 +558,21 @@ model SpendLedger {
 
   @@index([userId, month])
   @@index([month])
+}
+
+// A text the owner saved to start an invite note, a message or a reply from (.plan/message-composer.md). `use` is invite, message or reply.
+model MessageTemplate {
+  id        String   @id @default(uuid(7))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  use       String
+  name      String
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, use, name])
+  @@index([userId, use])
 }
 
 // The shared data wallet as the worker last saw it. One row.

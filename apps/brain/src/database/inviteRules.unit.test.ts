@@ -129,22 +129,17 @@ describe('fillNote', () => {
    it('should put in the first name and the company, and drop an empty note', () => {
       expect(
          fillNote('Hi {first_name}, saw {company} is hiring.', {
-            name: 'Ada Lovelace',
+            first_name: 'Ada',
             company: 'Analytical',
          })
       ).toBe('Hi Ada, saw Analytical is hiring.')
-      expect(
-         fillNote('Hi {first_name} at {company}', {
-            name: 'Ada',
-            company: null,
-         })
-      ).toBe('Hi Ada at')
-      expect(
-         fillNote('  ', {
-            name: 'Ada',
-            company: null,
-         })
-      ).toBeUndefined()
+      expect(fillNote('Hi {first_name} at {company}', { first_name: 'Ada' })).toBe('Hi Ada at')
+      expect(fillNote('  ', { first_name: 'Ada' })).toBeUndefined()
+   })
+
+   it('should pick one option of each spintax group, fall back, and keep to the 200 characters of a note', () => {
+      expect(fillNote('{Hi|Hello} {first_name:there}!', {})).toMatch(/^(Hi|Hello) there!$/)
+      expect(fillNote('x'.repeat(300), {})).toHaveLength(200)
    })
 })
 

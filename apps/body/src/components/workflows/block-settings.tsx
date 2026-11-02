@@ -31,6 +31,7 @@ import { DraftPick } from './draft-pick'
 import { type FlowNode, summaryOf } from './graph-convert'
 import { INPUT_KINDS, isInputType } from './input-kinds'
 import { InputMatches } from './input-matches'
+import { MessageComposer } from './message-composer'
 import { NetworkFiltersField } from './network-filters-field'
 import { PostField } from './post-field'
 import { ScheduleSettings } from './schedule-settings'
@@ -193,6 +194,10 @@ export const BlockSettings = ({
 
       if (item.kind === 'account') {
          return <AccountPick id={id} value={textOf(value)} onChange={next => onChange(item.key, next)} />
+      }
+
+      if (item.kind === 'composer') {
+         return <MessageComposer id={id} use={item.use} value={textOf(value)} onChange={next => onChange(item.key, next)} />
       }
 
       if (item.kind === 'draft') {

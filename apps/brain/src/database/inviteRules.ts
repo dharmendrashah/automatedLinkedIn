@@ -1,6 +1,12 @@
 import { type LinkedInInviteState } from 'generated/prisma/client'
 
-import { INVITE_LIMITS, type InviteSendOutcome, type InviteWithdrawOutcome } from '@automatedLinkedIn/contracts'
+import {
+   INVITE_LIMITS,
+   type InviteSendOutcome,
+   type InviteWithdrawOutcome,
+   type TemplateValues,
+   renderTemplate,
+} from '@automatedLinkedIn/contracts'
 
 // What brain decides about connection invites (.plan/network-invites.md), without a database: when each invite may go, which people
 // are skipped and why, the sentence the owner reads before inviting, and what a run's outcome makes of an invite.
@@ -157,21 +163,13 @@ export const inviteSentence = ({
    return parts.join(' ')
 }
 
-// The note with the person's own words put in: {first_name} and {company}, then cut to what LinkedIn takes.
-export const fillNote = (note: string | undefined, person: { name: string | null; company: string | null }) => {
+// The note with the person's own words put in and one option of each spintax group picked at random, then cut to what LinkedIn takes.
+export const fillNote = (note: string | undefined, values: TemplateValues) => {
    if (!note?.trim()) {
       return undefined
    }
 
-   const [first = ''] = (person.name ?? '').trim().split(/\s+/)
-   const filled = note
-      .replaceAll('{first_name}', first)
-      .replaceAll('{company}', person.company ?? '')
-      .replace(/[ \t]{2,}/g, ' ')
-      .trim()
-      .slice(0, INVITE_LIMITS.noteChars)
-
-   return filled || undefined
+   return renderTemplate(note, values).text.slice(0, INVITE_LIMITS.noteChars) || undefined
 }
 
 const GIVE_UP_AFTER = 3

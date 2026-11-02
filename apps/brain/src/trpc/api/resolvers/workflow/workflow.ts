@@ -9,6 +9,8 @@ import {
    EventToolsService,
    HookService,
    InputPickService,
+   MessagePreviewService,
+   MessageTemplateService,
    WorkflowRunService,
    WorkflowService,
    WorkflowTriggerService,
@@ -19,7 +21,10 @@ import {
    BLOCK_TYPES,
    EVENT_PHASES,
    GOALS,
+   MESSAGE_SAMPLES,
+   MESSAGE_USES,
    TEMPLATE_NUMBERS,
+   TEMPLATE_VARIABLES,
    apiWorkflowOf,
    blankGraph,
    catalog,
@@ -123,6 +128,43 @@ export const workflow = router({
             'Event not found.'
          )
       ),
+
+   // The variables, the built-in sample texts and the owner's own, for the composer of a note, a message or a reply.
+   messageLibrary: ownerProcedure.query(async ({ ctx }) => ({
+      variables: TEMPLATE_VARIABLES,
+      samples: MESSAGE_SAMPLES,
+      mine: await MessageTemplateService.list(ctx.user.id),
+   })),
+
+   // A few of the owner's people to see a text on.
+   messagePeople: ownerProcedure
+      .input(z.object({ search: z.string().trim().max(60) }))
+      .query(({ ctx, input }) => MessagePreviewService.people(ctx.user.id, input.search)),
+
+   // The text as one person would get it: a few random versions, every version, and what is missing or wrong. Sends nothing.
+   messagePreview: ownerProcedure
+      .input(
+         z.object({
+            use: z.enum(MESSAGE_USES),
+            text: z.string().max(12_000),
+            slug: z.string().trim().min(1).max(200).optional(),
+         })
+      )
+      .query(({ ctx, input }) => MessagePreviewService.preview(ctx.user.id, input)),
+
+   messageTemplateSave: ownerProcedure
+      .input(
+         z.object({
+            use: z.enum(MESSAGE_USES),
+            name: z.string().trim().min(1).max(60),
+            text: z.string().trim().min(1).max(12_000),
+         })
+      )
+      .mutation(({ ctx, input }) => orConflict(MessageTemplateService.save(ctx.user.id, input))),
+
+   messageTemplateDelete: ownerProcedure.input(byId).mutation(async ({ ctx, input }) => {
+      present(await MessageTemplateService.remove(ctx.user.id, input.id), 'Template not found.')
+   }),
 
    // A made-up event for a task and moment, so the trigger shows what its JSON looks like before one has happened.
    eventSample: ownerProcedure

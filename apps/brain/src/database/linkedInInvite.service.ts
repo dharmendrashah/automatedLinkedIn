@@ -1,3 +1,5 @@
+import { type PersonFacts, templateValues } from 'core'
+
 import { type LinkedInInviteState, type Prisma } from 'generated/prisma/client'
 
 import { INVITE_LIMITS, type InvitesFile } from '@automatedLinkedIn/contracts'
@@ -17,6 +19,7 @@ import {
    withdrawChange,
 } from './inviteRules'
 import { INVITE_TASK } from './linkedInInvite.hooks'
+import { MessageValuesService } from './messageValues.service'
 import { budgetWait } from './postPublication.rules'
 import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
@@ -133,19 +136,43 @@ export class LinkedInInviteService {
          },
       })
       const personOf = new Map(people.map(person => [`${person.userId}:${person.slug}`, person]))
+      const owners = [...new Set(sends.map(({ userId }) => userId))]
+      // What else the database knows about each person, for the variables of a note written with them.
+      const facts = new Map<string, PersonFacts>(
+         (
+            await Promise.all(
+               owners.map(async userId => {
+                  const found = await MessageValuesService.factsFor(
+                     userId,
+                     sends.filter(send => send.userId === userId && send.note).map(({ slug }) => slug)
+                  )
+
+                  return [...found].map(([slug, one]) => [`${userId}:${slug}`, one] as const)
+               })
+            )
+         ).flat()
+      )
 
       return sends.map(invite => {
-         const person = personOf.get(`${invite.userId}:${invite.slug}`)
+         const key = `${invite.userId}:${invite.slug}`
+         const person = personOf.get(key)
          const name = person?.name ?? invite.name
 
          return {
             id: invite.id,
             slug: invite.slug,
             name,
-            note: fillNote(invite.note ?? undefined, {
-               name: name === invite.slug ? null : name,
-               company: person?.company ?? null,
-            }),
+            note: fillNote(
+               invite.note ?? undefined,
+               templateValues(
+                  {
+                     ...facts.get(key),
+                     name: name === invite.slug ? null : name,
+                     company: person?.company ?? facts.get(key)?.company,
+                  },
+                  { slug: invite.slug }
+               )
+            ),
          }
       })
    }
