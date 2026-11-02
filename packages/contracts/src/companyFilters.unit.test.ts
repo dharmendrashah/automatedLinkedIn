@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import { readCompanyFilters } from './companyFilters'
 import { readPeopleFilters } from './peopleFilters'
-import { readPostFilters } from './postFilters'
 import { type Graph, type NodeConfig, errorsOf, validateGraph } from './workflow'
 
 const graphWith = (config: NodeConfig): Graph => ({
@@ -74,17 +73,6 @@ describe('the filters of a Profiles input block', () => {
             dateField: 'connected',
          }).join(' ')
       ).not.toContain('use My network')
-   })
-})
-
-describe('the filters of a Posts input block', () => {
-   it('should read the filters, and refuse a filter that does not exist or a value out of range', () => {
-      expect(readPostFilters('{"read":"UNREAD","minComments":10}').filters).toEqual({
-         read: 'UNREAD',
-         minComments: 10,
-      })
-      expect(readPostFilters('{"minComments":0}').error).toBe('the filters are not valid.')
-      expect(readPostFilters('{"ghost":1}').error).toBe('the filters are not valid.')
    })
 })
 

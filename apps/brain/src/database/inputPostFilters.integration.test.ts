@@ -111,30 +111,24 @@ describe('the filters of a Posts input block (database)', () => {
          slugs: ['activity-1'],
          count: 1,
       })
-      expect((await taken({ filters: JSON.stringify({ author: 'stone' }) })).slugs).toEqual(['activity-2'])
-      expect((await taken({ filters: JSON.stringify({ read: 'UNREAD' }) })).slugs).toEqual(['activity-3'])
-      expect((await taken({ filters: JSON.stringify({ read: 'READ' }) })).slugs).toEqual(['activity-1', 'activity-2'])
-      expect((await taken({ filters: JSON.stringify({ minComments: 10 }) })).slugs).toEqual(['activity-1'])
-      expect((await taken({ filters: JSON.stringify({ minReactions: 1 }) })).slugs).toEqual([
-         'activity-1',
-         'activity-2',
-      ])
+      expect((await taken({ author: 'stone' })).slugs).toEqual(['activity-2'])
+      expect((await taken({ postRead: 'unread' })).slugs).toEqual(['activity-3'])
+      expect((await taken({ postRead: 'read' })).slugs).toEqual(['activity-1', 'activity-2'])
+      expect((await taken({ minComments: 10 })).slugs).toEqual(['activity-1'])
+      expect((await taken({ minReactions: 1 })).slugs).toEqual(['activity-1', 'activity-2'])
       expect(
          (
             await taken({
-               search: 'hiring',
-               filters: JSON.stringify({
-                  minComments: 1,
-                  minReactions: 100,
-                  author: 'ada',
-               }),
+               minComments: 1,
+               minReactions: 100,
+               author: 'ada',
             })
          ).slugs
       ).toEqual(['activity-1'])
    })
 
    it('should take only posts that qualified people were found from', async () => {
-      expect((await taken({ filters: JSON.stringify({ hasQualified: true }) })).slugs).toEqual(['activity-1'])
+      expect((await taken({ hasQualified: true })).slugs).toEqual(['activity-1'])
    })
 
    it('should take nothing when the filters match nothing', async () => {

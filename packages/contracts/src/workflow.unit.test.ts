@@ -58,6 +58,11 @@ describe('input picks', () => {
          filters: '',
          source: 'profiles',
          client: '',
+         postRead: 'any',
+         minComments: 0,
+         minReactions: 0,
+         author: '',
+         hasQualified: false,
          skipTaken: false,
       })
       expect(inputPickOf('input.posts', {}).order).toBe('oldest')
