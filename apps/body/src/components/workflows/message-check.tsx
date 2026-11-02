@@ -108,6 +108,10 @@ export const MessageCheck = ({ id, use, text }: Props) => {
    const data = check.data
    const labelOf = (key: string) => library.data?.variables.find(variable => variable.key === key)?.label.toLowerCase() ?? key
 
+   if (text.trim() === '') {
+      return <p className="text-muted-foreground text-xs">What goes out, with a few random versions, shows here as you write.</p>
+   }
+
    if (words.trim() === '') {
       return null
    }
