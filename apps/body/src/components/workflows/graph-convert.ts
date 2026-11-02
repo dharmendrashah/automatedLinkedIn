@@ -369,18 +369,10 @@ const pickOf = (values: Record<string, ConfigValue | undefined>) => {
    const more = filtersOn(values.filters)
    const search = show(values.search).trim()
    const network = values.source === 'network'
-   const author = show(values.author).trim()
-   const comments = Number(values.minComments ?? 0)
-   const reactions = Number(values.minReactions ?? 0)
 
    return [
       network ? 'from My network' : null,
       search === '' ? null : `containing "${search}"`,
-      author === '' ? null : `by ${author}`,
-      values.postRead === 'read' ? 'read only' : values.postRead === 'unread' ? 'not read yet' : null,
-      comments > 0 ? `${comments}+ comments` : null,
-      reactions > 0 ? `${reactions}+ reactions` : null,
-      values.hasQualified === true ? 'with qualified people' : null,
       labels.length > 0 ? `labelled ${labels.join(joiner)}` : null,
       without.length > 0 ? `not ${without.join(', ')}` : null,
       whenOf(values),

@@ -4,6 +4,7 @@ import {
    type InputType,
    inputPickOf,
    readCompanyFilters,
+   readPostFilters,
    timeFrameOf,
 } from '@automatedLinkedIn/contracts'
 
@@ -102,26 +103,15 @@ export class InputPickService {
    // The items the page's own filters find for this block, or null when the block has none of them on.
    private static async idsOf(userId: string, pick: InputPick, type: InputType) {
       if (type === 'input.posts') {
-         const { search, postRead, minComments, minReactions, author, hasQualified } = pick
+         const { filters } = readPostFilters(pick.filters)
 
-         if (
-            search === '' &&
-            postRead === 'any' &&
-            minComments === 0 &&
-            minReactions === 0 &&
-            author === '' &&
-            !hasQualified
-         ) {
+         if (pick.search === '' && !filters) {
             return null
          }
 
          return LinkedInPostService.matchingIds(userId, {
-            ...(search === '' ? {} : { search }),
-            ...(postRead === 'any' ? {} : { read: postRead === 'read' ? ('READ' as const) : ('UNREAD' as const) }),
-            ...(minComments > 0 ? { minComments } : {}),
-            ...(minReactions > 0 ? { minReactions } : {}),
-            ...(author === '' ? {} : { author }),
-            ...(hasQualified ? { hasQualified } : {}),
+            ...filters,
+            ...(pick.search === '' ? {} : { search: pick.search }),
          })
       }
 

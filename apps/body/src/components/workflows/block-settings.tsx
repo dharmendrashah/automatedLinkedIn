@@ -27,6 +27,7 @@ import { type FlowNode, summaryOf } from './graph-convert'
 import { INPUT_KINDS, isInputType } from './input-kinds'
 import { InputMatches } from './input-matches'
 import { NetworkFiltersField } from './network-filters-field'
+import { PostFiltersField } from './post-filters-field'
 import { PostField } from './post-field'
 import { ScheduleSettings } from './schedule-settings'
 import { Chips, ChipsInput, SearchPick, Stepper } from './setting-inputs'
@@ -192,18 +193,14 @@ export const BlockSettings = ({
       }
 
       if (item.kind === 'filters') {
+         const change = (next: string) => onChange(item.key, next)
+
          return block.type === 'input.profiles' ? (
-            <NetworkFiltersField
-               value={textOf(value)}
-               client={textOf(values.client)}
-               onChange={next => onChange(item.key, next)}
-            />
+            <NetworkFiltersField value={textOf(value)} client={textOf(values.client)} onChange={change} />
+         ) : block.type === 'input.posts' ? (
+            <PostFiltersField value={textOf(value)} onChange={change} />
          ) : (
-            <CompanyFiltersField
-               value={textOf(value)}
-               search={textOf(values.search)}
-               onChange={next => onChange(item.key, next)}
-            />
+            <CompanyFiltersField value={textOf(value)} search={textOf(values.search)} onChange={change} />
          )
       }
 

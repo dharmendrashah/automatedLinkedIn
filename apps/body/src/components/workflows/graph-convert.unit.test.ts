@@ -118,15 +118,6 @@ describe('input blocks', () => {
       expect(summaryOf(profiles, { howMany: 5, skipTaken: true })).toBe(
          'Up to 5 people \u00b7 skipping what it took before'
       )
-      expect(
-         summaryOf(profiles, {
-            howMany: 5,
-            author: 'Ada',
-            postRead: 'read',
-            minComments: 10,
-            hasQualified: true,
-         })
-      ).toBe('Up to 5 people · by Ada · read only · 10+ comments · with qualified people')
       expect(summaryOf(profiles, { howMany: 5, source: 'network', statuses: ['NEW'] })).toBe(
          'Up to 5 people · from My network'
       )

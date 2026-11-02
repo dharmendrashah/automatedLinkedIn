@@ -4,6 +4,7 @@ import { readCompanyFilters } from './companyFilters'
 import { FILTERS_TEXT_MAX } from './filtersText'
 import { INDUSTRY_PAIRS } from './industries'
 import { readPeopleFilters } from './peopleFilters'
+import { readPostFilters } from './postFilters'
 import { joinedText, mediaBlock, postBlocksOfText, postFilesOf } from './posting'
 
 // The closed catalog of workflow blocks, the graph they form, and the pure rules on it (.plan/gtm-workflows.md).
@@ -415,12 +416,6 @@ export const inputPickSchema = z.object({
    // Profiles only: take from the owner's profiles list, or from My network (one client or all) with its filters.
    source: z.enum(['profiles', 'network']).default('profiles'),
    client: z.string().max(100).default(''),
-   // Posts only, about the post's read: whether it was read, and the least comments and reactions it had.
-   postRead: z.enum(['any', 'read', 'unread']).default('any'),
-   minComments: z.number().int().min(0).max(1_000_000).default(0),
-   minReactions: z.number().int().min(0).max(1_000_000).default(0),
-   author: z.string().trim().max(100).default(''),
-   hasQualified: z.boolean().default(false),
    // Take only what the workflow's earlier runs did not take, so each run works through the next batch.
    skipTaken: z.boolean().default(false),
    labels: labelList,
@@ -512,7 +507,9 @@ const inputErrors =
             ? readCompanyFilters(filters)
             : type === 'input.profiles' && source === 'network'
               ? readPeopleFilters(filters)
-              : { error: null }
+              : type === 'input.posts'
+                ? readPostFilters(filters)
+                : { error: null }
 
       return error ? problem(error) : []
    }
@@ -1161,45 +1158,12 @@ const BLOCKS = {
             placeholder: 'hiring',
          },
          {
-            key: 'postRead',
-            label: 'Read',
-            kind: 'select',
-            options: optionsOf([
-               ['any', 'Read or not'],
-               ['read', 'Read only'],
-               ['unread', 'Not read yet'],
-            ]),
-            hint: 'Comments, reactions and the author only match posts that were read.',
-         },
-         {
-            key: 'minComments',
-            label: 'At least this many comments',
-            kind: 'int',
-            min: 0,
-            max: 1_000_000,
-            hint: '0 takes any number.',
+            key: 'filters',
+            label: 'More filters',
+            kind: 'filters',
+            hint: 'Read or not, comments, reactions, author and qualified people. All but Read only match posts that were read.',
          },
          ...pickFields('input.posts', OLDEST_FIRST),
-         {
-            key: 'minReactions',
-            label: 'At least this many reactions',
-            kind: 'int',
-            min: 0,
-            max: 1_000_000,
-            advanced: true,
-         },
-         {
-            key: 'author',
-            label: 'Author name contains',
-            kind: 'text',
-            advanced: true,
-         },
-         {
-            key: 'hasQualified',
-            label: 'Only posts with qualified people found from them',
-            kind: 'toggle',
-            advanced: true,
-         },
       ],
    },
    'collect.commenters': {

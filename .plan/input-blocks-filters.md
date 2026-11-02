@@ -119,7 +119,7 @@ Shipped on `feat/input-blocks-filters` in five phase commits.
 - Time frame (date field, presets, custom days, time zone of the block) and quick limits on all three blocks; caps unchanged.
 - Companies block: the Companies drawer's filters plus a search; Profiles block: `source` My network (default for new blocks; saved blocks keep the profiles list, so no `migrate` was needed), client picker, the My network drawer, dates of a person; Posts block: search, read or not, at least N comments and reactions, author, has qualified people.
 - Skip what this workflow already took: additive table `WorkflowInputTaken` (migration `20261102060000_workflow_input_taken`, applied to both local databases), 180 days, real runs only.
-- Deviations: Posts keeps plain settings instead of one `filters` JSON; "Last contact (oldest first)" is the date field Last in touch with order Oldest first, not a separate order; the block's own labels also apply in My network next to the drawer's labels.
+- Deviations: "Last contact (oldest first)" is the date field Last in touch with order Oldest first, not a separate order; the block's own labels also apply in My network next to the drawer's labels.
 - Verified: lint, `ts:check`, unit tests (spider, contracts, body, brain), build, and 412 brain integration tests, including a picker test per block against Postgres.
 - Not verified: the drawers inside a block on the canvas in a browser, and a preview or real run through the engine.
 - Follow-up: the live count for My network counts the Everyone tab (it does not subtract suppressed people).
