@@ -12,6 +12,8 @@ const DAY_MS = 24 * 60 * 60 * 1000
 export const RETENTION = {
    itemsDays: 14,
    runsDays: 90,
+   // Task events and what became of them (.plan/workflow-events-and-hooks.md).
+   eventsDays: 30,
    maybeDays: 30,
    reviewAfterDays: 180,
    reviewGraceDays: 30,
@@ -51,6 +53,8 @@ export class RetentionService {
             startedAt: { lt: daysBefore(now, RETENTION.runsDays) },
          },
       })
+      // A delivery goes with its event.
+      const events = await db.taskEvent.deleteMany({ where: { at: { lt: daysBefore(now, RETENTION.eventsDays) } } })
       const maybe = await db.workflowListMember.deleteMany({
          where: {
             state: 'MAYBE',
@@ -122,6 +126,7 @@ export class RetentionService {
          items: items.count,
          inputs: inputs.count,
          runs: runs.count,
+         events: events.count,
          maybe: maybe.count,
          reviewed: reviewed.count,
          marked: marked.count,

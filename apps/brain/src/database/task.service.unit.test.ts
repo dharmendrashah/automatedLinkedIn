@@ -48,7 +48,10 @@ vi.mock('./browseBudget.service', () => ({
 
 vi.mock('./taskDispatch.service', () => ({ TaskDispatchService: { dispatch: mocks.dispatch } }))
 
-const tx = { taskDispatch: { create: mocks.createDispatch } }
+const tx = {
+   taskDispatch: { create: mocks.createDispatch },
+   taskEvent: { createMany: vi.fn(async () => ({ count: 1 })) },
+}
 
 vi.mock('./prisma.service', () => ({
    PrismaService: {
@@ -270,6 +273,7 @@ describe('TaskService', () => {
                trigger: 'manual',
                input: {},
                startedAt: expect.any(Date),
+               origin: { kind: 'owner' },
             },
             tx
          )

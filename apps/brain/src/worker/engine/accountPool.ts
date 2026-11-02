@@ -9,6 +9,19 @@ const HOUR_MS = 60 * 60 * 1000
 export const accountIdsOf = (ctx: Context): string[] => {
    const { accountMode, account } = accountSettingsOf(ctx.node.type, ctx.node.config)
 
+   if (accountMode === 'event') {
+      const fromEvent = (ctx.run.input as { account?: unknown } | null)?.account
+
+      if (typeof fromEvent !== 'string' || fromEvent === '') {
+         throw new StepError(
+            'This block uses the account of the event, and this run did not start from one.',
+            'ACCOUNTS_MISSING'
+         )
+      }
+
+      return [fromEvent]
+   }
+
    if (accountMode === 'one') {
       if (account === '') {
          throw new StepError('Pick the account this block uses.', 'ACCOUNTS_MISSING')

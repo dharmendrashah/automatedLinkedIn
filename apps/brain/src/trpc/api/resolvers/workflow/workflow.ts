@@ -5,6 +5,7 @@ import { CSV_MAX_ROWS, itemsCsv } from 'core'
 
 import {
    ConflictError,
+   EventDispatchService,
    InputPickService,
    WorkflowRunService,
    WorkflowService,
@@ -14,6 +15,7 @@ import {
 
 import {
    BLOCK_TYPES,
+   EVENT_PHASES,
    GOALS,
    TEMPLATE_NUMBERS,
    apiWorkflowOf,
@@ -22,6 +24,7 @@ import {
    graphSchema,
    inputPickSchema,
    nextScheduledRuns,
+   sampleEvent,
    scheduleSchema,
    stepErrorCatalog,
    templateCatalog,
@@ -86,6 +89,21 @@ export const workflow = router({
 
    // What each step error code means and what to do about it, for the block dialog.
    stepErrors: ownerProcedure.query(() => stepErrorCatalog()),
+
+   // What happened to the task events this workflow listens to, for its trigger block.
+   events: ownerProcedure
+      .input(byId)
+      .query(async ({ ctx, input }) => present(await EventDispatchService.activity(ctx.user.id, input.id), MISSING)),
+
+   // A made-up event for a task and moment, so the trigger shows what its JSON looks like before one has happened.
+   eventSample: ownerProcedure
+      .input(
+         z.object({
+            task: z.string().trim().max(60),
+            phase: z.enum(EVENT_PHASES),
+         })
+      )
+      .query(({ input }) => sampleEvent(input.task || 'linkedin-invite', input.phase)),
 
    // The next three starts of a schedule being edited, so the owner sees what it means. Invalid settings give none.
    nextRuns: ownerProcedure.input(z.object({ schedule: z.record(z.string(), z.unknown()) })).query(({ input }) => {

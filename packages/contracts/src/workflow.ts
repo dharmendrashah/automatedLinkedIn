@@ -232,7 +232,7 @@ export const MAX_POOL = 20
 // working), or one account named on the block; and how long it waits before it leaves the rest for the next run
 // (.plan/account-action-blocks.md). `hours` is the block's own default.
 export const accountSettings = (hours: number) => ({
-   accountMode: z.enum(['pool', 'one']).default('pool'),
+   accountMode: z.enum(['pool', 'one', 'event']).default('pool'),
    account: z.string().max(100).default(''),
    timeLimitHours: z.number().int().min(1).max(48).default(hours),
 })
@@ -361,6 +361,7 @@ export const accountFields = (hours: number): Field[] => [
       options: optionsOf([
          ['pool', 'From "Select accounts" before it'],
          ['one', 'One account'],
+         ['event', 'The account of the event'],
       ]),
    },
    {
@@ -5274,7 +5275,15 @@ export const validateGraph = (graph: Graph): GraphError[] => {
       if (POOL_BLOCKS.has(node.type)) {
          const { accountMode, account } = settingsOf(node)
 
-         if (accountMode === 'one') {
+         if (accountMode === 'event') {
+            if (!graph.nodes.some(other => eventTriggerOf(other) !== null)) {
+               problems.push({
+                  nodeId: node.id,
+                  level: 'error',
+                  message: `${BLOCKS[node.type].label} uses the account of the event, so the workflow needs a trigger that starts from an event.`,
+               })
+            }
+         } else if (accountMode === 'one') {
             if (typeof account !== 'string' || account === '') {
                problems.push({
                   nodeId: node.id,

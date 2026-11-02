@@ -6,6 +6,7 @@ import {
    eventTriggerOf,
    graphSchema,
    matchEvent,
+   originOfTrigger,
    originSchema,
    upgradeGraph,
 } from '@automatedLinkedIn/contracts'
@@ -51,7 +52,7 @@ type ClaimedEvent = {
    attempts: number
 }
 
-export type DeliveryTargets = { nodes: string[]; depth: number }
+export type DeliveryTargets = { nodes: string[]; depth: number; account: string | null }
 
 const targetsOf = (value: unknown): DeliveryTargets => {
    const read = value as Partial<DeliveryTargets> | null
@@ -59,6 +60,7 @@ const targetsOf = (value: unknown): DeliveryTargets => {
    return {
       nodes: Array.isArray(read?.nodes) ? read.nodes.filter((id): id is string => typeof id === 'string') : [],
       depth: typeof read?.depth === 'number' ? read.depth : 0,
+      account: typeof read?.account === 'string' ? read.account : null,
    }
 }
 
@@ -193,6 +195,7 @@ export class EventDispatchService {
                   targets: {
                      nodes,
                      depth,
+                     account: envelope.account?.id ?? null,
                   } satisfies DeliveryTargets,
                   retryAt: now,
                   createdAt: now,
@@ -423,6 +426,7 @@ export class EventDispatchService {
                   input: {
                      delivery: delivery.id,
                      nodes: targets.nodes,
+                     account: targets.account,
                   },
                   depth: targets.depth,
                }
@@ -488,6 +492,80 @@ export class EventDispatchService {
       return {
          started,
          items,
+      }
+   }
+
+   // What happened to the events a workflow listens to: whether it is listening, the last day in counts, and the newest deliveries
+   // with their fixed reasons. null when the workflow is not the owner's.
+   public static async activity(userId: string, workflowId: string) {
+      const workflow = await PrismaService.client.workflow.findFirst({
+         where: {
+            id: workflowId,
+            userId,
+         },
+         select: { enabled: true },
+      })
+
+      if (!workflow) {
+         return null
+      }
+
+      const since = new Date(Date.now() - 24 * HOUR_MS)
+      const [counts, recent] = await Promise.all([
+         PrismaService.client.workflowDelivery.groupBy({
+            by: ['status'],
+            where: {
+               workflowId,
+               createdAt: { gt: since },
+            },
+            _count: { _all: true },
+         }),
+         PrismaService.client.workflowDelivery.findMany({
+            where: { workflowId },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            take: 50,
+            select: {
+               id: true,
+               status: true,
+               reason: true,
+               runId: true,
+               createdAt: true,
+               taskEvent: {
+                  select: {
+                     id: true,
+                     task: true,
+                     phase: true,
+                     session: {
+                        select: {
+                           trigger: true,
+                           origin: true,
+                           linkedInAccount: {
+                              select: {
+                                 email: true,
+                                 displayName: true,
+                              },
+                           },
+                        },
+                     },
+                  },
+               },
+            },
+         }),
+      ])
+
+      return {
+         listening: workflow.enabled,
+         last24Hours: Object.fromEntries(counts.map(({ status, _count }) => [status, _count._all])),
+         recent: recent.map(({ taskEvent, ...delivery }) => ({
+            ...delivery,
+            eventId: taskEvent.id,
+            task: taskEvent.task,
+            phase: taskEvent.phase,
+            account: taskEvent.session.linkedInAccount.displayName ?? taskEvent.session.linkedInAccount.email,
+            startedBy: (
+               originSchema.safeParse(taskEvent.session.origin).data ?? originOfTrigger(taskEvent.session.trigger)
+            ).kind,
+         })),
       }
    }
 

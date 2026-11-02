@@ -225,7 +225,12 @@ describe('sendInvites', () => {
                company: 'Analytical Engines',
             },
          ],
-         'Hi {first_name}'
+         'Hi {first_name}',
+         expect.any(Date),
+         expect.objectContaining({
+            runId: 'r1',
+            nodeId: 'n1',
+         })
       )
       expect(mocks.ask).toHaveBeenCalledWith('r1', 'n1', 'ada', 'a1', 'DONE', {
          status: 'PLANNED',

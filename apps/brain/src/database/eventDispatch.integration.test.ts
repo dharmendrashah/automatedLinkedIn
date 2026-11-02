@@ -12,6 +12,7 @@ import { TaskEventService } from './taskEvent.service'
 import { UserService } from './user.service'
 import { WalletService } from './wallet.service'
 import { WorkflowService } from './workflow.service'
+import { WorkflowListenerService } from './workflowListener.service'
 
 // Needs PostgreSQL. The broker is replaced: only what brain writes to the database is under test (.plan/workflow-events-and-hooks.md).
 const mocks = vi.hoisted(() => ({ publish: vi.fn() }))
@@ -247,7 +248,11 @@ describe('task events (database)', () => {
          originWorkflowId: 'w-campaign',
       })
 
-      const invites = [invite('with-note', 'SENT', true), invite('no-note', 'SENT', false), invite('failed', 'FAILED', null)]
+      const invites = [
+         invite('with-note', 'SENT', true),
+         invite('no-note', 'SENT', false),
+         invite('failed', 'FAILED', null),
+      ]
 
       await PrismaService.client.linkedInInvite.createMany({ data: invites })
 
@@ -306,6 +311,36 @@ describe('task events (database)', () => {
       })
 
       expect(await TaskEventService.itemsOf(eventId)).toEqual([])
+   })
+
+   it('should keep a listener row for each trigger of a switched-on workflow, and none once it is off', async () => {
+      const id = await listener(owner, {
+         phase: 'before',
+         task: TASK,
+      })
+      const rows = () => PrismaService.client.workflowListener.findMany({ where: { workflowId: id } })
+
+      expect(await rows()).toMatchObject([
+         {
+            nodeId: 'event',
+            phase: 'before',
+            task: TASK,
+            userId: owner,
+         },
+      ])
+
+      await WorkflowService.update(owner, id, { enabled: false })
+
+      expect(await rows()).toEqual([])
+   })
+
+   it('should rebuild the listener rows from the graphs when one write missed them', async () => {
+      const id = await listener(owner, { phase: 'after' })
+
+      await PrismaService.client.workflowListener.deleteMany({ where: { workflowId: id } })
+
+      expect(await WorkflowListenerService.repair()).toBeGreaterThanOrEqual(1)
+      expect(await PrismaService.client.workflowListener.count({ where: { workflowId: id } })).toBe(1)
    })
 
    it('should write before when the task is asked and after once, even when the result is delivered twice', async () => {

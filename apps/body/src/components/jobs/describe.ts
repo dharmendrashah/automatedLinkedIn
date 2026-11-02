@@ -68,6 +68,8 @@ const ACTIONS: Record<string, string> = {
    'connections-read': 'Connections read',
    'accept-read': 'Newest connections read (invite answers)',
    'invites-send': 'Invites sent or withdrawn',
+   'task-event': 'Task event matched to workflows',
+   'event-run': 'Workflow run started by an event',
    visit: 'Daily visit',
    'sign-in-check': 'Sign-in check',
    'proxy-score': 'Proxy score',
