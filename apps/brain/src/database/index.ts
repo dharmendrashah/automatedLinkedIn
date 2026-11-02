@@ -24,6 +24,7 @@ export { MAX_CHAIN_DEPTH, type WorkflowChanges, WorkflowService, readGraph } fro
 export { API_LIMITS, type ApiInput, WorkflowTriggerService } from './workflowTrigger.service'
 export { WorkflowListenerService } from './workflowListener.service'
 export { EventDispatchService } from './eventDispatch.service'
+export { EventToolsService } from './eventTools.service'
 export { HOOK_LIMITS, HookService } from './hook.service'
 export { TaskEventService } from './taskEvent.service'
 export { type CallOutcome, type ItemKey, STALE_CLAIM_MS, WorkflowRunService } from './workflowRun.service'

@@ -4,6 +4,7 @@ import { type ConfigValue } from './types'
 
 import { trpc } from '../../trpc'
 import { Code } from './api-request'
+import { EventTryout } from './event-tryout'
 import { timeOf } from './run-sentence'
 
 // The Input tab of the two event triggers: whether the workflow is listening, who it reacts to, what happened to the latest events, and
@@ -100,6 +101,8 @@ export const EventTriggerInput = ({
                <p className="text-muted-foreground text-sm">Nothing yet. The next matching event will show here.</p>
             )}
          </div>
+
+         <EventTryout workflowId={workflowId} />
 
          <div className="grid gap-2">
             <h3 className="text-sm font-medium">What an event looks like</h3>

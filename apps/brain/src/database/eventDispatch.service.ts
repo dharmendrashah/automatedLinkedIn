@@ -172,15 +172,7 @@ export class EventDispatchService {
       const rows: Prisma.WorkflowDeliveryCreateManyInput[] = []
 
       if (envelope) {
-         const plannedBy = [
-            ...new Set(
-               (await TaskEventService.itemsOf(event.id)).flatMap(item => {
-                  const planned = item.facts?.['item.plannedBy']
-
-                  return typeof planned === 'string' ? [planned] : []
-               })
-            ),
-         ]
+         const plannedBy = await TaskEventService.plannedBy(event.id)
          const depth = await this.depthOf(envelope)
 
          for (const [workflowId, nodeIds] of byWorkflow) {

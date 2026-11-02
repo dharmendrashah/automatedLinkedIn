@@ -230,6 +230,19 @@ export class TaskEventService {
       return event?.id ?? null
    }
 
+   // The workflows that planned what an event is about, read from its items.
+   public static async plannedBy(eventId: string) {
+      return [
+         ...new Set(
+            (await TaskEventService.itemsOf(eventId)).flatMap(item => {
+               const planned = item.facts?.['item.plannedBy']
+
+               return typeof planned === 'string' ? [planned] : []
+            })
+         ),
+      ]
+   }
+
    // What the event is about, as items, for a run it starts. Nothing for a task with no details.
    public static async itemsOf(eventId: string) {
       const event = await PrismaService.client.taskEvent.findUnique({

@@ -6,6 +6,7 @@ import { CSV_MAX_ROWS, itemsCsv } from 'core'
 import {
    ConflictError,
    EventDispatchService,
+   EventToolsService,
    HookService,
    InputPickService,
    WorkflowRunService,
@@ -95,6 +96,33 @@ export const workflow = router({
    events: ownerProcedure
       .input(byId)
       .query(async ({ ctx, input }) => present(await EventDispatchService.activity(ctx.user.id, input.id), MISSING)),
+
+   // The newest events the workflow's triggers look at, and what became of each.
+   eventsRecent: ownerProcedure
+      .input(byId)
+      .query(async ({ ctx, input }) => present(await EventToolsService.recent(ctx.user.id, input.id), MISSING)),
+
+   // Which trigger filters pass or fail for one event.
+   eventCheck: ownerProcedure
+      .input(byId.extend({ eventId: z.string().min(1) }))
+      .query(async ({ ctx, input }) =>
+         present(await EventToolsService.check(ctx.user.id, input.id, input.eventId), 'Event not found.')
+      ),
+
+   // Runs the workflow on a real event: a preview, or a replay (a real run, confirmed in the browser).
+   eventRun: ownerProcedure
+      .input(
+         byId.extend({
+            eventId: z.string().min(1),
+            mode: z.enum(['preview', 'replay']),
+         })
+      )
+      .mutation(async ({ ctx, input }) =>
+         present(
+            await orConflict(EventToolsService.runOn(ctx.user.id, input.id, input.eventId, input.mode)),
+            'Event not found.'
+         )
+      ),
 
    // A made-up event for a task and moment, so the trigger shows what its JSON looks like before one has happened.
    eventSample: ownerProcedure

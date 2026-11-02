@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { type ItemFacts, type WorkflowItemData } from 'core'
 
-import { EventDispatchService, HookService, TaskEventService, WorkflowRunService } from 'database'
+import { EventDispatchService, EventToolsService, HookService, TaskEventService, WorkflowRunService } from 'database'
 
 import {
    EVENT_CONDITION_ROWS,
@@ -19,11 +19,19 @@ import { type Context, type StepResult, configOf, elseKey, keepItems } from './c
 // The blocks that work with events (.plan/workflow-events-and-hooks.md): the two triggers that start a run from a task event, "If the event
 // says" and the mood of a message. None of them sends anything.
 
-const inputSchema = z.object({ delivery: z.string().optional() })
+const inputSchema = z.object({
+   delivery: z.string().optional(),
+   event: z.string().optional(),
+})
 
-// The event this run started from; none for a run by hand or a preview.
+// The event this run started from: the one its delivery is about, or the one the owner picked for a preview or a replay; none for a run
+// by hand.
 const eventIdOf = async (ctx: Context) => {
-   const { delivery } = inputSchema.safeParse(ctx.run.input).data ?? {}
+   const { delivery, event } = inputSchema.safeParse(ctx.run.input).data ?? {}
+
+   if (event) {
+      return EventToolsService.ownEvent(event, ctx.run.userId)
+   }
 
    return delivery ? EventDispatchService.eventOfDelivery(delivery, ctx.run.userId) : null
 }
