@@ -327,4 +327,98 @@ describe('LinkedInInviteService (database)', () => {
          })
       ).toEqual({ name: 'grace-h Person' })
    })
+
+   it("should invite people a block holds from one of the owner's accounts, and put them in My network", async () => {
+      const links = [
+         {
+            slug: 'zed-n',
+            name: 'Zed N',
+            company: 'Acme',
+         },
+         {
+            slug: 'yan-q',
+            name: null,
+            company: null,
+         },
+         {
+            slug: 'mary-s',
+            name: 'Mary S',
+            company: null,
+         },
+      ]
+
+      expect(await LinkedInInviteService.inviteFrom(otherUserId, accountId, links, '')).toBeNull()
+
+      const made = await LinkedInInviteService.inviteFrom(userId, accountId, links, 'Hi {first_name}')
+
+      expect(made?.outcomes).toEqual([
+         expect.objectContaining({
+            slug: 'zed-n',
+            state: 'QUEUED',
+            reason: null,
+         }),
+         expect.objectContaining({
+            slug: 'yan-q',
+            state: 'QUEUED',
+         }),
+         expect.objectContaining({
+            slug: 'mary-s',
+            state: 'SKIPPED',
+            reason: 'A connection request is pending.',
+         }),
+      ])
+      expect((await invitesOf('zed-n'))[0]).toMatchObject({
+         state: 'QUEUED',
+         accountId,
+         name: 'Zed N',
+      })
+
+      await PeopleIndexService.refresh(userId, ['zed-n'])
+
+      expect(
+         await db.person.count({
+            where: {
+               clientId,
+               slug: 'zed-n',
+            },
+         })
+      ).toBe(1)
+   })
+
+   it('should cancel an invite that has not gone, queue a sent one for withdrawal, and touch only the owner’s own', async () => {
+      const [yan] = await invitesOf('yan-q')
+
+      await db.linkedInInvite.update({
+         where: { id: yan?.id ?? '' },
+         data: {
+            state: 'SENT',
+            invitedAt: new Date(),
+         },
+      })
+
+      expect(await LinkedInInviteService.withdraw(otherUserId, [accountId], ['zed-n', 'yan-q'])).toEqual(new Map())
+
+      const taken = await LinkedInInviteService.withdraw(userId, [accountId], ['zed-n', 'yan-q', 'nobody'])
+
+      expect(taken).toEqual(
+         new Map([
+            [
+               'zed-n',
+               {
+                  accountId,
+                  taken: 'CANCELLED',
+               },
+            ],
+            [
+               'yan-q',
+               {
+                  accountId,
+                  taken: 'QUEUED',
+               },
+            ],
+         ])
+      )
+      expect((await invitesOf('zed-n'))[0]).toMatchObject({ state: 'CANCELLED' })
+      expect((await invitesOf('yan-q'))[0]).toMatchObject({ state: 'WITHDRAW_QUEUED' })
+   })
 })

@@ -1,4 +1,11 @@
-import { type CompanyItem, type PersonItem, type PostItem, type WorkflowItemData, readSeniorities } from 'core'
+import {
+   type CompanyItem,
+   type ConversationItem,
+   type PersonItem,
+   type PostItem,
+   type WorkflowItemData,
+   readSeniorities,
+} from 'core'
 import { type DataClient, DataServiceError } from 'core/dataClient'
 import { advanceJob } from 'core/dataJob'
 import { ELSE_SUFFIX } from 'core/workflowInput'
@@ -86,6 +93,8 @@ export const DATA_REFUSED =
 export const peopleOf = (items: WorkflowItemData[]) =>
    items.filter((item): item is PersonItem => item.kind === 'profile')
 export const postsOf = (items: WorkflowItemData[]) => items.filter((item): item is PostItem => item.kind === 'post')
+export const conversationsOf = (items: WorkflowItemData[]) =>
+   items.filter((item): item is ConversationItem => item.kind === 'conversation')
 export const companiesOf = (items: WorkflowItemData[]) =>
    items.filter((item): item is CompanyItem => item.kind === 'company')
 

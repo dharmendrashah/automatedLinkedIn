@@ -3,13 +3,14 @@ import { z } from 'zod'
 import { readCompanyFilters } from './companyFilters'
 import { FILTERS_TEXT_MAX } from './filtersText'
 import { INDUSTRY_PAIRS } from './industries'
+import { INVITE_LIMITS } from './invites'
 import { readPeopleFilters } from './peopleFilters'
 import { joinedText, mediaBlock, postBlocksOfText, postFilesOf } from './posting'
 
 // The closed catalog of workflow blocks, the graph they form, and the pure rules on it (.plan/gtm-workflows.md).
 // Ids and labels are neutral: no data supplier is named here, because the browser shows these.
 
-export type ItemKind = 'start' | 'post' | 'profile' | 'company' | 'job' | 'ad'
+export type ItemKind = 'start' | 'post' | 'profile' | 'company' | 'job' | 'ad' | 'conversation'
 
 export const KIND_LABELS: Record<ItemKind, string> = {
    start: 'a start',
@@ -18,6 +19,7 @@ export const KIND_LABELS: Record<ItemKind, string> = {
    company: 'companies',
    job: 'job postings',
    ad: 'ads',
+   conversation: 'conversations',
 }
 
 // Per row, in millionths of a dollar.
@@ -63,6 +65,8 @@ export type Field = (
    // A day, written as YYYY-MM-DD; empty for none.
    | { key: string; label: string; kind: 'date' }
    | { key: string; label: string; kind: 'text'; placeholder?: string }
+   // Several lines of text, such as a message.
+   | { key: string; label: string; kind: 'textarea'; placeholder?: string }
    | { key: string; label: string; kind: 'select'; options: Option[] }
    | { key: string; label: string; kind: 'multi'; options: Option[] }
    // Many choices from a long list, picked by typing.
@@ -85,11 +89,17 @@ export type Field = (
    | { key: string; label: string; kind: 'workflow' }
    // One or more of the owner's LinkedIn accounts.
    | { key: string; label: string; kind: 'accounts' }
+   // One of the owner's LinkedIn accounts.
+   | { key: string; label: string; kind: 'account' }
    // A LinkedIn post written in the block, kept as text.
    | { key: string; label: string; kind: 'post' }
+   // One of the owner's saved drafts of the Posting page.
+   | { key: string; label: string; kind: 'draft' }
 ) & {
    hint?: string
    advanced?: boolean
+   // Changing it switches "Act for real" off again, so what the owner saw in a preview is what goes out.
+   disarms?: boolean
    // Shown once a list setting has at least that many values, or once a choice setting is on a value.
    showWhen?: { key: string; atLeast: number } | { key: string; is: string }
 }
@@ -219,9 +229,179 @@ export const POST_CONFIG_MAX = 40_000
 // The most accounts one "Select accounts" block holds.
 export const MAX_POOL = 20
 
+// Where an Account Actions block gets its accounts: the nearest "Select accounts" before it (the default, so saved blocks keep
+// working), or one account named on the block; and how long it waits before it leaves the rest for the next run
+// (.plan/account-action-blocks.md). `hours` is the block's own default.
+export const accountSettings = (hours: number) => ({
+   accountMode: z.enum(['pool', 'one']).default('pool'),
+   account: z.string().max(100).default(''),
+   timeLimitHours: z.number().int().min(1).max(48).default(hours),
+})
+
+// The wait each Account Actions block starts with, in hours.
+export const ACCOUNT_BLOCK_HOURS = {
+   'account.visitProfile': 8,
+   'account.visitCompany': 8,
+   'account.writePost': 1,
+   'account.getConnections': 2,
+   'account.getRequests': 2,
+   'account.getConversations': 2,
+   'account.answerRequests': 8,
+   'account.sendInvite': 1,
+   'account.withdrawInvite': 1,
+   'account.sendMessage': 8,
+   'account.replyToConversation': 8,
+   'account.removeConnection': 8,
+} as const
+
+// The most characters of a message or reply: the command that carries it may not pass 8 KB as JSON (the task limits it the same).
+export const MESSAGE_MAX_CHARS = 4000
+
+// Every spider task and the block or blocks that run it (.plan/account-action-blocks.md): `blocks` are built, `planned` are on the
+// way (the phase), `none` is left out on purpose. A test keeps the spider's catalog and this table the same, so a new task has to
+// choose one.
+export const ACCOUNT_ACTION_TASKS: Record<string, { blocks: string[] } | { planned: string } | { none: string }> = {
+   'browser-detection': { none: 'Left for later by the owner: it has no account.' },
+   'linkedin-login': { none: 'Left for later by the owner: the system keeps accounts signed in.' },
+   'linkedin-browse': {
+      planned:
+         'Get my feed posts: the task keeps nothing of the feed it reads, so it needs a file of the posts it saw first',
+   },
+   'linkedin-messages': { blocks: ['account.getConversations'] },
+   'linkedin-profile': { planned: 'Get my profile: reads the account\u2019s own profile (phase 2, later)' },
+   'linkedin-post': { blocks: ['account.writePost'] },
+   'linkedin-reply': { blocks: ['account.replyToConversation'] },
+   'linkedin-message': { blocks: ['account.sendMessage'] },
+   'linkedin-invitations': { blocks: ['account.getRequests', 'account.answerRequests'] },
+   'linkedin-connections': { blocks: ['account.getConnections', 'account.removeConnection'] },
+   'linkedin-invite': { blocks: ['account.sendInvite', 'account.withdrawInvite'] },
+   'linkedin-view-profile': { blocks: ['account.visitProfile'] },
+   'linkedin-view-company': { blocks: ['account.visitCompany'] },
+}
+
+// What a block's account settings say; text that does not fit reads as the defaults, so a bad value elsewhere in the block never
+// hides them from the engine.
+export const accountSettingsOf = (type: string, config: unknown) => {
+   const hours = Object.entries(ACCOUNT_BLOCK_HOURS).find(([key]) => key === type)?.[1] ?? 8
+   const schema = z.object(accountSettings(hours))
+
+   return schema.safeParse(config).data ?? schema.parse({})
+}
+
+// What an Account Actions block that changes something on LinkedIn (accepts, sends, removes) holds besides its accounts: it does
+// nothing there until the owner switches "Act for real" on, after a preview showed what would go out.
+export const actSettings = { actForReal: z.boolean().default(false) }
+
+export const actField: Field = {
+   key: 'actForReal',
+   label: 'Act for real',
+   kind: 'toggle',
+   hint: 'Off: a run shows what would go out and does nothing on LinkedIn. Switch it on after a preview. Changing what goes out switches it off again.',
+}
+
+// What a call may send to an Account Actions block (.plan/account-action-blocks.md): the account to use for that run, the people or
+// companies to act on (a block straight after the trigger acts on exactly those, and on nobody when the call names none), and the
+// words some blocks send. A call never switches "Act for real" on and never passes a limit.
+const accountApi = (what: string): ApiField => ({
+   field: 'account',
+   shape: 'text',
+   check: 'text',
+   what,
+   example: ['your-account-id'],
+   setting: 'account',
+   also: { accountMode: 'one' },
+})
+
+const peopleApi: ApiField = {
+   field: 'profiles',
+   shape: 'list',
+   check: 'link',
+   what: 'LinkedIn links of the people to act on',
+   example: ['https://www.linkedin.com/in/ada-lovelace'],
+   items: 'profile',
+}
+
+const companiesApi: ApiField = {
+   field: 'companies',
+   shape: 'list',
+   check: 'link',
+   what: 'LinkedIn links of the companies to act on',
+   example: ['https://www.linkedin.com/company/stripe'],
+   items: 'company',
+}
+
+const wordsApi = (what: string, setting: string, chars: number, example: string): ApiField => ({
+   field: setting,
+   shape: 'text',
+   check: 'text',
+   what,
+   example: [example],
+   setting,
+   chars,
+})
+
+// The note a block with "Act for real" shows while it is off: `verb` is what the run would do ("answers").
+const actOffNote =
+   (label: string, verb: string) =>
+   (node: GraphNode): GraphError[] =>
+      settingsOf(node).actForReal === true
+         ? []
+         : [
+              {
+                 nodeId: node.id,
+                 level: 'note',
+                 message: `${label}: "Act for real" is off, so a run ${verb} nothing yet.`,
+              },
+           ]
+
+export const accountFields = (hours: number): Field[] => [
+   {
+      key: 'accountMode',
+      label: 'Accounts',
+      kind: 'select',
+      options: optionsOf([
+         ['pool', 'From "Select accounts" before it'],
+         ['one', 'One account'],
+      ]),
+   },
+   {
+      key: 'account',
+      label: 'Account',
+      kind: 'account',
+      showWhen: {
+         key: 'accountMode',
+         is: 'one',
+      },
+   },
+   {
+      key: 'timeLimitHours',
+      label: 'Stop waiting after (hours)',
+      kind: 'int',
+      min: 1,
+      max: 48,
+      advanced: true,
+      hint: `What is not done by then is left for the next run. Starts at ${hours}.`,
+   },
+]
+
+const ANSWER_ACTIONS = optionsOf([
+   ['accept', 'Accept'],
+   ['ignore', 'Ignore'],
+])
+
 const VISIBILITIES = optionsOf([
    ['ANYONE', 'Anyone'],
    ['CONNECTIONS', 'Connections only'],
+])
+
+const POST_SOURCES = optionsOf([
+   ['write', 'Written here'],
+   ['draft', 'A saved draft'],
+])
+
+const POST_WHEN = optionsOf([
+   ['now', 'Now'],
+   ['after', 'After a wait'],
 ])
 
 const WAIT_MODES = optionsOf([
@@ -794,6 +974,15 @@ export const BLOCK_TYPES = [
    'account.visitProfile',
    'account.visitCompany',
    'account.writePost',
+   'account.getConnections',
+   'account.getRequests',
+   'account.getConversations',
+   'account.answerRequests',
+   'account.sendInvite',
+   'account.withdrawInvite',
+   'account.sendMessage',
+   'account.replyToConversation',
+   'account.removeConnection',
    'output.list',
    'output.markPosts',
    'output.csv',
@@ -839,8 +1028,15 @@ export type ApiField = {
    example: string[]
    // The most values a list field takes in one call; a link field takes up to the call's total cap.
    max?: number
+   // The most characters of a text value, when more than a short word fits (a message).
+   chars?: number
+   // The kind of items a list of links makes when the block comes straight after the trigger (an Account Actions block that acts on
+   // what the call names): nothing sent means nothing to act on. A field with this has no setting to replace.
+   items?: 'profile' | 'company'
    // The block's own setting a call value replaces for that run. A block that reads the call itself has none.
    setting?: string
+   // Other settings that change with it, such as a call naming one account turning "One account" on.
+   also?: Record<string, string>
 }
 
 type BlockSpec = {
@@ -874,6 +1070,8 @@ type BlockSpec = {
    presets?: Preset[]
    // What a call may feed this block.
    api?: ApiField[]
+   // A made-up item the block takes in and one it passes on, as plain data, for its Input and Output tabs before it has run.
+   sample?: { in?: Record<string, unknown>; out?: Record<string, unknown> }
    input: ItemKind | null
    output: ItemKind | null
    config: z.ZodType<Record<string, unknown>>
@@ -3459,12 +3657,28 @@ const BLOCKS = {
          usesAccounts: true,
       },
       label: 'Visit profile',
+      api: [peopleApi, accountApi('the id of one of your accounts to visit with')],
       summary:
          'Opens each person’s profile with one of the chosen accounts, waits a few seconds and scrolls down. Passes on the people viewed.',
       input: 'profile',
       output: 'profile',
-      config: empty,
-      fields: [],
+      config: z.object(accountSettings(ACCOUNT_BLOCK_HOURS['account.visitProfile'])),
+      fields: accountFields(ACCOUNT_BLOCK_HOURS['account.visitProfile']),
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            headline: 'Founder at Analytical Engines',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            result: {
+               action: 'visitProfile',
+               status: 'VISITED',
+            },
+         },
+      },
    },
    'account.visitCompany': {
       group: 'Account Actions',
@@ -3473,12 +3687,28 @@ const BLOCKS = {
          usesAccounts: true,
       },
       label: 'Visit company',
+      api: [companiesApi, accountApi('the id of one of your accounts to visit with')],
       summary:
          'Opens each company page with one of the chosen accounts, waits a few seconds and scrolls down. Passes on the companies viewed.',
       input: 'company',
       output: 'company',
-      config: empty,
-      fields: [],
+      config: z.object(accountSettings(ACCOUNT_BLOCK_HOURS['account.visitCompany'])),
+      fields: accountFields(ACCOUNT_BLOCK_HOURS['account.visitCompany']),
+      sample: {
+         in: {
+            name: 'Stripe',
+            website: 'stripe.com',
+            link: 'https://www.linkedin.com/company/stripe',
+         },
+         out: {
+            name: 'Stripe',
+            link: 'https://www.linkedin.com/company/stripe',
+            result: {
+               action: 'visitCompany',
+               status: 'VISITED',
+            },
+         },
+      },
    },
    'account.writePost': {
       group: 'Account Actions',
@@ -3489,6 +3719,20 @@ const BLOCKS = {
          usesAccounts: true,
       },
       validate: node => {
+         const settings = settingsOf(node)
+
+         if (settings.source === 'draft') {
+            return typeof settings.draft === 'string' && settings.draft !== ''
+               ? []
+               : [
+                    {
+                       nodeId: node.id,
+                       level: 'error',
+                       message: 'Write a post: pick the saved draft it posts.',
+                    },
+                 ]
+         }
+
          const blocks = postBlocksOfText(node.config.post ?? '[]')
 
          if (blocks && joinedText(blocks) === '' && !mediaBlock(blocks)) {
@@ -3512,11 +3756,14 @@ const BLOCKS = {
             : []
       },
       label: 'Write a post',
+      api: [accountApi('the id of one of your accounts to post from')],
       summary:
-         'Posts what you write here on LinkedIn, once per run, from one of the chosen accounts. Passes everything on unchanged.',
+         'Posts what you write here, or a saved draft of the Posting page, once per run from one of the chosen accounts, now or after a wait. Passes everything on unchanged, and the post too once it has a link.',
       input: 'profile',
       output: 'profile',
       config: z.object({
+         source: oneOf(POST_SOURCES, 'write'),
+         draft: z.string().max(100).default(''),
          post: z
             .string()
             .max(POST_CONFIG_MAX)
@@ -3524,14 +3771,524 @@ const BLOCKS = {
             .refine(value => postBlocksOfText(value) !== null, 'is not a post'),
          audience: oneOf(VISIBILITIES, 'ANYONE'),
          comments: oneOf(VISIBILITIES, 'ANYONE'),
+         when: oneOf(POST_WHEN, 'now'),
+         afterHours: z.number().int().min(1).max(168).default(1),
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.writePost']),
       }),
       fields: [
+         {
+            key: 'source',
+            label: 'Where the post comes from',
+            kind: 'select',
+            options: POST_SOURCES,
+         },
          {
             key: 'post',
             label: 'Post',
             kind: 'post',
             hint: 'Posted once per run, never more than the account’s limits allow. A preview posts nothing.',
+            showWhen: {
+               key: 'source',
+               is: 'write',
+            },
          },
+         {
+            key: 'draft',
+            label: 'Draft',
+            kind: 'draft',
+            hint: 'The words and file of the draft are copied each run; the draft stays and is never posted by itself. Keep the draft while this block uses it.',
+            showWhen: {
+               key: 'source',
+               is: 'draft',
+            },
+         },
+         {
+            key: 'when',
+            label: 'When',
+            kind: 'select',
+            options: POST_WHEN,
+         },
+         {
+            key: 'afterHours',
+            label: 'Wait (hours)',
+            kind: 'int',
+            min: 1,
+            max: 168,
+            hint: 'The post is planned for this long after the block runs, through the Posting page’s planner and its limits. The block ends once it is planned.',
+            showWhen: {
+               key: 'when',
+               is: 'after',
+            },
+         },
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.writePost']),
+      ],
+   },
+   'account.getConnections': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'people',
+      estimate: node => ({
+         items: howManyOf(node),
+         costMicros: 0,
+      }),
+      previewCap: PREVIEW_LIMITS.perPost,
+      label: 'Get my connections',
+      summary: 'Reads the people your accounts are connected to, with the day they connected, the most recent first.',
+      api: [
+         {
+            field: 'account',
+            shape: 'text',
+            check: 'text',
+            what: 'the id of one of your accounts to read from',
+            example: ['your-account-id'],
+            setting: 'account',
+            also: { accountMode: 'one' },
+         },
+      ],
+      sample: {
+         out: {
+            name: 'Ada Lovelace',
+            headline: 'Founder at Analytical Engines',
+            connectedOn: '2026-10-21',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+      },
+      input: 'start',
+      output: 'profile',
+      config: z.object({
+         howMany: howMany(1000, 100),
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.getConnections']),
+      }),
+      fields: [
+         {
+            key: 'howMany',
+            label: 'How many people',
+            kind: 'int',
+            min: 1,
+            max: 1000,
+            hint: 'The most recent connections first.',
+         },
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.getConnections']),
+      ],
+   },
+   'account.getRequests': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'people',
+      estimate: node => ({
+         items: howManyOf(node),
+         costMicros: 0,
+      }),
+      previewCap: PREVIEW_LIMITS.perPost,
+      label: 'Get my connection requests',
+      summary:
+         'Reads the connection requests your accounts received and have not answered, with the note each person wrote.',
+      api: [
+         {
+            field: 'account',
+            shape: 'text',
+            check: 'text',
+            what: 'the id of one of your accounts to read from',
+            example: ['your-account-id'],
+            setting: 'account',
+            also: { accountMode: 'one' },
+         },
+      ],
+      sample: {
+         out: {
+            name: 'Ada Lovelace',
+            headline: 'Founder at Analytical Engines',
+            note: 'Hi, I liked your post on engines. Let us connect.',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+      },
+      input: 'start',
+      output: 'profile',
+      config: z.object({
+         howMany: howMany(200, 50),
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.getRequests']),
+      }),
+      fields: [
+         {
+            key: 'howMany',
+            label: 'How many people',
+            kind: 'int',
+            min: 1,
+            max: 200,
+         },
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.getRequests']),
+      ],
+   },
+   'account.getConversations': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'conversations',
+      estimate: node => ({
+         items: howManyOf(node),
+         costMicros: 0,
+      }),
+      previewCap: PREVIEW_LIMITS.perPost,
+      label: 'Get my conversations',
+      summary:
+         'Reads the conversations of your accounts, newest first, with the last message shortened and who wrote it. No files.',
+      api: [
+         {
+            field: 'account',
+            shape: 'text',
+            check: 'text',
+            what: 'the id of one of your accounts to read from',
+            example: ['your-account-id'],
+            setting: 'account',
+            also: { accountMode: 'one' },
+         },
+      ],
+      sample: {
+         out: {
+            name: 'Ada Lovelace',
+            lastMessage: 'Thanks for connecting. Could we talk next week?',
+            lastFrom: 'THEM',
+            unread: true,
+            link: 'https://www.linkedin.com/messaging/thread/2-SAMPLE/',
+         },
+      },
+      input: 'start',
+      output: 'conversation',
+      config: z.object({
+         howMany: howMany(500, 50),
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.getConversations']),
+      }),
+      fields: [
+         {
+            key: 'howMany',
+            label: 'How many conversations',
+            kind: 'int',
+            min: 1,
+            max: 500,
+            hint: 'The newest first.',
+         },
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.getConversations']),
+      ],
+   },
+   'account.answerRequests': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'requests',
+      validate: actOffNote('Answer connection requests', 'answers'),
+      label: 'Answer connection requests',
+      api: [
+         peopleApi,
+         wordsApi('accept or ignore the requests', 'action', 10, 'accept'),
+         accountApi('the id of one of your accounts that received the requests'),
+      ],
+      summary:
+         'Accepts or ignores the connection requests of the people that reach it, with the account that received each. Passes the people on with what came of it.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            note: 'Hi, I liked your post on engines. Let us connect.',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            result: {
+               action: 'answerRequest',
+               status: 'ACCEPTED',
+            },
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         action: oneOf(ANSWER_ACTIONS, 'accept'),
+         ...actSettings,
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.answerRequests']),
+      }),
+      fields: [
+         {
+            key: 'action',
+            label: 'Answer',
+            kind: 'select',
+            options: ANSWER_ACTIONS,
+            disarms: true,
+            hint: 'Only people who sent you a request, from the accounts chosen below, are answered; at most 50 a day for each account.',
+         },
+         actField,
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.answerRequests']),
+      ],
+   },
+   'account.sendInvite': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'invites',
+      validate: actOffNote('Send connection request', 'sends'),
+      label: 'Send connection request',
+      api: [
+         peopleApi,
+         wordsApi(
+            'the note to send with each request; {first_name} and {company} are filled in',
+            'note',
+            INVITE_LIMITS.noteChars,
+            'Hi {first_name}, I liked your work at {company}.'
+         ),
+         accountApi('the id of one of your accounts to send from'),
+      ],
+      summary:
+         'Invites the people that reach it to connect, through your invite plan: spread over the days, at most 20 a day and 100 a week for each account. Passes the people on with when each goes. They join My network.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            headline: 'Founder at Analytical Engines',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            result: {
+               action: 'sendInvite',
+               status: 'PLANNED',
+            },
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         note: z.string().trim().max(INVITE_LIMITS.noteChars).default(''),
+         ...actSettings,
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.sendInvite']),
+      }),
+      fields: [
+         {
+            key: 'note',
+            label: 'Note (optional)',
+            kind: 'text',
+            placeholder: 'Hi {first_name}, I liked your work at {company}.',
+            disarms: true,
+            hint: `Up to ${INVITE_LIMITS.noteChars} characters; {first_name} and {company} are filled in for each person. A free account has only a few notes a month; later invites then go without one.`,
+         },
+         actField,
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.sendInvite']),
+      ],
+   },
+   'account.withdrawInvite': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'withdrawals',
+      label: 'Withdraw connection request',
+      api: [peopleApi, accountApi('the id of one of your accounts that sent the requests')],
+      summary:
+         'Takes back the connection requests your chosen accounts sent to the people that reach it: one that has not gone yet is cancelled, one sent is withdrawn on the account’s next run. Passes the people on with what came of it.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            result: {
+               action: 'withdrawInvite',
+               status: 'PLANNED',
+            },
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object(accountSettings(ACCOUNT_BLOCK_HOURS['account.withdrawInvite'])),
+      fields: accountFields(ACCOUNT_BLOCK_HOURS['account.withdrawInvite']),
+   },
+   'account.sendMessage': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'messages',
+      validate: node => [
+         ...actOffNote('Send message', 'sends')(node),
+         ...(typeof settingsOf(node).text === 'string' && settingsOf(node).text !== ''
+            ? []
+            : [
+                 {
+                    nodeId: node.id,
+                    level: 'error' as const,
+                    message: 'Send message: write the message.',
+                 },
+              ]),
+      ],
+      label: 'Send message',
+      api: [
+         peopleApi,
+         wordsApi(
+            'the message to send; {first_name} and {company} are filled in',
+            'text',
+            MESSAGE_MAX_CHARS,
+            'Hi {first_name}, thanks for connecting.'
+         ),
+         accountApi('the id of one of your accounts to write from'),
+      ],
+      summary:
+         'Writes to each person that reaches it, from the account they are connected to: only connections, never twice inside the wait you set, inside each account’s daily limits. Passes the people on with what came of it.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            company: 'Analytical Engines',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            result: {
+               action: 'sendMessage',
+               status: 'SENT',
+            },
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         text: z.string().trim().max(MESSAGE_MAX_CHARS).default(''),
+         notAgainHours: z.number().int().min(0).max(720).default(24),
+         ...actSettings,
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.sendMessage']),
+      }),
+      fields: [
+         {
+            key: 'text',
+            label: 'Message',
+            kind: 'textarea',
+            placeholder: 'Hi {first_name}, thanks for connecting.',
+            disarms: true,
+            hint: '{first_name} and {company} are filled in for each person. Only people connected to the chosen accounts get it; at most 15 first messages a day for each account.',
+         },
+         {
+            key: 'notAgainHours',
+            label: 'Not again within (hours)',
+            kind: 'int',
+            min: 0,
+            max: 720,
+            advanced: true,
+            hint: 'A person this account wrote to lately is skipped. 0 turns it off.',
+         },
+         actField,
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.sendMessage']),
+      ],
+   },
+   'account.replyToConversation': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'replies',
+      validate: node => [
+         ...actOffNote('Reply in a conversation', 'replies')(node),
+         ...(typeof settingsOf(node).text === 'string' && settingsOf(node).text !== ''
+            ? []
+            : [
+                 {
+                    nodeId: node.id,
+                    level: 'error' as const,
+                    message: 'Reply in a conversation: write the reply.',
+                 },
+              ]),
+      ],
+      label: 'Reply in a conversation',
+      api: [
+         wordsApi(
+            'the reply to send; {first_name} and {company} are filled in',
+            'text',
+            MESSAGE_MAX_CHARS,
+            'Hi {first_name}, thanks for your message.'
+         ),
+         accountApi('the id of one of your accounts to reply from'),
+      ],
+      summary:
+         'Replies in each conversation that reaches it, from the account that has it: by default only where they wrote last, never twice inside the wait you set, inside each account’s daily limits. Each reply also shows in the Unibox. Passes the conversations on with what came of it.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            lastMessage: 'Thanks for connecting. Could we talk next week?',
+            lastFrom: 'THEM',
+            unread: true,
+            link: 'https://www.linkedin.com/messaging/thread/2-SAMPLE/',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            lastMessage: 'Thanks for connecting. Could we talk next week?',
+            link: 'https://www.linkedin.com/messaging/thread/2-SAMPLE/',
+            result: {
+               action: 'replyToConversation',
+               status: 'SENT',
+            },
+         },
+      },
+      input: 'conversation',
+      output: 'conversation',
+      config: z.object({
+         text: z.string().trim().max(MESSAGE_MAX_CHARS).default(''),
+         onlyIfTheyWroteLast: z.boolean().default(true),
+         notAgainHours: z.number().int().min(0).max(720).default(24),
+         ...actSettings,
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.replyToConversation']),
+      }),
+      fields: [
+         {
+            key: 'text',
+            label: 'Reply',
+            kind: 'textarea',
+            placeholder: 'Hi {first_name}, thanks for your message.',
+            disarms: true,
+            hint: '{first_name} and {company} are filled in for each person.',
+         },
+         {
+            key: 'onlyIfTheyWroteLast',
+            label: 'Only where they wrote last',
+            kind: 'toggle',
+            disarms: true,
+         },
+         {
+            key: 'notAgainHours',
+            label: 'Not again within (hours)',
+            kind: 'int',
+            min: 0,
+            max: 720,
+            advanced: true,
+            hint: 'A conversation this account wrote in lately is skipped. 0 turns it off.',
+         },
+         actField,
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.replyToConversation']),
+      ],
+   },
+   'account.removeConnection': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'removals',
+      validate: actOffNote('Remove connection', 'removes'),
+      label: 'Remove connection',
+      api: [peopleApi, accountApi('the id of one of your accounts the people are connected to')],
+      summary:
+         'Takes each person that reaches it off the list of connections of the account they are on, one at a time with a rest between two and a few a day for each account. Passes the people on with what came of it.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            result: {
+               action: 'removeConnection',
+               status: 'REMOVED',
+            },
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         ...actSettings,
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.removeConnection']),
+      }),
+      fields: [
+         {
+            ...actField,
+            hint: 'Off: a run shows what would go out and does nothing on LinkedIn. Switch it on after a preview. Removing a connection cannot be undone from here.',
+         },
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.removeConnection']),
       ],
    },
    'output.csv': {
@@ -3651,12 +4408,12 @@ const LINK_MAX = 500
 // in all. A link is only checked for its length (the block drops one it cannot read); a text value must not be empty.
 export const apiBodySchema = (maxValues: number) => {
    const shape = Object.fromEntries(
-      apiFields().map(({ field, shape: kind, check, max }) => {
+      apiFields().map(({ field, shape: kind, check, max, chars }) => {
          const value = z
             .string()
             .trim()
             .min(1)
-            .max(check === 'link' ? LINK_MAX : TEXT_MAX)
+            .max(chars ?? (check === 'link' ? LINK_MAX : TEXT_MAX))
 
          return [field, (kind === 'text' ? value : z.array(value).max(max ?? maxValues)).optional()]
       })
@@ -3680,7 +4437,7 @@ export const applyApiInput = (type: BlockType, config: NodeConfig, input: unknow
    const sent = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
    const replaced: NodeConfig = { ...config }
 
-   for (const { field, shape: kind, setting } of (BLOCKS[type] as BlockSpec).api ?? []) {
+   for (const { field, shape: kind, setting, also } of (BLOCKS[type] as BlockSpec).api ?? []) {
       const value = sent[field]
 
       if (!setting) {
@@ -3689,8 +4446,10 @@ export const applyApiInput = (type: BlockType, config: NodeConfig, input: unknow
 
       if (kind === 'text' && typeof value === 'string' && value.trim() !== '') {
          replaced[setting] = value
+         Object.assign(replaced, also)
       } else if (kind === 'list' && Array.isArray(value) && value.length > 0) {
          replaced[setting] = value.map(String)
+         Object.assign(replaced, also)
       }
    }
 
@@ -3711,6 +4470,7 @@ export const catalog = (): CatalogBlock[] =>
          costHint: spec.costHint ?? null,
          presets: spec.presets ?? [],
          api: spec.api ?? [],
+         sample: spec.sample ?? null,
          version: spec.version ?? 1,
          deprecated: spec.deprecated === true,
          unit: spec.unit ?? null,
@@ -3747,6 +4507,7 @@ export type CatalogBlock = {
    costHint: string | null
    presets: Preset[]
    api: ApiField[]
+   sample: { in?: Record<string, unknown>; out?: Record<string, unknown> } | null
    version: number
    deprecated: boolean
    unit: string | null
@@ -4088,9 +4849,10 @@ const configErrors = (node: GraphNode): GraphError[] => {
         }))
 }
 
-// What happens to items a block does not take: posts become their authors where a block wants people, the rest
-// passes through unchanged.
-export const convertsTo = (gives: ItemKind, needs: ItemKind) => gives === 'post' && needs === 'profile'
+// What happens to items a block does not take: posts become their authors and conversations the person in them where a block
+// wants people, the rest passes through unchanged.
+export const convertsTo = (gives: ItemKind, needs: ItemKind) =>
+   (gives === 'post' || gives === 'conversation') && needs === 'profile'
 
 const edgeNotes = (graph: Graph, byId: Map<string, GraphNode>): GraphError[] =>
    graph.edges.flatMap(({ from, to }): GraphError[] => {
@@ -4129,7 +4891,7 @@ const edgeNotes = (graph: Graph, byId: Map<string, GraphNode>): GraphError[] =>
             nodeId: to,
             level: 'note' as const,
             message: convertsTo(gives, needs)
-               ? `${label} gets posts: it uses their authors.`
+               ? `${label} gets ${gives === 'post' ? 'posts: it uses their authors' : 'conversations: it uses the people in them'}.`
                : `${label} needs ${KIND_LABELS[needs]}; the ${KIND_LABELS[gives]} it gets pass through unchanged.`,
          },
       ]
@@ -4217,12 +4979,24 @@ export const validateGraph = (graph: Graph): GraphError[] => {
          note(`${BLOCKS[node.type].label} has nothing before it, so it gets nothing.`, node.id)
       }
 
-      if (POOL_BLOCKS.has(node.type) && !nodeBefore(graph, node.id, 'account.select')) {
-         problems.push({
-            nodeId: node.id,
-            level: 'error',
-            message: `${BLOCKS[node.type].label} needs "Select accounts" before it.`,
-         })
+      if (POOL_BLOCKS.has(node.type)) {
+         const { accountMode, account } = settingsOf(node)
+
+         if (accountMode === 'one') {
+            if (typeof account !== 'string' || account === '') {
+               problems.push({
+                  nodeId: node.id,
+                  level: 'error',
+                  message: `${BLOCKS[node.type].label}: pick the account it uses.`,
+               })
+            }
+         } else if (!nodeBefore(graph, node.id, 'account.select')) {
+            problems.push({
+               nodeId: node.id,
+               level: 'error',
+               message: `${BLOCKS[node.type].label} needs "Select accounts" before it, or one account picked on the block.`,
+            })
+         }
       }
 
       problems.push(...((BLOCKS[node.type] as BlockSpec).validate?.(node, graph) ?? []))
@@ -4696,6 +5470,35 @@ export const blankGraph = (): Graph => ({
    nodes: [step('trigger', 'trigger.manual', 0, 0)],
    edges: [],
 })
+
+// The workflow of the "Create an API workflow for this block" button (.plan/account-action-blocks.md): the API trigger, the block,
+// and "Give back", so a call gets what came of each item. The account is left to pick on the block, or to send in the call. A block
+// that acts on conversations comes after the block that reads them. Null for a block that is not an Account Actions block.
+export const apiWorkflowOf = (type: BlockType): { name: string; graph: Graph } | null => {
+   const spec: BlockSpec = BLOCKS[type]
+
+   if (spec.group !== 'Account Actions' || !POOL_BLOCKS.has(type)) {
+      return null
+   }
+
+   const alone = { accountMode: 'one' }
+   const reads = spec.input === 'conversation'
+   const nodes = [
+      step('trigger', 'trigger.api', 0, 0),
+      ...(reads ? [step('conversations', 'account.getConversations', 1, 0, alone)] : []),
+      step('block', type, reads ? 2 : 1, 0, alone),
+      step('result', 'output.return', reads ? 3 : 2, 0),
+   ]
+   const ids = nodes.map(({ id }) => id)
+
+   return {
+      name: `${spec.label} by API`,
+      graph: {
+         nodes,
+         edges: linked(ids.slice(1).map((id, index) => [ids[index] ?? '', id])),
+      },
+   }
+}
 
 export const USE_CASES = {
    leads: 'Find new leads',

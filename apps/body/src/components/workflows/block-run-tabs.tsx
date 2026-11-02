@@ -6,7 +6,7 @@ import { type Block, type ConfigValue, type Graph } from './types'
 import { ApiTriggerInput } from './api-request'
 import { BlockOutput } from './block-output'
 import { type BlockRun } from './block-run'
-import { PlannedInput, RunStrip, StepErrorPanel } from './block-run-panel'
+import { PlannedInput, PlannedOutput, RunStrip, StepErrorPanel } from './block-run-panel'
 
 export type RunInfo = {
    // The run the block's state is read from; null when the workflow has no run yet.
@@ -123,9 +123,7 @@ export const BlockRunTabs = ({
                      emptyText={outputText(blockRun)}
                   />
                ) : (
-                  <p className="text-muted-foreground text-sm">
-                     Nothing yet. Run the workflow to see what this block passes on.
-                  </p>
+                  <PlannedOutput block={block} />
                )}
             </TabsContent>
             <TabsContent value="settings">{settings}</TabsContent>

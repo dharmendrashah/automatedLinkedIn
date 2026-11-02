@@ -1,6 +1,6 @@
 import { KeptFiles, UploadFiles, UploadRefused } from 'core'
 
-import { kindOfName, safeFileName } from '@automatedLinkedIn/contracts'
+import { MESSAGE_MAX_CHARS, kindOfName, safeFileName } from '@automatedLinkedIn/contracts'
 
 import { LinkedInConnectionService } from './linkedInConnection.service'
 import { MESSAGE_TASK, REPLY_TASK } from './linkedInReply.hooks'
@@ -19,7 +19,7 @@ export const REPLY_LIMITS = {
    // The most replies that may wait their turn on one account (.plan/reply-queue.md).
    queued: 5,
    // The most characters of a reply: the command that carries it may not pass 8 KB as JSON (the task limits it the same).
-   maxChars: 4000,
+   maxChars: MESSAGE_MAX_CHARS,
    // The task's own limit is 10 minutes (files upload through a proxy); a reply still sending after this long was lost with its run.
    staleMs: 15 * 60 * 1000,
    // A queued reply that has not started this long after its time (when it was asked, or when its wait said it could) ends as failed.

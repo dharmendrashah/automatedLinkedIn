@@ -8,6 +8,7 @@ import { type Context } from '../../context'
 import { workflow } from './workflow'
 
 const mocks = vi.hoisted(() => ({
+   create: vi.fn(),
    update: vi.fn(),
    remove: vi.fn(),
    input: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock('database', () => ({
    WorkflowRunService: {},
    WorkflowTriggerService: {},
    WorkflowService: {
+      create: mocks.create,
       update: mocks.update,
       delete: mocks.remove,
       input: mocks.input,
@@ -65,6 +67,35 @@ describe('workflow resolvers (saving, deleting and reading what reached a block)
          nodes: [],
          edges: [],
       })
+   })
+
+   it('should make the workflow of an Account Actions block with the API trigger before it, and a number when the name is taken', async () => {
+      const { ConflictError } = await import('database')
+
+      mocks.create.mockRejectedValueOnce(new ConflictError('taken')).mockResolvedValueOnce({ id: 'w9' })
+
+      expect(await caller().createForBlock({ type: 'account.sendMessage' })).toEqual({ id: 'w9' })
+      expect(mocks.create.mock.calls.map(([, input]) => input.name)).toEqual([
+         'Send message by API',
+         'Send message by API 2',
+      ])
+
+      const [, made] = mocks.create.mock.calls[1] ?? []
+
+      expect(made.graph.nodes.map(({ type }: { type: string }) => type)).toEqual([
+         'trigger.api',
+         'account.sendMessage',
+         'output.return',
+      ])
+   })
+
+   it('should refuse a block that is not an Account Actions block, and let another failure through', async () => {
+      await expect(caller().createForBlock({ type: 'output.csv' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      expect(mocks.create).not.toHaveBeenCalled()
+
+      mocks.create.mockRejectedValueOnce(new Error('database down'))
+
+      await expect(caller().createForBlock({ type: 'account.sendMessage' })).rejects.toThrow('database down')
    })
 
    it('should list the advice of every step error code', async () => {

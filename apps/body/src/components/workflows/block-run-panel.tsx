@@ -10,7 +10,7 @@ import { type Block, type ConfigValue, type StepRun, formatUsd, resumeText } fro
 
 import { trpc } from '../../trpc'
 import { Code } from './api-request'
-import { KIND_WORDS, sampleOf } from './api-sample'
+import { KIND_WORDS, sampleOf, sampleOutOf } from './api-sample'
 import { type BlockRun, adviceOf } from './block-run'
 import { isInputType } from './input-kinds'
 import { InputMatches } from './input-matches'
@@ -169,6 +169,23 @@ type PlannedProps = {
    takes: string
    // A line leads straight from the "When called by API" block into this one.
    afterCall: boolean
+}
+
+// What a block passes on when it has not run: a sample, when its definition carries one.
+export const PlannedOutput = ({ block }: { block: Block }) => {
+   const sample = sampleOutOf(block)
+
+   return (
+      <div className="grid gap-3 text-sm">
+         <p className="text-muted-foreground">Nothing yet. Run the workflow to see what this block passes on.</p>
+         {sample ? (
+            <div className="grid gap-1">
+               <p className="text-xs font-medium">A sample of one item it passes on (made up)</p>
+               <Code text={sample} label="Copy sample" />
+            </div>
+         ) : null}
+      </div>
+   )
 }
 
 // What a block takes in when it has not run: where it comes from, a sample, what it is set to, and about how much.

@@ -2,7 +2,13 @@ import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import { RUNNER_VERDICTS, taskCatalogEntrySchema, taskCatalogSchema } from '@automatedLinkedIn/contracts'
+import {
+   ACCOUNT_ACTION_TASKS,
+   BLOCK_TYPES,
+   RUNNER_VERDICTS,
+   taskCatalogEntrySchema,
+   taskCatalogSchema,
+} from '@automatedLinkedIn/contracts'
 
 import { catalogEntryOf, catalogOf } from './catalog'
 import { buildTasks } from './registry'
@@ -75,6 +81,19 @@ describe('the registered tasks', () => {
          .map(task => task.name)
 
       expect(missing).toEqual([])
+   })
+
+   // Every task is a block in Account Actions, or planned as one, or left out with a reason (.plan/account-action-blocks.md); a new
+   // task fails here until it chooses, and the other way round for a task that was removed.
+   it('should have a block, a planned block or a reason for every task', () => {
+      expect(Object.keys(ACCOUNT_ACTION_TASKS).sort()).toEqual(TASKS.map(task => task.name).sort())
+
+      for (const entry of Object.values(ACCOUNT_ACTION_TASKS)) {
+         if ('blocks' in entry) {
+            expect(entry.blocks.length).toBeGreaterThan(0)
+            expect(entry.blocks.every(type => BLOCK_TYPES.some(known => known === type))).toBe(true)
+         }
+      }
    })
 
    it('should announce every task in one catalog message', () => {

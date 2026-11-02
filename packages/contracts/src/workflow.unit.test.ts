@@ -594,12 +594,26 @@ describe('Account Actions', () => {
       })),
    })
 
-   it('should group the account block, both visit blocks and Write a post under "Account Actions"', () => {
+   it('should group the account block, the visit blocks, Write a post and the reads under "Account Actions"', () => {
       const groups = catalog()
          .filter(({ group }) => group === 'Account Actions')
          .map(({ type }) => type)
 
-      expect(groups).toEqual(['account.select', 'account.visitProfile', 'account.visitCompany', 'account.writePost'])
+      expect(groups).toEqual([
+         'account.select',
+         'account.visitProfile',
+         'account.visitCompany',
+         'account.writePost',
+         'account.getConnections',
+         'account.getRequests',
+         'account.getConversations',
+         'account.answerRequests',
+         'account.sendInvite',
+         'account.withdrawInvite',
+         'account.sendMessage',
+         'account.replyToConversation',
+         'account.removeConnection',
+      ])
    })
 
    it('should keep a post written in the block as text that reads as a post, and say so when it does not', () => {
@@ -613,9 +627,16 @@ describe('Account Actions', () => {
       ])
 
       expect(blockOf('account.writePost').config.safeParse({}).data).toEqual({
+         source: 'write',
+         draft: '',
          post: '[]',
          audience: 'ANYONE',
          comments: 'ANYONE',
+         when: 'now',
+         afterHours: 1,
+         accountMode: 'pool',
+         account: '',
+         timeLimitHours: 1,
       })
       expect(
          blockOf('account.writePost').config.safeParse({
@@ -624,7 +645,16 @@ describe('Account Actions', () => {
          }).success
       ).toBe(true)
       // The writer holds the two choices next to the post, so the form lists the post only.
-      expect(blockOf('account.writePost').fields.map(({ key }) => key)).toEqual(['post'])
+      expect(blockOf('account.writePost').fields.map(({ key }) => key)).toEqual([
+         'source',
+         'post',
+         'draft',
+         'when',
+         'afterHours',
+         'accountMode',
+         'account',
+         'timeLimitHours',
+      ])
       expect(blockOf('account.writePost').config.safeParse({ audience: 'OFF' }).success).toBe(false)
       expect(blockOf('account.writePost').config.safeParse({ comments: 'OFF' }).success).toBe(false)
       expect(parse(written)).toBe(true)

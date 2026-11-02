@@ -84,11 +84,28 @@ const SAMPLE_BY_KIND = {
       headline: 'Payments for the internet',
       link: 'https://www.linkedin.com/ad-library/detail/1',
    },
+   conversation: {
+      name: 'Ada Lovelace',
+      headline: 'Founder at Analytical Engines',
+      lastMessage: 'Thanks for connecting. Could we talk next week?',
+      lastFrom: 'THEM',
+      unread: true,
+      link: 'https://www.linkedin.com/messaging/thread/2-SAMPLE/',
+   },
 } as const
 
-// A sample of one item the block takes in, as JSON; null for a block that takes none (it starts a chain).
-export const sampleOf = (block: Pick<Block, 'input'>) =>
-   block.input !== null && block.input !== 'start' ? JSON.stringify(SAMPLE_BY_KIND[block.input], null, 2) : null
+// A sample of one item the block takes in, as JSON; null for a block that takes none (it starts a chain). A block that carries
+// its own sample (an Account Actions block) shows that one.
+export const sampleOf = (block: Pick<Block, 'input'> & { sample?: Block['sample'] }) =>
+   block.sample?.in
+      ? JSON.stringify(block.sample.in, null, 2)
+      : block.input !== null && block.input !== 'start'
+        ? JSON.stringify(SAMPLE_BY_KIND[block.input], null, 2)
+        : null
+
+// A sample of one item the block passes on, when its definition carries one.
+export const sampleOutOf = (block: Pick<Block, 'sample'>) =>
+   block.sample?.out ? JSON.stringify(block.sample.out, null, 2) : null
 
 // What a block with items of a kind in front of it is called, in plain words.
 export const KIND_WORDS = {
@@ -97,4 +114,5 @@ export const KIND_WORDS = {
    company: 'companies',
    job: 'job postings',
    ad: 'ads',
+   conversation: 'conversations',
 } as const

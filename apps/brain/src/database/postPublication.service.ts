@@ -185,21 +185,23 @@ export class PostPublicationService {
       return created
    }
 
-   // Sends the post a "Write a post" block of a run holds, now, from one of the owner's accounts (.plan/write-a-post-block.md). The files
-   // stay with the block, so they are never deleted with the post. Throws TaskRefusedError with a sentence when the account cannot post it.
+   // Sends the post a "Write a post" block of a run holds, now, from one of the owner's accounts (.plan/write-a-post-block.md), or for
+   // `plannedAt` through the planner of the Posting page. The files stay with the block, so they are never deleted with the post. Throws
+   // TaskRefusedError with a sentence when the account cannot post it.
    public static async publishFromBlock(
       userId: string,
       accountId: string,
       blocks: PostBlock[],
       link: { runId: string; nodeId: string },
       settings: Visibility,
-      now = Date.now()
+      now = Date.now(),
+      plannedAt?: Date
    ) {
       if (!ownsKeys(userId, blocks)) {
          throw new TaskRefusedError('A file of this post is not yours. Attach it again.')
       }
 
-      await this.checkPost(userId, accountId, blocks, now, now, true)
+      await this.checkPost(userId, accountId, blocks, plannedAt?.getTime() ?? now, now, plannedAt === undefined)
 
       const created = await PrismaService.client.postPublication.create({
          data: {
@@ -207,7 +209,11 @@ export class PostPublicationService {
             accountId,
             blocks,
             ...settings,
-            state: 'QUEUED',
+            state: plannedAt ? 'SCHEDULED' : 'QUEUED',
+            ...(plannedAt && {
+               scheduledAt: plannedAt,
+               plannedZone: 'UTC',
+            }),
             runId: link.runId,
             nodeId: link.nodeId,
          },
@@ -217,9 +223,11 @@ export class PostPublicationService {
          },
       })
 
-      await this.dispatchNext(accountId, now).catch((error: unknown) => {
-         console.error(`Could not start the queued posts of account ${accountId}: ${(error as Error).message}`)
-      })
+      if (!plannedAt) {
+         await this.dispatchNext(accountId, now).catch((error: unknown) => {
+            console.error(`Could not start the queued posts of account ${accountId}: ${(error as Error).message}`)
+         })
+      }
 
       return created
    }
@@ -234,9 +242,12 @@ export class PostPublicationService {
          orderBy: { createdAt: 'asc' },
          select: {
             id: true,
+            accountId: true,
             state: true,
             failure: true,
             link: true,
+            scheduledAt: true,
+            postedAt: true,
          },
       })
    }

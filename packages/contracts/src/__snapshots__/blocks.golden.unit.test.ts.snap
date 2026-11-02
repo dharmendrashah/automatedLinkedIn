@@ -9,8 +9,17 @@ exports[`blocks before they became one definition > should keep the sets of bloc
     "logic.taskResult",
   ],
   "pool": [
+    "account.answerRequests",
+    "account.getConnections",
+    "account.getConversations",
+    "account.getRequests",
+    "account.removeConnection",
+    "account.replyToConversation",
+    "account.sendInvite",
+    "account.sendMessage",
     "account.visitCompany",
     "account.visitProfile",
+    "account.withdrawInvite",
     "account.writePost",
   ],
   "takesAnything": [
@@ -705,6 +714,132 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 9,
     },
     "type": "account.writePost",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 100,
+    },
+    "preview": {
+      "howMany": 20,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 7,
+    },
+    "type": "account.getConnections",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 50,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 7,
+    },
+    "type": "account.getRequests",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 50,
+    },
+    "preview": {
+      "howMany": 20,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 7,
+    },
+    "type": "account.getConversations",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.answerRequests",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.sendInvite",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.withdrawInvite",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.sendMessage",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.replyToConversation",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.removeConnection",
   },
   {
     "plain": {

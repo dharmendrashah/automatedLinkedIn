@@ -17,7 +17,19 @@ export type Signal = {
 
 export type Band = 'QUALIFIED' | 'MAYBE'
 
-export type PersonItem = {
+// What an Account Actions block did with an item, readable by the blocks after it (.plan/account-action-blocks.md). `status` is
+// a fixed word such as SENT, QUEUED, VISITED, SKIPPED, NOT_AVAILABLE, FAILED or UNKNOWN; `reason` is one fixed sentence.
+export type ItemResult = {
+   action: string
+   status: string
+   account: string | null
+   at: string | null
+   reason: string | null
+}
+
+type WithResult = { result?: ItemResult | null }
+
+export type PersonItem = WithResult & {
    kind: 'profile'
    slug: string
    url: string
@@ -37,9 +49,13 @@ export type PersonItem = {
    tags: string[]
    // A work email found for the person.
    email?: string | null
+   // The day they connected to one of the owner's accounts, when an account was read for it.
+   connectedOn?: string | null
+   // What the person wrote with a connection request to the owner, shortened.
+   note?: string | null
 }
 
-export type PostItem = {
+export type PostItem = WithResult & {
    kind: 'post'
    slug: string
    url: string
@@ -51,7 +67,7 @@ export type PostItem = {
    preview?: PostSnapshotData | null
 }
 
-export type CompanyItem = {
+export type CompanyItem = WithResult & {
    kind: 'company'
    slug: string
    url: string
@@ -63,7 +79,7 @@ export type CompanyItem = {
 }
 
 // A job posting a search found; it belongs to a company when LinkedIn names one.
-export type JobItem = {
+export type JobItem = WithResult & {
    kind: 'job'
    // LinkedIn's job id.
    slug: string
@@ -80,7 +96,7 @@ export type JobItem = {
 }
 
 // An ad a company runs; kept in the run only.
-export type AdItem = {
+export type AdItem = WithResult & {
    kind: 'ad'
    slug: string
    url: string
@@ -93,7 +109,24 @@ export type AdItem = {
    clickUrl: string | null
 }
 
-export type WorkflowItemData = PersonItem | PostItem | CompanyItem | JobItem | AdItem
+// A conversation of one of the owner's accounts: the other person and the last message, shortened. No attachments.
+export const CONVERSATION_EXCERPT = 200
+
+export type ConversationItem = WithResult & {
+   kind: 'conversation'
+   // The conversation's id, as in the address of its page.
+   slug: string
+   url: string
+   personSlug: string | null
+   name: string | null
+   headline: string | null
+   lastText: string | null
+   lastAt: string | null
+   lastFrom: 'ME' | 'THEM' | null
+   unread: boolean
+}
+
+export type WorkflowItemData = PersonItem | PostItem | CompanyItem | JobItem | AdItem | ConversationItem
 
 export const EXCERPT_LENGTH = 140
 
@@ -127,6 +160,8 @@ export const mergePeople = (a: PersonItem, b: PersonItem): PersonItem => ({
    title: a.title ?? b.title,
    company: a.company ?? b.company,
    email: a.email ?? b.email,
+   connectedOn: a.connectedOn ?? b.connectedOn,
+   note: a.note ?? b.note,
    known: a.known || b.known,
    tags: [...new Set([...a.tags, ...b.tags])],
    signals: [...a.signals, ...b.signals.filter(signal => !a.signals.some(known => sameSignal(known, signal)))],
@@ -145,6 +180,17 @@ export const mergeBySlug = (people: PersonItem[]) => {
 }
 
 const nullableText = z.string().nullable()
+
+const resultSchema = z
+   .object({
+      action: z.string(),
+      status: z.string(),
+      account: nullableText,
+      at: nullableText,
+      reason: nullableText,
+   })
+   .nullable()
+   .optional()
 
 const signalSchema = z.object({
    type: z.enum(['commented', 'reacted', 'employee', 'hiring']),
@@ -174,6 +220,9 @@ const itemSchema = z.discriminatedUnion('kind', [
       known: z.boolean().default(false),
       tags: z.array(z.string()).default([]),
       email: nullableText.optional(),
+      connectedOn: nullableText.optional(),
+      note: nullableText.optional(),
+      result: resultSchema,
    }),
    z.object({
       kind: z.literal('post'),
@@ -182,6 +231,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       postId: z.string().nullable(),
       author: z.string().nullable().optional(),
       preview: postSchema.nullable().optional(),
+      result: resultSchema,
    }),
    z.object({
       kind: z.literal('company'),
@@ -190,6 +240,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       name: nullableText,
       hiring: z.array(z.string()),
       preview: companySchema.nullable().optional(),
+      result: resultSchema,
    }),
    z.object({
       kind: z.literal('job'),
@@ -204,6 +255,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       employment: nullableText,
       applicants: z.number().nullable(),
       salary: nullableText,
+      result: resultSchema,
    }),
    z.object({
       kind: z.literal('ad'),
@@ -216,6 +268,20 @@ const itemSchema = z.discriminatedUnion('kind', [
       started: nullableText,
       ended: nullableText,
       clickUrl: nullableText,
+      result: resultSchema,
+   }),
+   z.object({
+      kind: z.literal('conversation'),
+      slug: z.string(),
+      url: z.string(),
+      personSlug: nullableText,
+      name: nullableText,
+      headline: nullableText,
+      lastText: nullableText,
+      lastAt: nullableText,
+      lastFrom: z.enum(['ME', 'THEM']).nullable(),
+      unread: z.boolean(),
+      result: resultSchema,
    }),
 ])
 

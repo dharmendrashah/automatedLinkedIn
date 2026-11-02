@@ -23,6 +23,7 @@ const block = (type: Block['type'], input: Block['input'], output: Block['output
    costHint: null,
    presets: [],
    api: [],
+   sample: null,
    version: 1,
    deprecated: false,
    unit: null,

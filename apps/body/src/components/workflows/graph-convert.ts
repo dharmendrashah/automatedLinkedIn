@@ -57,6 +57,7 @@ const KIND_WORDS = {
    company: 'companies',
    job: 'job postings',
    ad: 'ads',
+   conversation: 'conversations',
 } as const
 
 export const blockOf = (catalog: Block[], type: string) => catalog.find(block => block.type === type)

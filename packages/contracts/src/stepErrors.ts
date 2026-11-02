@@ -63,13 +63,13 @@ const ADVICE: Record<StepErrorCode, Entry> = {
    },
    NEEDS_SELECT_ACCOUNTS: {
       title: 'No accounts were chosen',
-      why: ['A LinkedIn action needs "Select accounts" before it to know which accounts may act.'],
-      fixes: [{ text: 'Add "Select accounts" before this block and pick at least one account.' }],
+      why: ['A LinkedIn action needs "Select accounts" before it, or an account picked on the block.'],
+      fixes: [{ text: 'Add "Select accounts" before this block, or pick one account on the block.' }],
    },
    ACCOUNTS_MISSING: {
       title: 'The chosen accounts could not be found',
-      why: ['The accounts picked in "Select accounts" were deleted, or belong to someone else.'],
-      fixes: [{ text: 'Open "Select accounts" and pick your accounts again.' }],
+      why: ['The accounts picked in "Select accounts" or on the block were deleted, or belong to someone else.'],
+      fixes: [{ text: 'Open "Select accounts" or the block and pick your accounts again.' }],
    },
    ACCOUNTS_SIGNED_OUT: {
       title: 'None of the chosen accounts can act right now',

@@ -26,6 +26,7 @@ import {
    retriesOf,
 } from '@automatedLinkedIn/contracts'
 
+import { apiItemsOf } from './apiItems'
 import {
    ELSE_SUFFIX,
    type EngineDeps,
@@ -116,6 +117,15 @@ const sortInputs = (items: WorkflowItemData[], needs: ItemKind | null) => {
          inputs.push(item)
       } else if (author && convertsTo('post', needs)) {
          inputs.push(person(author))
+      } else if (item.kind === 'conversation' && item.personSlug && convertsTo('conversation', needs)) {
+         inputs.push(
+            person({
+               slug: item.personSlug,
+               url: `https://www.linkedin.com/in/${item.personSlug}/`,
+               name: item.name,
+               known: true,
+            })
+         )
       } else {
          passThrough.push(item)
       }
@@ -186,6 +196,8 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
                  passThrough: [],
               }
             : sortInputs(read, blockOf(node.type).input)
+      // A block with nothing before it that a call may name items for acts on exactly the items the call names.
+      const named = read.length === 0 && !off ? apiItemsOf(node.type, run.input) : []
       const result = await (off ? switchedOff : EXECUTORS[node.type])({
          run,
          graph,
@@ -196,7 +208,7 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
          },
          step: started,
          at,
-         inputs,
+         inputs: named.length > 0 ? named : inputs,
          preview: run.trigger === 'PREVIEW',
          deps,
       })

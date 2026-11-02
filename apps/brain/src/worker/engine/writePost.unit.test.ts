@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => {
       lastPosts: vi.fn(),
       ofStep: vi.fn(),
       publishFromBlock: vi.fn(),
+      draftGet: vi.fn(),
       replaceItems: vi.fn(),
    }
 })
@@ -38,6 +39,7 @@ vi.mock('database', async () => ({
       publishFromBlock: mocks.publishFromBlock,
    },
    VisitPoolService: { accounts: mocks.accounts },
+   PostDraftService: { get: mocks.draftGet },
    WorkflowRunService: { replaceItems: mocks.replaceItems },
    IcpService: {},
    WalletService: {},
@@ -63,7 +65,7 @@ const node = (id: string, type: Graph['nodes'][number]['type'], config: Graph['n
    },
 })
 
-const graph = (post = JSON.stringify(BLOCKS), settings: Record<string, string> = {}): Graph => ({
+const graph = (post = JSON.stringify(BLOCKS), settings: Record<string, string | number> = {}): Graph => ({
    nodes: [
       node('pool', 'account.select', { accounts: ['a1', 'a2'] }),
       node('write', 'account.writePost', {
@@ -89,7 +91,7 @@ const context = (
       post?: string
       tries?: number
       startedAt?: Date
-      settings?: Record<string, string>
+      settings?: Record<string, string | number>
    } = {}
 ) => {
    const { post, tries = 0, startedAt = new Date(), settings, ...rest } = overrides
@@ -215,6 +217,55 @@ describe('writePost', () => {
       expect(mocks.publishFromBlock).not.toHaveBeenCalled()
    })
 
+   it('should use the one account the block names, without Select accounts, and refuse one that is not picked', async () => {
+      const lonely = context({
+         settings: {
+            accountMode: 'one',
+            account: 'a2',
+         },
+      })
+
+      lonely.graph = {
+         nodes: [lonely.node],
+         edges: [],
+      }
+
+      await expect(writePost(lonely)).rejects.toBeInstanceOf(Waiting)
+      expect(mocks.accounts).toHaveBeenCalledWith('u1', ['a2'])
+
+      const none = context({ settings: { accountMode: 'one' } })
+
+      none.graph = {
+         nodes: [none.node],
+         edges: [],
+      }
+
+      await expect(writePost(none)).rejects.toThrow('Pick the account')
+   })
+
+   it('should wait for the post as long as the block says, one hour when it says nothing', async () => {
+      mocks.ofStep.mockResolvedValue([
+         {
+            id: 'p1',
+            state: 'SENDING',
+            failure: null,
+            link: null,
+         },
+      ])
+
+      const twoHoursAgo = new Date(Date.now() - 2 * HOUR_MS)
+
+      await expect(
+         writePost(
+            context({
+               startedAt: twoHoursAgo,
+               settings: { timeLimitHours: 3 },
+            })
+         )
+      ).rejects.toBeInstanceOf(Waiting)
+      expect(await writePost(context({ startedAt: twoHoursAgo }))).toMatchObject({ status: 'PARTIAL' })
+   })
+
    it('should post nothing in a preview, and pass on what reached it', async () => {
       const result = await writePost(context({ preview: true }))
 
@@ -255,10 +306,123 @@ describe('writePost', () => {
       expect(result).toMatchObject({
          status: 'DONE',
          itemsIn: 1,
-         itemsOut: 1,
+         itemsOut: 2,
       })
       expect(result.message).toContain('https://www.linkedin.com/feed/update/urn:li:activity:7520195721216827392/')
+      expect(kept()[0]?.slug).toBe('ada')
+      expect(kept()[1]).toMatchObject({
+         kind: 'post',
+         url: expect.stringContaining('7520195721216827392'),
+         result: {
+            action: 'writePost',
+            status: 'POSTED',
+         },
+      })
+   })
+
+   it('should pass on only what reached it when the post went without a link', async () => {
+      mocks.ofStep.mockResolvedValue([
+         {
+            id: 'p1',
+            accountId: 'a1',
+            state: 'POSTED',
+            failure: 'It went without a link.',
+            link: null,
+            postedAt: new Date(),
+         },
+      ])
+
+      await writePost(context())
+
       expect(kept().map(({ slug }) => slug)).toEqual(['ada'])
+   })
+
+   it('should post a copy of the saved draft with its own audience, and fail when the draft is gone', async () => {
+      const settings = {
+         source: 'draft',
+         draft: 'd1',
+      }
+
+      mocks.draftGet.mockResolvedValue({
+         blocks: BLOCKS,
+         audience: 'CONNECTIONS',
+         comments: 'ANYONE',
+      })
+
+      await expect(writePost(context({ settings }))).rejects.toBeInstanceOf(Waiting)
+
+      expect(mocks.draftGet).toHaveBeenCalledWith('u1', 'd1')
+      expect(mocks.publishFromBlock.mock.calls[0]?.[2]).toEqual(BLOCKS)
+      expect(mocks.publishFromBlock.mock.calls[0]?.[4]).toEqual({
+         audience: 'CONNECTIONS',
+         comments: 'ANYONE',
+      })
+
+      mocks.draftGet.mockResolvedValue(null)
+
+      await expect(writePost(context({ settings }))).rejects.toThrow('draft was not found')
+   })
+
+   it('should not need the draft once the post is made, so a draft deleted meanwhile changes nothing', async () => {
+      mocks.ofStep.mockResolvedValue([
+         {
+            id: 'p1',
+            accountId: 'a1',
+            state: 'SENDING',
+            failure: null,
+            link: null,
+            postedAt: null,
+         },
+      ])
+      mocks.draftGet.mockResolvedValue(null)
+
+      await expect(
+         writePost(
+            context({
+               settings: {
+                  source: 'draft',
+                  draft: 'd1',
+               },
+            })
+         )
+      ).rejects.toBeInstanceOf(Waiting)
+      expect(mocks.draftGet).not.toHaveBeenCalled()
+   })
+
+   it('should plan the post for the wait the block says, end once it is planned, and say when', async () => {
+      const settings = {
+         when: 'after',
+         afterHours: 2,
+      }
+      const before = Date.now()
+
+      await expect(writePost(context({ settings }))).rejects.toBeInstanceOf(Waiting)
+
+      const [, , , , , now, plannedAt] = mocks.publishFromBlock.mock.calls[0] ?? []
+
+      expect(now).toBeGreaterThanOrEqual(before)
+      expect(Math.abs((plannedAt as Date).getTime() - (now as number) - 2 * HOUR_MS)).toBeLessThan(1000)
+
+      mocks.publishFromBlock.mockClear()
+      mocks.ofStep.mockResolvedValue([
+         {
+            id: 'p1',
+            accountId: 'a1',
+            state: 'SCHEDULED',
+            failure: null,
+            link: null,
+            scheduledAt: new Date('2026-11-03T09:30:00Z'),
+            postedAt: null,
+         },
+      ])
+
+      const result = await writePost(context({ settings }))
+
+      expect(mocks.publishFromBlock).not.toHaveBeenCalled()
+      expect(result).toMatchObject({
+         status: 'DONE',
+         message: 'Planned for 2026-11-03 09:30 UTC.',
+      })
    })
 
    it('should fail the step with the sentence of a post that did not go, so Retry and Task result can handle it', async () => {

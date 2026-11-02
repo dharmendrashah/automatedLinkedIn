@@ -11,6 +11,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { ChevronRight, CircleAlert, Trash2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -18,11 +19,14 @@ import { cn } from '@/lib/utils'
 import { type Block, type ConfigValue, type Field } from './types'
 
 import { LabelMultiSelect } from '../labels/label-multi-select'
+import { AccountPick } from './account-pick'
 import { AccountsPick } from './accounts-pick'
+import { ApiWorkflowButton } from './api-workflow-button'
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { BlockRunTabs, type RunInfo } from './block-run-tabs'
 import { ClientPick } from './client-pick'
 import { CompanyFiltersField } from './company-filters-field'
+import { DraftPick } from './draft-pick'
 import { type FlowNode, summaryOf } from './graph-convert'
 import { INPUT_KINDS, isInputType } from './input-kinds'
 import { InputMatches } from './input-matches'
@@ -60,6 +64,7 @@ const KINDS: Record<string, string> = {
    post: 'posts',
    profile: 'people',
    company: 'companies',
+   conversation: 'conversations',
 }
 
 // "Takes posts, gives people", from what the block reads and passes on; a block with its own words says them.
@@ -91,9 +96,14 @@ export const BlockSettings = ({
       return null
    }
 
-   const onChange = (key: string, value: ConfigValue) => onPatch({ [key]: value })
-
    const { block, config } = node.data
+   // A setting that decides what goes out switches "Act for real" off, so what the owner saw in a preview is what goes out.
+   const onChange = (key: string, value: ConfigValue) =>
+      onPatch({
+         [key]: value,
+         ...(block.fields.some(item => item.key === key && item.disarms) ? { actForReal: false } : {}),
+      })
+
    const Icon = BLOCK_ICONS[block.type]
    const values: Record<string, ConfigValue | undefined> = {
       ...block.defaults,
@@ -177,6 +187,14 @@ export const BlockSettings = ({
          )
       }
 
+      if (item.kind === 'account') {
+         return <AccountPick id={id} value={textOf(value)} onChange={next => onChange(item.key, next)} />
+      }
+
+      if (item.kind === 'draft') {
+         return <DraftPick id={id} value={textOf(value)} onChange={next => onChange(item.key, next)} />
+      }
+
       if (item.kind === 'post') {
          return (
             <PostField
@@ -251,6 +269,17 @@ export const BlockSettings = ({
                   </>
                )}
             </div>
+         )
+      }
+
+      if (item.kind === 'textarea') {
+         return (
+            <Textarea
+               id={id}
+               placeholder={item.placeholder}
+               value={textOf(value)}
+               onChange={event => onChange(item.key, event.target.value)}
+            />
          )
       }
 
@@ -438,6 +467,9 @@ export const BlockSettings = ({
             ) : (
                settings
             )}
+            {block.group === 'Account Actions' && block.flags.usesAccounts ? (
+               <ApiWorkflowButton type={block.type} />
+            ) : null}
             <DialogFooter className="sm:justify-between">
                <Button type="button" variant="ghost" className="text-destructive" onClick={onRemove}>
                   <Trash2 />

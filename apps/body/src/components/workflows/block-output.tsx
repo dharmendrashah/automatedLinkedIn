@@ -19,6 +19,7 @@ const KIND_LABELS = {
    company: 'Company',
    job: 'Job',
    ad: 'Ad',
+   conversation: 'Conversation',
 } as const
 
 const nameOf = ({ item }: Item) => {
@@ -46,6 +47,10 @@ const detailOf = ({ item }: Item) => {
          return [item.company, item.location, item.salary].filter(Boolean).join(' · ')
       case 'ad':
          return [item.advertiser, item.format].filter(Boolean).join(' · ')
+      case 'conversation':
+         return [item.lastFrom === 'ME' ? 'You wrote last' : item.lastFrom === 'THEM' ? 'They wrote last' : null, item.lastText]
+            .filter(Boolean)
+            .join(': ')
       default:
          return item.author ?? ''
    }
@@ -100,6 +105,7 @@ export const BlockOutput = ({ runId, nodeId, rounds, fileName, kind = 'output', 
    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
    const error = output.error ?? csv.error
    const items: Item[] = output.data?.items ?? []
+   const hasResults = items.some(({ item }) => item.result)
 
    return (
       <div className="grid gap-3">
@@ -153,6 +159,7 @@ export const BlockOutput = ({ runId, nodeId, rounds, fileName, kind = 'output', 
                      <TableHead>Name</TableHead>
                      <TableHead>Details</TableHead>
                      {kind === 'input' ? <TableHead>From</TableHead> : null}
+                     {hasResults ? <TableHead>Result</TableHead> : null}
                      {rounds > 1 ? <TableHead>Round</TableHead> : null}
                   </TableRow>
                </TableHeader>
@@ -176,12 +183,19 @@ export const BlockOutput = ({ runId, nodeId, rounds, fileName, kind = 'output', 
                               {row.from ? (labelOf?.(row.from) ?? row.from) : ''}
                            </TableCell>
                         ) : null}
+                        {hasResults ? (
+                           <TableCell className="text-muted-foreground">
+                              {row.item.result
+                                 ? [row.item.result.status, row.item.result.reason].filter(Boolean).join(': ')
+                                 : ''}
+                           </TableCell>
+                        ) : null}
                         {rounds > 1 ? <TableCell>{row.round + 1}</TableCell> : null}
                      </TableRow>
                   ))}
                   {total === 0 && !output.isPending ? (
                      <TableRow>
-                        <TableCell colSpan={5} className="text-muted-foreground py-6 text-center">
+                        <TableCell colSpan={6} className="text-muted-foreground py-6 text-center">
                            {emptyText ?? 'Nothing here for this run.'}
                         </TableCell>
                      </TableRow>

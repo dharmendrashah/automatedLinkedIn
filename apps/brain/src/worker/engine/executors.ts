@@ -79,6 +79,9 @@ import {
    searchPeopleParams,
    searchedPeopleFrom,
 } from '../data/operations'
+import { getConnections, getConversations, getRequests } from './accountRead'
+import { answerRequests } from './answerRequests'
+import { removeConnections } from './connectionBlocks'
 import {
    type Context,
    DAY_MS,
@@ -100,7 +103,9 @@ import {
    thresholdsOf,
    wordsIn,
 } from './context'
+import { sendInvites, withdrawInvites } from './inviteBlocks'
 import { retry, stop, taskResult, wait } from './logicBlocks'
+import { replyToConversations, sendMessages } from './replyBlocks'
 import { runWorkflow } from './runWorkflow'
 import { sendPages } from './sendApi'
 import { applyProfiles, conditionsOf, filterPeople, matches, scorePeople } from './steps'
@@ -1578,6 +1583,15 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'account.visitProfile': visitProfile,
    'account.visitCompany': visitCompany,
    'account.writePost': writePost,
+   'account.getConnections': getConnections,
+   'account.getRequests': getRequests,
+   'account.getConversations': getConversations,
+   'account.answerRequests': answerRequests,
+   'account.sendInvite': sendInvites,
+   'account.withdrawInvite': withdrawInvites,
+   'account.sendMessage': sendMessages,
+   'account.replyToConversation': replyToConversations,
+   'account.removeConnection': removeConnections,
    'output.list': addToList,
    'output.markPosts': markPosts,
    'output.csv': exportCsv,
