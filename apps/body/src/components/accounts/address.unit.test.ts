@@ -6,32 +6,31 @@ const read = (query: string) => readAddress(new URLSearchParams(query))
 
 describe('readAddress', () => {
    it('should read every part of a good address', () => {
-      expect(read('q=acme&client=Acme&status=needs&group=client&open=abc-123&panel=activity&activity=Acme')).toEqual({
+      expect(read('q=acme&status=needs&open=abc-123&panel=activity')).toEqual({
          q: 'acme',
-         client: 'Acme',
          chip: 'needs',
-         group: true,
          open: 'abc-123',
          panel: 'activity',
-         activity: 'Acme',
       })
    })
 
    it('should ignore what it does not know and fall back to the plain list', () => {
-      expect(read('status=nope&group=maybe&open=../etc&panel=other&activity=%20')).toEqual({
+      expect(read('status=nope&open=../etc&panel=other')).toEqual({
          q: '',
-         client: '',
          chip: 'all',
-         group: null,
          open: null,
          panel: null,
-         activity: null,
       })
    })
 
-   it('should keep the bottom drawer only with an account open, and say off when the owner turned grouping off', () => {
+   it('should keep the bottom drawer only with an account open, and ignore an old client address', () => {
       expect(read('panel=activity').panel).toBeNull()
-      expect(read('group=off').group).toBe(false)
+      expect(read('client=Acme&group=client&activity=Acme')).toEqual({
+         q: '',
+         chip: 'all',
+         open: null,
+         panel: null,
+      })
    })
 
    it('should cut very long text', () => {
@@ -45,10 +44,9 @@ describe('writeAddress', () => {
          chip: 'all',
          q: '  ',
          open: 'abc',
-         group: true,
       })
 
-      expect(next.toString()).toBe('browse=busy&group=client&open=abc')
+      expect(next.toString()).toBe('browse=busy&open=abc')
    })
 
    it('should drop the bottom drawer when the account closes', () => {
@@ -60,12 +58,9 @@ describe('writeAddress', () => {
    it('should write what readAddress reads back', () => {
       const address = {
          q: 'a b',
-         client: 'Acme & Co',
          chip: 'ready' as const,
-         group: false,
          open: 'x1',
          panel: 'activity' as const,
-         activity: 'Acme & Co',
       }
 
       expect(readAddress(writeAddress(new URLSearchParams(), address))).toEqual(address)

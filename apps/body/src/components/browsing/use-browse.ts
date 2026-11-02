@@ -78,7 +78,6 @@ export const useBrowsing = (accounts: SampleAccount[] | undefined) => {
 const restoreOf = (account: AccountBrowse, keys: string[]): Override => ({
    ...(keys.includes('mode') && { mode: account.mode }),
    ...(keys.includes('hours') && { hours: account.hours }),
-   ...(keys.includes('clientLabel') && { clientLabel: account.clientLabel }),
 })
 
 // Changes the accounts and offers an Undo that puts each one back as it was. With sample data nothing is sent.

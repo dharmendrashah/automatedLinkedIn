@@ -5,9 +5,8 @@ import { snapshotFrom } from 'core'
 
 import { peopleFiltersSchema } from '@automatedLinkedIn/contracts'
 
-import { ClientService } from './client.service'
 import { ConflictError } from './conflict'
-import { ALL_CLIENTS, PeopleService } from './people.service'
+import { PeopleService } from './people.service'
 import { PeopleIndexService } from './peopleIndex.service'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
@@ -18,7 +17,6 @@ const db = PrismaService.client
 
 let userId: string
 let otherUserId: string
-let clientId: string
 let accountId: string
 
 const request = (slug: string, name: string) =>
@@ -35,7 +33,6 @@ const request = (slug: string, name: string) =>
 
 const view = (extra: Partial<Parameters<typeof PeopleService.list>[1]> = {}) =>
    PeopleService.list(userId, {
-      clientId,
       tab: 'EVERYONE',
       limit: 50,
       ...extra,
@@ -45,7 +42,6 @@ describe('PeopleService (database)', () => {
    beforeAll(async () => {
       userId = (await UserService.create({ email: `${randomUUID()}@elitale.com` })).id
       otherUserId = (await UserService.create({ email: `${randomUUID()}@elitale.com` })).id
-      clientId = (await ClientService.create(userId, 'Acme')).id
       accountId = (
          await db.linkedInAccount.create({
             data: {
@@ -55,7 +51,6 @@ describe('PeopleService (database)', () => {
                secretIv: 'x',
                secretTag: 'x',
                status: 'ACTIVE',
-               clientId,
             },
          })
       ).id
@@ -132,7 +127,7 @@ describe('PeopleService (database)', () => {
             })
          )?.items.map(({ name }) => name)
       ).toEqual(['Ana Silva', 'Mia Chen', 'Ravi Kumar'])
-      expect(await PeopleService.filterOptions(userId, clientId)).toEqual({
+      expect(await PeopleService.filterOptions(userId)).toEqual({
          countries: [
             {
                value: 'France',
@@ -147,7 +142,6 @@ describe('PeopleService (database)', () => {
          ],
          labels: [],
       })
-      expect(await PeopleService.filterOptions(otherUserId, clientId)).toBeNull()
    })
 
    it('should filter by the skills of the profile read, all of them by default, and offer them as typed', async () => {
@@ -164,14 +158,13 @@ describe('PeopleService (database)', () => {
       expect(await names(['Salesforce', 'HubSpot'])).toEqual(['Ravi Kumar'])
       expect(await names(['Salesforce', 'Excel'])).toEqual([])
       expect(await names(['Salesforce', 'Excel'], 'any')).toEqual(['Ravi Kumar'])
-      expect(await PeopleService.skillOptions(userId, clientId, 'sales')).toEqual([
+      expect(await PeopleService.skillOptions(userId, 'sales')).toEqual([
          {
             value: 'Salesforce',
             count: 1,
          },
       ])
-      expect(await PeopleService.skillOptions(userId, clientId, '%')).toEqual([])
-      expect(await PeopleService.skillOptions(otherUserId, clientId, '')).toBeNull()
+      expect(await PeopleService.skillOptions(userId, '%')).toEqual([])
    })
 
    it('should find people by the start of a word, and by a profile link', async () => {
@@ -181,15 +174,21 @@ describe('PeopleService (database)', () => {
       ])
    })
 
-   it("should never show another owner's client", async () => {
+   it("should never show another owner's people", async () => {
       expect(
-         await PeopleService.list(otherUserId, {
-            clientId,
-            tab: 'EVERYONE',
-            limit: 50,
-         })
-      ).toBeNull()
-      expect(await PeopleService.counts(otherUserId, { clientId })).toBeNull()
+         (
+            await PeopleService.list(otherUserId, {
+               tab: 'EVERYONE',
+               limit: 50,
+            })
+         ).items
+      ).toEqual([])
+      expect((await PeopleService.counts(otherUserId, {})).EVERYONE).toBe(0)
+      expect(await PeopleService.filterOptions(otherUserId)).toEqual({
+         countries: [],
+         companies: [],
+         labels: [],
+      })
    })
 
    it('should find the person of a profile for any page, and nobody of another owner', async () => {
@@ -200,66 +199,35 @@ describe('PeopleService (database)', () => {
       expect(await PeopleService.find(userId, 'nobody')).toBeNull()
    })
 
-   it('should show every client of the owner together under All clients, and no one of another owner', async () => {
-      const otherClientId = (await ClientService.create(userId, 'Beta')).id
-      const betaAccount = await db.linkedInAccount.create({
-         data: {
+   it('should call people new after the owner last left My network, and count them in Today', async () => {
+      expect((await view()).items.some(({ isNew }) => isNew)).toBe(false)
+
+      await PeopleService.seen(userId)
+      await db.person.updateMany({
+         where: {
             userId,
-            email: `${randomUUID()}@example.com`,
-            secret: 'x',
-            secretIv: 'x',
-            secretTag: 'x',
-            status: 'ACTIVE',
-            clientId: otherClientId,
+            slug: 'person-0',
          },
+         data: { firstSeenAt: new Date(Date.now() + 60_000) },
       })
 
-      await db.linkedInInvitation.create({
-         data: {
-            userId,
-            accountId: betaAccount.id,
-            linkedInId: randomUUID(),
-            slug: 'beta-person',
-            name: 'Bea Turner',
-            headline: 'Buyer',
-         },
-      })
-      await PeopleIndexService.refresh(userId, ['beta-person'])
+      expect((await view()).items.filter(({ isNew }) => isNew).map(({ slug }) => slug)).toEqual(['person-0'])
+      expect((await view({ onlyNew: true })).items.map(({ slug }) => slug)).toEqual(['person-0'])
+      expect((await PeopleService.today(userId)).fresh).toBe(1)
+   })
 
-      const all = await view({ clientId: ALL_CLIENTS })
-
-      expect(all?.items.map(({ clientId: rowClient }) => rowClient).sort()).toEqual(
-         [clientId, clientId, clientId, otherClientId].sort()
-      )
-      expect((await PeopleService.counts(userId, { clientId: ALL_CLIENTS }))?.EVERYONE).toBe(4)
-      expect((await PeopleService.filterOptions(userId, ALL_CLIENTS))?.labels).toEqual([])
-      expect(
-         (
-            await PeopleService.list(otherUserId, {
-               clientId: ALL_CLIENTS,
-               tab: 'EVERYONE',
-               limit: 50,
-            })
-         )?.items ?? []
-      ).toEqual([])
-
-      await db.person.deleteMany({ where: { clientId: otherClientId } })
-      await db.linkedInAccount.delete({ where: { id: betaAccount.id } })
-      await db.client.delete({ where: { id: otherClientId } })
+   it('should list the owner accounts and lists for the pickers, and no one else', async () => {
+      expect((await PeopleService.workspace(userId)).accounts.map(({ id }) => id)).toEqual([accountId])
+      expect((await PeopleService.workspace(otherUserId)).accounts).toEqual([])
    })
 
    it('should count the tabs, and move a person out of Needs me when the owner closes them', async () => {
-      expect(await PeopleService.counts(userId, { clientId })).toMatchObject({
+      expect(await PeopleService.counts(userId, {})).toMatchObject({
          NEEDS_ME: 3,
          EVERYONE: 3,
          DO_NOT_CONTACT: 0,
       })
-      expect(
-         await PeopleService.counts(userId, {
-            clientId,
-            search: 'rav',
-         })
-      ).toMatchObject({
+      expect(await PeopleService.counts(userId, { search: 'rav' })).toMatchObject({
          NEEDS_ME: 1,
          EVERYONE: 1,
       })
@@ -271,7 +239,7 @@ describe('PeopleService (database)', () => {
 
       const closed = { status: 'NOT_INTERESTED' }
 
-      expect((await PeopleService.counts(userId, { clientId }))?.NEEDS_ME).toBe(2)
+      expect((await PeopleService.counts(userId, {})).NEEDS_ME).toBe(2)
       expect(await db.person.findUniqueOrThrow({ where: { id: person?.id ?? '' } })).toMatchObject(closed)
    })
 
@@ -309,12 +277,9 @@ describe('PeopleService (database)', () => {
    })
 
    it('should export a view with fixed columns and log it', async () => {
-      const exported = await PeopleService.export(userId, {
-         clientId,
-         tab: 'EVERYONE',
-      })
+      const exported = await PeopleService.export(userId, { tab: 'EVERYONE' })
 
-      expect(exported?.csv.split('\r\n')[0]).toBe(
+      expect(exported.csv.split('\r\n')[0]).toBe(
          '"Name","Profile link","Headline","Company","Reason","Found by","Fit","Status","Labels","Last touch"'
       )
       expect(await db.peopleExport.findFirst({ where: { userId } })).toMatchObject({
@@ -330,18 +295,12 @@ describe('PeopleService (database)', () => {
       await db.person.createMany({
          data: slugs.map(slug => ({
             userId,
-            clientId,
             slug,
             lastTouchAt: new Date(),
          })),
       })
 
-      await expect(
-         PeopleService.export(userId, {
-            clientId,
-            tab: 'EVERYONE',
-         })
-      ).rejects.toBeInstanceOf(ConflictError)
+      await expect(PeopleService.export(userId, { tab: 'EVERYONE' })).rejects.toBeInstanceOf(ConflictError)
       expect(
          await db.peopleExport.findFirst({
             where: {

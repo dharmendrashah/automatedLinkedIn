@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
    DropdownMenu,
    DropdownMenuCheckboxItem,
@@ -10,26 +9,18 @@ import {
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ChevronDown, Columns3, Download } from 'lucide-react'
 
 import { COLUMNS, type ColumnId, toggleColumn } from './columns'
 import { CHIPS, type Chip, MAIN_CHIPS } from './toolbar'
 
-const ALL_CLIENTS = '__all'
-
 type Props = {
    q: string
    onQ: (value: string) => void
-   client: string
-   onClient: (value: string) => void
-   clients: string[]
    chip: Chip
    onChip: (value: Chip) => void
    counts: Record<Chip, number>
-   grouped: boolean
-   onGrouped: (value: boolean) => void
    columns: ColumnId[]
    onColumns: (value: ColumnId[]) => void
    // A spreadsheet of what the accounts shown did today.
@@ -37,24 +28,9 @@ type Props = {
    canExport: boolean
 }
 
-// Find an account and narrow the list: words, a client, one chip, grouping by client and which optional columns show. The four
+// Find an account and narrow the list: words, one chip and which optional columns show. The four
 // browsing counts and Paused sit under More; the chip in use is always shown.
-export const AccountsToolbar = ({
-   q,
-   onQ,
-   client,
-   onClient,
-   clients,
-   chip,
-   onChip,
-   counts,
-   grouped,
-   onGrouped,
-   columns,
-   onColumns,
-   onExport,
-   canExport,
-}: Props) => {
+export const AccountsToolbar = ({ q, onQ, chip, onChip, counts, columns, onColumns, onExport, canExport }: Props) => {
    const shown = MAIN_CHIPS.includes(chip) ? MAIN_CHIPS : [...MAIN_CHIPS, chip]
    const more = CHIPS.filter(item => !shown.includes(item.chip))
 
@@ -64,34 +40,12 @@ export const AccountsToolbar = ({
             <Input
                type="search"
                aria-label="Search accounts"
-               placeholder="Search by email or client"
+               placeholder="Search by email or name"
                className="w-64"
                maxLength={100}
                value={q}
                onChange={event => onQ(event.target.value)}
             />
-            {clients.length > 0 ? (
-               <Select
-                  value={client === '' ? ALL_CLIENTS : client}
-                  onValueChange={value => onClient(value === ALL_CLIENTS ? '' : value)}
-               >
-                  <SelectTrigger className="w-48" aria-label="Client">
-                     <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                     <SelectItem value={ALL_CLIENTS}>All clients</SelectItem>
-                     {clients.map(item => (
-                        <SelectItem key={item} value={item}>
-                           {item}
-                        </SelectItem>
-                     ))}
-                  </SelectContent>
-               </Select>
-            ) : null}
-            <label className="flex items-center gap-2 text-sm">
-               <Checkbox checked={grouped} onCheckedChange={value => onGrouped(value === true)} />
-               Group by client
-            </label>
             <Button
                variant="outline"
                size="sm"

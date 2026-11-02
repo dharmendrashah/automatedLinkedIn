@@ -25,13 +25,7 @@ import {
    CodeBlockTitle,
 } from '@/components/ui/code-block'
 import { Drawer, DrawerContent, DrawerTitle } from '@/components/ui/drawer'
-import {
-   DropdownMenu,
-   DropdownMenuContent,
-   DropdownMenuItem,
-   DropdownMenuSeparator,
-   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -121,9 +115,9 @@ const EraseDialog = ({
             <AlertDialogHeader>
                <AlertDialogTitle>Erase {name}?</AlertDialogTitle>
                <AlertDialogDescription>
-                  Everything stored about {name} is deleted for every client: requests, connections, conversations and
-                  messages, lists, notes and profile reads. They are kept on Do not contact so they are not added again.
-                  This cannot be undone.
+                  Everything stored about {name} is deleted: requests, connections, conversations and messages, lists,
+                  notes and profile reads. They are kept on Do not contact so they are not added again. This cannot be
+                  undone.
                </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -257,7 +251,7 @@ const Identity = ({ person, onInvite }: { person: Person; onInvite: ((id: string
 
    if (profile) {
       return (
-         <ProfileCard person={profile} clientId={person.clientId} actions={actions} known={person}>
+         <ProfileCard person={profile} actions={actions} known={person}>
             {why}
          </ProfileCard>
       )
@@ -285,16 +279,8 @@ const WorkBar = ({
    onAnswer: (ask: Ask) => void
    onErased: () => void
 }) => {
-   const utils = trpc.useUtils()
    const update = useUpdate()
    const [erasing, setErasing] = useState(false)
-   const everywhere = trpc.people.doNotContactEverywhere.useMutation({
-      onSuccess: async () => {
-         toast.success(`${nameOf(person)} is on Do not contact for every client.`)
-         await utils.people.invalidate()
-      },
-      onError: error => toast.error(readableError(error)),
-   })
    const name = nameOf(person)
    const step = nextStepOf({
       ...person,
@@ -397,14 +383,6 @@ const WorkBar = ({
                   </Button>
                </DropdownMenuTrigger>
                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                     disabled={everywhere.isPending}
-                     onSelect={() => everywhere.mutate({ id: person.id })}
-                  >
-                     <Ban />
-                     Do not contact for all clients
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onSelect={() => setErasing(true)}>
                      <Trash2 />
                      Erase…
@@ -557,7 +535,7 @@ export const PersonPanel = ({ id, order = [], pane, onPane, onMove, onGone, onAn
    )
 }
 
-// One person of the client: who they are and why they are here, then the chat, the profile and the history.
+// One person: who they are and why they are here, then the chat, the profile and the history.
 export const PersonDrawer = ({ onClose, ...props }: Props) => (
    <Drawer direction="right" open onOpenChange={open => (open ? undefined : onClose())}>
       <DrawerContent className={floatingDrawer(WIDE)}>

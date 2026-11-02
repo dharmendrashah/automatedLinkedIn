@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { ClientService } from './client.service'
 import { ConnectionReadService } from './connectionRead.service'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
@@ -16,7 +15,7 @@ let userId: string
 let accountId: string
 let otherAccountId: string
 
-const account = (clientId: string) =>
+const account = () =>
    db.linkedInAccount.create({
       data: {
          userId,
@@ -25,7 +24,6 @@ const account = (clientId: string) =>
          secretIv: 'x',
          secretTag: 'x',
          status: 'ACTIVE',
-         clientId,
       },
       select: { id: true },
    })
@@ -66,10 +64,8 @@ describe('the connections read of an account (database)', () => {
    beforeAll(async () => {
       userId = (await UserService.create({ email })).id
 
-      const clientId = (await ClientService.create(userId, 'Acme')).id
-
-      accountId = (await account(clientId)).id
-      otherAccountId = (await account(clientId)).id
+      accountId = (await account()).id
+      otherAccountId = (await account()).id
 
       for (const [slug, position, connectedOn, forAccount] of [
          ['ana', 0, new Date('2026-10-30T00:00:00Z'), accountId],

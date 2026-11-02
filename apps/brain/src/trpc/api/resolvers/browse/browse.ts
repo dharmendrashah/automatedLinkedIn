@@ -59,17 +59,13 @@ export const browse = router({
             accountIds: z.array(accountId).min(1).max(MAX_ACCOUNTS),
             mode: z.enum(BROWSE_MODES).optional(),
             hours: hoursSchema.optional(),
-            clientLabel: z.string().trim().max(60).nullable().optional(),
          })
       )
       .mutation(async ({ ctx, input }) => {
          const { accountIds, ...change } = input
 
          try {
-            return await BrowseService.change(ctx.user.id, accountIds, {
-               ...change,
-               ...(change.clientLabel !== undefined && { clientLabel: change.clientLabel || null }),
-            })
+            return await BrowseService.change(ctx.user.id, accountIds, change)
          } catch (error) {
             if (error instanceof BrowseSettingsError) {
                throw new TRPCError({

@@ -1,4 +1,3 @@
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { CalendarClock, Copy, Trash2 } from 'lucide-react'
@@ -8,7 +7,6 @@ import { type Account } from '../accounts/types'
 
 import { type RouterOutputs } from '../../trpc'
 import { accountName } from './accounts'
-import { type Labels } from './landing'
 import { describePlanned } from './schedule'
 import { summaryOf } from './summary'
 
@@ -17,7 +15,6 @@ export type Draft = RouterOutputs['postDraft']['list']['items'][number]
 type Props = {
    drafts: Draft[]
    accounts: Account[]
-   labels: Labels
    onRemove: (draft: Draft) => void
    onDuplicate: (draft: Draft) => void
 }
@@ -29,11 +26,10 @@ const when = (iso: string) =>
    })
 
 // The owner's drafts, newest first. Each opens in the canvas; one can be copied or deleted, and deleting offers Undo.
-export const DraftsList = ({ drafts, accounts, labels, onRemove, onDuplicate }: Props) => (
+export const DraftsList = ({ drafts, accounts, onRemove, onDuplicate }: Props) => (
    <ul className="grid gap-2">
       {drafts.map(draft => {
          const account = accounts.find(({ id }) => id === draft.accountId)
-         const client = labels.get(draft.accountId)
          const { words, attachment } = summaryOf(draft.blocks)
 
          return (
@@ -49,7 +45,6 @@ export const DraftsList = ({ drafts, accounts, labels, onRemove, onDuplicate }: 
                         </span>
                         <span className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
                            <span>{accountName(account)}</span>
-                           {client ? <Badge variant="outline">{client}</Badge> : null}
                            {attachment ? <span>{attachment}</span> : null}
                            {draft.plannedAt && draft.plannedZone ? (
                               <span className="flex items-center gap-1">

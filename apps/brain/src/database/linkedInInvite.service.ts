@@ -2,7 +2,6 @@ import { type LinkedInInviteState, type Prisma } from 'generated/prisma/client'
 
 import { INVITE_LIMITS, type InvitesFile } from '@automatedLinkedIn/contracts'
 
-import { ClientService } from './client.service'
 import {
    COUNTED,
    LIVE,
@@ -30,7 +29,6 @@ const STALE_MS = 45 * 60 * 1000
 // A refusal that is not about browsing time (the account not signed in, say) is tried again after this.
 const REFUSED_WAIT_MS = 30 * 60 * 1000
 const STALE_SENTENCE = 'No answer came from the browser. It is not sent again.'
-const MOVED_SENTENCE = 'The account moved to another client. Nothing was sent.'
 const BLOCKED_SENTENCE = 'On Do not contact. Nothing was sent.'
 
 const SKIP_SENTENCES: Record<SkipReason, string> = {
@@ -44,9 +42,8 @@ const SKIP_SENTENCES: Record<SkipReason, string> = {
 class InvitesTaken extends Error {}
 
 export type InviteRequest = {
-   clientId: string
    personIds: string[]
-   // The account that sends; may be left out when the client has one signed-in account.
+   // The account that sends; may be left out when the owner has one signed-in account.
    accountId?: string
    note?: string
    // The Found by source the owner was looking at, credited with the accepts.
@@ -95,28 +92,12 @@ const stopped = (
 // Connection invites from My network (.plan/network-invites.md): planned per account over the days, sent by `linkedin-invite` runs of
 // up to 5, withdrawn after 3 weeks, and marked accepted by the reads of the newest connections. Every call is scoped to the owner.
 export class LinkedInInviteService {
-   // The signed-in accounts of a client that can send, with what each may still send today. Null when the client is not the owner's.
-   private static async accountsOf(userId: string, clientId: string) {
-      const client = await PrismaService.client.client.findFirst({
-         where: {
-            id: clientId,
-            userId,
-         },
-         select: {
-            id: true,
-            isDefault: true,
-         },
-      })
-
-      if (!client) {
-         return null
-      }
-
+   // The owner's signed-in accounts that can send, oldest first.
+   private static accountsOf(userId: string) {
       return PrismaService.client.linkedInAccount.findMany({
          where: {
             userId,
             status: 'ACTIVE',
-            ...(client.isDefault ? { OR: [{ clientId: null }, { clientId }] } : { clientId }),
          },
          orderBy: { createdAt: 'asc' },
          select: {
@@ -128,28 +109,28 @@ export class LinkedInInviteService {
    }
 
    // The due invites with the name My network has now and their note filled in from it (an address-named invite gets the name a
-   // read brought since). A person no longer in the client keeps the invite's own name.
+   // read brought since). A person no longer on My network keeps the invite's own name.
    private static async withNames(
-      sends: Array<{ id: string; clientId: string; slug: string; name: string; note: string | null }>
+      sends: Array<{ id: string; userId: string; slug: string; name: string; note: string | null }>
    ) {
       const people = await PrismaService.client.person.findMany({
          where: {
-            OR: sends.map(({ clientId, slug }) => ({
-               clientId,
+            OR: sends.map(({ userId, slug }) => ({
+               userId,
                slug,
             })),
          },
          select: {
-            clientId: true,
+            userId: true,
             slug: true,
             name: true,
             company: true,
          },
       })
-      const personOf = new Map(people.map(person => [`${person.clientId}:${person.slug}`, person]))
+      const personOf = new Map(people.map(person => [`${person.userId}:${person.slug}`, person]))
 
       return sends.map(invite => {
-         const person = personOf.get(`${invite.clientId}:${invite.slug}`)
+         const person = personOf.get(`${invite.userId}:${invite.slug}`)
          const name = person?.name ?? invite.name
 
          return {
@@ -164,13 +145,12 @@ export class LinkedInInviteService {
       })
    }
 
-   // The picked people of My network; only people of the client count.
-   private static prospects(userId: string, clientId: string, personIds: string[]): Promise<Prospect[]> {
+   // The picked people of My network.
+   private static prospects(userId: string, personIds: string[]): Promise<Prospect[]> {
       return PrismaService.client.person.findMany({
          where: {
             id: { in: personIds },
             userId,
-            clientId,
          },
          select: {
             slug: true,
@@ -182,12 +162,11 @@ export class LinkedInInviteService {
       })
    }
 
-   // People a workflow block holds: My network's own row when the client has one, else what the block knows of them.
-   private static async prospectsOfLinks(userId: string, clientId: string, links: Link[]): Promise<Prospect[]> {
+   // People a workflow block holds: My network's own row when there is one, else what the block knows of them.
+   private static async prospectsOfLinks(userId: string, links: Link[]): Promise<Prospect[]> {
       const known = await PrismaService.client.person.findMany({
          where: {
             userId,
-            clientId,
             slug: { in: links.map(({ slug }) => slug) },
          },
          select: {
@@ -213,7 +192,7 @@ export class LinkedInInviteService {
    }
 
    // Why each person would be skipped, or not.
-   private static async facts(userId: string, clientId: string, people: Prospect[], now: Date) {
+   private static async facts(userId: string, people: Prospect[], now: Date) {
       const db = PrismaService.client
       const slugs = people.map(({ slug }) => slug)
       const [suppressed, requests, invites, connections] = await Promise.all([
@@ -234,7 +213,7 @@ export class LinkedInInviteService {
          }),
          db.linkedInInvite.findMany({
             where: {
-               clientId,
+               userId,
                slug: { in: slugs },
                OR: [
                   { state: { in: LIVE } },
@@ -271,10 +250,9 @@ export class LinkedInInviteService {
       }))
    }
 
-   // What inviting these people would do, without doing it: the account that sends, the sentence, and the counts. Null when the client
-   // is not the owner's.
+   // What inviting these people would do, without doing it: the account that sends, the sentence, and the counts.
    public static async plan(userId: string, request: Omit<InviteRequest, 'note' | 'source'>, now = new Date()) {
-      return this.planOf(userId, request, await this.prospects(userId, request.clientId, request.personIds), now)
+      return this.planOf(userId, request, await this.prospects(userId, request.personIds), now)
    }
 
    private static async planOf(
@@ -283,19 +261,14 @@ export class LinkedInInviteService {
       people: Prospect[],
       now: Date
    ) {
-      const accounts = await this.accountsOf(userId, request.clientId)
-
-      if (!accounts) {
-         return null
-      }
-
+      const accounts = await this.accountsOf(userId)
       const account = accounts.find(({ id }) => id === request.accountId) ?? (await this.roomiest(accounts, now))
 
       if (!account) {
-         throw new TaskRefusedError('Inviting needs a signed-in account of this client. Run Test login first.')
+         throw new TaskRefusedError('Inviting needs a signed-in account. Run Test login first.')
       }
 
-      const facts = await this.facts(userId, request.clientId, people, now)
+      const facts = await this.facts(userId, people, now)
       const skipped = this.skipCounts(facts)
       const toInvite = facts.filter(({ skip }) => skip === undefined).length
       const unnamed = facts.filter(({ person, skip }) => skip === undefined && !person.name).length
@@ -327,33 +300,25 @@ export class LinkedInInviteService {
    }
 
    // Queues the invites as planned: each person not skipped gets one row with its planned time, each skipped one a SKIPPED row with
-   // why, and what 14 days cannot hold is left out. Null when the client is not the owner's.
+   // why, and what 14 days cannot hold is left out.
    public static async invite(userId: string, request: InviteRequest, now = new Date()) {
-      const made = await this.queue(
-         userId,
-         request,
-         await this.prospects(userId, request.clientId, request.personIds),
-         now
-      )
+      const made = await this.queue(userId, request, await this.prospects(userId, request.personIds), now)
 
-      return (
-         made && {
-            queued: made.queued,
-            skipped: made.skipped,
-            sentence: made.sentence,
-         }
-      )
+      return {
+         queued: made.queued,
+         skipped: made.skipped,
+         sentence: made.sentence,
+      }
    }
 
-   // What "Send connection request" asks: the people go out from one account, under the client that account belongs to. Null when the
-   // account is not the owner's.
+   // What "Send connection request" asks: the people go out from one account. Null when the account is not the owner's.
    public static async inviteFrom(userId: string, accountId: string, people: Link[], note: string, now = new Date()) {
       const account = await PrismaService.client.linkedInAccount.findFirst({
          where: {
             id: accountId,
             userId,
          },
-         select: { clientId: true },
+         select: { id: true },
       })
 
       if (!account) {
@@ -363,7 +328,6 @@ export class LinkedInInviteService {
       return this.inviteLinks(
          userId,
          {
-            clientId: account.clientId ?? (await ClientService.defaultId(userId)),
             accountId,
             note,
             people,
@@ -386,20 +350,15 @@ export class LinkedInInviteService {
             ...rest,
             personIds: [],
          },
-         await this.prospectsOfLinks(userId, request.clientId, people),
+         await this.prospectsOfLinks(userId, people),
          now
       )
    }
 
    private static async queue(userId: string, request: InviteRequest, people: Prospect[], now: Date) {
       const plan = await this.planOf(userId, request, people, now)
-
-      if (!plan) {
-         return null
-      }
-
       const { accountId } = plan
-      const facts = await this.facts(userId, request.clientId, people, now)
+      const facts = await this.facts(userId, people, now)
       const db = PrismaService.client
       const queued = await db.$transaction(async tx => {
          // The account row is locked so two requests at once plan from the same counts.
@@ -413,7 +372,6 @@ export class LinkedInInviteService {
          })
          const rows = wanted.slice(0, times.length).map(({ person }, index) => ({
             userId,
-            clientId: request.clientId,
             accountId,
             slug: person.slug,
             name: person.name ?? person.slug,
@@ -436,7 +394,6 @@ export class LinkedInInviteService {
                   ? [
                        {
                           userId,
-                          clientId: request.clientId,
                           accountId,
                           slug: person.slug,
                           name: person.name ?? person.slug,
@@ -552,17 +509,14 @@ export class LinkedInInviteService {
       return count === 1
    }
 
-   // The invites of one person in a client, newest first, for the drawer.
+   // The invites of one person, newest first, for the drawer.
    public static async ofPerson(userId: string, personId: string) {
       const person = await PrismaService.client.person.findFirst({
          where: {
             id: personId,
             userId,
          },
-         select: {
-            clientId: true,
-            slug: true,
-         },
+         select: { slug: true },
       })
 
       if (!person) {
@@ -571,7 +525,7 @@ export class LinkedInInviteService {
 
       return PrismaService.client.linkedInInvite.findMany({
          where: {
-            clientId: person.clientId,
+            userId,
             slug: person.slug,
             state: { not: 'SKIPPED' },
          },
@@ -608,7 +562,6 @@ export class LinkedInInviteService {
          select: {
             userId: true,
             status: true,
-            clientId: true,
             lastVerifiedAt: true,
             invitesStoppedAt: true,
             invitesStopUntil: true,
@@ -645,11 +598,7 @@ export class LinkedInInviteService {
          }
       }
 
-      await this.dropUnwanted(
-         accountId,
-         account.userId,
-         account.clientId ?? (await ClientService.defaultId(account.userId))
-      )
+      await this.dropUnwanted(accountId, account.userId)
 
       const { started } = await this.usage(accountId, now)
       const day = started.filter(at => at.getTime() > now.getTime() - DAY_MS).length
@@ -673,7 +622,7 @@ export class LinkedInInviteService {
                  take: room,
                  select: {
                     id: true,
-                    clientId: true,
+                    userId: true,
                     slug: true,
                     name: true,
                     note: true,
@@ -1036,7 +985,7 @@ export class LinkedInInviteService {
       }
    }
 
-   // The account with the most room today, so a client with several accounts spreads its invites.
+   // The account with the most room today, so an owner with several accounts spreads the invites.
    private static async roomiest(accounts: Account[], now: Date) {
       let best: { account: Account; today: number } | undefined
 
@@ -1071,8 +1020,8 @@ export class LinkedInInviteService {
       )
    }
 
-   // Queued invites that must not go any more: their person went on Do not contact, or their account moved to another client.
-   private static async dropUnwanted(accountId: string, userId: string, clientId: string) {
+   // Queued invites that must not go any more: their person went on Do not contact.
+   private static async dropUnwanted(accountId: string, userId: string) {
       const db = PrismaService.client
       const queued = await db.linkedInInvite.findMany({
          where: {
@@ -1082,7 +1031,6 @@ export class LinkedInInviteService {
          select: {
             id: true,
             slug: true,
-            clientId: true,
          },
          take: 200,
       })
@@ -1106,30 +1054,11 @@ export class LinkedInInviteService {
                slug: { in: slugs },
                doNotContact: true,
             },
-            select: {
-               slug: true,
-               clientId: true,
-            },
+            select: { slug: true },
          }),
       ])
-      const blocked = (invite: { slug: string; clientId: string }) =>
-         suppressed.some(({ slug }) => slug === invite.slug) ||
-         blockedPeople.some(person => person.slug === invite.slug && person.clientId === invite.clientId)
-      const moved = queued.filter(invite => invite.clientId !== clientId).map(({ id }) => id)
-      const unwanted = queued.filter(invite => invite.clientId === clientId && blocked(invite)).map(({ id }) => id)
-
-      if (moved.length > 0) {
-         await db.linkedInInvite.updateMany({
-            where: {
-               id: { in: moved },
-               state: 'QUEUED',
-            },
-            data: {
-               state: 'SKIPPED',
-               reason: MOVED_SENTENCE,
-            },
-         })
-      }
+      const blocked = new Set([...suppressed, ...blockedPeople].map(({ slug }) => slug))
+      const unwanted = queued.filter(({ slug }) => blocked.has(slug)).map(({ id }) => id)
 
       if (unwanted.length > 0) {
          await db.linkedInInvite.updateMany({

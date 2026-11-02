@@ -21,14 +21,12 @@ export type FilterOptions = {
 
 type Props = {
    open: boolean
-   // The client (or all clients) whose people the Skills picker offers.
-   clientId: string
    value: PeopleFilters
    options: FilterOptions
    // Matches in the chosen tab (null while counting), capped like the tab counts.
    count: number | null
    cap: number
-   // The client and account pickers, first in the drawer.
+   // The account picker, first in the drawer.
    scope: ReactNode
    // Found by, Fit and Label.
    quick: ReactNode
@@ -61,7 +59,6 @@ const Tick = ({ label, checked, onChange }: { label: string; checked: boolean; o
 // Every filter beyond the toolbar's, grouped by who they are, how they are tied to the owner, what happened, and the owner's work.
 export const FiltersSheet = ({
    open,
-   clientId,
    value,
    options,
    count,
@@ -111,7 +108,6 @@ export const FiltersSheet = ({
                      onChange={countries => set({ countries })}
                   />
                   <SkillsPick
-                     clientId={clientId}
                      value={value.skills}
                      mode={value.skillsMode}
                      onChange={(skills, skillsMode) =>

@@ -14,25 +14,23 @@ import { trpc } from '../../trpc'
 import { identityOf } from './accounts'
 import { type Option, OptionList } from './combobox'
 import { blocksOf } from './draft'
-import { type Labels, STARTERS, type Starter } from './landing'
+import { STARTERS, type Starter } from './landing'
 
 type Props = {
    accounts: Account[]
-   labels: Labels
    // The account the list is narrowed to, when it is one; picked here without a click.
    preselected: string
 }
 
-const hintOf = (account: Account, client: string | null | undefined) =>
-   [client, account.status === 'ACTIVE' ? undefined : 'not signed in'].filter(Boolean).join(' · ') || undefined
+const hintOf = (account: Account) => (account.status === 'ACTIVE' ? undefined : 'not signed in')
 
 // What was asked for while the account is still to be chosen.
 type Pending = { kind: 'write' } | { kind: 'idea'; starter: Starter }
 
 // The one way to start a post, for the toolbar: "Write a post" or an idea, always enabled. Any account can start a draft; the canvas
 // says what a signed-out one cannot do. With one account, or a list narrowed to one, it goes straight on. With several it asks which
-// account first (never guessed, so a post is not started under another client's name).
-export const NewPost = ({ accounts, labels, preselected }: Props) => {
+// account first (never guessed, so a post is not started under another account).
+export const NewPost = ({ accounts, preselected }: Props) => {
    const navigate = useNavigate()
    const utils = trpc.useUtils()
    const [pending, setPending] = useState<Pending | null>(null)
@@ -48,7 +46,7 @@ export const NewPost = ({ accounts, labels, preselected }: Props) => {
    const options: Option[] = accounts.map(item => ({
       value: item.id,
       label: identityOf(item, null).name,
-      hint: hintOf(item, labels.get(item.id)),
+      hint: hintOf(item),
    }))
    const run = (action: Pending, accountId: string) => {
       if (action.kind === 'write') {

@@ -102,20 +102,17 @@ describe('browse resolvers', () => {
       await expect(caller().year({ accountId: 'other' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
    })
 
-   it('should change the accounts it names, turning an empty client into none', async () => {
+   it('should change the accounts it names, and ignore a client label an old page still sends', async () => {
       mocks.change.mockResolvedValue(['a1', 'a2'])
 
       await expect(
          caller().change({
             accountIds: ['a1', 'a2'],
             mode: 'MODERATE',
-            clientLabel: '',
+            ...{ clientLabel: '' },
          })
       ).resolves.toEqual(['a1', 'a2'])
-      expect(mocks.change).toHaveBeenCalledWith('u1', ['a1', 'a2'], {
-         mode: 'MODERATE',
-         clientLabel: null,
-      })
+      expect(mocks.change).toHaveBeenCalledWith('u1', ['a1', 'a2'], { mode: 'MODERATE' })
    })
 
    it('should say why a change cannot be kept, as a bad request', async () => {

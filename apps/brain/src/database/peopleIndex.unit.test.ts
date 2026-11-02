@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { type ConnectionRow, type ConversationRow, type InviteRow, type Sources, draftPeople } from './peopleIndex'
+import { type ConnectionRow, type ConversationRow, type InviteRow, type Sources, draftPerson } from './peopleIndex'
 
 const at = (day: string) => new Date(`${day}T10:00:00.000Z`)
 
@@ -35,7 +35,6 @@ const conversation = (rest: Partial<ConversationRow>): ConversationRow => ({
 
 const invite = (rest: Partial<InviteRow>): InviteRow => ({
    id: 'inv-1',
-   clientId: 'client-1',
    accountId: 'acc-1',
    name: 'Ada',
    state: 'SENT',
@@ -57,7 +56,7 @@ const sources = (rest: Partial<Sources>): Sources => ({
 })
 
 const draft = (rest: Partial<Sources>) => {
-   const [person] = draftPeople(sources(rest), () => 'client-1', 'client-1', 'https://www.linkedin.com/in/ada/')
+   const person = draftPerson(sources(rest), 'https://www.linkedin.com/in/ada/')
 
    if (!person) {
       throw new Error('no person')
@@ -66,7 +65,7 @@ const draft = (rest: Partial<Sources>) => {
    return person
 }
 
-describe('draftPeople dates LinkedIn did not give', () => {
+describe('draftPerson dates LinkedIn did not give', () => {
    it('should show the name, headline, photo and company of the profile read first: the read is final', () => {
       expect(
          draft({
@@ -140,7 +139,7 @@ describe('draftPeople dates LinkedIn did not give', () => {
    })
 })
 
-describe('draftPeople filter fields', () => {
+describe('draftPerson filter fields', () => {
    it('should keep when the connection began, and the newest message each way', () => {
       expect(
          draft({
@@ -209,7 +208,6 @@ describe('draftPeople filter fields', () => {
             targets: [
                {
                   id: 'target-1',
-                  clientId: 'client-1',
                   name: 'Ada',
                   headline: null,
                   company: null,

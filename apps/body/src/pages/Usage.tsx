@@ -1,7 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { downloadFile } from '@/lib/download-file'
 import { ArrowDownUp, Download } from 'lucide-react'
@@ -13,20 +12,15 @@ import { trpc } from '../trpc'
 
 const thisMonth = () => new Date().toISOString().slice(0, 7)
 
-const ALL = 'all'
-const EVERY_CLIENT = 'Every client'
-
-// Owner only: every erasure (for all clients at once) and every export of My network, by client and date. Nothing about anyone.
+// Owner only: every erasure and every export of My network, by date. Nothing about anyone.
 const AuditView = () => {
    const audit = trpc.people.audit.useQuery()
-   const [client, setClient] = useState(ALL)
    const [newestFirst, setNewestFirst] = useState(true)
    const entries = [
       ...(audit.data?.erasures ?? []).map(({ id, createdAt }) => ({
          id,
          createdAt,
          what: 'Erasure',
-         client: EVERY_CLIENT,
          rows: '',
          refused: '',
       })),
@@ -34,14 +28,10 @@ const AuditView = () => {
          id: entry.id,
          createdAt: entry.createdAt,
          what: 'Export',
-         client: entry.client,
          rows: entry.rows.toLocaleString('en'),
          refused: entry.refused ? 'Refused (over 10,000)' : '',
       })),
-   ]
-      .filter(entry => client === ALL || entry.client === client)
-      .sort((a, b) => (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * (newestFirst ? -1 : 1))
-   const clients = [...new Set((audit.data?.exports ?? []).map(entry => entry.client))].sort()
+   ].sort((a, b) => (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * (newestFirst ? -1 : 1))
 
    return (
       <Card>
@@ -51,19 +41,6 @@ const AuditView = () => {
          </CardHeader>
          <CardContent className="grid gap-3">
             <div className="flex flex-wrap items-center gap-2">
-               <Select value={client} onValueChange={setClient}>
-                  <SelectTrigger size="sm" className="w-48" aria-label="Client">
-                     <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                     <SelectItem value={ALL}>All clients</SelectItem>
-                     {clients.map(name => (
-                        <SelectItem key={name} value={name}>
-                           {name}
-                        </SelectItem>
-                     ))}
-                  </SelectContent>
-               </Select>
                <Button variant="outline" size="sm" onClick={() => setNewestFirst(!newestFirst)}>
                   <ArrowDownUp />
                   {newestFirst ? 'Newest first' : 'Oldest first'}
@@ -75,7 +52,6 @@ const AuditView = () => {
                   <TableRow>
                      <TableHead>Date</TableHead>
                      <TableHead>What</TableHead>
-                     <TableHead>Client</TableHead>
                      <TableHead>Rows</TableHead>
                      <TableHead>Refused</TableHead>
                   </TableRow>
@@ -83,7 +59,7 @@ const AuditView = () => {
                <TableBody>
                   {entries.length === 0 ? (
                      <TableRow>
-                        <TableCell colSpan={5} className="text-muted-foreground text-sm">
+                        <TableCell colSpan={4} className="text-muted-foreground text-sm">
                            Nothing erased or exported yet.
                         </TableCell>
                      </TableRow>
@@ -92,7 +68,6 @@ const AuditView = () => {
                      <TableRow key={entry.id}>
                         <TableCell>{new Date(entry.createdAt).toLocaleString()}</TableCell>
                         <TableCell>{entry.what}</TableCell>
-                        <TableCell>{entry.client}</TableCell>
                         <TableCell>{entry.rows}</TableCell>
                         <TableCell>{entry.refused}</TableCell>
                      </TableRow>

@@ -99,12 +99,9 @@ describe('CollectKeepService (database)', () => {
    })
 
    it('should never add people who are on Do not contact, suppressed or archived', async () => {
-      const client = await PrismaService.client.client.findFirstOrThrow({ where: { userId } })
-
       await PrismaService.client.person.create({
          data: {
             userId,
-            clientId: client.id,
             slug: 'refused',
             doNotContact: true,
             lastTouchAt: new Date(),

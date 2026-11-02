@@ -26,7 +26,6 @@ export type BrowseState = 'OPEN' | 'WAITING_FOR_SLOT' | 'DAY_FULL' | 'OUTSIDE_HO
 export type AccountBrowse = {
    accountId: string
    email: string
-   clientLabel: string | null
    mode: BrowseMode
    usedSeconds: number
    state: BrowseState
@@ -44,7 +43,6 @@ export type DayUsage = { day: string; seconds: number; sessions: number; limitSe
 export type BrowseChange = {
    mode?: BrowseMode
    hours?: { days: number[]; startMinute: number; endMinute: number; timeZone: string }
-   clientLabel?: string | null
 }
 
 // What the owner asked for cannot be kept (hours too short for the limit, a zone that does not exist).
@@ -75,7 +73,6 @@ export class BrowseService {
             id: true,
             email: true,
             status: true,
-            clientLabel: true,
             browseMode: true,
             officeTimeZone: true,
             officeDays: true,
@@ -129,7 +126,6 @@ export class BrowseService {
          return {
             accountId: account.id,
             email: account.email,
-            clientLabel: account.clientLabel,
             mode: account.browseMode,
             usedSeconds: used,
             state,
@@ -416,7 +412,7 @@ export class BrowseService {
          .sort((a, b) => b.seconds - a.seconds)
    }
 
-   // Changes the mode, the working hours or the client label of the owner's accounts, each kept only if the result is valid. An
+   // Changes the mode or the working hours of the owner's accounts, each kept only if the result is valid. An
    // account that is not the owner's is left out. Resolves to the ids it changed.
    public static async change(userId: string, accountIds: string[], change: BrowseChange) {
       const { hours } = change
@@ -465,7 +461,6 @@ export class BrowseService {
                officeStartMinute: hours.startMinute,
                officeEndMinute: hours.endMinute,
             }),
-            ...(change.clientLabel !== undefined && { clientLabel: change.clientLabel }),
          },
       })
 

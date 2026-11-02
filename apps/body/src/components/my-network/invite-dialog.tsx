@@ -18,7 +18,6 @@ import { trpc } from '../../trpc'
 import { NOTE_CHARS, NOTE_FIELDS, insertField } from './invite-rules'
 
 type Props = {
-   clientId: string
    // The people to invite (up to 100); none closes the dialog.
    personIds: string[]
    // The Found by filter the owner was looking at, credited with the accepts.
@@ -31,7 +30,7 @@ type Props = {
 
 // Invites to one person or a selection: the account to send from (always asked), a note with the person's own name and company put
 // in, and the one sentence of what is safe to send today and how the rest spreads over the days. Brain plans and checks everything again.
-export const InviteDialog = ({ clientId, personIds, source, pickAccount, onClose, onDone }: Props) => {
+export const InviteDialog = ({ personIds, source, pickAccount, onClose, onDone }: Props) => {
    const utils = trpc.useUtils()
    const [accountId, setAccountId] = useState<string | undefined>()
    const [note, setNote] = useState('')
@@ -39,7 +38,6 @@ export const InviteDialog = ({ clientId, personIds, source, pickAccount, onClose
    const open = personIds.length > 0
    const plan = trpc.people.invitePlan.useQuery(
       {
-         clientId,
          personIds,
          ...(accountId && { accountId }),
       },
@@ -146,12 +144,7 @@ export const InviteDialog = ({ clientId, personIds, source, pickAccount, onClose
                         size="sm"
                         className="justify-self-start"
                         disabled={read.isPending || read.isSuccess}
-                        onClick={() =>
-                           read.mutate({
-                              clientId,
-                              personIds,
-                           })
-                        }
+                        onClick={() => read.mutate({ personIds })}
                      >
                         {read.isSuccess
                            ? 'Reading their profiles'
@@ -169,7 +162,6 @@ export const InviteDialog = ({ clientId, personIds, source, pickAccount, onClose
                   disabled={!plan.data || plan.data.toInvite === 0 || invite.isPending || (pickAccount && !chosen)}
                   onClick={() =>
                      invite.mutate({
-                        clientId,
                         personIds,
                         ...(chosen && { accountId: chosen }),
                         ...(note.trim() && { note: note.trim() }),

@@ -30,24 +30,22 @@ describe('postsCsv', () => {
 
    it('should write a header and one line per post, with the date it went, else its plan, else when it was sent', () => {
       const lines = postsCsv([
-         { post, client: 'Acme', account: 'Ada' },
+         { post, account: 'Ada' },
          {
             post: { ...post, state: 'SCHEDULED', link: null, postedAt: null, scheduledAt: '2026-11-01T08:00:00.000Z' },
-            client: '',
             account: 'Bob',
          },
          {
             post: { ...post, state: 'FAILED', link: null, postedAt: null },
-            client: '',
             account: 'Bob',
          },
       ]).split('\r\n')
 
-      expect(lines[0]).toBe('Client,Account,State,Date,Link,Words')
+      expect(lines[0]).toBe('Account,State,Date,Link,Words')
       expect(lines[1]).toBe(
-         'Acme,Ada,Posted,2026-10-27T09:00:00.000Z,https://www.linkedin.com/feed/update/urn:li:activity:7520195721216827392/,"Hello, world"'
+         'Ada,Posted,2026-10-27T09:00:00.000Z,https://www.linkedin.com/feed/update/urn:li:activity:7520195721216827392/,"Hello, world"'
       )
-      expect(lines[2]).toBe(',Bob,Planned,2026-11-01T08:00:00.000Z,,"Hello, world"')
-      expect(lines[3]).toBe(',Bob,Not posted,2026-10-26T09:00:00.000Z,,"Hello, world"')
+      expect(lines[2]).toBe('Bob,Planned,2026-11-01T08:00:00.000Z,,"Hello, world"')
+      expect(lines[3]).toBe('Bob,Not posted,2026-10-26T09:00:00.000Z,,"Hello, world"')
    })
 })

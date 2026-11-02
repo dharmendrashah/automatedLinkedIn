@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
-import { ClientService } from './client.service'
 import { LinkedInInviteService } from './linkedInInvite.service'
 import { PeopleService } from './people.service'
 import { PeopleIndexService } from './peopleIndex.service'
@@ -17,14 +16,13 @@ const SLUGS = ['ada-l', 'grace-h', 'alan-t', 'mary-s']
 
 let userId: string
 let otherUserId: string
-let clientId: string
 let accountId: string
 
 const personId = async (slug: string) =>
    (
       await db.person.findFirstOrThrow({
          where: {
-            clientId,
+            userId,
             slug,
          },
          select: { id: true },
@@ -34,7 +32,7 @@ const personId = async (slug: string) =>
 const invitesOf = (slug: string) =>
    db.linkedInInvite.findMany({
       where: {
-         clientId,
+         userId,
          slug,
       },
       orderBy: { createdAt: 'asc' },
@@ -44,7 +42,6 @@ describe('LinkedInInviteService (database)', () => {
    beforeAll(async () => {
       userId = (await UserService.create({ email: `${randomUUID()}@elitale.com` })).id
       otherUserId = (await UserService.create({ email: `${randomUUID()}@elitale.com` })).id
-      clientId = (await ClientService.create(userId, 'Acme')).id
       accountId = (
          await db.linkedInAccount.create({
             data: {
@@ -55,17 +52,11 @@ describe('LinkedInInviteService (database)', () => {
                secretTag: 'x',
                status: 'ACTIVE',
                lastVerifiedAt: new Date(),
-               clientId,
             },
          })
       ).id
 
       const list = await WorkflowListService.createList(userId, 'Post commenters')
-
-      await db.workflowList.update({
-         where: { id: list.id },
-         data: { clientId },
-      })
 
       for (const slug of SLUGS) {
          await WorkflowListService.addMember(userId, list.id, {
@@ -100,7 +91,7 @@ describe('LinkedInInviteService (database)', () => {
       expect(
          await db.person.findFirst({
             where: {
-               clientId,
+               userId,
                slug: 'ada-l',
             },
          })
@@ -108,19 +99,16 @@ describe('LinkedInInviteService (database)', () => {
       expect(
          await db.person.findFirst({
             where: {
-               clientId,
+               userId,
                slug: 'mary-s',
             },
          })
       ).toMatchObject({ priority: 2 })
    })
 
-   it("should plan without queuing, skip a person with a request, and refuse another owner's client", async () => {
+   it('should plan without queuing, skip a person with a request, and refuse an owner with no account', async () => {
       const ids = await Promise.all(SLUGS.map(personId))
-      const plan = await LinkedInInviteService.plan(userId, {
-         clientId,
-         personIds: ids,
-      })
+      const plan = await LinkedInInviteService.plan(userId, { personIds: ids })
 
       expect(plan).toMatchObject({
          accountId,
@@ -129,16 +117,13 @@ describe('LinkedInInviteService (database)', () => {
          unnamed: 0,
          skipped: { REQUEST: 1 },
       })
-      expect(plan?.sentence).toBe(
+      expect(plan.sentence).toBe(
          'You can safely send 20 today. 4 selected: all today. Skipped: 1 with a request pending.'
       )
-      expect(await db.linkedInInvite.count({ where: { clientId } })).toBe(0)
-      expect(
-         await LinkedInInviteService.plan(otherUserId, {
-            clientId,
-            personIds: ids,
-         })
-      ).toBeNull()
+      expect(await db.linkedInInvite.count({ where: { userId } })).toBe(0)
+      await expect(LinkedInInviteService.plan(otherUserId, { personIds: ids })).rejects.toThrow(
+         'Inviting needs a signed-in account'
+      )
    })
 
    it('should queue invites with the note as written, and skip people invited already on a second ask', async () => {
@@ -146,7 +131,6 @@ describe('LinkedInInviteService (database)', () => {
 
       await expect(
          LinkedInInviteService.invite(userId, {
-            clientId,
             personIds: ids,
             note: 'Hi {first_name}',
          })
@@ -156,14 +140,7 @@ describe('LinkedInInviteService (database)', () => {
          note: 'Hi {first_name}',
          accountId,
       })
-      expect(
-         (
-            await LinkedInInviteService.invite(userId, {
-               clientId,
-               personIds: ids,
-            })
-         )?.queued
-      ).toBe(0)
+      expect((await LinkedInInviteService.invite(userId, { personIds: ids })).queued).toBe(0)
       expect((await invitesOf('ada-l'))[1]).toMatchObject({ state: 'SKIPPED' })
    })
 
@@ -178,7 +155,7 @@ describe('LinkedInInviteService (database)', () => {
       // A read named Ada after she was invited: the invite goes with that name, and the note is filled from it.
       await db.person.updateMany({
          where: {
-            clientId,
+            userId,
             slug: 'ada-l',
          },
          data: { name: 'Ada Lovelace' },
@@ -255,7 +232,7 @@ describe('LinkedInInviteService (database)', () => {
       expect(
          await db.person.findFirst({
             where: {
-               clientId,
+               userId,
                slug: 'ada-l',
             },
          })
@@ -270,7 +247,7 @@ describe('LinkedInInviteService (database)', () => {
       await expect(LinkedInInviteService.markAccepted(accountId, ['Ada-L'])).resolves.toBe(1)
       expect((await invitesOf('ada-l'))[0]).toMatchObject({ state: 'ACCEPTED' })
 
-      expect(await PeopleService.results(userId, clientId, 30)).toMatchObject({
+      expect(await PeopleService.results(userId, 30)).toMatchObject({
          invited: 1,
          accepted: 1,
          bySource: [
@@ -320,7 +297,7 @@ describe('LinkedInInviteService (database)', () => {
       expect(
          await db.person.findFirst({
             where: {
-               clientId,
+               userId,
                slug: 'grace-h',
             },
             select: { name: true },
@@ -378,7 +355,7 @@ describe('LinkedInInviteService (database)', () => {
       expect(
          await db.person.count({
             where: {
-               clientId,
+               userId,
                slug: 'zed-n',
             },
          })

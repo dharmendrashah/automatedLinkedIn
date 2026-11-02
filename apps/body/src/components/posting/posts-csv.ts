@@ -1,7 +1,7 @@
 import type { PublicationState } from './publication'
 import { stateText } from './publication'
 
-// The latest posts as a spreadsheet for the owner's own report: one row per post, by client. Built in the browser from the list
+// The latest posts as a spreadsheet for the owner's own report: one row per post. Built in the browser from the list
 // already on the page; nothing is sent anywhere.
 
 type Row = {
@@ -13,7 +13,7 @@ type Row = {
    createdAt: string
 }
 
-export const HEADER = ['Client', 'Account', 'State', 'Date', 'Link', 'Words']
+export const HEADER = ['Account', 'State', 'Date', 'Link', 'Words']
 
 // A cell that starts with = + - or @ would run as a formula in a spreadsheet; a quote in front keeps it text.
 export const cell = (value: string) => {
@@ -24,11 +24,10 @@ export const cell = (value: string) => {
 
 const dateOf = (row: Row) => row.postedAt ?? row.scheduledAt ?? row.createdAt
 
-export const postsCsv = (rows: Array<{ post: Row; client: string; account: string }>) =>
+export const postsCsv = (rows: Array<{ post: Row; account: string }>) =>
    [
       HEADER,
-      ...rows.map(({ post, client, account }) => [
-         client,
+      ...rows.map(({ post, account }) => [
          account,
          stateText(post.state),
          dateOf(post),

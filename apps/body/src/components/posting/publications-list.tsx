@@ -8,7 +8,6 @@ import { type Account } from '../accounts/types'
 
 import { type RouterOutputs } from '../../trpc'
 import { accountName } from './accounts'
-import { type Labels } from './landing'
 import { canTakeBack, isPostLink, stateText, waitingText } from './publication'
 import { describePlanned } from './schedule'
 
@@ -17,7 +16,6 @@ export type Publication = RouterOutputs['postPublication']['list'][number]
 type Props = {
    posts: Publication[]
    accounts: Account[]
-   labels: Labels
    onBack: (post: Publication) => void
    onDuplicate: (post: Publication) => void
    onResults: (post: Publication) => void
@@ -61,14 +59,13 @@ const useNow = (active: boolean) => {
 
 // The owner's posts that were sent for posting or planned, newest first, with where each is and, once it went, its link and a way to
 // see how it did. Any post with words can be copied into a new draft.
-export const PublicationsList = ({ posts, accounts, labels, onBack, onDuplicate, onResults }: Props) => {
+export const PublicationsList = ({ posts, accounts, onBack, onDuplicate, onResults }: Props) => {
    const now = useNow(posts.some(({ waiting }) => waiting !== null))
 
    return (
       <ul className="grid gap-2">
          {posts.map(post => {
             const account = accounts.find(({ id }) => id === post.accountId)
-            const client = labels.get(post.accountId)
             const link = isPostLink(post.link) ? post.link : null
 
             return (
@@ -92,7 +89,6 @@ export const PublicationsList = ({ posts, accounts, labels, onBack, onDuplicate,
                                  {stateText(post.state)}
                               </Badge>
                               <span>{accountName(account)}</span>
-                              {client ? <Badge variant="outline">{client}</Badge> : null}
                               {post.attachment ? <span>{ATTACHMENT[post.attachment] ?? post.attachment}</span> : null}
                               {post.fromWorkflow ? <span>Made by a workflow</span> : null}
                               {post.scheduledAt && post.plannedZone && post.state === 'SCHEDULED' ? (

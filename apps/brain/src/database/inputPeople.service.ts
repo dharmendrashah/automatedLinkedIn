@@ -7,11 +7,10 @@ import { peopleWhere } from './peopleFilters'
 import { profileUrlOf } from './personContacts'
 import { PrismaService } from './prisma.service'
 
-// A Profiles input block that takes people from My network (.plan/input-blocks-filters.md): one client or all of them, the
-// page's own filters, the block's time frame and labels. People on Do not contact and suppressed people are never taken, and
-// a person who is in several clients is taken once.
+// A Profiles input block that takes people from My network (.plan/input-blocks-filters.md): the page's own filters, the block's
+// time frame and labels. People on Do not contact and suppressed people are never taken.
 
-export type NetworkPick = { clientIds: string[]; people: PeopleFilters | null }
+export type NetworkPick = { people: PeopleFilters | null }
 
 // A count stops here, as the page's counts do; no count reads the whole table.
 const COUNT_CAP = 10_000
@@ -40,7 +39,6 @@ const whereOf = async (userId: string, filter: InputFilter, network: NetworkPick
 
    return {
       userId,
-      clientId: { in: network.clientIds },
       doNotContact: false,
       ...(suppressed.length > 0 || filter.notSlugs.length > 0
          ? { slug: { notIn: [...suppressed, ...filter.notSlugs] } }
@@ -84,27 +82,15 @@ const orderOf = (filter: InputFilter): Prisma.PersonOrderByWithRelationInput[] =
 }
 
 export class InputPeopleService {
-   // The clients and filters a block asks for. No client when the one named is not the owner's, so nothing is taken.
-   public static async scope(userId: string, clientId: string, filtersText: string): Promise<NetworkPick> {
-      const clients = await PrismaService.client.client.findMany({
-         where: {
-            userId,
-            ...(clientId === '' ? {} : { id: clientId }),
-         },
-         select: { id: true },
-      })
-
-      return {
-         clientIds: clients.map(({ id }) => id),
-         people: readPeopleFilters(filtersText).filters,
-      }
+   // The page's filters a block asks for.
+   public static scope(filtersText: string): NetworkPick {
+      return { people: readPeopleFilters(filtersText).filters }
    }
 
    public static async pick(userId: string, take: number, filter: InputFilter, network: NetworkPick) {
       const rows = await PrismaService.client.person.findMany({
          where: await whereOf(userId, filter, network),
          orderBy: orderOf(filter),
-         distinct: ['slug'],
          take,
          select: {
             slug: true,
@@ -123,15 +109,11 @@ export class InputPeopleService {
       }))
    }
 
-   // One person once, however many clients know them; counting stops at the cap like the page's counts.
+   // Counting stops at the cap like the page's counts.
    public static async count(userId: string, filter: InputFilter, network: NetworkPick) {
-      const rows = await PrismaService.client.person.findMany({
+      return PrismaService.client.person.count({
          where: await whereOf(userId, filter, network),
-         distinct: ['slug'],
-         select: { slug: true },
          take: COUNT_CAP + 1,
       })
-
-      return rows.length
    }
 }

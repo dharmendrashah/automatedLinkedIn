@@ -26,7 +26,6 @@ describe('todayCsv', () => {
          todayCsv([
             {
                email: 'a@example.com',
-               client: 'Acme',
                states: [
                   state({}),
                   state({ item: 'network', kind: 'PENDING', last: null, result: null, next: 'today 19:30' }),
@@ -35,15 +34,15 @@ describe('todayCsv', () => {
          ])
       ).toBe(
          [
-            'Account,Client,Item,State,Last run,Last result,Next',
-            'a@example.com,Acme,Daily visit,Done,02:40,Visited,tomorrow 02:55',
-            'a@example.com,Acme,Check my network,Pending today,,,today 19:30',
+            'Account,Item,State,Last run,Last result,Next',
+            'a@example.com,Daily visit,Done,02:40,Visited,tomorrow 02:55',
+            'a@example.com,Check my network,Pending today,,,today 19:30',
          ].join('\r\n')
       )
    })
 
-   it('should keep a client name that would run as a formula as text, and write only the header for no accounts', () => {
-      expect(todayCsv([{ email: 'a@example.com', client: '=SUM(A1)', states: [state({})] }])).toContain("'=SUM(A1)")
-      expect(todayCsv([])).toBe('Account,Client,Item,State,Last run,Last result,Next')
+   it('should keep an email that would run as a formula as text, and write only the header for no accounts', () => {
+      expect(todayCsv([{ email: '=SUM(A1)', states: [state({})] }])).toContain("'=SUM(A1)")
+      expect(todayCsv([])).toBe('Account,Item,State,Last run,Last result,Next')
    })
 })

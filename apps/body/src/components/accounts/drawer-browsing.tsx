@@ -7,7 +7,6 @@ import { cn } from '@/lib/utils'
 
 import { type AccountBrowse } from '../browsing/types'
 
-import { ClientField } from '../browsing/client-field'
 import { formatMinutes, hoursText, meterText } from '../browsing/format'
 import { HoursEditor } from '../browsing/hours-editor'
 import { ModeCards } from '../browsing/mode-cards'
@@ -108,14 +107,11 @@ const Loaded = ({
                onDirtyChange={onDirtyChange}
             />
          </Part>
-         <Part value="client" title="Client" summary={browse.clientLabel ?? 'No client'}>
-            <ClientField key={browse.clientLabel ?? ''} account={browse} onChange={edits.setClient} />
-         </Part>
       </>
    )
 }
 
-// The sections that come from the account's browsing data: today, the daily limit, the working hours and the client.
+// The sections that come from the account's browsing data: today, the daily limit, and the working hours.
 export const BrowsingParts = ({ browse, loading, error, ...rest }: Props) =>
    browse ? (
       <Loaded browse={browse} {...rest} />
@@ -128,9 +124,6 @@ export const BrowsingParts = ({ browse, loading, error, ...rest }: Props) =>
             <Missing loading={loading} error={error} />
          </Part>
          <Part value="hours" title="Working hours">
-            <Missing loading={loading} error={error} />
-         </Part>
-         <Part value="client" title="Client">
             <Missing loading={loading} error={error} />
          </Part>
       </>

@@ -304,27 +304,17 @@ describe('PersonService (database)', () => {
       await PrismaService.client.user.delete({ where: { id: otherId } })
    })
 
-   it('should read someone only on My network (an accepted request, say), again after Do not contact for one client is undone, and keep the read', async () => {
-      const clientId = (
-         await PrismaService.client.client.create({
-            data: {
-               userId,
-               name: `Client ${randomUUID().slice(0, 8)}`,
-            },
-         })
-      ).id
-
+   it('should read someone only on My network (an accepted request, say), again after Do not contact is undone, and keep the read', async () => {
       await PrismaService.client.person.create({
          data: {
             userId,
-            clientId,
             slug: 'harshit',
             doNotContact: true,
             lastTouchAt: new Date(),
          },
       })
 
-      expect((await PersonService.readFull(userId, 'harshit', clientId))?.read?.status).toBe('QUEUED')
+      expect((await PersonService.readFull(userId, 'harshit'))?.read?.status).toBe('QUEUED')
       await workReads(userId, fakeReader())
       await RetentionService.run()
 

@@ -30,7 +30,7 @@ export type Kept = { people: number; companies: number; posts: number; jobs: num
 
 const slugsOf = (items: { slug: string }[]) => items.map(({ slug }) => slug)
 
-// People who must not be added or paid for: on Do not contact for any client, suppressed, or archived by the owner.
+// People who must not be added or paid for: on Do not contact, suppressed, or archived by the owner.
 const blockedPeople = async (userId: string, slugs: string[]) => {
    if (slugs.length === 0) {
       return new Set<string>()

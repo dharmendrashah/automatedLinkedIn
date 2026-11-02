@@ -7,7 +7,7 @@ import { INVITE_LIMITS, type InviteSendOutcome, type InviteWithdrawOutcome } fro
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-// Invites that count toward an account's limits once their send run was asked for, and invites still alive (one per client and person).
+// Invites that count toward an account's limits once their send run was asked for, and invites still alive (one per person).
 export const COUNTED: LinkedInInviteState[] = [
    'SENDING',
    'SENT',

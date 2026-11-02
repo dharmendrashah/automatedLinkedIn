@@ -57,13 +57,11 @@ export const ProfileBadges = ({ snapshot }: { snapshot: PersonDetail['snapshot']
 // text (the drawer's reason) and `actions` follow Open on LinkedIn and the read.
 export const ProfileCard = ({
    person,
-   clientId,
    actions,
    known,
    children,
 }: {
    person: PersonDetail
-   clientId?: string
    actions?: ReactNode
    // What My network already shows for them, for what the detail does not have.
    known?: {
@@ -123,7 +121,7 @@ export const ProfileCard = ({
                   read={person.read}
                   pending={read.isPending}
                   error={read.error}
-                  onRead={() => read.mutate({ slug: person.slug, clientId })}
+                  onRead={() => read.mutate({ slug: person.slug })}
                />
             )}
          </div>
@@ -177,9 +175,8 @@ export const ProfileDetails = ({ person }: { person: PersonDetail }) => {
    )
 }
 
-// One person, like their LinkedIn profile, so a lead can be judged without leaving the table. `clientId` charges the read to that
-// client.
-export const PersonView = ({ slug, clientId }: { slug: string; clientId?: string }) => {
+// One person, like their LinkedIn profile, so a lead can be judged without leaving the table.
+export const PersonView = ({ slug }: { slug: string }) => {
    const detail = usePersonDetail(slug)
    const person = detail.data
 
@@ -189,7 +186,7 @@ export const PersonView = ({ slug, clientId }: { slug: string; clientId?: string
 
    return (
       <div className="grid gap-3">
-         <ProfileCard person={person} clientId={clientId} />
+         <ProfileCard person={person} />
          <ProfileDetails person={person} />
       </div>
    )

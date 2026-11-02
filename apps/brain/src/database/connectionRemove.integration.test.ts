@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { ClientService } from './client.service'
 import { ConnectionRemoveService } from './connectionRemove.service'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
@@ -18,7 +17,7 @@ let first: string
 let second: string
 let theirs: string
 
-const account = async (owner: string, name: string) =>
+const account = async (owner: string) =>
    (
       await db.linkedInAccount.create({
          data: {
@@ -28,7 +27,6 @@ const account = async (owner: string, name: string) =>
             secretIv: 'x',
             secretTag: 'x',
             status: 'ACTIVE',
-            clientId: (await ClientService.create(owner, name)).id,
          },
          select: { id: true },
       })
@@ -60,9 +58,9 @@ describe('ConnectionRemoveService (database)', () => {
    beforeAll(async () => {
       userId = (await UserService.create({ email })).id
       otherUserId = (await UserService.create({ email: otherEmail })).id
-      first = await account(userId, 'Acme')
-      second = await account(userId, 'Acme two')
-      theirs = await account(otherUserId, 'Theirs')
+      first = await account(userId)
+      second = await account(userId)
+      theirs = await account(otherUserId)
    })
 
    afterAll(async () => {

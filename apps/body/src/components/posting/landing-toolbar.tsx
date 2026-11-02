@@ -8,13 +8,12 @@ import { type Account } from '../accounts/types'
 
 import { accountName } from './accounts'
 import { Combobox, type Option } from './combobox'
-import { type Labels, type Scope, clientLabels, parseScope, scopeValue } from './landing'
+import { type Scope, parseScope, scopeValue } from './landing'
 
 export type View = 'list' | 'week'
 
 type Props = {
    accounts: Account[]
-   labels: Labels
    scope: Scope
    onScope: (scope: Scope) => void
    search: string
@@ -27,22 +26,18 @@ type Props = {
    action: ReactNode
 }
 
-const optionsOf = (accounts: Account[], labels: Labels): Option[] => [
+const optionsOf = (accounts: Account[]): Option[] => [
    { value: 'all', label: 'All accounts' },
-   ...clientLabels(labels).map(label => ({ value: `client:${label}`, label, group: 'Clients', hint: 'client' })),
    ...accounts.map(account => ({
       value: `account:${account.id}`,
       label: accountName(account),
-      group: 'Accounts',
-      hint: labels.get(account.id) ?? undefined,
    })),
 ]
 
-// Narrows the lists below to one account or client, by words, and switches between the list and the week. The account picker is
+// Narrows the lists below to one account, by words, and switches between the list and the week. The account picker is
 // shown only when there is more than one account to pick from.
 export const LandingToolbar = ({
    accounts,
-   labels,
    scope,
    onScope,
    search,
@@ -56,7 +51,7 @@ export const LandingToolbar = ({
    <div className="flex flex-wrap items-center gap-2">
       {accounts.length > 1 ? (
          <Combobox
-            options={optionsOf(accounts, labels)}
+            options={optionsOf(accounts)}
             value={scopeValue(scope)}
             onChange={value => onScope(parseScope(value))}
             placeholder="All accounts"
@@ -97,7 +92,7 @@ export const LandingToolbar = ({
             variant="outline"
             size="sm"
             disabled={!canExport}
-            title="Downloads the posts shown, with their client, date, link and words, as a spreadsheet file."
+            title="Downloads the posts shown, with their date, link and words, as a spreadsheet file."
             onClick={onExport}
          >
             <Download />

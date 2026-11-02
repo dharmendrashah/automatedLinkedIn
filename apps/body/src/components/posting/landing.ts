@@ -21,19 +21,14 @@ export const tabOfState = (state: PublicationState): Exclude<Tab, 'drafts'> =>
 export const defaultTab = (counts: Record<Tab, number>): Tab =>
    (['failed', 'drafts', 'planned', 'posted'] as const).find(tab => counts[tab] > 0) ?? 'drafts'
 
-export type Scope = { kind: 'all' } | { kind: 'client'; label: string } | { kind: 'account'; id: string }
+export type Scope = { kind: 'all' } | { kind: 'account'; id: string }
 
 const ALL: Scope = { kind: 'all' }
 
-export const scopeValue = (scope: Scope) =>
-   scope.kind === 'client' ? `client:${scope.label}` : scope.kind === 'account' ? `account:${scope.id}` : 'all'
+export const scopeValue = (scope: Scope) => (scope.kind === 'account' ? `account:${scope.id}` : 'all')
 
 // The address and the select speak in strings; anything that is not understood means every account.
 export const parseScope = (value: string | null): Scope => {
-   if (value?.startsWith('client:') && value.length > 'client:'.length) {
-      return { kind: 'client', label: value.slice('client:'.length) }
-   }
-
    if (value?.startsWith('account:') && value.length > 'account:'.length) {
       return { kind: 'account', id: value.slice('account:'.length) }
    }
@@ -41,39 +36,28 @@ export const parseScope = (value: string | null): Scope => {
    return ALL
 }
 
-export type Labels = ReadonlyMap<string, string | null>
+export const inScope = (scope: Scope, accountId: string) => scope.kind === 'all' || scope.id === accountId
 
-const inScope = (scope: Scope, accountId: string, labels: Labels) =>
-   scope.kind === 'all' || (scope.kind === 'account' ? scope.id === accountId : labels.get(accountId) === scope.label)
+type Filter = { scope: Scope; search: string }
 
-type Filter = { scope: Scope; search: string; labels: Labels }
-
-// The rows of the chosen account or client whose words hold what was typed (not case sensitive).
+// The rows of the chosen account whose words hold what was typed (not case sensitive).
 export const filterRows = <T>(
    rows: T[],
    of: (row: T) => { accountId: string; text: string },
-   { scope, search, labels }: Filter
+   { scope, search }: Filter
 ) => {
    const needle = search.trim().toLowerCase()
 
    return rows.filter(row => {
       const { accountId, text } = of(row)
 
-      return inScope(scope, accountId, labels) && (needle === '' || text.toLowerCase().includes(needle))
+      return inScope(scope, accountId) && (needle === '' || text.toLowerCase().includes(needle))
    })
 }
 
-export const clientLabels = (labels: Labels) =>
-   [...new Set([...labels.values()].filter((label): label is string => Boolean(label)))].sort((a, b) =>
-      a.localeCompare(b)
-   )
-
-// A scope from the address that names an account or client the owner does not have means every account.
-export const knownScope = (scope: Scope, accounts: Array<{ id: string }>, labels: Labels): Scope =>
-   (scope.kind === 'account' && !accounts.some(({ id }) => id === scope.id)) ||
-   (scope.kind === 'client' && !clientLabels(labels).includes(scope.label))
-      ? ALL
-      : scope
+// A scope from the address that names an account the owner does not have means every account.
+export const knownScope = (scope: Scope, accounts: Array<{ id: string }>): Scope =>
+   scope.kind === 'account' && !accounts.some(({ id }) => id === scope.id) ? ALL : scope
 
 type AccountState = { id: string; status: string }
 

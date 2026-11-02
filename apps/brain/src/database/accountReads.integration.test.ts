@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { ClientService } from './client.service'
 import { ConversationReadService } from './conversationRead.service'
 import { InvitationAnswerService } from './invitationAnswer.service'
 import { InvitationReadService } from './invitationRead.service'
@@ -20,7 +19,7 @@ let accountId: string
 let otherUserId: string
 let otherAccountId: string
 
-const account = async (owner: string, name: string) =>
+const account = async (owner: string) =>
    (
       await db.linkedInAccount.create({
          data: {
@@ -30,7 +29,6 @@ const account = async (owner: string, name: string) =>
             secretIv: 'x',
             secretTag: 'x',
             status: 'ACTIVE',
-            clientId: (await ClientService.create(owner, name)).id,
          },
          select: { id: true },
       })
@@ -40,8 +38,8 @@ describe('the stored requests and conversations of an account (database)', () =>
    beforeAll(async () => {
       userId = (await UserService.create({ email })).id
       otherUserId = (await UserService.create({ email: otherEmail })).id
-      accountId = await account(userId, 'Acme')
-      otherAccountId = await account(otherUserId, 'Theirs')
+      accountId = await account(userId)
+      otherAccountId = await account(otherUserId)
 
       for (const [owner, forAccount, slug, position, status, note] of [
          [userId, accountId, 'ana', 0, 'PENDING', 'x'.repeat(400)],

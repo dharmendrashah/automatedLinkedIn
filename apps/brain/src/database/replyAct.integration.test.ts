@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { ClientService } from './client.service'
 import { PrismaService } from './prisma.service'
 import { ReplyActService } from './replyAct.service'
 import { UserService } from './user.service'
@@ -21,7 +20,7 @@ let theirs: string
 let conversationId: string
 let theirConversationId: string
 
-const account = async (owner: string, name: string) =>
+const account = async (owner: string) =>
    (
       await db.linkedInAccount.create({
          data: {
@@ -31,7 +30,6 @@ const account = async (owner: string, name: string) =>
             secretIv: 'x',
             secretTag: 'x',
             status: 'ACTIVE',
-            clientId: (await ClientService.create(owner, name)).id,
          },
          select: { id: true },
       })
@@ -59,9 +57,9 @@ describe('ReplyActService (database)', () => {
    beforeAll(async () => {
       userId = (await UserService.create({ email })).id
       otherUserId = (await UserService.create({ email: otherEmail })).id
-      first = await account(userId, 'Acme')
-      second = await account(userId, 'Acme two')
-      theirs = await account(otherUserId, 'Theirs')
+      first = await account(userId)
+      second = await account(userId)
+      theirs = await account(otherUserId)
 
       for (const [owner, forAccount, slug, status] of [
          [userId, first, 'ada', 'CONNECTED'],
@@ -88,7 +86,6 @@ describe('ReplyActService (database)', () => {
       await db.person.create({
          data: {
             userId,
-            clientId: (await ClientService.create(userId, 'People')).id,
             slug: 'ada',
             name: 'Ada',
             company: 'Analytical Engines',

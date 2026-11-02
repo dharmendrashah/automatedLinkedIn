@@ -41,7 +41,7 @@ const whereSlug = (userId: string, slug: string) => ({
 })
 
 // A person is read while they are in /profiles, a list, My network, a connection of the owner's accounts or one of their conversations,
-// unless they are on Do not contact for every client (a suppression, also left by an erasure).
+// unless they are on Do not contact (a suppression, also left by an erasure).
 const personWanted = async (userId: string, slug: string) => {
    const [profile, member, onNetwork, suppressed, connections, conversations] = await Promise.all([
       PrismaService.client.linkedInProfile.findUnique({

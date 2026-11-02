@@ -50,6 +50,7 @@ const user = {
    createdAt: new Date(),
    updatedAt: new Date(),
    inboxSeenAt: null,
+   peopleSeenAt: null,
 }
 
 const authed = (): Partial<Context> => ({

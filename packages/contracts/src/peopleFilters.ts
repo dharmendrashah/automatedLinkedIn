@@ -39,7 +39,7 @@ export const peopleFiltersSchema = z
       premium: z.boolean().optional(),
       // Discovery: no account of the owner knows them and no invite went yet (an imported profile).
       connection: z.enum(['CONNECTED', 'NOT_CONNECTED', 'DISCOVERY']).optional(),
-      // Connected to this account of the client.
+      // Connected to this account.
       connectedTo: z.string().min(1).max(100).optional(),
       connectedAt: dateRangeSchema.optional(),
       invites: values(z.enum(PERSON_INVITE_STATES)),

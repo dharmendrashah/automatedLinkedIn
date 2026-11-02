@@ -6,7 +6,6 @@ import { type PersonFit, type PersonStatus, Prisma } from 'generated/prisma/clie
 
 import { type PeopleFilters } from '@automatedLinkedIn/contracts'
 
-import { ClientService } from './client.service'
 import { likeOf } from './companyFilters'
 import { ConflictError } from './conflict'
 import { DataReadService } from './dataRead.service'
@@ -18,10 +17,9 @@ import { profileUrlOf } from './personContacts'
 import { PrismaService } from './prisma.service'
 import { WorkflowListService } from './workflowList.service'
 
-// My network (.plan/network-hub.md): the people of one client, what to do today, and the client's own changes to them.
+// My network (.plan/network-hub.md): the owner's people, what to do today, and the owner's own changes to them.
 
 export type PeopleQuery = {
-   clientId: string
    tab: PeopleTab
    accountId?: string
    search?: string
@@ -54,11 +52,10 @@ const blockedOf = async (userId: string, slugs: string[]) =>
    )
 
 // The import's labels join the person's own; its notes are added below theirs unless they already hold them.
-const keepOwnFields = async (userId: string, clientId: string, profile: Imported) => {
+const keepOwnFields = async (userId: string, profile: Imported) => {
    const person = await PrismaService.client.person.findFirst({
       where: {
          userId,
-         clientId,
          slug: profile.slug,
       },
       select: {
@@ -94,8 +91,6 @@ type PeopleRow = NonNullable<Awaited<ReturnType<typeof PeopleService.list>>>['it
 
 // Counts stop here and show as "10k+": no count ever reads a whole table.
 export const COUNT_CAP = 10_000
-// The `clientId` that means every client of the owner (.plan/network-all-clients.md).
-export const ALL_CLIENTS = 'all'
 export const EXPORT_CAP = 10_000
 const SEARCH_CAP = 1_000
 const OPTIONS_CAP = 200
@@ -149,7 +144,6 @@ const TAB_SQL: Record<PeopleTab, Prisma.Sql> = {
 
 const rowSelect = {
    id: true,
-   clientId: true,
    slug: true,
    name: true,
    headline: true,
@@ -200,84 +194,48 @@ const searchOf = (text: string) => {
    return words.length > 0 ? { query: words.map(word => `${word}:*`).join(' & ') } : null
 }
 
-const cappedCount = async (clientIds: string[], condition: Prisma.Sql) => {
+const cappedCount = async (userId: string, condition: Prisma.Sql) => {
    const [row] = await PrismaService.client.$queryRaw<Array<{ count: bigint }>>`
       SELECT count(*) AS "count" FROM (
-         SELECT 1 FROM "Person" WHERE "clientId" = ANY(${clientIds}) AND ${condition} LIMIT ${COUNT_CAP + 1}
+         SELECT 1 FROM "Person" WHERE "userId" = ${userId} AND ${condition} LIMIT ${COUNT_CAP + 1}
       ) capped`
 
    return Number(row?.count ?? 0)
 }
 
-type Scope = {
-   ids: string[]
-   name: string
-   // When the owner last left My network on each client; a person is new after it.
-   seenAt: Map<string, Date | null>
-}
+// When the owner last left My network; a person is new after it. null before the first visit.
+const seenAtOf = async (userId: string) =>
+   (
+      await PrismaService.client.user.findUnique({
+         where: { id: userId },
+         select: { peopleSeenAt: true },
+      })
+   )?.peopleSeenAt ?? null
 
-// The clients a view covers: one of the owner's, or all of them for ALL_CLIENTS. null when there is none.
-const scopeOf = async (userId: string, clientId: string): Promise<Scope | null> => {
-   const clients = await PrismaService.client.client.findMany({
-      where: {
-         userId,
-         ...(clientId === ALL_CLIENTS ? {} : { id: clientId }),
-      },
-      orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
-      select: {
-         id: true,
-         name: true,
-         seenAt: true,
-      },
-   })
+const isNewSince = (seenAt: Date | null, firstSeenAt: Date) => seenAt !== null && firstSeenAt > seenAt
 
-   return clients.length > 0
-      ? {
-           ids: clients.map(({ id }) => id),
-           name: clientId === ALL_CLIENTS ? 'All clients' : (clients[0]?.name ?? ''),
-           seenAt: new Map(clients.map(({ id, seenAt }) => [id, seenAt])),
-        }
-      : null
-}
+const newWhere = (seenAt: Date | null): Prisma.PersonWhereInput =>
+   seenAt ? { firstSeenAt: { gt: seenAt } } : { id: { in: [] } }
 
-const isNewIn = (scope: Scope, clientId: string, firstSeenAt: Date) => {
-   const seenAt = scope.seenAt.get(clientId)
-
-   return seenAt !== null && seenAt !== undefined && firstSeenAt > seenAt
-}
-
-const newWhere = (scope: Scope): Prisma.PersonWhereInput => ({
-   OR: [...scope.seenAt].flatMap(([clientId, seenAt]) =>
-      seenAt
-         ? [
-              {
-                 clientId,
-                 firstSeenAt: { gt: seenAt },
-              },
-           ]
-         : []
-   ),
-})
-
-// What a view asks for beyond its tab: the clients, the account, the search, the quick filters and the Filters panel.
-const viewWhere = async (scope: Scope, query: ViewQuery): Promise<Prisma.PersonWhereInput> => {
+// What a view asks for beyond its tab: the account, the search, the quick filters and the Filters panel.
+const viewWhere = async (userId: string, seenAt: Date | null, query: ViewQuery): Promise<Prisma.PersonWhereInput> => {
    const search = query.search ? searchOf(query.search) : null
    const matching =
       search && 'query' in search
          ? (
               await PrismaService.client.$queryRaw<Array<{ id: string }>>`
                  SELECT "id" FROM "Person"
-                 WHERE "clientId" = ANY(${scope.ids}) AND "search" @@ to_tsquery('simple', ${search.query})
+                 WHERE "userId" = ${userId} AND "search" @@ to_tsquery('simple', ${search.query})
                  ORDER BY "lastTouchAt" DESC LIMIT ${SEARCH_CAP}`
            ).map(({ id }) => id)
          : undefined
 
    return {
-      clientId: { in: scope.ids },
+      userId,
       AND: [
          ...(query.accountId ? [{ links: { some: { accountId: query.accountId } } }] : []),
          ...(query.filters ? peopleWhere(query.filters) : []),
-         ...(query.onlyNew ? [newWhere(scope)] : []),
+         ...(query.onlyNew ? [newWhere(seenAt)] : []),
       ],
       ...(query.foundBy ? { foundBy: { has: query.foundBy } } : {}),
       ...(query.fit ? { fit: query.fit } : {}),
@@ -296,21 +254,43 @@ const ownedPerson = (userId: string, id: string) =>
       select: {
          id: true,
          slug: true,
-         clientId: true,
       },
    })
 
 export class PeopleService {
-   // One page of a client's people (or all clients') in a tab, newest touch first (Needs me: replies, then requests). null when the
-   // client is not the owner's.
-   public static async list(userId: string, query: PeopleQuery) {
-      const scope = await scopeOf(userId, query.clientId)
+   // The owner's accounts and lists, for the pickers of My network.
+   public static async workspace(userId: string) {
+      const db = PrismaService.client
+      const [accounts, lists] = await Promise.all([
+         db.linkedInAccount.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'asc' },
+            select: {
+               id: true,
+               email: true,
+               displayName: true,
+               status: true,
+            },
+         }),
+         db.workflowList.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'asc' },
+            select: {
+               id: true,
+               name: true,
+            },
+         }),
+      ])
 
-      if (!scope) {
-         return null
+      return {
+         accounts,
+         lists,
       }
-
-      const where: Prisma.PersonWhereInput = { AND: [await viewWhere(scope, query), TAB_WHERE[query.tab]] }
+   }
+   // One page of the owner's people in a tab, newest touch first (Needs me: replies, then requests).
+   public static async list(userId: string, query: PeopleQuery) {
+      const seenAt = await seenAtOf(userId)
+      const where: Prisma.PersonWhereInput = { AND: [await viewWhere(userId, seenAt, query), TAB_WHERE[query.tab]] }
       const skip = query.cursor ?? 0
       const [rows, total] = await Promise.all([
          PrismaService.client.person.findMany({
@@ -327,7 +307,7 @@ export class PeopleService {
       ])
       const items = rows.slice(0, query.limit).map(row => ({
          ...row,
-         isNew: isNewIn(scope, row.clientId, row.firstSeenAt),
+         isNew: isNewSince(seenAt, row.firstSeenAt),
       }))
 
       return {
@@ -338,16 +318,9 @@ export class PeopleService {
       }
    }
 
-   // How many people each tab holds, up to COUNT_CAP + 1 ("10k+").
    // How many people each tab holds under the view's search and filters, up to COUNT_CAP + 1 ("10k+").
    public static async counts(userId: string, query: ViewQuery) {
-      const scope = await scopeOf(userId, query.clientId)
-
-      if (!scope) {
-         return null
-      }
-
-      const base = await viewWhere(scope, query)
+      const base = await viewWhere(userId, await seenAtOf(userId), query)
       const count = (tab: PeopleTab) =>
          PrismaService.client.person.count({
             where: { AND: [base, TAB_WHERE[tab]] },
@@ -369,22 +342,12 @@ export class PeopleService {
       }
    }
 
-   // The Today line of every client of the owner: replies and requests waiting, people ready to invite (once invites are live), invites
-   // waiting for an answer, people new since the owner's last visit, and the accounts whose invites are stopped.
+   // The Today line of the owner: replies and requests waiting, people ready to invite (once invites are live), invites waiting for
+   // an answer, people new since the owner's last visit, and the accounts whose invites are stopped.
    public static async today(userId: string, now = new Date()) {
       const db = PrismaService.client
-      const [clients, defaultId, stoppedAccounts] = await Promise.all([
-         db.client.findMany({
-            where: { userId },
-            orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
-            select: {
-               id: true,
-               name: true,
-               isDefault: true,
-               seenAt: true,
-            },
-         }),
-         ClientService.defaultId(userId),
+      const [seenAt, stoppedAccounts] = await Promise.all([
+         seenAtOf(userId),
          db.linkedInAccount.findMany({
             where: {
                userId,
@@ -394,7 +357,6 @@ export class PeopleService {
                id: true,
                email: true,
                displayName: true,
-               clientId: true,
                lastVerifiedAt: true,
                invitesStoppedAt: true,
                invitesStopUntil: true,
@@ -407,77 +369,56 @@ export class PeopleService {
             ? account.invitesStopUntil > now
             : !(account.lastVerifiedAt && account.invitesStoppedAt && account.lastVerifiedAt > account.invitesStoppedAt)
       )
+      const [replies, requests, invites, waitingInvites, fresh] = await Promise.all([
+         cappedCount(userId, Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = ${PRIORITY.REPLY}`),
+         cappedCount(userId, Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = ${PRIORITY.REQUEST}`),
+         INVITES_LIVE
+            ? cappedCount(userId, Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = ${PRIORITY.INVITE}`)
+            : Promise.resolve(0),
+         db.linkedInInvite.count({
+            where: {
+               userId,
+               state: { in: ['SENT', 'UNKNOWN'] },
+            },
+         }),
+         seenAt
+            ? cappedCount(userId, Prisma.sql`NOT "doNotContact" AND "firstSeenAt" > ${seenAt}`)
+            : Promise.resolve(0),
+      ])
 
-      return Promise.all(
-         clients.map(async client => {
-            const [replies, requests, invites, waitingInvites, fresh] = await Promise.all([
-               cappedCount([client.id], Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = ${PRIORITY.REPLY}`),
-               cappedCount([client.id], Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = ${PRIORITY.REQUEST}`),
-               INVITES_LIVE
-                  ? cappedCount([client.id], Prisma.sql`${TAB_SQL.NEEDS_ME} AND "priority" = ${PRIORITY.INVITE}`)
-                  : Promise.resolve(0),
-               db.linkedInInvite.count({
-                  where: {
-                     clientId: client.id,
-                     state: { in: ['SENT', 'UNKNOWN'] },
-                  },
-               }),
-               client.seenAt
-                  ? cappedCount([client.id], Prisma.sql`NOT "doNotContact" AND "firstSeenAt" > ${client.seenAt}`)
-                  : Promise.resolve(0),
-            ])
-
-            return {
-               clientId: client.id,
-               name: client.name,
-               isDefault: client.isDefault,
-               replies,
-               requests,
-               invites,
-               waitingInvites,
-               fresh,
-               invitesLive: INVITES_LIVE,
-               stopped: stopped
-                  .filter(account => (account.clientId ?? defaultId) === client.id)
-                  .map(account => ({
-                     accountId: account.id,
-                     name: account.displayName ?? account.email,
-                     reason: account.invitesStopReason ?? 'Invites are stopped.',
-                  })),
-            }
-         })
-      )
+      return {
+         replies,
+         requests,
+         invites,
+         waitingInvites,
+         fresh,
+         invitesLive: INVITES_LIVE,
+         stopped: stopped.map(account => ({
+            accountId: account.id,
+            name: account.displayName ?? account.email,
+            reason: account.invitesStopReason ?? 'Invites are stopped.',
+         })),
+      }
    }
 
-   // The results line of a client: people new this week and what reads cost this month, and over the last `days` the invites sent,
-   // accepted and answered, by account and by the source that led to each (.plan/network-invites.md). An accept and the reads of
-   // that person are credited to the invite's source.
-   public static async results(userId: string, clientId: string, days = 7, now = new Date()) {
-      const scope = await scopeOf(userId, clientId)
-
-      if (!scope) {
-         return null
-      }
-
-      const inScope = { in: scope.ids }
+   // The results line: people new this week and what reads cost this month, and over the last `days` the invites sent, accepted and
+   // answered, by account and by the source that led to each (.plan/network-invites.md). An accept and the reads of that person are
+   // credited to the invite's source.
+   public static async results(userId: string, days = 7, now = new Date()) {
       const db = PrismaService.client
       const since = new Date(now.getTime() - days * DAY_MS)
       const [newThisWeek, spent, invites] = await Promise.all([
-         cappedCount(
-            scope.ids,
-            Prisma.sql`NOT "doNotContact" AND "firstSeenAt" > ${new Date(now.getTime() - WEEK_MS)}`
-         ),
+         cappedCount(userId, Prisma.sql`NOT "doNotContact" AND "firstSeenAt" > ${new Date(now.getTime() - WEEK_MS)}`),
          db.spendLedger.aggregate({
             where: {
                userId,
-               clientId: inScope,
                month: now.toISOString().slice(0, 7),
             },
             _sum: { amountMicros: true },
          }),
          db.linkedInInvite.findMany({
             where: {
-               clientId: inScope,
+               userId,
                OR: [{ invitedAt: { gte: since } }, { acceptedAt: { gte: since } }],
             },
             take: COUNT_CAP,
@@ -500,7 +441,7 @@ export class PeopleService {
       const [replied, reads, lists] = await Promise.all([
          db.person.findMany({
             where: {
-               clientId: inScope,
+               userId,
                slug: { in: slugs },
                status: 'REPLIED',
             },
@@ -510,7 +451,6 @@ export class PeopleService {
             by: ['slug'],
             where: {
                userId,
-               clientId: inScope,
                slug: { in: slugs },
             },
             _sum: { costMicros: true },
@@ -568,27 +508,21 @@ export class PeopleService {
       }
    }
 
-   // What the filters can pick for a client, most common first: its people's countries, companies (top OPTIONS_CAP) and labels.
-   public static async filterOptions(userId: string, clientId: string) {
-      const scope = await scopeOf(userId, clientId)
-
-      if (!scope) {
-         return null
-      }
-
+   // What the filters can pick, most common first: the owner's people's countries, companies (top OPTIONS_CAP) and labels.
+   public static async filterOptions(userId: string) {
       const db = PrismaService.client
       const [countries, companies, labels] = await Promise.all([
          db.$queryRaw<Array<{ value: string; count: bigint }>>`
             SELECT "country" AS "value", count(*) AS "count" FROM "Person"
-            WHERE "clientId" = ANY(${scope.ids}) AND "country" IS NOT NULL
+            WHERE "userId" = ${userId} AND "country" IS NOT NULL
             GROUP BY "country" ORDER BY count(*) DESC, "country" LIMIT ${OPTIONS_CAP}`,
          db.$queryRaw<Array<{ value: string; count: bigint }>>`
             SELECT "company" AS "value", count(*) AS "count" FROM "Person"
-            WHERE "clientId" = ANY(${scope.ids}) AND "company" IS NOT NULL AND "company" <> ''
+            WHERE "userId" = ${userId} AND "company" IS NOT NULL AND "company" <> ''
             GROUP BY "company" ORDER BY count(*) DESC, "company" LIMIT ${OPTIONS_CAP}`,
          db.$queryRaw<Array<{ value: string; count: bigint }>>`
             SELECT "label" AS "value", count(*) AS "count" FROM "Person", unnest("labels") AS "label"
-            WHERE "clientId" = ANY(${scope.ids})
+            WHERE "userId" = ${userId}
             GROUP BY "label" ORDER BY count(*) DESC, "label" LIMIT ${OPTIONS_CAP}`,
       ])
       const counted = (rows: Array<{ value: string; count: bigint }>) =>
@@ -604,17 +538,11 @@ export class PeopleService {
       }
    }
 
-   // The skills of a client's people for the Skills picker, most common first, narrowed to those containing `search` as typed.
-   public static async skillOptions(userId: string, clientId: string, search: string) {
-      const scope = await scopeOf(userId, clientId)
-
-      if (!scope) {
-         return null
-      }
-
+   // The skills of the owner's people for the Skills picker, most common first, narrowed to those containing `search` as typed.
+   public static async skillOptions(userId: string, search: string) {
       const rows = await PrismaService.client.$queryRaw<Array<{ value: string; count: bigint }>>`
          SELECT "skill" AS "value", count(*) AS "count" FROM "Person", unnest("skills") AS "skill"
-         WHERE "clientId" = ANY(${scope.ids}) AND "skill" ILIKE ${likeOf(search)}
+         WHERE "userId" = ${userId} AND "skill" ILIKE ${likeOf(search)}
          GROUP BY "skill" ORDER BY count(*) DESC, "skill" LIMIT ${PICK_CAP}`
 
       return rows.map(({ value, count }) => ({
@@ -623,27 +551,23 @@ export class PeopleService {
       }))
    }
 
-   // The owner left My network on this client: people seen until now are not new any more.
-   public static async seen(userId: string, clientId: string) {
-      const { count } = await PrismaService.client.client.updateMany({
-         where: {
-            userId,
-            ...(clientId === ALL_CLIENTS ? {} : { id: clientId }),
-         },
-         data: { seenAt: new Date() },
+   // The owner left My network: people seen until now are not new any more.
+   public static async seen(userId: string) {
+      await PrismaService.client.user.update({
+         where: { id: userId },
+         data: { peopleSeenAt: new Date() },
       })
-
-      return count > 0
    }
 
-   // The owner's person of a profile, the most recently touched when several clients have them.
+   // The owner's person of a profile; null when they are not on My network.
    public static find(userId: string, slug: string) {
-      return PrismaService.client.person.findFirst({
+      return PrismaService.client.person.findUnique({
          where: {
-            userId,
-            slug,
+            userId_slug: {
+               userId,
+               slug,
+            },
          },
-         orderBy: { lastTouchAt: 'desc' },
          select: { id: true },
       })
    }
@@ -657,7 +581,6 @@ export class PeopleService {
          },
          select: {
             ...rowSelect,
-            clientId: true,
             notes: true,
             score: true,
             links: {
@@ -703,7 +626,7 @@ export class PeopleService {
       }
    }
 
-   // The client's own changes to a person. A status chosen here is kept by the index; New hands it back to the index.
+   // The owner's own changes to a person. A status chosen here is kept by the index; New hands it back to the index.
    public static async update(userId: string, id: string, changes: PersonChanges) {
       const { count } = await PrismaService.client.person.updateMany({
          where: {
@@ -726,18 +649,12 @@ export class PeopleService {
       return count === 1
    }
 
-   // The same changes to many people of one client (or of any client, for ALL_CLIENTS) at once. Resolves to how many changed.
-   public static async updateMany(
-      userId: string,
-      clientId: string,
-      ids: string[],
-      changes: Omit<PersonChanges, 'notes'>
-   ) {
+   // The same changes to many people at once. Resolves to how many changed.
+   public static async updateMany(userId: string, ids: string[], changes: Omit<PersonChanges, 'notes'>) {
       const { count } = await PrismaService.client.person.updateMany({
          where: {
             id: { in: ids },
             userId,
-            ...(clientId === ALL_CLIENTS ? {} : { clientId }),
          },
          data: {
             ...(changes.status
@@ -753,45 +670,13 @@ export class PeopleService {
       if (changes.labels?.length) {
          await PrismaService.client.$executeRaw`
             UPDATE "Person" SET "labels" = ARRAY(SELECT DISTINCT unnest("labels" || ${changes.labels}::text[]))
-            WHERE "id" = ANY(${ids}) AND "userId" = ${userId} AND (${clientId} = ${ALL_CLIENTS} OR "clientId" = ${clientId})`
+            WHERE "id" = ANY(${ids}) AND "userId" = ${userId}`
       }
 
       return count
    }
 
-   // Do not contact for every client of the owner: the profile is suppressed, and the index marks each of its people.
-   public static async doNotContactEverywhere(userId: string, id: string) {
-      const person = await ownedPerson(userId, id)
-
-      if (!person) {
-         return false
-      }
-
-      await PrismaService.client.suppression.upsert({
-         where: {
-            userId_slug: {
-               userId,
-               slug: person.slug,
-            },
-         },
-         create: {
-            userId,
-            slug: person.slug,
-         },
-         update: {},
-      })
-      await PrismaService.client.person.updateMany({
-         where: {
-            userId,
-            slug: person.slug,
-         },
-         data: { doNotContact: true },
-      })
-
-      return true
-   }
-
-   // Erases a person from every client of the owner: their requests, connections, conversations and messages, list rows, target,
+   // Erases a person: their requests, connections, conversations and messages, list rows, target,
    // snapshot and reads. Keeps the suppression (slug only) so no import brings them back, and one dated entry with nothing about
    // them.
    public static async erase(userId: string, id: string) {
@@ -884,24 +769,16 @@ export class PeopleService {
       return true
    }
 
-   // Adds imported profiles to a list of the client, made in the same step when named (.plan/network-import-people.md). People
+   // Adds imported profiles to a list of the owner, made in the same step when named (.plan/network-import-people.md). People
    // on Do not contact are left out; people already in a list or the targets are skipped but still get the labels and notes. When
    // `read` is set, each person's full profile is read (paid); a read that cannot start now is counted, not failed.
    public static async add(
       userId: string,
-      clientId: string,
       people: ImportEntry[],
       list: { id: string } | { name: string },
       read: boolean
    ) {
       const db = PrismaService.client
-      const client = clientId === ALL_CLIENTS ? null : await scopeOf(userId, clientId)
-      const [ownClientId] = client?.ids ?? []
-
-      if (!ownClientId) {
-         return null
-      }
-
       const target =
          'id' in list
             ? await db.workflowList.findFirst({
@@ -909,10 +786,7 @@ export class PeopleService {
                     id: list.id,
                     userId,
                  },
-                 select: {
-                    id: true,
-                    clientId: true,
-                 },
+                 select: { id: true },
               })
             : await WorkflowListService.createList(userId, list.name)
 
@@ -920,14 +794,6 @@ export class PeopleService {
          return null
       }
 
-      if ('name' in list) {
-         await db.workflowList.update({
-            where: { id: target.id },
-            data: { clientId: ownClientId },
-         })
-      }
-
-      const listClientId = 'clientId' in target && target.clientId ? target.clientId : ownClientId
       const { links: profiles, invalid } = importedOf(people, 'profile')
       const blocked = await blockedOf(
          userId,
@@ -965,7 +831,7 @@ export class PeopleService {
       }
 
       for (const profile of kept.filter(({ labels, notes }) => labels.length > 0 || notes)) {
-         await keepOwnFields(userId, listClientId, profile)
+         await keepOwnFields(userId, profile)
       }
 
       let reading = 0
@@ -978,7 +844,6 @@ export class PeopleService {
                slug,
                operation: 'profiles',
                params: { queries: [profileUrlOf(slug)] },
-               clientId: listClientId,
             })
             reading += 1
          } catch (error) {
@@ -999,15 +864,9 @@ export class PeopleService {
       }
    }
 
-   // What an import would do with each link, changing nothing: new, already here (a list, the targets or the client's people),
+   // What an import would do with each link, changing nothing: new, already here (a list, the targets or the owner's people),
    // or on Do not contact. Links that are not profiles are counted; the same profile twice counts once.
-   public static async preview(userId: string, clientId: string, urls: string[]) {
-      const scope = await scopeOf(userId, clientId)
-
-      if (!scope) {
-         return null
-      }
-
+   public static async preview(userId: string, urls: string[]) {
       const { links: profiles, invalid } = importedOf(
          urls.map(url => ({ url })),
          'profile'
@@ -1032,7 +891,7 @@ export class PeopleService {
          }),
          db.person.findMany({
             where: {
-               clientId: { in: scope.ids },
+               userId,
                slug: { in: slugs },
             },
             select: { slug: true },
@@ -1053,9 +912,9 @@ export class PeopleService {
       }
    }
 
-   // The owner's erasures and exports, newest first, for the Usage page: dates, clients and row counts, nothing about anyone.
+   // The owner's erasures and exports, newest first, for the Usage page: dates and row counts, nothing about anyone.
    public static async audit(userId: string, take = 200) {
-      const [erasures, exports, clients] = await Promise.all([
+      const [erasures, exports] = await Promise.all([
          PrismaService.client.personErasure.findMany({
             where: { userId },
             orderBy: { createdAt: 'desc' },
@@ -1071,40 +930,21 @@ export class PeopleService {
             take,
             select: {
                id: true,
-               clientId: true,
                rows: true,
                refused: true,
                createdAt: true,
             },
          }),
-         PrismaService.client.client.findMany({
-            where: { userId },
-            select: {
-               id: true,
-               name: true,
-            },
-         }),
       ])
-      const names = new Map(clients.map(({ id, name }) => [id, name]))
 
       return {
          erasures,
-         exports: exports.map(({ clientId, ...entry }) => ({
-            ...entry,
-            client: names.get(clientId) ?? 'Removed client',
-         })),
+         exports,
       }
    }
 
    // The people of one view as a CSV, at most EXPORT_CAP rows; a bigger view is refused. Every export is logged, refused or not.
    public static async export(userId: string, query: Omit<PeopleQuery, 'cursor' | 'limit'>) {
-      const scope = await scopeOf(userId, query.clientId)
-      const [clientId] = scope?.ids ?? []
-
-      if (!scope || !clientId) {
-         return null
-      }
-
       const rows: PeopleRow[] = []
       let cursor: number | undefined
       let refused: boolean
@@ -1116,16 +956,14 @@ export class PeopleService {
             limit: 500,
          })
 
-         rows.push(...(page?.items ?? []))
-         cursor = page?.next ?? undefined
+         rows.push(...page.items)
+         cursor = page.next ?? undefined
          refused = rows.length > EXPORT_CAP
       } while (cursor && !refused)
 
       await PrismaService.client.peopleExport.create({
          data: {
             userId,
-            // All clients is logged against the first client (the default one).
-            clientId,
             rows: refused ? 0 : rows.length,
             refused,
          },
@@ -1155,7 +993,7 @@ export class PeopleService {
       }
 
       return {
-         fileName: `${scope.name.replace(/[^\w-]+/g, '-')}-people.csv`,
+         fileName: 'people.csv',
          csv: toCsv(
             EXPORT_HEADER,
             rows.map(row => [

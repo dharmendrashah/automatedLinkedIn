@@ -16,7 +16,7 @@ const PersonActions = ({ id, onGone }: { id: string; onGone: () => void }) => {
    const [inviting, setInviting] = useState(false)
    const person = trpc.people.get.useQuery({ id }, { retry: false })
    const today = trpc.people.today.useQuery()
-   const invitesLive = today.data?.some(line => line.invitesLive) ?? false
+   const invitesLive = today.data?.invitesLive ?? false
    const { answer, refusal, goAnyway, stopAsking } = useAnswer()
 
    return (
@@ -31,7 +31,6 @@ const PersonActions = ({ id, onGone }: { id: string; onGone: () => void }) => {
          />
          {person.data ? (
             <InviteDialog
-               clientId={person.data.clientId}
                personIds={inviting ? [id] : []}
                pickAccount={isDiscovery(person.data)}
                source={undefined}

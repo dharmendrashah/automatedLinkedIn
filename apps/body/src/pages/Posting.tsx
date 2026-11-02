@@ -10,6 +10,7 @@ import {
    type Tab,
    defaultTab,
    filterRows,
+   inScope,
    isTab,
    knownScope,
    parseScope,
@@ -23,7 +24,6 @@ import { hasActive } from '@/components/posting/publication'
 import { type Publication, PublicationsList } from '@/components/posting/publications-list'
 import { joinedText, mediaBlock } from '@/components/posting/rules'
 import { summaryOf } from '@/components/posting/summary'
-import { useClientLabels } from '@/components/posting/use-client-labels'
 import { entriesOf } from '@/components/posting/week'
 import { WeekView } from '@/components/posting/week-view'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -46,14 +46,13 @@ const EMPTY: Record<Tab, string> = {
 }
 
 // The landing of Write a post: start a post, what needs fixing, then every post and draft of every account, by tab and by account
-// or client, as a list or a week (.plan/posting-landing-agencies.md). The address keeps the tab, the account and the view.
+// as a list or a week (.plan/posting-landing-agencies.md). The address keeps the tab, the account and the view.
 export const Posting = () => {
    const utils = trpc.useUtils()
    const navigate = useNavigate()
    const [params, setParams] = useSearchParams()
    const [search, setSearch] = useState('')
    const [now] = useState(() => Date.now())
-   const labels = useClientLabels()
    const accounts = trpc.linkedInAccount.list.useQuery(undefined, { retry: false })
    const drafts = trpc.postDraft.list.useQuery(undefined, { retry: false })
    const posts = trpc.postPublication.list.useQuery(undefined, {
@@ -180,9 +179,9 @@ export const Posting = () => {
       )
    }
 
-   const scope = knownScope(parseScope(params.get('for')), accounts.data, labels)
+   const scope = knownScope(parseScope(params.get('for')), accounts.data)
    const view: View = params.get('view') === 'week' ? 'week' : 'list'
-   const filter = { scope, search, labels }
+   const filter = { scope, search }
    const postRows = filterRows(posts.data ?? [], post => ({ accountId: post.accountId, text: post.words }), filter)
    const draftRows = filterRows(
       drafts.data?.items ?? [],
@@ -197,12 +196,7 @@ export const Posting = () => {
    }
    const tabParam = params.get('tab')
    const tab = isTab(tabParam) ? tabParam : defaultTab(counts)
-   const shownAccounts =
-      scope.kind === 'all'
-         ? accounts.data
-         : accounts.data.filter(({ id }) =>
-              scope.kind === 'account' ? id === scope.id : labels.get(id) === scope.label
-           )
+   const shownAccounts = accounts.data.filter(({ id }) => inScope(scope, id))
    const filtered = search.trim() !== '' || scope.kind !== 'all'
    const exportPosts = () =>
       downloadCsv(
@@ -210,7 +204,6 @@ export const Posting = () => {
          postsCsv(
             postRows.map(post => ({
                post,
-               client: labels.get(post.accountId) ?? '',
                account: accountName(accounts.data.find(({ id }) => id === post.accountId)),
             }))
          )
@@ -220,14 +213,13 @@ export const Posting = () => {
 
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
-         <Attention accounts={accounts.data} posts={posts.data} labels={labels} now={now} />
+         <Attention accounts={accounts.data} posts={posts.data} now={now} />
          <section className="grid gap-3" aria-labelledby="posts">
             <h2 id="posts" className="text-lg font-semibold">
                Your posts and drafts
             </h2>
             <LandingToolbar
                accounts={accounts.data}
-               labels={labels}
                scope={scope}
                onScope={next => setParam('for', next.kind === 'all' ? undefined : scopeValue(next))}
                search={search}
@@ -236,13 +228,7 @@ export const Posting = () => {
                onView={next => setParam('view', next === 'week' ? 'week' : undefined)}
                onExport={exportPosts}
                canExport={postRows.length > 0}
-               action={
-                  <NewPost
-                     accounts={accounts.data}
-                     labels={labels}
-                     preselected={scope.kind === 'account' ? scope.id : ''}
-                  />
-               }
+               action={<NewPost accounts={accounts.data} preselected={scope.kind === 'account' ? scope.id : ''} />}
             />
 
             {view === 'week' ? (
@@ -257,7 +243,6 @@ export const Posting = () => {
                         words: summaryOf(draft.blocks).words,
                      }))
                   )}
-                  labels={labels}
                />
             ) : (
                <>
@@ -284,7 +269,6 @@ export const Posting = () => {
                            <DraftsList
                               drafts={draftRows}
                               accounts={accounts.data}
-                              labels={labels}
                               onRemove={setToDelete}
                               onDuplicate={draft => void copyDraft(draft)}
                            />
@@ -307,7 +291,6 @@ export const Posting = () => {
                            <PublicationsList
                               posts={tabPosts}
                               accounts={accounts.data}
-                              labels={labels}
                               onBack={post => void takeBack(post)}
                               onDuplicate={post => void copyPost(post)}
                               onResults={post => void seeResults(post)}

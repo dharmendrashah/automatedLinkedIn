@@ -1,7 +1,7 @@
 import { type PersonFit, type PersonInviteState, type PersonLinkKind, type PersonStatus } from 'generated/prisma/client'
 
-// The pure part of My network's index (.plan/network-hub.md): from the rows that tie one profile to the owner, one draft person
-// per client. Tested without a database.
+// The pure part of My network's index (.plan/network-hub.md): from the rows that tie one profile to the owner, one draft person.
+// Tested without a database.
 
 export type RequestRow = {
    id: string
@@ -47,7 +47,6 @@ export type ConversationRow = {
 export type MemberRow = {
    id: string
    listId: string
-   clientId: string | null
    name: string | null
    headline: string | null
    company: string | null
@@ -63,7 +62,6 @@ export type MemberRow = {
 
 export type TargetRow = {
    id: string
-   clientId: string | null
    name: string | null
    headline: string | null
    company: string | null
@@ -72,10 +70,9 @@ export type TargetRow = {
    createdAt: Date
 }
 
-// An invite one of the client's accounts sent or will send (.plan/network-invites.md); it stays with the client it was asked for.
+// An invite one of the owner's accounts sent or will send (.plan/network-invites.md).
 export type InviteRow = {
    id: string
-   clientId: string
    accountId: string
    name: string | null
    state: string
@@ -84,7 +81,7 @@ export type InviteRow = {
    createdAt: Date
 }
 
-// What the owner's newest profile read says (`profileFacts`), the same in every client.
+// What the owner's newest profile read says (`profileFacts`).
 export type ProfileFacts = {
    name: string | null
    headline: string | null
@@ -115,7 +112,6 @@ export type DraftLink = {
 }
 
 export type DraftPerson = {
-   clientId: string
    name: string | null
    headline: string | null
    company: string | null
@@ -190,7 +186,7 @@ const connected = (row: ConnectionRow) => row.status === 'CONNECTED' || row.stat
 
 const open = (row: ConversationRow) => row.doneAt === null
 
-// Sent and not answered yet, so the client waits on them.
+// Sent and not answered yet, so the owner waits on them.
 const invitePending = (row: InviteRow) => ['SENT', 'UNKNOWN', 'WITHDRAW_QUEUED', 'WITHDRAWING'].includes(row.state)
 
 const inviteWent = (row: InviteRow) => invitePending(row) || row.state === 'ACCEPTED' || row.state === 'WITHDRAWN'
@@ -225,15 +221,6 @@ export const PRIORITY = {
 
 type Rows = Omit<Sources, 'facts'>
 
-const emptyRows = (): Rows => ({
-   requests: [],
-   connections: [],
-   conversations: [],
-   members: [],
-   targets: [],
-   invites: [],
-})
-
 const memberReason = (member: MemberRow) => {
    const { signal } = member
 
@@ -252,9 +239,9 @@ const memberReason = (member: MemberRow) => {
    }
 }
 
-// One client's rows for a profile into one person: the most useful reason first (a reply, a request, why a list found them,
+// The owner's rows for a profile into one person: the most useful reason first (a reply, a request, why a list found them,
 // the connection, the target), the best fit, the status the rows say, and what waits on whom.
-const draftOf = (clientId: string, rows: Rows, profileUrl: string, facts: ProfileFacts | null): DraftPerson => {
+const draftOf = (rows: Rows, profileUrl: string, facts: ProfileFacts | null): DraftPerson => {
    const reply = rows.conversations.find(row => open(row) && row.lastDirection === 'THEM')
    const request = rows.requests.find(pending)
    const [member] = rows.members
@@ -407,7 +394,7 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string, facts: Profil
       : rows.members.some(row => row.state === 'MAYBE')
         ? 'MAYBE'
         : 'NONE'
-   // Found by a list with a fit, new, and no account of the client has anything with them yet (P3 of the plan).
+   // Found by a list with a fit, new, and no account of the owner has anything with them yet (P3 of the plan).
    const readyToInvite =
       fit !== 'NONE' &&
       fromRows === 'NEW' &&
@@ -417,7 +404,6 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string, facts: Profil
       rows.invites.every(row => row.state === 'CANCELLED' || row.state === 'SKIPPED')
 
    return {
-      clientId,
       // The owner's profile read is final, so what it says comes first.
       name: facts?.name ?? first?.name ?? member?.name ?? target?.name ?? rows.invites[0]?.name ?? null,
       headline:
@@ -473,37 +459,22 @@ const draftOf = (clientId: string, rows: Rows, profileUrl: string, facts: Profil
    }
 }
 
-// Groups one profile's rows by client: an account's rows go to the account's client, a list's and a target's to theirs, and
-// rows without one to the owner's default client.
-export const draftPeople = (
-   sources: Sources,
-   clientOfAccount: (accountId: string) => string,
-   defaultClientId: string,
-   profileUrl: string
-): DraftPerson[] => {
-   const byClient = new Map<string, Rows>()
-   const rowsOf = (clientId: string) => {
-      const found = byClient.get(clientId) ?? emptyRows()
-
-      byClient.set(clientId, found)
-
-      return found
-   }
-
-   sources.requests.forEach(row => rowsOf(clientOfAccount(row.accountId)).requests.push(row))
-   sources.connections.forEach(row => rowsOf(clientOfAccount(row.accountId)).connections.push(row))
-   sources.conversations.forEach(row =>
-      rowsOf(clientOfAccount(row.accountId)).conversations.push({
+// One profile's rows into the owner's person; null when no row ties the profile to the owner.
+export const draftPerson = (sources: Sources, profileUrl: string): DraftPerson | null => {
+   const rows: Rows = {
+      requests: sources.requests,
+      connections: sources.connections,
+      conversations: sources.conversations.map(row => ({
          ...row,
          lastMessageAt: known(row.lastMessageAt),
          lastReplyAt: known(row.lastReplyAt),
          waitingSince: known(row.waitingSince),
          theirLastAt: known(row.theirLastAt),
-      })
-   )
-   sources.members.forEach(row => rowsOf(row.clientId ?? defaultClientId).members.push(row))
-   sources.targets.forEach(row => rowsOf(row.clientId ?? defaultClientId).targets.push(row))
-   sources.invites.forEach(row => rowsOf(row.clientId).invites.push(row))
+      })),
+      members: sources.members,
+      targets: sources.targets,
+      invites: sources.invites,
+   }
 
-   return [...byClient].map(([clientId, rows]) => draftOf(clientId, rows, profileUrl, sources.facts))
+   return Object.values(rows).every(list => list.length === 0) ? null : draftOf(rows, profileUrl, sources.facts)
 }

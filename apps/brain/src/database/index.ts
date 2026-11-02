@@ -1,16 +1,8 @@
 export { PrismaService } from './prisma.service'
 export { AccountTodayService } from './accountToday.service'
 export { CdnFileService } from './cdnFile.service'
-export { ClientService } from './client.service'
 export { PeopleIndexService } from './peopleIndex.service'
-export {
-   ALL_CLIENTS,
-   COUNT_CAP,
-   EXPORT_CAP,
-   type PeopleQuery,
-   PeopleService,
-   type PersonChanges,
-} from './people.service'
+export { COUNT_CAP, EXPORT_CAP, type PeopleQuery, PeopleService, type PersonChanges } from './people.service'
 export { PEOPLE_SORTS, PEOPLE_TABS, type PeopleSort, type PeopleTab } from './peopleFilters'
 export { IMPORT_BATCH, IMPORT_CAP, importedOf } from './linkedInRecord'
 export { POST_SORTS } from './postList'

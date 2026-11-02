@@ -5,7 +5,7 @@ import { bucketOf } from '../browsing/overview'
 import { type ItemState } from './today'
 import { type Verdict, rankOf, verdictOf, whyText } from './verdict'
 
-// The search, the client select, the chips and the tools around the list appear from this many accounts; with fewer the list
+// The search, the chips and the tools around the list appear from this many accounts; with fewer the list
 // is short enough to read.
 export const TOOLS_FROM = 4
 
@@ -47,7 +47,6 @@ export type Row<A extends AccountLike> = {
    account: A
    browse: AccountBrowse | undefined
    verdict: Verdict
-   client: string | null
    // What each of the four daily items is in; undefined until the account's day is known.
    states: ItemState[] | undefined
 }
@@ -64,7 +63,6 @@ export const rowsOf = <A extends AccountLike>(
          account,
          browse,
          verdict: verdictOf(account, browse),
-         client: browse?.clientLabel ?? null,
          states: statesById?.get(account.id),
       }
    })
@@ -121,17 +119,15 @@ export const countChips = <A extends AccountLike>(rows: Row<A>[]) => {
    return counts
 }
 
-export type Filter = { q: string; client: string; chip: Chip }
+export type Filter = { q: string; chip: Chip }
 
-export const filterRows = <A extends AccountLike>(rows: Row<A>[], { q, client, chip }: Filter) => {
+export const filterRows = <A extends AccountLike>(rows: Row<A>[], { q, chip }: Filter) => {
    const needle = q.trim().toLowerCase()
 
    return rows.filter(
       row =>
          matchesChip(chip, row) &&
-         (client === '' || row.client === client) &&
-         (needle === '' ||
-            `${row.account.email} ${row.account.displayName ?? ''} ${row.client ?? ''}`.toLowerCase().includes(needle))
+         (needle === '' || `${row.account.email} ${row.account.displayName ?? ''}`.toLowerCase().includes(needle))
    )
 }
 
@@ -141,36 +137,6 @@ export const sortRows = <A extends AccountLike>(rows: Row<A>[]) =>
       (a, b) =>
          rankOf(a.verdict, a.browse) - rankOf(b.verdict, b.browse) || a.account.email.localeCompare(b.account.email)
    )
-
-export const clientsOf = <A extends AccountLike>(rows: Row<A>[]) =>
-   [...new Set(rows.flatMap(({ client }) => (client ? [client] : [])))].sort((a, b) => a.localeCompare(b))
-
-export type Group<A extends AccountLike> = {
-   label: string | null
-   rows: Row<A>[]
-   usedSeconds: number
-   needs: number
-}
-
-// Groups that need you first, then the other named clients in order, accounts with no client last.
-const groupRank = ({ needs, label }: { needs: number; label: string | null }) =>
-   needs > 0 ? 0 : label === null ? 2 : 1
-
-export const groupRows = <A extends AccountLike>(rows: Row<A>[]): Group<A>[] => {
-   const labels = [...clientsOf(rows), ...(rows.some(({ client }) => client === null) ? [null] : [])]
-   const groups = labels.map(label => {
-      const own = rows.filter(({ client }) => client === label)
-
-      return {
-         label,
-         rows: own,
-         usedSeconds: own.reduce((sum, { browse }) => sum + (browse?.usedSeconds ?? 0), 0),
-         needs: own.filter(({ verdict }) => verdict === 'NEEDS_YOU').length,
-      }
-   })
-
-   return groups.sort((a, b) => groupRank(a) - groupRank(b))
-}
 
 export type Summary = {
    tone: 'attention' | 'first' | 'fine'

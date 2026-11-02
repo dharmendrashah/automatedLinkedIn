@@ -1,5 +1,5 @@
-// A named selection of accounts that the owner picks once and reuses ("the accounts of one client"), kept on this device. There is no
-// client model behind it: a set is only a list of account ids.
+// A named selection of accounts that the owner picks once and reuses ("my sales accounts"), kept on this device. A set is only a list of
+// account ids.
 export type AccountSet = {
    id: string
    name: string
