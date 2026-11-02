@@ -9,6 +9,7 @@ exports[`blocks before they became one definition > should keep the sets of bloc
     "logic.taskResult",
   ],
   "pool": [
+    "account.getConnections",
     "account.visitCompany",
     "account.visitProfile",
     "account.writePost",
@@ -705,6 +706,20 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 9,
     },
     "type": "account.writePost",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 100,
+    },
+    "preview": {
+      "howMany": 20,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 7,
+    },
+    "type": "account.getConnections",
   },
   {
     "plain": {

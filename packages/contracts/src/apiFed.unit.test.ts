@@ -14,6 +14,7 @@ describe('descriptions of what a call may feed', () => {
    it('should describe the input blocks and the collect blocks that start a chain on their own', () => {
       expect(described.map(({ type }) => type).sort()).toEqual(
          [
+            'account.getConnections',
             'collect.domainLookup',
             'collect.findPosts',
             'collect.searchPeople',

@@ -594,12 +594,18 @@ describe('Account Actions', () => {
       })),
    })
 
-   it('should group the account block, both visit blocks and Write a post under "Account Actions"', () => {
+   it('should group the account block, the visit blocks, Write a post and the reads under "Account Actions"', () => {
       const groups = catalog()
          .filter(({ group }) => group === 'Account Actions')
          .map(({ type }) => type)
 
-      expect(groups).toEqual(['account.select', 'account.visitProfile', 'account.visitCompany', 'account.writePost'])
+      expect(groups).toEqual([
+         'account.select',
+         'account.visitProfile',
+         'account.visitCompany',
+         'account.writePost',
+         'account.getConnections',
+      ])
    })
 
    it('should keep a post written in the block as text that reads as a post, and say so when it does not', () => {

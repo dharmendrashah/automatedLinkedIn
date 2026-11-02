@@ -12,6 +12,7 @@ const described = (type: Block['type'], api: Block['api'], input: Block['input']
    costHint: null,
    presets: [],
    api,
+   sample: null,
    version: 1,
    deprecated: false,
    unit: null,

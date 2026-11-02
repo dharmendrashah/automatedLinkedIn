@@ -49,6 +49,8 @@ export type PersonItem = WithResult & {
    tags: string[]
    // A work email found for the person.
    email?: string | null
+   // The day they connected to one of the owner's accounts, when an account was read for it.
+   connectedOn?: string | null
 }
 
 export type PostItem = WithResult & {
@@ -156,6 +158,7 @@ export const mergePeople = (a: PersonItem, b: PersonItem): PersonItem => ({
    title: a.title ?? b.title,
    company: a.company ?? b.company,
    email: a.email ?? b.email,
+   connectedOn: a.connectedOn ?? b.connectedOn,
    known: a.known || b.known,
    tags: [...new Set([...a.tags, ...b.tags])],
    signals: [...a.signals, ...b.signals.filter(signal => !a.signals.some(known => sameSignal(known, signal)))],
@@ -214,6 +217,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       known: z.boolean().default(false),
       tags: z.array(z.string()).default([]),
       email: nullableText.optional(),
+      connectedOn: nullableText.optional(),
       result: resultSchema,
    }),
    z.object({

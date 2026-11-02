@@ -98,6 +98,7 @@ export const BLOCK_ICONS: Record<Block['type'], LucideIcon> = {
    'account.visitProfile': Eye,
    'account.visitCompany': Building2,
    'account.writePost': PenLine,
+   'account.getConnections': Users,
    'output.csv': FileDown,
    'output.sendApi': Send,
 }

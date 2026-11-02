@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { type Graph, type NodeConfig, blockOf, errorsOf, validateGraph } from './workflow'
+import { type Graph, type NodeConfig, applyApiInput, blockOf, catalog, errorsOf, validateGraph } from './workflow'
 
 const node = (id: string, type: Graph['nodes'][number]['type'], config: NodeConfig = {}) => ({
    id,
@@ -59,5 +59,35 @@ describe('the account settings of the Account Actions blocks', () => {
       expect(schema.safeParse({ timeLimitHours: 0 }).success).toBe(false)
       expect(schema.safeParse({ timeLimitHours: 49 }).success).toBe(false)
       expect(schema.safeParse({ timeLimitHours: 48 }).success).toBe(true)
+   })
+})
+
+describe('Get my connections', () => {
+   it('should start a chain on its own, give people, and wait 2 hours by default', () => {
+      expect(blockOf('account.getConnections')).toMatchObject({
+         input: 'start',
+         output: 'profile',
+      })
+      expect(blockOf('account.getConnections').config.parse({})).toMatchObject({
+         howMany: 100,
+         accountMode: 'pool',
+         timeLimitHours: 2,
+      })
+   })
+
+   it('should take the account a call names, and turn on One account with it', () => {
+      expect(applyApiInput('account.getConnections', { howMany: 5 }, { account: 'a1' })).toEqual({
+         howMany: 5,
+         account: 'a1',
+         accountMode: 'one',
+      })
+      expect(applyApiInput('account.getConnections', { howMany: 5 }, {})).toEqual({ howMany: 5 })
+   })
+
+   it('should carry a made-up sample out in the catalog, and none where a block has none', () => {
+      const entry = catalog().find(({ type }) => type === 'account.getConnections')
+
+      expect(entry?.sample?.out).toMatchObject({ name: 'Ada Lovelace' })
+      expect(catalog().find(({ type }) => type === 'account.select')?.sample).toBeNull()
    })
 })

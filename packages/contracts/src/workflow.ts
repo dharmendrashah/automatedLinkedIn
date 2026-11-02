@@ -236,7 +236,27 @@ export const ACCOUNT_BLOCK_HOURS = {
    'account.visitProfile': 8,
    'account.visitCompany': 8,
    'account.writePost': 1,
+   'account.getConnections': 2,
 } as const
+
+// Every spider task and the block or blocks that run it (.plan/account-action-blocks.md): `blocks` are built, `planned` are on the
+// way (the phase), `none` is left out on purpose. A test keeps the spider's catalog and this table the same, so a new task has to
+// choose one.
+export const ACCOUNT_ACTION_TASKS: Record<string, { blocks: string[] } | { planned: string } | { none: string }> = {
+   'browser-detection': { none: 'Left for later by the owner: it has no account.' },
+   'linkedin-login': { none: 'Left for later by the owner: the system keeps accounts signed in.' },
+   'linkedin-browse': { planned: 'Get my feed posts (phase 5)' },
+   'linkedin-messages': { planned: 'Get my conversations (phase 2)' },
+   'linkedin-profile': { planned: 'Read profile with my account (phase 2)' },
+   'linkedin-post': { blocks: ['account.writePost'] },
+   'linkedin-reply': { planned: 'Reply in a conversation (phase 4)' },
+   'linkedin-message': { planned: 'Send message (phase 4)' },
+   'linkedin-invitations': { planned: 'Get my connection requests, Answer connection requests (phases 2 and 3)' },
+   'linkedin-connections': { blocks: ['account.getConnections'] },
+   'linkedin-invite': { planned: 'Send connection request, Withdraw connection request (phase 3)' },
+   'linkedin-view-profile': { blocks: ['account.visitProfile'] },
+   'linkedin-view-company': { blocks: ['account.visitCompany'] },
+}
 
 // What a block's account settings say; text that does not fit reads as the defaults, so a bad value elsewhere in the block never
 // hides them from the engine.
@@ -852,6 +872,7 @@ export const BLOCK_TYPES = [
    'account.visitProfile',
    'account.visitCompany',
    'account.writePost',
+   'account.getConnections',
    'output.list',
    'output.markPosts',
    'output.csv',
@@ -899,6 +920,8 @@ export type ApiField = {
    max?: number
    // The block's own setting a call value replaces for that run. A block that reads the call itself has none.
    setting?: string
+   // Other settings that change with it, such as a call naming one account turning "One account" on.
+   also?: Record<string, string>
 }
 
 type BlockSpec = {
@@ -932,6 +955,8 @@ type BlockSpec = {
    presets?: Preset[]
    // What a call may feed this block.
    api?: ApiField[]
+   // A made-up item the block takes in and one it passes on, as plain data, for its Input and Output tabs before it has run.
+   sample?: { in?: Record<string, unknown>; out?: Record<string, unknown> }
    input: ItemKind | null
    output: ItemKind | null
    config: z.ZodType<Record<string, unknown>>
@@ -3523,6 +3548,21 @@ const BLOCKS = {
       output: 'profile',
       config: z.object(accountSettings(ACCOUNT_BLOCK_HOURS['account.visitProfile'])),
       fields: accountFields(ACCOUNT_BLOCK_HOURS['account.visitProfile']),
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            headline: 'Founder at Analytical Engines',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            result: {
+               action: 'visitProfile',
+               status: 'VISITED',
+            },
+         },
+      },
    },
    'account.visitCompany': {
       group: 'Account Actions',
@@ -3537,6 +3577,21 @@ const BLOCKS = {
       output: 'company',
       config: z.object(accountSettings(ACCOUNT_BLOCK_HOURS['account.visitCompany'])),
       fields: accountFields(ACCOUNT_BLOCK_HOURS['account.visitCompany']),
+      sample: {
+         in: {
+            name: 'Stripe',
+            website: 'stripe.com',
+            link: 'https://www.linkedin.com/company/stripe',
+         },
+         out: {
+            name: 'Stripe',
+            link: 'https://www.linkedin.com/company/stripe',
+            result: {
+               action: 'visitCompany',
+               status: 'VISITED',
+            },
+         },
+      },
    },
    'account.writePost': {
       group: 'Account Actions',
@@ -3592,6 +3647,54 @@ const BLOCKS = {
             hint: 'Posted once per run, never more than the account’s limits allow. A preview posts nothing.',
          },
          ...accountFields(ACCOUNT_BLOCK_HOURS['account.writePost']),
+      ],
+   },
+   'account.getConnections': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'people',
+      estimate: node => ({
+         items: howManyOf(node),
+         costMicros: 0,
+      }),
+      previewCap: PREVIEW_LIMITS.perPost,
+      label: 'Get my connections',
+      summary: 'Reads the people your accounts are connected to, with the day they connected, the most recent first.',
+      api: [
+         {
+            field: 'account',
+            shape: 'text',
+            check: 'text',
+            what: 'the id of one of your accounts to read from',
+            example: ['your-account-id'],
+            setting: 'account',
+            also: { accountMode: 'one' },
+         },
+      ],
+      sample: {
+         out: {
+            name: 'Ada Lovelace',
+            headline: 'Founder at Analytical Engines',
+            connectedOn: '2026-10-21',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+      },
+      input: 'start',
+      output: 'profile',
+      config: z.object({
+         howMany: howMany(1000, 100),
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.getConnections']),
+      }),
+      fields: [
+         {
+            key: 'howMany',
+            label: 'How many people',
+            kind: 'int',
+            min: 1,
+            max: 1000,
+            hint: 'The most recent connections first.',
+         },
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.getConnections']),
       ],
    },
    'output.csv': {
@@ -3740,7 +3843,7 @@ export const applyApiInput = (type: BlockType, config: NodeConfig, input: unknow
    const sent = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
    const replaced: NodeConfig = { ...config }
 
-   for (const { field, shape: kind, setting } of (BLOCKS[type] as BlockSpec).api ?? []) {
+   for (const { field, shape: kind, setting, also } of (BLOCKS[type] as BlockSpec).api ?? []) {
       const value = sent[field]
 
       if (!setting) {
@@ -3749,8 +3852,10 @@ export const applyApiInput = (type: BlockType, config: NodeConfig, input: unknow
 
       if (kind === 'text' && typeof value === 'string' && value.trim() !== '') {
          replaced[setting] = value
+         Object.assign(replaced, also)
       } else if (kind === 'list' && Array.isArray(value) && value.length > 0) {
          replaced[setting] = value.map(String)
+         Object.assign(replaced, also)
       }
    }
 
@@ -3771,6 +3876,7 @@ export const catalog = (): CatalogBlock[] =>
          costHint: spec.costHint ?? null,
          presets: spec.presets ?? [],
          api: spec.api ?? [],
+         sample: spec.sample ?? null,
          version: spec.version ?? 1,
          deprecated: spec.deprecated === true,
          unit: spec.unit ?? null,
@@ -3807,6 +3913,7 @@ export type CatalogBlock = {
    costHint: string | null
    presets: Preset[]
    api: ApiField[]
+   sample: { in?: Record<string, unknown>; out?: Record<string, unknown> } | null
    version: number
    deprecated: boolean
    unit: string | null

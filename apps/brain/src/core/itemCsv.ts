@@ -53,7 +53,7 @@ const rowOf = ({ round, item }: { round: number; item: WorkflowItemData }): (str
       base[7] = item.tags.join(', ')
       base[8] = signal ? REASONS[signal.type] : null
       base[9] = signal?.via ?? null
-      base[10] = signal?.at ?? null
+      base[10] = signal?.at ?? item.connectedOn ?? null
       base[13] = item.email ?? null
    } else if (item.kind === 'post') {
       base[0] = 'Post'

@@ -293,6 +293,26 @@ model WorkflowInputTaken {
   @@index([createdAt])
 }
 
+// One request of an Account Actions block to one account in a run (.plan/account-action-blocks.md): a read asks once for each
+// account (`slug` is the account's id), an act once for each person. Unique, so a repeated tick never asks twice. `state` is ASKED,
+// DONE or FAILED; `result` holds a short fixed result.
+model AccountActionCall {
+  id        String      @id @default(uuid(7))
+  runId     String
+  run       WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  nodeId    String
+  slug      String
+  accountId String
+  state     String
+  result    Json?
+  tries     Int         @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([runId, nodeId, slug, accountId])
+  @@index([runId, nodeId])
+}
+
 // A saved version of a workflow's graph: one for each save that changed it, the newest 50 kept
 // (.plan/workflow-engine-p5-editor.md).
 model WorkflowVersion {
@@ -342,6 +362,7 @@ model WorkflowRun {
   finishedAt       DateTime?
   steps            WorkflowStepRun[]
   items            WorkflowItem[]
+  accountCalls     AccountActionCall[]
 
   // One run going at a time: a partial unique index on (workflowId) where status is RUNNING, in the migration
   // workflow_run_one_live (Prisma cannot express it).
