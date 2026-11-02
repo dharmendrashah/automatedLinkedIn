@@ -15,6 +15,7 @@ export const RETENTION = {
    // Task events and what became of them (.plan/workflow-events-and-hooks.md).
    eventsDays: 30,
    hookRunsDays: 14,
+   claimsDays: 7,
    maybeDays: 30,
    reviewAfterDays: 180,
    reviewGraceDays: 30,
@@ -64,6 +65,8 @@ export class RetentionService {
             startedAt: { lt: daysBefore(now, RETENTION.hookRunsDays) },
          },
       })
+      const claimCutoff = daysBefore(now, RETENTION.claimsDays)
+      const claims = await db.workflowEventClaim.deleteMany({ where: { createdAt: { lt: claimCutoff } } })
       const hookDeliveries = await db.workflowDelivery.deleteMany({
          where: {
             source: 'BLOCK',
@@ -141,7 +144,7 @@ export class RetentionService {
          items: items.count,
          inputs: inputs.count,
          runs: runs.count,
-         events: events.count + hookDeliveries.count,
+         events: events.count + hookDeliveries.count + claims.count,
          hookRuns: hookRuns.count,
          maybe: maybe.count,
          reviewed: reviewed.count,

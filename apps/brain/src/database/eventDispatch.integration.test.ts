@@ -415,4 +415,55 @@ describe('task events (database)', () => {
       expect(deliveries.map(({ status }) => status)).toEqual(['STARTED', 'PENDING'])
       expect(deliveries[1].reason).toContain('hourly limit')
    })
+
+   it('should let only one claiming workflow take an event, and leave the others that did not ask to claim', async () => {
+      const first = await listener(owner, {
+         phase: 'after',
+         claim: true,
+      })
+      const second = await listener(owner, {
+         phase: 'after',
+         claim: true,
+      })
+      const free = await listener(owner, { phase: 'after' })
+
+      await runTask()
+      await dispatch()
+
+      const statusOf = async (workflowId: string) =>
+         (await PrismaService.client.workflowDelivery.findFirstOrThrow({ where: { workflowId } })).status
+
+      const taken = [await statusOf(first), await statusOf(second)].sort()
+
+      expect(taken).toEqual(['SKIPPED', 'STARTED'])
+      expect(await statusOf(free)).toBe('STARTED')
+   })
+
+   it('should hold events for the window of a collecting trigger, then start one run for all of them', async () => {
+      const batch = await listener(owner, {
+         phase: 'after',
+         batchMinutes: 5,
+      })
+
+      await runTask()
+      await runTask()
+      await PrismaService.client.taskEvent.updateMany({ data: { readyAt: new Date(Date.now() - 5_000) } })
+      await EventDispatchService.fanOut()
+
+      await EventDispatchService.start(new Date(Date.now() + 1_000))
+
+      expect(await runsOf(batch)).toEqual([])
+
+      await EventDispatchService.start(new Date(Date.now() + 6 * 60_000))
+
+      const runs = await runsOf(batch)
+      const deliveries = await PrismaService.client.workflowDelivery.findMany({ where: { workflowId: batch } })
+
+      expect(runs).toHaveLength(1)
+      expect(deliveries.map(({ status, runId }) => [status, runId])).toEqual([
+         ['STARTED', runs[0].id],
+         ['STARTED', runs[0].id],
+      ])
+      expect((runs[0].input as { deliveries: string[] }).deliveries).toHaveLength(2)
+   })
 })

@@ -368,6 +368,19 @@ model WorkflowDelivery {
   @@index([userId, workflowId, createdAt])
 }
 
+// The workflow that took an event when its trigger says "only one workflow takes an event". The first to write the key wins; rows are
+// removed after 7 days (.plan/workflow-events-and-hooks.md).
+model WorkflowEventClaim {
+  id         String   @id @default(uuid(7))
+  userId     String
+  key        String
+  workflowId String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, key])
+  @@index([createdAt])
+}
+
 // One request of an Account Actions block to one account in a run (.plan/account-action-blocks.md): a read asks once for each
 // account (`slug` is the account's id), an act once for each person. Unique, so a repeated tick never asks twice. `state` is ASKED,
 // DONE or FAILED; `result` holds a short fixed result.

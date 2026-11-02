@@ -1417,11 +1417,15 @@ const taskEventConfig = z.object({
    plannedBy: z.array(z.string().min(1).max(60)).max(20).default([]),
    ownTasks: z.boolean().default(false),
    maxPerHour: z.number().int().min(1).max(200).default(30),
+   batchMinutes: z.number().int().min(0).max(60).default(0),
+   claim: z.boolean().default(false),
 })
 
 const messageArrivedConfig = z.object({
    accounts: z.array(z.string().min(1).max(100)).max(MAX_POOL).default([]),
    maxPerHour: z.number().int().min(1).max(200).default(30),
+   batchMinutes: z.number().int().min(0).max(60).default(0),
+   claim: z.boolean().default(false),
 })
 
 const maxPerHourField: Field = {
@@ -1432,6 +1436,25 @@ const maxPerHourField: Field = {
    max: 200,
    hint: 'More wait their turn instead of being lost.',
 }
+
+const batchFields: Field[] = [
+   {
+      key: 'batchMinutes',
+      label: 'Collect events for this many minutes (0 for one run for each event)',
+      kind: 'int',
+      min: 0,
+      max: 60,
+      hint: 'Events that arrive inside the window start one run with all their people, each person once.',
+      advanced: true,
+   },
+   {
+      key: 'claim',
+      label: 'Only one workflow takes an event',
+      kind: 'toggle',
+      hint: 'When another workflow with this setting took the event first, this one skips it.',
+      advanced: true,
+   },
+]
 
 const BLOCKS = {
    'trigger.manual': {
@@ -1978,6 +2001,7 @@ const BLOCKS = {
             ...maxPerHourField,
             advanced: true,
          },
+         ...batchFields,
       ],
    },
    'trigger.messageArrived': {
@@ -1999,6 +2023,7 @@ const BLOCKS = {
             ...maxPerHourField,
             advanced: true,
          },
+         ...batchFields,
       ],
    },
    'input.profiles': {
@@ -5025,7 +5050,7 @@ export const isFired = (graph: Graph, start: RunStart, type: BlockType) => {
 }
 
 // What a trigger block that listens to task events asks, in one shape; null for any other block or settings that do not read.
-export type EventTrigger = EventTriggerSettings & { maxPerHour: number }
+export type EventTrigger = EventTriggerSettings & { maxPerHour: number; batchMinutes: number; claim: boolean }
 
 export const eventTriggerOf = (node: GraphNode): EventTrigger | null => {
    if (node.type === 'trigger.taskEvent') {
@@ -5047,6 +5072,8 @@ export const eventTriggerOf = (node: GraphNode): EventTrigger | null => {
               plannedBy: [],
               ownTasks: true,
               maxPerHour: settings.data.maxPerHour,
+              batchMinutes: settings.data.batchMinutes,
+              claim: settings.data.claim,
            }
          : null
    }

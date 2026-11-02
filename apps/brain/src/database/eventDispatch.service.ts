@@ -25,6 +25,8 @@ export const DISPATCH = {
    eventsPerTick: 200,
    perOwnerPerTick: 20,
    startsPerTick: 200,
+   // Events one collecting trigger may fold into a run.
+   batchMax: 200,
    leaseSeconds: 60,
    poisonAfter: 5,
    waitHours: 6,
@@ -33,13 +35,15 @@ export const DISPATCH = {
    maxBackoffMs: 10 * 60 * 1000,
 } as const
 
-const HOUR_MS = 60 * 60 * 1000
+const MINUTE_MS = 60 * 1000
+const HOUR_MS = 60 * MINUTE_MS
 
 export const REASONS = {
    tooDeep: `Workflows can start each other at most ${MAX_CHAIN_DEPTH} in a row.`,
    off: 'The workflow was switched off.',
    tooOld: 'Waited too long for its turn.',
    deleted: 'The workflow no longer exists.',
+   claimed: 'Another workflow already took this event.',
 } as const
 
 type ClaimedEvent = {
@@ -95,7 +99,7 @@ export class EventDispatchService {
       nodeIds: string[],
       envelope: TaskEnvelope,
       plannedBy: string[]
-   ): Promise<{ nodes: string[]; trigger: EventTrigger | null }> {
+   ): Promise<{ nodes: string[]; trigger: EventTrigger | null; claim: boolean; batchMinutes: number }> {
       const workflow = await PrismaService.client.workflow.findUnique({
          where: { id: workflowId },
          select: { graph: true },
@@ -106,6 +110,8 @@ export class EventDispatchService {
          return {
             nodes: [],
             trigger: null,
+            claim: false,
+            batchMinutes: 0,
          }
       }
 
@@ -130,6 +136,8 @@ export class EventDispatchService {
       return {
          nodes: wanted.map(({ id }) => id),
          trigger: wanted[0]?.trigger ?? null,
+         claim: wanted.some(({ trigger }) => trigger.claim),
+         batchMinutes: Math.max(0, ...wanted.map(({ trigger }) => trigger.batchMinutes)),
       }
    }
 
@@ -176,9 +184,11 @@ export class EventDispatchService {
          const depth = await this.depthOf(envelope)
 
          for (const [workflowId, nodeIds] of byWorkflow) {
-            const { nodes } = await this.matching(workflowId, nodeIds, envelope, plannedBy)
+            const { nodes, claim, batchMinutes } = await this.matching(workflowId, nodeIds, envelope, plannedBy)
 
             if (nodes.length > 0) {
+               const lost = claim && !(await this.claimed(event.userId, event.id, workflowId))
+
                rows.push({
                   userId: event.userId,
                   workflowId,
@@ -189,11 +199,16 @@ export class EventDispatchService {
                      depth,
                      account: envelope.account?.id ?? null,
                   } satisfies DeliveryTargets,
-                  retryAt: now,
+                  // A trigger that collects events keeps each one back until its window has passed.
+                  retryAt: new Date(now.getTime() + batchMinutes * MINUTE_MS),
                   createdAt: now,
                   ...(depth > MAX_CHAIN_DEPTH && {
                      status: 'SKIPPED',
                      reason: REASONS.tooDeep,
+                  }),
+                  ...(lost && {
+                     status: 'SKIPPED',
+                     reason: REASONS.claimed,
                   }),
                })
             }
@@ -293,17 +308,53 @@ export class EventDispatchService {
       })
    }
 
-   // Whether the workflow already started as many event runs this hour as its trigger allows.
-   private static async overLimit(workflowId: string, graph: unknown, nodes: string[], now: Date) {
+   // The first workflow to write an event's key takes it; asking again as the same workflow still wins.
+   private static async claimed(userId: string, eventId: string, workflowId: string) {
+      const key = `event:${eventId}`
+      const { count } = await PrismaService.client.workflowEventClaim.createMany({
+         data: [
+            {
+               userId,
+               key,
+               workflowId,
+            },
+         ],
+         skipDuplicates: true,
+      })
+
+      if (count === 1) {
+         return true
+      }
+
+      const held = await PrismaService.client.workflowEventClaim.findUnique({
+         where: {
+            userId_key: {
+               userId,
+               key,
+            },
+         },
+         select: { workflowId: true },
+      })
+
+      return held?.workflowId === workflowId
+   }
+
+   // The settings of the trigger blocks a delivery matched, read from the workflow's graph.
+   private static triggersFor(graph: unknown, nodes: string[]) {
       const parsed = graphSchema.safeParse(graph)
-      const limits = parsed.success
+
+      return parsed.success
          ? upgradeGraph(parsed.data).nodes.flatMap(node => {
               const trigger = nodes.includes(node.id) ? eventTriggerOf(node) : null
 
-              return trigger ? [trigger.maxPerHour] : []
+              return trigger ? [trigger] : []
            })
          : []
-      const limit = Math.max(1, ...limits)
+   }
+
+   // Whether the workflow already started as many event runs this hour as its trigger allows.
+   private static async overLimit(workflowId: string, graph: unknown, nodes: string[], now: Date) {
+      const limit = Math.max(1, ...this.triggersFor(graph, nodes).map(({ maxPerHour }) => maxPerHour))
       const started = await PrismaService.client.workflowDelivery.count({
          where: {
             workflowId,
@@ -345,9 +396,15 @@ export class EventDispatchService {
       })
       const perOwner = new Map<string, number>()
       const items: JobItemInput[] = []
+      // Deliveries folded into the run of an earlier one in this pass.
+      const merged = new Set<string>()
       let started = 0
 
       for (const delivery of due) {
+         if (merged.has(delivery.id)) {
+            continue
+         }
+
          const taken = perOwner.get(delivery.userId) ?? 0
 
          if (taken >= DISPATCH.perOwnerPerTick) {
@@ -410,6 +467,32 @@ export class EventDispatchService {
             continue
          }
 
+         // A trigger that collects events starts one run for the events of its window, each person once.
+         const window = Math.max(
+            0,
+            ...this.triggersFor(delivery.workflow.graph, targets.nodes).map(({ batchMinutes }) => batchMinutes)
+         )
+         const mates =
+            window > 0
+               ? await PrismaService.client.workflowDelivery.findMany({
+                    where: {
+                       workflowId: delivery.workflowId,
+                       source: 'TASK',
+                       status: 'PENDING',
+                       retryAt: { lte: now },
+                       id: { not: delivery.id },
+                    },
+                    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+                    take: DISPATCH.batchMax - 1,
+                    select: {
+                       id: true,
+                       targets: true,
+                    },
+                 })
+               : []
+         const ids = [delivery.id, ...mates.map(({ id }) => id)]
+         const mateTargets = mates.map(({ targets: found }) => targetsOf(found))
+
          try {
             const run = await WorkflowService.startRun(
                delivery.userId,
@@ -419,10 +502,11 @@ export class EventDispatchService {
                {
                   input: {
                      delivery: delivery.id,
-                     nodes: targets.nodes,
+                     deliveries: ids,
+                     nodes: [...new Set([...targets.nodes, ...mateTargets.flatMap(({ nodes }) => nodes)])],
                      account: targets.account,
                   },
-                  depth: targets.depth,
+                  depth: Math.max(targets.depth, ...mateTargets.map(({ depth }) => depth)),
                }
             )
 
@@ -438,14 +522,18 @@ export class EventDispatchService {
                continue
             }
 
-            await this.settle(
-               delivery.id,
-               {
-                  status: 'STARTED',
-                  runId: run.id,
-               },
-               now
-            )
+            for (const id of ids) {
+               merged.add(id)
+               await this.settle(
+                  id,
+                  {
+                     status: 'STARTED',
+                     runId: run.id,
+                  },
+                  now
+               )
+            }
+
             items.push(item('ASKED'))
             started += 1
          } catch (error) {
@@ -586,5 +674,20 @@ export class EventDispatchService {
       })
 
       return delivery?.taskEventId ?? null
+   }
+
+   // The events of the deliveries a collecting trigger folded into one run, oldest first.
+   public static async eventsOfDeliveries(deliveryIds: string[], userId: string) {
+      const rows = await PrismaService.client.workflowDelivery.findMany({
+         where: {
+            id: { in: deliveryIds },
+            userId,
+            taskEventId: { not: null },
+         },
+         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+         select: { taskEventId: true },
+      })
+
+      return rows.flatMap(({ taskEventId }) => (taskEventId ? [taskEventId] : []))
    }
 }

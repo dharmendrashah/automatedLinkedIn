@@ -21,6 +21,7 @@ import { type Context, type StepResult, configOf, elseKey, keepItems } from './c
 
 const inputSchema = z.object({
    delivery: z.string().optional(),
+   deliveries: z.array(z.string()).optional(),
    event: z.string().optional(),
 })
 
@@ -43,13 +44,22 @@ export const runEvent = async (ctx: Context) => {
    return eventId ? ((await TaskEventService.envelopeOf(eventId, { withInput: true })) ?? undefined) : undefined
 }
 
-// A trigger gives what its event is about. A run by hand or a preview takes the newest event the trigger would have taken.
+// A trigger gives what its event is about, each person once when a collecting trigger folded several events together. A run by hand or a
+// preview takes the newest event the trigger would have taken.
 export const eventTrigger = async (ctx: Context): Promise<StepResult> => {
    const trigger = eventTriggerOf(ctx.node)
+   const { deliveries } = inputSchema.safeParse(ctx.run.input).data ?? {}
+   const folded =
+      deliveries && deliveries.length > 1
+         ? await EventDispatchService.eventsOfDeliveries(deliveries, ctx.run.userId)
+         : []
    const eventId =
       (await eventIdOf(ctx)) ??
       (trigger ? await TaskEventService.latestId(ctx.run.userId, trigger.phase, trigger.task) : null)
-   const items = eventId ? await TaskEventService.itemsOf(eventId) : []
+   const found = (
+      await Promise.all((folded.length > 0 ? folded : eventId ? [eventId] : []).map(id => TaskEventService.itemsOf(id)))
+   ).flat()
+   const items = [...new Map(found.map(item => [`${item.kind}:${item.slug}`, item])).values()]
    const result = await keepItems(ctx, items, 0)
 
    return eventId
