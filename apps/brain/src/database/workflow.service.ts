@@ -870,17 +870,28 @@ export class WorkflowService {
          },
       })
 
-      return runs.map(run => ({
-         runId: run.id,
-         workflowId: run.workflowId,
-         workflowName: run.workflow.name,
-         message: run.message,
-         finishedAt: run.finishedAt,
-      }))
+      const hooks = await HookService.alerts(userId, new Date(Date.now() - ALERT_DAYS * DAY_MS))
+
+      return [
+         ...runs.map(run => ({
+            runId: run.id,
+            workflowId: run.workflowId,
+            workflowName: run.workflow.name,
+            message: run.message,
+            finishedAt: run.finishedAt,
+         })),
+         ...hooks,
+      ]
+         .sort((a, b) => (b.finishedAt?.getTime() ?? 0) - (a.finishedAt?.getTime() ?? 0))
+         .slice(0, 20)
    }
 
    // False when it is not the owner's failed run.
    public static async dismissAlert(userId: string, runId: string) {
+      if (await HookService.dismiss(userId, runId)) {
+         return true
+      }
+
       const { count } = await PrismaService.client.workflowRun.updateMany({
          where: {
             id: runId,
@@ -893,12 +904,12 @@ export class WorkflowService {
       return count === 1
    }
 
-   public static runs(userId: string, workflowId: string) {
+   public static runs(userId: string, workflowId: string, includeHooks = false) {
       return PrismaService.client.workflowRun.findMany({
          where: {
             userId,
             workflowId,
-            kind: 'MAIN',
+            ...(!includeHooks && { kind: 'MAIN' }),
          },
          orderBy: { startedAt: 'desc' },
          take: 50,

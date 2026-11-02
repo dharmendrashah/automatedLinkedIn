@@ -57,6 +57,14 @@ export const WorkflowPage = () => {
       { refetchInterval: query => (query.state.data?.some(run => isLive(run.status)) ? POLL_MS : false) }
    )
    const shownRunId = runId ?? runs.data?.[0]?.id ?? null
+   const [showHookRuns, setShowHookRuns] = useState(false)
+   const hookRuns = trpc.workflow.runs.useQuery(
+      { workflowId: id, includeHooks: true },
+      {
+         enabled: showHookRuns,
+         refetchInterval: query => (query.state.data?.some(run => isLive(run.status)) ? POLL_MS : false),
+      }
+   )
    const detail = trpc.workflow.runDetail.useQuery(
       { runId: shownRunId ?? '' },
       {
@@ -279,7 +287,19 @@ export const WorkflowPage = () => {
                />
             </TabsContent>
             <TabsContent value="runs" className="grid gap-3">
-               <RunsTable runs={runs.data} selectedId={shownRunId} onSelect={run => setRunId(run.id)} />
+               <div className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                     id="show-hook-runs"
+                     checked={showHookRuns}
+                     onCheckedChange={checked => setShowHookRuns(checked === true)}
+                  />
+                  <Label htmlFor="show-hook-runs">Show hook runs</Label>
+               </div>
+               <RunsTable
+                  runs={showHookRuns ? hookRuns.data : runs.data}
+                  selectedId={shownRunId}
+                  onSelect={run => setRunId(run.id)}
+               />
                {detail.data?.status === 'FAILED' && detail.data.id === runs.data?.[0]?.id && detail.data.trigger !== 'PREVIEW' ? (
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                      <Button
@@ -300,6 +320,7 @@ export const WorkflowPage = () => {
                   <RunDetailView
                      run={detail.data}
                      catalog={catalog.data}
+                     onStop={stoppedId => stopRun.mutate({ runId: stoppedId })}
                      onOpenBlock={nodeId => {
                         setReplay(true)
                         setTab('canvas')

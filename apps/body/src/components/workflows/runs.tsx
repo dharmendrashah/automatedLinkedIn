@@ -63,7 +63,7 @@ export const RunsTable = ({ runs, selectedId, onSelect }: ListProps) => (
             {runs?.map(run => (
                <TableRow key={run.id} className={cn(run.id === selectedId && 'bg-muted/50')}>
                   <TableCell>{formatTime(run.startedAt)}</TableCell>
-                  <TableCell>{triggerLabels[run.trigger]}</TableCell>
+                  <TableCell>{run.kind === 'HOOK' ? 'Hook' : triggerLabels[run.trigger]}</TableCell>
                   <TableCell>
                      <RunStatusBadge status={run.status} />
                   </TableCell>
@@ -89,11 +89,13 @@ type DetailProps = {
    run: RunDetail
    catalog: Block[]
    onOpenBlock: (nodeId: string) => void
+   // Stops a live hook run on its own; the main run has its Stop above the tabs.
+   onStop?: (runId: string) => void
 }
 
 // One run step by step: how many went in and out of each block, the pass rate, what each block cost, and what it
 // passed on.
-export const RunDetailView = ({ run, catalog, onOpenBlock }: DetailProps) => {
+export const RunDetailView = ({ run, catalog, onOpenBlock, onStop }: DetailProps) => {
    const [shownNode, setShownNode] = useState<string | null>(null)
    const order = run.graph.nodes.map(({ id }) => id)
    const combined = combineRounds(run.steps)
@@ -106,7 +108,12 @@ export const RunDetailView = ({ run, catalog, onOpenBlock }: DetailProps) => {
          <p className="text-sm font-medium">{runSentence(run, type => blockOf(catalog, type)?.label ?? type)}</p>
          <div className="text-muted-foreground flex flex-wrap items-center gap-3 text-sm">
             <RunStatusBadge status={run.status} />
-            <span>{triggerLabels[run.trigger]}</span>
+            <span>{run.kind === 'HOOK' ? 'Hook' : triggerLabels[run.trigger]}</span>
+            {run.kind === 'HOOK' && run.status === 'RUNNING' && !run.stopRequestedAt && onStop ? (
+               <Button variant="outline" size="sm" onClick={() => onStop(run.id)}>
+                  Stop this hook run
+               </Button>
+            ) : null}
             <span>
                Data cost {formatUsd(run.costMicros)} of up to {formatUsd(run.estimateMicros)}
             </span>

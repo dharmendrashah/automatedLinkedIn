@@ -228,6 +228,30 @@ export const toGraph = (nodes: FlowNode[], edges: Edge[], loopRounds?: number): 
 export const attachedTo = (edges: Edge[], id: string, phase: HookPhase) =>
    edges.filter(edge => edge.source === id && edge.sourceHandle === handleOfPort(phase)).length
 
+const isHookEdge = (edge: Edge) => isHookPhase(portOfHandle(edge.sourceHandle))
+
+// The first block of each chain: where a hook line ends.
+export const chainRoots = (edges: Edge[]) => [...new Set(edges.filter(isHookEdge).map(edge => edge.target))]
+
+// Every block that only exists to run in a hook: the roots and what follows them by ordinary lines.
+export const chainNodeIds = (edges: Edge[]) => {
+   const found = new Set(chainRoots(edges))
+   const queue = [...found]
+
+   while (queue.length > 0) {
+      const id = queue.shift()
+
+      for (const edge of edges) {
+         if (edge.source === id && !isHookEdge(edge) && !found.has(edge.target)) {
+            found.add(edge.target)
+            queue.push(edge.target)
+         }
+      }
+   }
+
+   return found
+}
+
 // A hook line leaves a block's before, on or after dot; a block may hang one chain on several of its hooks.
 export const canHook = (edges: Edge[], source: string | null, target: string | null, handle: string | null | undefined) =>
    Boolean(

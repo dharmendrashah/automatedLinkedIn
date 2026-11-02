@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { type Prisma, type WorkflowTrigger } from 'generated/prisma/client'
 
-import { HOOK_PORTS, type HookPort, graphSchema, previewGraph } from '@automatedLinkedIn/contracts'
+import { HOOK_PORTS, type HookPort, blockOf, graphSchema, previewGraph } from '@automatedLinkedIn/contracts'
 
 import { isUniqueViolation } from './conflict'
 import { type JobItemInput } from './jobRun.service'
@@ -563,6 +563,134 @@ export class HookService {
       }
 
       return [...lines.values()]
+   }
+
+   // Failed hook runs of the last week that were not dismissed, one alert for each hook and day however many fires failed.
+   public static async alerts(userId: string, since: Date) {
+      const runs = await PrismaService.client.workflowRun.findMany({
+         where: {
+            userId,
+            kind: 'HOOK',
+            status: 'FAILED',
+            trigger: { not: 'PREVIEW' },
+            alertDismissedAt: null,
+            finishedAt: { gt: since },
+         },
+         orderBy: { finishedAt: 'desc' },
+         take: 200,
+         select: {
+            id: true,
+            workflowId: true,
+            message: true,
+            finishedAt: true,
+            workflow: {
+               select: {
+                  name: true,
+                  graph: true,
+               },
+            },
+         },
+      })
+      const deliveries = await PrismaService.client.workflowDelivery.findMany({
+         where: {
+            userId,
+            runId: { in: runs.map(({ id }) => id) },
+         },
+         select: {
+            runId: true,
+            hostNodeId: true,
+            phase: true,
+         },
+      })
+      const hookOf = new Map(
+         deliveries.map(({ runId, hostNodeId, phase }) => [
+            runId,
+            {
+               hostNodeId,
+               phase,
+            },
+         ])
+      )
+      const alerts = new Map<
+         string,
+         {
+            runId: string
+            workflowId: string
+            workflowName: string
+            message: string | null
+            finishedAt: Date | null
+            count: number
+         }
+      >()
+
+      for (const run of runs) {
+         const hook = hookOf.get(run.id)
+         const day = (run.finishedAt ?? new Date()).toISOString().slice(0, 10)
+         const key = `${run.workflowId}:${hook?.hostNodeId}:${hook?.phase}:${day}`
+         const known = alerts.get(key)
+
+         if (known) {
+            known.count += 1
+            continue
+         }
+
+         const parsed = graphSchema.safeParse(run.workflow.graph)
+         const node = parsed.success ? parsed.data.nodes.find(({ id }) => id === hook?.hostNodeId) : undefined
+         const name = node?.label ?? (node ? blockOf(node.type).label : 'a block')
+
+         alerts.set(key, {
+            runId: run.id,
+            workflowId: run.workflowId,
+            workflowName: run.workflow.name,
+            message: `The ${hook?.phase ?? ''} hook of ${name} failed: ${run.message ?? 'Something went wrong.'}`,
+            finishedAt: run.finishedAt,
+            count: 1,
+         })
+      }
+
+      return [...alerts.values()].map(({ count, message, ...alert }) => ({
+         ...alert,
+         message: count > 1 && message ? `${message} (${count} times today)` : message,
+      }))
+   }
+
+   // Dismisses a failed hook run and the other failed runs of the same hook. False when it is not the owner's failed hook run.
+   public static async dismiss(userId: string, runId: string) {
+      const same = await PrismaService.client.workflowDelivery.findFirst({
+         where: {
+            userId,
+            runId,
+         },
+         select: {
+            workflowId: true,
+            hostNodeId: true,
+            phase: true,
+         },
+      })
+      const siblings = same
+         ? await PrismaService.client.workflowDelivery.findMany({
+              where: {
+                 userId,
+                 source: 'BLOCK',
+                 workflowId: same.workflowId,
+                 hostNodeId: same.hostNodeId,
+                 phase: same.phase,
+                 runId: { not: null },
+              },
+              select: { runId: true },
+           })
+         : []
+      const { count } = await PrismaService.client.workflowRun.updateMany({
+         where: {
+            userId,
+            kind: 'HOOK',
+            status: 'FAILED',
+            OR: [{ id: runId }, { id: { in: siblings.flatMap(({ runId: id }) => (id ? [id] : [])) } }],
+         },
+         data: { alertDismissedAt: new Date() },
+      })
+
+      return count > 0
    }
 
    // The owner's Stop on a run reaches the hook runs it started that are still live.

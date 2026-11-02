@@ -6,6 +6,8 @@ import {
    attachedTo,
    canConnect,
    canHook,
+   chainNodeIds,
+   chainRoots,
    choicesFor,
    combineRounds,
    hasLoop,
@@ -287,6 +289,24 @@ describe('graph-convert', () => {
       })
       expect(saved.nodes[0]).not.toHaveProperty('label')
       expect(saved.edges.map(({ fromPort }) => fromPort)).toEqual(['before', 'after'])
+   })
+
+   it('should find the blocks that only run in a hook, from the first block of each chain onward', () => {
+      const line = (source: string, target: string, sourceHandle?: string) => ({
+         id: `${source}>${target}${sourceHandle ?? ''}`,
+         source,
+         target,
+         sourceHandle,
+      })
+      const edges = [
+         line('a', 'b'),
+         line('b', 'c', 'port:after'),
+         line('c', 'd'),
+         line('a', 'c', 'port:before'),
+      ]
+
+      expect(chainRoots(edges)).toEqual(['c'])
+      expect([...chainNodeIds(edges)].sort()).toEqual(['c', 'd'])
    })
 
    it('should join any two blocks once, and never a block to itself', () => {

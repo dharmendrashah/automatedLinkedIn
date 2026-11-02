@@ -271,8 +271,13 @@ export const workflow = router({
       }),
 
    runs: ownerProcedure
-      .input(z.object({ workflowId: z.string().min(1) }))
-      .query(({ ctx, input }) => WorkflowService.runs(ctx.user.id, input.workflowId)),
+      .input(
+         z.object({
+            workflowId: z.string().min(1),
+            includeHooks: z.boolean().optional(),
+         })
+      )
+      .query(({ ctx, input }) => WorkflowService.runs(ctx.user.id, input.workflowId, input.includeHooks)),
 
    runDetail: ownerProcedure.input(z.object({ runId: z.string().min(1) })).query(async ({ ctx, input }) => {
       const run = present(await WorkflowService.run(ctx.user.id, input.runId), RUN_MISSING)

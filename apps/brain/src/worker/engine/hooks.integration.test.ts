@@ -3,7 +3,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { fakeDataClient } from 'core/fakeDataClient'
 
-import { HookService, IcpService, PrismaService, UserService, WalletService, WorkflowService } from 'database'
+import {
+   HookService,
+   IcpService,
+   PrismaService,
+   UserService,
+   WalletService,
+   WorkflowRunService,
+   WorkflowService,
+} from 'database'
 
 import { type Graph, type GraphEdge, type GraphNode } from '@automatedLinkedIn/contracts'
 
@@ -306,5 +314,34 @@ describe('block hooks (database)', () => {
       expect(
          (await PrismaService.client.workflowRun.findUniqueOrThrow({ where: { id: live.id } })).stopRequestedAt
       ).not.toBeNull()
+   })
+
+   it('should show failed fires of one hook as one alert a day, and dismiss them together', async () => {
+      const wait = node(
+         'pause',
+         'logic.wait',
+         {
+            mode: 'exact',
+            amount: 600,
+         },
+         { hooks: { before: { when: 'always' } } }
+      )
+      const { workflowId, runId } = await start({
+         nodes: [people(), wait, node('csv', 'output.csv'), ...chain],
+         edges: [line('people', 'pause'), line('pause', 'csv'), ...chainLines('before', 'pause')],
+      })
+
+      await advanceRun(runId, deps())
+
+      const [hook] = await hookRunsOf(runId)
+
+      await WorkflowRunService.failUnfinished(hook.id, 'The chain broke.', 'UNEXPECTED')
+
+      const mine = (await WorkflowService.alerts(userId)).filter(alert => alert.workflowId === workflowId)
+
+      expect(mine).toHaveLength(1)
+      expect(mine[0].message).toBe('The before hook of Wait failed: The chain broke.')
+      expect(await WorkflowService.dismissAlert(userId, hook.id)).toBe(true)
+      expect((await WorkflowService.alerts(userId)).filter(alert => alert.workflowId === workflowId)).toHaveLength(0)
    })
 })
