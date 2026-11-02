@@ -4,7 +4,7 @@ import { AccountActionService, LinkedInInviteService, VisitPoolService, Workflow
 
 import { accountIdsOf } from './accountPool'
 import { actFrame } from './actFrame'
-import { type Context, StepError, type StepResult, configOf, textIn } from './context'
+import { type Context, StepError, type StepResult, configOf, peopleOf, textIn } from './context'
 import { refusalOf } from './visitRefusal'
 
 // "Send connection request" and "Withdraw connection request" (.plan/account-action-blocks.md): both go through the invite planner
@@ -17,11 +17,21 @@ const count = (results: Map<string, ItemResult>, status: string) =>
 export const sendInvites = async (ctx: Context): Promise<StepResult> => {
    const { run, node } = ctx
    const note = textIn(configOf(node), 'note')
-   const { people, result, give, holdBack } = actFrame(ctx, 'sendInvite', {
-      verb: 'sends',
-      past: 'sent',
-      needsArm: true,
-   })
+   const {
+      items: people,
+      result,
+      give,
+      holdBack,
+   } = actFrame(
+      ctx,
+      'sendInvite',
+      {
+         verb: 'sends',
+         past: 'sent',
+         needsArm: true,
+      },
+      peopleOf
+   )
    const held = await holdBack()
 
    if (held) {
@@ -117,11 +127,21 @@ export const sendInvites = async (ctx: Context): Promise<StepResult> => {
 
 export const withdrawInvites = async (ctx: Context): Promise<StepResult> => {
    const { run } = ctx
-   const { people, result, give, holdBack } = actFrame(ctx, 'withdrawInvite', {
-      verb: 'withdraws',
-      past: 'withdrawn',
-      needsArm: false,
-   })
+   const {
+      items: people,
+      result,
+      give,
+      holdBack,
+   } = actFrame(
+      ctx,
+      'withdrawInvite',
+      {
+         verb: 'withdraws',
+         past: 'withdrawn',
+         needsArm: false,
+      },
+      peopleOf
+   )
    const held = await holdBack()
 
    if (held) {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
    type Graph,
+   MESSAGE_MAX_CHARS,
    type NodeConfig,
    applyApiInput,
    blockOf,
@@ -188,6 +189,71 @@ describe('Send and Withdraw connection request', () => {
          'Send connection request: "Act for real" is off, so a run sends nothing yet.'
       )
       expect(blockOf('account.withdrawInvite').fields.some(({ key }) => key === 'actForReal')).toBe(false)
+   })
+})
+
+describe('Send message and Reply in a conversation', () => {
+   it('should take people and conversations, start with Act for real off, and wait 8 hours', () => {
+      expect(blockOf('account.sendMessage')).toMatchObject({
+         input: 'profile',
+         output: 'profile',
+      })
+      expect(blockOf('account.replyToConversation')).toMatchObject({
+         input: 'conversation',
+         output: 'conversation',
+      })
+      expect(blockOf('account.sendMessage').config.parse({})).toMatchObject({
+         text: '',
+         notAgainHours: 24,
+         actForReal: false,
+         timeLimitHours: 8,
+      })
+      expect(blockOf('account.replyToConversation').config.parse({})).toMatchObject({
+         onlyIfTheyWroteLast: true,
+         notAgainHours: 24,
+         actForReal: false,
+      })
+   })
+
+   it('should refuse a message longer than the queue takes, and mark what goes out as switching Act for real off', () => {
+      expect(blockOf('account.sendMessage').config.safeParse({ text: 'x'.repeat(MESSAGE_MAX_CHARS + 1) }).success).toBe(
+         false
+      )
+      expect(blockOf('account.sendMessage').fields.find(({ key }) => key === 'text')).toMatchObject({
+         kind: 'textarea',
+         disarms: true,
+      })
+
+      const { fields } = blockOf('account.replyToConversation')
+
+      expect(fields.find(({ key }) => key === 'onlyIfTheyWroteLast')).toMatchObject({ disarms: true })
+   })
+
+   it('should ask for the words, and say a run sends nothing while Act for real is off', () => {
+      const messages = (type: 'account.sendMessage' | 'account.replyToConversation', config: NodeConfig) =>
+         validateGraph({
+            nodes: [
+               node('one', type, {
+                  accountMode: 'one',
+                  account: 'a1',
+                  ...config,
+               }),
+            ],
+            edges: [],
+         })
+
+      expect(messages('account.sendMessage', {}).map(({ message }) => message)).toEqual(
+         expect.arrayContaining([
+            'Send message: "Act for real" is off, so a run sends nothing yet.',
+            'Send message: write the message.',
+         ])
+      )
+      expect(
+         messages('account.replyToConversation', {
+            text: 'Thanks',
+            actForReal: true,
+         }).map(({ message }) => message)
+      ).not.toEqual(expect.arrayContaining([expect.stringContaining('Act for real')]))
    })
 })
 

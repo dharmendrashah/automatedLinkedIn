@@ -1,9 +1,9 @@
-import { type ItemResult } from 'core'
+import { type ItemResult, type WorkflowItemData } from 'core'
 
-import { type Context, type StepResult, configOf, keepItems, peopleOf } from './context'
+import { type Context, type StepResult, configOf, keepItems } from './context'
 
-// What the blocks that act on people for the owner share (.plan/account-action-blocks.md): the people that reach them once each,
-// what is said on each person, and the step that does nothing in a preview or while "Act for real" is off.
+// What the blocks that act on people or conversations for the owner share (.plan/account-action-blocks.md): the items that reach them
+// once each, what is said on each, and the step that does nothing in a preview or while "Act for real" is off.
 
 type Words = {
    // "answers", for "A preview answers nothing."
@@ -14,8 +14,15 @@ type Words = {
    needsArm: boolean
 }
 
-export const actFrame = (ctx: Context, action: string, words: Words) => {
-   const people = [...new Map(peopleOf(ctx.inputs).map(person => [person.slug, person])).values()]
+type Acted = WorkflowItemData & { slug: string }
+
+export const actFrame = <T extends Acted>(
+   ctx: Context,
+   action: string,
+   words: Words,
+   pick: (inputs: WorkflowItemData[]) => T[]
+) => {
+   const items = [...new Map(pick(ctx.inputs).map(item => [item.slug, item])).values()]
    const result = (
       status: string,
       reason: string | null = null,
@@ -29,7 +36,7 @@ export const actFrame = (ctx: Context, action: string, words: Words) => {
       reason,
    })
 
-   // Gives the people back, each with its result; a person with none was not asked for.
+   // Gives the items back, each with its result; an item with none was not asked for.
    const give = async (
       results: Map<string, ItemResult>,
       status: StepResult['status'],
@@ -37,11 +44,11 @@ export const actFrame = (ctx: Context, action: string, words: Words) => {
    ): Promise<StepResult> => ({
       ...(await keepItems(
          ctx,
-         people.map(person => ({
-            ...person,
-            result: results.get(person.slug) ?? result('SKIPPED', 'Nothing was asked for them.'),
+         items.map(item => ({
+            ...item,
+            result: results.get(item.slug) ?? result('SKIPPED', 'Nothing was asked for them.'),
          })),
-         people.length
+         items.length
       )),
       status,
       message,
@@ -51,7 +58,7 @@ export const actFrame = (ctx: Context, action: string, words: Words) => {
    // on. Null when the block may act.
    const holdBack = () => {
       const hold = (reason: string, message: string) =>
-         give(new Map(people.map(({ slug }) => [slug, result('NOT_ASKED', reason)])), 'DONE', message)
+         give(new Map(items.map(({ slug }) => [slug, result('NOT_ASKED', reason)])), 'DONE', message)
 
       if (ctx.preview) {
          return hold(`A preview ${words.verb} nothing.`, `A preview ${words.verb} nothing.`)
@@ -66,7 +73,7 @@ export const actFrame = (ctx: Context, action: string, words: Words) => {
    }
 
    return {
-      people,
+      items,
       result,
       give,
       holdBack,

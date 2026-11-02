@@ -10,7 +10,7 @@ import {
 
 import { accountIdsOf, timeLimitMs } from './accountPool'
 import { actFrame } from './actFrame'
-import { type Context, StepError, type StepResult, Waiting, configOf, textIn } from './context'
+import { type Context, StepError, type StepResult, Waiting, configOf, peopleOf, textIn } from './context'
 import { refusalOf } from './visitRefusal'
 
 // "Answer connection requests" (.plan/account-action-blocks.md): accepts or ignores the requests the people that reach it sent to the
@@ -25,15 +25,20 @@ export const answerRequests = async (ctx: Context): Promise<StepResult> => {
    const config = configOf(node)
    const action = textIn(config, 'action') === 'ignore' ? 'IGNORE' : 'ACCEPT'
    const {
-      people,
+      items: people,
       result: resultOf,
       give,
       holdBack,
-   } = actFrame(ctx, 'answerRequest', {
-      verb: 'answers',
-      past: 'answered',
-      needsArm: true,
-   })
+   } = actFrame(
+      ctx,
+      'answerRequest',
+      {
+         verb: 'answers',
+         past: 'answered',
+         needsArm: true,
+      },
+      peopleOf
+   )
    const held = await holdBack()
 
    if (held) {

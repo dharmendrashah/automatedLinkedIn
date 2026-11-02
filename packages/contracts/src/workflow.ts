@@ -65,6 +65,8 @@ export type Field = (
    // A day, written as YYYY-MM-DD; empty for none.
    | { key: string; label: string; kind: 'date' }
    | { key: string; label: string; kind: 'text'; placeholder?: string }
+   // Several lines of text, such as a message.
+   | { key: string; label: string; kind: 'textarea'; placeholder?: string }
    | { key: string; label: string; kind: 'select'; options: Option[] }
    | { key: string; label: string; kind: 'multi'; options: Option[] }
    // Many choices from a long list, picked by typing.
@@ -245,7 +247,12 @@ export const ACCOUNT_BLOCK_HOURS = {
    'account.answerRequests': 8,
    'account.sendInvite': 1,
    'account.withdrawInvite': 1,
+   'account.sendMessage': 8,
+   'account.replyToConversation': 8,
 } as const
+
+// The most characters of a message or reply: the command that carries it may not pass 8 KB as JSON (the task limits it the same).
+export const MESSAGE_MAX_CHARS = 4000
 
 // Every spider task and the block or blocks that run it (.plan/account-action-blocks.md): `blocks` are built, `planned` are on the
 // way (the phase), `none` is left out on purpose. A test keeps the spider's catalog and this table the same, so a new task has to
@@ -257,8 +264,8 @@ export const ACCOUNT_ACTION_TASKS: Record<string, { blocks: string[] } | { plann
    'linkedin-messages': { blocks: ['account.getConversations'] },
    'linkedin-profile': { planned: 'Get my profile: reads the account\u2019s own profile (phase 2, later)' },
    'linkedin-post': { blocks: ['account.writePost'] },
-   'linkedin-reply': { planned: 'Reply in a conversation (phase 4)' },
-   'linkedin-message': { planned: 'Send message (phase 4)' },
+   'linkedin-reply': { blocks: ['account.replyToConversation'] },
+   'linkedin-message': { blocks: ['account.sendMessage'] },
    'linkedin-invitations': { blocks: ['account.getRequests', 'account.answerRequests'] },
    'linkedin-connections': { blocks: ['account.getConnections'] },
    'linkedin-invite': { blocks: ['account.sendInvite', 'account.withdrawInvite'] },
@@ -916,6 +923,8 @@ export const BLOCK_TYPES = [
    'account.answerRequests',
    'account.sendInvite',
    'account.withdrawInvite',
+   'account.sendMessage',
+   'account.replyToConversation',
    'output.list',
    'output.markPosts',
    'output.csv',
@@ -3949,6 +3958,144 @@ const BLOCKS = {
       output: 'profile',
       config: z.object(accountSettings(ACCOUNT_BLOCK_HOURS['account.withdrawInvite'])),
       fields: accountFields(ACCOUNT_BLOCK_HOURS['account.withdrawInvite']),
+   },
+   'account.sendMessage': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'messages',
+      validate: node => [
+         ...actOffNote('Send message', 'sends')(node),
+         ...(typeof settingsOf(node).text === 'string' && settingsOf(node).text !== ''
+            ? []
+            : [
+                 {
+                    nodeId: node.id,
+                    level: 'error' as const,
+                    message: 'Send message: write the message.',
+                 },
+              ]),
+      ],
+      label: 'Send message',
+      summary:
+         'Writes to each person that reaches it, from the account they are connected to: only connections, never twice inside the wait you set, inside each account’s daily limits. Passes the people on with what came of it.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            company: 'Analytical Engines',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            result: {
+               action: 'sendMessage',
+               status: 'SENT',
+            },
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         text: z.string().trim().max(MESSAGE_MAX_CHARS).default(''),
+         notAgainHours: z.number().int().min(0).max(720).default(24),
+         ...actSettings,
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.sendMessage']),
+      }),
+      fields: [
+         {
+            key: 'text',
+            label: 'Message',
+            kind: 'textarea',
+            placeholder: 'Hi {first_name}, thanks for connecting.',
+            disarms: true,
+            hint: '{first_name} and {company} are filled in for each person. Only people connected to the chosen accounts get it; at most 15 first messages a day for each account.',
+         },
+         {
+            key: 'notAgainHours',
+            label: 'Not again within (hours)',
+            kind: 'int',
+            min: 0,
+            max: 720,
+            advanced: true,
+            hint: 'A person this account wrote to lately is skipped. 0 turns it off.',
+         },
+         actField,
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.sendMessage']),
+      ],
+   },
+   'account.replyToConversation': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'replies',
+      validate: node => [
+         ...actOffNote('Reply in a conversation', 'replies')(node),
+         ...(typeof settingsOf(node).text === 'string' && settingsOf(node).text !== ''
+            ? []
+            : [
+                 {
+                    nodeId: node.id,
+                    level: 'error' as const,
+                    message: 'Reply in a conversation: write the reply.',
+                 },
+              ]),
+      ],
+      label: 'Reply in a conversation',
+      summary:
+         'Replies in each conversation that reaches it, from the account that has it: by default only where they wrote last, never twice inside the wait you set, inside each account’s daily limits. Each reply also shows in the Unibox. Passes the conversations on with what came of it.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            lastMessage: 'Thanks for connecting. Could we talk next week?',
+            lastFrom: 'THEM',
+            unread: true,
+            link: 'https://www.linkedin.com/messaging/thread/2-SAMPLE/',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            lastMessage: 'Thanks for connecting. Could we talk next week?',
+            link: 'https://www.linkedin.com/messaging/thread/2-SAMPLE/',
+            result: {
+               action: 'replyToConversation',
+               status: 'SENT',
+            },
+         },
+      },
+      input: 'conversation',
+      output: 'conversation',
+      config: z.object({
+         text: z.string().trim().max(MESSAGE_MAX_CHARS).default(''),
+         onlyIfTheyWroteLast: z.boolean().default(true),
+         notAgainHours: z.number().int().min(0).max(720).default(24),
+         ...actSettings,
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.replyToConversation']),
+      }),
+      fields: [
+         {
+            key: 'text',
+            label: 'Reply',
+            kind: 'textarea',
+            placeholder: 'Hi {first_name}, thanks for your message.',
+            disarms: true,
+            hint: '{first_name} and {company} are filled in for each person.',
+         },
+         {
+            key: 'onlyIfTheyWroteLast',
+            label: 'Only where they wrote last',
+            kind: 'toggle',
+            disarms: true,
+         },
+         {
+            key: 'notAgainHours',
+            label: 'Not again within (hours)',
+            kind: 'int',
+            min: 0,
+            max: 720,
+            advanced: true,
+            hint: 'A conversation this account wrote in lately is skipped. 0 turns it off.',
+         },
+         actField,
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.replyToConversation']),
+      ],
    },
    'output.csv': {
       group: 'Output',

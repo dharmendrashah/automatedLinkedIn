@@ -104,6 +104,7 @@ import {
 } from './context'
 import { sendInvites, withdrawInvites } from './inviteBlocks'
 import { retry, stop, taskResult, wait } from './logicBlocks'
+import { replyToConversations, sendMessages } from './replyBlocks'
 import { runWorkflow } from './runWorkflow'
 import { sendPages } from './sendApi'
 import { applyProfiles, conditionsOf, filterPeople, matches, scorePeople } from './steps'
@@ -1587,6 +1588,8 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'account.answerRequests': answerRequests,
    'account.sendInvite': sendInvites,
    'account.withdrawInvite': withdrawInvites,
+   'account.sendMessage': sendMessages,
+   'account.replyToConversation': replyToConversations,
    'output.list': addToList,
    'output.markPosts': markPosts,
    'output.csv': exportCsv,

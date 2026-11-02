@@ -610,6 +610,8 @@ describe('Account Actions', () => {
          'account.answerRequests',
          'account.sendInvite',
          'account.withdrawInvite',
+         'account.sendMessage',
+         'account.replyToConversation',
       ])
    })
 
