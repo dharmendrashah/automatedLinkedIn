@@ -8,6 +8,7 @@ import { INDUSTRY_PAIRS } from './industries'
 import { INVITE_LIMITS } from './invites'
 import { readPeopleFilters } from './peopleFilters'
 import { joinedText, mediaBlock, postBlocksOfText, postFilesOf } from './posting'
+import { type MessageUse, TEMPLATE_RAW_MAX, templateProblems } from './template'
 
 // The closed catalog of workflow blocks, the graph they form, and the pure rules on it (.plan/gtm-workflows.md).
 // Ids and labels are neutral: no data supplier is named here, because the browser shows these.
@@ -95,6 +96,8 @@ export type Field = (
    | { key: string; label: string; kind: 'post' }
    // One of the owner's saved drafts of the Posting page.
    | { key: string; label: string; kind: 'draft' }
+   // The words of an invite note, a message or a reply, written with variables and spintax (.plan/message-composer.md).
+   | { key: string; label: string; kind: 'composer'; use: MessageUse; max: number }
 ) & {
    hint?: string
    advanced?: boolean
@@ -1435,6 +1438,27 @@ const maxPerHourField: Field = {
    min: 1,
    max: 200,
    hint: 'More wait their turn instead of being lost.',
+}
+
+// The text of a writing block, checked for broken braces, unknown variables and a version over the limit.
+const wordsProblems = (name: string, key: 'note' | 'text', max: number) => (node: GraphNode) => {
+   const words = settingsOf(node)[key]
+
+   return typeof words === 'string'
+      ? templateProblems(words, { maxChars: max }).map(message => ({
+           nodeId: node.id,
+           level: 'error' as const,
+           message: `${name}: ${message}`,
+        }))
+      : []
+}
+
+const skipMissingField: Field = {
+   key: 'skipMissing',
+   label: 'Skip people I have no value for',
+   kind: 'toggle',
+   disarms: true,
+   hint: 'A person with no value for a variable you used, and no fallback for it, is not written to.',
 }
 
 const batchFields: Field[] = [
@@ -4322,12 +4346,15 @@ const BLOCKS = {
       group: 'Account Actions',
       flags: { usesAccounts: true },
       unit: 'invites',
-      validate: actOffNote('Send connection request', 'sends'),
+      validate: node => [
+         ...actOffNote('Send connection request', 'sends')(node),
+         ...wordsProblems('Send connection request', 'note', INVITE_LIMITS.noteChars)(node),
+      ],
       label: 'Send connection request',
       api: [
          peopleApi,
          wordsApi(
-            'the note to send with each request; {first_name} and {company} are filled in',
+            'the note to send with each request; variables like {first_name} and spintax like {Hi|Hello} are filled in',
             'note',
             INVITE_LIMITS.noteChars,
             'Hi {first_name}, I liked your work at {company}.'
@@ -4354,7 +4381,8 @@ const BLOCKS = {
       input: 'profile',
       output: 'profile',
       config: z.object({
-         note: z.string().trim().max(INVITE_LIMITS.noteChars).default(''),
+         note: z.string().trim().max(TEMPLATE_RAW_MAX.note).default(''),
+         skipMissing: z.boolean().default(false),
          ...actSettings,
          ...accountSettings(ACCOUNT_BLOCK_HOURS['account.sendInvite']),
       }),
@@ -4362,11 +4390,13 @@ const BLOCKS = {
          {
             key: 'note',
             label: 'Note (optional)',
-            kind: 'text',
-            placeholder: 'Hi {first_name}, I liked your work at {company}.',
+            kind: 'composer',
+            use: 'invite',
+            max: INVITE_LIMITS.noteChars,
             disarms: true,
-            hint: `Up to ${INVITE_LIMITS.noteChars} characters; {first_name} and {company} are filled in for each person. A free account has only a few notes a month; later invites then go without one.`,
+            hint: `Up to ${INVITE_LIMITS.noteChars} characters. A free account has only a few notes a month; later invites then go without one.`,
          },
+         skipMissingField,
          actField,
          ...accountFields(ACCOUNT_BLOCK_HOURS['account.sendInvite']),
       ],
@@ -4404,6 +4434,7 @@ const BLOCKS = {
       unit: 'messages',
       validate: node => [
          ...actOffNote('Send message', 'sends')(node),
+         ...wordsProblems('Send message', 'text', MESSAGE_MAX_CHARS)(node),
          ...(typeof settingsOf(node).text === 'string' && settingsOf(node).text !== ''
             ? []
             : [
@@ -4418,7 +4449,7 @@ const BLOCKS = {
       api: [
          peopleApi,
          wordsApi(
-            'the message to send; {first_name} and {company} are filled in',
+            'the message to send; variables like {first_name} and spintax like {Hi|Hello} are filled in',
             'text',
             MESSAGE_MAX_CHARS,
             'Hi {first_name}, thanks for connecting.'
@@ -4445,7 +4476,8 @@ const BLOCKS = {
       input: 'profile',
       output: 'profile',
       config: z.object({
-         text: z.string().trim().max(MESSAGE_MAX_CHARS).default(''),
+         text: z.string().trim().max(TEMPLATE_RAW_MAX.text).default(''),
+         skipMissing: z.boolean().default(false),
          notAgainHours: z.number().int().min(0).max(720).default(24),
          ...actSettings,
          ...accountSettings(ACCOUNT_BLOCK_HOURS['account.sendMessage']),
@@ -4454,11 +4486,13 @@ const BLOCKS = {
          {
             key: 'text',
             label: 'Message',
-            kind: 'textarea',
-            placeholder: 'Hi {first_name}, thanks for connecting.',
+            kind: 'composer',
+            use: 'message',
+            max: MESSAGE_MAX_CHARS,
             disarms: true,
-            hint: '{first_name} and {company} are filled in for each person. Only people connected to the chosen accounts get it; at most 15 first messages a day for each account.',
+            hint: 'Only people connected to the chosen accounts get it; at most 15 first messages a day for each account.',
          },
+         skipMissingField,
          {
             key: 'notAgainHours',
             label: 'Not again within (hours)',
@@ -4478,6 +4512,7 @@ const BLOCKS = {
       unit: 'replies',
       validate: node => [
          ...actOffNote('Reply in a conversation', 'replies')(node),
+         ...wordsProblems('Reply in a conversation', 'text', MESSAGE_MAX_CHARS)(node),
          ...(typeof settingsOf(node).text === 'string' && settingsOf(node).text !== ''
             ? []
             : [
@@ -4491,7 +4526,7 @@ const BLOCKS = {
       label: 'Reply in a conversation',
       api: [
          wordsApi(
-            'the reply to send; {first_name} and {company} are filled in',
+            'the reply to send; variables like {first_name} and spintax like {Hi|Hello} are filled in',
             'text',
             MESSAGE_MAX_CHARS,
             'Hi {first_name}, thanks for your message.'
@@ -4521,7 +4556,8 @@ const BLOCKS = {
       input: 'conversation',
       output: 'conversation',
       config: z.object({
-         text: z.string().trim().max(MESSAGE_MAX_CHARS).default(''),
+         text: z.string().trim().max(TEMPLATE_RAW_MAX.text).default(''),
+         skipMissing: z.boolean().default(false),
          onlyIfTheyWroteLast: z.boolean().default(true),
          notAgainHours: z.number().int().min(0).max(720).default(24),
          ...actSettings,
@@ -4531,11 +4567,12 @@ const BLOCKS = {
          {
             key: 'text',
             label: 'Reply',
-            kind: 'textarea',
-            placeholder: 'Hi {first_name}, thanks for your message.',
+            kind: 'composer',
+            use: 'reply',
+            max: MESSAGE_MAX_CHARS,
             disarms: true,
-            hint: '{first_name} and {company} are filled in for each person.',
          },
+         skipMissingField,
          {
             key: 'onlyIfTheyWroteLast',
             label: 'Only where they wrote last',
