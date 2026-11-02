@@ -95,8 +95,51 @@ describe('input blocks', () => {
       ).toBe('Up to 50 people · labelled acme and fintech · added this week · new only')
    })
 
+   it('should say the time frame in words, from the date it is about, custom days included', () => {
+      const frame = (values: Record<string, string>) => summaryOf(profiles, { howMany: 5, ...values })
+
+      expect(frame({ added: 'yesterday' })).toBe('Up to 5 people · added yesterday')
+      expect(frame({ added: 'lastMonth', dateField: 'posted' })).toBe('Up to 5 people · posted last month')
+      expect(frame({ added: 'custom', from: '2026-10-01', to: '2026-10-31', dateField: 'lastRead' })).toBe(
+         'Up to 5 people · read from 2026-10-01 to 2026-10-31'
+      )
+      expect(frame({ added: 'custom', to: '2026-10-31' })).toBe('Up to 5 people · added until 2026-10-31')
+      expect(frame({ added: 'custom' })).toBe('Up to 5 people')
+   })
+
+   it('should say the words and the number of more filters a block keeps, none for text that is not filters', () => {
+      const say = (values: Record<string, string>) => summaryOf(profiles, { howMany: 5, ...values })
+
+      expect(say({ search: ' acme ', filters: '{"sizes":["11-50"],"hasJobs":true}' })).toBe(
+         'Up to 5 people · containing "acme" · 2 more filters'
+      )
+      expect(say({ filters: '{"hasJobs":true}' })).toBe('Up to 5 people · 1 more filter')
+      expect(say({ filters: 'oops' })).toBe('Up to 5 people')
+      expect(summaryOf(profiles, { howMany: 5, skipTaken: true })).toBe(
+         'Up to 5 people \u00b7 skipping what it took before'
+      )
+      expect(
+         summaryOf(profiles, {
+            howMany: 5,
+            author: 'Ada',
+            postRead: 'read',
+            minComments: 10,
+            hasQualified: true,
+         })
+      ).toBe('Up to 5 people · by Ada · read only · 10+ comments · with qualified people')
+      expect(summaryOf(profiles, { howMany: 5, source: 'network', statuses: ['NEW'] })).toBe(
+         'Up to 5 people · from My network'
+      )
+   })
+
    it('should start new input blocks on All, profiles and companies on new ones only, in the owner time zone', () => {
       expect(startConfig('input.profiles', 'Asia/Kolkata')).toEqual({
+         timeZone: 'Asia/Kolkata',
+         all: true,
+         statuses: ['NEW'],
+         source: 'network',
+      })
+      expect(startConfig('input.companies', 'Asia/Kolkata')).toEqual({
          timeZone: 'Asia/Kolkata',
          all: true,
          statuses: ['NEW'],

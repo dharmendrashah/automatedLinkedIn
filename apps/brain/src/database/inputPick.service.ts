@@ -1,5 +1,16 @@
-import { type Graph, type InputPick, type InputType, addedSince, inputPickOf } from '@automatedLinkedIn/contracts'
+import {
+   type Graph,
+   type InputPick,
+   type InputType,
+   inputPickOf,
+   readCompanyFilters,
+   timeFrameOf,
+} from '@automatedLinkedIn/contracts'
 
+import { IcpService } from './icp.service'
+import { InputPeopleService, type NetworkPick } from './inputPeople.service'
+import { InputTakenService, type TakenKind } from './inputTaken.service'
+import { slugsInWindow } from './inputWindow'
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
 import { LinkedInProfileService } from './linkedInProfile.service'
@@ -13,8 +24,27 @@ const isInput = (type: string): type is InputType =>
 
 type Statuses = 'NEW' | 'CONTACTED' | 'REPLIED'
 
-const filterOf = (pick: InputPick, since: Date | null): InputFilter<Statuses> => ({
-   since,
+export const TAKEN_KIND: Record<InputType, TakenKind> = {
+   'input.posts': 'POST',
+   'input.profiles': 'PROFILE',
+   'input.companies': 'COMPANY',
+}
+
+const filterOf = (
+   pick: InputPick,
+   frame: { from: Date | null; until: Date | null },
+   slugs: string[] | null,
+   ids: string[] | null,
+   network: NetworkPick | null,
+   notSlugs: string[]
+): InputFilter<Statuses> => ({
+   since: frame.from,
+   until: frame.until,
+   field: pick.dateField,
+   slugs,
+   notSlugs,
+   ids,
+   network,
    labels: pick.labels,
    labelMatch: pick.labelMatch,
    withoutLabels: pick.withoutLabels,
@@ -40,11 +70,90 @@ export class InputPickService {
       return run?.startedAt ?? null
    }
 
-   public static async filter(userId: string, pick: InputPick, workflowId: string | null, now = new Date()) {
+   // `type` lets a time frame look at a date of the item itself (a post's posted date, a company's last read).
+   public static async filter(
+      userId: string,
+      pick: InputPick,
+      workflowId: string | null,
+      type?: InputType,
+      now = new Date(),
+      runId: string | null = null
+   ) {
       const lastRunAt =
          pick.added === 'lastRun' && workflowId ? await InputPickService.lastRunAt(userId, workflowId) : null
+      const frame = timeFrameOf(pick, now, lastRunAt)
+      const slugs =
+         type && pick.dateField !== 'added' && (frame.from || frame.until)
+            ? await slugsInWindow(userId, type, pick.dateField, frame)
+            : null
 
-      return filterOf(pick, addedSince(pick, now, lastRunAt))
+      return filterOf(
+         pick,
+         frame,
+         slugs,
+         type ? await InputPickService.idsOf(userId, pick, type) : null,
+         type === 'input.profiles' && pick.source === 'network'
+            ? await InputPeopleService.scope(userId, pick.client, pick.filters)
+            : null,
+         type && pick.skipTaken && workflowId ? await InputTakenService.slugs(workflowId, TAKEN_KIND[type], runId) : []
+      )
+   }
+
+   // The items the page's own filters find for this block, or null when the block has none of them on.
+   private static async idsOf(userId: string, pick: InputPick, type: InputType) {
+      if (type === 'input.posts') {
+         const { search, postRead, minComments, minReactions, author, hasQualified } = pick
+
+         if (
+            search === '' &&
+            postRead === 'any' &&
+            minComments === 0 &&
+            minReactions === 0 &&
+            author === '' &&
+            !hasQualified
+         ) {
+            return null
+         }
+
+         return LinkedInPostService.matchingIds(userId, {
+            ...(search === '' ? {} : { search }),
+            ...(postRead === 'any' ? {} : { read: postRead === 'read' ? ('READ' as const) : ('UNREAD' as const) }),
+            ...(minComments > 0 ? { minComments } : {}),
+            ...(minReactions > 0 ? { minReactions } : {}),
+            ...(author === '' ? {} : { author }),
+            ...(hasQualified ? { hasQualified } : {}),
+         })
+      }
+
+      if (type !== 'input.companies') {
+         return null
+      }
+
+      const { icpId, icpIncludeUnread, ...filters } = readCompanyFilters(pick.filters).filters ?? {}
+
+      if (!icpId && Object.keys(filters).length === 0 && pick.search === '') {
+         return null
+      }
+
+      const icp = icpId ? await IcpService.getForUser(userId, icpId) : null
+
+      // An ideal customer that is gone matches nothing, rather than everything.
+      if (icpId && !icp) {
+         return []
+      }
+
+      return LinkedInCompanyService.matchingIds(userId, {
+         ...filters,
+         ...(pick.search === '' ? {} : { search: pick.search }),
+         ...(icp
+            ? {
+                 icp: {
+                    rules: icp,
+                    includeUnread: icpIncludeUnread ?? false,
+                 },
+              }
+            : {}),
+      })
    }
 
    // How many items each input block of a graph would take now, after its filters, for the estimate.
@@ -61,7 +170,7 @@ export class InputPickService {
       )
       const counted = await Promise.all(
          inputs.map(async ({ id, type, config }) => {
-            const filter = await InputPickService.filter(userId, inputPickOf(type, config), workflowId)
+            const filter = await InputPickService.filter(userId, inputPickOf(type, config), workflowId, type)
 
             return [id, await InputPickService.count(userId, type, filter)] as const
          })

@@ -7,10 +7,9 @@ import {
    IMPORT_CAP,
    IcpService,
    LinkedInCompanyService,
-   READ_AGES,
-   TEAM_KIND_NAMES,
-   VISIT_AGES,
 } from 'database'
+
+import { companyFiltersSchema } from '@automatedLinkedIn/contracts'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -48,58 +47,10 @@ const updateInput = z.object({
 
 const NOUN = 'company'
 
-const values = z.array(z.string().trim().min(1).max(200)).max(50).optional()
-const range = z
-   .object({
-      min: z.number().int().min(0).max(10_000_000).optional(),
-      max: z.number().int().min(0).max(10_000_000).optional(),
-   })
-   .optional()
-
-// The Filters drawer (.plan/companies-filter-drawer.md).
-const drawerInput = {
-   icpId: z.string().min(1).optional(),
-   icpIncludeUnread: z.boolean().optional(),
-   sizes: values,
-   founded: range,
-   places: values,
-   offices: values,
-   categories: values,
-   team: z
-      .array(
-         z.object({
-            kind: z.enum(TEAM_KIND_NAMES),
-            values: z.array(z.string().trim().min(1).max(200)).min(1).max(50),
-            min: z.number().int().min(1).max(100_000),
-         })
-      )
-      .max(10)
-      .optional(),
-   specialities: values,
-   specialitiesMode: z.enum(['all', 'any']).optional(),
-   words: z
-      .object({
-         values: z.array(z.string().trim().min(1).max(100)).min(1).max(20),
-         match: z.enum(['any', 'all']),
-      })
-      .optional(),
-   read: z.enum(READ_AGES).optional(),
-   visited: z.enum(VISIT_AGES).optional(),
-   notes: z.string().trim().min(1).max(200).optional(),
-   employees: range,
-   followers: range,
-   verified: z.boolean().optional(),
-   active: z.boolean().optional(),
-   showcase: z.boolean().optional(),
-   hasWebsite: z.boolean().optional(),
-   hasJobs: z.boolean().optional(),
-}
-
+// The Filters drawer (.plan/companies-filter-drawer.md), shared with the Companies input block.
 const companyListInput = listInput.extend({
-   ...drawerInput,
+   ...companyFiltersSchema.shape,
    cursor: z.number().int().min(1).nullish(),
-   industries: values,
-   countries: values,
    sort: z
       .object({
          by: z.enum(['createdAt', 'name']),

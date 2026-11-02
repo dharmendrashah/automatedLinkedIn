@@ -21,9 +21,12 @@ import { LabelMultiSelect } from '../labels/label-multi-select'
 import { AccountsPick } from './accounts-pick'
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { BlockRunTabs, type RunInfo } from './block-run-tabs'
+import { ClientPick } from './client-pick'
+import { CompanyFiltersField } from './company-filters-field'
 import { type FlowNode, summaryOf } from './graph-convert'
 import { INPUT_KINDS, isInputType } from './input-kinds'
 import { InputMatches } from './input-matches'
+import { NetworkFiltersField } from './network-filters-field'
 import { PostField } from './post-field'
 import { ScheduleSettings } from './schedule-settings'
 import { Chips, ChipsInput, SearchPick, Stepper } from './setting-inputs'
@@ -188,6 +191,26 @@ export const BlockSettings = ({
          )
       }
 
+      if (item.kind === 'filters') {
+         return block.type === 'input.profiles' ? (
+            <NetworkFiltersField
+               value={textOf(value)}
+               client={textOf(values.client)}
+               onChange={next => onChange(item.key, next)}
+            />
+         ) : (
+            <CompanyFiltersField
+               value={textOf(value)}
+               search={textOf(values.search)}
+               onChange={next => onChange(item.key, next)}
+            />
+         )
+      }
+
+      if (item.kind === 'client') {
+         return <ClientPick id={id} value={textOf(value)} onChange={next => onChange(item.key, next)} />
+      }
+
       if (item.kind === 'toggle') {
          return (
             <Checkbox id={id} checked={value === true} onCheckedChange={next => onChange(item.key, next === true)} />
@@ -209,13 +232,23 @@ export const BlockSettings = ({
                   onToggle={option => onChange(item.allKey, option === 'all')}
                />
                {all ? null : (
-                  <Stepper
-                     id={`${id}-count`}
-                     value={Number(value ?? item.min)}
-                     min={item.min}
-                     max={item.max}
-                     onChange={next => onChange(item.key, next)}
-                  />
+                  <>
+                     <Stepper
+                        id={`${id}-count`}
+                        value={Number(value ?? item.min)}
+                        min={item.min}
+                        max={item.max}
+                        onChange={next => onChange(item.key, next)}
+                     />
+                     {item.quick ? (
+                        <Chips
+                           id={`${id}-quick`}
+                           options={item.quick.map(number => ({ value: String(number), label: String(number) }))}
+                           isOn={option => Number(value ?? item.min) === Number(option)}
+                           onToggle={option => onChange(item.key, Number(option))}
+                        />
+                     ) : null}
+                  </>
                )}
             </div>
          )
@@ -267,7 +300,7 @@ export const BlockSettings = ({
       return (
          <Input
             id={id}
-            type={item.kind === 'time' ? 'time' : 'text'}
+            type={item.kind === 'time' ? 'time' : item.kind === 'date' ? 'date' : 'text'}
             placeholder={item.kind === 'text' ? item.placeholder : undefined}
             value={textOf(value)}
             onChange={event => onChange(item.key, event.target.value)}

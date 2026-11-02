@@ -708,6 +708,24 @@ export class LinkedInCompanyService {
       return PrismaService.client.linkedInCompany.count({ where: inputWhere(userId, filter) })
    }
 
+   // The ids of the companies the Companies page's own filters (and search) find, for an input block to keep.
+   public static async matchingIds(
+      userId: string,
+      query: Omit<LinkedInCompanyListQuery, 'page' | 'pageSize' | 'sort'>
+   ) {
+      const rows = await PrismaService.client.linkedInCompany.findMany({
+         where: await whereOf(userId, query, new Date()),
+         select: { id: true },
+         take: MAX_MATCHES + 1,
+      })
+
+      if (rows.length > MAX_MATCHES) {
+         throw new ConflictError('These filters match too many companies. Add another filter to narrow them.')
+      }
+
+      return rows.map(({ id }) => id)
+   }
+
    public static countActive(userId: string) {
       return PrismaService.client.linkedInCompany.count({
          where: {

@@ -103,14 +103,16 @@ export const workflow = router({
             return {
                count: 0,
                since: null,
+               until: null,
             }
          }
 
-         const filter = await InputPickService.filter(ctx.user.id, pick.data, input.workflowId)
+         const filter = await InputPickService.filter(ctx.user.id, pick.data, input.workflowId, input.type)
 
          return {
             count: await InputPickService.count(ctx.user.id, input.type, filter),
             since: filter.since?.toISOString() ?? null,
+            until: filter.until?.toISOString() ?? null,
          }
       }),
 

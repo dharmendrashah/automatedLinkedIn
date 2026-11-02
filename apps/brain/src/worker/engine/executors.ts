@@ -21,6 +21,7 @@ import {
    CollectKeepService,
    EMAIL_REMEMBER_DAYS,
    InputPickService,
+   InputTakenService,
    type InputType,
    type Kept,
    LinkedInCompanyService,
@@ -30,6 +31,7 @@ import {
    PostPageService,
    RECENT_DAYS,
    type SeenSkip,
+   TAKEN_KIND,
    WorkflowListService,
    WorkflowRunService,
 } from 'database'
@@ -151,7 +153,21 @@ const sendableUrl = async (post: { id: string | null; url: string; expandedUrl: 
 
 // The slice of the owner's list the block's settings pick.
 const pickFilter = (ctx: Context, type: InputType) =>
-   InputPickService.filter(ctx.run.userId, inputPickOf(type, ctx.node.config), ctx.run.workflowId)
+   InputPickService.filter(
+      ctx.run.userId,
+      inputPickOf(type, ctx.node.config),
+      ctx.run.workflowId,
+      type,
+      new Date(),
+      ctx.run.id
+   )
+
+// A block that skips what the workflow already took remembers this batch; a preview never does.
+const rememberTaken = async (ctx: Context, type: InputType, slugs: string[]) => {
+   if (!ctx.preview && inputPickOf(type, ctx.node.config).skipTaken) {
+      await InputTakenService.record(ctx.run.workflowId, ctx.run.id, TAKEN_KIND[type], slugs)
+   }
+}
 
 const inputPosts = async (ctx: Context): Promise<StepResult> => {
    const sent = sentTo(ctx, 'posts')
@@ -179,6 +195,14 @@ const inputPosts = async (ctx: Context): Promise<StepResult> => {
       }))
    )
    const result = await keepItems(ctx, items, 0)
+
+   if (!sent) {
+      await rememberTaken(
+         ctx,
+         'input.posts',
+         posts.map(({ slug }) => slug)
+      )
+   }
 
    return {
       ...result,
@@ -217,9 +241,20 @@ const inputProfiles = async (ctx: Context): Promise<StepResult> => {
            )
    const result = await keepItems(ctx, mergeBySlug(people), 0)
 
+   if (links.length === 0) {
+      await rememberTaken(
+         ctx,
+         'input.profiles',
+         people.map(({ slug }) => slug)
+      )
+   }
+
    return {
       ...result,
-      message: people.length === 0 ? 'No profiles in your profiles list match this block.' : undefined,
+      message:
+         people.length === 0
+            ? `No profiles in ${ctx.node.config.source === 'network' ? 'My network' : 'your profiles list'} match this block.`
+            : undefined,
    }
 }
 
@@ -246,6 +281,14 @@ const inputCompanies = async (ctx: Context): Promise<StepResult> => {
            hiring: [],
         }))
    const result = await keepItems(ctx, companies, 0)
+
+   if (!sent) {
+      await rememberTaken(
+         ctx,
+         'input.companies',
+         companies.map(({ slug }) => slug)
+      )
+   }
 
    return {
       ...result,

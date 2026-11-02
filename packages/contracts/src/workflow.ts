@@ -1,6 +1,9 @@
 import { z } from 'zod'
 
+import { readCompanyFilters } from './companyFilters'
+import { FILTERS_TEXT_MAX } from './filtersText'
 import { INDUSTRY_PAIRS } from './industries'
+import { readPeopleFilters } from './peopleFilters'
 import { joinedText, mediaBlock, postBlocksOfText, postFilesOf } from './posting'
 
 // The closed catalog of workflow blocks, the graph they form, and the pure rules on it (.plan/gtm-workflows.md).
@@ -51,7 +54,14 @@ export type Field = (
    | { key: string; label: string; kind: 'int'; min: number; max: number }
    | { key: string; label: string; kind: 'words'; suggest?: Suggest }
    | { key: string; label: string; kind: 'icp' }
+   // A time to the minute, such as 09:00.
    | { key: string; label: string; kind: 'time' }
+   // The filters of the owner's page for the items this block takes, kept as text; the browser draws the page's own drawer.
+   | { key: string; label: string; kind: 'filters' }
+   // One of the owner's clients, or all of them when empty.
+   | { key: string; label: string; kind: 'client' }
+   // A day, written as YYYY-MM-DD; empty for none.
+   | { key: string; label: string; kind: 'date' }
    | { key: string; label: string; kind: 'text'; placeholder?: string }
    | { key: string; label: string; kind: 'select'; options: Option[] }
    | { key: string; label: string; kind: 'multi'; options: Option[] }
@@ -59,7 +69,16 @@ export type Field = (
    | { key: string; label: string; kind: 'search'; options: Option[]; max: number }
    | { key: string; label: string; kind: 'toggle' }
    // "All" (the boolean `allKey`, capped at `allCap`, ALL_CAP when not set) or "Up to" the number in `key`.
-   | { key: string; label: string; kind: 'limit'; allKey: string; min: number; max: number; allCap?: number }
+   | {
+        key: string
+        label: string
+        kind: 'limit'
+        allKey: string
+        min: number
+        max: number
+        allCap?: number
+        quick?: number[]
+     }
    // One of the blocks connected before this one.
    | { key: string; label: string; kind: 'parent' }
    // Another workflow of the same owner.
@@ -351,15 +370,59 @@ export const scheduleSchema = z
 
 export type Schedule = z.infer<typeof scheduleSchema>
 
-// Which part of the owner's posts, profiles or companies an input block takes (.plan/labels-and-input-filters.md).
-export const ADDED_WINDOWS = ['any', 'today', 'week', '7d', '30d', 'lastRun'] as const
+// Which part of the owner's posts, profiles or companies an input block takes (.plan/input-blocks-filters.md).
+export const ADDED_WINDOWS = [
+   'any',
+   'today',
+   'yesterday',
+   'week',
+   '7d',
+   'month',
+   '30d',
+   'lastMonth',
+   '3months',
+   'lastRun',
+   'custom',
+] as const
+
+// The date a time frame is about: when the item was added to the owner's list, or a date of the item itself.
+export const INPUT_DATE_FIELDS = [
+   'added',
+   'posted',
+   'lastRead',
+   'lastContact',
+   'connected',
+   'lastSent',
+   'lastReply',
+] as const
 
 export const LABEL_MAX = 20
 
 const labelList = z.array(z.string().trim().toLowerCase().min(1).max(30)).max(LABEL_MAX).default([])
 
+// A day as the owner's browser writes it, or empty for open ended.
+const isoDay = z.union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).default('')
+
 export const inputPickSchema = z.object({
    added: z.enum(ADDED_WINDOWS).default('any'),
+   dateField: z.enum(INPUT_DATE_FIELDS).default('added'),
+   // The days of "Custom dates"; the whole of the last day counts.
+   from: isoDay,
+   to: isoDay,
+   // Words the item holds, and the page's own filters for it, as the page keeps them (see `inputErrors`).
+   search: z.string().trim().max(100).default(''),
+   filters: z.string().max(FILTERS_TEXT_MAX).default(''),
+   // Profiles only: take from the owner's profiles list, or from My network (one client or all) with its filters.
+   source: z.enum(['profiles', 'network']).default('profiles'),
+   client: z.string().max(100).default(''),
+   // Posts only, about the post's read: whether it was read, and the least comments and reactions it had.
+   postRead: z.enum(['any', 'read', 'unread']).default('any'),
+   minComments: z.number().int().min(0).max(1_000_000).default(0),
+   minReactions: z.number().int().min(0).max(1_000_000).default(0),
+   author: z.string().trim().max(100).default(''),
+   hasQualified: z.boolean().default(false),
+   // Take only what the workflow's earlier runs did not take, so each run works through the next batch.
+   skipTaken: z.boolean().default(false),
    labels: labelList,
    labelMatch: z.enum(['any', 'all']).default('any'),
    withoutLabels: labelList,
@@ -377,18 +440,126 @@ export type InputPick = z.infer<typeof inputPickSchema>
 const ADDED = optionsOf([
    ['any', 'Any time'],
    ['today', 'Today'],
+   ['yesterday', 'Yesterday'],
    ['week', 'This week'],
    ['7d', 'Last 7 days'],
+   ['month', 'This month'],
    ['30d', 'Last 30 days'],
+   ['lastMonth', 'Last month'],
+   ['3months', 'Last 3 months'],
    ['lastRun', "Since this workflow's last run"],
+   ['custom', 'Custom dates'],
 ])
 
-const pickFields = (order: Option[]): Field[] => [
+export type InputType = 'input.posts' | 'input.profiles' | 'input.companies'
+
+// The dates each block can look at (.plan/input-blocks-filters.md); the first is when the item joined the owner's list.
+export const INPUT_DATE_OPTIONS: Record<InputType, Option[]> = {
+   'input.posts': optionsOf([
+      ['added', 'Added to my posts'],
+      ['posted', 'Posted on LinkedIn'],
+   ]),
+   'input.profiles': optionsOf([
+      ['added', 'Added (first seen in My network)'],
+      ['connected', 'Connected'],
+      ['lastContact', 'Last in touch'],
+      ['lastSent', 'Last message from you'],
+      ['lastReply', 'Last reply from them'],
+   ]),
+   'input.companies': optionsOf([
+      ['added', 'Added to my companies'],
+      ['lastRead', 'Last read'],
+   ]),
+}
+
+// What is wrong with the time frame and the filters of an input block, if anything.
+const inputErrors =
+   (type: InputType, label: string) =>
+   (node: GraphNode): GraphError[] => {
+      const pick = inputPickSchema.safeParse(node.config)
+      const problem = (message: string): GraphError[] => [
+         {
+            nodeId: node.id,
+            level: 'error',
+            message: `${label}: ${message}`,
+         },
+      ]
+
+      if (!pick.success) {
+         return []
+      }
+
+      const { dateField, added, from, to, filters, source } = pick.data
+
+      if (!INPUT_DATE_OPTIONS[type].some(({ value }) => value === dateField)) {
+         return problem('this block cannot look at that date.')
+      }
+
+      if (type === 'input.profiles' && source === 'profiles' && dateField !== 'added') {
+         return problem('your profiles list only has the day people were added; use My network for other dates.')
+      }
+
+      if (added === 'custom' && from === '' && to === '') {
+         return problem('pick the first or the last day of the custom dates.')
+      }
+
+      if (from !== '' && to !== '' && from > to) {
+         return problem('the custom dates end before they start.')
+      }
+
+      const { error } =
+         type === 'input.companies'
+            ? readCompanyFilters(filters)
+            : type === 'input.profiles' && source === 'network'
+              ? readPeopleFilters(filters)
+              : { error: null }
+
+      return error ? problem(error) : []
+   }
+
+const pickFields = (type: InputType, order: Option[]): Field[] => [
+   ...(INPUT_DATE_OPTIONS[type].length > 1
+      ? [
+           {
+              key: 'dateField',
+              label: 'Date to look at',
+              kind: 'select' as const,
+              options: INPUT_DATE_OPTIONS[type],
+              // Your profiles list only knows the day a person was added.
+              ...(type === 'input.profiles' && {
+                 showWhen: {
+                    key: 'source',
+                    is: 'network',
+                 },
+              }),
+           },
+        ]
+      : []),
    {
       key: 'added',
-      label: 'Added',
+      label: 'When',
       kind: 'select',
       options: ADDED,
+      hint: 'Today, last week and the like follow the day the workflow runs; custom dates stay as typed.',
+   },
+   {
+      key: 'from',
+      label: 'From',
+      kind: 'date',
+      showWhen: {
+         key: 'added',
+         is: 'custom',
+      },
+   },
+   {
+      key: 'to',
+      label: 'To',
+      kind: 'date',
+      hint: 'The whole of this day counts. Leave a day empty for no limit on that side.',
+      showWhen: {
+         key: 'added',
+         is: 'custom',
+      },
    },
    {
       key: 'labels',
@@ -424,9 +595,13 @@ const pickFields = (order: Option[]): Field[] => [
       options: order,
       advanced: true,
    },
+   {
+      key: 'skipTaken',
+      label: 'Skip what this workflow already took',
+      kind: 'toggle',
+      hint: 'Each run takes the next batch instead of the same ones. A preview does not count.',
+   },
 ]
-
-export type InputType = 'input.posts' | 'input.profiles' | 'input.companies'
 
 // "All" on an input block takes at most this many, the same as the biggest "Up to".
 export const INPUT_MAX: Record<InputType, number> = {
@@ -435,14 +610,22 @@ export const INPUT_MAX: Record<InputType, number> = {
    'input.companies': 100,
 }
 
+// The numbers offered as one click next to "Up to a number".
+const QUICK_LIMITS: Record<InputType, number[]> = {
+   'input.posts': [5, 10, 25, 50],
+   'input.profiles': [10, 25, 50, 100, 200],
+   'input.companies': [10, 25, 50, 100],
+}
+
 const inputHowMany = (type: InputType, noun: string): Field => ({
    key: 'howMany',
    allKey: 'all',
-   label: `How many ${noun}`,
+   label: `How many ${noun} in a run`,
    kind: 'limit',
    min: 1,
    max: INPUT_MAX[type],
    allCap: INPUT_MAX[type],
+   quick: QUICK_LIMITS[type],
    hint: `"All" takes every match, up to ${INPUT_MAX[type]}.`,
 })
 
@@ -477,27 +660,90 @@ export const inputPickOf = (type: InputType, config: unknown): InputPick =>
 
 const DAY_MS = 86_400_000
 
-// The first moment an item may have been added to be taken; null takes any.
-export const addedSince = (pick: Pick<InputPick, 'added' | 'timeZone'>, now: Date, lastRunAt: Date | null) => {
+type TimeFramePick = Pick<InputPick, 'added' | 'timeZone'> & Partial<Pick<InputPick, 'from' | 'to'>>
+
+// The days of a month, for a month counted back.
+const daysIn = (year: number, month: number) => new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+
+// The time frame of an input block as it is now: from this moment (inclusive) until that one (not included); null is open
+// ended. Days follow the time zone saved on the block and weeks start on Monday.
+export const timeFrameOf = (
+   pick: TimeFramePick,
+   now: Date,
+   lastRunAt: Date | null
+): { from: Date | null; until: Date | null } => {
+   const wall = new Date(wallClock(now, pick.timeZone))
+   const [year, month, day] = [wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate()]
+   const dayStart = (offset: number) => zonedToUtc(Date.UTC(year, month, day + offset), pick.timeZone)
+   const monthStart = (offset: number) => zonedToUtc(Date.UTC(year, month + offset, 1), pick.timeZone)
+   const dayOfText = (text: string) => {
+      const [y = 0, m = 1, d = 1] = text.split('-').map(Number)
+
+      return Date.UTC(y, m - 1, d)
+   }
+
    switch (pick.added) {
       case 'any':
-         return null
+         return {
+            from: null,
+            until: null,
+         }
       case 'lastRun':
-         return lastRunAt
+         return {
+            from: lastRunAt,
+            until: null,
+         }
       case '7d':
-         return new Date(now.getTime() - 7 * DAY_MS)
       case '30d':
-         return new Date(now.getTime() - 30 * DAY_MS)
-      default: {
-         const wall = new Date(wallClock(now, pick.timeZone))
-         const midnight = Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate())
-         // Weeks start on Monday.
-         const back = pick.added === 'week' ? (wall.getUTCDay() + 6) % 7 : 0
+         return {
+            from: new Date(now.getTime() - (pick.added === '7d' ? 7 : 30) * DAY_MS),
+            until: null,
+         }
+      case 'yesterday':
+         return {
+            from: dayStart(-1),
+            until: dayStart(0),
+         }
+      case 'week':
+         return {
+            from: dayStart(-((wall.getUTCDay() + 6) % 7)),
+            until: null,
+         }
+      case 'month':
+         return {
+            from: monthStart(0),
+            until: null,
+         }
+      case 'lastMonth':
+         return {
+            from: monthStart(-1),
+            until: monthStart(0),
+         }
+      case '3months': {
+         const target = new Date(Date.UTC(year, month - 3, 1))
+         const back = Math.min(day, daysIn(target.getUTCFullYear(), target.getUTCMonth()))
 
-         return zonedToUtc(midnight - back * DAY_MS, pick.timeZone)
+         return {
+            from: zonedToUtc(Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), back), pick.timeZone),
+            until: null,
+         }
       }
+      case 'custom':
+         return {
+            from: pick.from ? zonedToUtc(dayOfText(pick.from), pick.timeZone) : null,
+            until: pick.to ? zonedToUtc(dayOfText(pick.to) + DAY_MS, pick.timeZone) : null,
+         }
+      default:
+         return {
+            from: dayStart(0),
+            until: null,
+         }
    }
 }
+
+// The first moment an item may have been added to be taken; null takes any.
+export const addedSince = (pick: TimeFramePick, now: Date, lastRunAt: Date | null) =>
+   timeFrameOf(pick, now, lastRunAt).from
 
 export const BLOCK_TYPES = [
    'trigger.manual',
@@ -886,6 +1132,7 @@ const BLOCKS = {
          costMicros: 0,
       }),
       previewCap: PREVIEW_LIMITS.posts,
+      validate: inputErrors('input.posts', 'Posts'),
       label: 'Posts',
       summary: 'Takes posts from your posts list that are not done yet.',
       api: [
@@ -905,7 +1152,55 @@ const BLOCKS = {
          howMany: howMany(50, 5),
          order: z.enum(['newest', 'oldest']).default('oldest'),
       }),
-      fields: [inputHowMany('input.posts', 'posts'), ...pickFields(OLDEST_FIRST)],
+      fields: [
+         inputHowMany('input.posts', 'posts'),
+         {
+            key: 'search',
+            label: 'Post, author or link contains',
+            kind: 'text',
+            placeholder: 'hiring',
+         },
+         {
+            key: 'postRead',
+            label: 'Read',
+            kind: 'select',
+            options: optionsOf([
+               ['any', 'Read or not'],
+               ['read', 'Read only'],
+               ['unread', 'Not read yet'],
+            ]),
+            hint: 'Comments, reactions and the author only match posts that were read.',
+         },
+         {
+            key: 'minComments',
+            label: 'At least this many comments',
+            kind: 'int',
+            min: 0,
+            max: 1_000_000,
+            hint: '0 takes any number.',
+         },
+         ...pickFields('input.posts', OLDEST_FIRST),
+         {
+            key: 'minReactions',
+            label: 'At least this many reactions',
+            kind: 'int',
+            min: 0,
+            max: 1_000_000,
+            advanced: true,
+         },
+         {
+            key: 'author',
+            label: 'Author name contains',
+            kind: 'text',
+            advanced: true,
+         },
+         {
+            key: 'hasQualified',
+            label: 'Only posts with qualified people found from them',
+            kind: 'toggle',
+            advanced: true,
+         },
+      ],
    },
    'collect.commenters': {
       group: 'Collect',
@@ -1288,6 +1583,7 @@ const BLOCKS = {
          costMicros: 0,
       }),
       previewCap: 1,
+      validate: inputErrors('input.profiles', 'Profiles'),
       label: 'Profiles',
       summary: 'People from your profiles list, or the links you give.',
       api: [
@@ -1314,10 +1610,46 @@ const BLOCKS = {
             label: 'Only these profile links',
             kind: 'words',
             suggest: 'links',
-            hint: 'Paste one or many. Empty takes people from your profiles list, filtered below.',
+            hint: 'Paste one or many. Empty takes people from the list below, filtered.',
          },
-         statusField,
-         ...pickFields(NEWEST_FIRST),
+         {
+            key: 'source',
+            label: 'Take people from',
+            kind: 'select',
+            options: optionsOf([
+               ['network', 'My network'],
+               ['profiles', 'My profiles list'],
+            ]),
+            hint: 'My network has every filter of its page. People on Do not contact are never taken.',
+         },
+         {
+            key: 'client',
+            label: 'Client',
+            kind: 'client',
+            showWhen: {
+               key: 'source',
+               is: 'network',
+            },
+            hint: 'All clients takes each person once.',
+         },
+         {
+            key: 'filters',
+            label: 'More filters',
+            kind: 'filters',
+            showWhen: {
+               key: 'source',
+               is: 'network',
+            },
+            hint: 'The same filters as My network. Filters about a read only match people whose profile was read.',
+         },
+         {
+            ...statusField,
+            showWhen: {
+               key: 'source',
+               is: 'profiles',
+            },
+         },
+         ...pickFields('input.profiles', NEWEST_FIRST),
       ],
    },
    'input.companies': {
@@ -1328,6 +1660,7 @@ const BLOCKS = {
          costMicros: 0,
       }),
       previewCap: 1,
+      validate: inputErrors('input.companies', 'Companies'),
       label: 'Companies',
       summary: 'Companies from your companies list.',
       api: [
@@ -1345,7 +1678,23 @@ const BLOCKS = {
          all: z.boolean().default(false),
          howMany: howMany(100, 10),
       }),
-      fields: [inputHowMany('input.companies', 'companies'), statusField, ...pickFields(NEWEST_FIRST)],
+      fields: [
+         inputHowMany('input.companies', 'companies'),
+         {
+            key: 'search',
+            label: 'Name, notes or link contain',
+            kind: 'text',
+            placeholder: 'acme',
+         },
+         statusField,
+         ...pickFields('input.companies', NEWEST_FIRST),
+         {
+            key: 'filters',
+            label: 'More filters',
+            kind: 'filters',
+            hint: 'The same filters as the Companies page: size, place, team, specialities, what their page says, read and visited, and more.',
+         },
+      ],
    },
    'collect.findPosts': {
       group: 'Collect',

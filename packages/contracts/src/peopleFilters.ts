@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { readFiltersText } from './filtersText'
+
 // The filters of My network (.plan/network-filters.md), one schema for brain's `people.list` and `people.export`. The page keeps
 // its own copy with local dates (`apps/body/src/components/my-network/filters/model.ts`), and a test keeps the two equal.
 
@@ -60,3 +62,6 @@ export const peopleFiltersSchema = z
 
 export type PeopleFiltersInput = z.input<typeof peopleFiltersSchema>
 export type PeopleFilters = z.output<typeof peopleFiltersSchema>
+
+// The filters a Profiles block keeps as text (dates as exact instants), as `people.list` takes them.
+export const readPeopleFilters = (text: string) => readFiltersText(peopleFiltersSchema, text)

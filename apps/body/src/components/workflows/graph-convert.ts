@@ -240,7 +240,17 @@ const KEEPING_BLOCKS = new Set(['collect.searchPeople', 'collect.findPosts', 'co
 // What a new block starts with: a schedule and "added today" use the owner's time zone, input blocks take all that match,
 // and profiles and companies take only new ones. Blocks saved before keep their number and every status.
 export const startConfig = (type: string, timeZone: string = browserTimeZone()): GraphNode['config'] => {
-   if (type === 'input.profiles' || type === 'input.companies') {
+   // New profile blocks take people from My network; blocks saved before keep their profiles list.
+   if (type === 'input.profiles') {
+      return {
+         timeZone,
+         all: true,
+         statuses: ['NEW'],
+         source: 'network',
+      }
+   }
+
+   if (type === 'input.companies') {
       return {
          timeZone,
          all: true,
@@ -294,12 +304,41 @@ const WAIT_UNIT_WORDS: Record<string, [string, string]> = {
    weeks: ['week', 'weeks'],
 }
 
-const ADDED_WORDS: Record<string, string> = {
-   today: 'added today',
-   week: 'added this week',
-   '7d': 'added in the last 7 days',
-   '30d': 'added in the last 30 days',
-   lastRun: 'added since the last run',
+const WHEN_WORDS: Record<string, string> = {
+   today: 'today',
+   yesterday: 'yesterday',
+   week: 'this week',
+   '7d': 'in the last 7 days',
+   month: 'this month',
+   '30d': 'in the last 30 days',
+   lastMonth: 'last month',
+   '3months': 'in the last 3 months',
+   lastRun: 'since the last run',
+}
+
+const DATE_VERBS: Record<string, string> = {
+   added: 'added',
+   posted: 'posted',
+   lastRead: 'read',
+   firstSeen: 'first seen',
+   lastContact: 'last in touch',
+   connected: 'connected',
+   lastSent: 'last messaged',
+   lastReply: 'last replied',
+}
+
+// The time frame of an input block in words, such as "added this week" or "posted from 2026-10-01 to 2026-10-31".
+const whenOf = (values: Record<string, ConfigValue | undefined>) => {
+   const verb = DATE_VERBS[show(values.dateField) || 'added'] ?? 'added'
+   const added = show(values.added)
+
+   if (added === 'custom') {
+      const [from, to] = [show(values.from), show(values.to)]
+
+      return from && to ? `${verb} from ${from} to ${to}` : from ? `${verb} from ${from}` : to ? `${verb} until ${to}` : null
+   }
+
+   return WHEN_WORDS[added] ? `${verb} ${WHEN_WORDS[added]}` : null
 }
 
 const STATUS_WORDS: Record<string, string> = {
@@ -310,20 +349,46 @@ const STATUS_WORDS: Record<string, string> = {
 
 const listOf = (value: ConfigValue | undefined) => (Array.isArray(value) ? value : [])
 
+// How many filters a block keeps as text; text that is not JSON counts as none.
+const filtersOn = (value: ConfigValue | undefined) => {
+   try {
+      const parsed: unknown = JSON.parse(typeof value === 'string' && value !== '' ? value : '{}')
+
+      return typeof parsed === 'object' && parsed !== null ? Object.keys(parsed).length : 0
+   } catch {
+      return 0
+   }
+}
+
 // An input block's filters in a few words, such as "labelled fintech · added this week · new only".
 const pickOf = (values: Record<string, ConfigValue | undefined>) => {
    const labels = listOf(values.labels)
    const without = listOf(values.withoutLabels)
    const statuses = listOf(values.statuses)
    const joiner = values.labelMatch === 'all' ? ' and ' : ', '
+   const more = filtersOn(values.filters)
+   const search = show(values.search).trim()
+   const network = values.source === 'network'
+   const author = show(values.author).trim()
+   const comments = Number(values.minComments ?? 0)
+   const reactions = Number(values.minReactions ?? 0)
 
    return [
+      network ? 'from My network' : null,
+      search === '' ? null : `containing "${search}"`,
+      author === '' ? null : `by ${author}`,
+      values.postRead === 'read' ? 'read only' : values.postRead === 'unread' ? 'not read yet' : null,
+      comments > 0 ? `${comments}+ comments` : null,
+      reactions > 0 ? `${reactions}+ reactions` : null,
+      values.hasQualified === true ? 'with qualified people' : null,
       labels.length > 0 ? `labelled ${labels.join(joiner)}` : null,
       without.length > 0 ? `not ${without.join(', ')}` : null,
-      ADDED_WORDS[show(values.added)] ?? null,
-      statuses.length > 0 && statuses.length < 3
+      whenOf(values),
+      statuses.length > 0 && statuses.length < 3 && !network
          ? `${statuses.map(status => STATUS_WORDS[status] ?? status).join(' or ')} only`
          : null,
+      more > 0 ? `${more} more ${more === 1 ? 'filter' : 'filters'}` : null,
+      values.skipTaken === true ? 'skipping what it took before' : null,
    ].filter((part): part is string => part !== null)
 }
 

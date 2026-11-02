@@ -51,6 +51,19 @@ describe('input picks', () => {
          statuses: [],
          order: 'newest',
          timeZone: 'UTC',
+         dateField: 'added',
+         from: '',
+         to: '',
+         search: '',
+         filters: '',
+         source: 'profiles',
+         client: '',
+         postRead: 'any',
+         minComments: 0,
+         minReactions: 0,
+         author: '',
+         hasQualified: false,
+         skipTaken: false,
       })
       expect(inputPickOf('input.posts', {}).order).toBe('oldest')
       const labelled = blockOf('input.posts').config.safeParse({ labels: ['Fintech '] }).data

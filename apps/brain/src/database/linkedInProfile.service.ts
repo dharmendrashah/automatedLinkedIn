@@ -2,6 +2,7 @@ import { type LinkedInLink } from 'core'
 
 import { type LinkedInProfileStatus, type Prisma } from 'generated/prisma/client'
 
+import { InputPeopleService } from './inputPeople.service'
 import {
    type InputFilter,
    type LabelChange,
@@ -291,7 +292,11 @@ export class LinkedInProfileService {
    }
 
    // The profiles a workflow's input block takes.
-   public static pick(userId: string, take: number, filter: InputFilter<LinkedInProfileStatus>) {
+   public static async pick(userId: string, take: number, filter: InputFilter<LinkedInProfileStatus>) {
+      if (filter.network) {
+         return InputPeopleService.pick(userId, take, filter, filter.network)
+      }
+
       return PrismaService.client.linkedInProfile.findMany({
          where: inputWhere(userId, filter),
          orderBy: inputOrder(filter.order),
@@ -306,7 +311,11 @@ export class LinkedInProfileService {
       })
    }
 
-   public static countPicked(userId: string, filter: InputFilter<LinkedInProfileStatus>) {
+   public static async countPicked(userId: string, filter: InputFilter<LinkedInProfileStatus>) {
+      if (filter.network) {
+         return InputPeopleService.count(userId, filter, filter.network)
+      }
+
       return PrismaService.client.linkedInProfile.count({ where: inputWhere(userId, filter) })
    }
 
