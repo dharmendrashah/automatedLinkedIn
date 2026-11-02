@@ -72,13 +72,38 @@ const ROWS: Record<string, Record<string, unknown>[]> = {
          headline: 'Buy now',
       },
    ],
+   profiles: [
+      {
+         profileUrl: profile('ada'),
+         handle: 'ada',
+         firstName: 'Ada',
+         lastName: 'Lovelace',
+         headline: 'Engines',
+      },
+   ],
+}
+
+// A request for named links gets those rows only, as the data service does.
+const rowsFor = (slug: string, params: Record<string, unknown>) => {
+   const rows = ROWS[slug] ?? []
+   const asked = Array.isArray(params.companies)
+      ? params.companies
+      : Array.isArray(params.queries)
+        ? params.queries
+        : null
+
+   return asked ? rows.filter(row => asked.includes(row.linkedinUrl ?? row.profileUrl)) : rows
 }
 
 const fakeClient = () =>
-   fakeDataClient(slug => ({
-      rows: ROWS[slug] ?? [],
-      costMicros: (ROWS[slug]?.length ?? 0) * 4_000,
-   }))
+   fakeDataClient((slug, params) => {
+      const rows = rowsFor(slug, params)
+
+      return {
+         rows,
+         costMicros: rows.length * 4_000,
+      }
+   })
 
 const deps = (client: ReturnType<typeof fakeClient>) => ({
    client,
@@ -324,5 +349,119 @@ describe('collect blocks (database)', () => {
             slug: 'ad-1',
          },
       ])
+   })
+
+   describe('Get full profile', () => {
+      const links = [profile('ada'), 'https://www.linkedin.com/company/acme']
+      const read = (config: GraphNode['config']) =>
+         one('collect.profile', {
+            links,
+            ...config,
+         })
+
+      it('should read a pasted profile and a pasted company once, update my lists, and refresh a company already there', async () => {
+         await PrismaService.client.linkedInCompany.deleteMany({ where: { userId } })
+         await PrismaService.client.pageSnapshot.deleteMany({ where: { userId } })
+         await PrismaService.client.linkedInProfile.deleteMany({ where: { userId } })
+         await PrismaService.client.personSnapshot.deleteMany({ where: { userId } })
+         await PrismaService.client.linkedInCompany.create({
+            data: {
+               userId,
+               slug: 'acme',
+               url: 'https://www.linkedin.com/company/acme',
+               name: 'Typed by hand',
+               tags: ['mine'],
+            },
+         })
+
+         const first = await runOnce(read({ keep: true }))
+
+         const company = await PrismaService.client.linkedInCompany.findUniqueOrThrow({
+            where: {
+               userId_slug: {
+                  userId,
+                  slug: 'acme',
+               },
+            },
+         })
+         const person = await PrismaService.client.linkedInProfile.findUnique({
+            where: {
+               userId_slug: {
+                  userId,
+                  slug: 'ada',
+               },
+            },
+         })
+
+         expect([...first.asked].sort()).toEqual(['companies', 'profiles'])
+         expect((await itemsOf(first.runId)).map(({ kind, slug }) => `${kind}:${slug}`)).toEqual([
+            'company:acme',
+            'profile:ada',
+         ])
+         expect(company.name).toBe('Acme')
+         expect(company.tags.sort()).toEqual([LABEL, 'mine'].sort())
+         expect(person?.tags).toEqual([LABEL])
+         expect(
+            await PrismaService.client.personSnapshot.count({
+               where: {
+                  userId,
+                  slug: 'ada',
+               },
+            })
+         ).toBe(1)
+      })
+
+      it('should not read again what was read in the last 30 days, unless asked to', async () => {
+         const again = await runOnce(read({ keep: true }))
+         const reread = await runOnce(
+            read({
+               keep: true,
+               reread: true,
+            })
+         )
+
+         expect(again.asked).toEqual([])
+         expect([...reread.asked].sort()).toEqual(['companies', 'profiles'])
+      })
+
+      it('should keep nothing of a company when the tick is off, and leave people out that are on Do not contact', async () => {
+         await PrismaService.client.linkedInCompany.deleteMany({ where: { userId } })
+         await PrismaService.client.pageSnapshot.deleteMany({ where: { userId } })
+         await PrismaService.client.suppression.create({
+            data: {
+               userId,
+               slug: 'ada',
+            },
+         })
+
+         const { asked, runId } = await runOnce(read({}))
+
+         expect(asked).toEqual(['companies'])
+         expect((await itemsOf(runId)).map(({ kind, slug }) => `${kind}:${slug}`)).toEqual(['company:acme'])
+         expect(await PrismaService.client.linkedInCompany.count({ where: { userId } })).toBe(0)
+
+         await PrismaService.client.suppression.deleteMany({ where: { userId } })
+      })
+
+      it('should not read again a company that reaches it with its page already, and read one that does not', async () => {
+         const graph: Graph = {
+            nodes: [
+               node('search', 'collect.searchCompanies', {
+                  query: 'x',
+                  keep: false,
+               }),
+               node('read', 'collect.profile'),
+            ],
+            edges: [
+               {
+                  from: 'search',
+                  to: 'read',
+               },
+            ],
+         }
+         const { asked } = await runOnce(graph)
+
+         expect(asked).toEqual(['companies'])
+      })
    })
 })

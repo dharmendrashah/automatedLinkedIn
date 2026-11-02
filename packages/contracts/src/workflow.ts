@@ -1158,19 +1158,75 @@ const BLOCKS = {
    },
    'collect.profile': {
       group: 'Collect',
-      flags: { scores: true },
-      estimate: (_node, incoming) => ({
-         items: incoming,
-         costMicros: incoming * PRICE_MICROS.profile,
+      // Takes people, companies and posts as they are (posts become their authors in the block) and starts on its own
+      // from pasted links.
+      flags: {
+         scores: true,
+         takesAnything: true,
+      },
+      unit: 'profiles and companies',
+      estimate: (node, incoming) => ({
+         items: incoming + linkCount(node),
+         costMicros: (incoming + linkCount(node)) * PRICE_MICROS.profile,
       }),
+      previewCap: 1,
+      validate: (node, graph) =>
+         linkCount(node) === 0 && parentsOf(graph, node.id).length === 0
+            ? [
+                 {
+                    nodeId: node.id,
+                    level: 'note',
+                    message:
+                       'Get full profile has nothing before it, so it gets nothing. Paste links or connect a block.',
+                 },
+              ]
+            : [],
       label: 'Get full profile',
       summary:
-         'Reads the full profile of everyone who reaches it (job, company, place) and scores them again if a Score block came before.',
-      costHint: 'about $0.004 per person',
-      input: 'profile',
+         'Reads the full details of every person and company that reaches it or whose link you paste, and scores people again if a Score block came before.',
+      flow: 'Takes people, companies or pasted links, gives them with their full details',
+      costHint: 'about $0.004 per person or company',
+      // Blocks saved before companies were read keep passing them through.
+      version: 2,
+      migrate: {
+         1: config => ({
+            ...config,
+            readCompanies: false,
+         }),
+      },
+      input: 'start',
       output: 'profile',
-      config: empty,
-      fields: [],
+      config: z.object({
+         links: linkList(LINKS_MAX),
+         readCompanies: toggle(true),
+         keep: toggle(false),
+         reread: toggle(false),
+      }),
+      fields: [
+         linksField(
+            'Profile or company links (optional)',
+            'Read as well as what reaches this block: LinkedIn profile or company links.'
+         ),
+         {
+            key: 'readCompanies',
+            label: 'Also read companies that reach it',
+            kind: 'toggle',
+            hint: 'A company that already has its page, from a search, is not read again.',
+         },
+         {
+            key: 'keep',
+            label: 'Update my lists with what it reads',
+            kind: 'toggle',
+            hint: "New people join My network and new companies join Companies under this workflow's name; the ones already there get what was read. People on Do not contact are never added.",
+         },
+         {
+            key: 'reread',
+            label: 'Read again even if read in the last 30 days',
+            kind: 'toggle',
+            hint: 'Costs again. Leave off to use the stored read.',
+            advanced: true,
+         },
+      ],
    },
    'output.list': {
       group: 'Output',
@@ -3953,7 +4009,8 @@ export const previewGraph = (graph: Graph): Graph => ({
               ...node,
               config: {
                  ...node.config,
-                 howMany: Math.min(howManyOf(node), cap),
+                 // Only a block that has a "how many" is given one.
+                 ...(typeof settingsOf(node).howMany === 'number' ? { howMany: Math.min(howManyOf(node), cap) } : {}),
                  // A preview never reads "all", and a block that pays for each pasted link reads only the first.
                  ...(node.config.all === true ? { all: false } : {}),
                  ...(blockOf(node.type).group === 'Collect' && Array.isArray(node.config.links)

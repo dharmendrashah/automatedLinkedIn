@@ -164,3 +164,63 @@ describe('keeping what a block finds', () => {
       expect(blockOf('collect.domainLookup').fields.some(({ key }) => key === 'keep')).toBe(true)
    })
 })
+
+describe('Get full profile', () => {
+   const noteAbout = (graph: Graph) => validateGraph(graph).filter(({ nodeId }) => nodeId === 'collect')
+
+   it('should price what reaches it and the links pasted in it, a person and a company the same', () => {
+      expect(costOf('collect.profile', { links: LINKS })).toEqual({
+         items: 2,
+         costMicros: 2 * 4_000,
+      })
+   })
+
+   it('should start on its own with pasted links, and take companies and posts without a note', () => {
+      const graph = alone('collect.searchCompanies', { query: 'x' })
+      const joined: Graph = {
+         nodes: [
+            ...graph.nodes,
+            {
+               id: 'read',
+               type: 'collect.profile',
+               config: {},
+               position: {
+                  x: 0,
+                  y: 200,
+               },
+            },
+         ],
+         edges: [
+            ...graph.edges,
+            {
+               from: 'collect',
+               to: 'read',
+            },
+         ],
+      }
+
+      expect(noteAbout(alone('collect.profile', { links: LINKS }))).toEqual([])
+      expect(validateGraph(joined).filter(({ nodeId }) => nodeId === 'read')).toEqual([])
+   })
+
+   it('should leave a block saved before it as it was: no companies read, nothing kept, no re-read', () => {
+      const spec = blockOf('collect.profile')
+
+      expect(spec.version).toBe(2)
+      expect(spec.migrate?.[1]?.({})).toEqual({ readCompanies: false })
+      expect(spec.config.parse({})).toMatchObject({
+         readCompanies: true,
+         keep: false,
+         reread: false,
+      })
+   })
+
+   it('should offer the tick, the links and the re-read', () => {
+      expect(blockOf('collect.profile').fields.map(({ key }) => key)).toEqual([
+         'links',
+         'readCompanies',
+         'keep',
+         'reread',
+      ])
+   })
+})

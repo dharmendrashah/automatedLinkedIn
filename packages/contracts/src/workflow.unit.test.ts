@@ -250,7 +250,7 @@ describe('validateGraph', () => {
       expect(validateGraph(free).map(({ message }) => message)).toEqual(
          expect.arrayContaining([
             'No trigger: Run starts from the blocks with nothing before them.',
-            'Get full profile has nothing before it, so it gets nothing.',
+            'Get full profile has nothing before it, so it gets nothing. Paste links or connect a block.',
          ])
       )
    })

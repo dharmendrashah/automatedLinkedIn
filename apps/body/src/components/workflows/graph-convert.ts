@@ -255,6 +255,11 @@ export const startConfig = (type: string, timeZone: string = browserTimeZone()):
       }
    }
 
+   // Get full profile has no "how many"; it starts with its tick on.
+   if (type === 'collect.profile') {
+      return { keep: true }
+   }
+
    // Blocks that can keep what they find in the owner's lists start with that on and with 10; saved blocks keep theirs.
    if (KEEPING_BLOCKS.has(type)) {
       return {

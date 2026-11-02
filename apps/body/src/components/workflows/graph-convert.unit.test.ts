@@ -105,6 +105,7 @@ describe('input blocks', () => {
          timeZone: 'Asia/Kolkata',
          all: true,
       })
+      expect(startConfig('collect.profile', 'Asia/Kolkata')).toEqual({ keep: true })
       expect(startConfig('collect.commenters', 'Asia/Kolkata')).toEqual({})
       // A block that existed before the "keep" box starts with it on and with 10; a saved one keeps what it has.
       expect(startConfig('collect.searchPeople', 'Asia/Kolkata')).toEqual({
