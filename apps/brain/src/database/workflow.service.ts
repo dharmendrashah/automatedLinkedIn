@@ -13,11 +13,13 @@ import {
    nextScheduledRun,
    previewGraph,
    scheduleOf,
+   splitHooks,
    upgradeGraph,
    validateGraph,
 } from '@automatedLinkedIn/contracts'
 
 import { ConflictError, isUniqueViolation, uniqueOr } from './conflict'
+import { HookService } from './hook.service'
 import { InputPickService } from './inputPick.service'
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
@@ -59,6 +61,7 @@ const runSelect = {
    id: true,
    workflowId: true,
    trigger: true,
+   kind: true,
    status: true,
    estimateMicros: true,
    costMicros: true,
@@ -125,6 +128,7 @@ const admit = async (
       where: {
          workflowId,
          status: 'RUNNING',
+         kind: 'MAIN',
       },
       select: { steps: { select: { waitUntil: true } } },
    })
@@ -723,12 +727,14 @@ export class WorkflowService {
       }
 
       const admitted = await admit(workflowId, trigger, options.parentRunId)
+      // The run works on the main flow only; each hook chain is kept apart and starts as a run of its own when its moment comes.
+      const { main, attachments } = splitHooks(graph)
 
       if (await WalletService.belowFloor()) {
          throw new ConflictError('New runs are paused for a short while. Please try again later.')
       }
 
-      const runGraph = trigger === 'PREVIEW' ? previewGraph(graph) : graph
+      const runGraph = trigger === 'PREVIEW' ? previewGraph(main) : main
       const { posts, totalMicros } = await WorkflowService.estimate(userId, runGraph, false, workflowId)
       const fromOutside = trigger === 'API' || trigger === 'WORKFLOW' || trigger === 'EVENT'
 
@@ -746,6 +752,7 @@ export class WorkflowService {
                status,
                engineVersion: 2,
                graph: runGraph,
+               ...(attachments.length > 0 && { hooks: attachments }),
                input: options.input,
                depth: options.depth ?? 0,
                parentRunId: options.parentRunId,
@@ -808,7 +815,10 @@ export class WorkflowService {
       }
 
       const newest = await PrismaService.client.workflowRun.findFirst({
-         where: { workflowId: run.workflowId },
+         where: {
+            workflowId: run.workflowId,
+            kind: 'MAIN',
+         },
          orderBy: { startedAt: 'desc' },
          select: { id: true },
       })
@@ -844,6 +854,7 @@ export class WorkflowService {
          where: {
             userId,
             status: 'FAILED',
+            kind: 'MAIN',
             trigger: { not: 'PREVIEW' },
             alertDismissedAt: null,
             finishedAt: { gt: new Date(Date.now() - ALERT_DAYS * DAY_MS) },
@@ -887,6 +898,7 @@ export class WorkflowService {
          where: {
             userId,
             workflowId,
+            kind: 'MAIN',
          },
          orderBy: { startedAt: 'desc' },
          take: 50,
@@ -908,6 +920,8 @@ export class WorkflowService {
       })
 
       if (count === 1) {
+         await HookService.stopOf(runId)
+
          return true
       }
 

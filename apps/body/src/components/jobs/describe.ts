@@ -70,6 +70,7 @@ const ACTIONS: Record<string, string> = {
    'invites-send': 'Invites sent or withdrawn',
    'task-event': 'Task event matched to workflows',
    'event-run': 'Workflow run started by an event',
+   'hook-run': 'Hook run started by a block',
    visit: 'Daily visit',
    'sign-in-check': 'Sign-in check',
    'proxy-score': 'Proxy score',

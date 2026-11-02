@@ -1,4 +1,4 @@
-import { EventDispatchService } from 'database'
+import { EventDispatchService, HookService } from 'database'
 
 import { defineJob } from './defineJob'
 
@@ -15,18 +15,22 @@ export const eventDispatch = defineJob({
    run: async () => {
       const fanned = await EventDispatchService.fanOut()
       const started = await EventDispatchService.start()
-      const items = [...fanned.items, ...started.items]
+      const hooks = await HookService.startDue()
+      const items = [...fanned.items, ...started.items, ...hooks.items]
 
       if (items.length === 0 && fanned.events === 0) {
          return undefined
       }
 
+      const runs = started.started + hooks.started
+
       return {
-         ...(started.started > 0 && { summary: `${started.started} event runs started` }),
+         ...(runs > 0 && { summary: `${runs} runs started by events and hooks` }),
          counts: {
             events: fanned.events,
             deliveries: fanned.deliveries,
             started: started.started,
+            hooks: hooks.started,
          },
          items,
       }

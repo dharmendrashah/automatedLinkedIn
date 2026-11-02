@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { type ItemFacts, type WorkflowItemData } from 'core'
 
-import { EventDispatchService, TaskEventService, WorkflowRunService } from 'database'
+import { EventDispatchService, HookService, TaskEventService, WorkflowRunService } from 'database'
 
 import {
    EVENT_CONDITION_ROWS,
@@ -51,6 +51,10 @@ export const eventTrigger = async (ctx: Context): Promise<StepResult> => {
            message: 'No event of this kind has happened yet, so there was nothing to take.',
         }
 }
+
+// A hook run starts with what its block had at that moment.
+export const hookTrigger = async (ctx: Context): Promise<StepResult> =>
+   keepItems(ctx, await HookService.itemsOf(ctx.run), 0)
 
 const conditionsOf = (config: Record<string, unknown>): FactCondition[] =>
    Array.from({ length: EVENT_CONDITION_ROWS }, (_unused, index) => index + 1).flatMap((row): FactCondition[] => {

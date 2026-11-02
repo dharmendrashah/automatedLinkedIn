@@ -62,6 +62,7 @@ export const BLOCK_ICONS: Record<Block['type'], LucideIcon> = {
    'trigger.workflow': Workflow,
    'trigger.taskEvent': Radio,
    'trigger.messageArrived': MessageCircleMore,
+   'trigger.hook': Radio,
    'input.posts': Newspaper,
    'input.profiles': UserRound,
    'input.companies': Building,

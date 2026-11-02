@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { readCompanyFilters } from './companyFilters'
 import { EVENT_PHASES, type EventTriggerSettings, ORIGIN_KINDS, factsOf } from './events'
 import { FILTERS_TEXT_MAX } from './filtersText'
+import { HOOK_START_ID, hooksSchema, splitHooks } from './hooks'
 import { INDUSTRY_PAIRS } from './industries'
 import { INVITE_LIMITS } from './invites'
 import { readPeopleFilters } from './peopleFilters'
@@ -931,6 +932,7 @@ export const BLOCK_TYPES = [
    'trigger.workflow',
    'trigger.taskEvent',
    'trigger.messageArrived',
+   'trigger.hook',
    'input.posts',
    'input.profiles',
    'input.companies',
@@ -1900,6 +1902,18 @@ const BLOCKS = {
             kind: 'workflow',
          },
       ],
+   },
+   // The start of a hook run: made when a run is split, never offered in the palette ("retired" hides it and keeps it running).
+   'trigger.hook': {
+      group: 'Triggers',
+      liveness: 'always',
+      deprecated: true,
+      label: 'When a hook fires',
+      summary: 'Starts a hook run with what the block it hangs on had at that moment.',
+      input: null,
+      output: 'profile',
+      config: empty,
+      fields: [],
    },
    'trigger.taskEvent': {
       group: 'Triggers',
@@ -4792,6 +4806,10 @@ export const graphSchema = z.object({
             version: z.number().int().min(1).optional(),
             // Switched off: the block does no work and passes on what reaches it (see `isOff`).
             disabled: z.boolean().optional(),
+            // A name the owner gave it, shown on the canvas, in run views and in the hook list.
+            label: z.string().trim().min(1).max(60).optional(),
+            // How its before, on and after hooks behave; the chains hang on lines from those outputs.
+            hooks: hooksSchema.optional(),
             config: configSchema.default({}),
             position: z.object({
                x: z.number(),
@@ -4982,7 +5000,7 @@ export const topoOrder = (graph: Graph) => {
 }
 
 // How a run was started, and the triggers that fire for it. By hand and a preview fire every trigger.
-export type RunStart = 'MANUAL' | 'SCHEDULE' | 'PREVIEW' | 'API' | 'WORKFLOW' | 'EVENT'
+export type RunStart = 'MANUAL' | 'SCHEDULE' | 'PREVIEW' | 'API' | 'WORKFLOW' | 'EVENT' | 'HOOK'
 
 const FIRES: Record<RunStart, readonly BlockType[] | null> = {
    MANUAL: null,
@@ -4991,6 +5009,7 @@ const FIRES: Record<RunStart, readonly BlockType[] | null> = {
    API: ['trigger.api'],
    WORKFLOW: ['trigger.workflow'],
    EVENT: ['trigger.taskEvent', 'trigger.messageArrived'],
+   HOOK: ['trigger.hook'],
 }
 
 // Whether a trigger block starts a run. When the graph has no trigger of the kind that started the run, every trigger
@@ -5219,7 +5238,8 @@ const keptWithoutSplit = (graph: Graph, id: string) => {
 }
 
 // Only an error stops a run. Notes explain what will happen with a free-form graph.
-export const validateGraph = (graph: Graph): GraphError[] => {
+// The rules for one flow of blocks: the main flow, or one hook chain on its own.
+const validateFlow = (graph: Graph): GraphError[] => {
    const byId = new Map(graph.nodes.map(node => [node.id, node]))
    const problems: GraphError[] = []
    const note = (message: string, nodeId?: string) =>
@@ -5276,7 +5296,7 @@ export const validateGraph = (graph: Graph): GraphError[] => {
          const { accountMode, account } = settingsOf(node)
 
          if (accountMode === 'event') {
-            if (!graph.nodes.some(other => eventTriggerOf(other) !== null)) {
+            if (!graph.nodes.some(other => eventTriggerOf(other) !== null || other.type === 'trigger.hook')) {
                problems.push({
                   nodeId: node.id,
                   level: 'error',
@@ -5323,6 +5343,35 @@ export const validateGraph = (graph: Graph): GraphError[] => {
    }
 
    return problems
+}
+
+// The main flow and each hook chain are checked as workflows of their own, so a chain block that needs "Select accounts" must have it
+// inside the chain. A chain's notes are left out (it has no trigger or output of its own to remark on); its errors count.
+export const validateGraph = (graph: Graph): GraphError[] => {
+   const { main, attachments, problems } = splitHooks(graph)
+   const reserved = graph.nodes
+      .filter(({ id }) => id.startsWith('__'))
+      .map((node): GraphError => ({
+         nodeId: node.id,
+         level: 'error',
+         message: 'Block ids starting with __ are reserved.',
+      }))
+
+   if (attachments.length === 0 && problems.length === 0) {
+      return [...validateFlow(graph), ...reserved]
+   }
+
+   const chains = new Map<string, GraphError>()
+
+   for (const { graph: chain } of attachments) {
+      for (const error of errorsOf(validateFlow(chain))) {
+         if (error.nodeId !== HOOK_START_ID) {
+            chains.set(`${error.nodeId}:${error.message}`, error)
+         }
+      }
+   }
+
+   return [...validateFlow(main), ...problems, ...reserved, ...chains.values()]
 }
 
 export const errorsOf = (problems: GraphError[]) => problems.filter(({ level }) => level === 'error')

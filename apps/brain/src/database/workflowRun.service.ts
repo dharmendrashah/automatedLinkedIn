@@ -93,7 +93,14 @@ export class WorkflowRunService {
       const next = await PrismaService.client.workflowRun.findMany({
          where: {
             status: 'QUEUED',
-            workflow: { runs: { none: { status: 'RUNNING' } } },
+            workflow: {
+               runs: {
+                  none: {
+                     status: 'RUNNING',
+                     kind: 'MAIN',
+                  },
+               },
+            },
          },
          orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
          distinct: ['workflowId'],
@@ -588,6 +595,7 @@ export class WorkflowRunService {
                stopRequestedAt: null,
                // Failing again is a new failure to tell the owner about.
                alertDismissedAt: null,
+               resumes: { increment: 1 },
                startedAt: new Date(),
             },
          })

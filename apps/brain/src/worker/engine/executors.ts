@@ -103,7 +103,7 @@ import {
    thresholdsOf,
    wordsIn,
 } from './context'
-import { eventTrigger, ifEvent, messageMood, runEvent } from './eventBlocks'
+import { eventTrigger, hookTrigger, ifEvent, messageMood, runEvent } from './eventBlocks'
 import { sendInvites, withdrawInvites } from './inviteBlocks'
 import { retry, stop, taskResult, wait } from './logicBlocks'
 import { replyToConversations, sendMessages } from './replyBlocks'
@@ -1503,6 +1503,7 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'trigger.workflow': afterWorkflow,
    'trigger.taskEvent': eventTrigger,
    'trigger.messageArrived': eventTrigger,
+   'trigger.hook': hookTrigger,
    'input.posts': inputPosts,
    'input.profiles': inputProfiles,
    'input.companies': inputCompanies,

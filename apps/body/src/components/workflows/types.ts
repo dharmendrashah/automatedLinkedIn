@@ -101,4 +101,5 @@ export const triggerLabels: Record<Run['trigger'], string> = {
    API: 'API call',
    WORKFLOW: 'After a workflow',
    EVENT: 'After an event',
+   HOOK: 'Hook',
 }

@@ -224,6 +224,8 @@ enum WorkflowTrigger {
   WORKFLOW
   // Started by a task event (.plan/workflow-events-and-hooks.md).
   EVENT
+  // A hook of a block: a small run of the same workflow, started by the host run's block.
+  HOOK
 }
 
 enum WorkflowRunStatus {
@@ -340,10 +342,17 @@ model WorkflowDelivery {
   userId      String
   workflowId  String
   workflow    Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  taskEventId String
-  taskEvent   TaskEvent @relation(fields: [taskEventId], references: [id], onDelete: Cascade)
+  // TASK: a task event matched a trigger block. BLOCK: a block's hook fired in a run (host columns below).
+  source      String    @default("TASK")
+  taskEventId String?
+  taskEvent   TaskEvent? @relation(fields: [taskEventId], references: [id], onDelete: Cascade)
+  hostRunId   String?
+  hostNodeId  String?
   phase       String
-  // The trigger blocks that matched; they start the run.
+  round       Int       @default(0)
+  tries       Int       @default(0)
+  resumes     Int       @default(0)
+  // The trigger blocks that matched; they start the run. For a hook, the host and where its items are.
   targets     Json
   status      String    @default("PENDING")
   reason      String?
@@ -354,6 +363,7 @@ model WorkflowDelivery {
   startedAt   DateTime?
 
   @@unique([taskEventId, workflowId])
+  @@unique([hostRunId, hostNodeId, phase, round, tries, resumes])
   @@index([status, retryAt])
   @@index([userId, workflowId, createdAt])
 }
@@ -411,6 +421,12 @@ model WorkflowRun {
   discarded        Int                 @default(0)
   // Links sent by an API call, or the people a finished workflow passed on.
   input            Json?
+  // MAIN, or HOOK for the small run a block's hook starts. Only MAIN runs hold the one live-run slot.
+  kind             String              @default("MAIN")
+  // The hook chains split off the graph when the run started: [{ host, phase, options, graph }].
+  hooks            Json?
+  // How many times the owner took the run up again; part of a hook's key, so a resumed block fires again.
+  resumes          Int                 @default(0)
   // How many workflows started this one in a chain.
   depth            Int                 @default(0)
   // 1: every block runs (runs from before 2026-11-02). 2: a block runs only when something reaches it, and only the triggers
@@ -434,6 +450,7 @@ model WorkflowRun {
   @@index([workflowId, startedAt])
   @@index([status])
   @@index([parentRunId])
+  @@index([kind, status])
 }
 
 model WorkflowStepRun {

@@ -315,6 +315,7 @@ export class EventDispatchService {
       const started = await PrismaService.client.workflowDelivery.count({
          where: {
             workflowId,
+            source: 'TASK',
             status: 'STARTED',
             startedAt: { gt: new Date(now.getTime() - HOUR_MS) },
          },
@@ -327,6 +328,7 @@ export class EventDispatchService {
    public static async start(now = new Date()) {
       const due = await PrismaService.client.workflowDelivery.findMany({
          where: {
+            source: 'TASK',
             status: 'PENDING',
             retryAt: { lte: now },
          },
@@ -367,7 +369,7 @@ export class EventDispatchService {
             action: 'event-run',
             result,
             ...(reason && { reason }),
-            sessionId: delivery.taskEvent.sessionId,
+            sessionId: delivery.taskEvent?.sessionId,
          })
 
          if (!delivery.workflow.enabled) {
@@ -516,12 +518,16 @@ export class EventDispatchService {
             by: ['status'],
             where: {
                workflowId,
+               source: 'TASK',
                createdAt: { gt: since },
             },
             _count: { _all: true },
          }),
          PrismaService.client.workflowDelivery.findMany({
-            where: { workflowId },
+            where: {
+               workflowId,
+               source: 'TASK',
+            },
             orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             take: 50,
             select: {
@@ -556,16 +562,24 @@ export class EventDispatchService {
       return {
          listening: workflow.enabled,
          last24Hours: Object.fromEntries(counts.map(({ status, _count }) => [status, _count._all])),
-         recent: recent.map(({ taskEvent, ...delivery }) => ({
-            ...delivery,
-            eventId: taskEvent.id,
-            task: taskEvent.task,
-            phase: taskEvent.phase,
-            account: taskEvent.session.linkedInAccount.displayName ?? taskEvent.session.linkedInAccount.email,
-            startedBy: (
-               originSchema.safeParse(taskEvent.session.origin).data ?? originOfTrigger(taskEvent.session.trigger)
-            ).kind,
-         })),
+         recent: recent.flatMap(({ taskEvent, ...delivery }) =>
+            taskEvent
+               ? [
+                    {
+                       ...delivery,
+                       eventId: taskEvent.id,
+                       task: taskEvent.task,
+                       phase: taskEvent.phase,
+                       account:
+                          taskEvent.session.linkedInAccount.displayName ?? taskEvent.session.linkedInAccount.email,
+                       startedBy: (
+                          originSchema.safeParse(taskEvent.session.origin).data ??
+                          originOfTrigger(taskEvent.session.trigger)
+                       ).kind,
+                    },
+                 ]
+               : []
+         ),
       }
    }
 

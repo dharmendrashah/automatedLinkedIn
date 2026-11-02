@@ -42,6 +42,7 @@ import {
 } from './context'
 import { EXECUTORS } from './executors'
 import { PLAIN_FAILURE, failureOf } from './failure'
+import { closeHooks, fireHook } from './hooks'
 import { switchedOff } from './logicBlocks'
 
 // Runs workflow graphs step by step, keeping every step's output in the database so a stopped worker resumes where it
@@ -190,6 +191,12 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
 
       inputsRead = read
       const off = isOff(node)
+
+      // The hooks watch the block; they never wait for it and never change what it does.
+      if (!off) {
+         await fireHook(run, graph, node, step, 'before', deps)
+         await fireHook(run, graph, node, step, 'on', deps)
+      }
       const { inputs, passThrough } =
          RAW_INPUTS.has(node.type) || off
             ? {
@@ -230,6 +237,10 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
          itemsOut: result.itemsOut + passThrough.length,
          emits: await emitsOf(node, at, emit),
       })
+
+      if (!off) {
+         await fireHook(run, graph, node, step, 'after', deps)
+      }
    } catch (error) {
       if (error instanceof Paused || error instanceof Waiting) {
          await WorkflowRunService.release(step.id)
@@ -266,6 +277,10 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
          // A failure a Task result or Retry looks at lets what stands between them and the failed block run.
          emits: isHandled(graph, node.id) ? ['main'] : [],
       })
+
+      if (!isOff(node)) {
+         await fireHook(run, graph, node, step, 'after', deps, true)
+      }
    }
 
    return 'ended'
@@ -422,9 +437,13 @@ const finish = async (run: Run, graph: Graph, deps: EngineDeps) => {
       message: stopped ? undefined : (failed?.message ?? handled?.message ?? undefined),
    })
 
+   if (count === 1) {
+      await closeHooks(run, failed, deps)
+   }
+
    // Only the worker that ended the run starts the workflows listening to it, and never after a preview, a failure or
-   // a stop.
-   if (count === 1 && !failed && !stopped && run.trigger !== 'PREVIEW') {
+   // a stop. A hook run is not a workflow run in a chain.
+   if (count === 1 && !failed && !stopped && run.trigger !== 'PREVIEW' && run.kind === 'MAIN') {
       const started = await WorkflowTriggerService.startAfter(run, result)
 
       if (started > 0) {

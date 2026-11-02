@@ -132,6 +132,20 @@ exports[`blocks before they became one definition > should keep what every block
   {
     "plain": {
       "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "trigger.hook",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
       "items": 5,
     },
     "preview": {
