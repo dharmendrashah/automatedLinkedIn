@@ -63,6 +63,7 @@ describe('input picks', () => {
          minReactions: 0,
          author: '',
          hasQualified: false,
+         skipTaken: false,
       })
       expect(inputPickOf('input.posts', {}).order).toBe('oldest')
       const labelled = blockOf('input.posts').config.safeParse({ labels: ['Fintech '] }).data

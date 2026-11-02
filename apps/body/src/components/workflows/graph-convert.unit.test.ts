@@ -115,6 +115,9 @@ describe('input blocks', () => {
       )
       expect(say({ filters: '{"hasJobs":true}' })).toBe('Up to 5 people · 1 more filter')
       expect(say({ filters: 'oops' })).toBe('Up to 5 people')
+      expect(summaryOf(profiles, { howMany: 5, skipTaken: true })).toBe(
+         'Up to 5 people \u00b7 skipping what it took before'
+      )
       expect(
          summaryOf(profiles, {
             howMany: 5,

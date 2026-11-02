@@ -64,6 +64,8 @@ export type InputFilter<S extends string = string> = {
    field: string
    // When set, only these items (the ones whose own date fits the time frame).
    slugs: string[] | null
+   // Never these (what the workflow took in earlier runs).
+   notSlugs: string[]
    // When set, only these items, by id (the ones the page's own filters found).
    ids: string[] | null
    // Profiles only: take people from My network instead of the profiles list.
@@ -80,6 +82,7 @@ export const EVERYTHING: InputFilter<never> = {
    until: null,
    field: 'added',
    slugs: null,
+   notSlugs: [],
    ids: null,
    network: null,
    labels: [],
@@ -100,7 +103,14 @@ export const inputWhere = <S extends string>(userId: string, filter: InputFilter
            },
         }
       : {}),
-   ...(filter.slugs ? { slug: { in: filter.slugs } } : {}),
+   ...(filter.slugs || filter.notSlugs.length > 0
+      ? {
+           slug: {
+              ...(filter.slugs ? { in: filter.slugs } : {}),
+              ...(filter.notSlugs.length > 0 ? { notIn: filter.notSlugs } : {}),
+           },
+        }
+      : {}),
    ...(filter.ids ? { id: { in: filter.ids } } : {}),
    ...(filter.statuses.length > 0 ? { status: { in: filter.statuses } } : {}),
    ...labelWhere(filter.labels, filter.labelMatch, filter.withoutLabels),

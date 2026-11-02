@@ -388,6 +388,7 @@ const pickOf = (values: Record<string, ConfigValue | undefined>) => {
          ? `${statuses.map(status => STATUS_WORDS[status] ?? status).join(' or ')} only`
          : null,
       more > 0 ? `${more} more ${more === 1 ? 'filter' : 'filters'}` : null,
+      values.skipTaken === true ? 'skipping what it took before' : null,
    ].filter((part): part is string => part !== null)
 }
 

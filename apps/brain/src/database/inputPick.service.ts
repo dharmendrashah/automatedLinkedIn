@@ -9,6 +9,7 @@ import {
 
 import { IcpService } from './icp.service'
 import { InputPeopleService, type NetworkPick } from './inputPeople.service'
+import { InputTakenService, type TakenKind } from './inputTaken.service'
 import { slugsInWindow } from './inputWindow'
 import { LinkedInCompanyService } from './linkedInCompany.service'
 import { LinkedInPostService } from './linkedInPost.service'
@@ -23,17 +24,25 @@ const isInput = (type: string): type is InputType =>
 
 type Statuses = 'NEW' | 'CONTACTED' | 'REPLIED'
 
+export const TAKEN_KIND: Record<InputType, TakenKind> = {
+   'input.posts': 'POST',
+   'input.profiles': 'PROFILE',
+   'input.companies': 'COMPANY',
+}
+
 const filterOf = (
    pick: InputPick,
    frame: { from: Date | null; until: Date | null },
    slugs: string[] | null,
    ids: string[] | null,
-   network: NetworkPick | null
+   network: NetworkPick | null,
+   notSlugs: string[]
 ): InputFilter<Statuses> => ({
    since: frame.from,
    until: frame.until,
    field: pick.dateField,
    slugs,
+   notSlugs,
    ids,
    network,
    labels: pick.labels,
@@ -67,7 +76,8 @@ export class InputPickService {
       pick: InputPick,
       workflowId: string | null,
       type?: InputType,
-      now = new Date()
+      now = new Date(),
+      runId: string | null = null
    ) {
       const lastRunAt =
          pick.added === 'lastRun' && workflowId ? await InputPickService.lastRunAt(userId, workflowId) : null
@@ -84,7 +94,8 @@ export class InputPickService {
          type ? await InputPickService.idsOf(userId, pick, type) : null,
          type === 'input.profiles' && pick.source === 'network'
             ? await InputPeopleService.scope(userId, pick.client, pick.filters)
-            : null
+            : null,
+         type && pick.skipTaken && workflowId ? await InputTakenService.slugs(workflowId, TAKEN_KIND[type], runId) : []
       )
    }
 

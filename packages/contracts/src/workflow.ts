@@ -421,6 +421,8 @@ export const inputPickSchema = z.object({
    minReactions: z.number().int().min(0).max(1_000_000).default(0),
    author: z.string().trim().max(100).default(''),
    hasQualified: z.boolean().default(false),
+   // Take only what the workflow's earlier runs did not take, so each run works through the next batch.
+   skipTaken: z.boolean().default(false),
    labels: labelList,
    labelMatch: z.enum(['any', 'all']).default('any'),
    withoutLabels: labelList,
@@ -592,6 +594,12 @@ const pickFields = (type: InputType, order: Option[]): Field[] => [
       kind: 'select',
       options: order,
       advanced: true,
+   },
+   {
+      key: 'skipTaken',
+      label: 'Skip what this workflow already took',
+      kind: 'toggle',
+      hint: 'Each run takes the next batch instead of the same ones. A preview does not count.',
    },
 ]
 

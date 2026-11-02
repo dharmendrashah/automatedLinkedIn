@@ -42,7 +42,9 @@ const whereOf = async (userId: string, filter: InputFilter, network: NetworkPick
       userId,
       clientId: { in: network.clientIds },
       doNotContact: false,
-      ...(suppressed.length > 0 ? { slug: { notIn: suppressed } } : {}),
+      ...(suppressed.length > 0 || filter.notSlugs.length > 0
+         ? { slug: { notIn: [...suppressed, ...filter.notSlugs] } }
+         : {}),
       AND: [
          ...(network.people ? peopleWhere(network.people) : []),
          ...(filter.since || filter.until

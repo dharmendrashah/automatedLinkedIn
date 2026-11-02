@@ -272,9 +272,25 @@ model Workflow {
   updatedAt    DateTime          @updatedAt
   runs         WorkflowRun[]
   versions     WorkflowVersion[]
+  taken        WorkflowInputTaken[]
 
   @@unique([userId, name])
   @@index([enabled, nextRunAt])
+}
+
+// What an input block of a workflow took in a run, for "Skip what this workflow already took"
+// (.plan/input-blocks-filters.md). `kind` is POST, PROFILE or COMPANY. Rows older than 180 days are removed.
+model WorkflowInputTaken {
+  id         String   @id @default(uuid(7))
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  kind       String
+  slug       String
+  runId      String
+  createdAt  DateTime @default(now())
+
+  @@unique([workflowId, kind, slug])
+  @@index([createdAt])
 }
 
 // A saved version of a workflow's graph: one for each save that changed it, the newest 50 kept
