@@ -3,11 +3,20 @@ import { z } from 'zod'
 
 import { CSV_MAX_ROWS, itemsCsv } from 'core'
 
-import { InputPickService, WorkflowRunService, WorkflowService, WorkflowTriggerService, readGraph } from 'database'
+import {
+   ConflictError,
+   InputPickService,
+   WorkflowRunService,
+   WorkflowService,
+   WorkflowTriggerService,
+   readGraph,
+} from 'database'
 
 import {
+   BLOCK_TYPES,
    GOALS,
    TEMPLATE_NUMBERS,
+   apiWorkflowOf,
    blankGraph,
    catalog,
    graphSchema,
@@ -25,6 +34,8 @@ import { orConflict, present } from '../owned'
 
 const MISSING = 'Workflow not found'
 const RUN_MISSING = 'Run not found'
+// How many names (the block's, then with a number) an API workflow tries before it gives up.
+const NAME_TRIES = 10
 
 const byId = z.object({ id: z.string().min(1) })
 const name = z.string().trim().min(1).max(100)
@@ -142,6 +153,40 @@ export const workflow = router({
                        ...TEMPLATE_NUMBERS,
                        timeZone: input.timeZone,
                     }),
+         })
+      )
+
+      return { id }
+   }),
+
+   // The workflow of the "Create an API workflow for this block" button: the API trigger, the block and Give back, named after the
+   // block (a number is added when the name is taken).
+   createForBlock: ownerProcedure.input(z.object({ type: z.enum(BLOCK_TYPES) })).mutation(async ({ ctx, input }) => {
+      const made = present(apiWorkflowOf(input.type), 'This block has no API workflow')
+
+      for (let attempt = 1; attempt < NAME_TRIES; attempt += 1) {
+         try {
+            return {
+               id: (
+                  await WorkflowService.create(ctx.user.id, {
+                     name: attempt === 1 ? made.name : `${made.name} ${attempt}`,
+                     goal: null,
+                     graph: made.graph,
+                  })
+               ).id,
+            }
+         } catch (error) {
+            if (!(error instanceof ConflictError)) {
+               throw error
+            }
+         }
+      }
+
+      const { id } = await orConflict(
+         WorkflowService.create(ctx.user.id, {
+            name: `${made.name} ${NAME_TRIES}`,
+            goal: null,
+            graph: made.graph,
          })
       )
 

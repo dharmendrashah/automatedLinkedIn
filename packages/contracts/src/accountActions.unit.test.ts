@@ -4,6 +4,8 @@ import {
    type Graph,
    MESSAGE_MAX_CHARS,
    type NodeConfig,
+   apiBodySchema,
+   apiWorkflowOf,
    applyApiInput,
    blockOf,
    catalog,
@@ -151,6 +153,88 @@ describe('Answer connection requests', () => {
 
       expect(fields.find(({ key }) => key === 'action')).toMatchObject({ disarms: true })
       expect(fields.find(({ key }) => key === 'actForReal')).toMatchObject({ kind: 'toggle' })
+   })
+})
+
+describe('Account Actions blocks called by API', () => {
+   it('should take the words, the note, the action and the account from a call as the settings for that run', () => {
+      expect(
+         applyApiInput(
+            'account.sendMessage',
+            { text: 'Saved' },
+            {
+               text: 'Sent by the call',
+               account: 'a1',
+            }
+         )
+      ).toEqual({
+         text: 'Sent by the call',
+         account: 'a1',
+         accountMode: 'one',
+      })
+      const ignored = applyApiInput('account.answerRequests', { action: 'accept' }, { action: 'ignore' })
+
+      expect(ignored.action).toBe('ignore')
+      expect(
+         applyApiInput(
+            'account.sendInvite',
+            {},
+            {
+               actForReal: true,
+               note: 'Hi',
+            }
+         )
+      ).toEqual({ note: 'Hi' })
+   })
+
+   it('should take a message as long as the queue takes, and a note as long as LinkedIn takes, in a call', () => {
+      const schema = apiBodySchema(10)
+
+      expect(schema.safeParse({ text: 'x'.repeat(MESSAGE_MAX_CHARS) }).success).toBe(true)
+      expect(schema.safeParse({ text: 'x'.repeat(MESSAGE_MAX_CHARS + 1) }).success).toBe(false)
+      expect(schema.safeParse({ note: 'x'.repeat(200) }).success).toBe(true)
+      expect(schema.safeParse({ note: 'x'.repeat(201) }).success).toBe(false)
+   })
+
+   it('should make a workflow of the API trigger, the block and Give back, and one that reads first for a block on conversations', () => {
+      const types = (type: 'account.visitProfile' | 'account.replyToConversation') =>
+         apiWorkflowOf(type)?.graph.nodes.map(node => node.type)
+
+      expect(apiWorkflowOf('account.visitProfile')?.name).toBe('Visit profile by API')
+      expect(types('account.visitProfile')).toEqual(['trigger.api', 'account.visitProfile', 'output.return'])
+      expect(types('account.replyToConversation')).toEqual([
+         'trigger.api',
+         'account.getConversations',
+         'account.replyToConversation',
+         'output.return',
+      ])
+      expect(apiWorkflowOf('account.visitProfile')?.graph.edges).toEqual([
+         {
+            from: 'trigger',
+            to: 'block',
+         },
+         {
+            from: 'block',
+            to: 'result',
+         },
+      ])
+   })
+
+   it('should leave the account to pick, and make no workflow for a block that is not an Account Actions block', () => {
+      const graph = apiWorkflowOf('account.getConnections')?.graph
+
+      expect(
+         errorsOf(
+            validateGraph(
+               graph ?? {
+                  nodes: [],
+                  edges: [],
+               }
+            )
+         ).map(({ message }) => message)
+      ).toEqual(['Get my connections: pick the account it uses.'])
+      expect(apiWorkflowOf('output.csv')).toBeNull()
+      expect(apiWorkflowOf('account.select')).toBeNull()
    })
 })
 

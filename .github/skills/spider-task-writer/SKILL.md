@@ -23,6 +23,7 @@ Draft v1, 2026-10-27. A spider task drives a real browser on a real LinkedIn acc
 5. **Run it for real** through the devtools ("Run a task") on a test account before it goes to staging. For a task that writes (post, reply, send), use the narrowest audience or a test account and say that it is public or not.
 6. **Check in the real browser** with an `*.e2e.test.ts` stand-in when the task uses a new driver call or a new page shape.
 7. **Finish:** the definition of done in `.github/copilot-instructions.md`, then `MEMORY.md` (what was seen, on which account and date, what was not run live).
+8. **Give it a block.** A task that uses an account becomes a block of the Account Actions group in the same change (`.plan/account-action-blocks.md`), or gets a `none` line with a reason in `ACCOUNT_ACTION_TASKS`; the registry test enforces it.
 
 ## Lifecycle every task keeps
 

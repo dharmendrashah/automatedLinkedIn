@@ -26,6 +26,7 @@ import {
    retriesOf,
 } from '@automatedLinkedIn/contracts'
 
+import { apiItemsOf } from './apiItems'
 import {
    ELSE_SUFFIX,
    type EngineDeps,
@@ -195,6 +196,8 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
                  passThrough: [],
               }
             : sortInputs(read, blockOf(node.type).input)
+      // A block with nothing before it that a call may name items for acts on exactly the items the call names.
+      const named = read.length === 0 && !off ? apiItemsOf(node.type, run.input) : []
       const result = await (off ? switchedOff : EXECUTORS[node.type])({
          run,
          graph,
@@ -205,7 +208,7 @@ const runStep = async (run: Run, graph: Graph, step: Step, deps: EngineDeps): Pr
          },
          step: started,
          at,
-         inputs,
+         inputs: named.length > 0 ? named : inputs,
          preview: run.trigger === 'PREVIEW',
          deps,
       })

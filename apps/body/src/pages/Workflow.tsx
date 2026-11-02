@@ -37,7 +37,7 @@ export const WorkflowPage = () => {
    const linkedRun = params.get('run')
    const utils = trpc.useUtils()
    const navigate = useNavigate()
-   const [tab, setTab] = useState(linkedRun ? 'runs' : 'canvas')
+   const [tab, setTab] = useState(linkedRun ? 'runs' : params.get('tab') === 'api' ? 'api' : 'canvas')
    const [mode, setMode] = useState<'preview' | 'run' | null>(null)
    const [runId, setRunId] = useState<string | null>(linkedRun)
    const [replay, setReplay] = useState(false)

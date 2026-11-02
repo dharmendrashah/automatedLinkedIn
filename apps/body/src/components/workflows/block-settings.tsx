@@ -21,6 +21,7 @@ import { type Block, type ConfigValue, type Field } from './types'
 import { LabelMultiSelect } from '../labels/label-multi-select'
 import { AccountPick } from './account-pick'
 import { AccountsPick } from './accounts-pick'
+import { ApiWorkflowButton } from './api-workflow-button'
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { BlockRunTabs, type RunInfo } from './block-run-tabs'
 import { ClientPick } from './client-pick'
@@ -466,6 +467,9 @@ export const BlockSettings = ({
             ) : (
                settings
             )}
+            {block.group === 'Account Actions' && block.flags.usesAccounts ? (
+               <ApiWorkflowButton type={block.type} />
+            ) : null}
             <DialogFooter className="sm:justify-between">
                <Button type="button" variant="ghost" className="text-destructive" onClick={onRemove}>
                   <Trash2 />

@@ -63,6 +63,7 @@ The order every account task runs in:
 - [ ] Input and report schemas in `packages/contracts` (rebuild `dist` after a contract change).
 - [ ] `database/taskHooks.ts` entry when the finished task must change brain data; tested.
 - [ ] Verdict labels show correctly in the app (catalog entry parses: `registry.unit.test.ts`).
+- [ ] A task that uses an account has an entry in `ACCOUNT_ACTION_TASKS` (`packages/contracts/src/workflow.ts`): its block or blocks in the Account Actions group, with a made-up `sample`, an `api` description and a `usesAccounts` flag, or a `none` line with the reason. `registry.unit.test.ts` fails for a task that has neither. A block that changes something on LinkedIn also has "Act for real" (off by default) and a test for it.
 - [ ] The spider worker was restarted so brain sees the task (`TaskDefinition.seenAt`).
 
 ## 7. Verify

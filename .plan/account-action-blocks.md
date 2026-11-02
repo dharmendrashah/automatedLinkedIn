@@ -1,6 +1,6 @@
 # Account Actions: every spider task as a workflow block
 
-- Status: locked <!-- draft | locked | in progress | done -->
+- Status: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-11-02
 - Locked by user: yes, 2026-11-02 (every answer below, the last three on 2026-11-02: all improvements of Write a post and Reply in a conversation, and no new tasks)
 
@@ -201,9 +201,9 @@ Open questions: none.
 - [x] 3. Reads (done 2026-11-02): Get my conversations, Get my connection requests. Conversations become the person in them for a block that wants people. Found while building: `linkedin-profile` reads only the account's own profile, so "Read profile with my account" becomes "Get my profile" (the account's own profile as one person) and stays planned, not built (brain: each import service tells which rows a session touched, so a block gives exactly its run's rows; today a block gives the stored list once its read was stored).
 - [x] 4. Safe actions (done 2026-11-02): Answer connection requests (accepts or ignores the waiting requests of the people it gets, "Act for real" off by default, API fields deferred), Send connection request (through the invite planner from the chosen account's client, people not yet in My network join it when their invite is queued, note with {first_name} and {company}, "Act for real" off by default, step ends when planned, each person says when it goes), Withdraw connection request (cancels an invite that had not gone, queues a sent one for the withdraw run, no "Act for real" as the plan lists none).
 - [x] 5. Messaging (done 2026-11-02): Send message (connections only, from the account each is connected to; name and company filled in; not again within a settable 24 hours; "Act for real" off by default) and Reply in a conversation (only where they wrote last by default; same wait setting). Both go through the reply queue and its limits, wait for each message to go, and end UNKNOWN, never retried, when unsure. Not built, to confirm: files attached to a reply (the Unibox's upload would have to be kept with the block, and a saved upload is moved when its reply ends), and `conversations` links from an API call.
-- [ ] 6. Remove connection (done 2026-11-02: takes each person off the list of the account they are on, one at a time through the Connections page's removal and its day limit and rest, "Act for real" off by default, UNKNOWN never retried). Get my feed posts is NOT built: `linkedin-browse` is the account's daily browse walk and keeps nothing of the feed it reads, so the block needs the task to keep a file of the posts it saw (a change to the task, checked against the real feed page) and an import in brain. To confirm before it is built.
-- [ ] 7. The "Create an API workflow for this block" shortcut on every account block.
-- [ ] 8. Skill and instruction lines, `MEMORY.md`, live check with two test accounts on a short list (your go-ahead before any live action).
+- [x] 6. Remove connection (done 2026-11-02: takes each person off the list of the account they are on, one at a time through the Connections page's removal and its day limit and rest, "Act for real" off by default, UNKNOWN never retried). Get my feed posts is NOT built: `linkedin-browse` is the account's daily browse walk and keeps nothing of the feed it reads, so the block needs the task to keep a file of the posts it saw (a change to the task, checked against the real feed page) and an import in brain. To confirm before it is built.
+- [x] 7. API shortcut (done 2026-11-02): every account block has an `api` description (`account`, the words `text`, `note` and `action`, and `profiles` or `companies` for a block straight after the trigger, which acts on exactly those and on nobody when none are named); the button "Create an API workflow for this block" (`workflow.createForBlock`) makes trigger, block and Give back (a conversation block gets Get my conversations before it) and opens it in a new tab on its API tab. Not built: `conversations` links and `text` for Write a post from a call.
+- [ ] 8. Skill and instruction lines (done), `MEMORY.md` (done), live check with two test accounts on a short list (waiting for your go-ahead before any live action).
 
 ## Edge cases and risks
 
@@ -229,3 +229,9 @@ Open questions: none.
 ## Outcome
 
 Filled in when done.
+
+## Outcome
+
+- Shipped on `feat/account-action-blocks` (not pushed, no PR): the runner and reads, the move of the visit and post blocks, Answer, Send and Withdraw connection request, Send message, Reply in a conversation, Remove connection, Write a post from a draft and after a wait, the API descriptions and the button, the guard table, the skill and instruction lines, `MEMORY.md`.
+- Deviations: Get my feed posts and Get my profile are not built (the tasks keep nothing to read back; see items 3 and 6); Write a post at a clock time, files on a reply, `conversations` and Write a post `text` from a call are left out (see items 2, 5 and 7); Withdraw connection request has no "Act for real" because section 6 does not list it.
+- Not run live: nothing here has touched LinkedIn. The live check (item 8) needs your go-ahead.

@@ -11,12 +11,21 @@ const valueOf = ({ shape, example }: { shape: 'list' | 'text'; example: string[]
    shape === 'text' ? example[0] : example
 
 describe('descriptions of what a call may feed', () => {
-   it('should describe the input blocks and the collect blocks that start a chain on their own', () => {
+   it('should describe the input blocks, the collect blocks that start a chain, and the Account Actions blocks', () => {
       expect(described.map(({ type }) => type).sort()).toEqual(
          [
+            'account.answerRequests',
             'account.getConnections',
             'account.getConversations',
             'account.getRequests',
+            'account.removeConnection',
+            'account.replyToConversation',
+            'account.sendInvite',
+            'account.sendMessage',
+            'account.visitCompany',
+            'account.visitProfile',
+            'account.withdrawInvite',
+            'account.writePost',
             'collect.domainLookup',
             'collect.findPosts',
             'collect.searchPeople',
@@ -27,9 +36,13 @@ describe('descriptions of what a call may feed', () => {
       )
    })
 
-   it('should only describe a block that takes nothing from before, and say so in the catalog the page reads', () => {
-      for (const block of described) {
-         expect(block.input).toBe('start')
+   it('should let a block that takes items from before describe only what replaces a setting or names the items it acts on', () => {
+      for (const block of described.filter(({ input }) => input !== 'start')) {
+         expect(block.group, block.type).toBe('Account Actions')
+
+         for (const field of block.api) {
+            expect(field.setting !== undefined || field.items !== undefined, `${block.type} ${field.field}`).toBe(true)
+         }
       }
    })
 

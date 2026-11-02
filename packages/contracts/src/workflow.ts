@@ -299,6 +299,47 @@ export const actField: Field = {
    hint: 'Off: a run shows what would go out and does nothing on LinkedIn. Switch it on after a preview. Changing what goes out switches it off again.',
 }
 
+// What a call may send to an Account Actions block (.plan/account-action-blocks.md): the account to use for that run, the people or
+// companies to act on (a block straight after the trigger acts on exactly those, and on nobody when the call names none), and the
+// words some blocks send. A call never switches "Act for real" on and never passes a limit.
+const accountApi = (what: string): ApiField => ({
+   field: 'account',
+   shape: 'text',
+   check: 'text',
+   what,
+   example: ['your-account-id'],
+   setting: 'account',
+   also: { accountMode: 'one' },
+})
+
+const peopleApi: ApiField = {
+   field: 'profiles',
+   shape: 'list',
+   check: 'link',
+   what: 'LinkedIn links of the people to act on',
+   example: ['https://www.linkedin.com/in/ada-lovelace'],
+   items: 'profile',
+}
+
+const companiesApi: ApiField = {
+   field: 'companies',
+   shape: 'list',
+   check: 'link',
+   what: 'LinkedIn links of the companies to act on',
+   example: ['https://www.linkedin.com/company/stripe'],
+   items: 'company',
+}
+
+const wordsApi = (what: string, setting: string, chars: number, example: string): ApiField => ({
+   field: setting,
+   shape: 'text',
+   check: 'text',
+   what,
+   example: [example],
+   setting,
+   chars,
+})
+
 // The note a block with "Act for real" shows while it is off: `verb` is what the run would do ("answers").
 const actOffNote =
    (label: string, verb: string) =>
@@ -987,6 +1028,11 @@ export type ApiField = {
    example: string[]
    // The most values a list field takes in one call; a link field takes up to the call's total cap.
    max?: number
+   // The most characters of a text value, when more than a short word fits (a message).
+   chars?: number
+   // The kind of items a list of links makes when the block comes straight after the trigger (an Account Actions block that acts on
+   // what the call names): nothing sent means nothing to act on. A field with this has no setting to replace.
+   items?: 'profile' | 'company'
    // The block's own setting a call value replaces for that run. A block that reads the call itself has none.
    setting?: string
    // Other settings that change with it, such as a call naming one account turning "One account" on.
@@ -3611,6 +3657,7 @@ const BLOCKS = {
          usesAccounts: true,
       },
       label: 'Visit profile',
+      api: [peopleApi, accountApi('the id of one of your accounts to visit with')],
       summary:
          'Opens each person’s profile with one of the chosen accounts, waits a few seconds and scrolls down. Passes on the people viewed.',
       input: 'profile',
@@ -3640,6 +3687,7 @@ const BLOCKS = {
          usesAccounts: true,
       },
       label: 'Visit company',
+      api: [companiesApi, accountApi('the id of one of your accounts to visit with')],
       summary:
          'Opens each company page with one of the chosen accounts, waits a few seconds and scrolls down. Passes on the companies viewed.',
       input: 'company',
@@ -3708,6 +3756,7 @@ const BLOCKS = {
             : []
       },
       label: 'Write a post',
+      api: [accountApi('the id of one of your accounts to post from')],
       summary:
          'Posts what you write here, or a saved draft of the Posting page, once per run from one of the chosen accounts, now or after a wait. Passes everything on unchanged, and the post too once it has a link.',
       input: 'profile',
@@ -3926,6 +3975,11 @@ const BLOCKS = {
       unit: 'requests',
       validate: actOffNote('Answer connection requests', 'answers'),
       label: 'Answer connection requests',
+      api: [
+         peopleApi,
+         wordsApi('accept or ignore the requests', 'action', 10, 'accept'),
+         accountApi('the id of one of your accounts that received the requests'),
+      ],
       summary:
          'Accepts or ignores the connection requests of the people that reach it, with the account that received each. Passes the people on with what came of it.',
       sample: {
@@ -3969,6 +4023,16 @@ const BLOCKS = {
       unit: 'invites',
       validate: actOffNote('Send connection request', 'sends'),
       label: 'Send connection request',
+      api: [
+         peopleApi,
+         wordsApi(
+            'the note to send with each request; {first_name} and {company} are filled in',
+            'note',
+            INVITE_LIMITS.noteChars,
+            'Hi {first_name}, I liked your work at {company}.'
+         ),
+         accountApi('the id of one of your accounts to send from'),
+      ],
       summary:
          'Invites the people that reach it to connect, through your invite plan: spread over the days, at most 20 a day and 100 a week for each account. Passes the people on with when each goes. They join My network.',
       sample: {
@@ -4011,6 +4075,7 @@ const BLOCKS = {
       flags: { usesAccounts: true },
       unit: 'withdrawals',
       label: 'Withdraw connection request',
+      api: [peopleApi, accountApi('the id of one of your accounts that sent the requests')],
       summary:
          'Takes back the connection requests your chosen accounts sent to the people that reach it: one that has not gone yet is cancelled, one sent is withdrawn on the account’s next run. Passes the people on with what came of it.',
       sample: {
@@ -4049,6 +4114,16 @@ const BLOCKS = {
               ]),
       ],
       label: 'Send message',
+      api: [
+         peopleApi,
+         wordsApi(
+            'the message to send; {first_name} and {company} are filled in',
+            'text',
+            MESSAGE_MAX_CHARS,
+            'Hi {first_name}, thanks for connecting.'
+         ),
+         accountApi('the id of one of your accounts to write from'),
+      ],
       summary:
          'Writes to each person that reaches it, from the account they are connected to: only connections, never twice inside the wait you set, inside each account’s daily limits. Passes the people on with what came of it.',
       sample: {
@@ -4113,6 +4188,15 @@ const BLOCKS = {
               ]),
       ],
       label: 'Reply in a conversation',
+      api: [
+         wordsApi(
+            'the reply to send; {first_name} and {company} are filled in',
+            'text',
+            MESSAGE_MAX_CHARS,
+            'Hi {first_name}, thanks for your message.'
+         ),
+         accountApi('the id of one of your accounts to reply from'),
+      ],
       summary:
          'Replies in each conversation that reaches it, from the account that has it: by default only where they wrote last, never twice inside the wait you set, inside each account’s daily limits. Each reply also shows in the Unibox. Passes the conversations on with what came of it.',
       sample: {
@@ -4176,6 +4260,7 @@ const BLOCKS = {
       unit: 'removals',
       validate: actOffNote('Remove connection', 'removes'),
       label: 'Remove connection',
+      api: [peopleApi, accountApi('the id of one of your accounts the people are connected to')],
       summary:
          'Takes each person that reaches it off the list of connections of the account they are on, one at a time with a rest between two and a few a day for each account. Passes the people on with what came of it.',
       sample: {
@@ -4323,12 +4408,12 @@ const LINK_MAX = 500
 // in all. A link is only checked for its length (the block drops one it cannot read); a text value must not be empty.
 export const apiBodySchema = (maxValues: number) => {
    const shape = Object.fromEntries(
-      apiFields().map(({ field, shape: kind, check, max }) => {
+      apiFields().map(({ field, shape: kind, check, max, chars }) => {
          const value = z
             .string()
             .trim()
             .min(1)
-            .max(check === 'link' ? LINK_MAX : TEXT_MAX)
+            .max(chars ?? (check === 'link' ? LINK_MAX : TEXT_MAX))
 
          return [field, (kind === 'text' ? value : z.array(value).max(max ?? maxValues)).optional()]
       })
@@ -5385,6 +5470,35 @@ export const blankGraph = (): Graph => ({
    nodes: [step('trigger', 'trigger.manual', 0, 0)],
    edges: [],
 })
+
+// The workflow of the "Create an API workflow for this block" button (.plan/account-action-blocks.md): the API trigger, the block,
+// and "Give back", so a call gets what came of each item. The account is left to pick on the block, or to send in the call. A block
+// that acts on conversations comes after the block that reads them. Null for a block that is not an Account Actions block.
+export const apiWorkflowOf = (type: BlockType): { name: string; graph: Graph } | null => {
+   const spec: BlockSpec = BLOCKS[type]
+
+   if (spec.group !== 'Account Actions' || !POOL_BLOCKS.has(type)) {
+      return null
+   }
+
+   const alone = { accountMode: 'one' }
+   const reads = spec.input === 'conversation'
+   const nodes = [
+      step('trigger', 'trigger.api', 0, 0),
+      ...(reads ? [step('conversations', 'account.getConversations', 1, 0, alone)] : []),
+      step('block', type, reads ? 2 : 1, 0, alone),
+      step('result', 'output.return', reads ? 3 : 2, 0),
+   ]
+   const ids = nodes.map(({ id }) => id)
+
+   return {
+      name: `${spec.label} by API`,
+      graph: {
+         nodes,
+         edges: linked(ids.slice(1).map((id, index) => [ids[index] ?? '', id])),
+      },
+   }
+}
 
 export const USE_CASES = {
    leads: 'Find new leads',
