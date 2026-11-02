@@ -415,7 +415,7 @@ export const BlockSettings = ({
 
    return (
       <Dialog open onOpenChange={next => (next ? undefined : onClose())}>
-         <DialogContent className={run ? 'sm:max-w-3xl' : 'sm:max-w-xl'}>
+         <DialogContent className={cn('max-h-[calc(100svh-2rem)] overflow-y-auto', run ? 'sm:max-w-3xl' : 'sm:max-w-xl')}>
             <DialogHeader>
                <div className="flex items-center gap-3">
                   <span className={cn('grid size-10 place-items-center rounded-lg', tileOf(block.group))}>
