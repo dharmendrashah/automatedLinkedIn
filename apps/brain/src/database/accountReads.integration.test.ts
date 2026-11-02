@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { ClientService } from './client.service'
 import { ConversationReadService } from './conversationRead.service'
+import { InvitationAnswerService } from './invitationAnswer.service'
 import { InvitationReadService } from './invitationRead.service'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
@@ -136,6 +137,52 @@ describe('the stored requests and conversations of an account (database)', () =>
          lastText: 'See you then',
       })
       expect(await ConversationReadService.conversations(userId, [accountId], 1)).toHaveLength(1)
+   })
+
+   it('should find the requests that still wait in the chosen accounts, and say where each stands', async () => {
+      const pending = await InvitationAnswerService.pending(userId, [accountId], ['ana', 'ravi', 'done', 'stranger'])
+
+      expect(pending.map(({ slug }) => slug)).toEqual(['ana', 'ravi'])
+      expect(await InvitationAnswerService.pending(userId, [otherAccountId], ['stranger'])).toEqual([])
+
+      const done = await db.linkedInInvitation.findFirstOrThrow({
+         where: {
+            userId,
+            slug: 'done',
+         },
+         select: { id: true },
+      })
+      const failed = await db.linkedInInvitation.create({
+         data: {
+            userId,
+            accountId,
+            linkedInId: randomUUID(),
+            slug: 'failed',
+            name: 'FAILED',
+            headline: '',
+            status: 'FAILED',
+            failure: 'It could not start in time.',
+         },
+         select: { id: true },
+      })
+      const standing = await InvitationAnswerService.standing(userId, [
+         done.id,
+         failed.id,
+         pending[0]?.id ?? '',
+         randomUUID(),
+      ])
+
+      expect(standing.get(done.id)).toEqual({
+         status: 'DONE',
+         reason: null,
+      })
+      expect(standing.get(failed.id)).toEqual({
+         status: 'FAILED',
+         reason: 'It could not start in time.',
+      })
+      expect(standing.get(pending[0]?.id ?? '')?.status).toBe('WAITING')
+      expect(standing.size).toBe(3)
+      expect(await InvitationAnswerService.standing(otherUserId, [done.id])).toEqual(new Map())
    })
 
    it('should say running until a newer read ended and was stored, for requests and for messages', async () => {

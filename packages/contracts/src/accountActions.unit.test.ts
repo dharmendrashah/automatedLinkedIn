@@ -101,6 +101,58 @@ describe('Get my connections', () => {
    })
 })
 
+describe('Answer connection requests', () => {
+   it('should take people, give them back, start with Act for real off and a wait of 8 hours', () => {
+      expect(blockOf('account.answerRequests')).toMatchObject({
+         input: 'profile',
+         output: 'profile',
+      })
+      expect(blockOf('account.answerRequests').config.parse({})).toMatchObject({
+         action: 'accept',
+         actForReal: false,
+         accountMode: 'pool',
+         timeLimitHours: 8,
+      })
+   })
+
+   it('should say a run answers nothing while Act for real is off, and not once it is on', () => {
+      const blocks = (actForReal: boolean) =>
+         validateGraph({
+            nodes: [
+               node('read', 'account.getRequests', {
+                  accountMode: 'one',
+                  account: 'a1',
+               }),
+               node('answer', 'account.answerRequests', {
+                  accountMode: 'one',
+                  account: 'a1',
+                  actForReal,
+               }),
+            ],
+            edges: [
+               {
+                  from: 'read',
+                  to: 'answer',
+               },
+            ],
+         }).map(({ message }) => message)
+
+      expect(blocks(false)).toContain(
+         'Answer connection requests: "Act for real" is off, so a run answers nothing yet.'
+      )
+      expect(blocks(true)).not.toContain(
+         'Answer connection requests: "Act for real" is off, so a run answers nothing yet.'
+      )
+   })
+
+   it('should mark the settings that decide what goes out as ones that switch Act for real off', () => {
+      const { fields } = blockOf('account.answerRequests')
+
+      expect(fields.find(({ key }) => key === 'action')).toMatchObject({ disarms: true })
+      expect(fields.find(({ key }) => key === 'actForReal')).toMatchObject({ kind: 'toggle' })
+   })
+})
+
 describe('Get my connection requests and Get my conversations', () => {
    it('should give people and conversations, start a chain on their own, and wait 2 hours', () => {
       expect(blockOf('account.getRequests')).toMatchObject({

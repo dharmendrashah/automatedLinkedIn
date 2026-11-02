@@ -93,9 +93,14 @@ export const BlockSettings = ({
       return null
    }
 
-   const onChange = (key: string, value: ConfigValue) => onPatch({ [key]: value })
-
    const { block, config } = node.data
+   // A setting that decides what goes out switches "Act for real" off, so what the owner saw in a preview is what goes out.
+   const onChange = (key: string, value: ConfigValue) =>
+      onPatch({
+         [key]: value,
+         ...(block.fields.some(item => item.key === key && item.disarms) ? { actForReal: false } : {}),
+      })
+
    const Icon = BLOCK_ICONS[block.type]
    const values: Record<string, ConfigValue | undefined> = {
       ...block.defaults,

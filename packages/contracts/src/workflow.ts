@@ -93,6 +93,8 @@ export type Field = (
 ) & {
    hint?: string
    advanced?: boolean
+   // Changing it switches "Act for real" off again, so what the owner saw in a preview is what goes out.
+   disarms?: boolean
    // Shown once a list setting has at least that many values, or once a choice setting is on a value.
    showWhen?: { key: string; atLeast: number } | { key: string; is: string }
 }
@@ -239,6 +241,7 @@ export const ACCOUNT_BLOCK_HOURS = {
    'account.getConnections': 2,
    'account.getRequests': 2,
    'account.getConversations': 2,
+   'account.answerRequests': 8,
 } as const
 
 // Every spider task and the block or blocks that run it (.plan/account-action-blocks.md): `blocks` are built, `planned` are on the
@@ -253,7 +256,7 @@ export const ACCOUNT_ACTION_TASKS: Record<string, { blocks: string[] } | { plann
    'linkedin-post': { blocks: ['account.writePost'] },
    'linkedin-reply': { planned: 'Reply in a conversation (phase 4)' },
    'linkedin-message': { planned: 'Send message (phase 4)' },
-   'linkedin-invitations': { blocks: ['account.getRequests'] },
+   'linkedin-invitations': { blocks: ['account.getRequests', 'account.answerRequests'] },
    'linkedin-connections': { blocks: ['account.getConnections'] },
    'linkedin-invite': { planned: 'Send connection request, Withdraw connection request (phase 3)' },
    'linkedin-view-profile': { blocks: ['account.visitProfile'] },
@@ -267,6 +270,17 @@ export const accountSettingsOf = (type: string, config: unknown) => {
    const schema = z.object(accountSettings(hours))
 
    return schema.safeParse(config).data ?? schema.parse({})
+}
+
+// What an Account Actions block that changes something on LinkedIn (accepts, sends, removes) holds besides its accounts: it does
+// nothing there until the owner switches "Act for real" on, after a preview showed what would go out.
+export const actSettings = { actForReal: z.boolean().default(false) }
+
+export const actField: Field = {
+   key: 'actForReal',
+   label: 'Act for real',
+   kind: 'toggle',
+   hint: 'Off: a run shows what would go out and does nothing on LinkedIn. Switch it on after a preview. Changing what goes out switches it off again.',
 }
 
 export const accountFields = (hours: number): Field[] => [
@@ -298,6 +312,11 @@ export const accountFields = (hours: number): Field[] => [
       hint: `What is not done by then is left for the next run. Starts at ${hours}.`,
    },
 ]
+
+const ANSWER_ACTIONS = optionsOf([
+   ['accept', 'Accept'],
+   ['ignore', 'Ignore'],
+])
 
 const VISIBILITIES = optionsOf([
    ['ANYONE', 'Anyone'],
@@ -877,6 +896,7 @@ export const BLOCK_TYPES = [
    'account.getConnections',
    'account.getRequests',
    'account.getConversations',
+   'account.answerRequests',
    'output.list',
    'output.markPosts',
    'output.csv',
@@ -3797,6 +3817,61 @@ const BLOCKS = {
             hint: 'The newest first.',
          },
          ...accountFields(ACCOUNT_BLOCK_HOURS['account.getConversations']),
+      ],
+   },
+   'account.answerRequests': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'requests',
+      validate: node => {
+         const { actForReal } = settingsOf(node)
+
+         return actForReal === true
+            ? []
+            : [
+                 {
+                    nodeId: node.id,
+                    level: 'note',
+                    message: 'Answer connection requests: "Act for real" is off, so a run answers nothing yet.',
+                 },
+              ]
+      },
+      label: 'Answer connection requests',
+      summary:
+         'Accepts or ignores the connection requests of the people that reach it, with the account that received each. Passes the people on with what came of it.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            note: 'Hi, I liked your post on engines. Let us connect.',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            result: {
+               action: 'answerRequest',
+               status: 'ACCEPTED',
+            },
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         action: oneOf(ANSWER_ACTIONS, 'accept'),
+         ...actSettings,
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.answerRequests']),
+      }),
+      fields: [
+         {
+            key: 'action',
+            label: 'Answer',
+            kind: 'select',
+            options: ANSWER_ACTIONS,
+            disarms: true,
+            hint: 'Only people who sent you a request, from the accounts chosen below, are answered; at most 50 a day for each account.',
+         },
+         actField,
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.answerRequests']),
       ],
    },
    'output.csv': {

@@ -101,6 +101,7 @@ export const BLOCK_ICONS: Record<Block['type'], LucideIcon> = {
    'account.getConnections': Users,
    'account.getRequests': UserRound,
    'account.getConversations': MessageSquare,
+   'account.answerRequests': CheckCheck,
    'output.csv': FileDown,
    'output.sendApi': Send,
 }

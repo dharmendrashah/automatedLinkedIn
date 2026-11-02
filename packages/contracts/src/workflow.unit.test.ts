@@ -607,6 +607,7 @@ describe('Account Actions', () => {
          'account.getConnections',
          'account.getRequests',
          'account.getConversations',
+         'account.answerRequests',
       ])
    })
 
