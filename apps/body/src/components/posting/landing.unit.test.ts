@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import {
    QUIET_DAYS,
-   clientLabels,
    defaultTab,
    filterRows,
    isTab,
@@ -13,12 +12,6 @@ import {
    scopeValue,
    tabOfState,
 } from './landing'
-
-const labels = new Map<string, string | null>([
-   ['a1', 'Acme'],
-   ['a2', 'Acme'],
-   ['a3', null],
-])
 
 const rows = [
    { accountId: 'a1', text: 'Hiring a designer' },
@@ -57,64 +50,36 @@ describe('defaultTab and isTab', () => {
 
 describe('parseScope', () => {
    it('should read back what scopeValue wrote, and treat anything else as every account', () => {
-      for (const scope of [
-         { kind: 'all' },
-         { kind: 'client', label: 'Acme: EU' },
-         { kind: 'account', id: 'a1' },
-      ] as const) {
+      for (const scope of [{ kind: 'all' }, { kind: 'account', id: 'a1' }] as const) {
          expect(parseScope(scopeValue(scope))).toEqual(scope)
       }
 
       expect(parseScope(null)).toEqual({ kind: 'all' })
       expect(parseScope('account:')).toEqual({ kind: 'all' })
-      expect(parseScope('client:')).toEqual({ kind: 'all' })
+      expect(parseScope('client:Acme')).toEqual({ kind: 'all' })
       expect(parseScope('whatever')).toEqual({ kind: 'all' })
    })
 })
 
 describe('filterRows', () => {
-   it('should keep the rows of one account or of every account of a client', () => {
-      expect(filterRows(rows, of, { scope: { kind: 'account', id: 'a3' }, search: '', labels })).toEqual([rows[2]])
-      expect(filterRows(rows, of, { scope: { kind: 'client', label: 'Acme' }, search: '', labels })).toEqual([
-         rows[0],
-         rows[1],
-      ])
-      expect(filterRows(rows, of, { scope: { kind: 'all' }, search: '', labels })).toEqual(rows)
+   it('should keep the rows of one account, or of every account', () => {
+      expect(filterRows(rows, of, { scope: { kind: 'account', id: 'a3' }, search: '' })).toEqual([rows[2]])
+      expect(filterRows(rows, of, { scope: { kind: 'all' }, search: '' })).toEqual(rows)
    })
 
    it('should match the words without caring about case or the spaces around them, together with the scope', () => {
-      expect(filterRows(rows, of, { scope: { kind: 'all' }, search: '  PRICING ', labels })).toEqual([rows[1], rows[2]])
-      expect(filterRows(rows, of, { scope: { kind: 'client', label: 'Acme' }, search: 'pricing', labels })).toEqual([
-         rows[1],
-      ])
-      expect(filterRows(rows, of, { scope: { kind: 'all' }, search: 'nothing like it', labels })).toEqual([])
+      expect(filterRows(rows, of, { scope: { kind: 'all' }, search: '  PRICING ' })).toEqual([rows[1], rows[2]])
+      expect(filterRows(rows, of, { scope: { kind: 'account', id: 'a2' }, search: 'pricing' })).toEqual([rows[1]])
+      expect(filterRows(rows, of, { scope: { kind: 'all' }, search: 'nothing like it' })).toEqual([])
    })
 })
 
 describe('knownScope', () => {
-   it('should keep an account or client the owner has and fall back to every account for one that is gone', () => {
+   it('should keep an account the owner has and fall back to every account for one that is gone', () => {
       const accounts = [{ id: 'a1' }]
 
-      expect(knownScope({ kind: 'account', id: 'a1' }, accounts, labels)).toEqual({ kind: 'account', id: 'a1' })
-      expect(knownScope({ kind: 'account', id: 'zz' }, accounts, labels)).toEqual({ kind: 'all' })
-      expect(knownScope({ kind: 'client', label: 'Acme' }, accounts, labels)).toEqual({ kind: 'client', label: 'Acme' })
-      expect(knownScope({ kind: 'client', label: 'Gone' }, accounts, labels)).toEqual({ kind: 'all' })
-   })
-})
-
-describe('clientLabels', () => {
-   it('should list each client once, sorted, and skip accounts without one', () => {
-      expect(
-         clientLabels(
-            new Map([
-               ['a', 'Zed'],
-               ['b', 'Acme'],
-               ['c', 'Acme'],
-               ['d', null],
-               ['e', ''],
-            ])
-         )
-      ).toEqual(['Acme', 'Zed'])
+      expect(knownScope({ kind: 'account', id: 'a1' }, accounts)).toEqual({ kind: 'account', id: 'a1' })
+      expect(knownScope({ kind: 'account', id: 'zz' }, accounts)).toEqual({ kind: 'all' })
    })
 })
 

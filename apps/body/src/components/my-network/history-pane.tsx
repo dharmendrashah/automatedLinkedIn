@@ -65,7 +65,7 @@ const RemoveConnection = ({ link, accountId, name }: { link: Link; accountId: st
    )
 }
 
-// The invites the client's accounts sent the person or will send, with why one did not go and a Cancel for a queued one.
+// The invites the owner's accounts sent the person or will send, with why one did not go and a Cancel for a queued one.
 const Invites = ({ personId }: { personId: string }) => {
    const utils = trpc.useUtils()
    const invites = trpc.people.invites.useQuery({ id: personId })
@@ -109,7 +109,7 @@ const Invites = ({ personId }: { personId: string }) => {
    )
 }
 
-// The History tab: every way the client's accounts know the person, newest first, and the invites.
+// The History tab: every way the owner's accounts know the person, newest first, and the invites.
 export const HistoryPane = ({ person }: { person: Person }) => (
    <div className="grid gap-3">
       <Invites personId={person.id} />

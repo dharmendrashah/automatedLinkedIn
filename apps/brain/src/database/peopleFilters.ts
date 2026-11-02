@@ -5,7 +5,7 @@ import { type PeopleFilters } from '@automatedLinkedIn/contracts'
 import { PRIORITY } from './peopleIndex'
 
 // My network's filters (.plan/network-filters.md) as Prisma conditions on `Person`, one per filter that is on; the caller ANDs
-// them with the client, the tab and the search.
+// them with the owner, the tab and the search.
 
 export const PEOPLE_TABS = ['NEEDS_ME', 'WAITING', 'EVERYONE', 'DO_NOT_CONTACT'] as const
 export const PEOPLE_SORTS = [

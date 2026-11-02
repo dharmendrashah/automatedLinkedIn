@@ -14,7 +14,6 @@ const hours = {
 const browse = (patch: Partial<AccountBrowse> = {}): AccountBrowse => ({
    accountId: 'a',
    email: 'a@example.com',
-   clientLabel: null,
    mode: 'SAFE',
    usedSeconds: 20 * 60,
    state: 'OPEN',

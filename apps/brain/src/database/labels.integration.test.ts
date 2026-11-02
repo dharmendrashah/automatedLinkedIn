@@ -209,17 +209,9 @@ describe('labels and input picks (database)', () => {
    })
 
    it('should list the labels the owner put on My network people', async () => {
-      const client = await PrismaService.client.client.create({
-         data: {
-            userId,
-            name: `Client ${randomUUID().slice(0, 8)}`,
-         },
-      })
-
       await PrismaService.client.person.create({
          data: {
             userId,
-            clientId: client.id,
             slug: 'icp-person',
             labels: ['icp'],
             lastTouchAt: new Date(),

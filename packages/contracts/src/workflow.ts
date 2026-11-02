@@ -60,8 +60,6 @@ export type Field = (
    | { key: string; label: string; kind: 'time' }
    // The filters of the owner's page for the items this block takes, kept as text; the browser draws the page's own drawer.
    | { key: string; label: string; kind: 'filters' }
-   // One of the owner's clients, or all of them when empty.
-   | { key: string; label: string; kind: 'client' }
    // A day, written as YYYY-MM-DD; empty for none.
    | { key: string; label: string; kind: 'date' }
    | { key: string; label: string; kind: 'text'; placeholder?: string }
@@ -592,9 +590,8 @@ export const inputPickSchema = z.object({
    // Words the item holds, and the page's own filters for it, as the page keeps them (see `inputErrors`).
    search: z.string().trim().max(100).default(''),
    filters: z.string().max(FILTERS_TEXT_MAX).default(''),
-   // Profiles only: take from the owner's profiles list, or from My network (one client or all) with its filters.
+   // Profiles only: take from the owner's profiles list, or from My network with its filters.
    source: z.enum(['profiles', 'network']).default('profiles'),
-   client: z.string().max(100).default(''),
    // Posts only, about the post's read: whether it was read, and the least comments and reactions it had.
    postRead: z.enum(['any', 'read', 'unread']).default('any'),
    minComments: z.number().int().min(0).max(1_000_000).default(0),
@@ -1819,16 +1816,6 @@ const BLOCKS = {
                ['profiles', 'My profiles list'],
             ]),
             hint: 'My network has every filter of its page. People on Do not contact are never taken.',
-         },
-         {
-            key: 'client',
-            label: 'Client',
-            kind: 'client',
-            showWhen: {
-               key: 'source',
-               is: 'network',
-            },
-            hint: 'All clients takes each person once.',
          },
          {
             key: 'filters',

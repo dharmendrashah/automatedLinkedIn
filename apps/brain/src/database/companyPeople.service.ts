@@ -4,8 +4,7 @@ import { PrismaService } from './prisma.service'
 
 // The My network people who work or worked at a company of /companies (.plan/company-network-people.md), matched each time it is
 // asked: by the current company their profile read gave (`companySlug`) or the company name as text, and by any position of
-// their saved profile read at it (by its link or name). A position that ended makes them a former employee. A profile in several
-// of the owner's clients counts once.
+// their saved profile read at it (by its link or name). A position that ended makes them a former employee.
 
 const PEOPLE_SHOWN = 50
 const PHOTOS_SHOWN = 3
@@ -30,7 +29,6 @@ const personSelect = {
    reasonAt: true,
    priority: true,
    lastTouchAt: true,
-   client: { select: { name: true } },
 } satisfies Prisma.PersonSelect
 
 type Row = Prisma.PersonGetPayload<{ select: typeof personSelect }>
@@ -78,8 +76,7 @@ const rolesOf = (userId: string, keys: CompanyKey[]) => {
 
 const newest = (rows: Row[]) => [...rows].sort((a, b) => b.lastTouchAt.getTime() - a.lastTouchAt.getTime())
 
-// One entry per profile: the most recently touched client's row speaks for it, and every client is named. Current employees
-// first; a former one carries when their newest position there ended.
+// One entry per profile. Current employees first; a former one carries when their newest position there ended.
 export const byProfile = (rows: Row[], key: CompanyKey, roles: Role[] = []) => {
    const groups = new Map<string, Row[]>()
    const held = new Map<string, Role[]>()
@@ -112,7 +109,6 @@ export const byProfile = (rows: Row[], key: CompanyKey, roles: Role[] = []) => {
             reasonText: first?.reasonText ?? null,
             reasonUrl: first?.reasonUrl ?? null,
             reasonAt: first?.reasonAt ?? null,
-            clients: [...new Set(sorted.map(row => row.client.name))],
             matchedBy:
                group.some(row => row.companySlug === key.slug) || positions.some(role => role.link === linkOf(key.slug))
                   ? ('LINK' as const)
@@ -133,13 +129,12 @@ export const byProfile = (rows: Row[], key: CompanyKey, roles: Role[] = []) => {
       )
 }
 
-const rowsOf = (userId: string, keys: CompanyKey[], roles: Role[], clientId?: string) =>
+const rowsOf = (userId: string, keys: CompanyKey[], roles: Role[]) =>
    keys.length === 0
       ? Promise.resolve([])
       : PrismaService.client.person.findMany({
            where: {
               userId,
-              ...(clientId ? { clientId } : {}),
               OR: [...keys.flatMap(whereOf), { slug: { in: [...new Set(roles.map(({ slug }) => slug))] } }],
            },
            orderBy: { lastTouchAt: 'desc' },
@@ -147,19 +142,19 @@ const rowsOf = (userId: string, keys: CompanyKey[], roles: Role[], clientId?: st
            select: personSelect,
         })
 
-const peopleOf = async (userId: string, keys: CompanyKey[], clientId?: string) => {
+const peopleOf = async (userId: string, keys: CompanyKey[]) => {
    const roles = await rolesOf(userId, keys)
 
    return {
       roles,
-      rows: await rowsOf(userId, keys, roles, clientId),
+      rows: await rowsOf(userId, keys, roles),
    }
 }
 
 export class CompanyPeopleService {
-   // The people at one company, for its drawer; `clientId` narrows to one of the owner's clients.
-   public static async atCompany(userId: string, key: CompanyKey, clientId?: string) {
-      const { rows, roles } = await peopleOf(userId, [key], clientId)
+   // The people at one company, for its drawer.
+   public static async atCompany(userId: string, key: CompanyKey) {
+      const { rows, roles } = await peopleOf(userId, [key])
       const people = byProfile(rows, key, roles)
 
       return {

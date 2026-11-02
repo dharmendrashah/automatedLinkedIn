@@ -92,9 +92,7 @@ export class InputPickService {
          frame,
          slugs,
          type ? await InputPickService.idsOf(userId, pick, type) : null,
-         type === 'input.profiles' && pick.source === 'network'
-            ? await InputPeopleService.scope(userId, pick.client, pick.filters)
-            : null,
+         type === 'input.profiles' && pick.source === 'network' ? InputPeopleService.scope(pick.filters) : null,
          type && pick.skipTaken && workflowId ? await InputTakenService.slugs(workflowId, TAKEN_KIND[type], runId) : []
       )
    }

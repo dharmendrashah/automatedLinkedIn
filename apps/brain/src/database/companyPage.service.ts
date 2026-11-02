@@ -103,18 +103,14 @@ export class CompanyPageService {
    }
 
    // The My network people who work at the company, matched by its link or by its saved or read name. null when it is not the owner's.
-   public static async people(userId: string, slug: string, clientId?: string) {
+   public static async people(userId: string, slug: string) {
       const found = await companyOf(userId, slug)
 
       return found
-         ? CompanyPeopleService.atCompany(
-              userId,
-              {
-                 slug,
-                 names: [found.page?.name, found.company.name].filter((name): name is string => Boolean(name)),
-              },
-              clientId
-           )
+         ? CompanyPeopleService.atCompany(userId, {
+              slug,
+              names: [found.page?.name, found.company.name].filter((name): name is string => Boolean(name)),
+           })
          : null
    }
 

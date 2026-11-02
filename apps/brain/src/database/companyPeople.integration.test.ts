@@ -17,18 +17,15 @@ const RIVULET = {
 }
 
 let userId: string
-let agencyId: string
 
 const person = (
    owner: string,
-   clientId: string,
    slug: string,
    fields: { company?: string; companySlug?: string; doNotContact?: boolean; daysAgo?: number } = {}
 ) =>
    PrismaService.client.person.create({
       data: {
          userId: owner,
-         clientId,
          slug,
          name: slug,
          company: fields.company ?? null,
@@ -43,42 +40,19 @@ describe('CompanyPeopleService (database)', () => {
       userId = (await UserService.create({ email })).id
 
       const otherId = (await UserService.create({ email: otherEmail })).id
-      const mine = await PrismaService.client.client.create({
-         data: {
-            userId,
-            name: 'My accounts',
-         },
-      })
-      const agency = await PrismaService.client.client.create({
-         data: {
-            userId,
-            name: 'Agency',
-         },
-      })
-      const theirs = await PrismaService.client.client.create({
-         data: {
-            userId: otherId,
-            name: 'Theirs',
-         },
-      })
 
-      agencyId = agency.id
-      await person(userId, mine.id, 'purvi', {
+      await person(userId, 'purvi', {
          companySlug: 'rivulet-iq',
          company: 'Rivulet iQ',
          daysAgo: 2,
       })
-      await person(userId, agency.id, 'purvi', {
-         companySlug: 'rivulet-iq',
-         daysAgo: 1,
-      })
-      await person(userId, mine.id, 'ravi', { company: 'RIVULET DIGITAL PRIVATE LIMITED' })
-      await person(userId, mine.id, 'stop', {
+      await person(userId, 'ravi', { company: 'RIVULET DIGITAL PRIVATE LIMITED' })
+      await person(userId, 'stop', {
          companySlug: 'rivulet-iq',
          doNotContact: true,
       })
-      await person(userId, mine.id, 'elsewhere', { company: 'Acme' })
-      await person(otherId, theirs.id, 'stranger', { companySlug: 'rivulet-iq' })
+      await person(userId, 'elsewhere', { company: 'Acme' })
+      await person(otherId, 'stranger', { companySlug: 'rivulet-iq' })
       await LinkedInCompanyService.addMany(userId, [
          {
             slug: 'rivulet-iq',
@@ -96,18 +70,14 @@ describe('CompanyPeopleService (database)', () => {
       const { total, people } = await CompanyPeopleService.atCompany(userId, RIVULET)
 
       expect(total).toBe(3)
-      expect(
-         people.map(({ slug, matchedBy, clients, doNotContact }) => [slug, matchedBy, clients, doNotContact])
-      ).toEqual([
-         ['ravi', 'NAME', ['My accounts'], false],
-         ['purvi', 'LINK', ['Agency', 'My accounts'], false],
-         ['stop', 'LINK', ['My accounts'], true],
+      expect(people.map(({ slug, matchedBy, doNotContact }) => [slug, matchedBy, doNotContact])).toEqual([
+         ['ravi', 'NAME', false],
+         ['purvi', 'LINK', false],
+         ['stop', 'LINK', true],
       ])
    })
 
-   it('should narrow to one client and count a page of companies', async () => {
-      await expect(CompanyPeopleService.atCompany(userId, RIVULET, agencyId)).resolves.toMatchObject({ total: 1 })
-
+   it('should count a page of companies', async () => {
       const counts = await CompanyPeopleService.counts(userId, [
          RIVULET,
          {

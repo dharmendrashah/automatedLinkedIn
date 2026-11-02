@@ -766,7 +766,7 @@ export class WorkflowRunService {
       })
    }
 
-   // Ends a request and books what it cost to the client's month, once.
+   // Ends a request and books what it cost to the owner's month, once.
    public static finishCall(
       callId: string,
       outcome: CallOutcome,

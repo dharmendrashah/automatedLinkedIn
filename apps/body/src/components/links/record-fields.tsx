@@ -60,7 +60,7 @@ export const TagsField = ({ id, value, onChange, kind }: FieldProps & { kind: La
       <Label htmlFor={id}>Labels</Label>
       <LabelMultiSelect id={id} kind={kind} value={toTagList(value)} onChange={labels => onChange(labels.join(', '))} />
       <p className="text-muted-foreground text-xs">
-         Up to 20, 30 characters each. A prefix such as acme: keeps a client's labels together.
+         Up to 20, 30 characters each. A prefix such as acme: keeps related labels together.
       </p>
    </div>
 )

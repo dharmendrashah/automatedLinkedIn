@@ -128,7 +128,7 @@ export const QuickFilters = ({
    const [managing, setManaging] = useState<ListManaging>(null)
    const list = pickedList(view.found, lists)
    const known = [...SOURCES, ...lists.map(({ id }) => `list:${id}`)]
-   // An address can name a source this client does not list (an old /lists link); it still shows as picked.
+   // An address can name a source the owner does not have (an old /lists link); it still shows as picked.
    const sources = view.found && !known.includes(view.found) ? [...known, view.found] : known
    const shownLabels = view.label && !labels.includes(view.label) ? [view.label, ...labels] : labels
 

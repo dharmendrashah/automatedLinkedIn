@@ -29,14 +29,13 @@ export type SampleAccount = {
    status: AccountStatus
 }
 
-export type Override = Partial<Pick<AccountBrowse, 'mode' | 'hours' | 'clientLabel'>>
+export type Override = Partial<Pick<AccountBrowse, 'mode' | 'hours'>>
 
 const HISTORY_DAYS = 730
 const OFFICE_START = 9 * 60
 const OFFICE_END = 18 * 60
 const SECONDS_PER_VIEW = 90
 const MODE_CYCLE: BrowseMode[] = ['SAFE', 'SAFE', 'MODERATE', 'SAFE', 'AGGRESSIVE', 'MODERATE']
-const CLIENTS = ['Acme Partners', 'Northwind Labs', null, 'Acme Partners', 'Brightside', null]
 const ZONES = ['Asia/Kolkata', 'Europe/London', 'America/New_York']
 
 const hash = (text: string) => {
@@ -72,7 +71,6 @@ const baseOf = (id: string) => {
 
    return {
       mode: MODE_CYCLE[value % MODE_CYCLE.length] ?? 'SAFE',
-      clientLabel: CLIENTS[(value >>> 3) % CLIENTS.length] ?? null,
       timeZone: ZONES[(value >>> 6) % ZONES.length] ?? 'UTC',
       // One in four accounts has used the whole day by now, to show a full account.
       full: value % 4 === 0,
@@ -192,7 +190,6 @@ export const buildBrowse = (
    return {
       accountId: account.id,
       email: account.email,
-      clientLabel: override?.clientLabel === undefined ? base.clientLabel : override.clientLabel,
       mode,
       usedSeconds,
       state,

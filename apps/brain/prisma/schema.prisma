@@ -22,6 +22,8 @@ model User {
   authentikId String?   @unique
   // When the owner last left the leads inbox; people added after it are marked new.
   inboxSeenAt DateTime?
+  // When the owner last left My network; people first seen after it are new.
+  peopleSeenAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -50,7 +52,6 @@ model User {
   icps              Icp[]
   companyViews      CompanyView[]
   workflows         Workflow[]
-  clients           Client[]
   people            Person[]
 }
 
@@ -77,9 +78,6 @@ model WorkflowList {
   userId    String
   user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
-  // The client its people belong to on My network; null is the owner's default client.
-  clientId  String?
-  client    Client?              @relation(fields: [clientId], references: [id], onDelete: SetNull)
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
   members   WorkflowListMember[]
@@ -211,8 +209,6 @@ model DataRead {
   costMicros Int            @default(0)
   // The sentence the owner reads when it failed.
   message    String?
-  // The client of the person or company it was read for, so its cost is booked to that client.
-  clientId   String?
   createdAt  DateTime       @default(now())
   finishedAt DateTime?
 
@@ -446,7 +442,7 @@ model WorkflowItem {
   @@index([createdAt])
 }
 
-// One row per finished paid request: what the data cost, per client and month (UTC). Amounts only.
+// One row per finished paid request: what the data cost, per month (UTC). Amounts only.
 model SpendLedger {
   id           String   @id @default(uuid(7))
   userId       String
@@ -458,13 +454,10 @@ model SpendLedger {
   label        String?
   // Calendar month in UTC, such as 2026-10.
   month        String
-  // The client the spend is booked to; null when it was not made for one client (a workflow run).
-  clientId     String?
   createdAt    DateTime @default(now())
 
   @@index([userId, month])
   @@index([month])
-  @@index([clientId, month])
 }
 
 // The shared data wallet as the worker last saw it. One row.
@@ -592,9 +585,6 @@ model LinkedInProfile {
   status       LinkedInProfileStatus @default(NEW)
   // Set when the owner removes the profile; it can be restored.
   archivedAt   DateTime?
-  // The client the target belongs to on My network; null is the owner's default client.
-  clientId     String?
-  client       Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
   // A work email a workflow found for the person, and when; it is not paid for again.
   email        String?
   emailFoundAt DateTime?
@@ -774,11 +764,6 @@ model LinkedInAccount {
   officeDays            Int                   @default(31)
   officeStartMinute     Int                   @default(540)
   officeEndMinute       Int                   @default(1080)
-  // The owner's own note on who the account works for; changes no limit.
-  clientLabel           String?
-  // The client the account works for (one client per account); null is the owner's default client.
-  clientId              String?
-  client                Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
   // Invites stopped by trouble (.plan/network-invites.md): when, why, and until when; with no end they wait for the next good
   // sign-in after `invitesStoppedAt`. `nextAcceptReadAt` is the daily read of the newest connections while invites are pending.
   invitesStoppedAt      DateTime?
@@ -1630,30 +1615,9 @@ model CdnFile {
   updatedAt   DateTime      @updatedAt
 }
 
-// Who the owner works for (.plan/network-hub.md). Every account, list and target belongs to one; null on those rows means the
-// owner's default client, the one with `isDefault`, created on first use.
-model Client {
-  id        String            @id @default(uuid(7))
-  userId    String
-  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String
-  isDefault Boolean           @default(false)
-  // When the owner last left My network on this client; people first seen after it are new.
-  seenAt    DateTime?
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-  accounts  LinkedInAccount[]
-  lists     WorkflowList[]
-  profiles  LinkedInProfile[]
-  people    Person[]
-  invites   LinkedInInvite[]
-
-  @@unique([userId, name])
-}
-
 enum PersonStatus {
   NEW
-  // Set when one of the client's accounts messaged them.
+  // Set when one of the owner's accounts messaged them.
   CONTACTED
   // Set when they wrote back.
   REPLIED
@@ -1676,15 +1640,13 @@ enum PersonLinkKind {
   INVITE
 }
 
-// One person of one client on My network (.plan/network-hub.md), built by the people-index job from the rows that tie them to the
-// client (`PersonLink`). Status, labels, notes and Do not contact are the client's own and survive a rebuild. `search` is a
+// One person of the owner on My network (.plan/network-hub.md, .plan/single-client.md), built by the people-index job from the rows that
+// tie them to the owner (`PersonLink`). Status, labels, notes and Do not contact are the owner's own and survive a rebuild. `search` is a
 // generated full-text column (see the migration).
 model Person {
   id             String                   @id @default(uuid(7))
   userId         String
   user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clientId       String
-  client         Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   // The profile's public identifier from linkedin.com/in/<slug>, as the rows have it.
   slug           String
   name           String?
@@ -1706,9 +1668,9 @@ model Person {
   reasonAt       DateTime?
   // `request`, `connection`, `target`, or `list:<id>`, for the Found by filter.
   foundBy        String[]
-  // 2: a reply waits, 1: a request waits, 0: nothing waits on the client.
+  // 2: a reply waits, 1: a request waits, 0: nothing waits.
   priority       Int                      @default(0)
-  // The client wrote last and no answer came yet.
+  // The owner wrote last and no answer came yet.
   waiting        Boolean                  @default(false)
   lastTouchAt    DateTime
   firstSeenAt    DateTime                 @default(now())
@@ -1722,9 +1684,9 @@ model Person {
   // Null until a read or an account's visit says.
   premium        Boolean?
   profileRead    Boolean                  @default(false)
-  // The earliest connection of the client's accounts that still holds; null when not connected.
+  // The earliest connection of the owner's accounts that still holds; null when not connected.
   connectedAt    DateTime?
-  // The newest message of the client's accounts to them, and theirs to the accounts (LinkedIn's wall-clock, see LinkedInConversation).
+  // The newest message of the owner's accounts to them, and theirs to the accounts (LinkedIn's wall-clock, see LinkedInConversation).
   lastSentAt     DateTime?
   lastReceivedAt DateTime?
   inviteState    PersonInviteState        @default(NONE)
@@ -1734,24 +1696,23 @@ model Person {
   updatedAt      DateTime                 @updatedAt
   links          PersonLink[]
 
-  @@unique([clientId, slug])
-  @@index([clientId, priority, lastTouchAt, id])
-  @@index([clientId, waiting, lastTouchAt, id])
-  @@index([clientId, lastTouchAt, id])
-  @@index([clientId, firstSeenAt])
-  @@index([userId, slug])
+  @@unique([userId, slug])
+  @@index([userId, priority, lastTouchAt, id])
+  @@index([userId, waiting, lastTouchAt, id])
+  @@index([userId, lastTouchAt, id])
+  @@index([userId, firstSeenAt])
   @@index([userId, companySlug])
   @@index([foundBy], type: Gin)
   @@index([labels], type: Gin)
   @@index([skills], type: Gin)
   @@index([search], map: "Person_search_idx", type: Gin)
-  @@index([clientId, country])
-  @@index([clientId, connectedAt])
-  @@index([clientId, lastSentAt])
-  @@index([clientId, lastReceivedAt])
+  @@index([userId, country])
+  @@index([userId, connectedAt])
+  @@index([userId, lastSentAt])
+  @@index([userId, lastReceivedAt])
 }
 
-// Where the newest invite of the client to a person stands: QUEUED (not sent yet), PENDING (sent, no answer), ACCEPTED, or
+// Where the newest invite of the owner to a person stands: QUEUED (not sent yet), PENDING (sent, no answer), ACCEPTED, or
 // ENDED (withdrawn or failed).
 enum PersonInviteState {
   NONE
@@ -1761,7 +1722,7 @@ enum PersonInviteState {
   ENDED
 }
 
-// One row that ties a person to a client: the request, connection or conversation of an account, the list member or the target.
+// One row that ties a person to the owner: the request, connection or conversation of an account, the list member or the target.
 model PersonLink {
   id        String           @id @default(uuid(7))
   personId  String
@@ -1788,11 +1749,10 @@ model PeopleIndexDirty {
   @@index([createdAt])
 }
 
-// One export of My network: who, which client, how many rows, and whether it was refused. No personal data.
+// One export of My network: who, how many rows, and whether it was refused. No personal data.
 model PeopleExport {
   id        String   @id @default(uuid(7))
   userId    String
-  clientId  String
   rows      Int
   refused   Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -1830,15 +1790,13 @@ enum LinkedInInviteState {
   CANCELLED
 }
 
-// A connection invite one account of a client sends (.plan/network-invites.md). The note is the owner's own words, filled in when
+// A connection invite one account of the owner sends (.plan/network-invites.md). The note is the owner's own words, filled in when
 // it was asked for, kept for the owner and deleted with the account. A partial unique index (see the migration) allows one live
-// invite per client and person.
+// invite per person.
 model LinkedInInvite {
   id          String              @id @default(uuid(7))
   userId      String
   user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clientId    String
-  client      Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
   accountId   String
   account     LinkedInAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
   slug        String
@@ -1870,9 +1828,8 @@ model LinkedInInvite {
 
   @@index([accountId, state, plannedAt])
   @@index([accountId, startedAt])
-  @@index([clientId, slug])
-  @@index([clientId, invitedAt])
   @@index([userId, slug])
+  @@index([userId, invitedAt])
   @@index([sessionId])
   @@index([state, invitedAt])
 }

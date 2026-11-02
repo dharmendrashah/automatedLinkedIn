@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { ClientService } from './client.service'
 import { PeopleService } from './people.service'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
@@ -12,7 +11,6 @@ const db = PrismaService.client
 const url = (slug: string) => `https://www.linkedin.com/in/${slug}/`
 
 let userId: string
-let clientId: string
 
 const personOf = (slug: string) =>
    db.person.findFirst({
@@ -39,14 +37,13 @@ const readsOf = (slug: string) =>
 describe('PeopleService import (database)', () => {
    beforeAll(async () => {
       userId = (await UserService.create({ email: `${randomUUID()}@elitale.com` })).id
-      clientId = await ClientService.defaultId(userId)
       await db.suppression.create({
          data: {
             userId,
             slug: 'blocked-one',
          },
       })
-      await PeopleService.add(userId, clientId, [{ url: url('listed-one') }], { name: 'Earlier' }, false)
+      await PeopleService.add(userId, [{ url: url('listed-one') }], { name: 'Earlier' }, false)
    })
 
    afterAll(async () => {
@@ -54,7 +51,7 @@ describe('PeopleService import (database)', () => {
    })
 
    it('should say what an import would do with each link, without changing anything', async () => {
-      const preview = await PeopleService.preview(userId, clientId, [
+      const preview = await PeopleService.preview(userId, [
          url('fresh-one'),
          url('blocked-one'),
          url('listed-one'),
@@ -103,7 +100,7 @@ describe('PeopleService import (database)', () => {
          },
          { url: 'not a link' },
       ]
-      const result = await PeopleService.add(userId, clientId, people, { name: 'Imported' }, true)
+      const result = await PeopleService.add(userId, people, { name: 'Imported' }, true)
 
       expect(result).toMatchObject({
          added: 1,
@@ -123,7 +120,7 @@ describe('PeopleService import (database)', () => {
       expect(await readsOf('blocked-one')).toBe(0)
       expect(await personOf('blocked-one')).toBeNull()
 
-      const again = await PeopleService.add(userId, clientId, people, { name: 'Imported again' }, true)
+      const again = await PeopleService.add(userId, people, { name: 'Imported again' }, true)
 
       expect(again).toMatchObject({
          added: 0,

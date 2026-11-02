@@ -80,7 +80,7 @@ const NameForm = ({
    )
 }
 
-// One name to type, for a new or renamed client or list. The form mounts per opening, so it starts from `initial`.
+// One name to type, for a new or renamed list. The form mounts per opening, so it starts from `initial`.
 export const NameDialog = ({ open, ...props }: Props) => (
    <Dialog open={open} onOpenChange={props.onOpenChange}>
       <DialogContent>

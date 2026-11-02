@@ -1,19 +1,13 @@
 import { StartAnywayDialog } from '@/components/accounts/start-anyway-dialog'
 import { AddPeopleDialog } from '@/components/my-network/add-people-dialog'
 import {
-   ALL_CLIENTS,
    type Pane,
    TABS,
    type View,
    type ViewChange,
-   allClientsOf,
    changeView,
-   clientFor,
-   clientView,
    readView,
-   showsAllClients,
    sortParam,
-   todayOfAll,
 } from '@/components/my-network/address'
 import { BulkBar, type BulkChange } from '@/components/my-network/bulk-bar'
 import { Filters, QuickFilters, SearchBox } from '@/components/my-network/filters'
@@ -56,7 +50,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
-import { type Client, type PersonRow } from '@/components/my-network/types'
+import { type PersonRow, type Workspace } from '@/components/my-network/types'
 
 import { trpc } from '../trpc'
 
@@ -98,11 +92,7 @@ const isTyping = (event: KeyboardEvent) => {
 const paneFor = (row: PersonRow | undefined): Pane => (row?.profileRead ? 'profile' : 'chat')
 
 type PeopleProps = {
-   client: Client
-   // Where Add people puts people: the client itself, or the default client under All clients.
-   addTo: Client
-   // The clients to name on each row under All clients when there are several; null otherwise.
-   clients: Array<{ id: string; name: string }> | null
+   workspace: Workspace
    accountId: string | undefined
    view: View
    // The Filters panel, kept in the address as `filters`.
@@ -111,24 +101,20 @@ type PeopleProps = {
    pickers: ReactNode
 }
 
-// One client's people (or every client's): Today, the tabs, filters, the table and the drawer.
-const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update, pickers }: PeopleProps) => {
-   useSeenOnLeave(client.id)
+// The owner's people: Today, the tabs, filters, the table and the drawer.
+const MyPeople = ({ workspace, accountId, view, filters, update, pickers }: PeopleProps) => {
+   useSeenOnLeave()
 
    const [days, setDays] = useState<ResultDays>(7)
    const [inviting, setInviting] = useState<string[]>([])
    const utils = trpc.useUtils()
    const today = trpc.people.today.useQuery()
-   const results = trpc.people.results.useQuery({
-      clientId: client.id,
-      days,
-   })
+   const results = trpc.people.results.useQuery({ days })
    const labels = trpc.label.list.useQuery()
    const [filtering, setFiltering] = useState(false)
    const filtersOn = chipsOf(filters).length
-   const options = trpc.people.filterOptions.useQuery({ clientId: client.id }, { enabled: filtering })
+   const options = trpc.people.filterOptions.useQuery(undefined, { enabled: filtering })
    const query = {
-      clientId: client.id,
       tab: view.tab,
       accountId,
       search: view.q,
@@ -223,10 +209,7 @@ const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update
       return () => window.removeEventListener('keydown', onKey)
    }, [ids, selectedId, view.open, adding, open])
 
-   const line =
-      client.id === ALL_CLIENTS
-         ? todayOfAll(today.data ?? [])
-         : today.data?.find(({ clientId }) => clientId === client.id)
+   const line = today.data
    const invitesLive = line?.invitesLive ?? false
    const stopped = (line?.stopped ?? []).map(({ accountId: id }) => id)
    const filtered = Boolean(
@@ -241,7 +224,7 @@ const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update
          open: null,
       })
    const accountName = (id: string) => {
-      const account = client.accounts.find(other => other.id === id)
+      const account = workspace.accounts.find(other => other.id === id)
 
       return account ? (account.displayName ?? account.email) : 'an account'
    }
@@ -262,7 +245,7 @@ const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update
          label: value,
          hint: count.toLocaleString('en'),
       })),
-      accounts: client.accounts.map(({ id }) => ({
+      accounts: workspace.accounts.map(({ id }) => ({
          value: id,
          label: accountName(id),
       })),
@@ -276,7 +259,7 @@ const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update
             view={view}
             exporting={exporting.isPending}
             filtersOn={filtersOn + [view.found, view.fit, view.label].filter(Boolean).length}
-            search={<SearchBox key={client.id} value={view.q ?? ''} onSearch={q => update({ q, open: null })} />}
+            search={<SearchBox value={view.q ?? ''} onSearch={q => update({ q, open: null })} />}
             tabs={
                <Tabs
                   value={view.tab}
@@ -323,7 +306,6 @@ const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update
                busy={bulk.isPending}
                onChange={(change: BulkChange) =>
                   bulk.mutate({
-                     clientId: client.id,
                      ids: shownChosen,
                      ...change,
                   })
@@ -339,8 +321,7 @@ const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update
             ) : rows.length > 0 ? (
                <PeopleTable
                   rows={rows}
-                  clients={clients}
-                  accounts={client.accounts}
+                  accounts={workspace.accounts}
                   stopped={stopped}
                   invitesLive={invitesLive}
                   selectedId={selectedId}
@@ -375,7 +356,6 @@ const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update
             )}
          </div>
          <FiltersSheet
-            clientId={client.id}
             open={filtering}
             value={filters}
             options={filterOptions}
@@ -385,7 +365,7 @@ const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update
             quick={
                <QuickFilters
                   view={view}
-                  lists={client.lists}
+                  lists={workspace.lists}
                   labels={(labels.data ?? []).map(({ label }) => label)}
                   onChange={update}
                />
@@ -415,10 +395,9 @@ const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update
                {...(invitesLive && { onInvite: (id: string) => setInviting([id]) })}
             />
          ) : null}
-         <AddPeopleDialog key={addTo.id} client={addTo} open={adding} onOpenChange={setAdding} />
+         <AddPeopleDialog lists={workspace.lists} open={adding} onOpenChange={setAdding} />
          <InviteDialog
             key={inviting.join()}
-            clientId={rows.find(row => row.id === inviting[0])?.clientId ?? addTo.id}
             personIds={inviting}
             pickAccount={rows.some(row => inviting.includes(row.id) && isDiscovery(row))}
             source={view.found ?? undefined}
@@ -433,29 +412,27 @@ const ClientPeople = ({ client, addTo, clients, accountId, view, filters, update
    )
 }
 
-// "My network": every person the client's accounts know, what to do today, and the drawer to do it.
+// "My network": every person the owner's accounts know, what to do today, and the drawer to do it.
 export const Network = () => {
    const { accountId } = useParams()
    const navigate = useNavigate()
    const [params, setParams] = useSearchParams()
    const view = readView(params)
-   const clients = trpc.people.clients.useQuery(undefined, { retry: false })
+   const workspace = trpc.people.workspace.useQuery(undefined, { retry: false })
    const update = useCallback(
       (change: ViewChange) => setParams(current => changeView(current, change), { replace: true }),
       [setParams]
    )
 
-   if (clients.isPending) {
-      return <PageStatus>Loading your clients…</PageStatus>
+   if (workspace.isPending) {
+      return <PageStatus>Loading your people…</PageStatus>
    }
 
-   if (clients.error) {
-      return <p className="text-destructive px-4 text-sm lg:px-6">{readableError(clients.error)}</p>
+   if (workspace.error) {
+      return <p className="text-destructive px-4 text-sm lg:px-6">{readableError(workspace.error)}</p>
    }
 
-   const client = clientFor(clients.data, view.client, accountId)
-
-   if (!client) {
+   if (workspace.data.accounts.length === 0) {
       return (
          <div className="grid w-full gap-4 px-4 lg:px-6">
             <div className="bg-card rounded-xl border">
@@ -470,48 +447,23 @@ export const Network = () => {
       )
    }
 
-   const all = showsAllClients(view.client, accountId)
-   const shown = all ? allClientsOf(clients.data) : client
-   const account = shown.accounts.some(({ id }) => id === accountId) ? accountId : undefined
-   const pickClient = (id: string) =>
-      void navigate({
-         pathname: '/network',
-         search: changeView(
-            params,
-            id === ALL_CLIENTS ? { client: ALL_CLIENTS, open: null } : clientView(id)
-         ).toString(),
-      })
+   const account = workspace.data.accounts.some(({ id }) => id === accountId) ? accountId : undefined
    const pickAccount = (id: string | undefined) =>
       void navigate({
          pathname: id ? `/network/${encodeURIComponent(id)}` : '/network',
-         search: changeView(params, {
-            client: shown.id,
-            open: null,
-         }).toString(),
+         search: changeView(params, { open: null }).toString(),
       })
-   const pickers = (
-      <Pickers
-         clients={clients.data}
-         clientId={shown.id}
-         accountId={account}
-         onClient={pickClient}
-         onAccount={pickAccount}
-      />
-   )
 
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
          <h2 className="sr-only">My network</h2>
-         <ClientPeople
-            key={shown.id}
-            client={shown}
-            addTo={client}
-            clients={all && clients.data.length > 1 ? clients.data : null}
+         <MyPeople
+            workspace={workspace.data}
             filters={readFilters(params.get('filters'))}
             accountId={account}
             view={view}
             update={update}
-            pickers={pickers}
+            pickers={<Pickers accounts={workspace.data.accounts} accountId={account} onAccount={pickAccount} />}
          />
       </div>
    )

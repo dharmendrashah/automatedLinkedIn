@@ -22,7 +22,6 @@ import { describePlanned } from './schedule'
 import { type Planned, ScheduleDialog } from './schedule-dialog'
 import { summaryOf } from './summary'
 import { useAutosave } from './use-autosave'
-import { useClientLabels } from './use-client-labels'
 import { usePostWriter } from './use-post-writer'
 
 export type Initial = {
@@ -63,7 +62,6 @@ export const Studio = ({ initial, accounts }: Props) => {
    const [confirming, setConfirming] = useState<'now' | 'schedule'>()
    const account = accounts.find(({ id }) => id === accountId)
    const profile = trpc.accountProfile.get.useQuery({ accountId }, { retry: false })
-   const client = useClientLabels().get(accountId)
    const options = accounts.map(({ id, email, displayName }) => ({
       id,
       label: displayName ?? email,
@@ -241,7 +239,6 @@ export const Studio = ({ initial, accounts }: Props) => {
                         <div className="grid gap-0.5">
                            <p className="text-sm font-medium" dir="auto">
                               Posting as {identity.name}
-                              {client ? ` (${client})` : ''}
                            </p>
                            <p role="status" className="text-muted-foreground flex items-center gap-2 text-sm">
                               {saveText}
@@ -328,7 +325,7 @@ export const Studio = ({ initial, accounts }: Props) => {
          />
          <PostConfirmDialog
             mode={confirming}
-            account={`${accountName(account)}${client ? ` (${client})` : ''}`}
+            account={accountName(account)}
             words={summaryOf(blocks).words}
             attachment={summaryOf(blocks).attachment}
             audience={audience}

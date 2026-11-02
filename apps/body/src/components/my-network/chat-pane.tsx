@@ -148,7 +148,7 @@ const Thread = ({ conversationId }: { conversationId: string }) => {
    )
 }
 
-// The Chat tab: the conversation of one of the client's accounts with the person, or a first message to a connection.
+// The Chat tab: the conversation of one of the owner's accounts with the person, or a first message to a connection.
 export const ChatPane = ({ person }: { person: Person }) => {
    const { client } = trpc.useUtils()
    const conversation = person.links.find(({ kind }) => kind === 'CONVERSATION')

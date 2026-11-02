@@ -24,7 +24,7 @@ import { useEffect, useMemo, useRef } from 'react'
 
 import { cn } from '@/lib/utils'
 
-import { type Client, type PersonRow } from './types'
+import { type PersonRow, type Workspace } from './types'
 
 import { type RouterInputs } from '../../trpc'
 import { SortHeader } from '../table/sort-header'
@@ -38,9 +38,7 @@ export type PeopleSort = NonNullable<RouterInputs['people']['list']['sort']>
 
 type Props = {
    rows: PersonRow[]
-   // The clients to name on each row (All clients with several); null to name none.
-   clients: Array<{ id: string; name: string }> | null
-   accounts: Client['accounts']
+   accounts: Workspace['accounts']
    // Accounts whose invites are stopped (signed out, restricted, LinkedIn's limit): their chips show red.
    stopped: string[]
    invitesLive: boolean
@@ -105,7 +103,7 @@ const AccountChips = ({
    stopped,
 }: {
    row: PersonRow
-   accounts: Client['accounts']
+   accounts: Workspace['accounts']
    stopped: string[]
 }) => {
    const ids = [...new Set(row.links.flatMap(({ accountId }) => (accountId ? [accountId] : [])))]
@@ -149,7 +147,7 @@ const CELL_CLASS: Record<string, string> = {
    actions: 'w-0 text-right',
 }
 
-const PersonCell = ({ row, client }: { row: PersonRow; client: string | undefined }) => {
+const PersonCell = ({ row }: { row: PersonRow }) => {
    const name = nameOf(row)
    const flag = flagOf(row.country)
 
@@ -183,11 +181,6 @@ const PersonCell = ({ row, client }: { row: PersonRow; client: string | undefine
                      {flag}
                   </span>
                ) : null}
-               {client ? (
-                  <Badge variant="outline" className="max-w-28 truncate font-normal" title={`Client: ${client}`}>
-                     {client}
-                  </Badge>
-               ) : null}
                {isDiscovery(row) ? (
                   <Badge
                      variant="secondary"
@@ -206,7 +199,6 @@ const PersonCell = ({ row, client }: { row: PersonRow; client: string | undefine
 
 type ColumnsOf = Pick<
    Props,
-   | 'clients'
    | 'accounts'
    | 'stopped'
    | 'invitesLive'
@@ -223,7 +215,6 @@ type ColumnsOf = Pick<
 }
 
 const columnsOf = ({
-   clients,
    accounts,
    stopped,
    invitesLive,
@@ -261,9 +252,7 @@ const columnsOf = ({
          header: ({ column: header }) => (
             <SortHeader label="Person" sorted={header.getIsSorted()} onClick={header.getToggleSortingHandler()} />
          ),
-         cell: ({ row }) => (
-            <PersonCell row={row.original} client={clients?.find(({ id }) => id === row.original.clientId)?.name} />
-         ),
+         cell: ({ row }) => <PersonCell row={row.original} />,
       }),
       column.display({
          id: 'reason',
@@ -348,10 +337,9 @@ const columnsOf = ({
       }),
    ])
 
-// One row per person of the client: who, why, labels, last touch, status, the suggested next step and the row's actions.
+// One row per person: who, why, labels, last touch, status, the suggested next step and the row's actions.
 export const PeopleTable = ({
    rows,
-   clients,
    accounts,
    stopped,
    invitesLive,
@@ -382,7 +370,6 @@ export const PeopleTable = ({
    const columns = useMemo(
       () =>
          columnsOf({
-            clients,
             accounts,
             stopped,
             invitesLive,
@@ -396,21 +383,7 @@ export const PeopleTable = ({
             onInvite,
             onLabels,
          }),
-      [
-         clients,
-         accounts,
-         stopped,
-         invitesLive,
-         many,
-         chosen,
-         rows,
-         onOpen,
-         onChoose,
-         onChooseAll,
-         onStep,
-         onInvite,
-         onLabels,
-      ]
+      [accounts, stopped, invitesLive, many, chosen, rows, onOpen, onChoose, onChooseAll, onStep, onInvite, onLabels]
    )
    const table = useTable({
       features,

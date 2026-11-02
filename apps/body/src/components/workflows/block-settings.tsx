@@ -24,7 +24,6 @@ import { AccountsPick } from './accounts-pick'
 import { ApiWorkflowButton } from './api-workflow-button'
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { BlockRunTabs, type RunInfo } from './block-run-tabs'
-import { ClientPick } from './client-pick'
 import { CompanyFiltersField } from './company-filters-field'
 import { DraftPick } from './draft-pick'
 import { type FlowNode, summaryOf } from './graph-convert'
@@ -211,11 +210,7 @@ export const BlockSettings = ({
 
       if (item.kind === 'filters') {
          return block.type === 'input.profiles' ? (
-            <NetworkFiltersField
-               value={textOf(value)}
-               client={textOf(values.client)}
-               onChange={next => onChange(item.key, next)}
-            />
+            <NetworkFiltersField value={textOf(value)} onChange={next => onChange(item.key, next)} />
          ) : (
             <CompanyFiltersField
                value={textOf(value)}
@@ -223,10 +218,6 @@ export const BlockSettings = ({
                onChange={next => onChange(item.key, next)}
             />
          )
-      }
-
-      if (item.kind === 'client') {
-         return <ClientPick id={id} value={textOf(value)} onChange={next => onChange(item.key, next)} />
       }
 
       if (item.kind === 'toggle') {

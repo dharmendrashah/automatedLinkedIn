@@ -6,10 +6,8 @@ import { type ItemState } from './today'
 import {
    type AccountLike,
    TOOLS_FROM,
-   clientsOf,
    countChips,
    filterRows,
-   groupRows,
    isChip,
    rowsOf,
    showTools,
@@ -38,7 +36,6 @@ const account = (id: string, patch: Partial<AccountLike> = {}): AccountLike => (
 const browse = (id: string, patch: Partial<AccountBrowse> = {}): AccountBrowse => ({
    accountId: id,
    email: `${id}@example.com`,
-   clientLabel: null,
    mode: 'SAFE',
    usedSeconds: 20 * 60,
    state: 'OPEN',
@@ -61,10 +58,10 @@ const accounts = [
    account('ready'),
 ]
 const byId = new Map([
-   ['error', browse('error', { state: 'NOT_BROWSING', clientLabel: 'Acme' })],
-   ['full', browse('full', { state: 'DAY_FULL', usedSeconds: 90 * 60, clientLabel: 'Acme' })],
+   ['error', browse('error', { state: 'NOT_BROWSING' })],
+   ['full', browse('full', { state: 'DAY_FULL', usedSeconds: 90 * 60 })],
    ['near', browse('near', { usedSeconds: 80 * 60 })],
-   ['idle', browse('idle', { usedSeconds: 0, idleWorkingDays: 4, clientLabel: 'Zed' })],
+   ['idle', browse('idle', { usedSeconds: 0, idleWorkingDays: 4 })],
    ['paused', browse('paused', { state: 'NOT_BROWSING', usedSeconds: 0 })],
    ['ready', browse('ready')],
 ])
@@ -101,15 +98,14 @@ describe('countChips and filterRows', () => {
          'not-browsing': 2,
          paused: 1,
       })
-      expect(ids(filterRows(rows, { q: '', client: '', chip: 'needs' }))).toEqual(['error'])
-      expect(ids(filterRows(rows, { q: '', client: '', chip: 'paused' }))).toEqual(['paused'])
+      expect(ids(filterRows(rows, { q: '', chip: 'needs' }))).toEqual(['error'])
+      expect(ids(filterRows(rows, { q: '', chip: 'paused' }))).toEqual(['paused'])
    })
 
-   it('should narrow by client and by words, together', () => {
-      expect(ids(filterRows(rows, { q: '', client: 'Acme', chip: 'all' }))).toEqual(['error', 'full'])
-      expect(ids(filterRows(rows, { q: ' ZED ', client: '', chip: 'all' }))).toEqual(['idle'])
-      expect(ids(filterRows(rows, { q: 'full', client: 'Acme', chip: 'all' }))).toEqual(['full'])
-      expect(ids(filterRows(rows, { q: 'nothing', client: '', chip: 'all' }))).toEqual([])
+   it('should narrow by words', () => {
+      expect(ids(filterRows(rows, { q: ' IDLE ', chip: 'all' }))).toEqual(['idle'])
+      expect(ids(filterRows(rows, { q: 'full', chip: 'full' }))).toEqual(['full'])
+      expect(ids(filterRows(rows, { q: 'nothing', chip: 'all' }))).toEqual([])
    })
 
    it('should match no browsing chip when there is no browsing data', () => {
@@ -147,36 +143,16 @@ describe('countChips and filterRows', () => {
          ])
       )
 
-      expect(ids(filterRows(withStates, { q: '', client: '', chip: 'failed' }))).toEqual(['full'])
-      expect(ids(filterRows(withStates, { q: '', client: '', chip: 'pending' }))).toEqual(['near'])
-      expect(ids(filterRows(withStates, { q: '', client: '', chip: 'due' }))).toEqual(['idle'])
+      expect(ids(filterRows(withStates, { q: '', chip: 'failed' }))).toEqual(['full'])
+      expect(ids(filterRows(withStates, { q: '', chip: 'pending' }))).toEqual(['near'])
+      expect(ids(filterRows(withStates, { q: '', chip: 'due' }))).toEqual(['idle'])
       expect(countChips(withStates)).toMatchObject({ failed: 1, pending: 1, due: 1 })
    })
 })
 
-describe('sortRows and clientsOf', () => {
+describe('sortRows', () => {
    it('should list the accounts that need you first, paused last, then by email', () => {
       expect(ids(sortRows(rows))).toEqual(['error', 'full', 'near', 'idle', 'ready', 'paused'])
-      expect(clientsOf(rows)).toEqual(['Acme', 'Zed'])
-   })
-})
-
-describe('groupRows', () => {
-   it('should group by client, the groups that need you first and accounts with no client last', () => {
-      const groups = groupRows(sortRows(rows))
-
-      expect(groups.map(({ label }) => label)).toEqual(['Acme', 'Zed', null])
-      expect(groups[0]).toMatchObject({ needs: 1, usedSeconds: 110 * 60 })
-      expect(ids(groups[2]?.rows ?? [])).toEqual(['near', 'ready', 'paused'])
-   })
-
-   it('should put a group that needs you first even when it has no client', () => {
-      const calm = rowsOf(
-         [account('a'), account('b', { status: 'ERROR' })],
-         new Map([['a', browse('a', { clientLabel: 'Calm' })]])
-      )
-
-      expect(groupRows(calm).map(({ label }) => label)).toEqual([null, 'Calm'])
    })
 })
 

@@ -5,7 +5,6 @@ import { KeptFiles } from 'core'
 
 import { type MessagesFile } from '@automatedLinkedIn/contracts'
 
-import { ClientService } from './client.service'
 import { LinkedInConversationService } from './linkedInConversation.service'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
@@ -690,7 +689,6 @@ describe('LinkedInConversationService (database)', () => {
       await PrismaService.client.person.create({
          data: {
             userId,
-            clientId: (await ClientService.create(userId, 'Listed')).id,
             slug: 'lena-l',
             name: 'Lena Listed',
             lastTouchAt: new Date(),

@@ -1,4 +1,3 @@
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
@@ -9,13 +8,12 @@ import { cn } from '@/lib/utils'
 import { type Account } from '../accounts/types'
 
 import { accountName } from './accounts'
-import { type Labels, readyAccounts } from './landing'
+import { readyAccounts } from './landing'
 import { type Entry, byCell, startOfWeek, weekDays } from './week'
 
 type Props = {
    accounts: Account[]
    entries: Entry[]
-   labels: Labels
 }
 
 const KIND: Record<Entry['kind'], { text: string; className: string }> = {
@@ -49,7 +47,7 @@ const Pill = ({ entry }: { entry: Entry }) => {
 
 // One week, a row per account: what is planned, posted or drafted for each day, and which accounts have nothing. Times are in the
 // viewer's zone. It shows the posts the list holds, the latest 100.
-export const WeekView = ({ accounts, entries, labels }: Props) => {
+export const WeekView = ({ accounts, entries }: Props) => {
    const [offset, setOffset] = useState(0)
    const [now] = useState(() => new Date())
    const start = startOfWeek(now, offset)
@@ -122,9 +120,6 @@ export const WeekView = ({ accounts, entries, labels }: Props) => {
                               <span className="block truncate font-medium" dir="auto">
                                  {accountName(account)}
                               </span>
-                              {labels.get(account.id) ? (
-                                 <Badge variant="outline">{labels.get(account.id)}</Badge>
-                              ) : null}
                               {empty && readyAccounts([account]).length > 0 ? (
                                  <span className="text-muted-foreground block text-xs">Nothing this week</span>
                               ) : null}

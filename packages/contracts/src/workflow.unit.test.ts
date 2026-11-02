@@ -57,7 +57,6 @@ describe('input picks', () => {
          search: '',
          filters: '',
          source: 'profiles',
-         client: '',
          postRead: 'any',
          minComments: 0,
          minReactions: 0,

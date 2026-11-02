@@ -37,7 +37,6 @@ describe('sample browsing data', () => {
          viewsLeft: null,
       })
       expect(buildBrowse('busy', account, now, { mode: 'AGGRESSIVE' }).mode).toBe('AGGRESSIVE')
-      expect(buildBrowse('busy', account, now, { clientLabel: null }).clientLabel).toBeNull()
    })
 
    it('should close the day for an account whose use reached its limit, and open it again with a higher mode', () => {

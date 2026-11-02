@@ -74,7 +74,7 @@ export class RetentionService {
       const readCutoff = daysBefore(now, RETENTION.itemsDays)
       const reads = await db.dataRead.deleteMany({ where: { finishedAt: { lt: readCutoff } } })
       // A full profile is kept only while the person is in one of the owner's lists, in /profiles, on My network (and not on Do not
-      // contact for every client), a connection of one of the owner's accounts, or in a conversation of one.
+      // contact), a connection of one of the owner's accounts, or in a conversation of one.
       const snapshots = await db.$executeRaw`
          DELETE FROM "PersonSnapshot" s
          WHERE NOT EXISTS (

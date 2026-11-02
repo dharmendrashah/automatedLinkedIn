@@ -2,7 +2,6 @@ import { z } from 'zod'
 
 import {
    COUNT_CAP,
-   ClientService,
    IMPORT_BATCH,
    IMPORT_CAP,
    LinkedInInviteService,
@@ -21,12 +20,10 @@ import { tags, text } from '../linkedInRecord'
 import { orConflict, present } from '../owned'
 
 const id = z.string().min(1).max(100)
-const NO_CLIENT = 'Client not found'
 const NO_PERSON = 'Person not found'
 const status = z.enum(['NEW', 'CONTACTED', 'REPLIED', 'NOT_INTERESTED', 'DONE'])
 
 const view = z.object({
-   clientId: id,
    tab: z.enum(PEOPLE_TABS),
    accountId: id.optional(),
    search: z.string().trim().max(200).optional(),
@@ -43,11 +40,9 @@ const view = z.object({
       .optional(),
 })
 
-const clientName = z.string().trim().min(1).max(80)
 const profileUrl = z.string().trim().min(1).max(500)
 const PICK_A_LIST = { message: 'Pick a list or name a new one.' }
 const invitees = z.object({
-   clientId: id,
    personIds: z.array(id).min(1).max(100),
    accountId: id.optional(),
 })
@@ -58,41 +53,11 @@ const refused = <T>(work: Promise<T>) =>
       throw asTrpcError(error)
    })
 
-// My network (.plan/network-hub.md): one client's people, the Today line, and the client's own changes to them. Every call is
-// scoped to ctx.user.id; a foreign client or person answers like a missing one. LinkedIn actions stay on their own routers
+// My network (.plan/network-hub.md): the owner's people, the Today line, and the owner's own changes to them. Every call is
+// scoped to ctx.user.id; a foreign person answers like a missing one. LinkedIn actions stay on their own routers
 // (network.answer, unibox, connections, workflowList).
 export const people = router({
-   clients: ownerProcedure.query(({ ctx }) => ClientService.list(ctx.user.id)),
-
-   createClient: ownerProcedure
-      .input(z.object({ name: clientName }))
-      .mutation(({ ctx, input }) => orConflict(ClientService.create(ctx.user.id, input.name))),
-
-   renameClient: ownerProcedure
-      .input(
-         z.object({
-            id,
-            name: clientName,
-         })
-      )
-      .mutation(async ({ ctx, input }) =>
-         present(await orConflict(ClientService.rename(ctx.user.id, input.id, input.name)), NO_CLIENT)
-      ),
-
-   // Moves an account to a client; its people follow within a minute (the index job).
-   assignAccount: ownerProcedure
-      .input(
-         z.object({
-            accountId: id,
-            clientId: id,
-         })
-      )
-      .mutation(async ({ ctx, input }) =>
-         present(
-            await ClientService.assignAccount(ctx.user.id, input.accountId, input.clientId),
-            'Account or client not found'
-         )
-      ),
+   workspace: ownerProcedure.query(({ ctx }) => PeopleService.workspace(ctx.user.id)),
 
    today: ownerProcedure.query(({ ctx }) => PeopleService.today(ctx.user.id)),
 
@@ -104,25 +69,14 @@ export const people = router({
             limit: z.number().int().min(1).max(100).default(50),
          })
       )
-      .query(async ({ ctx, input }) => present(await PeopleService.list(ctx.user.id, input), NO_CLIENT)),
+      .query(({ ctx, input }) => PeopleService.list(ctx.user.id, input)),
 
-   filterOptions: ownerProcedure
-      .input(z.object({ clientId: id }))
-      .query(async ({ ctx, input }) =>
-         present(await PeopleService.filterOptions(ctx.user.id, input.clientId), NO_CLIENT)
-      ),
+   filterOptions: ownerProcedure.query(({ ctx }) => PeopleService.filterOptions(ctx.user.id)),
 
    // The Skills picker's options as the owner types; empty `search` gives the most common.
    skillOptions: ownerProcedure
-      .input(
-         z.object({
-            clientId: id,
-            search: z.string().trim().max(100).default(''),
-         })
-      )
-      .query(async ({ ctx, input }) =>
-         present(await PeopleService.skillOptions(ctx.user.id, input.clientId, input.search), NO_CLIENT)
-      ),
+      .input(z.object({ search: z.string().trim().max(100).default('') }))
+      .query(({ ctx, input }) => PeopleService.skillOptions(ctx.user.id, input.search)),
 
    counts: ownerProcedure
       .input(
@@ -131,32 +85,23 @@ export const people = router({
             sort: true,
          })
       )
-      .query(async ({ ctx, input }) => present(await PeopleService.counts(ctx.user.id, input), NO_CLIENT)),
+      .query(({ ctx, input }) => PeopleService.counts(ctx.user.id, input)),
 
    results: ownerProcedure
-      .input(
-         z.object({
-            clientId: id,
-            days: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(7),
-         })
-      )
-      .query(async ({ ctx, input }) =>
-         present(await PeopleService.results(ctx.user.id, input.clientId, input.days), NO_CLIENT)
-      ),
+      .input(z.object({ days: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(7) }))
+      .query(({ ctx, input }) => PeopleService.results(ctx.user.id, input.days)),
 
    // What inviting these people would do (the account, the sentence), without doing it.
    invitePlan: ownerProcedure
       .input(invitees)
-      .query(async ({ ctx, input }) =>
-         present(await refused(LinkedInInviteService.plan(ctx.user.id, input)), NO_CLIENT)
-      ),
+      .query(({ ctx, input }) => refused(LinkedInInviteService.plan(ctx.user.id, input))),
 
    // Reads the profiles of the picked people with no name yet, so their invite notes get a first name.
    readUnnamed: ownerProcedure
       .input(invitees.omit({ accountId: true }))
-      .mutation(({ ctx, input }) => PersonService.readUnnamed(ctx.user.id, input.clientId, input.personIds)),
+      .mutation(({ ctx, input }) => PersonService.readUnnamed(ctx.user.id, input.personIds)),
 
-   // Queues invites to up to 100 people of one client, planned over the days within the account's limits.
+   // Queues invites to up to 100 people, planned over the days within the account's limits.
    invite: ownerProcedure
       .input(
          invitees.extend({
@@ -164,9 +109,7 @@ export const people = router({
             source: z.string().max(120).optional(),
          })
       )
-      .mutation(async ({ ctx, input }) =>
-         present(await refused(LinkedInInviteService.invite(ctx.user.id, input)), NO_CLIENT)
-      ),
+      .mutation(({ ctx, input }) => refused(LinkedInInviteService.invite(ctx.user.id, input))),
 
    cancelInvite: ownerProcedure
       .input(z.object({ id }))
@@ -178,9 +121,7 @@ export const people = router({
       .input(z.object({ id }))
       .query(async ({ ctx, input }) => present(await LinkedInInviteService.ofPerson(ctx.user.id, input.id), NO_PERSON)),
 
-   seen: ownerProcedure
-      .input(z.object({ clientId: id }))
-      .mutation(async ({ ctx, input }) => present(await PeopleService.seen(ctx.user.id, input.clientId), NO_CLIENT)),
+   seen: ownerProcedure.mutation(({ ctx }) => PeopleService.seen(ctx.user.id)),
 
    get: ownerProcedure
       .input(z.object({ id }))
@@ -207,11 +148,10 @@ export const people = router({
          return present(await PeopleService.update(ctx.user.id, personId, changes), NO_PERSON)
       }),
 
-   // The same change to up to 100 people of one client (a page selection).
+   // The same change to up to 100 people (a page selection).
    updateMany: ownerProcedure
       .input(
          z.object({
-            clientId: id,
             ids: z.array(id).min(1).max(100),
             status: status.optional(),
             labels: tags.optional(),
@@ -219,16 +159,10 @@ export const people = router({
          })
       )
       .mutation(({ ctx, input }) => {
-         const { clientId, ids, ...changes } = input
+         const { ids, ...changes } = input
 
-         return PeopleService.updateMany(ctx.user.id, clientId, ids, changes)
+         return PeopleService.updateMany(ctx.user.id, ids, changes)
       }),
-
-   doNotContactEverywhere: ownerProcedure
-      .input(z.object({ id }))
-      .mutation(async ({ ctx, input }) =>
-         present(await PeopleService.doNotContactEverywhere(ctx.user.id, input.id), NO_PERSON)
-      ),
 
    erase: ownerProcedure
       .input(z.object({ id }))
@@ -236,22 +170,14 @@ export const people = router({
 
    // What an import would do with each link (read only; a mutation so up to IMPORT_CAP links fit in the request).
    preview: ownerProcedure
-      .input(
-         z.object({
-            clientId: id,
-            urls: z.array(profileUrl).min(1).max(IMPORT_CAP),
-         })
-      )
-      .mutation(async ({ ctx, input }) =>
-         present(await PeopleService.preview(ctx.user.id, input.clientId, input.urls), NO_CLIENT)
-      ),
+      .input(z.object({ urls: z.array(profileUrl).min(1).max(IMPORT_CAP) }))
+      .mutation(({ ctx, input }) => PeopleService.preview(ctx.user.id, input.urls)),
 
-   // Imported profiles into a list of the client (picked, or made with `listName`), in batches; `read` reads each profile (paid).
+   // Imported profiles into a list (picked, or made with `listName`), in batches; `read` reads each profile (paid).
    add: ownerProcedure
       .input(
          z
             .object({
-               clientId: id,
                people: z
                   .array(
                      z.object({
@@ -273,13 +199,12 @@ export const people = router({
             await orConflict(
                PeopleService.add(
                   ctx.user.id,
-                  input.clientId,
                   input.people,
                   input.listId ? { id: input.listId } : { name: input.listName ?? '' },
                   input.read
                )
             ),
-            'Client or list not found'
+            'List not found'
          )
       ),
 
@@ -288,7 +213,5 @@ export const people = router({
 
    export: ownerProcedure
       .input(view)
-      .mutation(async ({ ctx, input }) =>
-         present(await orConflict(PeopleService.export(ctx.user.id, input)), NO_CLIENT)
-      ),
+      .mutation(({ ctx, input }) => orConflict(PeopleService.export(ctx.user.id, input))),
 })

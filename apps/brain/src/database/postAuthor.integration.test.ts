@@ -86,15 +86,9 @@ describe('PostAuthorService (database)', () => {
                   slug: 'grace-hopper',
                },
             },
-            select: {
-               tags: true,
-               clientId: true,
-            },
+            select: { tags: true },
          })
-      ).resolves.toEqual({
-         tags: [FROM_POSTS],
-         clientId: null,
-      })
+      ).resolves.toEqual({ tags: [FROM_POSTS] })
       expect(await queuedReads('PROFILE', 'grace-hopper')).toBe(1)
       expect((await PostPageService.detail(userId, POST_SLUG))?.author).toMatchObject({
          kind: 'person',
@@ -199,19 +193,16 @@ describe('PostAuthorService (database)', () => {
             select: {
                slug: true,
                tags: true,
-               clientId: true,
             },
          })
       ).resolves.toEqual([
          {
             slug: 'ada-lovelace',
             tags: [FROM_POSTS],
-            clientId: null,
          },
          {
             slug: 'already-saved',
             tags: ['mine'],
-            clientId: null,
          },
       ])
       await expect(

@@ -20,8 +20,7 @@ export const useDrawerNav = () => {
    return {
       openAccount: (id: string) => go({ open: id }),
       openActivity: (id: string) => go({ open: id, panel: 'activity' }),
-      openClient: (label: string) => go({ activity: label }),
       closeAccount: () => close({ open: null }),
-      closePanel: () => close({ panel: null, activity: null }),
+      closePanel: () => close({ panel: null }),
    }
 }

@@ -21,7 +21,6 @@ import { type AccountBrowse } from '../browsing/types'
 import { type Account } from './types'
 
 import { type SampleKind } from '../browsing/sample'
-import { AccountClient } from './account-client'
 import { BrowsingParts, Part } from './drawer-browsing'
 import { GettingReady } from './getting-ready'
 import { SecretCode } from './secret-code'
@@ -84,7 +83,6 @@ const Body = ({
                <DrawerTitle className="truncate">{account.email}</DrawerTitle>
                <DrawerDescription className="flex flex-wrap items-center gap-2">
                   <StatusBadge status={account.status} message={account.statusMessage} />
-                  {browse?.clientLabel ? <Badge variant="outline">{browse.clientLabel}</Badge> : null}
                   <span>Added {formatDate(account.createdAt)}</span>
                </DrawerDescription>
                <Button asChild variant="outline" size="sm" className="w-fit">
@@ -99,7 +97,7 @@ const Body = ({
             </Button>
          </DrawerHeader>
          <div className="overflow-y-auto px-4 pb-6">
-            <Accordion type="multiple" defaultValue={['first', 'checklist', 'state', 'client', 'today', 'limit']}>
+            <Accordion type="multiple" defaultValue={['first', 'checklist', 'state', 'today', 'limit']}>
                {account.loading && account.loading.percent < 100 ? (
                   <Part value="first" title="Getting your LinkedIn ready" summary={`${account.loading.percent}%`}>
                      <GettingReady loading={account.loading} status={account.status} full />
@@ -136,9 +134,6 @@ const Body = ({
                         {paused ? 'Resume account' : 'Pause account'}
                      </Button>
                   </div>
-               </Part>
-               <Part value="client" title="Client">
-                  <AccountClient accountId={account.id} />
                </Part>
                <BrowsingParts
                   browse={browse}

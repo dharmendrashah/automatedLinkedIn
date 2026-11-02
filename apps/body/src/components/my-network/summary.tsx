@@ -99,7 +99,7 @@ export const ResultsLine = ({
    </p>
 )
 
-// A client with nobody yet: the guided start finds people for it.
+// Nobody yet: the guided start finds people.
 export const FirstVisit = () => (
    <div className="bg-card flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4">
       <div className="flex items-center gap-3">

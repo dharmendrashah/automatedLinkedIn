@@ -1,8 +1,6 @@
 import { Section } from '@/components/people/person-sections'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { timeAgo } from '@/lib/time-ago'
-import { useState } from 'react'
 import { Link } from 'react-router'
 
 import { cn } from '@/lib/utils'
@@ -12,13 +10,11 @@ import { StatusChip } from '../../my-network/status-chip'
 import { ContactAvatar } from '../../unibox/account-avatar'
 import { PersonCard } from '../../unibox/person-card'
 
-const ALL = 'all'
-
 const networkLink = (name: string) =>
    `/network?tab=everyone&filters=${encodeURIComponent(JSON.stringify({ companies: [name] }))}`
 
 // The My network people who work at the company (.plan/company-network-people.md): a short look on hover, the My network drawer
-// on click. All clients unless the owner picks one.
+// on click.
 export const CompanyPeople = ({
    slug,
    name,
@@ -28,35 +24,12 @@ export const CompanyPeople = ({
    name: string
    onPerson: (slug: string) => void
 }) => {
-   const [clientId, setClientId] = useState(ALL)
-   const clients = trpc.people.clients.useQuery(undefined, { retry: false })
-   const found = trpc.companyPage.people.useQuery(
-      {
-         slug,
-         ...(clientId !== ALL && { clientId }),
-      },
-      { retry: false }
-   )
+   const found = trpc.companyPage.people.useQuery({ slug }, { retry: false })
    const total = found.data?.total ?? 0
    const people = found.data?.people ?? []
 
    return (
       <Section title={found.data ? `Your people there (${total})` : 'Your people there'}>
-         {(clients.data?.length ?? 0) > 1 ? (
-            <Select value={clientId} onValueChange={setClientId}>
-               <SelectTrigger size="sm" className="w-48" aria-label="Client">
-                  <SelectValue />
-               </SelectTrigger>
-               <SelectContent>
-                  <SelectItem value={ALL}>All clients</SelectItem>
-                  {clients.data?.map(client => (
-                     <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                     </SelectItem>
-                  ))}
-               </SelectContent>
-            </Select>
-         ) : null}
          {found.isPending ? (
             <p className="text-muted-foreground text-sm">Loading…</p>
          ) : found.error ? (
@@ -102,11 +75,6 @@ export const CompanyPeople = ({
                         ) : null}
                         {person.doNotContact ? <Badge variant="destructive">Do not contact</Badge> : null}
                         <StatusChip status={person.status} />
-                        {person.clients.map(client => (
-                           <Badge key={client} variant="secondary" className="font-normal">
-                              {client}
-                           </Badge>
-                        ))}
                         {person.matchedBy === 'NAME' ? (
                            <span
                               className="text-muted-foreground text-xs"

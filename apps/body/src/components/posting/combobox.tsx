@@ -28,7 +28,7 @@ type ListProps = {
    onPick: (value: string) => void
 }
 
-// The searchable list on its own, for the many accounts of an agency; the name, the hint (the client) and the group all match.
+// The searchable list on its own, for the many accounts of an agency; the name, the hint and the group all match.
 export const OptionList = ({ options, value, onPick }: ListProps) => {
    const [query, setQuery] = useState('')
    const needle = query.trim().toLowerCase()

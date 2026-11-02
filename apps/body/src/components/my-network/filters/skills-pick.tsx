@@ -8,12 +8,10 @@ type Mode = 'all' | 'any'
 
 // Skills from the people's profile reads, offered by the server as the owner types (the list can be long), all of them or any.
 export const SkillsPick = ({
-   clientId,
    value,
    mode,
    onChange,
 }: {
-   clientId: string
    value: string[]
    mode: Mode
    onChange: (value: string[], mode: Mode) => void
@@ -21,10 +19,7 @@ export const SkillsPick = ({
    const [text, setText] = useState('')
    const search = useDebounced(text)
    const options = trpc.people.skillOptions.useQuery(
-      {
-         clientId,
-         search,
-      },
+      { search },
       {
          retry: false,
          placeholderData: previous => previous,

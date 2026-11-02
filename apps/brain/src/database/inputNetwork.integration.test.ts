@@ -3,7 +3,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { inputPickOf } from '@automatedLinkedIn/contracts'
 
-import { ClientService } from './client.service'
 import { InputPickService } from './inputPick.service'
 import { LinkedInProfileService } from './linkedInProfile.service'
 import { PrismaService } from './prisma.service'
@@ -16,14 +15,11 @@ const email = `${randomUUID()}@elitale.com`
 const otherEmail = `${randomUUID()}@elitale.com`
 
 let userId: string
-let acme: string
-let beta: string
 
-const person = (clientId: string, slug: string, extra: Record<string, unknown> = {}, owner = userId) =>
+const person = (slug: string, extra: Record<string, unknown> = {}, owner = userId) =>
    db.person.create({
       data: {
          userId: owner,
-         clientId,
          slug,
          name: slug.toUpperCase(),
          labels: [],
@@ -56,26 +52,22 @@ describe('a Profiles input block from My network (database)', () => {
 
       const other = (await UserService.create({ email: otherEmail })).id
 
-      acme = (await ClientService.create(userId, 'Acme')).id
-      beta = (await ClientService.create(userId, 'Beta')).id
-
-      await person(acme, 'ana', {
+      await person('ana', {
          country: 'India',
          labels: ['fintech'],
       })
-      await person(acme, 'ravi', {
+      await person('ravi', {
          country: 'France',
          connectedAt: new Date('2026-10-05T00:00:00Z'),
          lastTouchAt: new Date('2026-10-20T00:00:00Z'),
       })
-      await person(acme, 'mute', { doNotContact: true })
-      await person(acme, 'blocked')
-      await person(beta, 'ana', { country: 'India' })
-      await person(beta, 'zoe', {
+      await person('mute', { doNotContact: true })
+      await person('blocked')
+      await person('zoe', {
          firstSeenAt: new Date('2026-09-01T00:00:00Z'),
          lastTouchAt: new Date('2026-09-02T00:00:00Z'),
       })
-      await person((await ClientService.create(other, 'Theirs')).id, 'stranger', {}, other)
+      await person('stranger', {}, other)
       await db.suppression.create({
          data: {
             userId,
@@ -89,23 +81,22 @@ describe('a Profiles input block from My network (database)', () => {
       await PrismaService.disconnect()
    })
 
-   it('should take every client once each, never Do not contact, suppressed or another owner, and count the same', async () => {
+   it('should take each person once, never Do not contact, suppressed or another owner, and count the same', async () => {
       expect(await taken({})).toEqual({
          slugs: ['ana', 'ravi', 'zoe'],
          count: 3,
       })
    })
 
-   it('should take one client, and nobody for a client that is not the owner', async () => {
-      expect((await taken({ client: beta })).slugs).toEqual(['ana', 'zoe'])
-      expect((await taken({ client: randomUUID() })).count).toBe(0)
+   it('should ignore a client saved in the block before there was one workspace', async () => {
+      expect((await taken({ client: randomUUID() })).slugs).toEqual(['ana', 'ravi', 'zoe'])
    })
 
    it('should apply the page filters and the block labels together', async () => {
       expect((await taken({ filters: JSON.stringify({ countries: ['India'] }) })).slugs).toEqual(['ana'])
       expect((await taken({ filters: JSON.stringify({ connection: 'CONNECTED' }) })).slugs).toEqual(['ravi'])
       expect((await taken({ labels: ['fintech'] })).slugs).toEqual(['ana'])
-      expect((await taken({ withoutLabels: ['fintech'] })).slugs).toEqual(['ana', 'ravi', 'zoe'])
+      expect((await taken({ withoutLabels: ['fintech'] })).slugs).toEqual(['ravi', 'zoe'])
    })
 
    it('should take the time frame on the date asked, newest first by it, the first people when it is last contact', async () => {

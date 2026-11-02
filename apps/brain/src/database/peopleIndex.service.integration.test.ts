@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { ClientService } from './client.service'
 import { PeopleIndexService } from './peopleIndex.service'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
@@ -11,11 +10,10 @@ import { UserService } from './user.service'
 const db = PrismaService.client
 
 let userId: string
-let acmeId: string
 let acmeAccountId: string
 let ownAccountId: string
 
-const makeAccount = (clientId: string | null) =>
+const makeAccount = () =>
    db.linkedInAccount.create({
       data: {
          userId,
@@ -24,7 +22,6 @@ const makeAccount = (clientId: string | null) =>
          secretIv: 'x',
          secretTag: 'x',
          status: 'ACTIVE',
-         clientId,
       },
    })
 
@@ -35,7 +32,6 @@ const people = (slug: string) =>
          slug,
       },
       include: { links: true },
-      orderBy: { clientId: 'asc' },
    })
 
 const request = (slug: string, accountId: string, note: string | null = null) =>
@@ -87,9 +83,8 @@ const conversation = (slug: string, accountId: string) =>
 describe('PeopleIndexService (database)', () => {
    beforeAll(async () => {
       userId = (await UserService.create({ email: `${randomUUID()}@elitale.com` })).id
-      acmeId = (await ClientService.create(userId, 'Acme')).id
-      acmeAccountId = (await makeAccount(acmeId)).id
-      ownAccountId = (await makeAccount(null)).id
+      acmeAccountId = (await makeAccount()).id
+      ownAccountId = (await makeAccount()).id
    })
 
    afterAll(async () => {
@@ -126,29 +121,21 @@ describe('PeopleIndexService (database)', () => {
       expect(await people('marked-one')).toHaveLength(1)
    })
 
-   it('should build one person per client, each with what waits on it and why they are there', async () => {
+   it('should build one person per profile from every account, with what waits on it and why they are there', async () => {
       await request('ana', acmeAccountId, 'Loved your post')
       await conversation('ana', ownAccountId)
       await PeopleIndexService.refresh(userId, ['ana'])
 
-      const found = await people('ana')
-      const defaultId = await ClientService.defaultId(userId)
-      const acme = found.find(({ clientId }) => clientId === acmeId)
-      const own = found.find(({ clientId }) => clientId === defaultId)
+      const [ana, ...others] = await people('ana')
 
-      expect(found).toHaveLength(2)
-      expect(acme).toMatchObject({
+      expect(others).toEqual([])
+      expect(ana).toMatchObject({
          name: 'Ana Silva',
-         priority: 2,
-         reasonKind: 'REQUEST',
-         reasonText: 'Sent you a request: "Loved your post"',
-         foundBy: ['request'],
-      })
-      expect(own).toMatchObject({
          priority: 3,
          reasonText: 'Replied: "Sure, send the deck"',
       })
-      expect(own?.links.map(({ kind }) => kind)).toEqual(['CONVERSATION'])
+      expect(ana?.foundBy).toContain('request')
+      expect(ana?.links.map(({ kind }) => kind).sort()).toEqual(['CONVERSATION', 'REQUEST'])
    })
 
    it('should tie a chat LinkedIn names by member id to the one connection of that name, and leave it out for two', async () => {
@@ -198,8 +185,7 @@ describe('PeopleIndexService (database)', () => {
       expect(twin?.links.map(({ kind }) => kind)).toEqual(['CONNECTION'])
    })
 
-   it('should keep a status the owner chose, and add list members of the default client with their fit', async () => {
-      const defaultId = await ClientService.defaultId(userId)
+   it('should keep a status the owner chose, and add list members with their fit', async () => {
       const list = await db.workflowList.create({
          data: {
             userId,
@@ -209,8 +195,8 @@ describe('PeopleIndexService (database)', () => {
 
       await db.person.update({
          where: {
-            clientId_slug: {
-               clientId: defaultId,
+            userId_slug: {
+               userId,
                slug: 'ana',
             },
          },
@@ -234,8 +220,8 @@ describe('PeopleIndexService (database)', () => {
       expect(
          await db.person.findUniqueOrThrow({
             where: {
-               clientId_slug: {
-                  clientId: defaultId,
+               userId_slug: {
+                  userId,
                   slug: 'ana',
                },
             },
@@ -245,19 +231,8 @@ describe('PeopleIndexService (database)', () => {
          fit: 'STRONG',
          score: 81,
          company: 'Bolt',
-         foundBy: [`list:${list.id}`],
+         foundBy: ['request', `list:${list.id}`],
       })
-   })
-
-   it('should move people with their account to another client', async () => {
-      const other = await ClientService.create(userId, 'Beta')
-
-      await request('moved', ownAccountId)
-      await PeopleIndexService.refresh(userId, ['moved'])
-      await ClientService.assignAccount(userId, ownAccountId, other.id)
-      await PeopleIndexService.refresh(userId, ['moved'])
-
-      expect((await people('moved')).map(({ clientId }) => clientId)).toEqual([other.id])
    })
 
    it('should drop a person with no rows left, but keep one marked Do not contact', async () => {
@@ -285,7 +260,7 @@ describe('PeopleIndexService (database)', () => {
       ])
    })
 
-   it('should mark every person of a profile Do not contact when the owner suppresses it', async () => {
+   it('should mark the person of a profile Do not contact when the owner suppresses it', async () => {
       await request('blocked', acmeAccountId)
       await db.suppression.create({
          data: {

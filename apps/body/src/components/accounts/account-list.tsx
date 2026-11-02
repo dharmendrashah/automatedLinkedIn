@@ -10,14 +10,12 @@ import { Link } from 'react-router'
 
 import { type Account } from './types'
 
-import { meterText } from '../browsing/format'
-import { limitSecondsOf } from '../browsing/modes'
 import { BrowsingMeter } from './browsing-meter'
 import { type ColumnId } from './columns'
 import { GettingReady } from './getting-ready'
 import { StatusBadge } from './status-badge'
 import { TodayCell } from './today-cell'
-import { type Group, type Row } from './toolbar'
+import { type Row } from './toolbar'
 import { hoursNowText, whyText } from './verdict'
 import { VisitSummary } from './visit-summary'
 
@@ -35,8 +33,6 @@ const OWN_CLICK = 'button, a, input, [role="checkbox"], [role="menuitem"]'
 
 type Props = {
    rows: Row<Account>[]
-   // With grouping on, the rows by client; the rows above are then their union.
-   groups: Group<Account>[] | null
    columns: ColumnId[]
    // Full chips with times in the Today cell, instead of the compact line.
    detailed: boolean
@@ -50,8 +46,6 @@ type Props = {
    onOpen: (id: string) => void
    onPause: (account: Account) => void
    onResume: (account: Account) => void
-   onClientActivity: (label: string) => void
-   onPauseGroup: (accounts: Account[]) => void
 }
 
 type RowProps = Pick<
@@ -83,7 +77,7 @@ const AccountRow = ({
    onPause,
    onResume,
 }: RowProps) => {
-   const { account, browse, verdict, client, states } = row
+   const { account, browse, verdict, states } = row
    const paused = account.status === 'DISABLED'
 
    return (
@@ -123,7 +117,6 @@ const AccountRow = ({
                      >
                         {account.displayName ?? account.email}
                      </button>
-                     {client ? <Badge variant="outline">{client}</Badge> : null}
                   </div>
                   {account.displayName ? (
                      <span className="text-muted-foreground text-xs font-normal">{account.email}</span>
@@ -225,14 +218,10 @@ const AccountRow = ({
    )
 }
 
-const limitOf = (rows: Row<Account>[]) =>
-   rows.reduce((sum, { browse }) => sum + (browse ? limitSecondsOf(browse.mode) : 0), 0)
-
 // Every account in one list, worst first: the account, why it is in its state, today's browsing and the daily visit, with the optional
-// columns the owner picked. A row opens the account's drawer; with grouping each client has a header with its totals.
+// columns the owner picked. A row opens the account's drawer.
 export const AccountList = ({
    rows,
-   groups,
    columns,
    detailed,
    todayLoading,
@@ -244,8 +233,6 @@ export const AccountList = ({
    onOpen,
    onPause,
    onResume,
-   onClientActivity,
-   onPauseGroup,
 }: Props) => {
    const span = 4 + columns.filter(id => id !== 'detail').length + (selectable ? 1 : 0)
    const ids = rows.map(({ account }) => account.id)
@@ -289,58 +276,9 @@ export const AccountList = ({
                      </TableCell>
                   </TableRow>
                ) : null}
-               {groups
-                  ? groups.map(group => {
-                       const own = group.rows.map(({ account }) => account.id)
-                       const every = own.every(id => selected.has(id))
-                       const limit = limitOf(group.rows)
-
-                       return [
-                          <TableRow key={`group-${group.label ?? 'none'}`} className="bg-muted/40 hover:bg-muted/40">
-                             {selectable ? (
-                                <TableCell className="w-8">
-                                   <Checkbox
-                                      checked={
-                                         every ? true : own.some(id => selected.has(id)) ? 'indeterminate' : false
-                                      }
-                                      aria-label={`Select all of ${group.label ?? 'accounts with no client'}`}
-                                      onCheckedChange={value => onSelect(own, value === true)}
-                                   />
-                                </TableCell>
-                             ) : null}
-                             <TableCell colSpan={span - (selectable ? 1 : 0)}>
-                                <div className="flex flex-wrap items-center gap-3 text-sm">
-                                   <span className="font-medium">{group.label ?? 'No client'}</span>
-                                   <span className="text-muted-foreground">
-                                      {group.rows.length} {group.rows.length === 1 ? 'account' : 'accounts'}
-                                      {limit > 0 ? `, ${meterText(group.usedSeconds, limit)} today` : ''}
-                                      {group.needs > 0 ? `, ${group.needs} need you` : ''}
-                                   </span>
-                                   <span className="ml-auto flex gap-2">
-                                      {group.label ? (
-                                         <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => onClientActivity(group.label ?? '')}
-                                         >
-                                            Activity
-                                         </Button>
-                                      ) : null}
-                                      <Button
-                                         variant="outline"
-                                         size="sm"
-                                         onClick={() => onPauseGroup(group.rows.map(({ account }) => account))}
-                                      >
-                                         Pause all
-                                      </Button>
-                                   </span>
-                                </div>
-                             </TableCell>
-                          </TableRow>,
-                          ...group.rows.map(row => <AccountRow key={row.account.id} row={row} {...rowProps} />),
-                       ]
-                    })
-                  : rows.map(row => <AccountRow key={row.account.id} row={row} {...rowProps} />)}
+               {rows.map(row => (
+                  <AccountRow key={row.account.id} row={row} {...rowProps} />
+               ))}
             </TableBody>
          </Table>
       </div>

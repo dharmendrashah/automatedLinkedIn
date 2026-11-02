@@ -75,8 +75,8 @@ export class PersonService {
       }
    }
 
-   // Queues one full-profile read for the worker, booked to `clientId` when given. null when the person is not the owner's.
-   public static async readFull(userId: string, slug: string, clientId?: string) {
+   // Queues one full-profile read for the worker. null when the person is not the owner's.
+   public static async readFull(userId: string, slug: string) {
       const known = await PersonService.detail(userId, slug)
 
       if (!known) {
@@ -93,20 +93,18 @@ export class PersonService {
          slug,
          operation: 'profiles',
          params: { queries: [known.url] },
-         clientId,
       })
 
       return PersonService.detail(userId, slug)
    }
 
-   // One full-profile read each for the picked people of a client My network has no name for, before they are invited. A read that
+   // One full-profile read each for the picked people My network has no name for, before they are invited. A read that
    // cannot start (paused, read today, do not contact) is counted, not failed.
-   public static async readUnnamed(userId: string, clientId: string, personIds: string[]) {
+   public static async readUnnamed(userId: string, personIds: string[]) {
       const people = await PrismaService.client.person.findMany({
          where: {
             id: { in: personIds },
             userId,
-            clientId,
             name: null,
          },
          select: { slug: true },
@@ -115,7 +113,7 @@ export class PersonService {
 
       for (const { slug } of people) {
          try {
-            reading += (await PersonService.readFull(userId, slug, clientId)) ? 1 : 0
+            reading += (await PersonService.readFull(userId, slug)) ? 1 : 0
          } catch (error) {
             if (!(error instanceof ConflictError)) {
                throw error

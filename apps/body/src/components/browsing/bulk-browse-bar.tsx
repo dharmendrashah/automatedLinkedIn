@@ -1,6 +1,5 @@
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -12,7 +11,7 @@ import { ModeCards } from './mode-cards'
 import { MODES, modeOf } from './modes'
 import { countText, useBrowseChange } from './use-browse'
 
-type Dialogs = 'mode' | 'hours' | 'client' | null
+type Dialogs = 'mode' | 'hours' | null
 
 const sameMode = (accounts: AccountBrowse[]) => {
    const [first] = accounts
@@ -43,7 +42,6 @@ export const BulkBrowseBar = ({
 }) => {
    const change = useBrowseChange(sample)
    const [open, setOpen] = useState<Dialogs>(null)
-   const [client, setClient] = useState('')
    const who = countText(accounts)
 
    const setMode = (mode: BrowseMode) => {
@@ -64,11 +62,6 @@ export const BulkBrowseBar = ({
       setOpen(null)
    }
 
-   const setClientLabel = () => {
-      change(accounts, { clientLabel: client.trim() || null }, `Client changed for ${who}`)
-      setOpen(null)
-   }
-
    return (
       <div className="bg-background sticky bottom-4 z-10 flex flex-wrap items-center gap-2 rounded-lg border p-2 text-sm shadow-md">
          <span className="px-1 font-medium">
@@ -79,9 +72,6 @@ export const BulkBrowseBar = ({
          </Button>
          <Button size="sm" variant="outline" onClick={() => setOpen('hours')}>
             Set working hours
-         </Button>
-         <Button size="sm" variant="outline" onClick={() => setOpen('client')}>
-            Set client
          </Button>
          <Button size="sm" variant="outline" onClick={onPause}>
             Pause
@@ -118,24 +108,6 @@ export const BulkBrowseBar = ({
                   saveLabel="Apply to all"
                   onSave={setHours}
                />
-            </DialogContent>
-         </Dialog>
-
-         <Dialog open={open === 'client'} onOpenChange={next => setOpen(next ? 'client' : null)}>
-            <DialogContent className="sm:max-w-md">
-               <DialogHeader>
-                  <DialogTitle>Set the client</DialogTitle>
-                  <DialogDescription>Your own note for {who}. Leave it empty to remove the client.</DialogDescription>
-               </DialogHeader>
-               <Input
-                  aria-label="Client"
-                  placeholder="Client name"
-                  value={client}
-                  onChange={event => setClient(event.target.value)}
-               />
-               <Button className="w-fit" onClick={setClientLabel}>
-                  Apply to all
-               </Button>
             </DialogContent>
          </Dialog>
       </div>

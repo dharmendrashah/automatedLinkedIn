@@ -2,8 +2,7 @@ import { profileFacts, readSignals, readSnapshot } from 'core'
 
 import { type Prisma } from 'generated/prisma/client'
 
-import { ClientService } from './client.service'
-import { type DraftPerson, type Sources, draftPeople } from './peopleIndex'
+import { type DraftPerson, type Sources, draftPerson } from './peopleIndex'
 import { profileUrlOf } from './personContacts'
 import { PrismaService } from './prisma.service'
 
@@ -60,7 +59,7 @@ const bySlug = <T>(rows: T[], slugOf: (row: T) => string | undefined) => {
 }
 
 // My network's index (.plan/network-hub.md): database triggers mark a profile whenever a row that ties it to the owner changes,
-// and this rebuilds the marked profiles' people, one per client.
+// and this rebuilds the marked profiles' people, one per profile.
 export class PeopleIndexService {
    // Rebuilds up to one batch of marked profiles; resolves to how many. A mark made while it ran stays for the next pass.
    public static async drain(limit = BATCH) {
@@ -111,18 +110,13 @@ export class PeopleIndexService {
       return marked.length
    }
 
-   // Rebuilds the people of these profiles of one owner from their rows, in every client they belong to.
+   // Rebuilds the people of these profiles of one owner from their rows.
    public static async refresh(userId: string, slugs: string[]) {
       const db = PrismaService.client
-      const defaultClientId = await ClientService.defaultId(userId)
       const accounts = await db.linkedInAccount.findMany({
          where: { userId },
-         select: {
-            id: true,
-            clientId: true,
-         },
+         select: { id: true },
       })
-      const clientOf = new Map(accounts.map(({ id, clientId }) => [id, clientId ?? defaultClientId]))
       const accountIds = accounts.map(({ id }) => id)
       const urls = slugs.flatMap(slug => [profileUrlOf(slug), profileUrlOf(slug).slice(0, -1)])
       const named = await chatsByName(userId, slugs)
@@ -175,7 +169,6 @@ export class PeopleIndexService {
                   list: { userId },
                   slug: { in: slugs },
                },
-               include: { list: { select: { clientId: true } } },
             }),
             db.linkedInProfile.findMany({
                where: {
@@ -198,7 +191,6 @@ export class PeopleIndexService {
                },
                select: {
                   id: true,
-                  clientId: true,
                   slug: true,
                   doNotContact: true,
                   notes: true,
@@ -213,7 +205,6 @@ export class PeopleIndexService {
                },
                select: {
                   id: true,
-                  clientId: true,
                   accountId: true,
                   slug: true,
                   name: true,
@@ -322,7 +313,6 @@ export class PeopleIndexService {
                return {
                   id: row.id,
                   listId: row.listId,
-                  clientId: row.list.clientId,
                   name: row.name,
                   headline: row.headline,
                   company: row.company,
@@ -344,7 +334,6 @@ export class PeopleIndexService {
             }),
             targets: (rows.targets.get(slug) ?? []).map(row => ({
                id: row.id,
-               clientId: row.clientId,
                name: row.fullName,
                headline: row.headline,
                company: row.company,
@@ -359,18 +348,11 @@ export class PeopleIndexService {
             })),
             facts: facts.get(slug) ?? null,
          }
-         const drafts = draftPeople(
-            sources,
-            accountId => clientOf.get(accountId) ?? defaultClientId,
-            defaultClientId,
-            profileUrlOf(slug)
-         )
-
          await PeopleIndexService.write(
             userId,
             slug,
-            drafts,
-            existing.filter(person => person.slug === slug),
+            draftPerson(sources, profileUrlOf(slug)),
+            existing.find(person => person.slug === slug),
             blocked.has(slug)
          )
       }
@@ -379,30 +361,30 @@ export class PeopleIndexService {
    private static async write(
       userId: string,
       slug: string,
-      drafts: DraftPerson[],
-      existing: Array<{
-         id: string
-         clientId: string
-         doNotContact: boolean
-         notes: string | null
-         labels: string[]
-         statusSetAt: Date | null
-      }>,
+      draft: DraftPerson | null,
+      existing:
+         | {
+              id: string
+              doNotContact: boolean
+              notes: string | null
+              labels: string[]
+              statusSetAt: Date | null
+           }
+         | undefined,
       blocked: boolean
    ) {
       await PrismaService.client.$transaction(async tx => {
-         for (const { links, clientId, status, firstSeenAt, ...fields } of drafts) {
-            const known = existing.find(person => person.clientId === clientId)
+         if (draft) {
+            const { links, status, firstSeenAt, ...fields } = draft
             const person = await tx.person.upsert({
                where: {
-                  clientId_slug: {
-                     clientId,
+                  userId_slug: {
+                     userId,
                      slug,
                   },
                },
                create: {
                   userId,
-                  clientId,
                   slug,
                   status,
                   firstSeenAt,
@@ -411,7 +393,7 @@ export class PeopleIndexService {
                },
                update: {
                   ...fields,
-                  ...(known?.statusSetAt ? {} : { status }),
+                  ...(existing?.statusSetAt ? {} : { status }),
                   ...(blocked ? { doNotContact: true } : {}),
                },
                select: { id: true },
@@ -420,7 +402,7 @@ export class PeopleIndexService {
             if (fields.name) {
                await tx.linkedInInvite.updateMany({
                   where: {
-                     clientId,
+                     userId,
                      slug,
                      name: slug,
                   },
@@ -446,14 +428,16 @@ export class PeopleIndexService {
                })),
                skipDuplicates: true,
             })
+
+            return
          }
 
-         // A person with no rows left in a client goes, unless the client kept something of its own on them.
-         for (const person of existing.filter(({ clientId }) => !drafts.some(draft => draft.clientId === clientId))) {
-            if (person.doNotContact || blocked || person.notes || person.labels.length > 0) {
-               await tx.personLink.deleteMany({ where: { personId: person.id } })
+         // A person with no rows left goes, unless the owner kept something of their own on them.
+         if (existing) {
+            if (existing.doNotContact || blocked || existing.notes || existing.labels.length > 0) {
+               await tx.personLink.deleteMany({ where: { personId: existing.id } })
                await tx.person.update({
-                  where: { id: person.id },
+                  where: { id: existing.id },
                   data: {
                      priority: 0,
                      waiting: false,
@@ -462,7 +446,7 @@ export class PeopleIndexService {
                   },
                })
             } else {
-               await tx.person.delete({ where: { id: person.id } })
+               await tx.person.delete({ where: { id: existing.id } })
             }
          }
       })

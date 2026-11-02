@@ -19,7 +19,6 @@ export type WorkingHours = {
 export type AccountBrowse = {
    accountId: string
    email: string
-   clientLabel: string | null
    mode: BrowseMode
    usedSeconds: number
    state: BrowseState

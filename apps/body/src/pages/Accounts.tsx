@@ -10,16 +10,7 @@ import { NeedsProxyNotice } from '@/components/accounts/needs-proxy-notice'
 import { OverLimitNote, SummaryBanner } from '@/components/accounts/summary-banner'
 import { dayProgress, progressSentence } from '@/components/accounts/today'
 import { todayCsv } from '@/components/accounts/today-csv'
-import {
-   clientsOf,
-   countChips,
-   filterRows,
-   groupRows,
-   rowsOf,
-   showTools,
-   sortRows,
-   summaryOf,
-} from '@/components/accounts/toolbar'
+import { countChips, filterRows, rowsOf, showTools, sortRows, summaryOf } from '@/components/accounts/toolbar'
 import { useAccountActions } from '@/components/accounts/use-account-actions'
 import { useAccountsWithProxy } from '@/components/accounts/use-accounts-with-proxy'
 import { useDrawerNav } from '@/components/accounts/use-drawer-nav'
@@ -44,11 +35,8 @@ const VISIT_POLL_MS = 3000
 const READY_POLL_MS = 60_000
 const SEARCH_WAIT_MS = 250
 
-const groupFrom = (raw: string | null) => raw === '1'
-const groupToText = (value: boolean) => (value ? '1' : '0')
-
 // The LinkedIn accounts as one list, worst first: what needs the owner, what each account can do now, and its browsing today. A row
-// opens the account's drawer; the search, chips, grouping and optional columns appear from 4 accounts
+// opens the account's drawer; the search, chips and optional columns appear from 4 accounts
 // (.plan/accounts-drawers-simplify.md).
 export const Accounts = () => {
    const utils = trpc.useUtils()
@@ -69,7 +57,6 @@ export const Accounts = () => {
    const sampleAccounts = useMemo(() => list.data?.map(({ id, email, status }) => ({ id, email, status })), [list.data])
    const browsing = useBrowsing(sampleAccounts)
    const today = useToday(list.data, browsing.byId)
-   const [storedGroup, setStoredGroup] = useStoredSetting('accounts.group', groupFrom, groupToText)
    const [columns, setColumns] = useStoredSetting('accounts.columns', columnsFrom, columnsToText)
    const [q, setQ] = useState(address.q)
    const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -90,12 +77,9 @@ export const Accounts = () => {
       [list.data, browsing.byId, today.statesById]
    )
    const tools = showTools(rows.length)
-   const grouped = tools && (address.group ?? storedGroup)
    // A short list shows the full chips; a long one the compact line, unless the owner asked for the details.
    const detailed = !tools || columns.includes('detail')
-   const shown = sortRows(
-      filterRows(rows, tools ? { q, client: address.client, chip: address.chip } : { q: '', client: '', chip: 'all' })
-   )
+   const shown = sortRows(filterRows(rows, tools ? { q, chip: address.chip } : { q: '', chip: 'all' }))
    const selectedRows = rows.filter(({ account }) => picked.has(account.id))
    const selectedAccounts = selectedRows.map(({ account }) => account)
    const progress = progressSentence(
@@ -107,7 +91,7 @@ export const Accounts = () => {
    )
    const summary = summaryOf(rows, progress)
    const ready = list.data ? readyCounts(list.data) : undefined
-   const filtered = tools && (q.trim() !== '' || address.client !== '' || address.chip !== 'all')
+   const filtered = tools && (q.trim() !== '' || address.chip !== 'all')
    const columnIds = COLUMNS.map(({ id }) => id).filter(id => columns.includes(id))
 
    const select = (ids: string[], on: boolean) =>
@@ -122,14 +106,12 @@ export const Accounts = () => {
       setParams(writeAddress(params, patch), { replace: true })
    const clearFilters = () => {
       setQ('')
-      change({ q: '', client: '', chip: 'all' })
+      change({ q: '', chip: 'all' })
    }
    const exportToday = () =>
       downloadCsv(
          `today-${today.now.toISOString().slice(0, 10)}.csv`,
-         todayCsv(
-            shown.flatMap(({ account, client, states }) => (states ? [{ email: account.email, client, states }] : []))
-         )
+         todayCsv(shown.flatMap(({ account, states }) => (states ? [{ email: account.email, states }] : [])))
       )
 
    return (
@@ -206,17 +188,9 @@ export const Accounts = () => {
                   <AccountsToolbar
                      q={q}
                      onQ={setQ}
-                     client={address.client}
-                     onClient={client => change({ client })}
-                     clients={clientsOf(rows)}
                      chip={address.chip}
                      onChip={chip => change({ chip })}
                      counts={countChips(rows)}
-                     grouped={grouped}
-                     onGrouped={on => {
-                        setStoredGroup(on)
-                        change({ group: on })
-                     }}
                      columns={columns}
                      onColumns={setColumns}
                      onExport={exportToday}
@@ -243,7 +217,6 @@ export const Accounts = () => {
                ) : (
                   <AccountList
                      rows={shown}
-                     groups={grouped ? groupRows(shown) : null}
                      columns={columnIds}
                      detailed={detailed}
                      todayLoading={today.loading}
@@ -255,8 +228,6 @@ export const Accounts = () => {
                      onOpen={nav.openAccount}
                      onPause={account => actions.askPause([account])}
                      onResume={account => actions.resume([account])}
-                     onClientActivity={nav.openClient}
-                     onPauseGroup={actions.askPause}
                   />
                )}
 

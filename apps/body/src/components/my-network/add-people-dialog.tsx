@@ -18,7 +18,7 @@ import { downloadFile } from '@/lib/download-file'
 import { readableError } from '@/lib/trpc-error'
 import { type ChangeEvent, useState } from 'react'
 
-import { type Client } from './types'
+import { type Workspace } from './types'
 
 import { type RouterOutputs, trpc } from '../../trpc'
 import {
@@ -35,7 +35,7 @@ const NEW_LIST = 'new'
 const BATCH = 200
 
 type Props = {
-   client: Client
+   lists: Workspace['lists']
    open: boolean
    onOpenChange: (open: boolean) => void
 }
@@ -69,15 +69,15 @@ const resultLine = (totals: Totals, list: string, invalid: number) =>
       .filter(Boolean)
       .join(' ')
 
-// Imports profiles from pasted links or a CSV into a list of the client (.plan/network-import-people.md): choose, review what
+// Imports profiles from pasted links or a CSV into a list (.plan/network-import-people.md): choose, review what
 // each link is, then import the ticked ones in batches. They join as Discovery people, known to no account until invited.
-export const AddPeopleDialog = ({ client, open, onOpenChange }: Props) => {
+export const AddPeopleDialog = ({ lists, open, onOpenChange }: Props) => {
    const utils = trpc.useUtils()
    const [source, setSource] = useState('paste')
    const [text, setText] = useState('')
    const [file, setFile] = useState<{ name: string; rows: ImportRow[] } | null>(null)
    const [fileError, setFileError] = useState('')
-   const [listId, setListId] = useState(client.lists[0]?.id ?? NEW_LIST)
+   const [listId, setListId] = useState(lists[0]?.id ?? NEW_LIST)
    const [listName, setListName] = useState('')
    const [review, setReview] = useState<Preview | null>(null)
    const [chosen, setChosen] = useState<Set<string>>(new Set())
@@ -98,7 +98,7 @@ export const AddPeopleDialog = ({ client, open, onOpenChange }: Props) => {
          : (file?.rows ?? [])
    const tooMany = rows.length > IMPORT_ROWS
    const ready = rows.length > 0 && !tooMany && (!naming || listName.trim() !== '')
-   const listLabel = naming ? listName.trim() : (client.lists.find(({ id }) => id === listId)?.name ?? 'the list')
+   const listLabel = naming ? listName.trim() : (lists.find(({ id }) => id === listId)?.name ?? 'the list')
    const choosable = review?.profiles.filter(({ state }) => state !== 'DO_NOT_CONTACT') ?? []
    const importing = progress !== null && totals === null
 
@@ -156,10 +156,7 @@ export const AddPeopleDialog = ({ client, open, onOpenChange }: Props) => {
 
    const toReview = () =>
       preview.mutate(
-         {
-            clientId: client.id,
-            urls: rows.map(({ url }) => url),
-         },
+         { urls: rows.map(({ url }) => url) },
          {
             onSuccess: data => {
                setReview(data)
@@ -185,7 +182,6 @@ export const AddPeopleDialog = ({ client, open, onOpenChange }: Props) => {
       try {
          for (let at = 0; at < people.length; at += BATCH) {
             const done = await add.mutateAsync({
-               clientId: client.id,
                people: people.slice(at, at + BATCH),
                read,
                ...target,
@@ -217,7 +213,7 @@ export const AddPeopleDialog = ({ client, open, onOpenChange }: Props) => {
       <Dialog open={open} onOpenChange={close}>
          <DialogContent className="sm:max-w-xl">
             <DialogHeader>
-               <DialogTitle>Add people to {client.name}</DialogTitle>
+               <DialogTitle>Add people</DialogTitle>
                <DialogDescription>
                   Paste LinkedIn profile links or upload a CSV, up to {IMPORT_ROWS.toLocaleString('en')}. They join as
                   Discovery people: no account of yours knows them until you invite them.
@@ -372,7 +368,7 @@ export const AddPeopleDialog = ({ client, open, onOpenChange }: Props) => {
                            <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                           {client.lists.map(({ id, name }) => (
+                           {lists.map(({ id, name }) => (
                               <SelectItem key={id} value={id}>
                                  {name}
                               </SelectItem>

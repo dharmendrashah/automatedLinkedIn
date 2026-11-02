@@ -1,4 +1,4 @@
-// What My network shows lives in the address (client, tab, filters, search, open person), so old pages can redirect into a
+// What My network shows lives in the address (tab, filters, search, open person), so old pages can redirect into a
 // filter and a reload keeps the view.
 
 export const TABS = ['NEEDS_ME', 'WAITING', 'EVERYONE', 'DO_NOT_CONTACT'] as const
@@ -9,16 +9,12 @@ export type Tab = (typeof TABS)[number]
 export type Fit = (typeof FITS)[number]
 export type Sort = { by: (typeof SORTS)[number]; desc: boolean }
 
-// `client=all` shows the Today line of every client.
-export const ALL_CLIENTS = 'all'
-
 // The tabs of the person drawer.
 export const PANES = ['chat', 'profile', 'history', 'data'] as const
 
 export type Pane = (typeof PANES)[number]
 
 export type View = {
-   client: string | null
    tab: Tab
    found?: string
    fit?: Fit
@@ -53,7 +49,6 @@ export const readView = (params: URLSearchParams): View => {
    const fit = params.get('fit')?.toUpperCase() ?? null
 
    return {
-      client: text(params.get('client')) ?? null,
       tab: isTab(tab) ? tab : 'EVERYONE',
       found: text(params.get('found')),
       fit: isFit(fit) ? fit : undefined,
@@ -66,7 +61,7 @@ export const readView = (params: URLSearchParams): View => {
 }
 
 export type ViewChange = Partial<
-   Record<'client' | 'tab' | 'found' | 'fit' | 'label' | 'q' | 'new' | 'open' | 'filters' | 'sort', string | null>
+   Record<'tab' | 'found' | 'fit' | 'label' | 'q' | 'new' | 'open' | 'filters' | 'sort', string | null>
 >
 
 // A copy of the address with these keys set, or removed when null or empty.
@@ -84,87 +79,7 @@ export const changeView = (params: URLSearchParams, change: ViewChange) => {
    return next
 }
 
-// Picking a client starts over: its filters and its open person do not belong to the next one.
-export const clientView = (client: string): ViewChange => ({
-   client,
-   found: null,
-   fit: null,
-   label: null,
-   q: null,
-   new: null,
-   open: null,
-   filters: null,
-   sort: null,
-})
-
-// The client asked for, else the one the account in the address belongs to, else the first (the default one).
-export const clientFor = <C extends { id: string; accounts: Array<{ id: string }> }>(
-   clients: C[],
-   wanted: string | null,
-   accountId: string | undefined
-) =>
-   clients.find(({ id }) => id === wanted) ??
-   clients.find(({ accounts }) => accounts.some(({ id }) => id === accountId)) ??
-   clients[0]
-
-// The client picker shows with several clients, or with several accounts that could be split into clients.
-export const showClientPicker = (clients: Array<{ accounts: unknown[] }>) =>
-   clients.length > 1 || clients.reduce((sum, { accounts }) => sum + accounts.length, 0) > 1
-
-// All clients is the default (.plan/network-all-clients.md); an account's own page (`/network/<accountId>`) opens its client.
-export const showsAllClients = (client: string | null, accountId: string | undefined) =>
-   client === ALL_CLIENTS || (client === null && accountId === undefined)
-
-// Every client as one: all their accounts and lists, under the id brain reads as "every client".
-export const allClientsOf = <A, L>(
-   clients: Array<{ id: string; name: string; isDefault: boolean; accounts: A[]; lists: L[] }>
-) => ({
-   id: ALL_CLIENTS,
-   name: 'All clients',
-   isDefault: false,
-   accounts: clients.flatMap(({ accounts }) => accounts),
-   lists: clients.flatMap(({ lists }) => lists),
-})
-
-type TodayCounts = {
-   clientId: string
-   name: string
-   isDefault: boolean
-   replies: number
-   requests: number
-   invites: number
-   waitingInvites: number
-   fresh: number
-   invitesLive: boolean
-   stopped: Array<{ accountId: string; name: string; reason: string }>
-}
-
-// The Today line of every client added up; undefined before any line is known.
-export const todayOfAll = <T extends TodayCounts>(lines: T[]): TodayCounts | undefined => {
-   const [first] = lines
-
-   if (!first) {
-      return undefined
-   }
-
-   const sum = (key: 'replies' | 'requests' | 'invites' | 'waitingInvites' | 'fresh') =>
-      lines.reduce((total, line) => total + line[key], 0)
-
-   return {
-      clientId: ALL_CLIENTS,
-      name: 'All clients',
-      isDefault: false,
-      replies: sum('replies'),
-      requests: sum('requests'),
-      invites: sum('invites'),
-      waitingInvites: sum('waitingInvites'),
-      fresh: sum('fresh'),
-      invitesLive: first.invitesLive,
-      stopped: lines.flatMap(({ stopped }) => stopped),
-   }
-}
-
-// The client's list that Found by points at, if it is one.
+// The list that Found by points at, if it is one.
 export const pickedList = <L extends { id: string }>(found: string | undefined, lists: L[]) =>
    found?.startsWith('list:') ? lists.find(({ id }) => `list:${id}` === found) : undefined
 
