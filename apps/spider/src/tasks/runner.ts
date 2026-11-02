@@ -4,6 +4,7 @@ import {
    TASK_CONTRACT_VERSION,
    type TaskCommand,
    type TaskResult,
+   type TaskStarted,
    receivedKey,
    runPrefix,
    taskResultSchema,
@@ -87,6 +88,8 @@ export type RunnerDeps = {
       save: (key: string, body: Buffer, contentType: string) => Promise<void>
    }
    publishResult: (result: TaskResult) => Promise<void>
+   // Tells brain the run really began. Best effort: a failure is logged and never fails the task; absent in the devtools.
+   publishStarted?: (started: TaskStarted) => Promise<void>
    // The git sha of this worker, so a run can be reproduced.
    workerBuild: string
    pause?: (ms: number) => Promise<void>
@@ -328,6 +331,18 @@ export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
       }
    } else if (await alreadyDone()) {
       return skipDuplicate()
+   }
+
+   try {
+      await deps.publishStarted?.({
+         contract: TASK_CONTRACT_VERSION,
+         task_id: command.task_id,
+         task: command.task,
+         started_at: new Date(startedAt).toISOString(),
+         worker: { build: deps.workerBuild },
+      })
+   } catch (error) {
+      console.error(`Could not tell brain that ${command.task_id} began: ${(error as Error).message}`)
    }
 
    let profile: ProfileCheckout | undefined

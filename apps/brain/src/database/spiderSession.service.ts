@@ -3,6 +3,7 @@ import { SESSION_RECORDING_RETENTION_DAYS } from 'env'
 import { type Prisma, type ProxyProtocol, type SpiderSessionStatus } from 'generated/prisma/client'
 
 import {
+   type Origin,
    type TaskReport,
    type TaskResult,
    type TaskTrigger,
@@ -76,6 +77,8 @@ type StartTaskInput = {
    // The time of the command, which the worker uses for the folder of the run.
    startedAt: Date
    retryOfId?: string
+   // Who asked for it (ids only).
+   origin?: Origin
 }
 
 type SessionRequestParams =
@@ -196,7 +199,19 @@ export class SpiderSessionService {
    // Notes a task that is about to be queued. Unlike `start` it throws when the row cannot be saved: a run nobody can see
    // the result of must not happen. `client` is the transaction the task is saved in.
    public static async startTask(
-      { id, userId, linkedInAccountId, proxy, task, taskVersion, trigger, input, startedAt, retryOfId }: StartTaskInput,
+      {
+         id,
+         userId,
+         linkedInAccountId,
+         proxy,
+         task,
+         taskVersion,
+         trigger,
+         input,
+         startedAt,
+         retryOfId,
+         origin,
+      }: StartTaskInput,
       client: Prisma.TransactionClient = PrismaService.client
    ) {
       const params: SessionRequestParams = {
@@ -227,6 +242,7 @@ export class SpiderSessionService {
             }),
             requestParams: params as unknown as Prisma.InputJsonObject,
             ...(retryOfId && { retryOfId }),
+            ...(origin && { origin }),
          },
       })
    }

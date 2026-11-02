@@ -22,6 +22,9 @@ export { InvitationReadService } from './invitationRead.service'
 export { InvitationAnswerService } from './invitationAnswer.service'
 export { MAX_CHAIN_DEPTH, type WorkflowChanges, WorkflowService, readGraph } from './workflow.service'
 export { API_LIMITS, type ApiInput, WorkflowTriggerService } from './workflowTrigger.service'
+export { WorkflowListenerService } from './workflowListener.service'
+export { EventDispatchService } from './eventDispatch.service'
+export { TaskEventService } from './taskEvent.service'
 export { type CallOutcome, type ItemKey, STALE_CLAIM_MS, WorkflowRunService } from './workflowRun.service'
 export {
    EXPORT_LIMIT,

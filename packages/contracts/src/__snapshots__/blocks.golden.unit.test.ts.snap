@@ -4,6 +4,7 @@ exports[`blocks before they became one definition > should keep the sets of bloc
 {
   "elseSources": [
     "logic.if",
+    "logic.ifEvent",
     "logic.retry",
     "logic.runWorkflow",
     "logic.taskResult",
@@ -26,6 +27,7 @@ exports[`blocks before they became one definition > should keep the sets of bloc
     "account.select",
     "account.writePost",
     "collect.profile",
+    "logic.ifEvent",
     "logic.retry",
     "logic.runWorkflow",
     "logic.stop",
@@ -98,6 +100,34 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 0,
     },
     "type": "trigger.workflow",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "trigger.taskEvent",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 0,
+    },
+    "type": "trigger.messageArrived",
   },
   {
     "plain": {
@@ -517,6 +547,20 @@ exports[`blocks before they became one definition > should keep what every block
       "costMicros": 0,
       "items": 9,
     },
+    "type": "process.messageMood",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
     "type": "process.merge",
   },
   {
@@ -560,6 +604,20 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 9,
     },
     "type": "logic.if",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "logic.ifEvent",
   },
   {
     "plain": {

@@ -88,7 +88,13 @@ export const sendInvites = async (ctx: Context): Promise<StepResult> => {
                name,
                company,
             })),
-            note
+            note,
+            new Date(),
+            {
+               workflowId: run.workflowId,
+               runId: run.id,
+               nodeId: node.id,
+            }
          )
 
          for (const outcome of made?.outcomes ?? []) {

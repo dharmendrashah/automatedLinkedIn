@@ -25,6 +25,7 @@ import { LinkedInProfileService } from './linkedInProfile.service'
 import { dropFiles, filesOf, ownsKeys, postsOf } from './postFileKeys'
 import { PrismaService } from './prisma.service'
 import { WalletService } from './wallet.service'
+import { WorkflowListenerService } from './workflowListener.service'
 import { WorkflowRunService } from './workflowRun.service'
 import { MAX_VERSIONS, sameGraph, unheldFiles } from './workflowVersion'
 
@@ -169,7 +170,13 @@ const FOREIGN_FILE = 'A file of a post is not yours. Attach it again.'
 const usesPosts = (graph: Graph) => graph.nodes.some(({ type }) => type === 'input.posts')
 
 // Triggers that start a workflow without a person pressing Run; the on/off switch governs them.
-const AUTOMATIC = new Set(['trigger.schedule', 'trigger.api', 'trigger.workflow'])
+const AUTOMATIC = new Set([
+   'trigger.schedule',
+   'trigger.api',
+   'trigger.workflow',
+   'trigger.taskEvent',
+   'trigger.messageArrived',
+])
 
 // How many workflows may start one another in a row.
 export const MAX_CHAIN_DEPTH = 5
@@ -470,6 +477,8 @@ export class WorkflowService {
          workflowTaken(changes.name ?? current.name)
       )
 
+      await WorkflowListenerService.sync(id)
+
       // The files nothing holds any more (not the saved graph, not a kept version) are deleted from the bucket.
       if (changes.graph) {
          const { staying, pruned } = await WorkflowService.keepVersion(id, changes.graph)
@@ -721,7 +730,7 @@ export class WorkflowService {
 
       const runGraph = trigger === 'PREVIEW' ? previewGraph(graph) : graph
       const { posts, totalMicros } = await WorkflowService.estimate(userId, runGraph, false, workflowId)
-      const fromOutside = trigger === 'API' || trigger === 'WORKFLOW'
+      const fromOutside = trigger === 'API' || trigger === 'WORKFLOW' || trigger === 'EVENT'
 
       if (usesPosts(graph) && posts === 0 && !fromOutside) {
          throw new ConflictError('No posts are waiting in your posts list. Add some posts first.')

@@ -27,7 +27,10 @@ export type ItemResult = {
    reason: string | null
 }
 
-type WithResult = { result?: ItemResult | null }
+// What an event or a block says about one item, by `scope.key` (for example `item.noteSent`): read by "If the event says".
+export type ItemFacts = Record<string, string | number | boolean | null>
+
+type WithResult = { result?: ItemResult | null; facts?: ItemFacts }
 
 export type PersonItem = WithResult & {
    kind: 'profile'
@@ -192,6 +195,8 @@ const resultSchema = z
    .nullable()
    .optional()
 
+const factsSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional()
+
 const signalSchema = z.object({
    type: z.enum(['commented', 'reacted', 'employee', 'hiring']),
    via: z.string(),
@@ -223,6 +228,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       connectedOn: nullableText.optional(),
       note: nullableText.optional(),
       result: resultSchema,
+      facts: factsSchema,
    }),
    z.object({
       kind: z.literal('post'),
@@ -232,6 +238,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       author: z.string().nullable().optional(),
       preview: postSchema.nullable().optional(),
       result: resultSchema,
+      facts: factsSchema,
    }),
    z.object({
       kind: z.literal('company'),
@@ -241,6 +248,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       hiring: z.array(z.string()),
       preview: companySchema.nullable().optional(),
       result: resultSchema,
+      facts: factsSchema,
    }),
    z.object({
       kind: z.literal('job'),
@@ -256,6 +264,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       applicants: z.number().nullable(),
       salary: nullableText,
       result: resultSchema,
+      facts: factsSchema,
    }),
    z.object({
       kind: z.literal('ad'),
@@ -269,6 +278,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       ended: nullableText,
       clickUrl: nullableText,
       result: resultSchema,
+      facts: factsSchema,
    }),
    z.object({
       kind: z.literal('conversation'),
@@ -282,6 +292,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       lastFrom: z.enum(['ME', 'THEM']).nullable(),
       unread: z.boolean(),
       result: resultSchema,
+      facts: factsSchema,
    }),
 ])
 

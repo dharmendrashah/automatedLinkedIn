@@ -2,6 +2,7 @@ import { unique } from '../registry'
 import { accountDaily } from './accountDaily'
 import { connectionImport } from './connectionImport'
 import { dataReads } from './dataReads'
+import { eventDispatch } from './eventDispatch'
 import { invitationImport } from './invitationImport'
 import { inviteSend } from './inviteSend'
 import { messageImport } from './messageImport'
@@ -39,4 +40,5 @@ export const JOBS = unique('job', [
    postSweep,
    peopleIndex,
    inviteSend,
+   eventDispatch,
 ])

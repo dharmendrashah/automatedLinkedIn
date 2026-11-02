@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { readCompanyFilters } from './companyFilters'
+import { EVENT_PHASES, type EventTriggerSettings, ORIGIN_KINDS, factsOf } from './events'
 import { FILTERS_TEXT_MAX } from './filtersText'
 import { INDUSTRY_PAIRS } from './industries'
 import { INVITE_LIMITS } from './invites'
@@ -927,6 +928,8 @@ export const BLOCK_TYPES = [
    'trigger.schedule',
    'trigger.api',
    'trigger.workflow',
+   'trigger.taskEvent',
+   'trigger.messageArrived',
    'input.posts',
    'input.profiles',
    'input.companies',
@@ -956,10 +959,12 @@ export const BLOCK_TYPES = [
    'process.filter',
    'process.topN',
    'process.tag',
+   'process.messageMood',
    'process.merge',
    'score.icp',
    'collect.profile',
    'logic.if',
+   'logic.ifEvent',
    'logic.else',
    'logic.runWorkflow',
    'logic.wait',
@@ -1296,6 +1301,134 @@ const PROFILE_LANGUAGES = optionsOf(
 )
 
 const JOB_SALARIES = SALARIES.filter(({ value }) => value !== 'any')
+
+// "If the event says": a few rows, each a fact, is or is not (or not known), and a value (.plan/workflow-events-and-hooks.md).
+export const EVENT_CONDITION_ROWS = 3
+
+const conditionKey = (name: 'fact' | 'is' | 'value', row: number) => (row === 1 ? name : `${name}${row}`)
+
+const FACT_OPTIONS = factsOf().map(({ scope, key, label }) => ({
+   value: `${scope}.${key}`,
+   label,
+}))
+
+const conditionRows = Array.from({ length: EVENT_CONDITION_ROWS }, (_unused, index) => index + 1)
+
+export const EVENT_STARTERS = [
+   {
+      value: 'owner',
+      label: 'Me, by hand',
+   },
+   {
+      value: 'automation',
+      label: 'The system on its own',
+   },
+   {
+      value: 'workflow',
+      label: 'A workflow',
+   },
+   {
+      value: 'retry',
+      label: 'A retry',
+   },
+   {
+      value: 'event',
+      label: 'A workflow started by an event',
+   },
+]
+
+const ifEventConfig = z.object({
+   match: z.enum(['all', 'any']).default('all'),
+   ...Object.fromEntries(
+      conditionRows.flatMap(row => [
+         [conditionKey('fact', row), z.string().max(80).default('')],
+         [conditionKey('is', row), z.enum(['is', 'isNot', 'unknown']).default('is')],
+         [conditionKey('value', row), z.string().max(100).default('')],
+      ])
+   ),
+})
+
+const ifEventFields: Field[] = [
+   {
+      key: 'match',
+      label: 'Match',
+      kind: 'select',
+      options: [
+         {
+            value: 'all',
+            label: 'All conditions (and)',
+         },
+         {
+            value: 'any',
+            label: 'Any condition (or)',
+         },
+      ],
+   },
+   ...conditionRows.flatMap((row): Field[] => [
+      {
+         key: conditionKey('fact', row),
+         label: row === 1 ? 'Condition' : `Condition ${row}`,
+         kind: 'select',
+         options: [
+            {
+               value: '',
+               label: row === 1 ? 'Pick a fact' : 'Not used',
+            },
+            ...FACT_OPTIONS,
+         ],
+      },
+      {
+         key: conditionKey('is', row),
+         label: 'is',
+         kind: 'select',
+         options: [
+            {
+               value: 'is',
+               label: 'is',
+            },
+            {
+               value: 'isNot',
+               label: 'is not',
+            },
+            {
+               value: 'unknown',
+               label: 'is not known',
+            },
+         ],
+      },
+      {
+         key: conditionKey('value', row),
+         label: 'Value',
+         kind: 'text',
+         placeholder: 'For example false, SENT or negative',
+      },
+   ]),
+]
+
+const taskEventConfig = z.object({
+   phase: z.enum(EVENT_PHASES).default('after'),
+   task: z.string().trim().max(60).default(''),
+   accounts: z.array(z.string().min(1).max(100)).max(MAX_POOL).default([]),
+   startedBy: z.array(z.enum(ORIGIN_KINDS)).default([...ORIGIN_KINDS]),
+   verdicts: z.array(z.string().trim().toUpperCase().min(1).max(40)).max(20).default([]),
+   plannedBy: z.array(z.string().min(1).max(60)).max(20).default([]),
+   ownTasks: z.boolean().default(false),
+   maxPerHour: z.number().int().min(1).max(200).default(30),
+})
+
+const messageArrivedConfig = z.object({
+   accounts: z.array(z.string().min(1).max(100)).max(MAX_POOL).default([]),
+   maxPerHour: z.number().int().min(1).max(200).default(30),
+})
+
+const maxPerHourField: Field = {
+   key: 'maxPerHour',
+   label: 'At most this many runs an hour',
+   kind: 'int',
+   min: 1,
+   max: 200,
+   hint: 'More wait their turn instead of being lost.',
+}
 
 const BLOCKS = {
    'trigger.manual': {
@@ -1764,6 +1897,92 @@ const BLOCKS = {
             key: 'workflowId',
             label: 'After this workflow',
             kind: 'workflow',
+         },
+      ],
+   },
+   'trigger.taskEvent': {
+      group: 'Triggers',
+      liveness: 'always',
+      label: 'When an account runs a task',
+      summary:
+         'Starts when one of your accounts is about to run, is running, or has finished a task, for example after a connection request went. Gives the people the task was about.',
+      input: null,
+      output: 'profile',
+      config: taskEventConfig,
+      fields: [
+         {
+            key: 'phase',
+            label: 'Moment',
+            kind: 'select',
+            options: [
+               {
+                  value: 'before',
+                  label: 'Before it starts',
+               },
+               {
+                  value: 'on',
+                  label: 'While it works',
+               },
+               {
+                  value: 'after',
+                  label: 'When it finishes',
+               },
+            ],
+         },
+         {
+            key: 'task',
+            label: 'Task (empty for any)',
+            kind: 'text',
+            placeholder: 'linkedin-invite',
+         },
+         {
+            key: 'accounts',
+            label: 'Accounts (empty for any)',
+            kind: 'accounts',
+         },
+         {
+            key: 'startedBy',
+            label: 'Started by',
+            kind: 'multi',
+            options: EVENT_STARTERS,
+            hint: 'Untick what should not start this workflow, for example the tasks you start by hand.',
+         },
+         {
+            key: 'verdicts',
+            label: 'Only when the verdict is (finished only)',
+            kind: 'words',
+            hint: 'For example DONE. Empty for any.',
+         },
+         {
+            key: 'ownTasks',
+            label: 'Also react to tasks this workflow started',
+            kind: 'toggle',
+            advanced: true,
+         },
+         {
+            ...maxPerHourField,
+            advanced: true,
+         },
+      ],
+   },
+   'trigger.messageArrived': {
+      group: 'Triggers',
+      liveness: 'always',
+      label: 'When a message arrives',
+      summary:
+         'Starts when a read of your messages stores a new message from someone. Gives the conversations, with the new words. The first read of an account gives none.',
+      input: null,
+      output: 'conversation',
+      config: messageArrivedConfig,
+      fields: [
+         {
+            key: 'accounts',
+            label: 'Accounts (empty for any)',
+            kind: 'accounts',
+         },
+         {
+            ...maxPerHourField,
+            advanced: true,
          },
       ],
    },
@@ -3316,6 +3535,61 @@ const BLOCKS = {
          },
       ],
    },
+   'logic.ifEvent': {
+      group: 'Logic',
+      flags: {
+         takesAnything: true,
+         keepsAside: true,
+      },
+      flow: 'Takes anything, gives what the event says matches; an Else after it gets the rest',
+      validate: node => {
+         const settings = settingsOf(node)
+         const used = conditionRows.some(
+            row => settings[conditionKey('fact', row)] !== '' && settings[conditionKey('fact', row)] !== undefined
+         )
+
+         return used
+            ? []
+            : [
+                 {
+                    nodeId: node.id,
+                    level: 'error' as const,
+                    message: 'If the event says: pick a fact to look at.',
+                 },
+              ]
+      },
+      label: 'If the event says',
+      summary:
+         'Passes on what the event says matches, for example "the note was not sent" or "the mood is negative". Draw a line from its Else dot for the rest. A fact that is not known matches neither is nor is not.',
+      input: 'profile',
+      output: 'profile',
+      config: ifEventConfig,
+      fields: ifEventFields,
+   },
+   'process.messageMood': {
+      group: 'Process',
+      label: 'Read the mood of a message',
+      flow: 'Takes conversations, gives them with a mood',
+      summary:
+         'Reads the newest words of each conversation by rules (interest, a no, a question, an away reply, a request to stop) and keeps the mood next to it. It reads words, not intent, and can be wrong; "neutral" means no rule matched.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            lastText: 'Sounds good, can we talk next week?',
+            lastFrom: 'THEM',
+            link: 'https://www.linkedin.com/messaging/thread/2-SAMPLE/',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            facts: { 'item.mood': 'positive' },
+            link: 'https://www.linkedin.com/messaging/thread/2-SAMPLE/',
+         },
+      },
+      input: 'conversation',
+      output: 'conversation',
+      config: empty,
+      fields: [],
+   },
    'logic.else': {
       group: 'Logic',
       flags: { passesOn: true },
@@ -4707,7 +4981,7 @@ export const topoOrder = (graph: Graph) => {
 }
 
 // How a run was started, and the triggers that fire for it. By hand and a preview fire every trigger.
-export type RunStart = 'MANUAL' | 'SCHEDULE' | 'PREVIEW' | 'API' | 'WORKFLOW'
+export type RunStart = 'MANUAL' | 'SCHEDULE' | 'PREVIEW' | 'API' | 'WORKFLOW' | 'EVENT'
 
 const FIRES: Record<RunStart, readonly BlockType[] | null> = {
    MANUAL: null,
@@ -4715,6 +4989,7 @@ const FIRES: Record<RunStart, readonly BlockType[] | null> = {
    SCHEDULE: ['trigger.schedule'],
    API: ['trigger.api'],
    WORKFLOW: ['trigger.workflow'],
+   EVENT: ['trigger.taskEvent', 'trigger.messageArrived'],
 }
 
 // Whether a trigger block starts a run. When the graph has no trigger of the kind that started the run, every trigger
@@ -4727,6 +5002,36 @@ export const isFired = (graph: Graph, start: RunStart, type: BlockType) => {
    }
 
    return wanted.includes(type)
+}
+
+// What a trigger block that listens to task events asks, in one shape; null for any other block or settings that do not read.
+export type EventTrigger = EventTriggerSettings & { maxPerHour: number }
+
+export const eventTriggerOf = (node: GraphNode): EventTrigger | null => {
+   if (node.type === 'trigger.taskEvent') {
+      const settings = taskEventConfig.safeParse(node.config)
+
+      return settings.success ? settings.data : null
+   }
+
+   if (node.type === 'trigger.messageArrived') {
+      const settings = messageArrivedConfig.safeParse(node.config)
+
+      return settings.success
+         ? {
+              phase: 'after',
+              task: 'linkedin-messages',
+              accounts: settings.data.accounts,
+              startedBy: [],
+              verdicts: [],
+              plannedBy: [],
+              ownTasks: true,
+              maxPerHour: settings.data.maxPerHour,
+           }
+         : null
+   }
+
+   return null
 }
 
 // The order ready blocks go in: depth first from the blocks with nothing before them, one branch to its end before the

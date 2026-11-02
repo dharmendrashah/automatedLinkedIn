@@ -183,6 +183,20 @@ export type InviteChange = {
    invitedAt?: Date
    withdrawnAt?: Date
    memberId?: string
+   noteSent?: boolean
+}
+
+// Whether the note went with the invite: known only when a note was asked for and the invite went.
+export const noteSentOf = (outcome: InviteSendOutcome, note: string | null): { noteSent?: boolean } => {
+   if (!note) {
+      return {}
+   }
+
+   if (outcome === 'SENT') {
+      return { noteSent: true }
+   }
+
+   return outcome === 'SENT_WITHOUT_NOTE' ? { noteSent: false } : {}
 }
 
 // LinkedIn gives free accounts a few invite notes a month; once they are used up, notes come back on the 1st (UTC, the closest known).

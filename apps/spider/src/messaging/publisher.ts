@@ -4,8 +4,10 @@ import {
    TASK_KEY as RUN_KEY,
    TASK_CATALOG_KEY,
    TASK_DONE_KEY,
+   TASK_STARTED_KEY,
    type TaskCatalog,
    type TaskResult,
+   type TaskStarted,
 } from '@automatedLinkedIn/contracts'
 
 import { type ScrapeTaskCommand, type ScrapeTaskResult } from '../types'
@@ -46,6 +48,10 @@ export const republishTask = (channel: Publisher, message: Message, retries: num
 // The answer to a task of the standard contract (.plan/spider-task-framework.md).
 export const publishRunResult = (channel: Publisher, result: TaskResult) =>
    publish(channel, TASK_DONE_KEY, Buffer.from(JSON.stringify(result)), result.task_id)
+
+// A run really began: brain writes the "on" moment of the task from it.
+export const publishStarted = (channel: Publisher, started: TaskStarted) =>
+   publish(channel, TASK_STARTED_KEY, Buffer.from(JSON.stringify(started)), `started-${started.task_id}`)
 
 export const republishRun = (channel: Publisher, message: Message, retries: number) =>
    publish(channel, RUN_KEY, message.content, String(message.properties.messageId), { [RETRIES_HEADER]: retries })

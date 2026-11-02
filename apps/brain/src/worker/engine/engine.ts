@@ -15,6 +15,7 @@ import {
    blockOf,
    convertsTo,
    edgeKey,
+   eventTriggerOf,
    executionOrder,
    isFired,
    isHandled,
@@ -289,6 +290,13 @@ const emitsOf = async (node: GraphNode, at: ItemKey, emit: string[] | undefined)
 }
 
 const NOTHING_REACHED = 'Nothing reached this block, so it did not run.'
+
+// The trigger blocks an event run was started for (saved in its input by the event dispatcher).
+const eventNodesOf = (run: Run): string[] => {
+   const nodes = (run.input as { nodes?: unknown } | null)?.nodes
+
+   return Array.isArray(nodes) ? nodes.filter((id): id is string => typeof id === 'string') : []
+}
 const NOT_FIRED = 'This trigger did not start the run, so it did not run.'
 
 // Why a block that has not started does not run: its trigger did not fire, or no line into it is live (the block before it
@@ -301,7 +309,14 @@ const deadReason = (run: Run, graph: Graph, step: Step, byKey: Map<string, Step>
    }
 
    if (isTrigger(node.type)) {
-      return isFired(graph, run.trigger, node.type) ? null : NOT_FIRED
+      if (!isFired(graph, run.trigger, node.type)) {
+         return NOT_FIRED
+      }
+
+      // An event run starts the trigger blocks that matched the event, not every event trigger of the workflow.
+      return run.trigger === 'EVENT' && eventTriggerOf(node) !== null && !eventNodesOf(run).includes(node.id)
+         ? NOT_FIRED
+         : null
    }
 
    const round = sourceRound(node.type, step.round)

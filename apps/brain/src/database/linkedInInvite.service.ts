@@ -9,6 +9,7 @@ import {
    type SkipReason,
    fillNote,
    inviteSentence,
+   noteSentOf,
    notesBackAt,
    planInvites,
    sendChange,
@@ -48,7 +49,11 @@ export type InviteRequest = {
    note?: string
    // The Found by source the owner was looking at, credited with the accepts.
    source?: string
+   // The workflow block that plans it, so campaigns can be told apart.
+   origin?: InviteOrigin
 }
+
+export type InviteOrigin = { workflowId: string; runId: string; nodeId: string }
 
 // Someone to invite: what My network or the block knows of them.
 type Prospect = { slug: string; name: string | null; company: string | null; doNotContact: boolean; foundBy: string[] }
@@ -312,7 +317,14 @@ export class LinkedInInviteService {
    }
 
    // What "Send connection request" asks: the people go out from one account. Null when the account is not the owner's.
-   public static async inviteFrom(userId: string, accountId: string, people: Link[], note: string, now = new Date()) {
+   public static async inviteFrom(
+      userId: string,
+      accountId: string,
+      people: Link[],
+      note: string,
+      now = new Date(),
+      origin?: InviteOrigin
+   ) {
       const account = await PrismaService.client.linkedInAccount.findFirst({
          where: {
             id: accountId,
@@ -331,6 +343,7 @@ export class LinkedInInviteService {
             accountId,
             note,
             people,
+            ...(origin && { origin }),
          },
          now
       )
@@ -382,6 +395,11 @@ export class LinkedInInviteService {
                   ? request.source
                   : (person.foundBy.find(source => source.startsWith('list:')) ?? person.foundBy[0] ?? null),
             plannedAt: times[index] ?? now,
+            ...(request.origin && {
+               originWorkflowId: request.origin.workflowId,
+               originRunId: request.origin.runId,
+               originNodeId: request.origin.nodeId,
+            }),
          }))
          const made = await tx.linkedInInvite.createMany({
             data: rows,
@@ -817,6 +835,7 @@ export class LinkedInInviteService {
             accountId: true,
             state: true,
             tries: true,
+            note: true,
          },
       })
       const byId = new Map(rows.map(row => [row.id, row]))
@@ -840,7 +859,14 @@ export class LinkedInInviteService {
             const row = byId.get(id)
 
             if (row && (row.state === 'SENDING' || row.state === 'UNKNOWN')) {
-               await apply(id, sendChange(outcome, row.tries, now, memberId), ['SENDING', 'UNKNOWN'])
+               await apply(
+                  id,
+                  {
+                     ...sendChange(outcome, row.tries, now, memberId),
+                     ...noteSentOf(outcome, row.note),
+                  },
+                  ['SENDING', 'UNKNOWN']
+               )
             }
          }
 

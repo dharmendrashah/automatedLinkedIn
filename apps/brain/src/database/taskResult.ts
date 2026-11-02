@@ -2,6 +2,7 @@ import { type TaskResult } from '@automatedLinkedIn/contracts'
 
 import { BrowseBudgetService } from './browseBudget.service'
 import { SpiderSessionService } from './spiderSession.service'
+import { TaskEventService } from './taskEvent.service'
 import { TASK_HOOKS } from './taskHooks'
 
 // Finishes the session of a task and runs the hook of its task in the same transaction. Resolves to whether this answer was
@@ -10,6 +11,14 @@ export const applyTaskResult = async (result: TaskResult) => {
    const session = await SpiderSessionService.finishTask(result, async (finished, tx) => {
       await BrowseBudgetService.settle(tx, finished.id, result)
       await TASK_HOOKS[result.task]?.onResult?.(finished, result, tx)
+      await TaskEventService.recordFor(
+         tx,
+         {
+            ...finished,
+            task: result.task,
+         },
+         'after'
+      )
    })
 
    return session !== null

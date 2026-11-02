@@ -6,10 +6,13 @@ export const DEAD_EXCHANGE = 'scraping.dead'
 export const TASK_QUEUE = 'tasks.run'
 export const TASK_DEAD_QUEUE = 'tasks.run.dead'
 export const TASK_DONE_QUEUE = 'tasks.done'
+// The worker tells brain a run really began (the "on" moment of a task event). Late or lost ones only mean a missing event.
+export const TASK_STARTED_QUEUE = 'tasks.started'
 // Holds the latest catalog the worker announced; brain stores it, so a missed one only waits.
 export const TASK_CATALOG_QUEUE = 'tasks.catalog'
 export const TASK_KEY = 'task.run'
 export const TASK_DONE_KEY = 'task.done'
+export const TASK_STARTED_KEY = 'task.started'
 export const TASK_CATALOG_KEY = 'task.catalog'
 
 // A task that keeps failing is delivered this many times, then dead-lettered.
@@ -17,6 +20,7 @@ export const TASK_DELIVERY_LIMIT = 3
 
 const TASK_DONE_TTL_MS = 24 * 60 * 60 * 1000
 const TASK_DONE_MAX_LENGTH = 10_000
+const TASK_STARTED_TTL_MS = 60 * 60 * 1000
 
 // The part of an amqplib channel the topology needs. Method syntax keeps it assignable from amqplib's overloads.
 export type TopologyChannel = {
@@ -51,6 +55,15 @@ export const assertAccountTopology = async (channel: TopologyChannel) => {
       },
    })
    await channel.bindQueue(TASK_DONE_QUEUE, EXCHANGE, TASK_DONE_KEY)
+
+   await channel.assertQueue(TASK_STARTED_QUEUE, {
+      durable: true,
+      arguments: {
+         'x-message-ttl': TASK_STARTED_TTL_MS,
+         'x-max-length': TASK_DONE_MAX_LENGTH,
+      },
+   })
+   await channel.bindQueue(TASK_STARTED_QUEUE, EXCHANGE, TASK_STARTED_KEY)
 
    await channel.assertQueue(TASK_CATALOG_QUEUE, {
       durable: true,

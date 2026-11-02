@@ -301,6 +301,33 @@ describe('runTask', () => {
       expect(manifest).toEqual({ artifacts: published[0].artifacts })
    })
 
+   it('should tell brain the run began, for a task that knows nothing of events', async () => {
+      const publishStarted = vi.fn(async () => undefined)
+      const { run, published } = setup({ overrides: { publishStarted } })
+
+      await run()
+
+      expect(publishStarted).toHaveBeenCalledWith({
+         contract: 1,
+         task_id: TASK_ID,
+         task: 'demo',
+         started_at: expect.any(String),
+         worker: { build: 'abc1234' },
+      })
+      expect(published).toHaveLength(1)
+   })
+
+   it('should not fail the task when the broker cannot take the started message', async () => {
+      const publishStarted = vi.fn(async () => {
+         throw new Error('broker down')
+      })
+      const { run, published } = setup({ overrides: { publishStarted } })
+
+      await run()
+
+      expect(published[0]).toMatchObject({ status: 'SUCCEEDED' })
+   })
+
    it('should keep the input of the run with its files, with the run secrets masked and the rest as it was', async () => {
       const { run, store } = setup()
 

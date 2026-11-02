@@ -40,6 +40,7 @@ export {
    CONVERSATION_EXCERPT,
    type ConversationItem,
    EXCERPT_LENGTH,
+   type ItemFacts,
    type ItemResult,
    type JobItem,
    type PersonItem,
