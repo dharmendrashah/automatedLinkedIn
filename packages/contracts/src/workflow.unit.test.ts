@@ -605,6 +605,8 @@ describe('Account Actions', () => {
          'account.visitCompany',
          'account.writePost',
          'account.getConnections',
+         'account.getRequests',
+         'account.getConversations',
       ])
    })
 

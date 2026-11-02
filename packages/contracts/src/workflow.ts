@@ -237,6 +237,8 @@ export const ACCOUNT_BLOCK_HOURS = {
    'account.visitCompany': 8,
    'account.writePost': 1,
    'account.getConnections': 2,
+   'account.getRequests': 2,
+   'account.getConversations': 2,
 } as const
 
 // Every spider task and the block or blocks that run it (.plan/account-action-blocks.md): `blocks` are built, `planned` are on the
@@ -246,12 +248,12 @@ export const ACCOUNT_ACTION_TASKS: Record<string, { blocks: string[] } | { plann
    'browser-detection': { none: 'Left for later by the owner: it has no account.' },
    'linkedin-login': { none: 'Left for later by the owner: the system keeps accounts signed in.' },
    'linkedin-browse': { planned: 'Get my feed posts (phase 5)' },
-   'linkedin-messages': { planned: 'Get my conversations (phase 2)' },
-   'linkedin-profile': { planned: 'Read profile with my account (phase 2)' },
+   'linkedin-messages': { blocks: ['account.getConversations'] },
+   'linkedin-profile': { planned: 'Get my profile: reads the account\u2019s own profile (phase 2, later)' },
    'linkedin-post': { blocks: ['account.writePost'] },
    'linkedin-reply': { planned: 'Reply in a conversation (phase 4)' },
    'linkedin-message': { planned: 'Send message (phase 4)' },
-   'linkedin-invitations': { planned: 'Get my connection requests, Answer connection requests (phases 2 and 3)' },
+   'linkedin-invitations': { blocks: ['account.getRequests'] },
    'linkedin-connections': { blocks: ['account.getConnections'] },
    'linkedin-invite': { planned: 'Send connection request, Withdraw connection request (phase 3)' },
    'linkedin-view-profile': { blocks: ['account.visitProfile'] },
@@ -873,6 +875,8 @@ export const BLOCK_TYPES = [
    'account.visitCompany',
    'account.writePost',
    'account.getConnections',
+   'account.getRequests',
+   'account.getConversations',
    'output.list',
    'output.markPosts',
    'output.csv',
@@ -3697,6 +3701,104 @@ const BLOCKS = {
          ...accountFields(ACCOUNT_BLOCK_HOURS['account.getConnections']),
       ],
    },
+   'account.getRequests': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'people',
+      estimate: node => ({
+         items: howManyOf(node),
+         costMicros: 0,
+      }),
+      previewCap: PREVIEW_LIMITS.perPost,
+      label: 'Get my connection requests',
+      summary:
+         'Reads the connection requests your accounts received and have not answered, with the note each person wrote.',
+      api: [
+         {
+            field: 'account',
+            shape: 'text',
+            check: 'text',
+            what: 'the id of one of your accounts to read from',
+            example: ['your-account-id'],
+            setting: 'account',
+            also: { accountMode: 'one' },
+         },
+      ],
+      sample: {
+         out: {
+            name: 'Ada Lovelace',
+            headline: 'Founder at Analytical Engines',
+            note: 'Hi, I liked your post on engines. Let us connect.',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+      },
+      input: 'start',
+      output: 'profile',
+      config: z.object({
+         howMany: howMany(200, 50),
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.getRequests']),
+      }),
+      fields: [
+         {
+            key: 'howMany',
+            label: 'How many people',
+            kind: 'int',
+            min: 1,
+            max: 200,
+         },
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.getRequests']),
+      ],
+   },
+   'account.getConversations': {
+      group: 'Account Actions',
+      flags: { usesAccounts: true },
+      unit: 'conversations',
+      estimate: node => ({
+         items: howManyOf(node),
+         costMicros: 0,
+      }),
+      previewCap: PREVIEW_LIMITS.perPost,
+      label: 'Get my conversations',
+      summary:
+         'Reads the conversations of your accounts, newest first, with the last message shortened and who wrote it. No files.',
+      api: [
+         {
+            field: 'account',
+            shape: 'text',
+            check: 'text',
+            what: 'the id of one of your accounts to read from',
+            example: ['your-account-id'],
+            setting: 'account',
+            also: { accountMode: 'one' },
+         },
+      ],
+      sample: {
+         out: {
+            name: 'Ada Lovelace',
+            lastMessage: 'Thanks for connecting. Could we talk next week?',
+            lastFrom: 'THEM',
+            unread: true,
+            link: 'https://www.linkedin.com/messaging/thread/2-SAMPLE/',
+         },
+      },
+      input: 'start',
+      output: 'conversation',
+      config: z.object({
+         howMany: howMany(500, 50),
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.getConversations']),
+      }),
+      fields: [
+         {
+            key: 'howMany',
+            label: 'How many conversations',
+            kind: 'int',
+            min: 1,
+            max: 500,
+            hint: 'The newest first.',
+         },
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.getConversations']),
+      ],
+   },
    'output.csv': {
       group: 'Output',
       flags: { keepsResults: true },
@@ -4255,9 +4357,10 @@ const configErrors = (node: GraphNode): GraphError[] => {
         }))
 }
 
-// What happens to items a block does not take: posts become their authors where a block wants people, the rest
-// passes through unchanged.
-export const convertsTo = (gives: ItemKind, needs: ItemKind) => gives === 'post' && needs === 'profile'
+// What happens to items a block does not take: posts become their authors and conversations the person in them where a block
+// wants people, the rest passes through unchanged.
+export const convertsTo = (gives: ItemKind, needs: ItemKind) =>
+   (gives === 'post' || gives === 'conversation') && needs === 'profile'
 
 const edgeNotes = (graph: Graph, byId: Map<string, GraphNode>): GraphError[] =>
    graph.edges.flatMap(({ from, to }): GraphError[] => {
@@ -4296,7 +4399,7 @@ const edgeNotes = (graph: Graph, byId: Map<string, GraphNode>): GraphError[] =>
             nodeId: to,
             level: 'note' as const,
             message: convertsTo(gives, needs)
-               ? `${label} gets posts: it uses their authors.`
+               ? `${label} gets ${gives === 'post' ? 'posts: it uses their authors' : 'conversations: it uses the people in them'}.`
                : `${label} needs ${KIND_LABELS[needs]}; the ${KIND_LABELS[gives]} it gets pass through unchanged.`,
          },
       ]

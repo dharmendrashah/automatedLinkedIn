@@ -79,7 +79,7 @@ import {
    searchPeopleParams,
    searchedPeopleFrom,
 } from '../data/operations'
-import { getConnections } from './accountRead'
+import { getConnections, getConversations, getRequests } from './accountRead'
 import {
    type Context,
    DAY_MS,
@@ -1580,6 +1580,8 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'account.visitCompany': visitCompany,
    'account.writePost': writePost,
    'account.getConnections': getConnections,
+   'account.getRequests': getRequests,
+   'account.getConversations': getConversations,
    'output.list': addToList,
    'output.markPosts': markPosts,
    'output.csv': exportCsv,

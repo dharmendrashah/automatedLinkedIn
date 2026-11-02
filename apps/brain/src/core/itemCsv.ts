@@ -55,6 +55,7 @@ const rowOf = ({ round, item }: { round: number; item: WorkflowItemData }): (str
       base[9] = signal?.via ?? null
       base[10] = signal?.at ?? item.connectedOn ?? null
       base[13] = item.email ?? null
+      base[15] = item.note ?? null
    } else if (item.kind === 'post') {
       base[0] = 'Post'
       base[11] = item.author ?? null

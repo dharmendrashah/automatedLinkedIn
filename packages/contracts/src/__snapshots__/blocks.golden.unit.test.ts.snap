@@ -10,6 +10,8 @@ exports[`blocks before they became one definition > should keep the sets of bloc
   ],
   "pool": [
     "account.getConnections",
+    "account.getConversations",
+    "account.getRequests",
     "account.visitCompany",
     "account.visitProfile",
     "account.writePost",
@@ -720,6 +722,34 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 7,
     },
     "type": "account.getConnections",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 50,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 7,
+    },
+    "type": "account.getRequests",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 50,
+    },
+    "preview": {
+      "howMany": 20,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 7,
+    },
+    "type": "account.getConversations",
   },
   {
     "plain": {

@@ -15,6 +15,8 @@ describe('descriptions of what a call may feed', () => {
       expect(described.map(({ type }) => type).sort()).toEqual(
          [
             'account.getConnections',
+            'account.getConversations',
+            'account.getRequests',
             'collect.domainLookup',
             'collect.findPosts',
             'collect.searchPeople',

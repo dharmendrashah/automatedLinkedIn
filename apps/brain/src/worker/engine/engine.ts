@@ -116,6 +116,15 @@ const sortInputs = (items: WorkflowItemData[], needs: ItemKind | null) => {
          inputs.push(item)
       } else if (author && convertsTo('post', needs)) {
          inputs.push(person(author))
+      } else if (item.kind === 'conversation' && item.personSlug && convertsTo('conversation', needs)) {
+         inputs.push(
+            person({
+               slug: item.personSlug,
+               url: `https://www.linkedin.com/in/${item.personSlug}/`,
+               name: item.name,
+               known: true,
+            })
+         )
       } else {
          passThrough.push(item)
       }

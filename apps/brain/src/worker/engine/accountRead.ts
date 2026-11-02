@@ -1,6 +1,13 @@
 import { type WorkflowItemData, person } from 'core'
 
-import { AccountActionService, ConnectionReadService, VisitPoolService, WorkflowRunService } from 'database'
+import {
+   AccountActionService,
+   ConnectionReadService,
+   ConversationReadService,
+   InvitationReadService,
+   VisitPoolService,
+   WorkflowRunService,
+} from 'database'
 
 import { PREVIEW_LIMITS } from '@automatedLinkedIn/contracts'
 
@@ -139,6 +146,51 @@ export const getConnections = (ctx: Context) =>
                   known: true,
                })
             ),
+      },
+      numberIn(configOf(ctx.node), 'howMany')
+   )
+
+export const getRequests = (ctx: Context) =>
+   runAccountRead(
+      ctx,
+      {
+         noun: 'people',
+         ask: InvitationReadService.ask,
+         state: InvitationReadService.state,
+         items: async (userId, accountIds, take) =>
+            (await InvitationReadService.people(userId, accountIds, take)).map(row =>
+               person({
+                  slug: row.slug,
+                  url: row.url,
+                  name: row.name,
+                  headline: row.headline,
+                  note: row.note,
+               })
+            ),
+      },
+      numberIn(configOf(ctx.node), 'howMany')
+   )
+
+export const getConversations = (ctx: Context) =>
+   runAccountRead(
+      ctx,
+      {
+         noun: 'conversations',
+         ask: ConversationReadService.ask,
+         state: ConversationReadService.state,
+         items: async (userId, accountIds, take) =>
+            (await ConversationReadService.conversations(userId, accountIds, take)).map(row => ({
+               kind: 'conversation' as const,
+               slug: row.id,
+               url: row.url,
+               personSlug: row.personSlug,
+               name: row.name,
+               headline: null,
+               lastText: row.lastText,
+               lastAt: row.lastAt,
+               lastFrom: row.lastFrom,
+               unread: row.unread,
+            })),
       },
       numberIn(configOf(ctx.node), 'howMany')
    )

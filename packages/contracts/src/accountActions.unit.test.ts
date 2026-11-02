@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { type Graph, type NodeConfig, applyApiInput, blockOf, catalog, errorsOf, validateGraph } from './workflow'
+import {
+   type Graph,
+   type NodeConfig,
+   applyApiInput,
+   blockOf,
+   catalog,
+   convertsTo,
+   errorsOf,
+   validateGraph,
+} from './workflow'
 
 const node = (id: string, type: Graph['nodes'][number]['type'], config: NodeConfig = {}) => ({
    id,
@@ -89,5 +98,48 @@ describe('Get my connections', () => {
 
       expect(entry?.sample?.out).toMatchObject({ name: 'Ada Lovelace' })
       expect(catalog().find(({ type }) => type === 'account.select')?.sample).toBeNull()
+   })
+})
+
+describe('Get my connection requests and Get my conversations', () => {
+   it('should give people and conversations, start a chain on their own, and wait 2 hours', () => {
+      expect(blockOf('account.getRequests')).toMatchObject({
+         input: 'start',
+         output: 'profile',
+      })
+      expect(blockOf('account.getConversations')).toMatchObject({
+         input: 'start',
+         output: 'conversation',
+      })
+      expect(blockOf('account.getConversations').config.parse({})).toMatchObject({
+         howMany: 50,
+         timeLimitHours: 2,
+      })
+   })
+
+   it('should turn the conversations a block gets into their people for a block that wants people, and say so', () => {
+      expect(convertsTo('conversation', 'profile')).toBe(true)
+      expect(convertsTo('conversation', 'company')).toBe(false)
+
+      const notes = validateGraph({
+         nodes: [
+            node('read', 'account.getConversations', {
+               accountMode: 'one',
+               account: 'a1',
+            }),
+            node('visit', 'account.visitProfile', {
+               accountMode: 'one',
+               account: 'a1',
+            }),
+         ],
+         edges: [
+            {
+               from: 'read',
+               to: 'visit',
+            },
+         ],
+      }).map(({ message }) => message)
+
+      expect(notes).toContain('Visit profile gets conversations: it uses the people in them.')
    })
 })
