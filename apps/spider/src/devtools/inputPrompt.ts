@@ -42,6 +42,19 @@ export const describeFields = (schema: Record<string, unknown>): Field[] => {
    })
 }
 
+// A profile address as the contract takes it: LinkedIn writes accents percent-encoded, so a pasted `sébastien` or a whole
+// `https://www.linkedin.com/in/...` link becomes `s%C3%A9bastien`.
+export const normaliseSlug = (text: string) => {
+   const typed = text.trim().normalize('NFC')
+   const slug = /\/in\/([^/?#\s]+)/.exec(typed)?.[1] ?? typed.replace(/^\/+|\/+$/g, '')
+
+   try {
+      return encodeURIComponent(decodeURIComponent(slug))
+   } catch {
+      return encodeURIComponent(slug)
+   }
+}
+
 const toBoolean = (text: string) => {
    if (/^(y|yes|true)$/i.test(text)) {
       return true
@@ -63,7 +76,7 @@ export const coerceAnswer = (field: Field, text: string): Answer => {
    }
 
    if (field.type === 'string') {
-      return { value: text }
+      return { value: field.name === 'slug' ? normaliseSlug(text) : text }
    }
 
    if (field.type === 'boolean') {
@@ -131,4 +144,49 @@ export const askInput = async (task: TaskDefinition): Promise<Record<string, unk
       checked.error.issues.forEach(issue => console.log(`${issue.path.join('.') || 'input'}: ${issue.message}`))
       console.log('Let us try again.')
    }
+}
+
+export type InputRequest = {
+   // `key=value` words, and the whole input as a JSON object; the words win.
+   fields: string[]
+   json?: string
+}
+
+// The input given on the command line: each word is read by the type of its field like an answer would be, then the task's own
+// schema checks the whole. Nothing is asked: what is wrong ends the command with the messages, which never repeat a value.
+export const presetInput = (task: TaskDefinition, { fields, json }: InputRequest): Record<string, unknown> => {
+   const described = describeFields(toJSONSchema(task.input) as Record<string, unknown>)
+   const given: Record<string, unknown> = json === undefined ? {} : (JSON.parse(json) as Record<string, unknown>)
+
+   for (const word of fields) {
+      const at = word.indexOf('=')
+      const name = word.slice(0, at)
+      const field = described.find(found => found.name === name)
+
+      if (!field) {
+         throw new Error(
+            `This task has no input called ${name}. It takes: ${described.map(found => found.name).join(', ') || 'nothing'}.`
+         )
+      }
+
+      const answer = coerceAnswer(field, word.slice(at + 1))
+
+      if ('error' in answer) {
+         throw new Error(`${name}: ${answer.error}`)
+      }
+
+      if ('value' in answer) {
+         given[name] = answer.value
+      }
+   }
+
+   const checked = task.input.safeParse(given)
+
+   if (!checked.success) {
+      throw new Error(
+         checked.error.issues.map(issue => `${issue.path.join('.') || 'input'}: ${issue.message}`).join('\n')
+      )
+   }
+
+   return given
 }

@@ -25,6 +25,7 @@
       "@automatedLinkedIn/tsconfig": "workspace:*",
       "@types/node": "^26.6.4",
       "@types/pg": "^8.11.10",
+      "commander": "^15.0.0",
       "pg": "^8.23.1",
       "tsx": "^4.23.15",
       "typescript": "^7.0.2"

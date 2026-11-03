@@ -3,7 +3,7 @@ import { type ProxyConfig } from '@automatedLinkedIn/contracts'
 import { type TaskDefinition } from '../tasks/defineTask'
 import { TASK_NAME as BROWSE_TASK } from '../tasks/linkedinBrowse'
 import { TASK_NAME as LOGIN_TASK } from '../tasks/linkedinLogin'
-import { askInput } from './inputPrompt'
+import { type InputRequest, askInput, presetInput } from './inputPrompt'
 import { type SavedAccount } from './localDb'
 import { ask, choose, confirm, handleInterrupt } from './prompt'
 import { type RunSeed, createRunEnvironment } from './runEnvironment'
@@ -12,6 +12,16 @@ import { type RunRecord, summarise } from './summary'
 const MAX_RUNS = 10
 // A sign-in to a real account is what gets it locked, so it is not repeated often.
 const MAX_ACCOUNT_RUNS = 3
+
+// A task named on the command line, with what else was given; whatever is missing is asked as before.
+export type RunRequest = {
+   task: string
+   input: InputRequest
+   // An account by its email, how many runs, and whether to skip the question before signing in to live LinkedIn.
+   account?: string
+   runs?: number
+   yes: boolean
+}
 
 export type RunModeOptions = {
    proxy?: ProxyConfig
@@ -23,6 +33,7 @@ export type RunModeOptions = {
    seed?: RunSeed
    // One task and its input to run once, instead of asking for them (a staging run repeated with its own input).
    rerun?: { task: string; input: Record<string, unknown> }
+   request?: RunRequest
 }
 
 const describeNeeds = ({ needs }: TaskDefinition) =>
@@ -30,24 +41,38 @@ const describeNeeds = ({ needs }: TaskDefinition) =>
       .filter(Boolean)
       .join(', ')
 
-const chooseAccount = async (listAccounts: RunModeOptions['listAccounts']): Promise<SavedAccount> => {
+const chooseAccount = async (
+   listAccounts: RunModeOptions['listAccounts'],
+   { email, yes }: { email?: string; yes: boolean }
+): Promise<SavedAccount> => {
    const accounts = await listAccounts()
 
    if (accounts.length === 0) {
       throw new Error('There is no LinkedIn account in the local database.')
    }
 
-   const account = await choose(
-      'Which account should the task use?',
-      accounts.map(found => ({
-         label: `${found.email} (${found.status})`,
-         value: found,
-      }))
-   )
+   const named =
+      email === undefined ? undefined : accounts.find(found => found.email.toLowerCase() === email.toLowerCase())
 
-   const proceed = await confirm(
-      `\nThis signs in to live LinkedIn as ${account.email}, without the 5 minute wait the app keeps between sign-ins. Continue?`
-   )
+   if (email !== undefined && !named) {
+      throw new Error(`No account has the email ${email}. They are: ${accounts.map(found => found.email).join(', ')}.`)
+   }
+
+   const account =
+      named ??
+      (await choose(
+         'Which account should the task use?',
+         accounts.map(found => ({
+            label: `${found.email} (${found.status})`,
+            value: found,
+         }))
+      ))
+
+   const proceed =
+      yes ||
+      (await confirm(
+         `\nThis signs in to live LinkedIn as ${account.email}, without the 5 minute wait the app keeps between sign-ins. Continue?`
+      ))
 
    if (!proceed) {
       throw new Error('Cancelled.')
@@ -56,8 +81,10 @@ const chooseAccount = async (listAccounts: RunModeOptions['listAccounts']): Prom
    return account
 }
 
+const maxRuns = (needsAccount: boolean) => (needsAccount ? MAX_ACCOUNT_RUNS : MAX_RUNS)
+
 const countRuns = async (needsAccount: boolean) => {
-   const max = needsAccount ? MAX_ACCOUNT_RUNS : MAX_RUNS
+   const max = maxRuns(needsAccount)
 
    for (;;) {
       const count = Number.parseInt(await ask(`How many times should it run (1 to ${max})`, '1'), 10)
@@ -76,6 +103,7 @@ export const runTasks = async ({
    account: chosen,
    seed,
    rerun,
+   request,
 }: RunModeOptions) => {
    const { tasks, profiles, runOnce } = createRunEnvironment({
       proxy,
@@ -88,8 +116,9 @@ export const runTasks = async ({
       '\nTasks run with no allowlist, no robots.txt check and no delay between pages. The worker applies all three.'
    )
 
+   const wanted = rerun?.task ?? request?.task
    const task =
-      rerun === undefined
+      wanted === undefined
          ? await choose(
               'Which task?',
               tasks.map(found => ({
@@ -97,7 +126,7 @@ export const runTasks = async ({
                  value: found,
               }))
            )
-         : tasks.find(found => found.name === rerun.task)
+         : tasks.find(found => found.name === wanted)
 
    if (!task) {
       throw new Error('This worker does not have that task.')
@@ -107,9 +136,22 @@ export const runTasks = async ({
       throw new Error('This task only runs through a proxy. Start again and pick one.')
    }
 
-   const input = rerun?.input ?? (await askInput(task))
-   const account = task.needs.account ? (chosen ?? (await chooseAccount(listAccounts))) : undefined
-   const runs = rerun ? 1 : await countRuns(Boolean(account))
+   const given = request && (request.input.fields.length > 0 || request.input.json !== undefined)
+   const input = rerun?.input ?? (request && given ? presetInput(task, request.input) : await askInput(task))
+   const account = task.needs.account
+      ? (chosen ??
+        (await chooseAccount(listAccounts, {
+           ...(request?.account !== undefined && { email: request.account }),
+           yes: request?.yes === true,
+        })))
+      : undefined
+   const max = maxRuns(Boolean(account))
+
+   if (request?.runs !== undefined && request.runs > max) {
+      throw new Error(`This task may run at most ${max} times in one go.`)
+   }
+
+   const runs = rerun ? 1 : (request?.runs ?? (await countRuns(Boolean(account))))
    const records: RunRecord[] = []
    let stopping = false
 

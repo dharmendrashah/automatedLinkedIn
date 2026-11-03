@@ -7,6 +7,7 @@ import { type ProxyConfig } from '@automatedLinkedIn/contracts'
 
 import { browserExecutablePath } from '../scraping/browserPath'
 import { clearWebsiteFilter } from '../scraping/websiteFilter'
+import { type Plan, parseCommandLine } from './cli'
 import { type SavedAccount, type SavedProxy, listSavedAccounts, listSavedProxies, loadLocalDbConfig } from './localDb'
 import { choose, prompt } from './prompt'
 import { toProxyConfig } from './proxyConfig'
@@ -29,11 +30,25 @@ type Context = {
    chooseReplay?: () => Promise<ReplayChoice>
 }
 
-const localContext = async (): Promise<Context> => {
-   const { databaseUrl, encryptionKey } = loadLocalDbConfig()
-   const proxies = await listSavedProxies(databaseUrl)
+// The saved proxy named by the email of its account on the command line, `none` for no proxy, or one asked for when nothing was named.
+const pickProxy = async (proxies: SavedProxy[], named: string | undefined) => {
+   if (named?.toLowerCase() === 'none') {
+      return undefined
+   }
 
-   const picked = await choose<SavedProxy | undefined>('Which proxy?', [
+   if (named !== undefined) {
+      const found = proxies.find(proxy => proxy.accountEmail.toLowerCase() === named.toLowerCase())
+
+      if (!found) {
+         throw new Error(
+            `No saved proxy belongs to ${named}. They belong to: ${proxies.map(proxy => proxy.accountEmail).join(', ') || 'nobody'}.`
+         )
+      }
+
+      return found
+   }
+
+   return choose<SavedProxy | undefined>('Which proxy?', [
       {
          label: 'No proxy \u2014 connect directly',
          value: undefined,
@@ -43,6 +58,11 @@ const localContext = async (): Promise<Context> => {
          value: proxy,
       })),
    ])
+}
+
+const localContext = async (named: string | undefined): Promise<Context> => {
+   const { databaseUrl, encryptionKey } = loadLocalDbConfig()
+   const picked = await pickProxy(await listSavedProxies(databaseUrl), named)
 
    return {
       ...(picked && {
@@ -54,47 +74,57 @@ const localContext = async (): Promise<Context> => {
    }
 }
 
-const main = async () => {
-   const args = process.argv.slice(2)
+const main = async (plan: Exclude<Plan, { kind: 'help' }>) => {
    // The pulled files stay in their temporary folder unless `--clean` is given.
-   const keep = !args.includes('--clean')
-   const name = args.find(arg => !arg.startsWith('--')) ?? ''
+   const { keep } = plan
+   const name = plan.kind === 'menu' ? plan.name : ''
 
    // A worker started from this install may have left its allowlist filter in the browser's policies; here every address is
    // allowed.
    await clearWebsiteFilter(await browserExecutablePath()).catch(() => undefined)
 
-   const environment = await choose('Which environment?', [
-      {
-         label: 'Local \u2014 the accounts and proxies of this computer',
-         value: 'local',
-      },
-      {
-         label: 'Staging \u2014 take one staging account (proxy, device, browser profile, session) and use it here',
-         value: 'staging',
-      },
-   ])
-   const staging = environment === 'staging' ? await prepareStaging(keep) : undefined
-   const context: Context = staging ?? (await localContext())
-
-   const mode = await choose('What do you want to do?', [
-      {
-         label: 'Record a session \u2014 browse by hand, the steps are saved',
-         value: 'record',
-      },
-      {
-         label: 'Run a task \u2014 ask for its inputs, run it, show the result',
-         value: 'run',
-      },
-      ...(context.chooseReplay
-         ? [
+   const environment =
+      plan.kind === 'run'
+         ? plan.env
+         : await choose('Which environment?', [
               {
-                 label: 'Replay a staging run \u2014 repeat its steps, then keep recording',
-                 value: 'replay',
+                 label: 'Local \u2014 the accounts and proxies of this computer',
+                 value: 'local',
               },
-           ]
-         : []),
-   ])
+              {
+                 label: 'Staging \u2014 take one staging account (proxy, device, browser profile, session) and use it here',
+                 value: 'staging',
+              },
+           ])
+
+   if (plan.kind === 'run' && environment === 'staging' && plan.proxy !== undefined) {
+      console.warn('\nStaging brings its own proxy, so --proxy is ignored.')
+   }
+
+   const staging = environment === 'staging' ? await prepareStaging(keep) : undefined
+   const context: Context = staging ?? (await localContext(plan.kind === 'run' ? plan.proxy : undefined))
+
+   const mode =
+      plan.kind === 'run'
+         ? 'run'
+         : await choose('What do you want to do?', [
+              {
+                 label: 'Record a session \u2014 browse by hand, the steps are saved',
+                 value: 'record',
+              },
+              {
+                 label: 'Run a task \u2014 ask for its inputs, run it, show the result',
+                 value: 'run',
+              },
+              ...(context.chooseReplay
+                 ? [
+                      {
+                         label: 'Replay a staging run \u2014 repeat its steps, then keep recording',
+                         value: 'replay',
+                      },
+                   ]
+                 : []),
+           ])
    const { proxy, picked, listAccounts, encryptionKey, seed, account, chooseReplay } = context
 
    const replay = mode === 'replay' && chooseReplay ? await chooseReplay() : undefined
@@ -107,6 +137,18 @@ const main = async () => {
          outputRoot: OUTPUT_ROOT,
          account,
          seed,
+         ...(plan.kind === 'run' && {
+            request: {
+               task: plan.task,
+               input: {
+                  fields: plan.fields,
+                  ...(plan.input !== undefined && { json: plan.input }),
+               },
+               yes: plan.yes,
+               ...(plan.account !== undefined && { account: plan.account }),
+               ...(plan.runs !== undefined && { runs: plan.runs }),
+            },
+         }),
          ...(replay?.kind === 'task' && {
             rerun: {
                task: replay.task,
@@ -130,7 +172,19 @@ const main = async () => {
    })
 }
 
-main()
+const start = async () => {
+   const plan = parseCommandLine(process.argv.slice(2))
+
+   if (plan.kind === 'help') {
+      console.log(plan.text)
+
+      return
+   }
+
+   await main(plan)
+}
+
+start()
    .catch(error => {
       console.error(error instanceof Error ? error.message : error)
       process.exitCode = 1

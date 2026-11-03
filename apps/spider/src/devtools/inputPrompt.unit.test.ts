@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { toJSONSchema } from 'zod'
 
-import { coerceAnswer, describeFields } from './inputPrompt'
+import { type TaskDefinition } from '../tasks/defineTask'
+import { coerceAnswer, describeFields, normaliseSlug, presetInput } from './inputPrompt'
 
 const fieldsOf = (schema: z.ZodType) => describeFields(toJSONSchema(schema) as Record<string, unknown>)
 
@@ -96,5 +97,71 @@ describe('coerceAnswer', () => {
    it('should parse JSON for a nested value and refuse invalid JSON', () => {
       expect(coerceAnswer(field({ type: 'json' }), '["a","b"]')).toEqual({ value: ['a', 'b'] })
       expect(coerceAnswer(field({ type: 'json' }), '[a')).toHaveProperty('error')
+   })
+})
+
+describe('normaliseSlug', () => {
+   it('should write accents the way LinkedIn does, so the contract accepts the address', () => {
+      expect(normaliseSlug('sébastien-gaüzère-521240b2')).toBe('s%C3%A9bastien-ga%C3%BCz%C3%A8re-521240b2')
+      expect(normaliseSlug('s%C3%A9bastien-ga%C3%BCz%C3%A8re-521240b2')).toBe(
+         's%C3%A9bastien-ga%C3%BCz%C3%A8re-521240b2'
+      )
+   })
+
+   it('should take the address out of a link, and leave a plain one as it is', () => {
+      expect(normaliseSlug('https://www.linkedin.com/in/ada-l/?trk=x')).toBe('ada-l')
+      expect(normaliseSlug('  ada-l/ ')).toBe('ada-l')
+      expect(normaliseSlug('%E0%A4%A')).toBe('%25E0%25A4%25A')
+   })
+
+   it('should be used for a field called slug only', () => {
+      const field = (name: string) =>
+         ({
+            name,
+            type: 'string',
+            required: true,
+         }) as Parameters<typeof coerceAnswer>[0]
+
+      expect(coerceAnswer(field('slug'), 'sébastien')).toEqual({ value: 's%C3%A9bastien' })
+      expect(coerceAnswer(field('text'), 'sébastien')).toEqual({ value: 'sébastien' })
+   })
+})
+
+describe('presetInput', () => {
+   const task = {
+      input: z.strictObject({
+         slug: z.string().regex(/^[A-Za-z0-9_%-]{1,200}$/),
+         text: z.string().default(''),
+         pages: z.number().int().default(1),
+         files: z.array(z.string()).default([]),
+      }),
+   } as unknown as TaskDefinition
+
+   it('should read key=value pairs by the type of each field, splitting at the first =', () => {
+      expect(presetInput(task, { fields: ['slug=sébastien', 'text=a = b', 'pages=3', 'files=["x"]'] })).toEqual({
+         slug: 's%C3%A9bastien',
+         text: 'a = b',
+         pages: 3,
+         files: ['x'],
+      })
+   })
+
+   it('should take the whole input as JSON, and let a pair win over it', () => {
+      expect(
+         presetInput(task, {
+            fields: ['text=pair'],
+            json: '{"slug":"ada-l","text":"json"}',
+         })
+      ).toEqual({
+         slug: 'ada-l',
+         text: 'pair',
+      })
+   })
+
+   it('should end with a message that names the problem, never asking again', () => {
+      expect(() => presetInput(task, { fields: ['nope=1'] })).toThrow(/no input called nope.*slug, text, pages, files/)
+      expect(() => presetInput(task, { fields: ['slug=ada-l', 'pages=1.5'] })).toThrow(/pages: Enter a whole number/)
+      expect(() => presetInput(task, { fields: ['text=x'] })).toThrow(/slug/)
+      expect(() => presetInput(task, { fields: ['slug='] })).toThrow(/slug: This one is required/)
    })
 })
