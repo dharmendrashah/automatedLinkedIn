@@ -38,6 +38,9 @@ const clean = (text: string) =>
       .replace(/\n{3,}/g, '\n\n')
       .trim()
 
+// Whether two texts hold the same letters, whatever the line breaks and spaces: the box draws each line apart, so its text has none.
+export const sameWords = (a: string, b: string) => a.replace(/\s+/g, '') === b.replace(/\s+/g, '')
+
 // The text of a node as a person reads it: a line break is a line break, an emoji drawn as a picture is its description.
 const textOf = (node: Node): string => {
    if (node.nodeType === 3) {

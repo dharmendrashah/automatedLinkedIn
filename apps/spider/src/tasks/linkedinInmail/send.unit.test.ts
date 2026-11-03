@@ -43,6 +43,11 @@ type Page = {
    banner?: string | null
    subjectBox?: boolean
    typingWorks?: boolean
+   // The editor keeps only this many characters (key presses are lost), or only on the first try.
+   maxChars?: number
+   truncateOnce?: boolean
+   // The words the conversation shows after send.
+   shownText?: string
    sendWorks?: boolean
    clickFails?: boolean
    // After send: the window turns into a conversation that holds the message, or stays as it was.
@@ -72,6 +77,7 @@ const setup = (page: Page = {}) => {
    let uploading = page.uploadLooks ?? 0
    let changes = 0
    let pressed = 0
+   let deletes = 0
    const calls: string[] = []
    const removed = vi.fn(async () => undefined)
    const html = () => {
@@ -92,7 +98,7 @@ const setup = (page: Page = {}) => {
                   profile: `${BASE}/in/me/`,
                   time: '9:05 AM',
                   subject: SUBJECT,
-                  text: TEXT,
+                  text: page.shownText ?? TEXT,
                },
             ],
          })}</body></html>`
@@ -110,7 +116,7 @@ const setup = (page: Page = {}) => {
                      time: '9:05 AM',
                      day: 'Today',
                      subject: SUBJECT,
-                     text: TEXT,
+                     text: page.shownText ?? TEXT,
                   },
                ],
             },
@@ -212,7 +218,9 @@ const setup = (page: Page = {}) => {
          calls.push(`type ${focus}`)
 
          if (focus === 'body' && typingWorks) {
-            body += text
+            const limit = page.truncateOnce && deletes === 0 ? 10 : (page.maxChars ?? Infinity)
+
+            body += text.slice(0, Math.max(0, limit - body.length))
          }
       }),
       attachFiles: vi.fn(async (selector: string, paths: string[]) => {
@@ -227,6 +235,7 @@ const setup = (page: Page = {}) => {
          calls.push(`key ${key}`)
 
          if (key === 'Delete') {
+            deletes += 1
             body = ''
          }
 
@@ -322,6 +331,46 @@ describe('sendInmail', () => {
             profile: '/in/grace-h/',
          }).run()
       ).resolves.toEqual({ outcome: 'WRONG_RECIPIENT' })
+   })
+
+   it('should type long words in pieces, and send them whole', async () => {
+      const text = 'We help teams like yours book more calls with the right people, and we would like to talk about it.'
+      const { run, calls } = setup({ shownText: text })
+
+      await expect(run({ text })).resolves.toEqual({ outcome: 'SENT' })
+      expect(calls.filter(call => call === 'type body').length).toBeGreaterThan(3)
+      expect(calls.filter(call => call === 'press send')).toHaveLength(1)
+   })
+
+   it('should empty the box and type the words again when key presses were lost, and send only the whole words', async () => {
+      const text = 'We help teams like yours book more calls with the right people.'
+      const { run, calls } = setup({
+         truncateOnce: true,
+         shownText: text,
+      })
+
+      await expect(run({ text })).resolves.toEqual({ outcome: 'SENT' })
+      expect(calls).toContain('key Delete')
+      expect(calls.filter(call => call === 'press send')).toHaveLength(1)
+   })
+
+   it('should send nothing when the box never holds the words', async () => {
+      const { run, calls } = setup({ maxChars: 10 })
+
+      await expect(run({ text: 'We help teams like yours book more calls with the right people.' })).resolves.toEqual({
+         outcome: 'FAILED',
+         why: 'TYPING',
+      })
+      expect(calls).not.toContain('press send')
+   })
+
+   it('should say the words differ when LinkedIn says it went and the conversation shows other words', async () => {
+      const { run } = setup({
+         shownText: 'We help teams like',
+         answer: 200,
+      })
+
+      await expect(run()).resolves.toEqual({ outcome: 'DIFFERENT_WORDS' })
    })
 
    it('should type the subject in its own box before the words', async () => {
@@ -534,6 +583,7 @@ describe('answerFor', () => {
       { outcome: 'WOULD_COST_CREDIT' },
       { outcome: 'NO_COMPOSER' },
       { outcome: 'WRONG_RECIPIENT' },
+      { outcome: 'DIFFERENT_WORDS' },
       { outcome: 'NOT_AVAILABLE' },
       { outcome: 'SIGNED_OUT' },
       ...(

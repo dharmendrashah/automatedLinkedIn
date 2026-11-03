@@ -21,6 +21,7 @@ import {
    parseInmailWindow,
    parseMessageWindow,
    parseThread,
+   sameWords,
 } from '../../linkedin/messageReader'
 import { PACE } from '../../linkedin/pace'
 import { SignedOut, createSession } from '../../linkedin/session'
@@ -44,7 +45,7 @@ export type InmailInput = {
 // known (nothing is typed again for it). NO_MESSAGE_BUTTON: the profile shows no Message link. NOT_INMAIL: the window that opened is an
 // ordinary conversation window (the person may be a connection). WOULD_COST_CREDIT: the banner does not say "Free message", so nothing
 // was typed. NO_COMPOSER: no window or no box. WRONG_RECIPIENT: the window is for someone else, or more than one is open.
-// NOT_AVAILABLE: the address did not lead to a profile.
+// NOT_AVAILABLE: the address did not lead to a profile. DIFFERENT_WORDS: it went, and the conversation shows other words than asked for.
 export type InmailResult =
    | {
         outcome:
@@ -57,6 +58,7 @@ export type InmailResult =
            | 'WRONG_RECIPIENT'
            | 'NOT_AVAILABLE'
            | 'SIGNED_OUT'
+           | 'DIFFERENT_WORDS'
      }
    | {
         outcome: 'FAILED'
@@ -77,12 +79,29 @@ const WINDOW_LOOKS = 20
 const UPLOAD_LOOKS = 120
 const STABLE_LOOKS = 3
 
+// The words are typed in pieces of about this many characters, and the box is read back before send: through a slow page the editor
+// drops key presses (run cbfe04bb, 2026-11-03: the tail of the words was missing and the message went with other words than asked).
+const PIECE_CHARS = 24
+const TYPE_TRIES = 2
+const HOLD_LOOKS = 4
+
 const PAUSES = {
    open: [2000, 4000],
    look: [900, 1600],
    click: [600, 1400],
    typed: [800, 2000],
+   piece: [200, 500],
 } as const
+
+// The words cut after a space into pieces of about PIECE_CHARS characters.
+const piecesOf = (text: string) =>
+   text.split(/(?<=\s)/).reduce<string[]>((pieces, word) => {
+      const last = pieces.at(-1)
+
+      return last !== undefined && last.length + word.length <= PIECE_CHARS
+         ? [...pieces.slice(0, -1), last + word]
+         : [...pieces, word]
+   }, [])
 
 // The request the page makes to send a message. The recorder keeps no query strings, so `action=createMessage` could not be checked
 // for this window (2026-11-03): the page showing the message is the main proof and this answer only counts when the page never shows it.
@@ -116,6 +135,12 @@ export const sendInmail = async (
       log,
       baseUrl,
    })
+   // Over the profile the window turns into a conversation; on the compose page the page turns into one.
+   const messagesOf = (html: string) => {
+      const window = parseMessageWindow(html, today())
+
+      return window.open ? window.messages : parseThread(html, today()).messages
+   }
    const box = createMessageBox({
       hands,
       reader,
@@ -124,12 +149,7 @@ export const sendInmail = async (
       send: INMAIL_SEND_BUTTON,
       scope: INMAIL_FORM,
       sendInside: INMAIL_SEND,
-      // Over the profile the window turns into a conversation; on the compose page the page turns into one.
-      messagesOf: html => {
-         const window = parseMessageWindow(html, today())
-
-         return window.open ? window.messages : parseThread(html, today()).messages
-      },
+      messagesOf,
    })
 
    // Looks at the page until `ready` says yes, as a person waits for it; the last page read either way.
@@ -160,6 +180,44 @@ export const sendInmail = async (
          }
 
          await reader.wait(PAUSES.look)
+      }
+
+      return false
+   }
+
+   // Whether the box holds the words, given the editor a few looks to draw them.
+   const boxHolds = async (text: string) => {
+      for (let look = 0; look < HOLD_LOOKS; look += 1) {
+         if (sameWords(box.composer(await hands.html()).typed, text)) {
+            return true
+         }
+
+         await reader.wait(PAUSES.look)
+      }
+
+      return false
+   }
+
+   // Types the words piece by piece and checks the box holds all of them; when it does not (a key press was lost), the box is emptied
+   // and the words are typed once more. False means nothing trustworthy is in the box, and send must not be pressed.
+   const typeWords = async (text: string) => {
+      for (let attempt = 0; attempt < TYPE_TRIES; attempt += 1) {
+         for (const piece of piecesOf(text)) {
+            if (!(await hands.typeKeys(piece))) {
+               return false
+            }
+
+            await reader.wait(PAUSES.piece)
+         }
+
+         if (await boxHolds(text)) {
+            return true
+         }
+
+         log('The box does not hold the words that were typed')
+         await hands.clickSelector(INMAIL_COMPOSER)
+         await box.clear()
+         await reader.wait(PAUSES.typed)
       }
 
       return false
@@ -347,7 +405,7 @@ export const sendInmail = async (
             await reader.wait(PAUSES.click)
          }
 
-         if (!(await hands.typeKeys(input.text)) || box.composer(await hands.html()).typed === '') {
+         if (!(await typeWords(input.text))) {
             await box.clear()
 
             return {
@@ -387,14 +445,31 @@ export const sendInmail = async (
       pressed = true
       log('Pressed send')
 
-      const { outcome } = await box.confirm(watch, input.text, before)
+      const { outcome, html } = await box.confirm(watch, input.text, before)
 
-      return outcome === 'NOT_SENT'
-         ? {
-              outcome: 'FAILED',
-              why: 'NOT_SENT',
-           }
-         : { outcome }
+      if (outcome === 'NOT_SENT') {
+         return {
+            outcome: 'FAILED',
+            why: 'NOT_SENT',
+         }
+      }
+
+      // LinkedIn's answer can say it went while the page shows a conversation of this one message with other words.
+      const [only, ...rest] = messagesOf(html)
+
+      if (
+         outcome === 'SENT' &&
+         input.text !== '' &&
+         only?.direction === 'ME' &&
+         rest.length === 0 &&
+         !sameWords(only.text, input.text)
+      ) {
+         log('The conversation shows other words than the ones asked for')
+
+         return { outcome: 'DIFFERENT_WORDS' }
+      }
+
+      return { outcome }
    } catch (error) {
       if (error instanceof SignedOut) {
          return { outcome: pressed ? 'UNKNOWN' : 'SIGNED_OUT' }

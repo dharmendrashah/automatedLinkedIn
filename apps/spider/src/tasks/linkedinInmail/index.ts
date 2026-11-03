@@ -68,6 +68,10 @@ export const createLinkedinInmail = ({ baseUrl }: Options) =>
             label: 'Not sent',
             tone: 'failure',
          },
+         DIFFERENT_WORDS: {
+            label: 'Sent with other words',
+            tone: 'failure',
+         },
          NO_MESSAGE_BUTTON: {
             label: 'No Message button',
             tone: 'failure',

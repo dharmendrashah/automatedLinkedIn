@@ -21,6 +21,13 @@ export const answerFor = (result: InmailResult): TaskOutcome => {
             verdict: 'UNKNOWN',
             message: 'LinkedIn did not show whether the message was sent. Check the conversation on LinkedIn.',
          }
+      case 'DIFFERENT_WORDS':
+         return {
+            status: 'FAILED',
+            verdict: 'DIFFERENT_WORDS',
+            message:
+               'The message was sent, but LinkedIn shows other words than the ones asked for. Check the conversation on LinkedIn.',
+         }
       case 'NO_MESSAGE_BUTTON':
          return {
             status: 'FAILED',

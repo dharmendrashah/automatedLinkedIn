@@ -184,6 +184,10 @@ Checklist boxes (tick or write n/a with a reason before `done`):
 
 `NO_COMPOSER` after 31 s, nothing typed (as designed). Cause: the second layout. The Message link led to the whole `/messaging/compose/` page (a `div.msg-convo-wrapper.msg-thread` with the same `.msg-inmail-compose-form-v2` form, banner "Free message | Why?", subject, box, send `msg-form__send-btn`), not the window over the profile, and the reader looked only for the window. Fixed: the task works in `.msg-inmail-compose-form-v2` (in both layouts), waits 20 looks, and reads the sent message from the window or from the conversation page. Checked offline against the kept page of that run and the first recording. Still to run live again.
 
+## Live run 2 (devtools, 2026-11-03, run cbfe04bb)
+
+`SENT`, but the words were wrong: the box held "we provide that, if can we" of "we provide that, if can we have a chat later on" right after typing, and the message that went read "we provide that, if we". The editor dropped key presses (typing the whole text in one go, 45 to 115 ms per key, on a slow page) and the task never read the box back. LinkedIn's page did not show the sent words as asked, so the send-request fallback answered `SENT`. Fixed: the words are typed in pieces of about 24 characters with a short pause; the box is read back and must hold the same letters (spaces and line breaks ignored) or it is emptied and typed once more, else `FAILED / TYPING` and Send is not pressed; and when LinkedIn's answer says it went but the conversation shows one message of ours with other words, the verdict is `DIFFERENT_WORDS`. The subject is not read back (the input's value is not in the markup).
+
 ## Outcome
 
 Built and tested offline (2026-11-03); the live run is still open, so the status stays `locked`.
