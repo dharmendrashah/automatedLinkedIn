@@ -50,6 +50,7 @@ Decisions (owner answers, 2026-11-03):
 - Input: `{ slug, subject?, text, files, uploadId? }`. The profile address after /in/, an optional subject (up to 200), the words (up to 1,900; may be empty when there are files), and files as for a reply: images, documents, video and, as an experiment, audio (`replyFileSchema`, `MAX_ATTACHMENTS`, the upload kept by brain). No name input: the card linking to `/in/<slug>/` is the recipient check.
 - Limits: subject 200 and words 1,900, until seen.
 - Pacing: `oneAtATime: 'account'` and `cooldownMs: 120000`. The cooldown counts toward the account's daily caps, which are set in brain with the block.
+- Caps (owner, 2026-11-03): the monthly InMail cap (a free account has 5 a month) is kept by brain and the brain worker later, never by the spider; when the month's cap is reached brain does not send the request to the spider. `INMAIL_LIMIT_REACHED` in the task is only LinkedIn's own word that the allowance is used up.
 - One line `'linkedin-inmail': { planned: '...' }` in `packages/contracts/src/workflow.ts` (and a contracts rebuild): the registry test needs it. The block comes in the workflow later.
 - Live test: later, with a recipient the owner names. The task is built and tested offline first.
 
@@ -199,6 +200,10 @@ The member is not on Premium (or has not turned on InMail requests) and is not a
 ## Live run 4 (devtools, 2026-11-03, run 1c97eca6, dharmendrashaheagle, jenna-gil-4a7b6681)
 
 `NO_COMPOSER` after 49 s, nothing typed. A second-degree member (Connect, Message, More on the profile, no Premium mark) on a free account: the Message press did nothing at all for 25 s (no window, page, offer or composeOptions call; only `premium/featureAccess` was asked, video frames at 27 s and 36 s unchanged). The owner's three negative cases: the member does not take InMail (not Premium or not turned on), the account has used its InMail allowance (a free account has 5 a month, the owner says), and a free account in general. Handled: a Message press that opens nothing is now `NOT_ACCEPTING_INMAIL`; a banner that reads like a used-up allowance is the new verdict `INMAIL_LIMIT_REACHED` (the wording is a guess, never seen), and any other banner is still `WOULD_COST_CREDIT`. All stop before anything is typed. Unproven: a slow page would read as `NOT_ACCEPTING_INMAIL` after 20 looks (about 25 s; the compose page opened in 5 s in runs 2 and 3); the real wording when the allowance is used up and the owner's "pending requests" limit; counting the account's InMails per month belongs in brain with the block (caps), not in the task.
+
+## Live run 5 (devtools command line, 2026-11-03, run ad90299c, sébastien-gaüzère, Premium, free message)
+
+`FAILED` (`NOT_SENT`), but the message went. The words were typed right on the second try (the first read-back missed them and the retry worked), Send was pressed at 88.6 s, and LinkedIn covered the window with "Sending..." (`.msg-compose-retry-loader`) for the 15 s the task looked: the send request had not answered yet (slow proxy), and the words stay in the box while it is on its way. The shared check "the words are still in the box, so send did nothing" then cleared the box and said `NOT_SENT`. Fixed in `createMessageBox.confirm` (shared with `linkedin-message` and `linkedin-reply`): while the page says Sending the task keeps looking (up to 45 more looks, about a minute, not counted as lost looks), never concludes "not sent" from the box then, and ends `UNKNOWN` without touching the box if the page still says Sending at the end. Checked against the kept page of the run (the marker is in it and in no other kept page). Not run live again.
 
 ## Outcome
 

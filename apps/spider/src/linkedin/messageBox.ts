@@ -7,6 +7,7 @@ import { type TaskContext } from '../tasks/defineTask'
 import { fileName, partsOf } from '../tasks/linkedinMessages/messagesFile'
 import {
    type ReadMessage,
+   isSending,
    newestIsOurs,
    parseComposer,
    parseOwner,
@@ -21,6 +22,9 @@ import {
 // How many times the page is looked at for the message after send was pressed; a look that cannot read the page counts, and the
 // next one is tried (a page that is moving cannot always be read).
 const LOOKS = 10
+// How many more looks while the page still says "Sending..." (about a minute): through a slow proxy a send took over 15 s (run
+// ad90299c, 2026-11-03), and the words are still in the box then, which is no sign that nothing was sent.
+const SENDING_LOOKS = 45
 // The request the page makes to send a message, which LinkedIn answers whether or not the page draws the message in time (run
 // 87852d9b, 2026-10-23: createMessage answered 200, and the message showed in the video).
 export const SEND_REQUEST = ['voyagerMessagingDashMessengerMessages', 'action=createMessage']
@@ -109,8 +113,9 @@ export const createMessageBox = ({ hands, reader, log, box, send, scope, sendIns
       await reader.wait(BOX_PAUSES.sent)
 
       let html = ''
+      let patience = SENDING_LOOKS
 
-      for (let look = 0; look < LOOKS; look += 1) {
+      for (let look = 0; look < LOOKS;) {
          try {
             html = await hands.html()
 
@@ -120,10 +125,19 @@ export const createMessageBox = ({ hands, reader, log, box, send, scope, sendIns
                   html,
                }
             }
+
+            // A message on its way is not a look lost: the page is waited for while it says so.
+            if (isSending(html) && patience > 0) {
+               patience -= 1
+               await reader.wait(BOX_PAUSES.look)
+
+               continue
+            }
          } catch {
             // A look that cannot read the page is a look lost, not the end of the confirmation.
          }
 
+         look += 1
          await reader.wait(BOX_PAUSES.look)
       }
 
@@ -146,6 +160,16 @@ export const createMessageBox = ({ hands, reader, log, box, send, scope, sendIns
          return {
             outcome: 'NOT_SENT',
             html: '',
+         }
+      }
+
+      // Still on its way after all that waiting: the words in the box say nothing, and the box is left alone.
+      if (html !== '' && isSending(html)) {
+         log('The page still says Sending')
+
+         return {
+            outcome: 'UNKNOWN',
+            html,
          }
       }
 

@@ -89,6 +89,9 @@ export const INMAIL_FORM = '.msg-inmail-compose-form-v2'
 // Message link opens that conversation (`--default-inactive`, no `msg-form` at all), and where the box would be sits
 // `.msg-s-conversation-blocked-footer` ("Improve your chances of hearing back ... Verify now"), while a Premium offer opens on top
 // (`.artdeco-modal.modal-upsell`, a Dismiss button with `aria-label="Dismiss"`). The window's card links to the member's id, not the slug.
+// While a message is on its way LinkedIn puts a "Sending..." cover over the window (run ad90299c, 2026-11-03, tripti.verma, through a
+// slow proxy: it stayed for over 15 s with the words still in the box). It is in the page only then: no other kept page holds it.
+export const SENDING = '.msg-compose-retry-loader'
 export const CONVERSATION_BLOCKED = '.msg-s-conversation-blocked-footer'
 export const UPSELL_OFFER = '.artdeco-modal.modal-upsell'
 export const UPSELL_DISMISS = `${UPSELL_OFFER} button[aria-label="Dismiss"]`

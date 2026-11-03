@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { inmailProfileMarkup, inmailWindowMarkup } from '../../linkedin/inmailFixture'
+import { SENDING_MARKUP, inmailProfileMarkup, inmailWindowMarkup } from '../../linkedin/inmailFixture'
 import {
    INMAIL_COMPOSER,
    INMAIL_FILE_INPUT,
@@ -59,6 +59,8 @@ type Page = {
    appears?: boolean
    // Whether the box is emptied by a send that did not show a message.
    clears?: boolean
+   // How many looks after send the page still says Sending, with the words in the box, before the message shows (run ad90299c).
+   slowSend?: number
    // The status LinkedIn answers the send request with once send is pressed.
    answer?: number
    // The page the window leaves the account on once the link is pressed (a sign-in page).
@@ -83,12 +85,29 @@ const setup = (page: Page = {}) => {
    let changes = 0
    let pressed = 0
    let deletes = 0
+   let sending = page.slowSend ?? 0
    const calls: string[] = []
    const removed = vi.fn(async () => undefined)
    const html = () => {
       if (hasFiles && (uploading === 'never' || uploading > 0)) {
          changes += 1
          uploading = uploading === 'never' ? uploading : uploading - 1
+      }
+
+      if (pressed > 0 && sending > 0) {
+         const covered = `<html><body>${inmailProfileMarkup({
+            inmail: {
+               composer: {
+                  typed: body,
+                  sendDisabled: true,
+               },
+            },
+         })}${SENDING_MARKUP}</body></html>`
+
+         sending -= 1
+         body = sending === 0 ? '' : body
+
+         return covered
       }
 
       if (pressed > 0 && appears && page.layout === 'page') {
@@ -228,7 +247,7 @@ const setup = (page: Page = {}) => {
             pressed += 1
             hasFiles = false
 
-            if (appears || clears) {
+            if (!page.slowSend && (appears || clears)) {
                body = ''
             }
 
@@ -375,6 +394,22 @@ describe('sendInmail', () => {
       await expect(run({ text })).resolves.toEqual({ outcome: 'SENT' })
       expect(calls).toContain('key Delete')
       expect(calls.filter(call => call === 'press send')).toHaveLength(1)
+   })
+
+   it('should wait while the page says Sending, with the words still in the box, and say it was sent when the message shows', async () => {
+      // Run ad90299c: a slow proxy kept "Sending..." up for longer than the ten looks, and the task called it not sent.
+      const { run, calls } = setup({ slowSend: 25 })
+
+      await expect(run()).resolves.toEqual({ outcome: 'SENT' })
+      expect(calls.filter(call => call === 'press send')).toHaveLength(1)
+      expect(calls.slice(calls.indexOf('press send'))).not.toContain('key Delete')
+   })
+
+   it('should not call it unsent, nor empty the box, when the page says Sending to the end', async () => {
+      const { run, calls } = setup({ slowSend: 1000 })
+
+      await expect(run()).resolves.toEqual({ outcome: 'UNKNOWN' })
+      expect(calls.slice(calls.indexOf('press send'))).not.toContain('key Delete')
    })
 
    it('should send nothing when the box never holds the words', async () => {

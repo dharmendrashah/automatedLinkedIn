@@ -4,6 +4,9 @@ import { type FixtureMessage, messageWindowMarkup, profileMarkup } from './messa
 // 2026-11-03, tripti.verma, English; session-2026-11-03T08-44-40-796Z), and the whole compose page it led to in run 96db1845 (the same
 // form in `div.msg-convo-wrapper.msg-thread`), with made-up people and text. Only what the readers rely on is here. The banner for a credit is made up (never seen) and marked so in the test that uses it.
 
+// What the page adds over the window while a message is on its way (recorded 2026-11-03, run ad90299c).
+export const SENDING_MARKUP = '<div class="msg-compose-retry-loader"><p class="t-white">Sending…</p></div>'
+
 export type FixtureInmail = {
    // Over the profile (the default), or the whole compose page.
    layout?: 'window' | 'page'

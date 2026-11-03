@@ -16,6 +16,7 @@ import {
    MESSAGE_WINDOW,
    MESSAGE_WINDOW_TITLE,
    PROFILE_MESSAGE,
+   SENDING,
    SEND_BUTTON,
    UPSELL_OFFER,
    WINDOW_PROFILE_CARD,
@@ -283,6 +284,9 @@ export const parseInmailWindow = (html: string) => {
       composer: parseComposer(form?.outerHTML ?? '', undefined, INMAIL_SEND),
    }
 }
+
+// Whether a message is on its way: the page covers the window with "Sending..." until LinkedIn has taken it.
+export const isSending = (html: string) => parse(html).querySelector(SENDING) !== null
 
 // Whether a profile shows its own Message link (a connection's profile does; recorded 2026-10-27).
 export const hasProfileMessage = (html: string) => parse(html).querySelector(PROFILE_MESSAGE) !== null

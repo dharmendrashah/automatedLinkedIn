@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { inmailProfileMarkup, inmailWindowMarkup } from './inmailFixture'
+import { SENDING_MARKUP, inmailProfileMarkup, inmailWindowMarkup } from './inmailFixture'
 import { INMAIL_COMPOSER, INMAIL_FORM, INMAIL_SEND_BUTTON, INMAIL_SUBJECT_BOX } from './markup'
-import { composerHtml, hasProfileMessage, parseInmailWindow, parseMessageWindow } from './messageReader'
+import { composerHtml, hasProfileMessage, isSending, parseInmailWindow, parseMessageWindow } from './messageReader'
 
 describe('parseInmailWindow', () => {
    it('should read an open window for a free message: its person, its banner, its subject box, and a box that cannot send yet', () => {
@@ -111,6 +111,11 @@ describe('parseInmailWindow', () => {
          conversation: 'none',
       })
       expect(parseInmailWindow(inmailProfileMarkup()).offer).toBe(false)
+   })
+
+   it('should know a message is on its way only while the page covers the window with Sending', () => {
+      expect(isSending(`${inmailProfileMarkup({ inmail: {} })}${SENDING_MARKUP}`)).toBe(true)
+      expect(isSending(inmailProfileMarkup({ inmail: {} }))).toBe(false)
    })
 
    it('should say when the window has no subject box, and when the page has no Message link', () => {
