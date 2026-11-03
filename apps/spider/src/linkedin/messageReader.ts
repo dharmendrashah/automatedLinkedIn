@@ -6,6 +6,10 @@ import { type Message } from '@automatedLinkedIn/contracts'
 import {
    COMPOSER,
    INBOX_ROW,
+   INMAIL_BANNER,
+   INMAIL_RECIPIENT,
+   INMAIL_SEND,
+   INMAIL_SUBJECT,
    MESSAGE_WINDOW,
    MESSAGE_WINDOW_TITLE,
    PROFILE_MESSAGE,
@@ -197,12 +201,13 @@ export const parseThread = (html: string, today: Date) => {
 }
 
 // The place to write in the open conversation: whether there is one, what is typed in it, and whether its send button can be
-// pressed (it is disabled while the box is empty). `scope` keeps the look inside one part of the page (the window a profile opens).
-export const parseComposer = (html: string, scope?: string) => {
+// pressed (it is disabled while the box is empty). `scope` keeps the look inside one part of the page (the window a profile opens);
+// `sendButton` is the send button's selector when the window's is not the conversation's.
+export const parseComposer = (html: string, scope?: string, sendButton = SEND_BUTTON) => {
    const page = parse(html)
    const root = scope ? page.querySelector(scope) : page
    const box = root?.querySelector(COMPOSER) ?? null
-   const send = root?.querySelector(SEND_BUTTON) ?? null
+   const send = root?.querySelector(sendButton) ?? null
 
    return {
       present: box !== null && send !== null,
@@ -228,7 +233,30 @@ export const newestIsOurs = (messages: Message[], text: string, before?: { id: s
 }
 
 // The markup of the place to write, with whatever is attached to it (empty when the page has none), to tell when it stops changing.
-export const composerHtml = (html: string) => parse(html).querySelector('form.msg-form')?.outerHTML ?? ''
+export const composerHtml = (html: string, scope?: string) =>
+   (scope ? parse(html).querySelector(scope) : parse(html))?.querySelector('form.msg-form')?.outerHTML ?? ''
+
+// What the windows a profile's Message link opened say (recorded 2026-11-03): how many message windows are open and how many of them
+// are the window for a free message to a member who is not a connection, the profile links of the person in the first of those, what
+// its banner says (free: "Free message"; other: anything else, such as a credit; none: no banner), and whether it has its subject box
+// and its box and send button.
+export const parseInmailWindow = (html: string) => {
+   const windows = parse(html).querySelectorAll(MESSAGE_WINDOW)
+   const inmail = windows.filter(window => window.classList.contains('msg-overlay-conversation-bubble--inmail'))
+   const [window] = inmail
+   const banner = shown(window?.querySelector(INMAIL_BANNER) ?? null)
+   const inside = window?.outerHTML ?? ''
+
+   return {
+      open: windows.length > 0,
+      windows: inmail.length,
+      recipients: (window?.querySelectorAll(INMAIL_RECIPIENT) ?? []).flatMap(link => link.getAttribute('href') ?? []),
+      banner:
+         banner === '' ? ('none' as const) : /^free message\b/i.test(banner) ? ('free' as const) : ('other' as const),
+      hasSubject: window?.querySelector(INMAIL_SUBJECT) != null,
+      composer: parseComposer(inside, undefined, INMAIL_SEND),
+   }
+}
 
 // Whether a profile shows its own Message link (a connection's profile does; recorded 2026-10-27).
 export const hasProfileMessage = (html: string) => parse(html).querySelector(PROFILE_MESSAGE) !== null

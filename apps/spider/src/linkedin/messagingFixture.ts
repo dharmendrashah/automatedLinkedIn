@@ -11,6 +11,8 @@ export type FixtureMessage = {
    // The date heading shown above the first message of a day.
    day?: string
    text?: string
+   // A subject shown above the words, as a free message to a member who is not a connection has (recorded 2026-11-03).
+   subject?: string
    image?: string
    // Where the picture comes from, when it has an address.
    imageSrc?: string
@@ -38,12 +40,13 @@ export type FixtureRow = {
    placeholder?: boolean
 }
 
-const message = ({ id, from, name, profile, time, day, text, image, imageSrc }: FixtureMessage) =>
+const message = ({ id, from, name, profile, time, day, text, subject, image, imageSrc }: FixtureMessage) =>
    `<li class="msg-s-message-list__event">${day ? `<time class="msg-s-message-list__time-heading"> ${day} </time>` : ''}
 <div class="msg-s-event-listitem ${from === 'THEM' ? 'msg-s-event-listitem--other' : ''}" data-event-urn="urn:li:msg_message:(urn:li:fsd_profile:me,${id})" data-view-name="message-list-item">
 ${profile ? `<a href="${profile}" class="msg-s-event-listitem__link"><img class="msg-s-event-listitem__profile-picture" alt="${name ?? ''}"></a>` : ''}
 ${name ? `<div class="msg-s-message-group__meta"><a href="${profile ?? '#'}"><span class="msg-s-message-group__profile-link msg-s-message-group__name"> ${name} </span></a><time class="msg-s-message-group__timestamp"> ${time ?? ''} </time></div>` : ''}
 <div class="msg-s-event-listitem__message-bubble"><div class="msg-s-event-listitem__actions-container"><button aria-label="Reply to this message">Reply</button></div>
+${subject ? `<h3 class="msg-s-event-listitem__subject t-14 t-bold"> ${subject} </h3>` : ''}
 ${image ? `<img class="msg-s-event-message__image"${imageSrc ? ` src="${imageSrc}"` : ''} alt="${image}">` : ''}
 ${text === undefined ? '' : `<div class="msg-s-event-with-indicator"><div class="msg-s-event__content"><p class="msg-s-event-listitem__body"><!---->${text}<!----></p></div></div>`}
 </div></div></li>`

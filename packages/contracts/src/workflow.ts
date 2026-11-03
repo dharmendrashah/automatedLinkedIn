@@ -275,6 +275,10 @@ export const ACCOUNT_ACTION_TASKS: Record<string, { blocks: string[] } | { plann
    'linkedin-post': { blocks: ['account.writePost'] },
    'linkedin-reply': { blocks: ['account.replyToConversation'] },
    'linkedin-message': { blocks: ['account.sendMessage'] },
+   'linkedin-inmail': {
+      planned:
+         'Send an InMail: a free message to a member the account is not connected to; the block comes with the workflow later',
+   },
    'linkedin-invitations': { blocks: ['account.getRequests', 'account.answerRequests'] },
    'linkedin-connections': { blocks: ['account.getConnections', 'account.removeConnection'] },
    'linkedin-invite': { blocks: ['account.sendInvite', 'account.withdrawInvite'] },

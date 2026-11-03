@@ -47,6 +47,8 @@ type Deps = {
    box: string
    send: string
    scope?: string
+   // The send button's selector inside the scope, when it is not the conversation's.
+   sendInside?: string
    // The messages the page shows where the box is.
    messagesOf: (html: string) => ReadMessage[]
 }
@@ -58,8 +60,8 @@ export type Before = { id: string | undefined; count: number }
 // UNKNOWN: send was pressed and neither is known. `html` is the last page read, for the task to hand over.
 export type Confirmed = { outcome: 'SENT' | 'UNKNOWN' | 'NOT_SENT'; html: string }
 
-export const createMessageBox = ({ hands, reader, log, box, send, scope, messagesOf }: Deps) => {
-   const composer = (html: string) => parseComposer(html, scope)
+export const createMessageBox = ({ hands, reader, log, box, send, scope, sendInside, messagesOf }: Deps) => {
+   const composer = (html: string) => parseComposer(html, scope, sendInside)
 
    // Empties the box of what was typed, so no draft is left on the account's page; it is no help when it cannot.
    const clear = async () => {

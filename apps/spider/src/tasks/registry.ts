@@ -2,6 +2,7 @@ import { browserDetection } from './browserDetection'
 import { type TaskDefinition } from './defineTask'
 import { createLinkedinBrowse } from './linkedinBrowse'
 import { createLinkedinConnections } from './linkedinConnections'
+import { createLinkedinInmail } from './linkedinInmail'
 import { createLinkedinInvitations } from './linkedinInvitations'
 import { createLinkedinInvite } from './linkedinInvite'
 import { createLinkedinLogin } from './linkedinLogin'
@@ -28,6 +29,7 @@ export const buildTasks = (config: TaskConfig): TaskDefinition[] => [
    createLinkedinPost({ baseUrl: config.linkedin.baseUrl }),
    createLinkedinReply({ baseUrl: config.linkedin.baseUrl }),
    createLinkedinMessage({ baseUrl: config.linkedin.baseUrl }),
+   createLinkedinInmail({ baseUrl: config.linkedin.baseUrl }),
    createLinkedinInvitations({ baseUrl: config.linkedin.baseUrl }),
    createLinkedinConnections({ baseUrl: config.linkedin.baseUrl }),
    createLinkedinInvite({ baseUrl: config.linkedin.baseUrl }),
