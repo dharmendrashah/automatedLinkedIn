@@ -54,7 +54,7 @@ export const inmailProfileMarkup = ({
 }: {
    messageLink?: boolean
    inmail?: FixtureInmail
-   ordinary?: { title: string; messages?: FixtureMessage[] }
+   ordinary?: { title: string; messages?: FixtureMessage[]; blocked?: boolean }
    // A second window left open, for the same person or another.
    extraWindow?: FixtureInmail
 } = {}) =>
@@ -63,10 +63,14 @@ export const inmailProfileMarkup = ({
          ? messageWindowMarkup({
               title: ordinary.title,
               messages: ordinary.messages ?? [],
-              composer: {
-                 typed: '',
-                 sendDisabled: true,
-              },
+              ...(ordinary.blocked
+                 ? { blocked: true }
+                 : {
+                      composer: {
+                         typed: '',
+                         sendDisabled: true,
+                      },
+                   }),
            })
          : ''
    }`

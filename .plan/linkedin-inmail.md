@@ -188,6 +188,10 @@ Checklist boxes (tick or write n/a with a reason before `done`):
 
 `SENT`, but the words were wrong: the box held "we provide that, if can we" of "we provide that, if can we have a chat later on" right after typing, and the message that went read "we provide that, if we". The editor dropped key presses (typing the whole text in one go, 45 to 115 ms per key, on a slow page) and the task never read the box back. LinkedIn's page did not show the sent words as asked, so the send-request fallback answered `SENT`. Fixed: the words are typed in pieces of about 24 characters with a short pause; the box is read back and must hold the same letters (spaces and line breaks ignored) or it is emptied and typed once more, else `FAILED / TYPING` and Send is not pressed; and when LinkedIn's answer says it went but the conversation shows one message of ours with other words, the verdict is `DIFFERENT_WORDS`. The subject is not read back (the input's value is not in the markup).
 
+## Live run 3 (devtools, 2026-11-03, run 136a8937, walid-boulanouar)
+
+`NOT_INMAIL` after 30 s, nothing typed. The account already had a conversation with this second-degree member (an earlier message of ours is in it), so the Message link opened that conversation, with no box: LinkedIn showed `.msg-s-conversation-blocked-footer` ("Improve your chances of hearing back ... Verify now") in its place and opened a Premium offer (`.modal-upsell`, Dismiss button) over the page. Handled: a new verdict `CONVERSATION_BLOCKED` ("an earlier message may be waiting for a reply"), the Premium offer is closed (best effort, never changes the verdict), `NOT_INMAIL` now means an ordinary conversation that does have a box, and a window with neither box nor notice is `NO_COMPOSER`. The wait no longer runs all 20 looks for these cases. Checked against the kept page of the run. Why LinkedIn blocks the box (a reply is awaited, or the person does not accept free messages) is not proven.
+
 ## Outcome
 
 Built and tested offline (2026-11-03); the live run is still open, so the status stays `locked`.

@@ -85,6 +85,12 @@ export const WINDOW_PROFILE_CARD = '.msg-s-profile-card a[href*="/in/"]'
 // is what the task works in. Not seen: the banner when a credit is spent, a profile that cannot be messaged, a window opened in the
 // page layout of a connection.
 export const INMAIL_FORM = '.msg-inmail-compose-form-v2'
+// A person the account already wrote to (run 136a8937, 2026-11-03, tripti.verma, walid-boulanouar, a second-degree member): the
+// Message link opens that conversation (`--default-inactive`, no `msg-form` at all), and where the box would be sits
+// `.msg-s-conversation-blocked-footer` ("Improve your chances of hearing back ... Verify now"), while a Premium offer opens on top
+// (`.artdeco-modal.modal-upsell`, a Dismiss button with `aria-label="Dismiss"`). The window's card links to the member's id, not the slug.
+export const CONVERSATION_BLOCKED = '.msg-s-conversation-blocked-footer'
+export const UPSELL_DISMISS = '.modal-upsell button[aria-label="Dismiss"]'
 // A message window or a whole message page, before it is known to be for a free message.
 export const CONVERSATION = '.msg-convo-wrapper'
 export const INMAIL_RECIPIENT = '.msg-compose__inmail-compose-entity-lockup a[href*="/in/"]'

@@ -6,6 +6,7 @@ import { type Message } from '@automatedLinkedIn/contracts'
 import {
    COMPOSER,
    CONVERSATION,
+   CONVERSATION_BLOCKED,
    INBOX_ROW,
    INMAIL_BANNER,
    INMAIL_FORM,
@@ -250,10 +251,18 @@ export const parseInmailWindow = (html: string) => {
    const forms = page.querySelectorAll(INMAIL_FORM)
    const [form] = forms
    const banner = shown(form?.querySelector(INMAIL_BANNER) ?? null)
+   // Without a form for a free message, a conversation is either one with a box (an ordinary message) or one where LinkedIn put a
+   // notice in the box's place (an earlier message from the account is waiting).
+   const conversation = page.querySelector(`${CONVERSATION} ${COMPOSER}`)
+      ? ('open' as const)
+      : page.querySelector(`${CONVERSATION} ${CONVERSATION_BLOCKED}`)
+        ? ('blocked' as const)
+        : ('none' as const)
 
    return {
       open: forms.length > 0 || page.querySelector(`${MESSAGE_WINDOW}, ${CONVERSATION}`) !== null,
       forms: forms.length,
+      conversation,
       recipients: (form?.querySelectorAll(INMAIL_RECIPIENT) ?? []).flatMap(link => link.getAttribute('href') ?? []),
       banner:
          banner === '' ? ('none' as const) : /^free message\b/i.test(banner) ? ('free' as const) : ('other' as const),

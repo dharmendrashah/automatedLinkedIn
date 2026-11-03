@@ -13,6 +13,7 @@ import {
    INMAIL_SEND_BUTTON,
    INMAIL_SUBJECT_BOX,
    PROFILE_MESSAGE,
+   UPSELL_DISMISS,
 } from '../../linkedin/markup'
 import { type Before, createMessageBox } from '../../linkedin/messageBox'
 import {
@@ -45,7 +46,8 @@ export type InmailInput = {
 // known (nothing is typed again for it). NO_MESSAGE_BUTTON: the profile shows no Message link. NOT_INMAIL: the window that opened is an
 // ordinary conversation window (the person may be a connection). WOULD_COST_CREDIT: the banner does not say "Free message", so nothing
 // was typed. NO_COMPOSER: no window or no box. WRONG_RECIPIENT: the window is for someone else, or more than one is open.
-// NOT_AVAILABLE: the address did not lead to a profile. DIFFERENT_WORDS: it went, and the conversation shows other words than asked for.
+// NOT_AVAILABLE: the address did not lead to a profile. CONVERSATION_BLOCKED: the account already has a conversation with the person and
+// LinkedIn shows a notice where the box would be. DIFFERENT_WORDS: it went, and the conversation shows other words than asked for.
 export type InmailResult =
    | {
         outcome:
@@ -59,6 +61,7 @@ export type InmailResult =
            | 'NOT_AVAILABLE'
            | 'SIGNED_OUT'
            | 'DIFFERENT_WORDS'
+           | 'CONVERSATION_BLOCKED'
      }
    | {
         outcome: 'FAILED'
@@ -223,6 +226,17 @@ export const sendInmail = async (
       return false
    }
 
+   // Closes the Premium offer LinkedIn opens over a conversation it will not let the account write in; the page is left as found.
+   const closeOffer = async () => {
+      try {
+         if (await hands.clickSelector(UPSELL_DISMISS)) {
+            log('Closed the Premium offer')
+         }
+      } catch {
+         // The verdict does not depend on it.
+      }
+   }
+
    let fetched: Fetched | undefined
 
    // Gives the files of the upload to the window, images to its images' input and the rest to the other, and waits for them to upload;
@@ -308,7 +322,7 @@ export const sendInmail = async (
          await until(WINDOW_LOOKS, html => {
             const window = parseInmailWindow(html)
 
-            return window.forms > 0 && window.composer.present
+            return (window.forms > 0 && window.composer.present) || window.conversation !== 'none'
          })
       )
 
@@ -321,9 +335,22 @@ export const sendInmail = async (
       }
 
       if (opened.forms === 0) {
-         log('An ordinary conversation opened, not a message to a non-connection')
+         if (opened.conversation === 'blocked') {
+            log('A conversation with this person exists and LinkedIn offers no box to write in')
+            await closeOffer()
 
-         return { outcome: 'NOT_INMAIL' }
+            return { outcome: 'CONVERSATION_BLOCKED' }
+         }
+
+         if (opened.conversation === 'open') {
+            log('An ordinary conversation opened, not a message to a non-connection')
+
+            return { outcome: 'NOT_INMAIL' }
+         }
+
+         log('The message window has no place to write')
+
+         return { outcome: 'NO_COMPOSER' }
       }
 
       if (opened.forms > 1) {

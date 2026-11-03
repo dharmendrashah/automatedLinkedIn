@@ -28,6 +28,13 @@ export const answerFor = (result: InmailResult): TaskOutcome => {
             message:
                'The message was sent, but LinkedIn shows other words than the ones asked for. Check the conversation on LinkedIn.',
          }
+      case 'CONVERSATION_BLOCKED':
+         return {
+            status: 'FAILED',
+            verdict: 'CONVERSATION_BLOCKED',
+            message:
+               'The account already has a conversation with this person and LinkedIn offers no box to write in (an earlier message may be waiting for a reply), so nothing was typed.',
+         }
       case 'NO_MESSAGE_BUTTON':
          return {
             status: 'FAILED',

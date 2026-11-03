@@ -8,6 +8,7 @@ import {
    INMAIL_SEND_BUTTON,
    INMAIL_SUBJECT_BOX,
    PROFILE_MESSAGE,
+   UPSELL_DISMISS,
 } from '../../linkedin/markup'
 import { threadMarkup } from '../../linkedin/messagingFixture'
 import { answerFor } from './answer'
@@ -38,6 +39,8 @@ type Page = {
    // The window opens when the link is pressed: for a free message, or as an ordinary conversation.
    opens?: boolean
    ordinary?: boolean
+   // The ordinary conversation has a notice where its box would be, and LinkedIn opens a Premium offer.
+   blocked?: boolean
    second?: boolean
    profile?: string
    banner?: string | null
@@ -146,7 +149,12 @@ const setup = (page: Page = {}) => {
       return `<html><body>${inmailProfileMarkup({
          messageLink,
          ...(page.ordinary
-            ? { ordinary: { title: 'Ada Lovelace' } }
+            ? {
+                 ordinary: {
+                    title: 'Ada Lovelace',
+                    ...(page.blocked && { blocked: true }),
+                 },
+              }
             : {
                  inmail: {
                     profile: page.profile ?? `/in/${SLUG}/`,
@@ -179,6 +187,12 @@ const setup = (page: Page = {}) => {
             at = page.leavesAt ?? at
 
             return messageLink
+         }
+
+         if (selector === UPSELL_DISMISS) {
+            calls.push('close offer')
+
+            return true
          }
 
          if (selector === INMAIL_COMPOSER) {
@@ -472,6 +486,13 @@ describe('sendInmail', () => {
       const cases: Array<[Page, InmailResult['outcome']]> = [
          [{ opens: false }, 'NO_COMPOSER'],
          [{ ordinary: true }, 'NOT_INMAIL'],
+         [
+            {
+               ordinary: true,
+               blocked: true,
+            },
+            'CONVERSATION_BLOCKED',
+         ],
          [{ second: true }, 'WRONG_RECIPIENT'],
          [{ profile: '/in/grace-h/' }, 'WRONG_RECIPIENT'],
       ]
@@ -483,6 +504,16 @@ describe('sendInmail', () => {
          expect(typedNothing(calls)).toBe(true)
          expect(context.markAttempt).not.toHaveBeenCalled()
       }
+   })
+
+   it('should close the Premium offer and type nothing when the account already has a conversation it may not write in', async () => {
+      const { run, calls } = setup({
+         ordinary: true,
+         blocked: true,
+      })
+
+      await expect(run()).resolves.toEqual({ outcome: 'CONVERSATION_BLOCKED' })
+      expect(calls).toContain('close offer')
    })
 
    it('should type nothing, and start no attempt, when the window does not say the message is free', async () => {
@@ -584,6 +615,7 @@ describe('answerFor', () => {
       { outcome: 'NO_COMPOSER' },
       { outcome: 'WRONG_RECIPIENT' },
       { outcome: 'DIFFERENT_WORDS' },
+      { outcome: 'CONVERSATION_BLOCKED' },
       { outcome: 'NOT_AVAILABLE' },
       { outcome: 'SIGNED_OUT' },
       ...(

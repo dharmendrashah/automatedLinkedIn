@@ -90,6 +90,23 @@ describe('parseInmailWindow', () => {
       })
    })
 
+   it('should tell a conversation with a box from one where LinkedIn shows a notice in its place, and neither from a missing window', () => {
+      const conversation = (html: string) => parseInmailWindow(html).conversation
+
+      expect(conversation(inmailProfileMarkup({ ordinary: { title: 'Ada Lovelace' } }))).toBe('open')
+      expect(
+         conversation(
+            inmailProfileMarkup({
+               ordinary: {
+                  title: 'Ada Lovelace',
+                  blocked: true,
+               },
+            })
+         )
+      ).toBe('blocked')
+      expect(conversation(inmailProfileMarkup())).toBe('none')
+   })
+
    it('should say when the window has no subject box, and when the page has no Message link', () => {
       expect(parseInmailWindow(inmailProfileMarkup({ inmail: { subject: false } })).hasSubject).toBe(false)
       expect(hasProfileMessage(inmailProfileMarkup({ messageLink: false }))).toBe(false)

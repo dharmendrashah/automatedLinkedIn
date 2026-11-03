@@ -29,6 +29,8 @@ export type FixtureThread = {
       // Markup inside the box's form besides the text, such as what is attached and how far it is uploaded.
       extra?: string
    }
+   // LinkedIn's notice in the box's place when the account may not write (recorded 2026-11-03, run 136a8937).
+   blocked?: boolean
 }
 
 export type FixtureRow = {
@@ -75,6 +77,7 @@ export const messageWindowMarkup = ({
    title,
    messages,
    composer,
+   blocked,
    compose,
 }: FixtureThread & { compose?: { recipients: string[]; profile: string } }) =>
    `<div class="msg-convo-wrapper msg-overlay-conversation-bubble" role="dialog" aria-label="Messaging" data-view-name="message-overlay-conversation-bubble-item">
@@ -96,7 +99,11 @@ export const messageWindowMarkup = ({
    }
 <div class="msg-s-message-list msg-s-message-list--scroll-buffer"><ul class="msg-s-message-list-content"><li class="msg-s-message-list__top-of-list"></li><li class="msg-s-message-list__loader"></li>${messages
       .map(message)
-      .join('')}</ul></div>${composerMarkup(composer)}</div>`
+      .join('')}</ul></div>${composerMarkup(composer)}${
+      blocked
+         ? '<div class="msg-s-conversation-blocked-footer"><div class="artdeco-inline-feedback" role="status"><span class="artdeco-inline-feedback__message">Improve your chances of hearing back.</span></div></div>'
+         : ''
+   }</div>`
 
 // A person's profile as far as a first message needs it: the profile's own Message link (three times, none named), a Message link of
 // another person under "People also viewed" (named "Message <name>"), and the window when it is open. `plain` is the layout without any
