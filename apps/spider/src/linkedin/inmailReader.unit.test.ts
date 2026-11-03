@@ -48,6 +48,7 @@ describe('parseInmailWindow', () => {
       expect(banner(' Free message | ')).toBe('free')
       // Made up: what the page says when a credit is spent was never seen.
       expect(banner('3 InMail credits |')).toBe('other')
+      expect(banner('You have reached your monthly InMail limit |')).toBe('limit')
       expect(banner(null)).toBe('none')
    })
 

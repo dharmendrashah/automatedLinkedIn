@@ -247,6 +247,17 @@ export const composerHtml = (html: string, scope?: string) =>
 // many forms for a free message to a member who is not a connection it holds (the window over the profile or the whole compose
 // page), the profile links of the person in the first, what its banner says (free: "Free message"; other: anything else, such as a
 // credit; none: no banner), whether it has its subject box, and its box and send button.
+// What the banner of a free message says: free ("Free message"), limit (the account's InMail allowance is used up; the wording is a
+// guess, never seen: a free account has 5 InMail messages a month), none, or other (anything else, such as a credit).
+const bannerKind = (banner: string) =>
+   banner === ''
+      ? ('none' as const)
+      : /^free message\b/i.test(banner)
+        ? ('free' as const)
+        : /\b(limit|reached|used (all|up)|no (more )?(inmail )?(credits|messages)|out of)\b/i.test(banner)
+          ? ('limit' as const)
+          : ('other' as const)
+
 export const parseInmailWindow = (html: string) => {
    const page = parse(html)
    const forms = page.querySelectorAll(INMAIL_FORM)
@@ -267,8 +278,7 @@ export const parseInmailWindow = (html: string) => {
       // The Premium offer LinkedIn opens in place of a box it will not give the account.
       offer: page.querySelector(UPSELL_OFFER) !== null,
       recipients: (form?.querySelectorAll(INMAIL_RECIPIENT) ?? []).flatMap(link => link.getAttribute('href') ?? []),
-      banner:
-         banner === '' ? ('none' as const) : /^free message\b/i.test(banner) ? ('free' as const) : ('other' as const),
+      banner: bannerKind(banner),
       hasSubject: form?.querySelector(INMAIL_SUBJECT) != null,
       composer: parseComposer(form?.outerHTML ?? '', undefined, INMAIL_SEND),
    }

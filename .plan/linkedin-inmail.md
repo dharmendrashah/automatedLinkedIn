@@ -196,6 +196,10 @@ Checklist boxes (tick or write n/a with a reason before `done`):
 
 The member is not on Premium (or has not turned on InMail requests) and is not a connection, which is why LinkedIn gave the account no box. The verdict `CONVERSATION_BLOCKED` is therefore `NOT_ACCEPTING_INMAIL` ("Not open to InMail"): a conversation with a notice where the box would be, or LinkedIn's Premium offer opening with no box, means the member does not take messages from this account; nothing is typed and the offer is closed. `NO_MESSAGE_BUTTON` stays (a profile with no Message link), and its sentence now says the member may not take messages from people they are not connected to. The offer alone as a signal (no conversation) was not seen live; it follows the owner's description.
 
+## Live run 4 (devtools, 2026-11-03, run 1c97eca6, dharmendrashaheagle, jenna-gil-4a7b6681)
+
+`NO_COMPOSER` after 49 s, nothing typed. A second-degree member (Connect, Message, More on the profile, no Premium mark) on a free account: the Message press did nothing at all for 25 s (no window, page, offer or composeOptions call; only `premium/featureAccess` was asked, video frames at 27 s and 36 s unchanged). The owner's three negative cases: the member does not take InMail (not Premium or not turned on), the account has used its InMail allowance (a free account has 5 a month, the owner says), and a free account in general. Handled: a Message press that opens nothing is now `NOT_ACCEPTING_INMAIL`; a banner that reads like a used-up allowance is the new verdict `INMAIL_LIMIT_REACHED` (the wording is a guess, never seen), and any other banner is still `WOULD_COST_CREDIT`. All stop before anything is typed. Unproven: a slow page would read as `NOT_ACCEPTING_INMAIL` after 20 looks (about 25 s; the compose page opened in 5 s in runs 2 and 3); the real wording when the allowance is used up and the owner's "pending requests" limit; counting the account's InMails per month belongs in brain with the block (caps), not in the task.
+
 ## Outcome
 
 Built and tested offline (2026-11-03); the live run is still open, so the status stays `locked`.

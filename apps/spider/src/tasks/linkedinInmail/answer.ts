@@ -33,7 +33,7 @@ export const answerFor = (result: InmailResult): TaskOutcome => {
             status: 'FAILED',
             verdict: 'NOT_ACCEPTING_INMAIL',
             message:
-               'This member is not on Premium or has not turned on InMail messages, and is not a connection, so LinkedIn offers no way to write to them and nothing was typed.',
+               'LinkedIn offers this account no way to write to this member (they are not on Premium or have not turned on InMail messages, and are not a connection), so nothing was typed.',
          }
       case 'NO_MESSAGE_BUTTON':
          return {
@@ -48,6 +48,12 @@ export const answerFor = (result: InmailResult): TaskOutcome => {
             verdict: 'NOT_INMAIL',
             message:
                'LinkedIn opened an ordinary conversation, not a message to a member who is not a connection, so nothing was typed.',
+         }
+      case 'INMAIL_LIMIT_REACHED':
+         return {
+            status: 'FAILED',
+            verdict: 'INMAIL_LIMIT_REACHED',
+            message: 'LinkedIn says this account has used up its InMail messages, so nothing was typed.',
          }
       case 'WOULD_COST_CREDIT':
          return {

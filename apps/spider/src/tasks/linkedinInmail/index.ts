@@ -84,6 +84,10 @@ export const createLinkedinInmail = ({ baseUrl }: Options) =>
             label: 'Ordinary conversation opened',
             tone: 'failure',
          },
+         INMAIL_LIMIT_REACHED: {
+            label: 'InMail limit reached',
+            tone: 'failure',
+         },
          WOULD_COST_CREDIT: {
             label: 'Not free',
             tone: 'failure',

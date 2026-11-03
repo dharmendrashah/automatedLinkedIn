@@ -493,7 +493,7 @@ describe('sendInmail', () => {
 
    it('should type nothing when the window does not open, opens as an ordinary conversation, or more than one is open', async () => {
       const cases: Array<[Page, InmailResult['outcome']]> = [
-         [{ opens: false }, 'NO_COMPOSER'],
+         [{ opens: false }, 'NOT_ACCEPTING_INMAIL'],
          [{ ordinary: true }, 'NOT_INMAIL'],
          [
             {
@@ -529,6 +529,15 @@ describe('sendInmail', () => {
          await expect(run()).resolves.toEqual({ outcome: 'NOT_ACCEPTING_INMAIL' })
          expect(calls).toContain('close offer')
       }
+   })
+
+   it('should type nothing, and say the limit is reached, when the banner says the InMail allowance is used up', async () => {
+      // Made up: the wording of the banner for a used-up allowance was never seen.
+      const { run, calls, context } = setup({ banner: 'You have reached your monthly InMail limit |' })
+
+      await expect(run()).resolves.toEqual({ outcome: 'INMAIL_LIMIT_REACHED' })
+      expect(typedNothing(calls)).toBe(true)
+      expect(context.markAttempt).not.toHaveBeenCalled()
    })
 
    it('should type nothing, and start no attempt, when the window does not say the message is free', async () => {
@@ -627,6 +636,7 @@ describe('answerFor', () => {
       { outcome: 'NO_MESSAGE_BUTTON' },
       { outcome: 'NOT_INMAIL' },
       { outcome: 'WOULD_COST_CREDIT' },
+      { outcome: 'INMAIL_LIMIT_REACHED' },
       { outcome: 'NO_COMPOSER' },
       { outcome: 'WRONG_RECIPIENT' },
       { outcome: 'DIFFERENT_WORDS' },

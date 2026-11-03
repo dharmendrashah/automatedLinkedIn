@@ -47,7 +47,8 @@ export type InmailInput = {
 // ordinary conversation window (the person may be a connection). WOULD_COST_CREDIT: the banner does not say "Free message", so nothing
 // was typed. NO_COMPOSER: no window or no box. WRONG_RECIPIENT: the window is for someone else, or more than one is open.
 // NOT_AVAILABLE: the address did not lead to a profile. NOT_ACCEPTING_INMAIL: the member is not on Premium or has not turned on InMail
-// and is not a connection, so LinkedIn shows a notice where the box would be, or a Premium offer. DIFFERENT_WORDS: it went, and the conversation shows other words than asked for.
+// and is not a connection, so LinkedIn shows a notice where the box would be, a Premium offer, or nothing at all (run 1c97eca6: the
+// Message press did nothing for a free account). INMAIL_LIMIT_REACHED: the banner says the account's InMail allowance is used up. DIFFERENT_WORDS: it went, and the conversation shows other words than asked for.
 export type InmailResult =
    | {
         outcome:
@@ -62,6 +63,7 @@ export type InmailResult =
            | 'SIGNED_OUT'
            | 'DIFFERENT_WORDS'
            | 'NOT_ACCEPTING_INMAIL'
+           | 'INMAIL_LIMIT_REACHED'
      }
    | {
         outcome: 'FAILED'
@@ -329,9 +331,9 @@ export const sendInmail = async (
       session.signedIn((await hands.inspect()).url)
 
       if (!opened.open) {
-         log('No message window or page opened')
+         log('Nothing opened after Message was pressed: LinkedIn offers this account no way to write to the member')
 
-         return { outcome: 'NO_COMPOSER' }
+         return { outcome: 'NOT_ACCEPTING_INMAIL' }
       }
 
       if (opened.forms === 0) {
@@ -369,6 +371,12 @@ export const sendInmail = async (
          log('The message form is for someone else')
 
          return { outcome: 'WRONG_RECIPIENT' }
+      }
+
+      if (opened.banner === 'limit') {
+         log('The message form says the InMail allowance is used up')
+
+         return { outcome: 'INMAIL_LIMIT_REACHED' }
       }
 
       if (opened.banner !== 'free') {
