@@ -5,8 +5,10 @@ import { type Message } from '@automatedLinkedIn/contracts'
 
 import {
    COMPOSER,
+   CONVERSATION,
    INBOX_ROW,
    INMAIL_BANNER,
+   INMAIL_FORM,
    INMAIL_RECIPIENT,
    INMAIL_SEND,
    INMAIL_SUBJECT,
@@ -236,25 +238,24 @@ export const newestIsOurs = (messages: Message[], text: string, before?: { id: s
 export const composerHtml = (html: string, scope?: string) =>
    (scope ? parse(html).querySelector(scope) : parse(html))?.querySelector('form.msg-form')?.outerHTML ?? ''
 
-// What the windows a profile's Message link opened say (recorded 2026-11-03): how many message windows are open and how many of them
-// are the window for a free message to a member who is not a connection, the profile links of the person in the first of those, what
-// its banner says (free: "Free message"; other: anything else, such as a credit; none: no banner), and whether it has its subject box
-// and its box and send button.
+// What the page says after a profile's Message link was pressed (recorded 2026-11-03): whether a message window or page is open, how
+// many forms for a free message to a member who is not a connection it holds (the window over the profile or the whole compose
+// page), the profile links of the person in the first, what its banner says (free: "Free message"; other: anything else, such as a
+// credit; none: no banner), whether it has its subject box, and its box and send button.
 export const parseInmailWindow = (html: string) => {
-   const windows = parse(html).querySelectorAll(MESSAGE_WINDOW)
-   const inmail = windows.filter(window => window.classList.contains('msg-overlay-conversation-bubble--inmail'))
-   const [window] = inmail
-   const banner = shown(window?.querySelector(INMAIL_BANNER) ?? null)
-   const inside = window?.outerHTML ?? ''
+   const page = parse(html)
+   const forms = page.querySelectorAll(INMAIL_FORM)
+   const [form] = forms
+   const banner = shown(form?.querySelector(INMAIL_BANNER) ?? null)
 
    return {
-      open: windows.length > 0,
-      windows: inmail.length,
-      recipients: (window?.querySelectorAll(INMAIL_RECIPIENT) ?? []).flatMap(link => link.getAttribute('href') ?? []),
+      open: forms.length > 0 || page.querySelector(`${MESSAGE_WINDOW}, ${CONVERSATION}`) !== null,
+      forms: forms.length,
+      recipients: (form?.querySelectorAll(INMAIL_RECIPIENT) ?? []).flatMap(link => link.getAttribute('href') ?? []),
       banner:
          banner === '' ? ('none' as const) : /^free message\b/i.test(banner) ? ('free' as const) : ('other' as const),
-      hasSubject: window?.querySelector(INMAIL_SUBJECT) != null,
-      composer: parseComposer(inside, undefined, INMAIL_SEND),
+      hasSubject: form?.querySelector(INMAIL_SUBJECT) != null,
+      composer: parseComposer(form?.outerHTML ?? '', undefined, INMAIL_SEND),
    }
 }
 

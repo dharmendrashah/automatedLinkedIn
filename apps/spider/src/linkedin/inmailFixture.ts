@@ -1,10 +1,12 @@
 import { type FixtureMessage, messageWindowMarkup, profileMarkup } from './messagingFixture'
 
 // The window a profile's Message link opens for a free message to a member who is not a connection, as the real page has it (recorded
-// 2026-11-03, tripti.verma, English; session-2026-11-03T08-44-40-796Z), with made-up people and text. Only what the readers rely on is
-// here. The banner for a credit is made up (never seen) and marked so in the test that uses it.
+// 2026-11-03, tripti.verma, English; session-2026-11-03T08-44-40-796Z), and the whole compose page it led to in run 96db1845 (the same
+// form in `div.msg-convo-wrapper.msg-thread`), with made-up people and text. Only what the readers rely on is here. The banner for a credit is made up (never seen) and marked so in the test that uses it.
 
 export type FixtureInmail = {
+   // Over the profile (the default), or the whole compose page.
+   layout?: 'window' | 'page'
    // The profile address of the person the window is for, as the card links to it.
    profile?: string
    name?: string
@@ -15,14 +17,18 @@ export type FixtureInmail = {
 }
 
 export const inmailWindowMarkup = ({
+   layout = 'window',
    profile = '/in/ada-l/',
    name = 'Ada Lovelace',
    banner = 'Free message |',
    subject = true,
    composer = {},
 }: FixtureInmail = {}) =>
-   `<div class="msg-convo-wrapper msg-overlay-conversation-bubble msg-overlay-conversation-bubble--is-active msg-overlay-conversation-bubble--jumbo msg-overlay-conversation-bubble--inmail" role="dialog" aria-label="Messaging" data-view-name="message-overlay-conversation-bubble-item">
-<header class="msg-overlay-conversation-bubble-header premium-accent-bar"><h2 class="msg-overlay-bubble-header__title truncate"> New message </h2><button class="msg-overlay-bubble-header__control">Close your conversation</button></header>
+   `${
+      layout === 'page'
+         ? '<div class="msg-convo-wrapper msg-thread msg-thread--pillar msg-compose-container"><header><h2> New message </h2></header>'
+         : '<div class="msg-convo-wrapper msg-overlay-conversation-bubble msg-overlay-conversation-bubble--is-active msg-overlay-conversation-bubble--jumbo msg-overlay-conversation-bubble--inmail" role="dialog" aria-label="Messaging" data-view-name="message-overlay-conversation-bubble-item"><header class="msg-overlay-conversation-bubble-header premium-accent-bar"><h2 class="msg-overlay-bubble-header__title truncate"> New message </h2><button class="msg-overlay-bubble-header__control">Close your conversation</button></header>'
+   }
 <div class="msg-inmail-compose-form-v2"><div class="artdeco-entity-lockup msg-compose__inmail-compose-entity-lockup"><a href="${profile}"><img alt="${name}"></a><div class="artdeco-entity-lockup__content"><div class="msg-compose__occupation"> Founder </div></div></div>
 <form class="msg-form msg-form--is-fully-expanded msg-form full-height">${
       banner === null

@@ -7,15 +7,21 @@ import { slugKey } from '../../linkedin/inviteReader'
 import {
    INMAIL_COMPOSER,
    INMAIL_FILE_INPUT,
+   INMAIL_FORM,
    INMAIL_IMAGE_INPUT,
    INMAIL_SEND,
    INMAIL_SEND_BUTTON,
    INMAIL_SUBJECT_BOX,
-   INMAIL_WINDOW,
    PROFILE_MESSAGE,
 } from '../../linkedin/markup'
 import { type Before, createMessageBox } from '../../linkedin/messageBox'
-import { composerHtml, hasProfileMessage, parseInmailWindow, parseMessageWindow } from '../../linkedin/messageReader'
+import {
+   composerHtml,
+   hasProfileMessage,
+   parseInmailWindow,
+   parseMessageWindow,
+   parseThread,
+} from '../../linkedin/messageReader'
 import { PACE } from '../../linkedin/pace'
 import { SignedOut, createSession } from '../../linkedin/session'
 import { type AnswerWatch } from '../../scraping/driver'
@@ -65,7 +71,8 @@ type Deps = {
 
 // Through a slow proxy a profile can take half a minute to draw, and the window a few seconds to open.
 const READY_LOOKS = 20
-const WINDOW_LOOKS = 12
+// The Message link may open a window over the profile or load the whole compose page, which takes longer.
+const WINDOW_LOOKS = 20
 // How many looks at the window while files upload, and how many in a row it must be unchanged to count as uploaded.
 const UPLOAD_LOOKS = 120
 const STABLE_LOOKS = 3
@@ -115,9 +122,14 @@ export const sendInmail = async (
       log,
       box: INMAIL_COMPOSER,
       send: INMAIL_SEND_BUTTON,
-      scope: INMAIL_WINDOW,
+      scope: INMAIL_FORM,
       sendInside: INMAIL_SEND,
-      messagesOf: html => parseMessageWindow(html, today()).messages,
+      // Over the profile the window turns into a conversation; on the compose page the page turns into one.
+      messagesOf: html => {
+         const window = parseMessageWindow(html, today())
+
+         return window.open ? window.messages : parseThread(html, today()).messages
+      },
    })
 
    // Looks at the page until `ready` says yes, as a person waits for it; the last page read either way.
@@ -138,7 +150,7 @@ export const sendInmail = async (
       let stable = 0
 
       for (let look = 0; look < UPLOAD_LOOKS; look += 1) {
-         const current = composerHtml(await hands.html(), INMAIL_WINDOW)
+         const current = composerHtml(await hands.html(), INMAIL_FORM)
 
          stable = current === last ? stable + 1 : 0
          last = current
@@ -238,44 +250,44 @@ export const sendInmail = async (
          await until(WINDOW_LOOKS, html => {
             const window = parseInmailWindow(html)
 
-            return window.windows > 0 && window.composer.present
+            return window.forms > 0 && window.composer.present
          })
       )
 
       session.signedIn((await hands.inspect()).url)
 
       if (!opened.open) {
-         log('The message window did not open')
+         log('No message window or page opened')
 
          return { outcome: 'NO_COMPOSER' }
       }
 
-      if (opened.windows === 0) {
-         log('The message window is an ordinary conversation window')
+      if (opened.forms === 0) {
+         log('An ordinary conversation opened, not a message to a non-connection')
 
          return { outcome: 'NOT_INMAIL' }
       }
 
-      if (opened.windows > 1) {
-         log('More than one window for a free message is open')
+      if (opened.forms > 1) {
+         log('More than one place to write a free message is open')
 
          return { outcome: 'WRONG_RECIPIENT' }
       }
 
       if (!opened.composer.present) {
-         log('The message window has no place to write')
+         log('The message form has no place to write')
 
          return { outcome: 'NO_COMPOSER' }
       }
 
       if (opened.recipients.length === 0 || opened.recipients.some(href => profileSlug(href) !== slugKey(input.slug))) {
-         log('The message window is for someone else')
+         log('The message form is for someone else')
 
          return { outcome: 'WRONG_RECIPIENT' }
       }
 
       if (opened.banner !== 'free') {
-         log('The message window does not say the message is free')
+         log('The message form does not say the message is free')
 
          return { outcome: 'WOULD_COST_CREDIT' }
       }
@@ -305,7 +317,7 @@ export const sendInmail = async (
 
       if (input.subject !== '') {
          if (!opened.hasSubject || !(await hands.clickSelector(INMAIL_SUBJECT_BOX))) {
-            log('The window has no subject box')
+            log('The form has no subject box')
             await box.clear()
 
             return {

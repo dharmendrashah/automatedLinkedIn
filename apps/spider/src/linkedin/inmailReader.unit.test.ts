@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { inmailProfileMarkup } from './inmailFixture'
-import { INMAIL_COMPOSER, INMAIL_SEND_BUTTON, INMAIL_SUBJECT_BOX } from './markup'
+import { inmailProfileMarkup, inmailWindowMarkup } from './inmailFixture'
+import { INMAIL_COMPOSER, INMAIL_FORM, INMAIL_SEND_BUTTON, INMAIL_SUBJECT_BOX } from './markup'
 import { composerHtml, hasProfileMessage, parseInmailWindow, parseMessageWindow } from './messageReader'
 
 describe('parseInmailWindow', () => {
@@ -10,7 +10,7 @@ describe('parseInmailWindow', () => {
 
       expect(window).toMatchObject({
          open: true,
-         windows: 1,
+         forms: 1,
          recipients: ['/in/ada-l/'],
          banner: 'free',
          hasSubject: true,
@@ -56,7 +56,7 @@ describe('parseInmailWindow', () => {
 
       expect(ordinary).toMatchObject({
          open: true,
-         windows: 0,
+         forms: 0,
          recipients: [],
          banner: 'none',
       })
@@ -69,8 +69,24 @@ describe('parseInmailWindow', () => {
             })
          )
       ).toMatchObject({
-         windows: 2,
+         forms: 2,
          recipients: ['/in/ada-l/'],
+      })
+   })
+
+   it('should read the whole compose page the Message link can lead to, the same as the window over the profile', () => {
+      const page = parseInmailWindow(`<html><body>${inmailWindowMarkup({ layout: 'page' })}</body></html>`)
+
+      expect(page).toMatchObject({
+         open: true,
+         forms: 1,
+         recipients: ['/in/ada-l/'],
+         banner: 'free',
+         hasSubject: true,
+         composer: {
+            present: true,
+            canSend: false,
+         },
       })
    })
 
@@ -84,12 +100,7 @@ describe('parseInmailWindow', () => {
       const composer = { extra: '<div class="msg-form__attachment">a.pdf 40%</div>' }
       const html = inmailProfileMarkup({ inmail: { composer } })
 
-      expect(
-         composerHtml(
-            html,
-            '[data-view-name="message-overlay-conversation-bubble-item"].msg-overlay-conversation-bubble--inmail'
-         )
-      ).toContain('a.pdf 40%')
+      expect(composerHtml(html, INMAIL_FORM)).toContain('a.pdf 40%')
    })
 
    it('should read the window as a conversation once the message went, with the subject apart from the words', () => {

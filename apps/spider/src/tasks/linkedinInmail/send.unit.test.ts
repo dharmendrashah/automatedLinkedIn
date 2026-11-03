@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { inmailProfileMarkup } from '../../linkedin/inmailFixture'
+import { inmailProfileMarkup, inmailWindowMarkup } from '../../linkedin/inmailFixture'
 import {
    INMAIL_COMPOSER,
    INMAIL_FILE_INPUT,
@@ -9,6 +9,7 @@ import {
    INMAIL_SUBJECT_BOX,
    PROFILE_MESSAGE,
 } from '../../linkedin/markup'
+import { threadMarkup } from '../../linkedin/messagingFixture'
 import { answerFor } from './answer'
 import { createLinkedinInmail } from './index'
 import { type InmailInput, type InmailResult, sendInmail } from './send'
@@ -31,6 +32,8 @@ const FILES = [
 
 type Page = {
    profileAt?: string
+   // The Message link opens a window over the profile, or leads to the whole compose page.
+   layout?: 'window' | 'page'
    messageLink?: boolean
    // The window opens when the link is pressed: for a free message, or as an ordinary conversation.
    opens?: boolean
@@ -77,6 +80,24 @@ const setup = (page: Page = {}) => {
          uploading = uploading === 'never' ? uploading : uploading - 1
       }
 
+      if (pressed > 0 && appears && page.layout === 'page') {
+         return `<html><body>${threadMarkup({
+            title: 'Ada Lovelace',
+            profile: `${BASE}/in/${SLUG}/`,
+            messages: [
+               {
+                  id: 'm1',
+                  from: 'ME',
+                  name: 'Tripti',
+                  profile: `${BASE}/in/me/`,
+                  time: '9:05 AM',
+                  subject: SUBJECT,
+                  text: TEXT,
+               },
+            ],
+         })}</body></html>`
+      }
+
       if (pressed > 0 && appears) {
          return `<html><body>${inmailProfileMarkup({
             ordinary: {
@@ -104,6 +125,16 @@ const setup = (page: Page = {}) => {
          typed: body,
          sendDisabled: (body === '' && !hasFiles) || !sendWorks,
          ...(hasFiles && { extra: `<div class="chip" data-n="${changes}">file</div>` }),
+      }
+
+      if (page.layout === 'page') {
+         return `<html><body>${inmailWindowMarkup({
+            layout: 'page',
+            profile: page.profile ?? `/in/${SLUG}/`,
+            ...(page.banner !== undefined && { banner: page.banner }),
+            subject: page.subjectBox ?? true,
+            composer,
+         })}</body></html>`
       }
 
       return `<html><body>${inmailProfileMarkup({
@@ -272,6 +303,25 @@ describe('sendInmail', () => {
       expect(context.visit).toHaveBeenCalledWith(`${BASE}/in/${SLUG}/`)
       expect(calls).toEqual(['click message', 'click body', 'type body', 'press send'])
       expect(context.markAttempt).toHaveBeenCalledTimes(1)
+   })
+
+   it('should write and send the same on the whole compose page the Message link can lead to, and see the conversation page it turns into', async () => {
+      const { run, calls } = setup({ layout: 'page' })
+
+      await expect(run({ subject: SUBJECT })).resolves.toEqual({ outcome: 'SENT' })
+      expect(calls.filter(call => call === 'press send')).toHaveLength(1)
+      await expect(
+         setup({
+            layout: 'page',
+            banner: null,
+         }).run()
+      ).resolves.toEqual({ outcome: 'WOULD_COST_CREDIT' })
+      await expect(
+         setup({
+            layout: 'page',
+            profile: '/in/grace-h/',
+         }).run()
+      ).resolves.toEqual({ outcome: 'WRONG_RECIPIENT' })
    })
 
    it('should type the subject in its own box before the words', async () => {

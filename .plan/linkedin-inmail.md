@@ -180,6 +180,10 @@ Checklist boxes (tick or write n/a with a reason before `done`):
 - Offline: unit tests per verdict with the hands mocked, readers against fixtures, then `pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build` from the repo root.
 - Real path (needs your go-ahead): devtools `pnpm record` option 2, "Run a task", `linkedin-inmail`, on tripti.verma with a recipient you name; read `result.json`, `timeline.json`, `logs.json`, the video contact sheet and `files/`; then a second run to check the saved session. What was not run live is written in `MEMORY.md`: the paid banner, a profile that cannot be messaged, the second layout.
 
+## Live run 1 (devtools, 2026-11-03, run 96db1845, tripti.verma through a proxy, davidarnoux)
+
+`NO_COMPOSER` after 31 s, nothing typed (as designed). Cause: the second layout. The Message link led to the whole `/messaging/compose/` page (a `div.msg-convo-wrapper.msg-thread` with the same `.msg-inmail-compose-form-v2` form, banner "Free message | Why?", subject, box, send `msg-form__send-btn`), not the window over the profile, and the reader looked only for the window. Fixed: the task works in `.msg-inmail-compose-form-v2` (in both layouts), waits 20 looks, and reads the sent message from the window or from the conversation page. Checked offline against the kept page of that run and the first recording. Still to run live again.
+
 ## Outcome
 
 Built and tested offline (2026-11-03); the live run is still open, so the status stays `locked`.

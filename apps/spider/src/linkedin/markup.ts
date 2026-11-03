@@ -79,19 +79,24 @@ export const WINDOW_PROFILE_CARD = '.msg-s-profile-card a[href*="/in/"]'
 // session-2026-11-03T08-44-40-796Z, steps 9 to 21). The same Message link opens the same window with the extra class
 // `msg-overlay-conversation-bubble--inmail`, titled "New message", with the person as a card (not a chip), a banner that reads
 // "Free message | Why?", a subject box and the same body box. Its send button is `msg-form__send-btn`, not `msg-form__send-button`.
-// After send the window becomes an ordinary conversation window. Not seen: the banner when a credit is spent, a profile that cannot
-// be messaged, a second layout.
-export const INMAIL_WINDOW = `${MESSAGE_WINDOW}.msg-overlay-conversation-bubble--inmail`
+// After send the window becomes an ordinary conversation window. The same Message link on the same account led, in run 96db1845
+// (2026-11-03, tripti.verma, local), to the whole /messaging/compose/ page instead of the window: one `div.msg-convo-wrapper.msg-thread`
+// with the same form inside it. Both hold `.msg-inmail-compose-form-v2` around the card, banner, subject, box and send button, so that
+// is what the task works in. Not seen: the banner when a credit is spent, a profile that cannot be messaged, a window opened in the
+// page layout of a connection.
+export const INMAIL_FORM = '.msg-inmail-compose-form-v2'
+// A message window or a whole message page, before it is known to be for a free message.
+export const CONVERSATION = '.msg-convo-wrapper'
 export const INMAIL_RECIPIENT = '.msg-compose__inmail-compose-entity-lockup a[href*="/in/"]'
 export const INMAIL_BANNER = '.msg-inmail-credits-display'
-// Inside the window, for the readers (which already hold the window).
+// Inside the form, for the readers (which already hold it).
 export const INMAIL_SUBJECT = 'input[name="subject"]'
 export const INMAIL_SEND = 'button.msg-form__send-btn'
-export const INMAIL_COMPOSER = `${INMAIL_WINDOW} ${COMPOSER}`
-export const INMAIL_SEND_BUTTON = `${INMAIL_WINDOW} ${INMAIL_SEND}`
-export const INMAIL_SUBJECT_BOX = `${INMAIL_WINDOW} ${INMAIL_SUBJECT}`
-export const INMAIL_IMAGE_INPUT = `${INMAIL_WINDOW} ${IMAGE_INPUT}`
-export const INMAIL_FILE_INPUT = `${INMAIL_WINDOW} ${FILE_INPUT}`
+export const INMAIL_COMPOSER = `${INMAIL_FORM} ${COMPOSER}`
+export const INMAIL_SEND_BUTTON = `${INMAIL_FORM} ${INMAIL_SEND}`
+export const INMAIL_SUBJECT_BOX = `${INMAIL_FORM} ${INMAIL_SUBJECT}`
+export const INMAIL_IMAGE_INPUT = `${INMAIL_FORM} ${IMAGE_INPUT}`
+export const INMAIL_FILE_INPUT = `${INMAIL_FORM} ${FILE_INPUT}`
 
 // The page where a post is written, the box its words go in (a rich-text editor; real key presses reach it) and the button that
 // sends it, which is greyed until there are words and while it sends; recorded 2026-10-25.
