@@ -192,6 +192,10 @@ Checklist boxes (tick or write n/a with a reason before `done`):
 
 `NOT_INMAIL` after 30 s, nothing typed. The account already had a conversation with this second-degree member (an earlier message of ours is in it), so the Message link opened that conversation, with no box: LinkedIn showed `.msg-s-conversation-blocked-footer` ("Improve your chances of hearing back ... Verify now") in its place and opened a Premium offer (`.modal-upsell`, Dismiss button) over the page. Handled: a new verdict `CONVERSATION_BLOCKED` ("an earlier message may be waiting for a reply"), the Premium offer is closed (best effort, never changes the verdict), `NOT_INMAIL` now means an ordinary conversation that does have a box, and a window with neither box nor notice is `NO_COMPOSER`. The wait no longer runs all 20 looks for these cases. Checked against the kept page of the run. Why LinkedIn blocks the box (a reply is awaited, or the person does not accept free messages) is not proven.
 
+## Owner's reading of run 3 (2026-11-03)
+
+The member is not on Premium (or has not turned on InMail requests) and is not a connection, which is why LinkedIn gave the account no box. The verdict `CONVERSATION_BLOCKED` is therefore `NOT_ACCEPTING_INMAIL` ("Not open to InMail"): a conversation with a notice where the box would be, or LinkedIn's Premium offer opening with no box, means the member does not take messages from this account; nothing is typed and the offer is closed. `NO_MESSAGE_BUTTON` stays (a profile with no Message link), and its sentence now says the member may not take messages from people they are not connected to. The offer alone as a signal (no conversation) was not seen live; it follows the owner's description.
+
 ## Outcome
 
 Built and tested offline (2026-11-03); the live run is still open, so the status stays `locked`.

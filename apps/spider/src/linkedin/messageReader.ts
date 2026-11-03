@@ -17,6 +17,7 @@ import {
    MESSAGE_WINDOW_TITLE,
    PROFILE_MESSAGE,
    SEND_BUTTON,
+   UPSELL_OFFER,
    WINDOW_PROFILE_CARD,
    WINDOW_RECIPIENT,
 } from './markup'
@@ -260,9 +261,11 @@ export const parseInmailWindow = (html: string) => {
         : ('none' as const)
 
    return {
-      open: forms.length > 0 || page.querySelector(`${MESSAGE_WINDOW}, ${CONVERSATION}`) !== null,
+      open: forms.length > 0 || page.querySelector(`${MESSAGE_WINDOW}, ${CONVERSATION}, ${UPSELL_OFFER}`) !== null,
       forms: forms.length,
       conversation,
+      // The Premium offer LinkedIn opens in place of a box it will not give the account.
+      offer: page.querySelector(UPSELL_OFFER) !== null,
       recipients: (form?.querySelectorAll(INMAIL_RECIPIENT) ?? []).flatMap(link => link.getAttribute('href') ?? []),
       banner:
          banner === '' ? ('none' as const) : /^free message\b/i.test(banner) ? ('free' as const) : ('other' as const),

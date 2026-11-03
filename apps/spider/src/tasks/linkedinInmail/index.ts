@@ -68,8 +68,8 @@ export const createLinkedinInmail = ({ baseUrl }: Options) =>
             label: 'Not sent',
             tone: 'failure',
          },
-         CONVERSATION_BLOCKED: {
-            label: 'Conversation blocked',
+         NOT_ACCEPTING_INMAIL: {
+            label: 'Not open to InMail',
             tone: 'failure',
          },
          DIFFERENT_WORDS: {

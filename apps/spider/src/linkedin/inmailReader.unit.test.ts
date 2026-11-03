@@ -105,6 +105,11 @@ describe('parseInmailWindow', () => {
          )
       ).toBe('blocked')
       expect(conversation(inmailProfileMarkup())).toBe('none')
+      expect(parseInmailWindow(inmailProfileMarkup({ offer: true }))).toMatchObject({
+         offer: true,
+         conversation: 'none',
+      })
+      expect(parseInmailWindow(inmailProfileMarkup()).offer).toBe(false)
    })
 
    it('should say when the window has no subject box, and when the page has no Message link', () => {

@@ -39,6 +39,8 @@ type Page = {
    // The window opens when the link is pressed: for a free message, or as an ordinary conversation.
    opens?: boolean
    ordinary?: boolean
+   // LinkedIn opens its Premium offer and no box, as for a member who is not on Premium or has not turned on InMail.
+   offer?: boolean
    // The ordinary conversation has a notice where its box would be, and LinkedIn opens a Premium offer.
    blocked?: boolean
    second?: boolean
@@ -128,6 +130,13 @@ const setup = (page: Page = {}) => {
 
       if (!open) {
          return `<html><body>${inmailProfileMarkup({ messageLink })}</body></html>`
+      }
+
+      if (page.offer) {
+         return `<html><body>${inmailProfileMarkup({
+            messageLink,
+            offer: true,
+         })}</body></html>`
       }
 
       const composer = {
@@ -491,8 +500,9 @@ describe('sendInmail', () => {
                ordinary: true,
                blocked: true,
             },
-            'CONVERSATION_BLOCKED',
+            'NOT_ACCEPTING_INMAIL',
          ],
+         [{ offer: true }, 'NOT_ACCEPTING_INMAIL'],
          [{ second: true }, 'WRONG_RECIPIENT'],
          [{ profile: '/in/grace-h/' }, 'WRONG_RECIPIENT'],
       ]
@@ -506,14 +516,19 @@ describe('sendInmail', () => {
       }
    })
 
-   it('should close the Premium offer and type nothing when the account already has a conversation it may not write in', async () => {
-      const { run, calls } = setup({
-         ordinary: true,
-         blocked: true,
-      })
+   it('should close the Premium offer and type nothing when the member does not take messages from the account', async () => {
+      for (const page of [
+         { offer: true },
+         {
+            ordinary: true,
+            blocked: true,
+         },
+      ]) {
+         const { run, calls } = setup(page)
 
-      await expect(run()).resolves.toEqual({ outcome: 'CONVERSATION_BLOCKED' })
-      expect(calls).toContain('close offer')
+         await expect(run()).resolves.toEqual({ outcome: 'NOT_ACCEPTING_INMAIL' })
+         expect(calls).toContain('close offer')
+      }
    })
 
    it('should type nothing, and start no attempt, when the window does not say the message is free', async () => {
@@ -615,7 +630,7 @@ describe('answerFor', () => {
       { outcome: 'NO_COMPOSER' },
       { outcome: 'WRONG_RECIPIENT' },
       { outcome: 'DIFFERENT_WORDS' },
-      { outcome: 'CONVERSATION_BLOCKED' },
+      { outcome: 'NOT_ACCEPTING_INMAIL' },
       { outcome: 'NOT_AVAILABLE' },
       { outcome: 'SIGNED_OUT' },
       ...(

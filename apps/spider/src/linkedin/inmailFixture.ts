@@ -51,12 +51,15 @@ export const inmailProfileMarkup = ({
    inmail,
    ordinary,
    extraWindow,
+   offer,
 }: {
    messageLink?: boolean
    inmail?: FixtureInmail
    ordinary?: { title: string; messages?: FixtureMessage[]; blocked?: boolean }
    // A second window left open, for the same person or another.
    extraWindow?: FixtureInmail
+   // The Premium offer opened over the page (recorded 2026-11-03, run 136a8937).
+   offer?: boolean
 } = {}) =>
    `${profileMarkup({ messageLink })}${inmail ? inmailWindowMarkup(inmail) : ''}${extraWindow ? inmailWindowMarkup(extraWindow) : ''}${
       ordinary
@@ -72,5 +75,9 @@ export const inmailProfileMarkup = ({
                       },
                    }),
            })
+         : ''
+   }${
+      offer
+         ? '<div class="artdeco-modal-overlay artdeco-modal-overlay--is-top-layer"><div class="artdeco-modal artdeco-modal--layer-default modal-upsell modal-upsell__multi-value-props" role="dialog"><button aria-label="Dismiss"></button></div></div>'
          : ''
    }`

@@ -90,7 +90,8 @@ export const INMAIL_FORM = '.msg-inmail-compose-form-v2'
 // `.msg-s-conversation-blocked-footer` ("Improve your chances of hearing back ... Verify now"), while a Premium offer opens on top
 // (`.artdeco-modal.modal-upsell`, a Dismiss button with `aria-label="Dismiss"`). The window's card links to the member's id, not the slug.
 export const CONVERSATION_BLOCKED = '.msg-s-conversation-blocked-footer'
-export const UPSELL_DISMISS = '.modal-upsell button[aria-label="Dismiss"]'
+export const UPSELL_OFFER = '.artdeco-modal.modal-upsell'
+export const UPSELL_DISMISS = `${UPSELL_OFFER} button[aria-label="Dismiss"]`
 // A message window or a whole message page, before it is known to be for a free message.
 export const CONVERSATION = '.msg-convo-wrapper'
 export const INMAIL_RECIPIENT = '.msg-compose__inmail-compose-entity-lockup a[href*="/in/"]'

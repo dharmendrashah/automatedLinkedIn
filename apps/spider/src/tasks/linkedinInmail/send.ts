@@ -46,8 +46,8 @@ export type InmailInput = {
 // known (nothing is typed again for it). NO_MESSAGE_BUTTON: the profile shows no Message link. NOT_INMAIL: the window that opened is an
 // ordinary conversation window (the person may be a connection). WOULD_COST_CREDIT: the banner does not say "Free message", so nothing
 // was typed. NO_COMPOSER: no window or no box. WRONG_RECIPIENT: the window is for someone else, or more than one is open.
-// NOT_AVAILABLE: the address did not lead to a profile. CONVERSATION_BLOCKED: the account already has a conversation with the person and
-// LinkedIn shows a notice where the box would be. DIFFERENT_WORDS: it went, and the conversation shows other words than asked for.
+// NOT_AVAILABLE: the address did not lead to a profile. NOT_ACCEPTING_INMAIL: the member is not on Premium or has not turned on InMail
+// and is not a connection, so LinkedIn shows a notice where the box would be, or a Premium offer. DIFFERENT_WORDS: it went, and the conversation shows other words than asked for.
 export type InmailResult =
    | {
         outcome:
@@ -61,7 +61,7 @@ export type InmailResult =
            | 'NOT_AVAILABLE'
            | 'SIGNED_OUT'
            | 'DIFFERENT_WORDS'
-           | 'CONVERSATION_BLOCKED'
+           | 'NOT_ACCEPTING_INMAIL'
      }
    | {
         outcome: 'FAILED'
@@ -322,7 +322,7 @@ export const sendInmail = async (
          await until(WINDOW_LOOKS, html => {
             const window = parseInmailWindow(html)
 
-            return (window.forms > 0 && window.composer.present) || window.conversation !== 'none'
+            return (window.forms > 0 && window.composer.present) || window.conversation !== 'none' || window.offer
          })
       )
 
@@ -335,17 +335,17 @@ export const sendInmail = async (
       }
 
       if (opened.forms === 0) {
-         if (opened.conversation === 'blocked') {
-            log('A conversation with this person exists and LinkedIn offers no box to write in')
-            await closeOffer()
-
-            return { outcome: 'CONVERSATION_BLOCKED' }
-         }
-
          if (opened.conversation === 'open') {
             log('An ordinary conversation opened, not a message to a non-connection')
 
             return { outcome: 'NOT_INMAIL' }
+         }
+
+         if (opened.conversation === 'blocked' || opened.offer) {
+            log('LinkedIn offers no box to write in: the member does not take messages from this account')
+            await closeOffer()
+
+            return { outcome: 'NOT_ACCEPTING_INMAIL' }
          }
 
          log('The message window has no place to write')

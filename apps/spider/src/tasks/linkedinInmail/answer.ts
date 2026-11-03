@@ -28,18 +28,19 @@ export const answerFor = (result: InmailResult): TaskOutcome => {
             message:
                'The message was sent, but LinkedIn shows other words than the ones asked for. Check the conversation on LinkedIn.',
          }
-      case 'CONVERSATION_BLOCKED':
+      case 'NOT_ACCEPTING_INMAIL':
          return {
             status: 'FAILED',
-            verdict: 'CONVERSATION_BLOCKED',
+            verdict: 'NOT_ACCEPTING_INMAIL',
             message:
-               'The account already has a conversation with this person and LinkedIn offers no box to write in (an earlier message may be waiting for a reply), so nothing was typed.',
+               'This member is not on Premium or has not turned on InMail messages, and is not a connection, so LinkedIn offers no way to write to them and nothing was typed.',
          }
       case 'NO_MESSAGE_BUTTON':
          return {
             status: 'FAILED',
             verdict: 'NO_MESSAGE_BUTTON',
-            message: 'The profile shows no Message button, so nothing was typed.',
+            message:
+               'The profile shows no Message button, so nothing was typed. The member may not take messages from people they are not connected to.',
          }
       case 'NOT_INMAIL':
          return {
