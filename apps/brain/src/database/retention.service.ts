@@ -3,6 +3,7 @@ import { Prisma } from 'generated/prisma/client'
 import { FirstDayUsedService } from './firstDayUsed.service'
 import { JobRunService } from './jobRun.service'
 import { PrismaService } from './prisma.service'
+import { SignalService } from './signal.service'
 
 // Deletes personal data and old records on time (.plan/gtm-phase-3-blocks-triggers.md). Every step is safe to repeat
 // and suppression rows are never touched.
@@ -139,6 +140,7 @@ export class RetentionService {
       // The cron monitor's history of job runs (.plan/cron-monitor.md).
       const jobRuns = await JobRunService.cleanup(now)
       const firstDaysUsed = await FirstDayUsedService.sweep(now)
+      const signals = await SignalService.cleanup(now)
 
       return {
          items: items.count,
@@ -156,6 +158,7 @@ export class RetentionService {
          pages,
          jobRuns,
          firstDaysUsed,
+         signals: signals.people + signals.companies + signals.excerpts,
       }
    }
 }

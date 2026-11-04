@@ -19,6 +19,7 @@ import {
    personRowKey,
 } from './personFacts'
 import { joinedText, mediaBlock, postBlocksOfText, postFilesOf } from './posting'
+import { FADE_SPEEDS, MODEL_IDS, MODEL_LABELS, tierLinesSchema } from './ranking'
 import { type MessageUse, TEMPLATE_RAW_MAX, templateProblems } from './template'
 
 // The closed catalog of workflow blocks, the graph they form, and the pure rules on it (.plan/gtm-workflows.md).
@@ -1385,10 +1386,13 @@ export const BLOCK_TYPES = [
    'process.topN',
    'process.room',
    'process.tag',
+   'process.bestPer',
    'process.messageMood',
    'process.write',
    'process.merge',
    'score.icp',
+   'score.signals',
+   'score.company',
    'collect.profile',
    'collect.chat',
    'logic.if',
@@ -1400,6 +1404,7 @@ export const BLOCK_TYPES = [
    'logic.runWorkflow',
    'logic.wait',
    'logic.personWait',
+   'logic.spaceOut',
    'logic.taskResult',
    'logic.retry',
    'logic.forEach',
@@ -1424,6 +1429,7 @@ export const BLOCK_TYPES = [
    'output.csv',
    'output.sendApi',
    'output.return',
+   'output.doNotContact',
 ] as const
 
 // What a block is. A new block says it here and the sets, the checks and the engine follow.
@@ -1950,6 +1956,91 @@ const commentTextProblems = (label: string, texts: unknown[], nodeId: string): G
          : []
    )
 
+const MODEL_OPTIONS = optionsOf(MODEL_IDS.map((id): [string, string] => [id, MODEL_LABELS[id]]))
+
+const FADE_OPTIONS = optionsOf(
+   (Object.keys(FADE_SPEEDS) as Array<keyof typeof FADE_SPEEDS>).map((speed): [string, string] => [
+      speed,
+      speed === 'slow' ? 'Slow (twice as long)' : speed === 'fast' ? 'Fast (half as long)' : 'Normal',
+   ])
+)
+
+// What Score by signals and Score company share: the model, the three tier lines and how fast signals fade.
+const RANK_SHAPE = {
+   model: oneOf(MODEL_OPTIONS, 'balanced'),
+   tierA: z.number().int().min(1).max(100).default(80),
+   tierB: z.number().int().min(1).max(100).default(60),
+   tierC: z.number().int().min(1).max(100).default(40),
+   fade: oneOf(FADE_OPTIONS, 'normal'),
+   neverCompanies: words,
+}
+
+const tierLinesGo = ({ tierA, tierB, tierC }: Record<string, unknown>) =>
+   tierLinesSchema.safeParse({
+      a: tierA,
+      b: tierB,
+      c: tierC,
+   }).success
+
+const RANK_FIELDS: Field[] = [
+   {
+      key: 'model',
+      label: 'Model',
+      kind: 'select',
+      options: MODEL_OPTIONS,
+      hint: 'How much fit, intent, reach and relationship count. Balanced is 50, 30, 10, 10.',
+   },
+   {
+      key: 'tierA',
+      label: 'Tier A from',
+      kind: 'int',
+      min: 1,
+      max: 100,
+   },
+   {
+      key: 'tierB',
+      label: 'Tier B from',
+      kind: 'int',
+      min: 1,
+      max: 100,
+   },
+   {
+      key: 'tierC',
+      label: 'Tier C from',
+      kind: 'int',
+      min: 1,
+      max: 100,
+      hint: 'Below it is tier D. The lines must go down: A above B above C.',
+   },
+   {
+      key: 'fade',
+      label: 'Signals fade',
+      kind: 'select',
+      options: FADE_OPTIONS,
+      hint: 'How fast old signals count less.',
+   },
+   {
+      key: 'neverCompanies',
+      label: 'Never rank these companies',
+      kind: 'words',
+      advanced: true,
+      hint: 'Customers or competitors, by name. They go to Else as excluded.',
+   },
+]
+
+const tierProblem =
+   (label: string) =>
+   (node: GraphNode): GraphError[] =>
+      tierLinesGo(node.config)
+         ? []
+         : [
+              {
+                 nodeId: node.id,
+                 level: 'error',
+                 message: `${label}: the tier lines must go down, A above B above C.`,
+              },
+           ]
+
 const BLOCKS = {
    'trigger.manual': {
       group: 'Triggers',
@@ -2176,6 +2267,7 @@ const BLOCKS = {
          skipListed: toggle(true),
          skipProfiles: toggle(true),
          skipDone: toggle(true),
+         skipCompanyLabel: z.string().trim().toLowerCase().max(30).default(''),
       }),
       fields: [
          {
@@ -2193,6 +2285,13 @@ const BLOCKS = {
             label: 'Leave out posts I already processed',
             kind: 'toggle',
             hint: 'Turn on Keep in Find posts to remember posts; a post that was not kept cannot be recognised.',
+         },
+         {
+            key: 'skipCompanyLabel',
+            label: 'Leave out people at companies labelled',
+            kind: 'text',
+            advanced: true,
+            hint: 'A label of your Companies, such as customer. Empty leaves out no one.',
          },
       ],
    },
@@ -2311,6 +2410,101 @@ const BLOCKS = {
             max: 100,
             advanced: true,
          },
+      ],
+   },
+   'score.signals': {
+      group: 'Process',
+      flags: {
+         scores: true,
+         keepsAside: true,
+      },
+      validate: tierProblem('Score by signals'),
+      label: 'Score by signals',
+      summary:
+         'Scores each person for fit, intent, reach and relationship and says why. A to D tiers; people a rule excludes (a competitor, a never-rank company) go to Else. Without a profile read, a person cannot reach tier A.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            headline: 'Head of Growth at Analytical Engines',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            score: 78,
+            tier: 'B',
+            matched: ['title "growth"', 'seniority HEAD', 'asked for a tool today'],
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         icpId: z.string().min(1),
+         ...RANK_SHAPE,
+         neverTitles: words,
+         keepTierD: toggle(true),
+      }),
+      fields: [
+         {
+            key: 'icpId',
+            label: 'Ideal customer',
+            kind: 'icp',
+            hint: 'Who counts as a fit.',
+         },
+         ...RANK_FIELDS,
+         {
+            key: 'neverTitles',
+            label: 'Never rank these titles',
+            kind: 'words',
+            advanced: true,
+            hint: 'Words in a headline, such as intern or recruiter.',
+         },
+         {
+            key: 'keepTierD',
+            label: 'Keep tier D',
+            kind: 'toggle',
+            advanced: true,
+            hint: 'Off sends them to Else.',
+         },
+      ],
+   },
+   'score.company': {
+      group: 'Process',
+      flags: {
+         scores: true,
+         keepsAside: true,
+      },
+      validate: tierProblem('Score company'),
+      label: 'Score company',
+      summary:
+         'Scores each company for fit (size, industry, place, the words of the problem) and triggers (hiring, funding). Companies a rule excludes go to Else.',
+      sample: {
+         in: {
+            name: 'Analytical Engines',
+            link: 'https://www.linkedin.com/company/analytical-engines',
+         },
+         out: {
+            name: 'Analytical Engines',
+            score: 85,
+            tier: 'A',
+            matched: ['size 51 - 200', 'industry Software', 'hiring today'],
+            link: 'https://www.linkedin.com/company/analytical-engines',
+         },
+      },
+      input: 'company',
+      output: 'company',
+      config: z.object({
+         icpId: z.string().min(1),
+         ...RANK_SHAPE,
+      }),
+      fields: [
+         {
+            key: 'icpId',
+            label: 'Ideal customer',
+            kind: 'icp',
+            hint: 'Its sizes, industries, places and problem words are the fit.',
+         },
+         ...RANK_FIELDS,
       ],
    },
    'collect.profile': {
@@ -4321,7 +4515,10 @@ const BLOCKS = {
       summary: 'Adds labels to everyone who passes, shown in the list.',
       input: 'profile',
       output: 'profile',
-      config: z.object({ tags: z.array(z.string().trim().toLowerCase().min(1).max(30)).min(1).max(LABEL_MAX) }),
+      config: z.object({
+         tags: z.array(z.string().trim().toLowerCase().min(1).max(30)).min(1).max(LABEL_MAX),
+         replacePrefix: z.string().trim().toLowerCase().max(30).default(''),
+      }),
       fields: [
          {
             key: 'tags',
@@ -4329,6 +4526,56 @@ const BLOCKS = {
             kind: 'words',
             suggest: 'labels',
             hint: `Up to ${LABEL_MAX}, 30 characters each.`,
+         },
+         {
+            key: 'replacePrefix',
+            label: 'Replace labels beginning with',
+            kind: 'text',
+            advanced: true,
+            hint: 'Empty adds only. With tier- the new tier-a replaces any other tier- label, so a person moves between tiers.',
+         },
+      ],
+   },
+   'process.bestPer': {
+      group: 'Process',
+      flags: { keepsAside: true },
+      label: 'Pick best per company',
+      summary:
+         'Keeps the best few people of each company, by score. The rest go to Else with a reason. People with no company pass on.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            company: 'Analytical Engines',
+            score: 82,
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            company: 'Analytical Engines',
+            score: 82,
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         perCompany: z.number().int().min(1).max(20).default(3),
+         spread: toggle(true),
+      }),
+      fields: [
+         {
+            key: 'perCompany',
+            label: 'Per company',
+            kind: 'int',
+            min: 1,
+            max: 20,
+            hint: 'Most people kept for one company.',
+         },
+         {
+            key: 'spread',
+            label: 'Spread over roles',
+            kind: 'toggle',
+            hint: 'Prefers one of each role label (role:buyer, role:champion, role:user) before a second of any.',
          },
       ],
    },
@@ -4923,6 +5170,62 @@ const BLOCKS = {
             options: NO_DATE,
             advanced: true,
             hint: 'People who connected another way have no accept date.',
+         },
+      ],
+   },
+   'logic.spaceOut': {
+      group: 'Logic',
+      flow: 'Takes people, lets one person of a company through at a time; an Else after it gets the rest',
+      flags: {
+         keepsAside: true,
+         passesOn: true,
+      },
+      label: 'Space out people of one company',
+      summary:
+         'Lets one person of a company through every few days, the best scored first, and none after a colleague replied. The rest go to Else and come back on a later run.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            company: 'Analytical Engines',
+            score: 82,
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            company: 'Analytical Engines',
+            score: 82,
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         daysApart: z.number().int().min(1).max(30).default(3),
+         stopAfterReply: toggle(true),
+         forDays: z.number().int().min(1).max(90).default(14),
+      }),
+      fields: [
+         {
+            key: 'daysApart',
+            label: 'Days apart',
+            kind: 'int',
+            min: 1,
+            max: 30,
+            hint: 'Between two people of one company.',
+         },
+         {
+            key: 'stopAfterReply',
+            label: 'Stop after a reply',
+            kind: 'toggle',
+            hint: 'No more people there once one answered.',
+         },
+         {
+            key: 'forDays',
+            label: 'For how long (days)',
+            kind: 'int',
+            min: 1,
+            max: 90,
+            hint: 'Counts only when Stop after a reply is on.',
          },
       ],
    },
@@ -6013,6 +6316,37 @@ const BLOCKS = {
             key: 'secret',
             label: 'Secret sent in the X-Workflow-Secret header (optional)',
             kind: 'text',
+         },
+      ],
+   },
+   'output.doNotContact': {
+      group: 'Output',
+      label: 'Stop contacting them',
+      summary:
+         'Puts every person that reaches it on Do not contact: no workflow writes to them or invites them again. You can undo it on My network. A preview stops no one.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            result: {
+               action: 'stop',
+               status: 'DONE',
+            },
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object({ reason: z.string().trim().min(1).max(60).default('Stopped by a workflow') }),
+      fields: [
+         {
+            key: 'reason',
+            label: 'Reason',
+            kind: 'text',
+            hint: 'Kept in this run\u2019s result for each person.',
          },
       ],
    },

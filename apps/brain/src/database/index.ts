@@ -3,6 +3,8 @@ export { AccountTodayService } from './accountToday.service'
 export { AccountRoomService } from './accountRoom.service'
 export { type AccountRoomToday, type RoomAction, RoomTodayService } from './roomToday.service'
 export { type PersonDates, type PersonMoment, PersonDatesService } from './personDates.service'
+export { type Colleague, ColleaguesService } from './colleagues.service'
+export { type CompanySignalRow, type PersonSignalRow, type Shown, SignalService } from './signal.service'
 export {
    type EngageAccounts,
    type EngageCandidate,
