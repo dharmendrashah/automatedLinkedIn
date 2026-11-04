@@ -7,11 +7,12 @@ import {
    parseComposer,
    parseInbox,
    parseMessageWindow,
+   parseMessageWindows,
    parseOwner,
    parseThread,
    rowHash,
 } from './messageReader'
-import { inboxMarkup, profileMarkup, threadMarkup } from './messagingFixture'
+import { inboxMarkup, messageWindowMarkup, profileMarkup, threadMarkup } from './messagingFixture'
 
 // Thursday, 22 October 2026.
 const today = new Date(Date.UTC(2026, 9, 22, 12, 0, 0))
@@ -422,6 +423,22 @@ describe('parseMessageWindow', () => {
       })
       expect(compose(['Ada L.', 'Grace H.']).recipients).toEqual(['Ada L.', 'Grace H.'])
       expect(parseMessageWindow(withWindow(), today).recipients).toEqual([])
+   })
+})
+
+describe('parseMessageWindows', () => {
+   const shown = (title: string) =>
+      messageWindowMarkup({
+         title,
+         messages: [],
+         composer: {},
+      })
+
+   it('should list every shown window in page order and skip a hidden one', () => {
+      const hidden = shown('Hidden Person').replace('msg-convo-wrapper', 'msg-convo-wrapper hidden')
+      const windows = parseMessageWindows(`${shown('Jasper Bennett')}${hidden}${shown('Ada Lovelace')}`, today)
+
+      expect(windows.map(({ title }) => title)).toEqual(['Jasper Bennett', 'Ada Lovelace'])
    })
 })
 
