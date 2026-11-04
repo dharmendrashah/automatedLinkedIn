@@ -120,111 +120,130 @@ export class PeopleIndexService {
       const accountIds = accounts.map(({ id }) => id)
       const urls = slugs.flatMap(slug => [profileUrlOf(slug), profileUrlOf(slug).slice(0, -1)])
       const named = await chatsByName(userId, slugs)
-      const [requests, connections, conversations, members, targets, suppressed, existing, invites, snapshots] =
-         await Promise.all([
-            db.linkedInInvitation.findMany({
-               where: {
-                  userId,
-                  accountId: { in: accountIds },
-                  slug: { in: slugs },
+      const [
+         requests,
+         connections,
+         conversations,
+         members,
+         targets,
+         suppressed,
+         existing,
+         invites,
+         snapshots,
+         engaged,
+      ] = await Promise.all([
+         db.linkedInInvitation.findMany({
+            where: {
+               userId,
+               accountId: { in: accountIds },
+               slug: { in: slugs },
+            },
+         }),
+         db.linkedInConnection.findMany({
+            where: {
+               userId,
+               accountId: { in: accountIds },
+               slug: { in: slugs },
+            },
+         }),
+         db.linkedInConversation.findMany({
+            where: {
+               userId,
+               kind: 'DIRECT',
+               OR: [
+                  { contactProfileUrl: { in: urls } },
+                  { replies: { some: { recipientSlug: { in: slugs } } } },
+                  { id: { in: [...named.keys()] } },
+               ],
+            },
+            select: {
+               id: true,
+               accountId: true,
+               contactProfileUrl: true,
+               participants: true,
+               lastMessageAt: true,
+               lastDirection: true,
+               lastReplyAt: true,
+               waitingSince: true,
+               doneAt: true,
+               createdAt: true,
+               replies: {
+                  where: { recipientSlug: { not: null } },
+                  select: { recipientSlug: true },
+                  take: 1,
                },
-            }),
-            db.linkedInConnection.findMany({
-               where: {
-                  userId,
-                  accountId: { in: accountIds },
-                  slug: { in: slugs },
-               },
-            }),
-            db.linkedInConversation.findMany({
-               where: {
-                  userId,
-                  kind: 'DIRECT',
-                  OR: [
-                     { contactProfileUrl: { in: urls } },
-                     { replies: { some: { recipientSlug: { in: slugs } } } },
-                     { id: { in: [...named.keys()] } },
-                  ],
-               },
-               select: {
-                  id: true,
-                  accountId: true,
-                  contactProfileUrl: true,
-                  participants: true,
-                  lastMessageAt: true,
-                  lastDirection: true,
-                  lastReplyAt: true,
-                  waitingSince: true,
-                  doneAt: true,
-                  createdAt: true,
-                  replies: {
-                     where: { recipientSlug: { not: null } },
-                     select: { recipientSlug: true },
-                     take: 1,
-                  },
-               },
-            }),
-            db.workflowListMember.findMany({
-               where: {
-                  list: { userId },
-                  slug: { in: slugs },
-               },
-            }),
-            db.linkedInProfile.findMany({
-               where: {
-                  userId,
-                  slug: { in: slugs },
-                  archivedAt: null,
-               },
-            }),
-            db.suppression.findMany({
-               where: {
-                  userId,
-                  slug: { in: slugs },
-               },
-               select: { slug: true },
-            }),
-            db.person.findMany({
-               where: {
-                  userId,
-                  slug: { in: slugs },
-               },
-               select: {
-                  id: true,
-                  slug: true,
-                  doNotContact: true,
-                  notes: true,
-                  labels: true,
-                  statusSetAt: true,
-               },
-            }),
-            db.linkedInInvite.findMany({
-               where: {
-                  userId,
-                  slug: { in: slugs },
-               },
-               select: {
-                  id: true,
-                  accountId: true,
-                  slug: true,
-                  name: true,
-                  state: true,
-                  invitedAt: true,
-                  acceptedAt: true,
-                  createdAt: true,
-               },
-            }),
-            db.personSnapshot.findMany({
-               where: {
-                  userId,
-                  slug: { in: slugs },
-               },
-               select: {
-                  slug: true,
-                  data: true,
-               },
-            }),
-         ])
+            },
+         }),
+         db.workflowListMember.findMany({
+            where: {
+               list: { userId },
+               slug: { in: slugs },
+            },
+         }),
+         db.linkedInProfile.findMany({
+            where: {
+               userId,
+               slug: { in: slugs },
+               archivedAt: null,
+            },
+         }),
+         db.suppression.findMany({
+            where: {
+               userId,
+               slug: { in: slugs },
+            },
+            select: { slug: true },
+         }),
+         db.person.findMany({
+            where: {
+               userId,
+               slug: { in: slugs },
+            },
+            select: {
+               id: true,
+               slug: true,
+               doNotContact: true,
+               notes: true,
+               labels: true,
+               statusSetAt: true,
+            },
+         }),
+         db.linkedInInvite.findMany({
+            where: {
+               userId,
+               slug: { in: slugs },
+            },
+            select: {
+               id: true,
+               accountId: true,
+               slug: true,
+               name: true,
+               state: true,
+               invitedAt: true,
+               acceptedAt: true,
+               createdAt: true,
+            },
+         }),
+         db.personSnapshot.findMany({
+            where: {
+               userId,
+               slug: { in: slugs },
+            },
+            select: {
+               slug: true,
+               data: true,
+            },
+         }),
+         db.postAct.groupBy({
+            by: ['slug'],
+            where: {
+               userId,
+               slug: { in: slugs },
+               state: 'DONE',
+            },
+            _max: { doneAt: true },
+         }),
+      ])
       const facts = new Map(
          snapshots.flatMap(({ slug, data }) => {
             const snapshot = readSnapshot(data)
@@ -262,6 +281,7 @@ export class PeopleIndexService {
          invites: bySlug(invites, ({ slug }) => slug),
       }
       const blocked = new Set(suppressed.map(({ slug }) => slug))
+      const engagedBy = new Map(engaged.map(({ slug, _max }) => [slug, _max.doneAt]))
 
       for (const slug of new Set(slugs)) {
          const sources: Sources = {
@@ -347,6 +367,7 @@ export class PeopleIndexService {
                name: row.name === inviteSlug ? null : row.name,
             })),
             facts: facts.get(slug) ?? null,
+            engagedAt: engagedBy.get(slug) ?? null,
          }
          await PeopleIndexService.write(
             userId,

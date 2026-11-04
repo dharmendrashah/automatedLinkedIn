@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
-import { JobMonitorService } from 'database'
+import { JobMonitorService, PlatformSettingService } from 'database'
 
 import { adminProcedure, router } from 'trpc'
 
@@ -41,4 +41,11 @@ export const jobs = router({
    }),
 
    messageReads: adminProcedure.query(() => JobMonitorService.messageReads()),
+
+   // The switch that stops every reaction and comment (.plan/lead-pipeline-p3-engage.md, P8), with who changed it and when.
+   acts: adminProcedure.query(() => PlatformSettingService.actsSwitch()),
+
+   setActs: adminProcedure
+      .input(z.object({ on: z.boolean() }))
+      .mutation(({ ctx, input }) => PlatformSettingService.setActs(input.on, ctx.user.email)),
 })

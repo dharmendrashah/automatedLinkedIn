@@ -102,6 +102,8 @@ export type Sources = {
    targets: TargetRow[]
    invites: InviteRow[]
    facts: ProfileFacts | null
+   // When one of the owner's accounts last reacted to or commented on this person's posts and it went.
+   engagedAt: Date | null
 }
 
 export type DraftLink = {
@@ -140,6 +142,7 @@ export type DraftPerson = {
    lastReceivedAt: Date | null
    invitedAt: Date | null
    inviteState: PersonInviteState
+   lastEngagedAt: Date | null
    links: DraftLink[]
 }
 
@@ -220,7 +223,7 @@ export const PRIORITY = {
    INVITE: 1,
 } as const
 
-type Rows = Omit<Sources, 'facts'>
+type Rows = Omit<Sources, 'facts' | 'engagedAt'>
 
 const memberReason = (member: MemberRow) => {
    const { signal } = member
@@ -242,7 +245,7 @@ const memberReason = (member: MemberRow) => {
 
 // The owner's rows for a profile into one person: the most useful reason first (a reply, a request, why a list found them,
 // the connection, the target), the best fit, the status the rows say, and what waits on whom.
-const draftOf = (rows: Rows, profileUrl: string, facts: ProfileFacts | null): DraftPerson => {
+const draftOf = (rows: Rows, profileUrl: string, facts: ProfileFacts | null): Omit<DraftPerson, 'lastEngagedAt'> => {
    const reply = rows.conversations.find(row => open(row) && row.lastDirection === 'THEM')
    const request = rows.requests.find(pending)
    const [member] = rows.members
@@ -478,5 +481,10 @@ export const draftPerson = (sources: Sources, profileUrl: string): DraftPerson |
       invites: sources.invites,
    }
 
-   return Object.values(rows).every(list => list.length === 0) ? null : draftOf(rows, profileUrl, sources.facts)
+   return Object.values(rows).every(list => list.length === 0)
+      ? null
+      : {
+           ...draftOf(rows, profileUrl, sources.facts),
+           lastEngagedAt: sources.engagedAt,
+        }
 }

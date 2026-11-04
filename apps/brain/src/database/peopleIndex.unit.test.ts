@@ -52,6 +52,7 @@ const sources = (rest: Partial<Sources>): Sources => ({
    targets: [],
    invites: [],
    facts: null,
+   engagedAt: null,
    ...rest,
 })
 

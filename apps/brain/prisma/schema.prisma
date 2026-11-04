@@ -14,20 +14,20 @@ enum Role {
 }
 
 model User {
-  id           String    @id @default(uuid(7))
-  email        String    @unique
-  name         String?
-  role         Role      @default(USER)
+  id             String    @id @default(uuid(7))
+  email          String    @unique
+  name           String?
+  role           Role      @default(USER)
   // Subject (`sub`) of the authentik account linked to this user.
-  authentikId  String?   @unique
+  authentikId    String?   @unique
   // When the owner last left the leads inbox; people added after it are marked new.
-  inboxSeenAt  DateTime?
+  inboxSeenAt    DateTime?
   // When the owner last left My network; people first seen after it are new.
-  peopleSeenAt DateTime?
+  peopleSeenAt   DateTime?
   // When the owner accepted, once, the notice shown before the first "Act for real": LinkedIn's rules forbid automation and the risk is theirs.
   riskAcceptedAt DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   linkedInAccounts  LinkedInAccount[]
   linkedInCompanies LinkedInCompany[]
@@ -40,6 +40,7 @@ model User {
   replies           LinkedInReply[]
   invitations       LinkedInInvitation[]
   sentInvites       LinkedInInvite[]
+  postActs          PostAct[]
   connections       LinkedInConnection[]
   accountProfiles   LinkedInAccountProfile[]
   firstDaysUsed     FirstDayUsed[]
@@ -341,28 +342,28 @@ model WorkflowListener {
 // A task event matched to a workflow that listens to it: the log, the retry and the caps for event runs. PENDING waits for its
 // turn, STARTED has a run, SKIPPED never will (the reason is a fixed sentence), DROPPED waited too long.
 model WorkflowDelivery {
-  id          String    @id @default(uuid(7))
+  id          String     @id @default(uuid(7))
   userId      String
   workflowId  String
-  workflow    Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflow    Workflow   @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   // TASK: a task event matched a trigger block. BLOCK: a block's hook fired in a run (host columns below).
-  source      String    @default("TASK")
+  source      String     @default("TASK")
   taskEventId String?
   taskEvent   TaskEvent? @relation(fields: [taskEventId], references: [id], onDelete: Cascade)
   hostRunId   String?
   hostNodeId  String?
   phase       String
-  round       Int       @default(0)
-  tries       Int       @default(0)
-  resumes     Int       @default(0)
+  round       Int        @default(0)
+  tries       Int        @default(0)
+  resumes     Int        @default(0)
   // The trigger blocks that matched; they start the run. For a hook, the host and where its items are.
   targets     Json
-  status      String    @default("PENDING")
+  status      String     @default("PENDING")
   reason      String?
   runId       String?
-  attempts    Int       @default(0)
-  retryAt     DateTime  @default(now())
-  createdAt   DateTime  @default(now())
+  attempts    Int        @default(0)
+  retryAt     DateTime   @default(now())
+  createdAt   DateTime   @default(now())
   startedAt   DateTime?
 
   @@unique([taskEventId, workflowId])
@@ -889,6 +890,11 @@ model LinkedInAccount {
   // The account used its free invite notes this month (.plan/invite-note-fallback.md): until then invites go without their note.
   notesOutUntil         DateTime?
   nextAcceptReadAt      DateTime?
+  // Engaging (reactions and comments) stopped by trouble (.plan/lead-pipeline-p3-engage.md): when, why, and until when; with no end it
+  // waits for the next good sign-in after `engageStoppedAt`.
+  engageStoppedAt       DateTime?
+  engageStopReason      String?
+  engageStopUntil       DateTime?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
@@ -905,6 +911,7 @@ model LinkedInAccount {
   postDrafts       PostDraft[]
   postPublications PostPublication[]
   personLinks      PersonLink[]
+  postActs         PostAct[]
 
   @@unique([userId, email])
   @@index([userId])
@@ -1149,6 +1156,7 @@ model SpiderSession {
   // Present for a finished `linkedin-invitations` run whose requests are stored (.plan/my-network-invitations.md).
   invitationImport  InvitationImport?
   inviteImport      InviteImport?
+  engageImport      EngageImport?
   // The connection requests this run was asked to answer.
   invitations       LinkedInInvitation[]
   // Present for a finished `linkedin-connections` run whose connections are stored (.plan/my-connections.md).
@@ -1811,6 +1819,8 @@ model Person {
   // The newest message of the owner's accounts to them, and theirs to the accounts (LinkedIn's wall-clock, see LinkedInConversation).
   lastSentAt     DateTime?
   lastReceivedAt DateTime?
+  // When an account of the owner last reacted to or commented on their posts and it went; the people index copies it from PostAct.
+  lastEngagedAt  DateTime?
   // When the newest invite of the owner's accounts to them went (sent, accepted or withdrawn); null when none went.
   invitedAt      DateTime?
   inviteState    PersonInviteState        @default(NONE)
@@ -1835,6 +1845,7 @@ model Person {
   @@index([userId, lastSentAt])
   @@index([userId, lastReceivedAt])
   @@index([userId, invitedAt])
+  @@index([userId, lastEngagedAt])
 }
 
 // Where the newest invite of the owner to a person stands: QUEUED (not sent yet), PENDING (sent, no answer), ACCEPTED, or
@@ -1963,6 +1974,91 @@ model LinkedInInvite {
   @@index([userId, invitedAt])
   @@index([sessionId])
   @@index([state, invitedAt])
+}
+
+enum PostActKind {
+  REACT
+  COMMENT
+}
+
+enum PostActState {
+  QUEUED
+  SENDING
+  DONE
+  FAILED
+  // Pressed and the page did not say; never sent again.
+  UNKNOWN
+  EXPIRED
+  CANCELLED
+}
+
+// A reaction or a comment one of the owner's accounts makes on a person's post (.plan/lead-pipeline-p3-engage.md). Unique per owner,
+// post and kind for every state, so a post is never reacted to or commented on twice, even from another account. `words`, `excerpt` and
+// `authorHeadline` are other people's or the owner's own words: emptied after 30 days, the row stays.
+model PostAct {
+  id               String          @id @default(uuid(7))
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId        String
+  account          LinkedInAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // The author's profile slug: the person the act is for.
+  slug             String
+  // `activity:<id>` and so on: the same for every link to one post.
+  postKey          String
+  postUrl          String
+  authorName       String?
+  authorHeadline   String?
+  excerpt          String?
+  postedAt         DateTime?
+  act              PostActKind
+  reaction         String?
+  words            String?
+  // TEMPLATE or AI (phase 4).
+  mode             String          @default("TEMPLATE")
+  state            PostActState    @default(QUEUED)
+  // A fixed sentence the owner can read: why it was skipped, failed or left.
+  reason           String?
+  plannedAt        DateTime
+  waitReason       String?
+  waitUntil        DateTime?
+  startedAt        DateTime?
+  doneAt           DateTime?
+  sessionId        String?
+  originWorkflowId String?
+  originRunId      String?
+  originNodeId     String?
+  createdAt        DateTime        @default(now())
+
+  @@unique([userId, postKey, act])
+  @@index([accountId, state, plannedAt])
+  @@index([accountId, startedAt])
+  @@index([userId, slug])
+  @@index([sessionId])
+  @@index([state, startedAt])
+}
+
+// A finished `linkedin-engage` run that waits to be stored; the same shape and lifecycle as InviteImport.
+model EngageImport {
+  sessionId     String              @id
+  session       SpiderSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  status        MessageImportStatus @default(PENDING)
+  attempts      Int                 @default(0)
+  nextAttemptAt DateTime            @default(now())
+  claimedUntil  DateTime?
+  // An error class, never page content.
+  lastError     String?
+  createdAt     DateTime            @default(now())
+  importedAt    DateTime?
+
+  @@index([status, nextAttemptAt])
+}
+
+// A switch or a cap the operator holds for the whole platform, such as `acts` (on by default).
+model PlatformSetting {
+  key       String   @id
+  value     Json
+  changedBy String?
+  updatedAt DateTime @updatedAt
 }
 
 // A finished `linkedin-invite` run that waits to be stored; the same shape and lifecycle as InvitationImport. It holds no names.

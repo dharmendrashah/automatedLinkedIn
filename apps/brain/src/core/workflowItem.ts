@@ -85,6 +85,10 @@ export type PostItem = WithResult & {
    postId: string | null
    // The author's profile link when the data service gave it; a block that wants people uses the author.
    author?: string | null
+   // The person whose posts were asked for (Get posts of people): their slug and the score they had, so a block after it can
+   // pick the best authors first.
+   authorSlug?: string | null
+   authorScore?: number | null
    // The post as the data service returned it, when a block found it.
    preview?: PostSnapshotData | null
 }
@@ -274,6 +278,8 @@ const itemSchema = z.discriminatedUnion('kind', [
       url: z.string(),
       postId: z.string().nullable(),
       author: z.string().nullable().optional(),
+      authorSlug: z.string().nullable().optional(),
+      authorScore: z.number().nullable().optional(),
       preview: postSchema.nullable().optional(),
       result: resultSchema,
       facts: factsSchema,

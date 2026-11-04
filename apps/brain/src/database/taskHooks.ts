@@ -4,6 +4,7 @@ import { type TaskResult, type TaskTrigger } from '@automatedLinkedIn/contracts'
 
 import { linkedInBrowseHooks } from './linkedInBrowse.hooks'
 import { CONNECTIONS_TASK, linkedInConnectionHooks } from './linkedInConnection.hooks'
+import { ENGAGE_TASK, linkedInEngageHooks } from './linkedInEngage.hooks'
 import { INVITATIONS_TASK, linkedInInvitationHooks } from './linkedInInvitation.hooks'
 import { INVITE_TASK, linkedInInviteHooks } from './linkedInInvite.hooks'
 import { linkedInLoginHooks } from './linkedInLogin.hooks'
@@ -53,4 +54,5 @@ export const TASK_HOOKS: Record<string, TaskHooks> = {
    [INVITE_TASK]: linkedInInviteHooks,
    [CONNECTIONS_TASK]: linkedInConnectionHooks,
    [POST_TASK]: linkedInPostHooks,
+   [ENGAGE_TASK]: linkedInEngageHooks,
 }

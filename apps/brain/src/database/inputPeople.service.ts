@@ -21,6 +21,7 @@ const COLUMNS = {
    added: 'firstSeenAt',
    connected: 'connectedAt',
    lastContact: 'lastTouchAt',
+   lastEngaged: 'lastEngagedAt',
    lastSent: 'lastSentAt',
    lastReply: 'lastReceivedAt',
    invitedOn: 'invitedAt',
@@ -29,6 +30,19 @@ const COLUMNS = {
 type Column = (typeof COLUMNS)[keyof typeof COLUMNS]
 
 const columnOf = (field: string): Column => COLUMNS[field as keyof typeof COLUMNS] ?? 'firstSeenAt'
+
+// The people whose date falls in the time frame. Someone never reacted to or commented on is older than any date, so a frame that
+// only has an end ("not engaged for N days") keeps them.
+const windowOf = (column: Column, { since, until }: Pick<InputFilter, 'since' | 'until'>): Prisma.PersonWhereInput => {
+   const range = {
+      ...(since ? { gte: since } : {}),
+      ...(until ? { lt: until } : {}),
+   }
+
+   return column === 'lastEngagedAt' && !since
+      ? { OR: [{ lastEngagedAt: null }, { lastEngagedAt: range }] }
+      : { [column]: range }
+}
 
 const whereOf = async (userId: string, filter: InputFilter, network: NetworkPick): Promise<Prisma.PersonWhereInput> => {
    const suppressed = (
@@ -48,16 +62,7 @@ const whereOf = async (userId: string, filter: InputFilter, network: NetworkPick
       AND: [
          ...(network.people ? peopleWhere(network.people) : []),
          ...(network.people ? await worksAtWhere(userId, network.people.worksAt) : []),
-         ...(filter.since || filter.until
-            ? [
-                 {
-                    [column]: {
-                       ...(filter.since ? { gte: filter.since } : {}),
-                       ...(filter.until ? { lt: filter.until } : {}),
-                    },
-                 },
-              ]
-            : []),
+         ...(filter.since || filter.until ? [windowOf(column, filter)] : []),
          ...(filter.labels.length > 0
             ? [{ labels: filter.labelMatch === 'all' ? { hasEvery: filter.labels } : { hasSome: filter.labels } }]
             : []),
@@ -66,7 +71,8 @@ const whereOf = async (userId: string, filter: InputFilter, network: NetworkPick
    }
 }
 
-// The newest (or oldest) first by the date asked, empty dates last; the id breaks ties. "Best score" puts the highest score first and
+// The newest (or oldest) first by the date asked, empty dates last (first for the oldest of the last engaged: never engaged is the
+// longest ago); the id breaks ties. "Best score" puts the highest score first and
 // people with no score last.
 const orderOf = (filter: InputFilter): Prisma.PersonOrderByWithRelationInput[] => {
    const direction = filter.order === 'oldest' ? ('asc' as const) : ('desc' as const)
@@ -90,7 +96,7 @@ const orderOf = (filter: InputFilter): Prisma.PersonOrderByWithRelationInput[] =
          : {
               [column]: {
                  sort: direction,
-                 nulls: 'last' as const,
+                 nulls: column === 'lastEngagedAt' && direction === 'asc' ? ('first' as const) : ('last' as const),
               },
            },
       { id: direction },

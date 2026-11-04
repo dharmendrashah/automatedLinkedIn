@@ -133,6 +133,45 @@ describe('a Profiles input block from My network (database)', () => {
       expect((await LinkedInProfileService.pick(userId, 1, filter)).map(({ slug }) => slug)).toEqual(['zoe'])
    })
 
+   it('should keep people never reacted to or commented on in "not engaged for N days", and put them first by last engaged', async () => {
+      const day = 24 * 60 * 60 * 1000
+
+      await db.person.update({
+         where: {
+            userId_slug: {
+               userId,
+               slug: 'ravi',
+            },
+         },
+         data: { lastEngagedAt: new Date(Date.now() - 2 * day) },
+      })
+      await db.person.update({
+         where: {
+            userId_slug: {
+               userId,
+               slug: 'zoe',
+            },
+         },
+         data: { lastEngagedAt: new Date(Date.now() - 60 * day) },
+      })
+
+      const config = {
+         source: 'network',
+         dateField: 'lastEngaged',
+         added: 'olderThan',
+         days: 30,
+         order: 'oldest',
+      }
+      const filter = await InputPickService.filter(
+         userId,
+         inputPickOf('input.profiles', config),
+         null,
+         'input.profiles'
+      )
+
+      expect((await LinkedInProfileService.pick(userId, 10, filter)).map(({ slug }) => slug)).toEqual(['ana', 'zoe'])
+   })
+
    it('should take people from the profiles list as before when the source is the list', async () => {
       expect((await taken({ source: 'profiles' })).count).toBe(0)
    })
