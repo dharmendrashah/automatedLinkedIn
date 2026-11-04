@@ -7,11 +7,18 @@ import {
    MESSAGING_PATH,
    PROFILE_MESSAGE,
    THREAD_ID,
+   WINDOW_CLOSE,
    WINDOW_COMPOSER,
    WINDOW_SEND_BUTTON,
 } from '../../linkedin/markup'
 import { type Before, SEND_REQUEST, createMessageBox, handOverPage } from '../../linkedin/messageBox'
-import { hasProfileMessage, newestIsOurs, parseMessageWindow, parseThread } from '../../linkedin/messageReader'
+import {
+   hasProfileMessage,
+   newestIsOurs,
+   parseMessageWindow,
+   parseMessageWindows,
+   parseThread,
+} from '../../linkedin/messageReader'
 import { PACE } from '../../linkedin/pace'
 import { SignedOut, createSession } from '../../linkedin/session'
 import { type AnswerWatch } from '../../scraping/driver'
@@ -45,9 +52,15 @@ type Deps = {
 // Through a slow proxy a profile can take half a minute to draw, and the window a few seconds to open.
 const READY_LOOKS = 20
 const WINDOW_LOOKS = 12
+// The profile draws its Message link before its page scripts run, and a press then opens nothing (staging, 2026-11-04, no window on
+// any of three runs); the link is pressed again, up to this many times, after the page has had time to settle. Nothing is typed before.
+const WINDOW_PRESSES = 3
+// Old windows closed before a press (LinkedIn keeps a few at most).
+const MAX_CLOSES = 4
 
 const PAUSES = {
    open: [2000, 4000],
+   settle: [3000, 5000],
    look: [900, 1600],
    click: [600, 1400],
    typed: [800, 2000],
@@ -136,6 +149,32 @@ export const sendMessage = async (
       return html
    }
 
+   // The windows an earlier run left open come back with the page and sit before the new one. The new one is the window with a box that
+   // is for this person; the others are closed so the box typed in is the right one. A window that cannot be closed is left, and the
+   // recipient check then refuses the first window when it is not this person's.
+   const ownIndex = (html: string) =>
+      parseMessageWindows(html, today()).findIndex(shown => shown.composer.present && windowIsFor(shown, input))
+
+   const closeOtherWindows = async () => {
+      for (let closed = 0; closed < MAX_CLOSES; closed += 1) {
+         const html = await hands.html()
+         const own = ownIndex(html)
+         const other = parseMessageWindows(html, today()).findIndex((_, index) => index !== own)
+
+         if (own < 0 || other < 0) {
+            return
+         }
+
+         if (!(await hands.clickNth(WINDOW_CLOSE, other, ''))) {
+            log('An old message window could not be closed')
+
+            return
+         }
+
+         await reader.wait(PAUSES.click)
+      }
+   }
+
    // The newest conversation of /messaging/ is the one just written to; it is handed over only when it says so itself.
    const handOverNewest = async () => {
       try {
@@ -176,16 +215,33 @@ export const sendMessage = async (
          return { outcome: 'NOT_AVAILABLE' }
       }
 
-      if (
-         !hasProfileMessage(await until(READY_LOOKS, hasProfileMessage)) ||
-         !(await hands.clickSelector(PROFILE_MESSAGE))
-      ) {
+      if (!hasProfileMessage(await until(READY_LOOKS, hasProfileMessage))) {
          log('The profile shows no Message link')
 
          return { outcome: 'NO_MESSAGE_BUTTON' }
       }
 
-      const opened = window(await until(WINDOW_LOOKS, html => window(html).composer.present))
+      let html = ''
+
+      for (let press = 1; press <= WINDOW_PRESSES && ownIndex(html) < 0; press += 1) {
+         await reader.wait(PAUSES.settle)
+
+         if (!(await hands.clickSelector(PROFILE_MESSAGE))) {
+            log('The profile shows no Message link')
+
+            return { outcome: 'NO_MESSAGE_BUTTON' }
+         }
+
+         html = await until(WINDOW_LOOKS, page => ownIndex(page) >= 0)
+
+         if (ownIndex(html) < 0 && press < WINDOW_PRESSES) {
+            log('The message window did not open, pressing Message again')
+         }
+      }
+
+      await closeOtherWindows()
+
+      const opened = window(await hands.html())
 
       if (!opened.composer.present) {
          log(opened.open ? 'The message window has no place to write' : 'The message window did not open')
