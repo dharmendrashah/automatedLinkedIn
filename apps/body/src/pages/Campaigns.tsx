@@ -43,10 +43,17 @@ export const Campaigns = () => {
                   Group the workflows that work one goal together and see what they did in one place.
                </p>
             </div>
-            <Button onClick={() => setName('')}>
-               <Plus />
-               New campaign
-            </Button>
+            <div className="flex flex-wrap gap-2">
+               <Button asChild>
+                  <Link to="/campaigns/new">
+                     <Plus />
+                     Outreach campaign
+                  </Link>
+               </Button>
+               <Button variant="outline" onClick={() => setName('')}>
+                  Empty campaign
+               </Button>
+            </div>
          </div>
 
          {list.isPending ? <Skeleton className="h-24 w-full rounded-xl" /> : null}

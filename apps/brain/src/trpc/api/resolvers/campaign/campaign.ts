@@ -1,8 +1,13 @@
 import { z } from 'zod'
 
-import { CampaignService, CampaignStatsService, FleetHealthService } from 'database'
+import { CampaignService, CampaignStarterService, CampaignStatsService, FleetHealthService } from 'database'
 
-import { CAMPAIGN_PERIODS, CAMPAIGN_STAGES, campaignInputSchema } from '@automatedLinkedIn/contracts'
+import {
+   CAMPAIGN_PERIODS,
+   CAMPAIGN_STAGES,
+   campaignInputSchema,
+   outreachAnswersSchema,
+} from '@automatedLinkedIn/contracts'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -70,4 +75,9 @@ export const campaign = router({
 
    // How each account is doing, for the strip and the account drawers.
    fleet: ownerProcedure.query(({ ctx }) => FleetHealthService.forUser(ctx.user.id)),
+
+   // The Starter: one form makes the campaign and its six workflows, switched off (.plan/lead-pipeline-p6-campaign-starter.md).
+   createOutreach: ownerProcedure
+      .input(outreachAnswersSchema)
+      .mutation(({ ctx, input }) => orConflict(CampaignStarterService.createOutreach(ctx.user.id, input))),
 })

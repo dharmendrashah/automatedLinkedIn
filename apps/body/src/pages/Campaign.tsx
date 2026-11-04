@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { GoLive } from '@/components/campaigns/go-live'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
    Dialog,
@@ -247,6 +248,8 @@ export const Campaign = () => {
                </ul>
             )}
          </section>
+
+         <GoLive workflows={workflows} onChanged={() => void refresh()} />
 
          <section className="grid gap-2 rounded-xl border px-4 py-3">
             <h3 className="text-sm font-medium">Workflows</h3>
