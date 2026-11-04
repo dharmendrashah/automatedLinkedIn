@@ -1,11 +1,21 @@
 import { z } from 'zod'
 
-import { CampaignService, CampaignStarterService, CampaignStatsService, FleetHealthService } from 'database'
+import {
+   AutomationService,
+   CampaignService,
+   CampaignStarterService,
+   CampaignStatsService,
+   FleetHealthService,
+} from 'database'
 
 import {
+   AUTOMATIONS,
+   type AutomationId,
    CAMPAIGN_PERIODS,
    CAMPAIGN_STAGES,
+   automationAnswersSchema,
    campaignInputSchema,
+   isAutomationId,
    outreachAnswersSchema,
 } from '@automatedLinkedIn/contracts'
 
@@ -80,4 +90,20 @@ export const campaign = router({
    createOutreach: ownerProcedure
       .input(outreachAnswersSchema)
       .mutation(({ ctx, input }) => orConflict(CampaignStarterService.createOutreach(ctx.user.id, input))),
+
+   // The sixteen automations and what each still waits for (.plan/lead-pipeline-p10-automations.md).
+   automations: ownerProcedure.query(() => AUTOMATIONS),
+
+   // One form makes the workflows of one automation, switched off.
+   createAutomation: ownerProcedure
+      .input(
+         z.object({
+            id: z.custom<AutomationId>(
+               value => typeof value === 'string' && isAutomationId(value),
+               'Unknown automation'
+            ),
+            answers: automationAnswersSchema,
+         })
+      )
+      .mutation(({ ctx, input }) => orConflict(AutomationService.create(ctx.user.id, input.id, input.answers))),
 })

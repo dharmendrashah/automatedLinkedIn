@@ -210,6 +210,18 @@ export const EVENT_FACTS: EventFact[] = [
       label: 'Seconds it took',
       type: 'number',
    },
+   {
+      scope: 'item',
+      key: 'label',
+      label: 'The label Label with AI put on it',
+      type: 'text',
+   },
+   {
+      scope: 'item',
+      key: 'labelConfidence',
+      label: 'How sure the AI was (percent)',
+      type: 'number',
+   },
 ]
 
 export type TaskEventDetails = {
