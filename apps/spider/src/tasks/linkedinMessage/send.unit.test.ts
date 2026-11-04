@@ -18,6 +18,8 @@ type Page = {
    messageLink?: boolean
    // The window opens when the link is pressed, and the name it shows.
    opens?: boolean
+   // The window opens only on this press of the link (a page that had not run its scripts ignores the earlier ones).
+   opensOnPress?: number
    title?: string
    composer?: boolean
    history?: FixtureMessage[]
@@ -97,7 +99,7 @@ const setup = (page: Page = {}) => {
       clickSelector: vi.fn(async (selector: string) => {
          if (selector === PROFILE_MESSAGE) {
             calls.push('click message')
-            open = opens
+            open = opens && calls.filter(call => call === 'click message').length >= (page.opensOnPress ?? 1)
 
             return messageLink
          }
@@ -245,6 +247,21 @@ describe('sendMessage', () => {
          await expect(run()).resolves.toEqual({ outcome: 'NO_COMPOSER' })
          expect(typedNothing(calls)).toBe(true)
       }
+   })
+
+   it('should press Message again when the first press opens nothing, and send once', async () => {
+      const { run, calls } = setup({ opensOnPress: 2 })
+
+      await expect(run()).resolves.toEqual({ outcome: 'SENT' })
+      expect(calls.filter(call => call === 'click message')).toHaveLength(2)
+      expect(calls.filter(call => call === 'press send')).toHaveLength(1)
+   })
+
+   it('should press Message only three times when no window ever opens', async () => {
+      const { run, calls } = setup({ opens: false })
+
+      await expect(run()).resolves.toEqual({ outcome: 'NO_COMPOSER' })
+      expect(calls.filter(call => call === 'click message')).toHaveLength(3)
    })
 
    it('should type nothing when the window is with someone else', async () => {

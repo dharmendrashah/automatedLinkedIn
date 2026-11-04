@@ -45,9 +45,13 @@ type Deps = {
 // Through a slow proxy a profile can take half a minute to draw, and the window a few seconds to open.
 const READY_LOOKS = 20
 const WINDOW_LOOKS = 12
+// The profile draws its Message link before its page scripts run, and a press then opens nothing (staging, 2026-11-04, no window on
+// any of three runs); the link is pressed again, up to this many times, after the page has had time to settle. Nothing is typed before.
+const WINDOW_PRESSES = 3
 
 const PAUSES = {
    open: [2000, 4000],
+   settle: [3000, 5000],
    look: [900, 1600],
    click: [600, 1400],
    typed: [800, 2000],
@@ -176,16 +180,29 @@ export const sendMessage = async (
          return { outcome: 'NOT_AVAILABLE' }
       }
 
-      if (
-         !hasProfileMessage(await until(READY_LOOKS, hasProfileMessage)) ||
-         !(await hands.clickSelector(PROFILE_MESSAGE))
-      ) {
+      if (!hasProfileMessage(await until(READY_LOOKS, hasProfileMessage))) {
          log('The profile shows no Message link')
 
          return { outcome: 'NO_MESSAGE_BUTTON' }
       }
 
-      const opened = window(await until(WINDOW_LOOKS, html => window(html).composer.present))
+      let opened = window('')
+
+      for (let press = 1; press <= WINDOW_PRESSES && !opened.open; press += 1) {
+         await reader.wait(PAUSES.settle)
+
+         if (!(await hands.clickSelector(PROFILE_MESSAGE))) {
+            log('The profile shows no Message link')
+
+            return { outcome: 'NO_MESSAGE_BUTTON' }
+         }
+
+         opened = window(await until(WINDOW_LOOKS, html => window(html).composer.present))
+
+         if (!opened.composer.present && press < WINDOW_PRESSES) {
+            log('The message window did not open, pressing Message again')
+         }
+      }
 
       if (!opened.composer.present) {
          log(opened.open ? 'The message window has no place to write' : 'The message window did not open')
