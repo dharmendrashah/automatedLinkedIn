@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { messagesFileSchema } from '@automatedLinkedIn/contracts'
 
-import { PROFILE_MESSAGE, WINDOW_COMPOSER, WINDOW_SEND_BUTTON } from '../../linkedin/markup'
-import { type FixtureMessage, profileMarkup, threadMarkup } from '../../linkedin/messagingFixture'
+import { PROFILE_MESSAGE, WINDOW_CLOSE, WINDOW_COMPOSER, WINDOW_SEND_BUTTON } from '../../linkedin/markup'
+import { type FixtureMessage, messageWindowMarkup, profileMarkup, threadMarkup } from '../../linkedin/messagingFixture'
 import { answerFor } from './answer'
 import { type MessageResult, sameName, sendMessage } from './send'
 
@@ -34,6 +34,10 @@ type Page = {
    attempted?: boolean
    // The window is a New message window (a person never written to) with these recipient chips and a card linking to this profile.
    compose?: { recipients: string[]; profile: string }
+   // Windows the browser profile kept open from earlier runs, by name; each press of the close button removes the first.
+   stale?: string[]
+   // The close button of an old window cannot be pressed.
+   staleStays?: boolean
 }
 
 const ours = (id: string): FixtureMessage => ({
@@ -54,6 +58,7 @@ const setup = (page: Page = {}) => {
    let open = false
    let typed = ''
    let pressed = 0
+   let stale = [...(page.stale ?? [])]
    const calls: string[] = []
    const attached: Array<{ name: string; content: string }> = []
    const html = () => {
@@ -65,7 +70,20 @@ const setup = (page: Page = {}) => {
          })}</body></html>`
       }
 
-      return `<html><body>${profileMarkup({
+      const old = stale
+         .map(name =>
+            messageWindowMarkup({
+               title: name,
+               messages: [],
+               composer: {
+                  typed: '',
+                  sendDisabled: true,
+               },
+            })
+         )
+         .join('')
+
+      return `<html><body>${old}${profileMarkup({
          messageLink,
          ...(open && {
             window: {
@@ -97,6 +115,18 @@ const setup = (page: Page = {}) => {
          blocks: [],
       })),
       clickSelector: vi.fn(async (selector: string) => {
+         if (selector === WINDOW_CLOSE) {
+            calls.push('close window')
+
+            if (stale.length === 0 || page.staleStays) {
+               return false
+            }
+
+            stale = stale.slice(1)
+
+            return true
+         }
+
          if (selector === PROFILE_MESSAGE) {
             calls.push('click message')
             open = opens && calls.filter(call => call === 'click message').length >= (page.opensOnPress ?? 1)
@@ -247,6 +277,29 @@ describe('sendMessage', () => {
          await expect(run()).resolves.toEqual({ outcome: 'NO_COMPOSER' })
          expect(typedNothing(calls)).toBe(true)
       }
+   })
+
+   it('should close the windows an earlier run left open before pressing Message, so the new window is the one it reads', async () => {
+      const { run, calls } = setup({ stale: ['Jasper Bennett', 'Dima Grossman'] })
+
+      await expect(run()).resolves.toEqual({ outcome: 'SENT' })
+      expect(calls.slice(0, 3)).toEqual(['close window', 'close window', 'click message'])
+   })
+
+   it('should close nothing when no window is open, and type nothing when an old window cannot be closed', async () => {
+      const clean = setup()
+
+      await clean.run()
+      expect(clean.calls).not.toContain('close window')
+
+      const stuck = setup({
+         stale: ['Jasper Bennett'],
+         staleStays: true,
+      })
+
+      await expect(stuck.run()).resolves.toEqual({ outcome: 'WRONG_RECIPIENT' })
+      expect(typedNothing(stuck.calls)).toBe(true)
+      expect(stuck.calls.filter(call => call === 'close window').length).toBeLessThanOrEqual(4)
    })
 
    it('should press Message again when the first press opens nothing, and send once', async () => {

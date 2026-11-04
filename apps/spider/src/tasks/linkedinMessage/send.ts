@@ -7,6 +7,7 @@ import {
    MESSAGING_PATH,
    PROFILE_MESSAGE,
    THREAD_ID,
+   WINDOW_CLOSE,
    WINDOW_COMPOSER,
    WINDOW_SEND_BUTTON,
 } from '../../linkedin/markup'
@@ -48,6 +49,8 @@ const WINDOW_LOOKS = 12
 // The profile draws its Message link before its page scripts run, and a press then opens nothing (staging, 2026-11-04, no window on
 // any of three runs); the link is pressed again, up to this many times, after the page has had time to settle. Nothing is typed before.
 const WINDOW_PRESSES = 3
+// Old windows closed before a press (LinkedIn keeps a few at most).
+const MAX_CLOSES = 4
 
 const PAUSES = {
    open: [2000, 4000],
@@ -140,6 +143,20 @@ export const sendMessage = async (
       return html
    }
 
+   // The windows an earlier run left open come back with the page and sit before the new one; they are closed so the window read is the
+   // one just opened. A window that cannot be closed is left, and the recipient check then refuses it.
+   const closeOldWindows = async () => {
+      for (let closed = 0; closed < MAX_CLOSES && window(await hands.html()).open; closed += 1) {
+         if (!(await hands.clickSelector(WINDOW_CLOSE))) {
+            log('An old message window could not be closed')
+
+            return
+         }
+
+         await reader.wait(PAUSES.click)
+      }
+   }
+
    // The newest conversation of /messaging/ is the one just written to; it is handed over only when it says so itself.
    const handOverNewest = async () => {
       try {
@@ -190,6 +207,7 @@ export const sendMessage = async (
 
       for (let press = 1; press <= WINDOW_PRESSES && !opened.open; press += 1) {
          await reader.wait(PAUSES.settle)
+         await closeOldWindows()
 
          if (!(await hands.clickSelector(PROFILE_MESSAGE))) {
             log('The profile shows no Message link')
