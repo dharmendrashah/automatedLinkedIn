@@ -236,8 +236,7 @@ export const hasProfileMessage = (html: string) => parse(html).querySelector(PRO
 // The window a profile's Message link opens: the person it is with, the messages it shows and its box. Only the window is read, so a
 // message list elsewhere on the page never counts. A New message window (a person never written to) names its recipients by chips
 // ("Remove <name>") and links to the person's profile from a card.
-export const parseMessageWindow = (html: string, today: Date) => {
-   const window = parse(html).querySelector(MESSAGE_WINDOW)
+const readWindow = (window: HTMLElement | null, today: Date) => {
    const inside = window?.outerHTML ?? ''
 
    return {
@@ -251,6 +250,15 @@ export const parseMessageWindow = (html: string, today: Date) => {
       composer: parseComposer(inside),
    }
 }
+
+// Every window shown, in page order: LinkedIn restores the ones an earlier run left open, and they come before the new one.
+export const parseMessageWindows = (html: string, today: Date) =>
+   parse(html)
+      .querySelectorAll(MESSAGE_WINDOW)
+      .map(window => readWindow(window, today))
+
+export const parseMessageWindow = (html: string, today: Date) =>
+   readWindow(parse(html).querySelector(MESSAGE_WINDOW), today)
 
 // What a row of the list is known by without opening it: its title and its last words, not its time, which changes with the clock
 // for a conversation that did not change. Two identical last words from one person give the same value (.plan/messages-first-sync-and-new-only.md).

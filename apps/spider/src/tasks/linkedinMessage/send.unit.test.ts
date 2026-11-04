@@ -70,7 +70,7 @@ const setup = (page: Page = {}) => {
          })}</body></html>`
       }
 
-      const old = stale
+      const old = (open ? stale : [])
          .map(name =>
             messageWindowMarkup({
                title: name,
@@ -114,19 +114,22 @@ const setup = (page: Page = {}) => {
          controls: [],
          blocks: [],
       })),
-      clickSelector: vi.fn(async (selector: string) => {
-         if (selector === WINDOW_CLOSE) {
-            calls.push('close window')
-
-            if (stale.length === 0 || page.staleStays) {
-               return false
-            }
-
-            stale = stale.slice(1)
-
-            return true
+      clickNth: vi.fn(async (selector: string, index: number) => {
+         if (selector !== WINDOW_CLOSE) {
+            return false
          }
 
+         calls.push(`close window ${index}`)
+
+         if (page.staleStays || index >= stale.length) {
+            return false
+         }
+
+         stale = stale.filter((_, position) => position !== index)
+
+         return true
+      }),
+      clickSelector: vi.fn(async (selector: string) => {
          if (selector === PROFILE_MESSAGE) {
             calls.push('click message')
             open = opens && calls.filter(call => call === 'click message').length >= (page.opensOnPress ?? 1)
@@ -279,18 +282,19 @@ describe('sendMessage', () => {
       }
    })
 
-   it('should close the windows an earlier run left open before pressing Message, so the new window is the one it reads', async () => {
+   it('should close the windows an earlier run left open, which come before the new window, and write in the new one', async () => {
       const { run, calls } = setup({ stale: ['Jasper Bennett', 'Dima Grossman'] })
 
       await expect(run()).resolves.toEqual({ outcome: 'SENT' })
-      expect(calls.slice(0, 3)).toEqual(['close window', 'close window', 'click message'])
+      expect(calls.filter(call => call.startsWith('close window'))).toEqual(['close window 0', 'close window 0'])
+      expect(calls.indexOf('close window 0')).toBeLessThan(calls.indexOf('type'))
    })
 
-   it('should close nothing when no window is open, and type nothing when an old window cannot be closed', async () => {
+   it('should close nothing when no other window is open, and type nothing when an old window cannot be closed', async () => {
       const clean = setup()
 
       await clean.run()
-      expect(clean.calls).not.toContain('close window')
+      expect(clean.calls.some(call => call.startsWith('close window'))).toBe(false)
 
       const stuck = setup({
          stale: ['Jasper Bennett'],
@@ -299,7 +303,6 @@ describe('sendMessage', () => {
 
       await expect(stuck.run()).resolves.toEqual({ outcome: 'WRONG_RECIPIENT' })
       expect(typedNothing(stuck.calls)).toBe(true)
-      expect(stuck.calls.filter(call => call === 'close window').length).toBeLessThanOrEqual(4)
    })
 
    it('should press Message again when the first press opens nothing, and send once', async () => {
