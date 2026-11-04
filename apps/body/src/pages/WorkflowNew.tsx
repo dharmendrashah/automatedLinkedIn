@@ -25,7 +25,7 @@ import {
    Workflow,
 } from 'lucide-react'
 import { type FormEvent, type ReactNode, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 
 import { cn } from '@/lib/utils'
 
@@ -143,6 +143,17 @@ export const WorkflowNew = () => {
                </Alert>
             ) : null}
          </div>
+
+         <section className="max-w-xl rounded-xl border px-4 py-3 text-sm">
+            <p className="font-medium">Outreach campaign</p>
+            <p className="text-muted-foreground">
+               Find people who post about your problem, invite them, warm them up, message the ones who accept and hand
+               off the rest. One form builds six workflows for you.
+            </p>
+            <Link className="text-primary underline" to="/campaigns/new">
+               Start an outreach campaign
+            </Link>
+         </section>
 
          <section className="grid max-w-xl gap-2">
             <Label htmlFor="workflow-name">1. Name (also the name of its list)</Label>

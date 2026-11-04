@@ -1,6 +1,7 @@
 # Lead pipeline, phase 6: Campaign Starter
 
-- Status: ready for the owner's approval (no open question; planned only, not to be built before phases 1 to 5)- Created: 2026-11-03
+- Status: built offline (see Outcome)
+- Created: 2026-11-03
 - Locked by user: no (the owner said: plan it, do not build it)
 - Parent: [lead-outreach-pipeline.md](lead-outreach-pipeline.md)
 
@@ -184,10 +185,10 @@ flowchart TD
 
 ## Approach
 
-- [ ] Recipe registry and the "Engage-first outreach" recipe in contracts with golden snapshot tests (all six graphs, every block passes `validateGraph`)
-- [ ] Brain: `campaign.createFromRecipe` (transaction, token), reuse of `workflow.create`
-- [ ] Body: the form, the review screen, the card on `/workflows/new`, the go-live checklist
-- [ ] Real path: create a campaign on a test user, preview each stage through the worker, switch on Discover only, read the run
+- [x] Recipe registry and the "Engage-first outreach" recipe in contracts with tests (all six graphs for five answer sets: no `validateGraph` error and every block setting parses; Act for real stays off; the control group is the Else of the split). Golden snapshots were not added
+- [x] Brain: `campaign.createOutreach` (an idempotent, clean-up-on-failure create; reuses `workflow.create`); every created stage can be switched on
+- [~] Body: the form, the review screen, the card on `/workflows/new`, the go-live list on the campaign page. Not done: the review's data cost, the competing-campaign warning, the "0 qualified" Discover preview, the first-use notice when switching Act for real on
+- [ ] Real path: create a campaign on a test user, preview each stage through the worker, switch on Discover only, read the run. Not done
 
 ## Edge cases and risks
 
@@ -205,4 +206,8 @@ flowchart TD
 
 ## Outcome
 
-Filled in when done.
+Shipped: contracts `recipes.ts` (`outreachAnswersSchema` with one sentence for each wrong answer, `buildOutreach`, `capacityOf`, a `RECIPES` registry with one entry); `CampaignStarterService.createOutreach` and the tRPC `campaign.createOutreach`; the page `/campaigns/new` (the form and the review), the card on `/workflows/new`, the Outreach campaign button on `/campaigns`, and a Go live list on the campaign page (Preview and Switch on for each stage).
+
+Deviations: the first message is written by the owner only (With AI needs 4b, which is not built); the ideal customer form takes titles, locations and a saved customer (seniority, size and industry are accepted by the answers but not asked on the form); "found in the last 14 days" is the 30 day window; the idempotency is the campaign name (a second click is refused with a sentence) and a failure part way removes what was made, not a client token and one transaction; the data cost of a day, the competing-campaign warning and the 0-qualified check are not on the review; the three finder recipes are not built (the registry is ready for them); versions are the ones `workflow.create` makes. Not seen in a browser.
+
+Follow-ups: With AI first messages (4b), the finder recipes, the review's cost line, the first-use notice for Act for real.

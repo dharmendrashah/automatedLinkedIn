@@ -25,6 +25,7 @@ describe('titleFor', () => {
       ['/jobs', 'Cron monitor'],
       ['/approve', 'To approve'],
       ['/campaigns', 'Campaigns'],
+      ['/campaigns/new', 'New outreach campaign'],
       ['/campaigns/abc', 'Campaign'],
       ['/profile', 'Profile'],
    ])('should name %s', (path, title) => {
