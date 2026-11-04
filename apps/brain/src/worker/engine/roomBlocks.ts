@@ -5,7 +5,17 @@ import { type PersonDates, PersonDatesService, type RoomAction, RoomTodayService
 import { ROOM_KIND, toSeconds } from '@automatedLinkedIn/contracts'
 
 import { accountIdsOf } from './accountPool'
-import { type Context, type StepResult, configOf, elseKey, keepItems, numberIn, peopleOf, textIn } from './context'
+import {
+   type Context,
+   type StepResult,
+   aside,
+   configOf,
+   elseKey,
+   keepItems,
+   numberIn,
+   peopleOf,
+   textIn,
+} from './context'
 import { extraSeconds } from './personWaitRules'
 
 // "Fit to today's limit" and "Wait per person" (.plan/lead-pipeline-p1-foundations.md): two gates that keep what is not ready or not
@@ -14,18 +24,6 @@ import { extraSeconds } from './personWaitRules'
 const ACTIONS: RoomAction[] = ['invite', 'message', 'reply', 'reaction', 'comment']
 
 const actionOf = (value: string): RoomAction => ACTIONS.find(action => action === value) ?? 'invite'
-
-const aside = (items: WorkflowItemData[], action: string, reason: string) =>
-   items.map(item => ({
-      ...item,
-      result: {
-         action,
-         status: 'SKIPPED',
-         account: null,
-         at: null,
-         reason,
-      },
-   }))
 
 const scoreOf = (item: WorkflowItemData) => ('score' in item ? (item.score ?? -1) : -1)
 

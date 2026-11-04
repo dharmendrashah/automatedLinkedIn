@@ -7,6 +7,15 @@ import { HOOK_START_ID, hooksSchema, splitHooks } from './hooks'
 import { INDUSTRY_PAIRS } from './industries'
 import { INVITE_LIMITS } from './invites'
 import { type PeopleFiltersInput, readPeopleFilters } from './peopleFilters'
+import {
+   PERSON_CHECK_ROWS,
+   PERSON_FACTS,
+   PERSON_OPERATORS,
+   PERSON_OPERATORS_BY_KIND,
+   PERSON_OPERATOR_LABELS,
+   personFactOf,
+   personRowKey,
+} from './personFacts'
 import { joinedText, mediaBlock, postBlocksOfText, postFilesOf } from './posting'
 import { type MessageUse, TEMPLATE_RAW_MAX, templateProblems } from './template'
 
@@ -476,6 +485,226 @@ export const CSV_COLUMNS = optionsOf([
    ['standard', 'Standard'],
    ['handoff', 'Hand-off'],
 ])
+
+// The accounts a block that reads what is stored looks at: any signed-in account of the owner, those of the "Select accounts" before it,
+// or one (.plan/lead-pipeline-p2-checks.md).
+const STORED_ACCOUNTS = optionsOf([
+   ['any', 'Any of my signed-in accounts'],
+   ['pool', 'From "Select accounts" before it'],
+   ['one', 'One account'],
+])
+
+const CHAT_AGES = optionsOf([
+   ['any', 'Any time'],
+   ['7', '7 days'],
+   ['30', '30 days'],
+   ['90', '90 days'],
+])
+
+const storedScopeConfig = {
+   accountMode: z.enum(['any', 'pool', 'one']).default('any'),
+   account: z.string().max(100).default(''),
+}
+
+const storedScopeFields: Field[] = [
+   {
+      key: 'accountMode',
+      label: 'Accounts',
+      kind: 'select',
+      options: STORED_ACCOUNTS,
+      hint: 'Which accounts to look at.',
+   },
+   {
+      key: 'account',
+      label: 'Account',
+      kind: 'account',
+      showWhen: {
+         key: 'accountMode',
+         is: 'one',
+      },
+   },
+]
+
+const PERSON_ROWS = Array.from({ length: PERSON_CHECK_ROWS }, (_unused, index) => index + 1)
+
+const ifPersonConfig = z.object({
+   match: z.enum(['all', 'any']).default('all'),
+   ...Object.fromEntries(
+      PERSON_ROWS.flatMap(row => [
+         [
+            personRowKey('check', row),
+            z
+               .string()
+               .max(40)
+               .default(row === 1 ? 'connected' : ''),
+         ],
+         [personRowKey('op', row), z.string().max(20).default('is')],
+         [
+            personRowKey('value', row),
+            z
+               .string()
+               .max(100)
+               .default(row === 1 ? 'yes' : ''),
+         ],
+      ])
+   ),
+   ...storedScopeConfig,
+   maxAgeHours: z.number().int().min(1).max(720).default(36),
+})
+
+const PERSON_OPERATOR_OPTIONS = PERSON_OPERATORS.map(value => ({
+   value,
+   label: PERSON_OPERATOR_LABELS[value],
+}))
+
+const ifPersonFields: Field[] = [
+   {
+      key: 'match',
+      label: 'Match',
+      kind: 'select',
+      options: optionsOf([
+         ['all', 'All checks (and)'],
+         ['any', 'Any check (or)'],
+      ]),
+   },
+   ...PERSON_ROWS.flatMap((row): Field[] => [
+      {
+         key: personRowKey('check', row),
+         label: row === 1 ? 'Check' : `Check ${row}`,
+         kind: 'select',
+         options: [
+            {
+               value: '',
+               label: row === 1 ? 'Pick a fact' : 'Not used',
+            },
+            ...PERSON_FACTS.map(({ key, label }) => ({
+               value: key,
+               label,
+            })),
+         ],
+         ...(row === 1 && { hint: 'What we already have with them.' }),
+      },
+      {
+         key: personRowKey('op', row),
+         label: 'is',
+         kind: 'select',
+         options: PERSON_OPERATOR_OPTIONS,
+      },
+      {
+         key: personRowKey('value', row),
+         label: 'Value',
+         kind: 'text',
+         placeholder: 'yes or no, a number, a status or a label',
+      },
+   ]),
+   ...storedScopeFields,
+   {
+      key: 'maxAgeHours',
+      label: 'Facts older than (hours)',
+      kind: 'int',
+      min: 1,
+      max: 720,
+      advanced: true,
+      hint: 'A read of connections or messages older than this counts as not known.',
+   },
+]
+
+// The value of a check must fit the fact: yes or no, a number, one of its choices, or a label.
+const personValueProblem = (kind: string, op: string, value: unknown, choices: string[]) => {
+   if (op === 'known' || op === 'unknown') {
+      return null
+   }
+
+   const text = typeof value === 'string' ? value.trim() : ''
+
+   if (kind === 'bool') {
+      return text === 'yes' || text === 'no' ? null : 'write yes or no'
+   }
+
+   if (kind === 'number') {
+      return text !== '' && Number.isFinite(Number(text)) ? null : 'write a number'
+   }
+
+   if (kind === 'choice') {
+      return choices.includes(text) ? null : `write one of ${choices.join(', ')}`
+   }
+
+   return text === '' ? 'write the label' : null
+}
+
+const ifPersonProblems = (node: GraphNode, graph: Graph): GraphError[] => {
+   const settings = settingsOf(node)
+   const problems: GraphError[] = []
+   let used = 0
+
+   for (const row of PERSON_ROWS) {
+      const key = settings[personRowKey('check', row)]
+
+      if (typeof key !== 'string' || key === '') {
+         continue
+      }
+
+      used += 1
+
+      const fact = personFactOf(key)
+      const op = String(settings[personRowKey('op', row)])
+      const allowed = fact ? PERSON_OPERATORS_BY_KIND[fact.kind].map(String) : []
+      const wrong = !fact
+         ? 'pick a fact from the list'
+         : !allowed.includes(op)
+           ? `${fact.label} does not take "${op}"`
+           : personValueProblem(
+                fact.kind,
+                op,
+                settings[personRowKey('value', row)],
+                (fact.options ?? []).map(option => option.value)
+             )
+
+      if (wrong) {
+         problems.push({
+            nodeId: node.id,
+            level: 'error',
+            message: `If person state, check ${row}: ${wrong}.`,
+         })
+      }
+   }
+
+   if (used === 0) {
+      problems.push({
+         nodeId: node.id,
+         level: 'error',
+         message: 'If person state: pick a check.',
+      })
+   }
+
+   return [...problems, ...storedScopeProblems('If person state')(node, graph)]
+}
+
+const storedScopeProblems =
+   (label: string) =>
+   (node: GraphNode, graph: Graph): GraphError[] => {
+      const { accountMode, account } = settingsOf(node)
+
+      if (accountMode === 'one' && (typeof account !== 'string' || account === '')) {
+         return [
+            {
+               nodeId: node.id,
+               level: 'error',
+               message: `${label}: pick the account it looks at.`,
+            },
+         ]
+      }
+
+      return accountMode === 'pool' && !nodeBefore(graph, node.id, 'account.select')
+         ? [
+              {
+                 nodeId: node.id,
+                 level: 'error',
+                 message: `${label} needs "Select accounts" before it, or another choice of accounts.`,
+              },
+           ]
+         : []
+   }
 
 const NO_DATE = optionsOf([
    ['through', 'Let through'],
@@ -1143,8 +1372,11 @@ export const BLOCK_TYPES = [
    'process.merge',
    'score.icp',
    'collect.profile',
+   'collect.chat',
    'logic.if',
    'logic.ifEvent',
+   'logic.ifPerson',
+   'logic.split',
    'logic.else',
    'logic.runWorkflow',
    'logic.wait',
@@ -3931,6 +4163,158 @@ const BLOCKS = {
       config: ifEventConfig,
       fields: ifEventFields,
    },
+   'logic.ifPerson': {
+      group: 'Logic',
+      flags: { keepsAside: true },
+      flow: 'Takes people, gives the ones whose state matches; an Else after it gets the rest',
+      validate: ifPersonProblems,
+      label: 'If person state',
+      summary:
+         'Checks what we already have with each person: connection, invite, chat, status, label, score. Matching people go on; the rest, and people it cannot know about yet, go to Else. It reads only what is stored, so add Get my connections or Get my conversations before it for a fresh answer.',
+      costHint: 'free',
+      presets: [
+         {
+            label: 'Is a connection',
+            hint: 'Connected to any of the accounts',
+            config: {
+               check: 'connected',
+               op: 'is',
+               value: 'yes',
+               check2: '',
+               check3: '',
+            },
+         },
+         {
+            label: 'Not connected',
+            hint: 'Connected to none of the accounts',
+            config: {
+               check: 'connected',
+               op: 'is',
+               value: 'no',
+               check2: '',
+               check3: '',
+            },
+         },
+         {
+            label: 'We already talked',
+            hint: 'A chat is stored',
+            config: {
+               check: 'chatStored',
+               op: 'is',
+               value: 'yes',
+               check2: '',
+               check3: '',
+            },
+         },
+         {
+            label: 'Never messaged',
+            hint: 'We have not written to them',
+            config: {
+               check: 'wroteTo',
+               op: 'is',
+               value: 'no',
+               check2: '',
+               check3: '',
+            },
+         },
+         {
+            label: 'They replied',
+            hint: 'They have written to us',
+            config: {
+               check: 'theyWrote',
+               op: 'is',
+               value: 'yes',
+               check2: '',
+               check3: '',
+            },
+         },
+         {
+            label: 'Invite pending 21 days or more',
+            hint: 'No answer to our invite yet',
+            config: {
+               match: 'all',
+               check: 'inviteState',
+               op: 'is',
+               value: 'pending',
+               check2: 'invitePendingDays',
+               op2: 'atLeast',
+               value2: '21',
+               check3: '',
+            },
+         },
+      ],
+      input: 'profile',
+      output: 'profile',
+      config: ifPersonConfig,
+      fields: ifPersonFields,
+   },
+   'logic.split': {
+      group: 'Logic',
+      flags: {
+         takesAnything: true,
+         keepsAside: true,
+      },
+      flow: 'Takes anything, passes a stable share on; an Else after it gets the rest',
+      label: 'Split people',
+      summary:
+         'Sends a share of what reaches it on and the rest to Else. The same person always lands on the same side of this block, so a control group stays a control group. The share is exact only on big batches.',
+      costHint: 'free',
+      input: 'profile',
+      output: 'profile',
+      config: z.object({ percent: z.number().int().min(1).max(99).default(50) }),
+      fields: [
+         {
+            key: 'percent',
+            label: 'Share that goes on (percent)',
+            kind: 'int',
+            min: 1,
+            max: 99,
+            hint: 'Exact only on big batches.',
+         },
+      ],
+   },
+   'collect.chat': {
+      group: 'Collect',
+      flow: 'Takes people, gives the same people with the stored chat found for each',
+      validate: storedScopeProblems('Get our chat with them'),
+      label: 'Get our chat with them',
+      summary:
+         'Finds the stored chat between your accounts and each person and keeps pointers and counts on them, never the words. It opens nothing on LinkedIn: it covers the newest conversations each account read, so "none stored" does not mean none exist.',
+      costHint: 'free',
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         ...storedScopeConfig,
+         latest: z.number().int().min(1).max(30).default(10),
+         maxAgeDays: oneOf(CHAT_AGES, 'any'),
+         redact: toggle(true),
+      }),
+      fields: [
+         ...storedScopeFields,
+         {
+            key: 'latest',
+            label: 'Latest messages to keep in view',
+            kind: 'int',
+            min: 1,
+            max: 30,
+            hint: 'How many of the newest messages the words reader may see.',
+         },
+         {
+            key: 'maxAgeDays',
+            label: 'Only chats active in the last',
+            kind: 'select',
+            options: CHAT_AGES,
+            advanced: true,
+         },
+         {
+            key: 'redact',
+            label: 'Remove emails and phone numbers',
+            kind: 'toggle',
+            advanced: true,
+            hint: 'Before anything is shown or sent on.',
+         },
+      ],
+   },
    'process.messageMood': {
       group: 'Process',
       label: 'Read the mood of a message',
@@ -4322,7 +4706,10 @@ const BLOCKS = {
 
          return graph.nodes.some(
             other =>
-               (POOL_BLOCKS.has(other.type) || other.type === 'process.room') &&
+               (POOL_BLOCKS.has(other.type) ||
+                  other.type === 'process.room' ||
+                  other.type === 'logic.ifPerson' ||
+                  other.type === 'collect.chat') &&
                other.id !== node.id &&
                after.has(other.id)
          )

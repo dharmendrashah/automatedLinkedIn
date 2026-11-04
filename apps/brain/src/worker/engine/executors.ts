@@ -108,6 +108,7 @@ import {
 import { eventTrigger, hookTrigger, ifEvent, messageMood, runEvent } from './eventBlocks'
 import { sendInvites, withdrawInvites } from './inviteBlocks'
 import { retry, stop, taskResult, wait } from './logicBlocks'
+import { getChat, ifPerson, splitPeople } from './personBlocks'
 import { replyToConversations, sendMessages } from './replyBlocks'
 import { fitToRoom, personWait } from './roomBlocks'
 import { runWorkflow } from './runWorkflow'
@@ -1732,6 +1733,9 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    },
    'logic.if': ifBlock,
    'logic.ifEvent': ifEvent,
+   'logic.ifPerson': ifPerson,
+   'logic.split': splitPeople,
+   'collect.chat': getChat,
    'logic.else': elseBlock,
    'logic.forEach': forEach,
    'logic.runWorkflow': runWorkflow,

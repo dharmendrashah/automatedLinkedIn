@@ -12,6 +12,7 @@ import {
    InputPickService,
    MessagePreviewService,
    MessageTemplateService,
+   PersonStateService,
    WorkflowRunService,
    WorkflowService,
    WorkflowTriggerService,
@@ -58,6 +59,14 @@ const createInput = z.object({
    description: z.string().trim().max(200).optional(),
    // The browser's time zone, for a template that runs on a schedule.
    timeZone: z.string().trim().max(64).optional(),
+})
+
+// The settings of a "Get our chat with them" block that the digest reads.
+const chatSettings = z.object({
+   accountMode: z.string().default('any'),
+   account: z.string().default(''),
+   latest: z.number().int().default(10),
+   redact: z.boolean().default(true),
 })
 
 const outputInput = z.object({
@@ -460,6 +469,40 @@ export const workflow = router({
             fileName: `${base}.csv`,
             csv: itemsCsv(items, total),
          }
+      }),
+
+   // When each of the owner's accounts last read its connections and its messages: the freshness line of "If person state". A read older
+   // than `maxAgeHours` is old.
+   accountReads: ownerProcedure
+      .input(z.object({ maxAgeHours: z.number().int().min(1).max(720).default(36) }))
+      .query(async ({ ctx, input }) => {
+         const limit = Date.now() - input.maxAgeHours * 60 * 60 * 1000
+         const old = (at: Date | null) => at === null || at.getTime() < limit
+
+         return (await PersonStateService.reads(ctx.user.id)).map(read => ({
+            ...read,
+            connectionsOld: old(read.connectionsReadAt),
+            messagesOld: old(read.messagesReadAt),
+         }))
+      }),
+
+   // The newest stored messages of the owner's chat with one person of a "Get our chat with them" step, cut and cleaned, read now for the
+   // owner and kept nowhere.
+   chatDigest: ownerProcedure
+      .input(outputInput.extend({ slug: z.string().min(1).max(200) }))
+      .query(async ({ ctx, input }) => {
+         const node = present(await WorkflowService.nodeOf(ctx.user.id, input.runId, input.nodeId), RUN_MISSING)
+         const config = chatSettings.parse(node.config)
+         const accountIds =
+            config.accountMode === 'one'
+               ? [config.account]
+               : (await PersonStateService.reads(ctx.user.id)).map(({ accountId }) => accountId)
+
+         return PersonStateService.digest(ctx.user.id, input.slug, {
+            accountIds,
+            latest: config.latest,
+            redact: config.redact,
+         })
       }),
 
    // A mutation so the file is only built when asked for and never cached.

@@ -124,6 +124,7 @@ export const BlockRunTabs = ({
                      rounds={blockRun.rounds}
                      fileName={fileName}
                      emptyText={outputText(blockRun)}
+                     digest={block.type === 'collect.chat'}
                   />
                ) : (
                   <PlannedOutput block={block} />

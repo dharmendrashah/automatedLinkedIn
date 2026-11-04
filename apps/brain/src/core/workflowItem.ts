@@ -32,6 +32,19 @@ export type ItemFacts = Record<string, string | number | boolean | null>
 
 type WithResult = { result?: ItemResult | null; facts?: ItemFacts }
 
+// Where the stored chat with a person is (Get our chat with them): pointers and counts, never message text. `stored` is null when no
+// account in scope had read its messages.
+export type ChatPointer = {
+   stored: boolean | null
+   complete: boolean
+   accountIds: string[]
+   conversationIds: string[]
+   messages: number
+   weWrote: boolean
+   theyWrote: boolean
+   lastFrom: 'ME' | 'THEM' | null
+}
+
 export type PersonItem = WithResult & {
    kind: 'profile'
    slug: string
@@ -60,6 +73,8 @@ export type PersonItem = WithResult & {
    companyIndustry?: string | null
    companySize?: string | null
    companyDomain?: string | null
+   // The stored chat with them, found by Get our chat with them.
+   chat?: ChatPointer
 }
 
 export type PostItem = WithResult & {
@@ -172,6 +187,7 @@ export const mergePeople = (a: PersonItem, b: PersonItem): PersonItem => ({
    companyIndustry: a.companyIndustry ?? b.companyIndustry,
    companySize: a.companySize ?? b.companySize,
    companyDomain: a.companyDomain ?? b.companyDomain,
+   chat: a.chat ?? b.chat,
    known: a.known || b.known,
    tags: [...new Set([...a.tags, ...b.tags])],
    signals: [...a.signals, ...b.signals.filter(signal => !a.signals.some(known => sameSignal(known, signal)))],
@@ -203,6 +219,17 @@ const resultSchema = z
    .optional()
 
 const factsSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional()
+
+const chatSchema = z.object({
+   stored: z.boolean().nullable(),
+   complete: z.boolean(),
+   accountIds: z.array(z.string()),
+   conversationIds: z.array(z.string()),
+   messages: z.number(),
+   weWrote: z.boolean(),
+   theyWrote: z.boolean(),
+   lastFrom: z.enum(['ME', 'THEM']).nullable(),
+})
 
 const signalSchema = z.object({
    type: z.enum(['commented', 'reacted', 'employee', 'hiring']),
@@ -237,6 +264,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       companyIndustry: nullableText.optional(),
       companySize: nullableText.optional(),
       companyDomain: nullableText.optional(),
+      chat: chatSchema.optional(),
       result: resultSchema,
       facts: factsSchema,
    }),
