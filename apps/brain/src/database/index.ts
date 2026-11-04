@@ -3,6 +3,17 @@ export { AccountTodayService } from './accountToday.service'
 export { AccountRoomService } from './accountRoom.service'
 export { type AccountRoomToday, type RoomAction, RoomTodayService } from './roomToday.service'
 export { type PersonDates, type PersonMoment, PersonDatesService } from './personDates.service'
+export {
+   type EngageAccounts,
+   type EngageCandidate,
+   type EngageOrigin,
+   type EngageOutcome,
+   type EngageRequest,
+   type EngageWish,
+   LinkedInEngageService,
+} from './linkedInEngage.service'
+export { EngageImportService } from './engageImport.service'
+export { PlatformSettingService } from './platformSetting.service'
 export { type AccountRead, PersonStateService } from './personState.service'
 export { type HandoffInput, HandoffService } from './handoff.service'
 export { CdnFileService } from './cdnFile.service'

@@ -3,6 +3,7 @@
 exports[`blocks before they became one definition > should keep the sets of blocks with a role 1`] = `
 {
   "elseSources": [
+    "account.reactToPost",
     "logic.if",
     "logic.ifEvent",
     "logic.ifPerson",
@@ -19,6 +20,7 @@ exports[`blocks before they became one definition > should keep the sets of bloc
     "account.getConnections",
     "account.getConversations",
     "account.getRequests",
+    "account.reactToPost",
     "account.removeConnection",
     "account.replyToConversation",
     "account.sendInvite",
@@ -991,6 +993,20 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 9,
     },
     "type": "account.removeConnection",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.reactToPost",
   },
   {
     "plain": {

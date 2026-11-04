@@ -113,6 +113,11 @@ const Invites = ({ personId }: { personId: string }) => {
 export const HistoryPane = ({ person }: { person: Person }) => (
    <div className="grid gap-3">
       <Invites personId={person.id} />
+      {person.lastEngagedAt ? (
+         <p className="text-muted-foreground text-sm">
+            Last reacted to or commented on: {new Date(person.lastEngagedAt).toLocaleDateString()}
+         </p>
+      ) : null}
       {person.links.length > 0 ? (
          <ul className="divide-y rounded-xl border text-sm">
             {person.links.map(link => (

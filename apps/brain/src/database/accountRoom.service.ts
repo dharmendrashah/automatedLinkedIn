@@ -11,7 +11,7 @@ const WEEK_MS = 7 * DAY_MS
 export type Room = { limit: number; used: number }
 
 // What an account may still do today and what it did (.plan/lead-pipeline-p1-foundations.md). Counts keep their windows: a rolling 24 hours
-// and a rolling 7 days. Reactions and comments are counted from phase 3; until then they show 0 used.
+// and a rolling 7 days. Reactions and comments count the acts that were asked for in the last 24 hours and the ones still queued.
 export type AccountRoom = {
    accountId: string
    invites: Room
@@ -40,7 +40,7 @@ export class AccountRoomService {
       const db = PrismaService.client
       const day = new Date(now.getTime() - DAY_MS)
       const week = new Date(now.getTime() - WEEK_MS)
-      const [limits, invitesDay, invitesWeek, first, replies, pending] = await Promise.all([
+      const [limits, invitesDay, invitesWeek, first, replies, pending, acts] = await Promise.all([
          AccountLimitsService.forAccounts(
             accountIds,
             [
@@ -99,7 +99,24 @@ export class AccountRoomService {
             },
             _count: { _all: true },
          }),
+         // Acts asked for in the last 24 hours (pressed, done or unsure) and the ones still queued.
+         db.postAct.groupBy({
+            by: ['accountId', 'act'],
+            where: {
+               accountId: { in: accountIds },
+               OR: [
+                  { state: 'QUEUED' },
+                  {
+                     state: { in: ['SENDING', 'DONE', 'UNKNOWN'] },
+                     startedAt: { gte: day },
+                  },
+               ],
+            },
+            _count: { _all: true },
+         }),
       ])
+      const actsBy = (accountId: string, act: 'REACT' | 'COMMENT') =>
+         acts.find(row => row.accountId === accountId && row.act === act)?._count._all ?? 0
       const invitesDayBy = countsBy(invitesDay)
       const invitesWeekBy = countsBy(invitesWeek)
       const firstBy = countsBy(first)
@@ -118,8 +135,8 @@ export class AccountRoomService {
                   invitesWeek: roomOf(own.invitesPerWeek, invitesWeekBy.get(accountId) ?? 0),
                   firstMessages: roomOf(own.firstMessagesPerDay, firstBy.get(accountId) ?? 0),
                   replies: roomOf(own.repliesPerDay, repliesBy.get(accountId) ?? 0),
-                  reactions: roomOf(own.reactionsPerDay, 0),
-                  comments: roomOf(own.commentsPerDay, 0),
+                  reactions: roomOf(own.reactionsPerDay, actsBy(accountId, 'REACT')),
+                  comments: roomOf(own.commentsPerDay, actsBy(accountId, 'COMMENT')),
                   pending: {
                      count,
                      share: count / PLATFORM_MAX.pendingInvites,

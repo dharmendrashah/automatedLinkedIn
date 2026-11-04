@@ -1,6 +1,7 @@
 # Lead pipeline, phase 3: engage (React to post, the engage task, the act queue)
 
-- Status: ready for the owner's approval (no open question)- Created: 2026-11-03
+- Status: brain side built; spider task waits for recordings (see Outcome)
+- Created: 2026-11-03
 - Locked by user: no
 - Parent: [lead-outreach-pipeline.md](lead-outreach-pipeline.md)
 
@@ -167,13 +168,14 @@ flowchart TD
 
 ## Approach
 
-- [ ] Plan the recording session and run it; save fixtures and the notes (account, date)
-- [ ] Tests first: contract schema, the reader of each page shape, one test per verdict with the hands mocked, a test that lands on `/uas/login` and answers SIGNED_OUT, a real-browser e2e on a stand-in page
-- [ ] Build the task; run it through the devtools "Run a task" on a test account against a post of the owner's own, then a test person's post
-- [ ] Brain: migration (additive: `PostAct`, `EngageImport`, `PlatformSetting`, `Person.lastEngagedAt`, `LinkedInAccount.engageStopUntil`, the trigger), service, job, import, hook
-- [ ] B6, C12, C4, C8, B1 counts; body fields and the account drawer line "Today's reactions"
-- [ ] Build Stage 3 (with a Split control group) on a test user as the real-path check
-- [ ] Spider task checklist (`.github/skills/spider-task-writer/assets/checklist.md`) copied here and ticked
+- [ ] Plan the recording session and run it; save fixtures and the notes (account, date). Not done: waits for the owner's recordings
+- [ ] Tests first: contract schema, the reader of each page shape, one test per verdict with the hands mocked, a test that lands on `/uas/login` and answers SIGNED_OUT, a real-browser e2e on a stand-in page. Contract schema done; the rest waits for the task
+- [ ] Build the task; run it through the devtools "Run a task" on a test account against a post of the owner's own, then a test person's post. Not done: waits for the recordings
+- [x] Brain: migration (additive: `PostAct`, `EngageImport`, `PlatformSetting`, `Person.lastEngagedAt`, `LinkedInAccount.engageStopUntil`, the trigger), service, job, import, hook
+- [x] B6, C12, C4, C8, B1 counts; body fields (the block fields come from the contract) and the person drawer line. The account drawer line "Today's reactions" was done in phase 1 (rooms count `PostAct` now)
+- [x] P8: the `acts` switch (`jobs.acts`, `jobs.setActs`, switch on the Cron monitor page)
+- [ ] Build Stage 3 (with a Split control group) on a test user as the real-path check. Not done: needs the task
+- [ ] Spider task checklist (`.github/skills/spider-task-writer/assets/checklist.md`) copied here and ticked. Not applicable yet: no task code
 
 ## Edge cases and risks
 
@@ -194,4 +196,10 @@ flowchart TD
 
 ## Outcome
 
-Filled in when done.
+Status: brain side built, spider side waiting (the owner shares recordings later; the task inputs, outputs and debugging files are ready).
+
+Shipped: contract `engage.ts`; migration `20261104140000_lead_pipeline_engage`; `LinkedInEngageService` (plan, dispatch, store), hooks, `EngageImportService`, job `engage-send`; `account.reactToPost` with the `inviter` account mode; C8 (author slug and score on posts of people, and the count of people with no post); C4 as the date field `lastEngaged` on the Profiles input; the `acts` switch with who and when on the Cron monitor page; the person drawer line; reaction and comment rooms counted from `PostAct`.
+
+Deviations: the spider task, recordings, devtools run and the Stage 3 real-path run are not done, so the task is unregistered and queued acts wait, then expire after 7 days. `account.reactToPost` has no `ACCOUNT_ACTION_TASKS` line yet (added with the task). Its `api` names the account only; posts through the API are not supported by the API item machinery (profile and company only). C4 is the date field plus "Older than N days" and the order "oldest", not a new filter in the My network panel. Not run: pages in a browser, any LinkedIn page.
+
+Follow-ups: the spider task and its checklist; Comment block (phase 4 holds the words); posts through the API.

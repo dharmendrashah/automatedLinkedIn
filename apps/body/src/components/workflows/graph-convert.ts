@@ -397,6 +397,7 @@ const DATE_VERBS: Record<string, string> = {
    lastRead: 'read',
    firstSeen: 'first seen',
    lastContact: 'last in touch',
+   lastEngaged: 'last reacted to or commented on',
    connected: 'connected',
    lastSent: 'last messaged',
    lastReply: 'last replied',

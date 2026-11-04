@@ -105,6 +105,7 @@ import {
    thresholdsOf,
    wordsIn,
 } from './context'
+import { reactToPosts } from './engageBlocks'
 import { eventTrigger, hookTrigger, ifEvent, messageMood, runEvent } from './eventBlocks'
 import { sendInvites, withdrawInvites } from './inviteBlocks'
 import { retry, stop, taskResult, wait } from './logicBlocks'
@@ -460,23 +461,55 @@ const findPosts = (ctx: Context) => {
    ])
 }
 
-const postsOfEach = (ctx: Context, sources: { slug: string; url: string }[]) => {
+type PostSource = { slug: string; url: string; score?: number | null }
+
+// Posts of people carry who wrote them and the score that person had, so a block after it can take the best authors first, and the
+// step says how many people had no post in the window.
+const postsOfEach = async (ctx: Context, sources: PostSource[], byPerson: boolean): Promise<StepResult> => {
    const config = configOf(ctx.node)
    const settings = {
       howMany: numberIn(config, 'howMany'),
       postedWithin: textIn(config, 'postedWithin'),
       includeReposts: config.includeReposts === true,
    }
-
-   return collectEach(
+   const result = await collectEach(
       ctx,
       sources.map(source => ({
          inputKey: source.slug,
          slug: 'posts',
          params: postsOfParams(source.url, settings),
-         use: savePosts(ctx),
+         use: async (rows: Record<string, unknown>[]) => {
+            await WorkflowRunService.seedItems(
+               ctx.at,
+               postsFrom(rows).map(post =>
+                  byPerson
+                     ? {
+                          ...post,
+                          authorSlug: source.slug,
+                          authorScore: source.score ?? null,
+                       }
+                     : post
+               )
+            )
+         },
       }))
    )
+
+   if (!byPerson) {
+      return result
+   }
+
+   const written = new Set(postsOf(await WorkflowRunService.items(ctx.run.id, [ctx.at])).map(post => post.authorSlug))
+   const without = sources.filter(({ slug }) => !written.has(slug)).length
+
+   return without === 0
+      ? result
+      : {
+           ...result,
+           message: [result.message, `${without} of ${sources.length} people had no post in the window.`]
+              .filter(Boolean)
+              .join(' '),
+        }
 }
 
 const engagedPosts = (ctx: Context) => {
@@ -1619,8 +1652,8 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'collect.commenters': ctx => engagement(ctx, 'commenters'),
    'collect.reactors': ctx => engagement(ctx, 'reactors'),
    'collect.findPosts': withKeep(findPosts),
-   'collect.postsOfPeople': ctx => postsOfEach(ctx, peopleOf(ctx.inputs)),
-   'collect.postsOfCompanies': ctx => postsOfEach(ctx, companiesOf(ctx.inputs)),
+   'collect.postsOfPeople': ctx => postsOfEach(ctx, peopleOf(ctx.inputs), true),
+   'collect.postsOfCompanies': ctx => postsOfEach(ctx, companiesOf(ctx.inputs), false),
    'collect.engagedPosts': engagedPosts,
    'collect.employees': withKeep(employees),
    'collect.jobs': jobs,
@@ -1757,6 +1790,7 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'account.sendMessage': sendMessages,
    'account.replyToConversation': replyToConversations,
    'account.removeConnection': removeConnections,
+   'account.reactToPost': reactToPosts,
    'output.list': addToList,
    'output.markPosts': markPosts,
    'output.csv': exportCsv,

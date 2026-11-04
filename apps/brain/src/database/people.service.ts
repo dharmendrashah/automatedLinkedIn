@@ -184,6 +184,7 @@ const rowSelect = {
    connectedAt: true,
    lastSentAt: true,
    lastReceivedAt: true,
+   lastEngagedAt: true,
    inviteState: true,
    links: {
       select: {

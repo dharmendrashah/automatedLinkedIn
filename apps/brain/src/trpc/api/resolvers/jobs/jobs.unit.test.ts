@@ -10,9 +10,14 @@ const mocks = vi.hoisted(() => ({
    runs: vi.fn(),
    run: vi.fn(),
    messageReads: vi.fn(),
+   actsSwitch: vi.fn(),
+   setActs: vi.fn(),
 }))
 
-vi.mock('database', () => ({ JobMonitorService: mocks }))
+vi.mock('database', () => ({
+   JobMonitorService: mocks,
+   PlatformSettingService: mocks,
+}))
 
 vi.mock('env', () => ({
    AUTHENTIK_ISSUER: 'http://localhost:9000/application/o/automatedlinkedin/',
@@ -54,6 +59,8 @@ describe('jobs resolvers', () => {
       ['runs', c => c.runs({ job: 'account-daily' })],
       ['run', c => c.run({ id: 'r1' })],
       ['messageReads', c => c.messageReads()],
+      ['acts', c => c.acts()],
+      ['setActs', c => c.setActs({ on: false })],
    ]
 
    it.each(calls)('should refuse %s to a signed-in user who is not the admin', async (_, call) => {
@@ -63,6 +70,8 @@ describe('jobs resolvers', () => {
       expect(mocks.runs).not.toHaveBeenCalled()
       expect(mocks.run).not.toHaveBeenCalled()
       expect(mocks.messageReads).not.toHaveBeenCalled()
+      expect(mocks.actsSwitch).not.toHaveBeenCalled()
+      expect(mocks.setActs).not.toHaveBeenCalled()
    })
 
    it.each(calls)('should refuse %s without a token', async (_, call) => {
@@ -82,6 +91,24 @@ describe('jobs resolvers', () => {
 
       await expect(caller(asUser('ADMIN')).overview()).resolves.toEqual({ jobs: [] })
       await expect(caller(asUser('ADMIN')).messageReads()).resolves.toEqual([])
+   })
+
+   it('should let the admin read and change the acts switch, and record who changed it', async () => {
+      mocks.actsSwitch.mockResolvedValueOnce({
+         on: true,
+         changedBy: null,
+         changedAt: null,
+      })
+      mocks.setActs.mockResolvedValueOnce({
+         on: false,
+         changedBy: 'ada@elitale.com',
+         changedAt: new Date(),
+      })
+
+      await expect(caller(asUser('ADMIN')).acts()).resolves.toMatchObject({ on: true })
+      await expect(caller(asUser('ADMIN')).setActs({ on: false })).resolves.toMatchObject({ on: false })
+
+      expect(mocks.setActs).toHaveBeenCalledWith(false, 'ada@elitale.com')
    })
 
    it('should page the runs of a job, without idle ones unless asked, 50 at a time', async () => {

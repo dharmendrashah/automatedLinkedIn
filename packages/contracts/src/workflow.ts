@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { readCompanyFilters } from './companyFilters'
+import { ENGAGE_LIMITS, REACTIONS, REACTION_LABELS } from './engage'
 import { EVENT_PHASES, type EventTriggerSettings, ORIGIN_KINDS, factsOf } from './events'
 import { FILTERS_TEXT_MAX } from './filtersText'
 import { HOOK_START_ID, hooksSchema, splitHooks } from './hooks'
@@ -245,10 +246,13 @@ export const MAX_POOL = 20
 // working), or one account named on the block; and how long it waits before it leaves the rest for the next run
 // (.plan/account-action-blocks.md). `hours` is the block's own default.
 export const accountSettings = (hours: number) => ({
-   accountMode: z.enum(['pool', 'one', 'event']).default('pool'),
+   accountMode: z.enum(['pool', 'one', 'event', 'inviter']).default('pool'),
    account: z.string().max(100).default(''),
    timeLimitHours: z.number().int().min(1).max(48).default(hours),
 })
+
+// The blocks that may use the account that sent the person an invite ("inviter"): it needs no "Select accounts" before it.
+const INVITER_BLOCKS = new Set<string>(['account.reactToPost'])
 
 // The wait each Account Actions block starts with, in hours.
 export const ACCOUNT_BLOCK_HOURS = {
@@ -264,6 +268,7 @@ export const ACCOUNT_BLOCK_HOURS = {
    'account.sendMessage': 8,
    'account.replyToConversation': 8,
    'account.removeConnection': 8,
+   'account.reactToPost': 8,
 } as const
 
 // The most characters of a message or reply: the command that carries it may not pass 8 KB as JSON (the task limits it the same).
@@ -366,12 +371,13 @@ const actOffNote =
               },
            ]
 
-export const accountFields = (hours: number): Field[] => [
+export const accountFields = (hours: number, inviter = false): Field[] => [
    {
       key: 'accountMode',
       label: 'Accounts',
       kind: 'select',
       options: optionsOf([
+         ...(inviter ? ([['inviter', 'The account that sent them an invite']] satisfies [string, string][]) : []),
          ['pool', 'From "Select accounts" before it'],
          ['one', 'One account'],
          ['event', 'The account of the event'],
@@ -784,6 +790,8 @@ const someOf = (choices: Option[], max = choices.length) =>
 
 const toggle = (fallback: boolean) => z.boolean().default(fallback)
 
+const REACTION_OPTIONS = optionsOf(REACTIONS.map(reaction => [reaction, REACTION_LABELS[reaction]]))
+
 const LINKS_HINT = 'Paste one or many LinkedIn links.'
 
 const howMany = (max: number, fallback: number) => z.number().int().min(1).max(max).default(fallback)
@@ -856,6 +864,7 @@ export const INPUT_DATE_FIELDS = [
    'posted',
    'lastRead',
    'lastContact',
+   'lastEngaged',
    'connected',
    'lastSent',
    'lastReply',
@@ -933,6 +942,7 @@ export const INPUT_DATE_OPTIONS: Record<InputType, Option[]> = {
       ['added', 'Added (first seen in My network)'],
       ['connected', 'Connected'],
       ['lastContact', 'Last in touch'],
+      ['lastEngaged', 'Last reacted to or commented on'],
       ['lastSent', 'Last message from you'],
       ['lastReply', 'Last reply from them'],
       ['invitedOn', 'Invited on'],
@@ -1398,6 +1408,7 @@ export const BLOCK_TYPES = [
    'account.sendMessage',
    'account.replyToConversation',
    'account.removeConnection',
+   'account.reactToPost',
    'output.list',
    'output.markPosts',
    'output.csv',
@@ -5424,6 +5435,71 @@ const BLOCKS = {
          ...accountFields(ACCOUNT_BLOCK_HOURS['account.removeConnection']),
       ],
    },
+   'account.reactToPost': {
+      group: 'Account Actions',
+      flags: {
+         usesAccounts: true,
+         keepsAside: true,
+      },
+      unit: 'reactions',
+      validate: actOffNote('React to post', 'reacts'),
+      label: 'React to post',
+      api: [accountApi('the id of one of your accounts that reacts')],
+      summary:
+         'Reacts to the posts that reach it, from the account that sent the author an invite (or the accounts you choose), inside each account\u2019s daily limit and a rest between two acts on one person. Posts it plans go on; the rest go to Else with a reason.',
+      sample: {
+         in: {
+            link: 'https://www.linkedin.com/posts/ada-lovelace_engines-activity-7300000000000000000-AbCd',
+            author: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            link: 'https://www.linkedin.com/posts/ada-lovelace_engines-activity-7300000000000000000-AbCd',
+            result: {
+               action: 'reactToPost',
+               status: 'PLANNED',
+            },
+         },
+      },
+      input: 'post',
+      output: 'post',
+      config: z.object({
+         reactions: z
+            .array(z.string().refine(isOption(REACTION_OPTIONS), 'is not a choice'))
+            .min(1)
+            .max(REACTIONS.length)
+            .default(['like']),
+         daysApart: z
+            .number()
+            .int()
+            .min(ENGAGE_LIMITS.daysApart.min)
+            .max(ENGAGE_LIMITS.daysApart.max)
+            .default(ENGAGE_LIMITS.daysApart.default),
+         ...actSettings,
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.reactToPost']),
+         accountMode: z.enum(['inviter', 'pool', 'one', 'event']).default('inviter'),
+      }),
+      fields: [
+         {
+            key: 'reactions',
+            label: 'Reactions',
+            kind: 'multi',
+            options: REACTION_OPTIONS,
+            disarms: true,
+            hint: 'One is picked for each post, steadily, from the ones you tick.',
+         },
+         {
+            key: 'daysApart',
+            label: 'Days between two acts on one person',
+            kind: 'int',
+            min: ENGAGE_LIMITS.daysApart.min,
+            max: ENGAGE_LIMITS.daysApart.max,
+            advanced: true,
+            hint: 'Counts reactions and comments both. A stable extra of up to a day is added so acts do not fall on one hour.',
+         },
+         actField,
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.reactToPost'], true),
+      ],
+   },
    'output.csv': {
       group: 'Output',
       flags: { keepsResults: true },
@@ -6180,7 +6256,10 @@ const validateFlow = (graph: Graph): GraphError[] => {
                   message: `${BLOCKS[node.type].label}: pick the account it uses.`,
                })
             }
-         } else if (!nodeBefore(graph, node.id, 'account.select')) {
+         } else if (
+            !(accountMode === 'inviter' && INVITER_BLOCKS.has(node.type)) &&
+            !nodeBefore(graph, node.id, 'account.select')
+         ) {
             problems.push({
                nodeId: node.id,
                level: 'error',

@@ -68,6 +68,7 @@ const ACTIONS: Record<string, string> = {
    'connections-read': 'Connections read',
    'accept-read': 'Newest connections read (invite answers)',
    'invites-send': 'Invites sent or withdrawn',
+   'engage-send': 'Reactions and comments sent',
    'task-event': 'Task event matched to workflows',
    'event-run': 'Workflow run started by an event',
    'hook-run': 'Hook run started by a block',

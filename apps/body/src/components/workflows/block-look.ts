@@ -131,6 +131,7 @@ export const BLOCK_ICONS: Record<Block['type'], LucideIcon> = {
    'account.sendMessage': MessageSquarePlus,
    'account.replyToConversation': Reply,
    'account.removeConnection': UserX,
+   'account.reactToPost': ThumbsUp,
    'output.csv': FileDown,
    'output.sendApi': Send,
 }
