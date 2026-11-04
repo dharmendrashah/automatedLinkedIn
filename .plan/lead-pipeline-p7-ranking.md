@@ -1,6 +1,6 @@
 # Lead pipeline, phase 7: ranking and routing (signals, scoring models, per-company control)
 
-- Status: ready for the owner's approval
+- Status: done (built offline; the learning half and the model screen are deferred, see Outcome)
 - Created: 2026-11-04
 - Locked by user: no (the blocks N1, N2, N4, N5, N8 and the ranking model were approved in principle on 2026-11-04)
 - Parent: [lead-outreach-pipeline.md](lead-outreach-pipeline.md) (section "Blue-sky automations")
@@ -269,14 +269,14 @@ Lane A, B and C each are a daily workflow that starts with Profiles (label `tier
 
 ## Approach
 
-- [ ] Tests first: the score on golden people (each part, each negative rule, fading at 0, 1 and 3 half-lives, a future date), the model validation, the company score, best per company and space out on seeded companies
-- [ ] Migration (additive): `PersonSignal`, `CompanySignal`, `ScoreModel` and the built-in presets; the writers in `CollectKeepService` and the import services
-- [ ] The model screen on the ideal customer page; the person drawer gets a "Signals" list (type, date, where) from `PersonSignal`
-- [ ] N1, N2, N4, N5, N8 (contract entry, executor, icon, registry tests); the small changes
-- [ ] Retention job rules for the new tables; erasure
-- [ ] `CampaignContext`, the new `suggest` sources and the chips in the block editor; `solution` and `phrases` on `Campaign`
-- [ ] `PersonFeedback` (thumbs and "Not a fit") in My network and the hand-off list; `PersonScoreSnapshot`; the suggestion calculation and the tuning view with the 200 and 30 thresholds
-- [ ] Build the tier lanes and a test campaign on a test user as the real-path check
+- [x] Tests first: the score on golden people (each part, each negative rule, fading at 0, 1 and 3 half-lives, a future date), the model validation, the company score, best per company and space out (pure code: `core/ranking.unit.test.ts`, `contracts/ranking.unit.test.ts`; blocks: `rankBlocks.unit.test.ts`)
+- [x] Migration (additive): `PersonSignal` and `CompanySignal` (`20261104170000_lead_pipeline_signals`); the built-in models live in contracts. Writers: Score by signals and Score company write what the run found (not `CollectKeepService`)
+- [ ] The model screen on the ideal customer page; the person drawer gets a "Signals" list (deferred, see Outcome)
+- [x] N1, N2, N4, N5, N8 (contract entry, executor, icon, registry tests); the small changes
+- [x] Retention job rules for the new tables; erasure and Do not contact
+- [ ] `CampaignContext`, the new `suggest` sources and the chips in the block editor; `solution` and `phrases` on `Campaign` (deferred)
+- [ ] `PersonFeedback` (thumbs and "Not a fit") in My network and the hand-off list; `PersonScoreSnapshot`; the suggestion calculation and the tuning view with the 200 and 30 thresholds (deferred)
+- [ ] Build the tier lanes and a test campaign on a test user as the real-path check (deferred to phase 10, which builds the lanes)
 
 ## Edge cases and risks
 
@@ -301,4 +301,19 @@ Lane A, B and C each are a daily workflow that starts with Profiles (label `tier
 
 ## Outcome
 
-Filled in when done.
+Shipped (not seen in a browser, no real model or LinkedIn call):
+
+- Contracts `ranking.ts`: the 17 person signal types and 5 company signal types with points and half-lives, the three built-in models (Balanced 50/30/10/10, Fit first 65/20/8/7, Intent first 35/45/10/10), tier lines (80, 60, 40, must go down), `tierOf`, `fadeFactor`, fade speeds (slow x2, fast x0.5).
+- Brain `core/ranking.ts`: `rankPerson` (negative rules first: competitor signal, never-rank title, never-rank company, excluded title; fit from `scoreIcp` scaled to what the ideal customer asks for; intent from the freshest signal of each type, faded, capped at the intent part; reach from followers; relationship from shared and mutual; no profile read caps a person at tier B), `rankCompany`, `pickBestPer`, `spaceOutReason`.
+- Migration `20261104170000_lead_pipeline_signals` (`PersonSignal`, `CompanySignal`, one row per owner, slug, type, source and day), `SignalService` (write skips people on Do not contact, read, cleanup: 365 days, excerpt 140 characters cleared at 90), `ColleaguesService`, `PeopleService.stopContacting`; erasure, Do not contact and the retention job reach the new tables.
+- Blocks `score.signals`, `score.company`, `process.bestPer`, `logic.spaceOut`, `output.doNotContact` (contract, executors in `worker/engine/rankBlocks.ts`, icons), `PersonItem.tier`, `CompanyItem.score/tier/matched`; small changes: Add label "Replace labels beginning with", Remove duplicates "Leave out people at companies labelled".
+- Checks: lint (0 warnings), ts:check, unit tests, clean `pnpm build --force`, the new integration tests (`signal.integration.test.ts`, `rankBlocks.integration.test.ts`) and the whole brain integration suite pass.
+
+Deviations (deferred, not built):
+
+- No saved `ScoreModel`, editor screen or "Edit" button: the block picks one of three built-in models. The saved-model table can be added later without changing the block settings.
+- Signals are written by Score by signals and Score company from what the run holds (the item's commented, reacted, employee and hiring signals; a hiring company), not by the collectors; accepted and replied come from My network dates at scoring time. The signal types that no block writes yet (asked, posted, engagedOurPost, viewed, requested, jobchange, funding, competitor and the shared and mutual ones) are read when something stores them; phase 8 and 9 reads and the automations will.
+- "Pause their colleagues" on Stop contacting them is not built; the reason is kept in the run's result, not on the person.
+- Tier D in Else only when Keep tier D is off; the customers label is not a negative rule (use the never-rank companies list and Remove duplicates with the label).
+- Not built: the Signals list in the person drawer, `CampaignContext` and its chips, `PersonFeedback`, `PersonScoreSnapshot`, suggestions and the tuning view, the tier lanes (phase 10), the new facts for If person state ("has the signal", "tier is"; Else for tier is the Score block's own, and the tier is a field of the item).
+- The dedupe company label has no test through the engine (items from links carry no company); the lookup is tested in `signal.integration.test.ts`.

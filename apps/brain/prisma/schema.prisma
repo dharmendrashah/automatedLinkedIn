@@ -53,6 +53,8 @@ model User {
   workflowLists     WorkflowList[]
   suppressions      Suppression[]
   personSnapshots   PersonSnapshot[]
+  personSignals     PersonSignal[]
+  companySignals    CompanySignal[]
   pageSnapshots     PageSnapshot[]
   dataReads         DataRead[]
   icps              Icp[]
@@ -153,6 +155,43 @@ model PersonSnapshot {
   fetchedAt DateTime @default(now())
 
   @@unique([userId, slug])
+}
+
+// Something a person showed (.plan/lead-pipeline-p7-ranking.md): one row per type, source and day, so a rerun adds nothing. `type` is a
+// SIGNAL_TYPES word; `via` is the post, company or workflow node that showed it. Deleted after 365 days; `excerpt` after 90, and with the
+// person on erasure or Do not contact.
+model PersonSignal {
+  id        String   @id @default(uuid(7))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slug      String
+  type      String
+  via       String   @default("")
+  at        DateTime
+  day       DateTime @db.Date
+  excerpt   String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, slug, type, via, day])
+  @@index([userId, slug])
+  @@index([at])
+}
+
+// The same for a company, by its LinkedIn slug; `type` is a COMPANY_SIGNAL_TYPES word.
+model CompanySignal {
+  id        String   @id @default(uuid(7))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slug      String
+  type      String
+  via       String   @default("")
+  at        DateTime
+  day       DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  @@unique([userId, slug, type, via, day])
+  @@index([userId, slug])
+  @@index([at])
 }
 
 enum PageKind {

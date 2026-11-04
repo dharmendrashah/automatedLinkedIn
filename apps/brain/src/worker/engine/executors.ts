@@ -19,6 +19,7 @@ import {
 
 import {
    COMPANY_REMEMBER_DAYS,
+   ColleaguesService,
    CollectCacheService,
    CollectKeepService,
    EMAIL_REMEMBER_DAYS,
@@ -110,6 +111,7 @@ import { eventTrigger, hookTrigger, ifEvent, messageMood, runEvent } from './eve
 import { sendInvites, withdrawInvites } from './inviteBlocks'
 import { retry, stop, taskResult, wait } from './logicBlocks'
 import { getChat, ifPerson, splitPeople } from './personBlocks'
+import { bestPerCompany, scoreCompanies, scoreSignals, spaceOut, stopContacting } from './rankBlocks'
 import { replyToConversations, sendMessages } from './replyBlocks'
 import { fitToRoom, personWait } from './roomBlocks'
 import { runWorkflow } from './runWorkflow'
@@ -1709,9 +1711,14 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
          }))
       )
 
+      const label = textIn(config, 'skipCompanyLabel')
+      const customers = label === '' ? new Set<string>() : await ColleaguesService.labelled(ctx.run.userId, label)
+      const fresh = (await notSeen(ctx.run.userId, people, skip)).filter(
+         ({ company }) => !customers.has(company?.trim().toLowerCase() ?? '')
+      )
       const result = await keepItems(
          ctx,
-         [...(await notSeen(ctx.run.userId, people, skip)), ...posts.filter(post => !done.includes(post)), ...other],
+         [...fresh, ...posts.filter(post => !done.includes(post)), ...other],
          ctx.inputs.length
       )
 
@@ -1748,14 +1755,19 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    },
    'process.merge': merge,
    'process.room': fitToRoom,
+   'process.bestPer': bestPerCompany,
    'process.messageMood': messageMood,
    'process.write': writeWordsOnPosts,
    'process.tag': async ctx => {
       const people = mergeBySlug(peopleOf(ctx.inputs))
-      const tags = wordsIn(configOf(ctx.node), 'tags')
+      const config = configOf(ctx.node)
+      const tags = wordsIn(config, 'tags')
+      const prefix = textIn(config, 'replacePrefix')
       const tagged = people.map(item => ({
          ...item,
-         tags: [...new Set([...item.tags, ...tags])],
+         tags: [
+            ...new Set([...(prefix === '' ? item.tags : item.tags.filter(tag => !tag.startsWith(prefix))), ...tags]),
+         ],
       }))
 
       return keepItems(ctx, tagged, people.length)
@@ -1767,6 +1779,8 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
 
       return keepItems(ctx, kept, people.length)
    },
+   'score.signals': scoreSignals,
+   'score.company': scoreCompanies,
    'logic.if': ifBlock,
    'logic.ifEvent': ifEvent,
    'logic.ifPerson': ifPerson,
@@ -1778,6 +1792,7 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'logic.runWorkflow': runWorkflow,
    'logic.wait': wait,
    'logic.personWait': personWait,
+   'logic.spaceOut': spaceOut,
    'logic.taskResult': taskResult,
    'logic.retry': retry,
    'logic.stop': stop,
@@ -1801,4 +1816,5 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'output.csv': exportCsv,
    'output.sendApi': sendApi,
    'output.return': giveBack,
+   'output.doNotContact': stopContacting,
 }

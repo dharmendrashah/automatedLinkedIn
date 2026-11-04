@@ -476,6 +476,13 @@ export class WorkflowListService {
             },
          })
 
+         await tx.personSignal.deleteMany({
+            where: {
+               userId,
+               slug: member.slug,
+            },
+         })
+
          return count
       })
    }

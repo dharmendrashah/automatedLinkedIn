@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { type Tier } from '@automatedLinkedIn/contracts'
+
 import { type CompanySnapshotData, type PostSnapshotData, companySchema, postSchema } from './pageSnapshot'
 
 // What flows between workflow steps and is saved per step. Only the minimal person fields are kept.
@@ -73,6 +75,8 @@ export type PersonItem = WithResult & {
    companyIndustry?: string | null
    companySize?: string | null
    companyDomain?: string | null
+   // A to D, set by Score by signals.
+   tier?: Tier | null
    // The stored chat with them, found by Get our chat with them.
    chat?: ChatPointer
 }
@@ -103,6 +107,10 @@ export type CompanyItem = WithResult & {
    name: string | null
    // Open roles found for the company.
    hiring: string[]
+   // Set by Score company: 0 to 100, the tier and why.
+   score?: number | null
+   tier?: Tier | null
+   matched?: string[]
    // The company page as the run read it, when a block found it.
    preview?: CompanySnapshotData | null
 }
@@ -214,6 +222,8 @@ export const mergeBySlug = (people: PersonItem[]) => {
 
 const nullableText = z.string().nullable()
 
+const tierSchema = z.enum(['A', 'B', 'C', 'D']).nullable()
+
 const resultSchema = z
    .object({
       action: z.string(),
@@ -271,6 +281,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       companyIndustry: nullableText.optional(),
       companySize: nullableText.optional(),
       companyDomain: nullableText.optional(),
+      tier: tierSchema.optional(),
       chat: chatSchema.optional(),
       result: resultSchema,
       facts: factsSchema,
@@ -295,6 +306,9 @@ const itemSchema = z.discriminatedUnion('kind', [
       url: z.string(),
       name: nullableText,
       hiring: z.array(z.string()),
+      score: z.number().nullable().optional(),
+      tier: tierSchema.optional(),
+      matched: z.array(z.string()).optional(),
       preview: companySchema.nullable().optional(),
       result: resultSchema,
       facts: factsSchema,

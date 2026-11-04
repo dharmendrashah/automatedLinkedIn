@@ -60,7 +60,7 @@ export type IcpScore = {
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // A phrase counts only as whole words, so "growth" does not match "growthhacker".
-const contains = (text: string, phrase: string) =>
+export const contains = (text: string, phrase: string) =>
    new RegExp(`(?<![\\p{L}\\p{N}])${escape(phrase.toLowerCase())}(?![\\p{L}\\p{N}])`, 'u').test(text)
 
 const firstIn = (text: string, phrases: readonly string[]) => phrases.find(phrase => contains(text, phrase))

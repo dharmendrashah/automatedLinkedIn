@@ -12,11 +12,15 @@ exports[`blocks before they became one definition > should keep the sets of bloc
     "logic.personWait",
     "logic.retry",
     "logic.runWorkflow",
+    "logic.spaceOut",
     "logic.split",
     "logic.taskResult",
+    "process.bestPer",
     "process.dedupe",
     "process.room",
     "process.write",
+    "score.company",
+    "score.signals",
   ],
   "pool": [
     "account.answerRequests",
@@ -606,6 +610,20 @@ exports[`blocks before they became one definition > should keep what every block
       "costMicros": 0,
       "items": 9,
     },
+    "type": "process.bestPer",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
     "type": "process.messageMood",
   },
   {
@@ -649,6 +667,34 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 9,
     },
     "type": "score.icp",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "score.signals",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "score.company",
   },
   {
     "plain": {
@@ -803,6 +849,20 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 9,
     },
     "type": "logic.personWait",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "logic.spaceOut",
   },
   {
     "plain": {
@@ -1139,6 +1199,20 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 9,
     },
     "type": "output.return",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "output.doNotContact",
   },
 ]
 `;

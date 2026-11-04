@@ -667,6 +667,43 @@ export class PeopleService {
       return count === 1
    }
 
+   // Do not contact for people a workflow chose, by profile slug: the flag, the suppression, and nothing kept about them in the owner's
+   // lists, snapshots or signals. A person My network does not hold yet is covered by the suppression alone.
+   public static stopContacting(userId: string, slugs: string[]) {
+      if (slugs.length === 0) {
+         return Promise.resolve(0)
+      }
+
+      return PrismaService.client.$transaction(async tx => {
+         const where = {
+            userId,
+            slug: { in: slugs },
+         }
+
+         await tx.suppression.createMany({
+            data: slugs.map(slug => ({
+               userId,
+               slug,
+            })),
+            skipDuplicates: true,
+         })
+         await tx.person.updateMany({
+            where,
+            data: { doNotContact: true },
+         })
+         await tx.workflowListMember.deleteMany({
+            where: {
+               slug: { in: slugs },
+               list: { userId },
+            },
+         })
+         await tx.personSnapshot.deleteMany({ where })
+         await tx.personSignal.deleteMany({ where })
+
+         return slugs.length
+      })
+   }
+
    // The same changes to many people at once. Resolves to how many changed.
    public static async updateMany(userId: string, ids: string[], changes: Omit<PersonChanges, 'notes'>) {
       const { count } = await PrismaService.client.person.updateMany({
@@ -763,6 +800,12 @@ export class PeopleService {
             },
          })
          await tx.personSnapshot.deleteMany({
+            where: {
+               userId,
+               slug,
+            },
+         })
+         await tx.personSignal.deleteMany({
             where: {
                userId,
                slug,
