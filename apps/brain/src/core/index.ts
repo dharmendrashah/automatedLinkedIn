@@ -1,6 +1,7 @@
 export { AbuseIpDbError, AbuseIpDbService, type AbuseDetail, type AbuseIpDbResult } from './abuseIpDb.service'
 export { CryptoService } from './crypto.service'
 export { toCsv } from './csv'
+export { digestText, redactContacts } from './redact'
 export { dailyTime, nextMessagesTime, timezoneOfCountry } from './dailyTime'
 export { CdnFetchError, type CdnFetchFailure } from './cdnFetch'
 export { CdnFiles, type StoredCdnFile } from './cdnFiles'
@@ -45,6 +46,7 @@ export {
    type ItemFacts,
    type ItemResult,
    type JobItem,
+   type ChatPointer,
    type PersonItem,
    type PostItem,
    type Signal,

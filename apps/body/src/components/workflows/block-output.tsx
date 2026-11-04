@@ -7,6 +7,7 @@ import { Download, Loader2 } from 'lucide-react'
 import { useState } from 'react'
 
 import { type RouterOutputs, trpc } from '../../trpc'
+import { ChatDigestButton } from './chat-digest'
 
 type Item = RouterOutputs['workflow']['output']['items'][number] & { from?: string }
 
@@ -56,6 +57,21 @@ const detailOf = ({ item }: Item) => {
    }
 }
 
+// "Chat: 12 messages, they wrote last", "none stored" or "not read" (none stored does not mean none exist).
+const chatText = ({ item }: Item) => {
+   if (item.kind !== 'profile' || !item.chat) {
+      return ''
+   }
+
+   const { stored, messages, lastFrom } = item.chat
+
+   return stored === null
+      ? 'Not read'
+      : stored
+        ? `${messages} messages${lastFrom ? `, ${lastFrom === 'ME' ? 'you' : 'they'} wrote last` : ''}`
+        : 'None stored'
+}
+
 type Props = {
    runId: string
    nodeId: string
@@ -68,10 +84,21 @@ type Props = {
    labelOf?: (nodeId: string) => string
    // Shown when there is nothing to list.
    emptyText?: string
+   // Get our chat with them: a Chat column with the stored chat of each person and a button to read its newest messages.
+   digest?: boolean
 }
 
 // What one block passed on in a run, or what reached it, page by page, with the whole of it as a CSV download.
-export const BlockOutput = ({ runId, nodeId, rounds, fileName, kind = 'output', labelOf, emptyText }: Props) => {
+export const BlockOutput = ({
+   runId,
+   nodeId,
+   rounds,
+   fileName,
+   kind = 'output',
+   labelOf,
+   emptyText,
+   digest = false,
+}: Props) => {
    const [page, setPage] = useState(1)
    const [round, setRound] = useState(ALL)
    const query = {
@@ -158,6 +185,7 @@ export const BlockOutput = ({ runId, nodeId, rounds, fileName, kind = 'output', 
                      <TableHead>Kind</TableHead>
                      <TableHead>Name</TableHead>
                      <TableHead>Details</TableHead>
+                     {digest ? <TableHead>Chat</TableHead> : null}
                      {kind === 'input' ? <TableHead>From</TableHead> : null}
                      {hasResults ? <TableHead>Result</TableHead> : null}
                      {rounds > 1 ? <TableHead>Round</TableHead> : null}
@@ -178,6 +206,19 @@ export const BlockOutput = ({ runId, nodeId, rounds, fileName, kind = 'output', 
                            </a>
                         </TableCell>
                         <TableCell className="text-muted-foreground max-w-md truncate">{detailOf(row)}</TableCell>
+                        {digest ? (
+                           <TableCell className="text-muted-foreground">
+                              {chatText(row)}
+                              {row.item.kind === 'profile' && row.item.chat?.stored ? (
+                                 <ChatDigestButton
+                                    runId={runId}
+                                    nodeId={nodeId}
+                                    slug={row.item.slug}
+                                    name={nameOf(row)}
+                                 />
+                              ) : null}
+                           </TableCell>
+                        ) : null}
                         {kind === 'input' ? (
                            <TableCell className="text-muted-foreground">
                               {row.from ? (labelOf?.(row.from) ?? row.from) : ''}

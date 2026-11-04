@@ -257,6 +257,33 @@ describe('sendMessages', () => {
       })
    })
 
+   it('should write to each person from the account they are connected to, and not from another', async () => {
+      mocks.accounts.mockResolvedValue([
+         {
+            id: 'a1',
+            status: 'ACTIVE',
+         },
+         {
+            id: 'a2',
+            status: 'ACTIVE',
+         },
+      ])
+      mocks.connectedVia.mockResolvedValue(
+         new Map([
+            ['ada', 'a2'],
+            ['bob', 'a1'],
+         ])
+      )
+      mocks.ofStep.mockResolvedValueOnce([]).mockResolvedValue([])
+
+      await sendMessages(context('account.sendMessage', [ada, bob], { settings: armed })).catch(() => undefined)
+
+      expect(mocks.start.mock.calls.map(([, accountId, slug]) => [slug, accountId])).toEqual([
+         ['ada', 'a2'],
+         ['bob', 'a1'],
+      ])
+   })
+
    it('should pick one option of the spintax, use the stored profile for earlier job and account name, and fall back when a value is missing', async () => {
       mocks.connectedVia.mockResolvedValue(new Map([['ada', 'a1']]))
       mocks.accountNames.mockResolvedValue(new Map([['a1', 'Sam']]))

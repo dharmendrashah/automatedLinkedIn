@@ -403,6 +403,19 @@ export const collectEach = async (ctx: Context, requests: Request[]): Promise<St
    }
 }
 
+// What stays behind for an Else after a block, each with one fixed sentence of why (never the person's data).
+export const aside = (items: WorkflowItemData[], action: string, reason: string): WorkflowItemData[] =>
+   items.map(item => ({
+      ...item,
+      result: {
+         action,
+         status: 'SKIPPED',
+         account: null,
+         at: null,
+         reason,
+      },
+   }))
+
 export const keepItems = async (ctx: Context, items: WorkflowItemData[], itemsIn: number): Promise<StepResult> => {
    await WorkflowRunService.replaceItems(ctx.at, items)
 

@@ -5,9 +5,11 @@ exports[`blocks before they became one definition > should keep the sets of bloc
   "elseSources": [
     "logic.if",
     "logic.ifEvent",
+    "logic.ifPerson",
     "logic.personWait",
     "logic.retry",
     "logic.runWorkflow",
+    "logic.split",
     "logic.taskResult",
     "process.dedupe",
     "process.room",
@@ -34,6 +36,7 @@ exports[`blocks before they became one definition > should keep the sets of bloc
     "logic.ifEvent",
     "logic.retry",
     "logic.runWorkflow",
+    "logic.split",
     "logic.stop",
     "logic.taskResult",
     "logic.wait",
@@ -637,6 +640,20 @@ exports[`blocks before they became one definition > should keep what every block
       "costMicros": 0,
       "items": 9,
     },
+    "type": "collect.chat",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
     "type": "logic.if",
   },
   {
@@ -652,6 +669,34 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 9,
     },
     "type": "logic.ifEvent",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "logic.ifPerson",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "logic.split",
   },
   {
     "plain": {

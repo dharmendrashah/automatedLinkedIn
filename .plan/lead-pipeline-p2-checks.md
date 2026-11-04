@@ -1,7 +1,8 @@
 # Lead pipeline, phase 2: checks (If person state, Get our chat, Split people)
 
-- Status: ready for the owner's approval (no open question)- Created: 2026-11-03
-- Locked by user: no
+- Status: done (built and tested offline on 2026-11-04, locked by the owner's go-ahead "continue with p2"; the pages in a browser and the real-path run of R6 were not run, see Outcome)
+- Created: 2026-11-03
+- Locked by user: yes (2026-11-04)
 - Parent: [lead-outreach-pipeline.md](lead-outreach-pipeline.md)
 
 ## Goal
@@ -218,14 +219,14 @@ flowchart TD
 
 ## Approach
 
-- [ ] Fact catalog as one table in contracts (key, label, kind, options) shared by validation, the body and the executor
-- [ ] Tests first for each fact, then the executor with batched queries
-- [ ] B4 contract entry, executor, icon, presets, registry tests, `accountReads` read
-- [ ] B5 contract entry, item field, executor, Output tab digest, registry tests
-- [ ] B6 contract entry, executor, icon, registry tests
-- [ ] The test that Send message writes from the connected account
-- [ ] Body: fields for the three blocks, the freshness note, the Output tab digest
-- [ ] Build R6 (route by relationship) on a test user as the real-path check
+- [x] Fact catalog as one table in contracts (key, label, kind, options) shared by validation, the body and the executor
+- [x] Tests first for each fact, then the executor with batched queries
+- [x] B4 contract entry, executor, icon, presets, registry tests, `accountReads` read
+- [x] B5 contract entry, item field, executor, Output tab digest, registry tests
+- [x] B6 (the plan's name for the split block; it is B5 above) contract entry, executor, icon, registry tests
+- [x] The test that Send message writes from the connected account
+- [x] Body: fields for the three blocks, the freshness note, the Output tab digest
+- [ ] Build R6 (route by relationship) on a test user as the real-path check: not done (needs a browser session and a test user with two accounts)
 
 ## Edge cases and risks
 
@@ -244,4 +245,13 @@ flowchart TD
 
 ## Outcome
 
-Filled in when done.
+Shipped (offline, with tests): `logic.ifPerson` (If person state), `collect.chat` (Get our chat with them) and `logic.split` (Split people); the fact catalog and checks in contracts (`personFacts.ts`); `PersonStateService` (facts, chat pointers and the digest, all in batches of 500 slugs); `PersonItem.chat`; `workflow.accountReads` and `workflow.chatDigest`; the body freshness note, the Chat column and "Show digest"; redaction of emails and phone numbers (`core/redact.ts`); a test that Send message writes from the account each person is connected to.
+
+Deviations and follow-ups:
+
+- "We have written to them" and "They have written to us" read as no (not unknown) when messages were read and no direct chat is stored, so the preset "Never messaged" finds people with no chat. They are unknown only when no account in scope has a fresh message read.
+- "Days since we last reacted or commented" is not offered: it needs `Person.lastEngagedAt` from phase 3.
+- Group chats count as no chat in both the facts and the chat pointer.
+- The digest reads the owner's accounts (or the one account of the block); it does not use the pointer's account list.
+- The step message and the "1,000 people" bound: queries are batched, but no test counts them.
+- Not run: the pages in a browser, the real-path run of R6 on a test user, and any live act. The spider integration tests (RabbitMQ) time out on this machine while other brokers' consumers run; they are unrelated to this change.

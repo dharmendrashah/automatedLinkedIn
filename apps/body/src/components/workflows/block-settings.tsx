@@ -21,6 +21,7 @@ import { type Block, type ConfigValue, type Field } from './types'
 
 import { LabelMultiSelect } from '../labels/label-multi-select'
 import { AccountPick } from './account-pick'
+import { AccountReads } from './account-reads'
 import { AccountsPick } from './accounts-pick'
 import { ActForRealToggle } from './act-for-real-toggle'
 import { ApiWorkflowButton } from './api-workflow-button'
@@ -415,6 +416,9 @@ export const BlockSettings = ({
             ) : null}
             {presets}
             {main.map(row)}
+            {block.type === 'logic.ifPerson' ? (
+               <AccountReads maxAgeHours={Number(values.maxAgeHours ?? 36)} />
+            ) : null}
             {more.length > 0 ? (
                <details className="group grid gap-5">
                   <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center gap-1 text-sm">
