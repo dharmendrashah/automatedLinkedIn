@@ -297,6 +297,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-11-05: Fix for issue #196 (`fix/reply-stale-from-start`): `LinkedInReplyService.endStale` counts the 15 minutes from `startedAt` (from `createdAt` for a row with no start), so a queued reply that waited longer than that no longer shows UNKNOWN while it is sending. The other sweeps (`linkedInConnection`, `linkedInInvitation`, `linkedInInvite`, `postPublication`) still count from `createdAt`; check them when their rows can queue.
 - 2026-11-04: Lead pipeline phase 10 built on `feat/lead-pipeline-p10-automations` (the catalog of sixteen automations, builders for A1, A10, A11, A13, A14 and the A16 split, the create service and tRPC procedures); lint, ts:check, unit, clean build and the brain integration suite pass; ten automations wait for blocks that do not exist yet; nothing seen in a browser or run against LinkedIn.
 - 2026-11-04: Lead pipeline phase 9 built on the brain side on `feat/lead-pipeline-p9-new-reads` (four stores, importers, signals, retention, erasure, four read blocks); lint, ts:check, unit, clean build and the brain integration suite pass; no spider task, nothing seen in a browser or on LinkedIn.
 - 2026-11-04: Lead pipeline phase 8 built offline on `feat/lead-pipeline-p8-reading-blocks` (Label with AI, Find the pattern, Detect changes reduced to a new-role check); lint, ts:check, unit, clean build and the brain integration suite pass; nothing seen in a browser, no model called; N9, label suggestions and examples, C13 not built.
