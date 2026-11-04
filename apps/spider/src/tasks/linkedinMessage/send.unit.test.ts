@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { messagesFileSchema } from '@automatedLinkedIn/contracts'
 
-import { PROFILE_MESSAGE, WINDOW_COMPOSER, WINDOW_SEND_BUTTON } from '../../linkedin/markup'
-import { type FixtureMessage, profileMarkup, threadMarkup } from '../../linkedin/messagingFixture'
+import { PROFILE_MESSAGE, WINDOW_CLOSE, WINDOW_COMPOSER, WINDOW_SEND_BUTTON } from '../../linkedin/markup'
+import { type FixtureMessage, messageWindowMarkup, profileMarkup, threadMarkup } from '../../linkedin/messagingFixture'
 import { answerFor } from './answer'
 import { type MessageResult, sameName, sendMessage } from './send'
 
@@ -18,6 +18,8 @@ type Page = {
    messageLink?: boolean
    // The window opens when the link is pressed, and the name it shows.
    opens?: boolean
+   // The window opens only on this press of the link (a page that had not run its scripts ignores the earlier ones).
+   opensOnPress?: number
    title?: string
    composer?: boolean
    history?: FixtureMessage[]
@@ -32,6 +34,10 @@ type Page = {
    attempted?: boolean
    // The window is a New message window (a person never written to) with these recipient chips and a card linking to this profile.
    compose?: { recipients: string[]; profile: string }
+   // Windows the browser profile kept open from earlier runs, by name; each press of the close button removes the first.
+   stale?: string[]
+   // The close button of an old window cannot be pressed.
+   staleStays?: boolean
 }
 
 const ours = (id: string): FixtureMessage => ({
@@ -52,6 +58,7 @@ const setup = (page: Page = {}) => {
    let open = false
    let typed = ''
    let pressed = 0
+   let stale = [...(page.stale ?? [])]
    const calls: string[] = []
    const attached: Array<{ name: string; content: string }> = []
    const html = () => {
@@ -63,7 +70,20 @@ const setup = (page: Page = {}) => {
          })}</body></html>`
       }
 
-      return `<html><body>${profileMarkup({
+      const old = (open ? stale : [])
+         .map(name =>
+            messageWindowMarkup({
+               title: name,
+               messages: [],
+               composer: {
+                  typed: '',
+                  sendDisabled: true,
+               },
+            })
+         )
+         .join('')
+
+      return `<html><body>${old}${profileMarkup({
          messageLink,
          ...(open && {
             window: {
@@ -94,10 +114,25 @@ const setup = (page: Page = {}) => {
          controls: [],
          blocks: [],
       })),
+      clickNth: vi.fn(async (selector: string, index: number) => {
+         if (selector !== WINDOW_CLOSE) {
+            return false
+         }
+
+         calls.push(`close window ${index}`)
+
+         if (page.staleStays || index >= stale.length) {
+            return false
+         }
+
+         stale = stale.filter((_, position) => position !== index)
+
+         return true
+      }),
       clickSelector: vi.fn(async (selector: string) => {
          if (selector === PROFILE_MESSAGE) {
             calls.push('click message')
-            open = opens
+            open = opens && calls.filter(call => call === 'click message').length >= (page.opensOnPress ?? 1)
 
             return messageLink
          }
@@ -245,6 +280,44 @@ describe('sendMessage', () => {
          await expect(run()).resolves.toEqual({ outcome: 'NO_COMPOSER' })
          expect(typedNothing(calls)).toBe(true)
       }
+   })
+
+   it('should close the windows an earlier run left open, which come before the new window, and write in the new one', async () => {
+      const { run, calls } = setup({ stale: ['Jasper Bennett', 'Dima Grossman'] })
+
+      await expect(run()).resolves.toEqual({ outcome: 'SENT' })
+      expect(calls.filter(call => call.startsWith('close window'))).toEqual(['close window 0', 'close window 0'])
+      expect(calls.indexOf('close window 0')).toBeLessThan(calls.indexOf('type'))
+   })
+
+   it('should close nothing when no other window is open, and type nothing when an old window cannot be closed', async () => {
+      const clean = setup()
+
+      await clean.run()
+      expect(clean.calls.some(call => call.startsWith('close window'))).toBe(false)
+
+      const stuck = setup({
+         stale: ['Jasper Bennett'],
+         staleStays: true,
+      })
+
+      await expect(stuck.run()).resolves.toEqual({ outcome: 'WRONG_RECIPIENT' })
+      expect(typedNothing(stuck.calls)).toBe(true)
+   })
+
+   it('should press Message again when the first press opens nothing, and send once', async () => {
+      const { run, calls } = setup({ opensOnPress: 2 })
+
+      await expect(run()).resolves.toEqual({ outcome: 'SENT' })
+      expect(calls.filter(call => call === 'click message')).toHaveLength(2)
+      expect(calls.filter(call => call === 'press send')).toHaveLength(1)
+   })
+
+   it('should press Message only three times when no window ever opens', async () => {
+      const { run, calls } = setup({ opens: false })
+
+      await expect(run()).resolves.toEqual({ outcome: 'NO_COMPOSER' })
+      expect(calls.filter(call => call === 'click message')).toHaveLength(3)
    })
 
    it('should type nothing when the window is with someone else', async () => {
