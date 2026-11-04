@@ -112,6 +112,7 @@ import { sendInvites, withdrawInvites } from './inviteBlocks'
 import { retry, stop, taskResult, wait } from './logicBlocks'
 import { getChat, ifPerson, splitPeople } from './personBlocks'
 import { bestPerCompany, scoreCompanies, scoreSignals, spaceOut, stopContacting } from './rankBlocks'
+import { classifyItems, detectChanges, findThePattern } from './readBlocks'
 import { replyToConversations, sendMessages } from './replyBlocks'
 import { fitToRoom, personWait } from './roomBlocks'
 import { runWorkflow } from './runWorkflow'
@@ -1756,6 +1757,9 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'process.merge': merge,
    'process.room': fitToRoom,
    'process.bestPer': bestPerCompany,
+   'process.classify': classifyItems,
+   'process.pattern': findThePattern,
+   'collect.changes': detectChanges,
    'process.messageMood': messageMood,
    'process.write': writeWordsOnPosts,
    'process.tag': async ctx => {

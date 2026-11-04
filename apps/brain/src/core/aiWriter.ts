@@ -71,7 +71,7 @@ const SKIPS = {
 } as const
 
 // A line of data from other people cannot close the quote and start giving orders.
-const quoted = (text: string) => redactContacts(text).replaceAll('<', '\u2039').replaceAll('>', '\u203a')
+export const quoted = (text: string) => redactContacts(text).replaceAll('<', '\u2039').replaceAll('>', '\u203a')
 
 export const systemOf = (voice: Voice, settings: WriteSettings) =>
    [
@@ -104,7 +104,7 @@ export const promptOf = ({ post, authorFirstName, authorHeadline }: Pack) =>
       `<author>\n${quoted([authorFirstName, authorHeadline].filter(Boolean).join(', '))}\n</author>`,
    ].join('\n')
 
-const costOf = (inputTokens: number, outputTokens: number, { inputMicros, outputMicros }: Price) =>
+export const costOf = (inputTokens: number, outputTokens: number, { inputMicros, outputMicros }: Price) =>
    Math.ceil((inputTokens * inputMicros + outputTokens * outputMicros) / 1_000_000)
 
 // Asks once (no retries: a retry doubles the cost) and says what came of it. A provider error is a failure; a billed call is booked
