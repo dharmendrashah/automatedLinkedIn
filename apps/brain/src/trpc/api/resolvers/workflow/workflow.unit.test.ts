@@ -14,12 +14,17 @@ const mocks = vi.hoisted(() => ({
    input: vi.fn(),
    problems: vi.fn(),
    readGraph: vi.fn(),
+   output: vi.fn(),
+   csvColumns: vi.fn(),
+   handoffCsv: vi.fn(),
+   itemsCsv: vi.fn(),
 }))
 
 vi.mock('database', () => ({
    ConflictError: class ConflictError extends Error {},
    TaskRefusedError: class TaskRefusedError extends Error {},
    InputPickService: {},
+   HandoffService: { csv: mocks.handoffCsv },
    WorkflowRunService: {},
    WorkflowTriggerService: {},
    WorkflowService: {
@@ -27,6 +32,8 @@ vi.mock('database', () => ({
       update: mocks.update,
       delete: mocks.remove,
       input: mocks.input,
+      output: mocks.output,
+      csvColumns: mocks.csvColumns,
       problems: mocks.problems,
    },
    readGraph: mocks.readGraph,
@@ -34,7 +41,8 @@ vi.mock('database', () => ({
 
 vi.mock('core', () => ({
    CSV_MAX_ROWS: 10_000,
-   itemsCsv: vi.fn(),
+   itemsCsv: mocks.itemsCsv,
+   handoffInputOf: (item: { slug: string }) => ({ slug: item.slug }),
 }))
 
 vi.mock('env', () => ({
@@ -175,5 +183,63 @@ describe('workflow resolvers (saving, deleting and reading what reached a block)
             nodeId: 'a',
          })
       ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+   })
+
+   it('should download what a block passed on with the standard columns, or the hand-off ones when its Export block says so', async () => {
+      const items = [
+         {
+            round: 0,
+            item: {
+               kind: 'profile',
+               slug: 'ada',
+            },
+         },
+         {
+            round: 1,
+            item: {
+               kind: 'profile',
+               slug: 'ada',
+            },
+         },
+         {
+            round: 0,
+            item: {
+               kind: 'post',
+               slug: 'p1',
+            },
+         },
+      ]
+
+      mocks.output.mockResolvedValue({
+         total: 3,
+         items,
+      })
+      mocks.itemsCsv.mockReturnValue('standard-file')
+      mocks.handoffCsv.mockResolvedValue('handoff-file')
+      mocks.csvColumns.mockResolvedValueOnce('standard')
+
+      expect(
+         await caller().outputCsv({
+            runId: 'r1',
+            nodeId: 'csv',
+         })
+      ).toEqual({
+         fileName: 'csv-output.csv',
+         csv: 'standard-file',
+      })
+
+      mocks.csvColumns.mockResolvedValueOnce('handoff')
+
+      expect(
+         await caller().outputCsv({
+            runId: 'r1',
+            nodeId: 'csv',
+         })
+      ).toEqual({
+         fileName: 'csv-output.csv',
+         csv: 'handoff-file',
+      })
+      // Each person once, and only people.
+      expect(mocks.handoffCsv).toHaveBeenCalledWith('u1', [{ slug: 'ada' }])
    })
 })

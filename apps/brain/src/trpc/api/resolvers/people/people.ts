@@ -212,6 +212,6 @@ export const people = router({
    audit: ownerProcedure.query(({ ctx }) => PeopleService.audit(ctx.user.id)),
 
    export: ownerProcedure
-      .input(view)
+      .input(view.extend({ columns: z.enum(['standard', 'handoff']).optional() }))
       .mutation(({ ctx, input }) => orConflict(PeopleService.export(ctx.user.id, input))),
 })

@@ -1,5 +1,5 @@
-// Rules-only scoring of a person against an ideal customer. Only what a headline and a location can prove is
-// scored here; industry, company size and engagement are added when a workflow reads more about the person.
+// Rules-only scoring of a person against an ideal customer. A headline and a location prove the title, the seniority and the place;
+// the company's industry and size count once the profile and the company were read (.plan/lead-pipeline-p1-foundations.md).
 
 export const SENIORITIES = ['OWNER', 'CXO', 'VP', 'HEAD', 'DIRECTOR', 'MANAGER'] as const
 
@@ -23,18 +23,32 @@ export const ICP_WEIGHTS = {
    title: 30,
    seniority: 20,
    location: 5,
+   // Only once the profile and the company were read.
+   industry: 15,
+   companySize: 15,
 } as const
+
+// What a headline and a place can prove, without any read: the most a person can score before their company is known.
+export const HEADLINE_MAX = ICP_WEIGHTS.title + ICP_WEIGHTS.seniority + ICP_WEIGHTS.location
 
 export type IcpRules = {
    includeTitles: string[]
    excludeTitles: string[]
    seniorities: Seniority[]
    locations: string[]
+   industries?: string[]
+   // Bands as LinkedIn writes them, such as "51-200" or "51 - 200".
+   companySizes?: string[]
 }
 
 export type IcpSample = {
    headline: string | null
    location: string | null
+   // What the company of the current job says, when the profile and the company were read.
+   companyIndustry?: string | null
+   companySize?: string | null
+   // False when the profile was not read yet, so industry and size cannot count.
+   read?: boolean
 }
 
 export type IcpScore = {
@@ -50,6 +64,11 @@ const contains = (text: string, phrase: string) =>
    new RegExp(`(?<![\\p{L}\\p{N}])${escape(phrase.toLowerCase())}(?![\\p{L}\\p{N}])`, 'u').test(text)
 
 const firstIn = (text: string, phrases: readonly string[]) => phrases.find(phrase => contains(text, phrase))
+
+// "11 – 50" and "11-50" are the same band.
+export const bandOf = (value: string) => value.replace(/[\s\u2013\u2014]/g, match => (match.trim() ? '-' : ''))
+
+const NOT_READ = 'profile not read yet'
 
 export const scoreIcp = (rules: IcpRules, sample: IcpSample): IcpScore => {
    const headline = sample.headline?.toLowerCase() ?? ''
@@ -68,6 +87,10 @@ export const scoreIcp = (rules: IcpRules, sample: IcpSample): IcpScore => {
    const title = firstIn(headline, rules.includeTitles)
    const seniority = rules.seniorities.find(level => firstIn(headline, SENIORITY_KEYWORDS[level]))
    const place = firstIn(location, rules.locations)
+   const industries = rules.industries ?? []
+   const sizes = rules.companySizes ?? []
+   const industry = sample.companyIndustry ? firstIn(sample.companyIndustry.toLowerCase(), industries) : undefined
+   const size = sample.companySize ? sizes.find(band => bandOf(band) === bandOf(sample.companySize ?? '')) : undefined
 
    const hits: { weight: number; label: string }[] = []
 
@@ -92,10 +115,27 @@ export const scoreIcp = (rules: IcpRules, sample: IcpSample): IcpScore => {
       })
    }
 
+   if (industry) {
+      hits.push({
+         weight: ICP_WEIGHTS.industry,
+         label: `industry "${industry}"`,
+      })
+   }
+
+   if (size) {
+      hits.push({
+         weight: ICP_WEIGHTS.companySize,
+         label: `company size ${bandOf(size).replace('-', ' to ')}`,
+      })
+   }
+
+   // A person scored on the headline alone says so, when the ideal customer cares about the company.
+   const unread = sample.read === false && (industries.length > 0 || sizes.length > 0) ? [NOT_READ] : []
+
    return {
       score: hits.reduce((sum, hit) => sum + hit.weight, 0),
       disqualified: false,
-      matched: hits.map(hit => hit.label),
+      matched: [...hits.map(hit => hit.label), ...unread],
    }
 }
 
@@ -162,6 +202,30 @@ export const explainMatched = (matched: string[]): Reason[] =>
       const level = quoted(match, 'seniority ')
       const place = quoted(match, 'location ')
       const problem = quoted(match, 'comment mentions ')
+      const industry = quoted(match, 'industry ')
+      const size = quoted(match, 'company size ')
+
+      if (match === NOT_READ)
+         return [
+            {
+               label: 'Profile not read yet',
+               points: 0,
+            },
+         ]
+      if (industry)
+         return [
+            {
+               label: `Industry: ${industry.replaceAll('"', '')}`,
+               points: ICP_WEIGHTS.industry,
+            },
+         ]
+      if (size)
+         return [
+            {
+               label: `Company size ${size}`,
+               points: ICP_WEIGHTS.companySize,
+            },
+         ]
 
       if (excluded)
          return [

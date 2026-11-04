@@ -7,13 +7,11 @@ export const INVITES_CONTRACT_VERSION = 2
 // Connection invites an account sends, and the ones it withdraws, through the task `linkedin-invite` (.plan/network-invites.md).
 // One file per run, named `invites.json`, says what became of each.
 
-// The limits the owner locked on 2026-10-30 (.plan/network-hub.md). Not LinkedIn's own numbers: LinkedIn may stop an account
-// sooner, which the task reads as LIMIT_REACHED. The page keeps a copy (`apps/body/src/components/my-network/invite-rules.ts`)
-// and a test keeps it equal to this one.
+// The limits the owner locked on 2026-10-30 (.plan/network-hub.md), but the daily and weekly numbers moved to `limits.ts`: every account
+// has its own seeded share of the platform maximum. Not LinkedIn's own numbers: LinkedIn may stop an account sooner, which the task
+// reads as LIMIT_REACHED. The page keeps a copy of the note length (`apps/body/src/components/my-network/invite-rules.ts`) and a test
+// keeps it equal to this one.
 export const INVITE_LIMITS = {
-   // Invites one account sends in 24 hours and in 7 days.
-   perDay: 20,
-   perWeek: 100,
    // Invites and withdrawals one run is asked for.
    perRun: 5,
    withdrawPerRun: 10,
@@ -24,7 +22,8 @@ export const INVITE_LIMITS = {
    },
    // The longest note the box of a free account takes (it counts to 200, recorded 2026-10-30; Premium is said to take 300).
    noteChars: 200,
-   // An invite still pending this many days is withdrawn; a person invited or withdrawn this recently is not invited again.
+   // A person invited and withdrawn or accepted this recently is not invited again; a pending invite this old is "No answer" in
+   // My network. Nothing withdraws it by itself.
    pendingDays: 21,
    // How many days ahead one request may plan.
    planDays: 14,

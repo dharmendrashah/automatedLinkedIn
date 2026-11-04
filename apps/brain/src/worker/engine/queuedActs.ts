@@ -50,7 +50,7 @@ export const runQueued = async <T extends PersonItem | ConversationItem>(
 
    const stopped = run.stopRequestedAt !== null
    const expired = Date.now() - (ctx.step.startedAt ?? run.startedAt).getTime() > timeLimitMs(ctx)
-   const accounts = await VisitPoolService.accounts(run.userId, accountIdsOf(ctx))
+   const accounts = await VisitPoolService.accounts(run.userId, await accountIdsOf(ctx))
    const usable = accounts.filter(({ status }) => status === 'ACTIVE').map(({ id }) => id)
    let calls = await AccountActionService.ofStep(run.id, node.id)
 

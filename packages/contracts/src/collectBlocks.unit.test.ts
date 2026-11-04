@@ -210,6 +210,7 @@ describe('Get full profile', () => {
       expect(spec.migrate?.[1]?.({})).toEqual({ readCompanies: false })
       expect(spec.config.parse({})).toMatchObject({
          readCompanies: true,
+         readCompany: false,
          keep: false,
          reread: false,
       })
@@ -219,6 +220,7 @@ describe('Get full profile', () => {
       expect(blockOf('collect.profile').fields.map(({ key }) => key)).toEqual([
          'links',
          'readCompanies',
+         'readCompany',
          'keep',
          'reread',
       ])

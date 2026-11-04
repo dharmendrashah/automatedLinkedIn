@@ -69,6 +69,8 @@ type Props = {
    onChange: (change: ViewChange) => void
    onExport: () => void
    onAdd: () => void
+   // Something that belongs to the tab, such as the waiting time of the Waiting tab, after the Filters button.
+   extra?: ReactNode
 }
 
 const Filter = ({
@@ -171,7 +173,18 @@ export const QuickFilters = ({
 }
 
 // The search, the tabs, the button to the Filters drawer, then the export and Add people.
-export const Filters = ({ view, exporting, filtersOn, search, tabs, onFilters, onChange, onExport, onAdd }: Props) => (
+export const Filters = ({
+   view,
+   exporting,
+   filtersOn,
+   search,
+   tabs,
+   extra,
+   onFilters,
+   onChange,
+   onExport,
+   onAdd,
+}: Props) => (
    <div className="flex flex-wrap items-center gap-2">
       {search}
       {tabs}
@@ -182,6 +195,7 @@ export const Filters = ({ view, exporting, filtersOn, search, tabs, onFilters, o
             <Badge className="ml-0.5 h-5 min-w-5 rounded-full px-1.5 tabular-nums">{filtersOn}</Badge>
          ) : null}
       </Button>
+      {extra}
       {view.onlyNew ? (
          <Button variant="secondary" size="sm" onClick={() => onChange({ new: null })}>
             Only new · show all

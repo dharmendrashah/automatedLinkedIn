@@ -24,6 +24,8 @@ model User {
   inboxSeenAt  DateTime?
   // When the owner last left My network; people first seen after it are new.
   peopleSeenAt DateTime?
+  // When the owner accepted, once, the notice shown before the first "Act for real": LinkedIn's rules forbid automation and the risk is theirs.
+  riskAcceptedAt DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -1809,6 +1811,8 @@ model Person {
   // The newest message of the owner's accounts to them, and theirs to the accounts (LinkedIn's wall-clock, see LinkedInConversation).
   lastSentAt     DateTime?
   lastReceivedAt DateTime?
+  // When the newest invite of the owner's accounts to them went (sent, accepted or withdrawn); null when none went.
+  invitedAt      DateTime?
   inviteState    PersonInviteState        @default(NONE)
   // Prisma reads a generated column's expression as its default; written as Postgres prints it, so `migrate dev` sees no change.
   search         Unsupported("tsvector")? @default(dbgenerated("to_tsvector('simple'::regconfig, ((((((COALESCE(name, ''::text) || ' '::text) || COALESCE(headline, ''::text)) || ' '::text) || COALESCE(company, ''::text)) || ' '::text) || slug))"))
@@ -1830,6 +1834,7 @@ model Person {
   @@index([userId, connectedAt])
   @@index([userId, lastSentAt])
   @@index([userId, lastReceivedAt])
+  @@index([userId, invitedAt])
 }
 
 // Where the newest invite of the owner to a person stands: QUEUED (not sent yet), PENDING (sent, no answer), ACCEPTED, or

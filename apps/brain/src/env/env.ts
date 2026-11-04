@@ -51,6 +51,12 @@ export class Environment {
             example: 'http://localhost:3000,http://localhost:5173',
             default: 'http://localhost:3000,http://localhost:5173',
          }),
+         APP_URL: url({
+            desc: 'Public address of the web app, with no trailing slash. Links in exported files open pages there',
+            example: 'https://app.example.com',
+            // Local and test only; production has no default and must set it (the same value authentik uses).
+            devDefault: 'http://localhost:3000',
+         }),
          ADMIN_EMAIL: string({
             desc: 'Email of the one platform owner. The user with this verified email gets the ADMIN role (cron monitor, usage owner view). Empty: nobody is promoted',
             example: 'owner@example.com',

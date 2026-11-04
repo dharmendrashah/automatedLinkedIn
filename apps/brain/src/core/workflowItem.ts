@@ -56,6 +56,10 @@ export type PersonItem = WithResult & {
    connectedOn?: string | null
    // What the person wrote with a connection request to the owner, shortened.
    note?: string | null
+   // What the company of the current job says, when Get full profile read it: its industry, its size band and its website's domain.
+   companyIndustry?: string | null
+   companySize?: string | null
+   companyDomain?: string | null
 }
 
 export type PostItem = WithResult & {
@@ -165,6 +169,9 @@ export const mergePeople = (a: PersonItem, b: PersonItem): PersonItem => ({
    email: a.email ?? b.email,
    connectedOn: a.connectedOn ?? b.connectedOn,
    note: a.note ?? b.note,
+   companyIndustry: a.companyIndustry ?? b.companyIndustry,
+   companySize: a.companySize ?? b.companySize,
+   companyDomain: a.companyDomain ?? b.companyDomain,
    known: a.known || b.known,
    tags: [...new Set([...a.tags, ...b.tags])],
    signals: [...a.signals, ...b.signals.filter(signal => !a.signals.some(known => sameSignal(known, signal)))],
@@ -227,6 +234,9 @@ const itemSchema = z.discriminatedUnion('kind', [
       email: nullableText.optional(),
       connectedOn: nullableText.optional(),
       note: nullableText.optional(),
+      companyIndustry: nullableText.optional(),
+      companySize: nullableText.optional(),
+      companyDomain: nullableText.optional(),
       result: resultSchema,
       facts: factsSchema,
    }),

@@ -7,6 +7,7 @@ export { CdnFiles, type StoredCdnFile } from './cdnFiles'
 export { parseRemoteUrl, publicUrlOf, urlHash } from './cdnUrl'
 export { CloudRunJob } from './cloudRunJob'
 export { CSV_MAX_ROWS, itemsCsv } from './itemCsv'
+export { type HandoffRow, appLink, daysSince, handoffCsv, handoffInputOf } from './handoff'
 export { HttpServer } from './httpServer'
 export { KeptFiles } from './keptFiles'
 export { extractLiAt } from '@automatedLinkedIn/contracts'
@@ -17,6 +18,7 @@ export {
    type Reason,
    SENIORITIES,
    type Seniority,
+   bandOf,
    explainMatched,
    readSeniorities,
    scoreIcp,
@@ -61,6 +63,7 @@ export {
    companyCardOf,
    companyRowFrom,
    companySnapshotFrom,
+   domainOfWebsite,
    postCardOf,
    postSnapshotFrom,
    readCompanySnapshot,

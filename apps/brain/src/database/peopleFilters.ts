@@ -7,7 +7,7 @@ import { PRIORITY } from './peopleIndex'
 // My network's filters (.plan/network-filters.md) as Prisma conditions on `Person`, one per filter that is on; the caller ANDs
 // them with the owner, the tab and the search.
 
-export const PEOPLE_TABS = ['NEEDS_ME', 'WAITING', 'EVERYONE', 'DO_NOT_CONTACT'] as const
+export const PEOPLE_TABS = ['NEEDS_ME', 'WAITING', 'NO_ANSWER', 'EVERYONE', 'DO_NOT_CONTACT'] as const
 export const PEOPLE_SORTS = [
    'name',
    'connectedAt',
@@ -38,7 +38,7 @@ const anyOf = (field: 'company' | 'country', values: string[]): Where => ({
 })
 
 const between = (
-   field: 'connectedAt' | 'lastSentAt' | 'lastReceivedAt' | 'lastTouchAt' | 'firstSeenAt',
+   field: 'connectedAt' | 'lastSentAt' | 'lastReceivedAt' | 'lastTouchAt' | 'firstSeenAt' | 'invitedAt',
    range: Range
 ): Where[] =>
    range && (range.from || range.to)
@@ -84,21 +84,29 @@ export const peopleWhere = (filters: PeopleFilters): Where[] => [
    }),
    ...between('connectedAt', filters.connectedAt),
    ...when(filters.invites.length > 0, { inviteState: { in: filters.invites } }),
+   ...between('invitedAt', filters.invitedAt),
    ...between('lastSentAt', filters.lastSent),
    ...between('lastReceivedAt', filters.lastReceived),
    ...when(filters.neverMessaged, { links: { none: { kind: 'CONVERSATION' } } }),
    ...when(filters.replyWaiting, { priority: PRIORITY.REPLY }),
+   ...when(filters.waiting, { waiting: true }),
    ...between('lastTouchAt', filters.lastTouch),
    ...between('firstSeenAt', filters.firstSeen),
    ...when(filters.labels.length > 0, { labels: labelsWhere(filters) }),
    ...when(filters.noLabels, { labels: { isEmpty: true } }),
    ...when(filters.statuses.length > 0, { status: { in: filters.statuses } }),
+   ...when(filters.fit.length > 0, { fit: { in: filters.fit } }),
    ...when(filters.profileRead !== undefined, { profileRead: filters.profileRead }),
 ]
 
 // The tab's own order (Needs me: replies, then requests), or the column asked for (empty values last); the id breaks ties.
 export const orderOf = (tab: PeopleTab, sort?: PeopleSort): Prisma.PersonOrderByWithRelationInput[] => {
    if (!sort) {
+      // No answer to an invite: the one waiting the longest first.
+      if (tab === 'NO_ANSWER') {
+         return [{ invitedAt: 'asc' }, { id: 'desc' }]
+      }
+
       return [...(tab === 'NEEDS_ME' ? [{ priority: 'desc' as const }] : []), { lastTouchAt: 'desc' }, { id: 'desc' }]
    }
 

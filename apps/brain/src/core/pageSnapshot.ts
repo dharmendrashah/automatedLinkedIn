@@ -147,6 +147,21 @@ export const companySnapshotFrom = (row: Row): CompanySnapshotData => {
 const countryOf = ({ address, headquarters }: CompanySnapshotData) =>
    address?.country ?? headquarters?.split(',').at(-1)?.trim() ?? null
 
+// The site's domain without "www.", for a hand-off file: "https://www.kite.io/about" is "kite.io"; null when there is no site.
+export const domainOfWebsite = (website: string | null | undefined) => {
+   if (!website) {
+      return null
+   }
+
+   try {
+      const host = new URL(/^https?:\/\//i.test(website) ? website : `https://${website}`).hostname.toLowerCase()
+
+      return host.replace(/^www\./, '') || null
+   } catch {
+      return null
+   }
+}
+
 // What a company read writes onto the company row; undefined leaves the row's value, so a missing one keeps it.
 export const companyRowFrom = (snapshot: CompanySnapshotData) => {
    const keep = (value: string | null) => value || undefined

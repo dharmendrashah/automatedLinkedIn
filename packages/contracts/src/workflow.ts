@@ -6,7 +6,7 @@ import { FILTERS_TEXT_MAX } from './filtersText'
 import { HOOK_START_ID, hooksSchema, splitHooks } from './hooks'
 import { INDUSTRY_PAIRS } from './industries'
 import { INVITE_LIMITS } from './invites'
-import { readPeopleFilters } from './peopleFilters'
+import { type PeopleFiltersInput, readPeopleFilters } from './peopleFilters'
 import { joinedText, mediaBlock, postBlocksOfText, postFilesOf } from './posting'
 import { type MessageUse, TEMPLATE_RAW_MAX, templateProblems } from './template'
 
@@ -103,8 +103,8 @@ export type Field = (
    advanced?: boolean
    // Changing it switches "Act for real" off again, so what the owner saw in a preview is what goes out.
    disarms?: boolean
-   // Shown once a list setting has at least that many values, or once a choice setting is on a value.
-   showWhen?: { key: string; atLeast: number } | { key: string; is: string }
+   // Shown once a list setting has at least that many values, or once a choice setting is on a value (or one of several).
+   showWhen?: { key: string; atLeast: number } | { key: string; is: string } | { key: string; isOneOf: string[] }
 }
 
 const optionsOf = (pairs: [string, string][]): Option[] =>
@@ -432,6 +432,56 @@ const UNIT_SECONDS: Record<string, number> = {
 
 export const toSeconds = (amount: number, unit: string) => amount * (UNIT_SECONDS[unit] ?? 1)
 
+// What "Fit to today's limit" counts the room for, and the kind of item each takes (.plan/lead-pipeline-p1-foundations.md).
+const ROOM_ACTIONS = optionsOf([
+   ['invite', 'Connection requests'],
+   ['message', 'First messages'],
+   ['reply', 'Replies'],
+   ['reaction', 'Reactions'],
+   ['comment', 'Comments'],
+])
+
+export const ROOM_KIND: Record<string, 'profile' | 'conversation' | 'post'> = {
+   invite: 'profile',
+   message: 'profile',
+   reply: 'conversation',
+   reaction: 'post',
+   comment: 'post',
+}
+
+const ROOM_ORDERS = optionsOf([
+   ['score', 'Best score'],
+   ['leastEngaged', 'Least recently engaged'],
+   ['newest', 'Newest'],
+])
+
+// The moment of a person's story "Wait per person" counts from.
+const PERSON_EVENTS = optionsOf([
+   ['accepted', 'They accepted'],
+   ['connected', 'They connected'],
+   ['invited', 'I invited them'],
+   ['wrote', 'I last wrote'],
+   ['wroteBack', 'They last wrote'],
+   ['added', 'I added them'],
+])
+
+const PERSON_WAIT_UNITS = optionsOf([
+   ['minutes', 'Minutes'],
+   ['hours', 'Hours'],
+   ['days', 'Days'],
+])
+
+// The columns of an Export to CSV file: what each block gives, or the short file for whoever takes a lead over.
+export const CSV_COLUMNS = optionsOf([
+   ['standard', 'Standard'],
+   ['handoff', 'Hand-off'],
+])
+
+const NO_DATE = optionsOf([
+   ['through', 'Let through'],
+   ['hold', 'Hold'],
+])
+
 // The longest wait of one Wait block; two Waits in a row wait longer.
 export const MAX_WAIT_BLOCK_SECONDS = 365 * 86_400
 // The biggest number a Wait block takes, whatever the unit (the year above is checked on top of it).
@@ -565,6 +615,8 @@ export const ADDED_WINDOWS = [
    '30d',
    'lastMonth',
    '3months',
+   'olderThan',
+   'between',
    'lastRun',
    'custom',
 ] as const
@@ -578,6 +630,7 @@ export const INPUT_DATE_FIELDS = [
    'connected',
    'lastSent',
    'lastReply',
+   'invitedOn',
 ] as const
 
 export const LABEL_MAX = 20
@@ -593,6 +646,9 @@ export const inputPickSchema = z.object({
    // The days of "Custom dates"; the whole of the last day counts.
    from: isoDay,
    to: isoDay,
+   // The days of "Older than N days" (N) and of "Between N and M days ago" (N to M), counted back from today in the block's zone.
+   days: z.number().int().min(1).max(3650).default(30),
+   daysTo: z.number().int().min(0).max(3649).default(0),
    // Words the item holds, and the page's own filters for it, as the page keeps them (see `inputErrors`).
    search: z.string().trim().max(100).default(''),
    filters: z.string().max(FILTERS_TEXT_MAX).default(''),
@@ -614,7 +670,7 @@ export const inputPickSchema = z.object({
       .array(z.enum(['NEW', 'CONTACTED', 'REPLIED']))
       .max(3)
       .default([]),
-   order: z.enum(['newest', 'oldest']).default('newest'),
+   order: z.enum(['newest', 'oldest', 'score']).default('newest'),
    timeZone: z.string().trim().min(1).max(64).refine(isTimeZone, 'is not a known time zone').default('UTC'),
 })
 
@@ -630,6 +686,8 @@ const ADDED = optionsOf([
    ['30d', 'Last 30 days'],
    ['lastMonth', 'Last month'],
    ['3months', 'Last 3 months'],
+   ['olderThan', 'Older than N days'],
+   ['between', 'Between N and M days ago'],
    ['lastRun', "Since this workflow's last run"],
    ['custom', 'Custom dates'],
 ])
@@ -648,6 +706,7 @@ export const INPUT_DATE_OPTIONS: Record<InputType, Option[]> = {
       ['lastContact', 'Last in touch'],
       ['lastSent', 'Last message from you'],
       ['lastReply', 'Last reply from them'],
+      ['invitedOn', 'Invited on'],
    ]),
    'input.companies': optionsOf([
       ['added', 'Added to my companies'],
@@ -672,7 +731,7 @@ const inputErrors =
          return []
       }
 
-      const { dateField, added, from, to, filters, source } = pick.data
+      const { dateField, added, from, to, days, daysTo, filters, source } = pick.data
 
       if (!INPUT_DATE_OPTIONS[type].some(({ value }) => value === dateField)) {
          return problem('this block cannot look at that date.')
@@ -680,6 +739,10 @@ const inputErrors =
 
       if (type === 'input.profiles' && source === 'profiles' && dateField !== 'added') {
          return problem('your profiles list only has the day people were added; use My network for other dates.')
+      }
+
+      if (added === 'between' && days <= daysTo) {
+         return problem('"Between N and M days ago" goes from the further day to the nearer one.')
       }
 
       if (added === 'custom' && from === '' && to === '') {
@@ -742,6 +805,29 @@ const pickFields = (type: InputType, order: Option[]): Field[] => [
       showWhen: {
          key: 'added',
          is: 'custom',
+      },
+   },
+   {
+      key: 'days',
+      label: 'Days',
+      kind: 'int',
+      min: 1,
+      max: 3650,
+      hint: 'Older than: this many days or more. Between: the further day; the nearer one is below.',
+      showWhen: {
+         key: 'added',
+         isOneOf: ['olderThan', 'between'],
+      },
+   },
+   {
+      key: 'daysTo',
+      label: 'To days ago',
+      kind: 'int',
+      min: 0,
+      max: 3649,
+      showWhen: {
+         key: 'added',
+         is: 'between',
       },
    },
    {
@@ -817,6 +903,13 @@ const NEWEST_FIRST = optionsOf([
    ['oldest', 'Oldest first'],
 ])
 
+// People from My network can also come best score first (people with no score last).
+const PEOPLE_ORDER = optionsOf([
+   ['newest', 'Newest first'],
+   ['oldest', 'Oldest first'],
+   ['score', 'Best score first'],
+])
+
 const OLDEST_FIRST = optionsOf([
    ['oldest', 'Oldest first'],
    ['newest', 'Newest first'],
@@ -843,7 +936,7 @@ export const inputPickOf = (type: InputType, config: unknown): InputPick =>
 
 const DAY_MS = 86_400_000
 
-type TimeFramePick = Pick<InputPick, 'added' | 'timeZone'> & Partial<Pick<InputPick, 'from' | 'to'>>
+type TimeFramePick = Pick<InputPick, 'added' | 'timeZone'> & Partial<Pick<InputPick, 'from' | 'to' | 'days' | 'daysTo'>>
 
 // The days of a month, for a month counted back.
 const daysIn = (year: number, month: number) => new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
@@ -881,6 +974,17 @@ export const timeFrameOf = (
          return {
             from: new Date(now.getTime() - (pick.added === '7d' ? 7 : 30) * DAY_MS),
             until: null,
+         }
+      case 'olderThan':
+         // The whole day N days ago counts as N days: "21 days or more" includes it.
+         return {
+            from: null,
+            until: dayStart(1 - (pick.days ?? 30)),
+         }
+      case 'between':
+         return {
+            from: dayStart(-(pick.days ?? 30)),
+            until: dayStart(1 - (pick.daysTo ?? 0)),
          }
       case 'yesterday':
          return {
@@ -928,6 +1032,75 @@ export const timeFrameOf = (
 export const addedSince = (pick: TimeFramePick, now: Date, lastRunAt: Date | null) =>
    timeFrameOf(pick, now, lastRunAt).from
 
+// People from My network by what we already know about them (.plan/lead-pipeline-p1-foundations.md). Each preset only fills the
+// settings the block already has; choosing one resets the time frame, so the result is always the one named.
+const networkPreset = (
+   label: string,
+   hint: string,
+   filters: PeopleFiltersInput,
+   rest: Record<string, string | number> = {}
+) => ({
+   label,
+   hint,
+   config: {
+      source: 'network',
+      links: [],
+      added: 'any',
+      dateField: 'added',
+      order: 'newest',
+      ...rest,
+      filters: JSON.stringify(filters),
+   },
+})
+
+const NETWORK_PRESETS = [
+   networkPreset(
+      'Untouched',
+      'Not connected, never invited, never messaged, oldest first',
+      {
+         connection: 'NOT_CONNECTED',
+         invites: ['NONE'],
+         neverMessaged: true,
+         statuses: ['NEW'],
+      },
+      { order: 'oldest' }
+   ),
+   networkPreset('Connected, never messaged', 'Connected to one of your accounts and never written to', {
+      connection: 'CONNECTED',
+      neverMessaged: true,
+   }),
+   networkPreset('Invite pending', 'You invited them and they have not answered', { invites: ['PENDING'] }),
+   networkPreset(
+      'No answer to invite',
+      'Invited 21 days ago or more and still pending',
+      { invites: ['PENDING'] },
+      {
+         dateField: 'invitedOn',
+         added: 'olderThan',
+         days: 21,
+      }
+   ),
+   networkPreset(
+      'Waiting for a reply',
+      'You wrote last, more than 4 days ago',
+      { waiting: true },
+      {
+         dateField: 'lastSent',
+         added: 'olderThan',
+         days: 4,
+      }
+   ),
+   networkPreset(
+      'Qualified, not invited',
+      'Qualified by a list, never invited, best score first',
+      {
+         invites: ['NONE'],
+         fit: ['STRONG'],
+      },
+      { order: 'score' }
+   ),
+]
+
 export const BLOCK_TYPES = [
    'trigger.manual',
    'trigger.schedule',
@@ -964,6 +1137,7 @@ export const BLOCK_TYPES = [
    'process.dedupe',
    'process.filter',
    'process.topN',
+   'process.room',
    'process.tag',
    'process.messageMood',
    'process.merge',
@@ -974,6 +1148,7 @@ export const BLOCK_TYPES = [
    'logic.else',
    'logic.runWorkflow',
    'logic.wait',
+   'logic.personWait',
    'logic.taskResult',
    'logic.retry',
    'logic.forEach',
@@ -1692,13 +1867,20 @@ const BLOCKS = {
    },
    'process.dedupe': {
       group: 'Process',
+      // Posts pass through it; the ones already processed go to its Else output.
+      flags: {
+         takesAnything: true,
+         keepsAside: true,
+      },
       label: 'Remove duplicates',
-      summary: 'Keeps each person once and leaves out people you already have. Do-not-contact people always go.',
+      summary:
+         'Keeps each person once and leaves out people you already have. Posts you already processed go to Else. Do-not-contact people always go.',
       input: 'profile',
       output: 'profile',
       config: z.object({
          skipListed: toggle(true),
          skipProfiles: toggle(true),
+         skipDone: toggle(true),
       }),
       fields: [
          {
@@ -1710,6 +1892,12 @@ const BLOCKS = {
             key: 'skipProfiles',
             label: 'Leave out people in my LinkedIn profiles',
             kind: 'toggle',
+         },
+         {
+            key: 'skipDone',
+            label: 'Leave out posts I already processed',
+            kind: 'toggle',
+            hint: 'Turn on Keep in Find posts to remember posts; a post that was not kept cannot be recognised.',
          },
       ],
    },
@@ -1760,7 +1948,8 @@ const BLOCKS = {
       group: 'Process',
       flags: { scores: true },
       label: 'Score against an ideal customer',
-      summary: 'Gives each person a score from 0 to 100 and keeps the qualified and maybe ones.',
+      summary:
+         'Gives each person a score from 0 to 100 and keeps the qualified and maybe ones. Uses company size and industry when the profile and the company were read.',
       presets: [
          {
             label: 'Strict',
@@ -1838,10 +2027,16 @@ const BLOCKS = {
          takesAnything: true,
       },
       unit: 'profiles and companies',
-      estimate: (node, incoming) => ({
-         items: incoming + linkCount(node),
-         costMicros: (incoming + linkCount(node)) * PRICE_MICROS.profile,
-      }),
+      estimate: (node, incoming) => {
+         const items = incoming + linkCount(node)
+         // Their company is read once for the people who work there; the estimate counts one for each person, the most it can cost.
+         const company = node.config.readCompany === true ? PRICE_MICROS.company : 0
+
+         return {
+            items,
+            costMicros: items * (PRICE_MICROS.profile + company),
+         }
+      },
       previewCap: 1,
       validate: (node, graph) =>
          linkCount(node) === 0 && parentsOf(graph, node.id).length === 0
@@ -1858,7 +2053,7 @@ const BLOCKS = {
       summary:
          'Reads the full details of every person and company that reaches it or whose link you paste, and scores people again if a Score block came before.',
       flow: 'Takes people, companies or pasted links, gives them with their full details',
-      costHint: 'about $0.004 per person or company',
+      costHint: 'about $0.004 per person or company, and $0.004 more for each company of a person',
       // Blocks saved before companies were read keep passing them through.
       version: 2,
       migrate: {
@@ -1872,6 +2067,8 @@ const BLOCKS = {
       config: z.object({
          links: linkList(LINKS_MAX),
          readCompanies: toggle(true),
+         // A block saved before keeps it off; a new block starts with it on.
+         readCompany: toggle(false),
          keep: toggle(false),
          reread: toggle(false),
       }),
@@ -1885,6 +2082,12 @@ const BLOCKS = {
             label: 'Also read companies that reach it',
             kind: 'toggle',
             hint: 'A company that already has its page, from a search, is not read again.',
+         },
+         {
+            key: 'readCompany',
+            label: 'Also read their company',
+            kind: 'toggle',
+            hint: 'Reads the company page of each person\u2019s current job: its website, industry and size. A page read in the last 30 days is not paid again.',
          },
          {
             key: 'keep',
@@ -2064,6 +2267,7 @@ const BLOCKS = {
       validate: inputErrors('input.profiles', 'Profiles'),
       label: 'Profiles',
       summary: 'People from your profiles list, or the links you give.',
+      presets: NETWORK_PRESETS,
       api: [
          {
             field: 'profiles',
@@ -2117,7 +2321,7 @@ const BLOCKS = {
                is: 'profiles',
             },
          },
-         ...pickFields('input.profiles', NEWEST_FIRST),
+         ...pickFields('input.profiles', PEOPLE_ORDER),
       ],
    },
    'input.companies': {
@@ -2174,7 +2378,7 @@ const BLOCKS = {
       previewCap: PREVIEW_LIMITS.posts,
       label: 'Find posts',
       summary: 'Finds posts on LinkedIn that mention your keywords.',
-      costHint: 'about $0.002 per post',
+      costHint: 'about $0.002 per post, each time it runs',
       presets: [
          {
             label: 'Fresh conversations',
@@ -3219,15 +3423,32 @@ const BLOCKS = {
    },
    'collect.emailsFromLinks': {
       group: 'Collect',
+      // Takes the people that reach it as well as pasted links, and starts on its own from the links.
+      flags: { takesAnything: true },
       unit: 'emails',
-      estimate: node => ({
-         items: linkCount(node),
-         costMicros: linkCount(node) * PRICE_MICROS.email,
+      estimate: (node, incoming) => ({
+         items: incoming + linkCount(node),
+         costMicros: (incoming + linkCount(node)) * PRICE_MICROS.email,
       }),
       previewCap: 1,
-      validate: needsLinks('Find work emails'),
+      validate: (node, graph) =>
+         linkCount(node) === 0 &&
+         !parentsOf(graph, node.id).some(id => {
+            const parent = graph.nodes.find(other => other.id === id)
+
+            return parent !== undefined && !parent.type.startsWith('trigger.')
+         })
+            ? [
+                 {
+                    nodeId: node.id,
+                    level: 'error',
+                    message: 'Find work emails: paste at least one link, or connect a block that gives people.',
+                 },
+              ]
+            : [],
       label: 'Find work emails',
-      summary: 'Finds the verified work email of each LinkedIn profile link you paste.',
+      summary:
+         'Finds the verified work email of each person that reaches it and of each LinkedIn profile link you paste. A person with a stored email costs nothing.',
       costHint: 'about $0.02 per email found',
       input: 'start',
       output: 'profile',
@@ -3235,7 +3456,7 @@ const BLOCKS = {
          links: linkList(LINKS_MAX),
          keep: toggle(true),
       }),
-      fields: [linksField('Profile links'), KEEP_FIELD],
+      fields: [linksField('Profile links (optional)'), KEEP_FIELD],
    },
    'collect.commentersFromLinks': {
       group: 'Collect',
@@ -3487,6 +3708,86 @@ const BLOCKS = {
             key: 'main',
             label: 'Main line (for the last choice)',
             kind: 'parent',
+         },
+      ],
+   },
+   'process.room': {
+      group: 'Process',
+      flow: 'Takes anything, passes on as many as the accounts can handle today; an Else after it gets the rest',
+      flags: {
+         takesAnything: true,
+         keepsAside: true,
+         passesOn: true,
+      },
+      validate: (node, graph) => {
+         const { accountMode, account } = node.config
+
+         if (accountMode === 'one') {
+            return typeof account === 'string' && account !== ''
+               ? []
+               : [
+                    {
+                       nodeId: node.id,
+                       level: 'error',
+                       message: "Fit to today's limit: pick the account it counts.",
+                    },
+                 ]
+         }
+
+         return nodeBefore(graph, node.id, 'account.select')
+            ? []
+            : [
+                 {
+                    nodeId: node.id,
+                    level: 'error',
+                    message:
+                       'Fit to today\u2019s limit needs "Select accounts" before it, or one account picked on the block.',
+                 },
+              ]
+      },
+      label: 'Fit to today\u2019s limit',
+      summary:
+         'Lets through only as many as your accounts can handle today, best first. The rest go to Else and are not lost.',
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         action: oneOf(ROOM_ACTIONS, 'invite'),
+         orderBy: oneOf(ROOM_ORDERS, 'score'),
+         accountMode: z.enum(['pool', 'one']).default('pool'),
+         account: z.string().max(100).default(''),
+      }),
+      fields: [
+         {
+            key: 'action',
+            label: 'For',
+            kind: 'select',
+            options: ROOM_ACTIONS,
+            hint: 'What the accounts do today.',
+         },
+         {
+            key: 'orderBy',
+            label: 'Best first',
+            kind: 'select',
+            options: ROOM_ORDERS,
+            hint: 'Who goes first when room is short.',
+         },
+         {
+            key: 'accountMode',
+            label: 'Accounts',
+            kind: 'select',
+            options: optionsOf([
+               ['pool', 'From "Select accounts" before it'],
+               ['one', 'One account'],
+            ]),
+         },
+         {
+            key: 'account',
+            label: 'Account',
+            kind: 'account',
+            showWhen: {
+               key: 'accountMode',
+               is: 'one',
+            },
          },
       ],
    },
@@ -3808,6 +4109,70 @@ const BLOCKS = {
          },
       ],
    },
+   'logic.personWait': {
+      group: 'Logic',
+      flow: 'Takes people, passes on the ones whose time has come; an Else after it gets the rest',
+      flags: {
+         keepsAside: true,
+         passesOn: true,
+      },
+      label: 'Wait per person',
+      summary:
+         'Lets each person through once enough time has passed since an event, such as their accepting. People who are not due go to Else and come back on a later run.',
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         after: oneOf(PERSON_EVENTS, 'accepted'),
+         atLeast: z.number().int().min(0).max(365).default(1),
+         atLeastUnit: oneOf(PERSON_WAIT_UNITS, 'hours'),
+         plusUpTo: z.number().int().min(0).max(365).default(0),
+         plusUpToUnit: oneOf(PERSON_WAIT_UNITS, 'hours'),
+         ifNoDate: oneOf(NO_DATE, 'through'),
+      }),
+      fields: [
+         {
+            key: 'after',
+            label: 'After',
+            kind: 'select',
+            options: PERSON_EVENTS,
+         },
+         {
+            key: 'atLeast',
+            label: 'Wait at least',
+            kind: 'int',
+            min: 0,
+            max: 365,
+         },
+         {
+            key: 'atLeastUnit',
+            label: 'In',
+            kind: 'select',
+            options: PERSON_WAIT_UNITS,
+         },
+         {
+            key: 'plusUpTo',
+            label: 'Plus up to',
+            kind: 'int',
+            min: 0,
+            max: 365,
+            hint: 'A random extra, the same for each person.',
+         },
+         {
+            key: 'plusUpToUnit',
+            label: 'In',
+            kind: 'select',
+            options: PERSON_WAIT_UNITS,
+         },
+         {
+            key: 'ifNoDate',
+            label: 'If there is no date',
+            kind: 'select',
+            options: NO_DATE,
+            advanced: true,
+            hint: 'People who connected another way have no accept date.',
+         },
+      ],
+   },
    'logic.taskResult': {
       group: 'Logic',
       flow: 'Takes anything, gives what worked; an Else after it gets the rest',
@@ -3943,10 +4308,27 @@ const BLOCKS = {
       flags: { takesAnything: true },
       validate: (node, graph) => {
          const after = downstreamOf(graph.edges, node.id)
+         const picked = Array.isArray(node.config.accounts) ? node.config.accounts.length : 0
+         const problems: GraphError[] =
+            node.config.scope === 'all' || picked > 0
+               ? []
+               : [
+                    {
+                       nodeId: node.id,
+                       level: 'error',
+                       message: 'Pick at least one account, or choose every signed-in account.',
+                    },
+                 ]
 
-         return graph.nodes.some(other => POOL_BLOCKS.has(other.type) && other.id !== node.id && after.has(other.id))
-            ? []
+         return graph.nodes.some(
+            other =>
+               (POOL_BLOCKS.has(other.type) || other.type === 'process.room') &&
+               other.id !== node.id &&
+               after.has(other.id)
+         )
+            ? problems
             : [
+                 ...problems,
                  {
                     nodeId: node.id,
                     level: 'note',
@@ -3956,21 +4338,37 @@ const BLOCKS = {
       },
       label: 'Select accounts',
       summary:
-         'Picks the accounts that take turns doing the LinkedIn actions after it. Passes everything on unchanged.',
+         'Picks the accounts that take turns doing the LinkedIn actions after it: every signed-in account, or the ones you pick. Passes everything on unchanged.',
       input: 'profile',
       output: 'profile',
       config: z.object({
+         // `pick` is what blocks saved before read as; a new block starts on `all`.
+         scope: z.enum(['pick', 'all']).default('pick'),
          accounts: z
             .array(z.string().min(1).max(100))
-            .min(1)
             .max(MAX_POOL)
+            .default([])
             .refine(ids => new Set(ids).size === ids.length, 'must not repeat an account'),
       }),
       fields: [
          {
+            key: 'scope',
+            label: 'Use',
+            kind: 'select',
+            options: optionsOf([
+               ['all', 'Every signed-in account'],
+               ['pick', 'Pick accounts'],
+            ]),
+            hint: `Up to ${MAX_POOL} accounts. Accounts that are not signed in are skipped. Each keeps its own limits.`,
+         },
+         {
             key: 'accounts',
             label: 'Accounts',
             kind: 'accounts',
+            showWhen: {
+               key: 'scope',
+               is: 'pick',
+            },
             hint: `Up to ${MAX_POOL}. Each visit goes to the account that went longest without one; each keeps its own limits.`,
          },
       ],
@@ -4362,7 +4760,7 @@ const BLOCKS = {
          accountApi('the id of one of your accounts to send from'),
       ],
       summary:
-         'Invites the people that reach it to connect, through your invite plan: spread over the days, at most 20 a day and 100 a week for each account. Passes the people on with when each goes. They join My network.',
+         'Invites the people that reach it to connect, through your invite plan: each person goes to the account with the most room today, inside each account\u2019s limits. Passes the people on with when each goes. They join My network.',
       sample: {
          in: {
             name: 'Ada Lovelace',
@@ -4383,6 +4781,7 @@ const BLOCKS = {
       config: z.object({
          note: z.string().trim().max(TEMPLATE_RAW_MAX.note).default(''),
          skipMissing: z.boolean().default(false),
+         planDays: z.number().int().min(1).max(INVITE_LIMITS.planDays).default(1),
          ...actSettings,
          ...accountSettings(ACCOUNT_BLOCK_HOURS['account.sendInvite']),
       }),
@@ -4397,6 +4796,15 @@ const BLOCKS = {
             hint: `Up to ${INVITE_LIMITS.noteChars} characters. A free account has only a few notes a month; later invites then go without one.`,
          },
          skipMissingField,
+         {
+            key: 'planDays',
+            label: 'Plan at most (days ahead)',
+            kind: 'int',
+            min: 1,
+            max: INVITE_LIMITS.planDays,
+            advanced: true,
+            hint: 'People that do not fit today wait for the next days, up to this many. 1 plans only what fits today, so a better person arriving tomorrow is not behind worse ones.',
+         },
          actField,
          ...accountFields(ACCOUNT_BLOCK_HOURS['account.sendInvite']),
       ],
@@ -4490,7 +4898,7 @@ const BLOCKS = {
             use: 'message',
             max: MESSAGE_MAX_CHARS,
             disarms: true,
-            hint: 'Only people connected to the chosen accounts get it; at most 15 first messages a day for each account.',
+            hint: 'Only people connected to the chosen accounts get it, inside each account\u2019s daily limit of first messages.',
          },
          skipMissingField,
          {
@@ -4636,12 +5044,22 @@ const BLOCKS = {
       summary: 'Keeps what reaches it for 90 days to see and download from the run.',
       input: 'profile',
       output: 'profile',
-      config: z.object({ fileName: z.string().trim().max(80).default('') }),
+      config: z.object({
+         fileName: z.string().trim().max(80).default(''),
+         columns: oneOf(CSV_COLUMNS, 'standard'),
+      }),
       fields: [
          {
             key: 'fileName',
             label: 'File name (optional)',
             kind: 'text',
+         },
+         {
+            key: 'columns',
+            label: 'Columns',
+            kind: 'select',
+            options: CSV_COLUMNS,
+            hint: 'Hand-off: link, name, title, company, domain, work email, when invited, accepted and first written to, days waiting, what they engaged with, score. No chat text, no phone, no LinkedIn link: the link opens the person here, for you, signed in.',
          },
       ],
    },

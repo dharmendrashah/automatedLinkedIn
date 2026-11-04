@@ -138,6 +138,7 @@ export type DraftPerson = {
    connectedAt: Date | null
    lastSentAt: Date | null
    lastReceivedAt: Date | null
+   invitedAt: Date | null
    inviteState: PersonInviteState
    links: DraftLink[]
 }
@@ -454,6 +455,7 @@ const draftOf = (rows: Rows, profileUrl: string, facts: ProfileFacts | null): Dr
          .reduce<Date | null>((best, date) => (!best || date < best ? date : best), null),
       lastSentAt: latest(rows.conversations.map(row => row.lastReplyAt)),
       lastReceivedAt: latest(rows.conversations.map(row => row.theirLastAt)),
+      invitedAt: latest(rows.invites.filter(inviteWent).map(row => row.invitedAt)),
       inviteState: inviteStateOf(rows.invites),
       links,
    }

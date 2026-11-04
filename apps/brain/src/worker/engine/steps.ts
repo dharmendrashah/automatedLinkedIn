@@ -99,6 +99,9 @@ const rescore = (item: PersonItem, rules: ScoringRules, thresholds: Thresholds):
    const { score, disqualified, matched } = scorePerson(rules, {
       headline,
       location: item.location,
+      companyIndustry: item.companyIndustry ?? null,
+      companySize: item.companySize ?? null,
+      read: item.enriched,
       signals: item.signals,
    })
 
@@ -109,6 +112,10 @@ const rescore = (item: PersonItem, rules: ScoringRules, thresholds: Thresholds):
       band: disqualified ? null : bandOf(score, thresholds),
    }
 }
+
+// Scores these people again, for when more became known about them (their company, once it was read).
+export const rescorePeople = (people: PersonItem[], rules: ScoringRules, thresholds: Thresholds) =>
+   people.map(item => rescore(item, rules, thresholds))
 
 const split = (people: PersonItem[]) => ({
    kept: people.filter(({ band }) => band !== null),

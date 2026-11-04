@@ -9,9 +9,9 @@ import {
    idleFirst,
 } from 'database'
 
-import { retriesOf } from '@automatedLinkedIn/contracts'
+import { MAX_POOL, retriesOf } from '@automatedLinkedIn/contracts'
 
-import { accountIdsOf, timeLimitMs } from './accountPool'
+import { accountIdsOf, poolOf, timeLimitMs } from './accountPool'
 import {
    type Context,
    StepError,
@@ -21,7 +21,6 @@ import {
    configOf,
    keepItems,
    peopleOf,
-   wordsIn,
 } from './context'
 import { type Refusal, deferralOf, refusalOf } from './visitRefusal'
 
@@ -41,16 +40,30 @@ const NOUNS: Record<Kind, string> = {
 
 const bySlug = <T extends { slug: string }>(items: T[]) => [...new Map(items.map(item => [item.slug, item])).values()]
 
-const accountIdsOfSelect = (node: Context['node']) => wordsIn(configOf(node), 'accounts')
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
 export const selectAccounts = async (ctx: Context): Promise<StepResult> => {
-   const owned = await VisitPoolService.accounts(ctx.run.userId, accountIdsOfSelect(ctx.node))
+   const all = configOf(ctx.node).scope === 'all'
+   const pool = await poolOf(ctx.run.userId, ctx.node)
+   const owned = await VisitPoolService.accounts(ctx.run.userId, pool.ids)
 
-   if (owned.length === 0) {
+   if (!all && owned.length === 0) {
       throw new StepError('None of the chosen accounts was found.', 'ACCOUNTS_MISSING')
    }
 
-   return keepItems(ctx, ctx.inputs, ctx.inputs.length)
+   const notSignedIn = all ? pool.notSignedIn : owned.filter(({ status }) => status !== 'ACTIVE').length
+   const message = [
+      owned.length === 0 ? 'No account is signed in.' : plural(owned.length, 'account'),
+      notSignedIn > 0 ? `${notSignedIn} not signed in` : undefined,
+      pool.leftOut > 0 ? `${pool.leftOut} left out (at most ${MAX_POOL})` : undefined,
+   ]
+      .filter(Boolean)
+      .join(', ')
+
+   return {
+      ...(await keepItems(ctx, ctx.inputs, ctx.inputs.length)),
+      message: `${message}.`,
+   }
 }
 
 type Row = Awaited<ReturnType<typeof VisitPoolService.ofStep>>[number]
@@ -75,7 +88,7 @@ const standing = (rows: Row[]) => {
 const count = (n: number, text: string) => (n > 0 ? [`${n} ${text}`] : [])
 
 const view = async (ctx: Context, kind: Kind): Promise<StepResult> => {
-   const poolIds = accountIdsOf(ctx)
+   const poolIds = await accountIdsOf(ctx)
 
    const { run, node, deps } = ctx
    const retry = retriesOf(ctx.graph, node.id)

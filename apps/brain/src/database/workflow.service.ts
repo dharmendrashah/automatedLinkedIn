@@ -1014,6 +1014,21 @@ export class WorkflowService {
       )
    }
 
+   // The columns an Export to CSV block of the owner's run was set to give; the standard ones for any other block.
+   public static async csvColumns(userId: string, runId: string, nodeId: string) {
+      const run = await PrismaService.client.workflowRun.findFirst({
+         where: {
+            id: runId,
+            userId,
+         },
+         select: { graph: true },
+      })
+      const parsed = graphSchema.safeParse(run?.graph)
+      const node = parsed.success ? parsed.data.nodes.find(({ id }) => id === nodeId) : undefined
+
+      return node?.type === 'output.csv' && node.config.columns === 'handoff' ? 'handoff' : 'standard'
+   }
+
    // One page of what a block of the owner's run passed on. null when the run is not the owner's.
    public static async output(
       userId: string,

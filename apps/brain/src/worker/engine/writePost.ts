@@ -145,7 +145,7 @@ const makePost = async (ctx: Context, accountIds: string[], post: Post, plannedA
 
 export const writePost = async (ctx: Context): Promise<StepResult> => {
    const { run, node, step } = ctx
-   const accountIds = accountIdsOf(ctx)
+   const accountIds = await accountIdsOf(ctx)
    const plannedAt = plannedFor(ctx)
 
    if (ctx.preview) {

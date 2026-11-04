@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { readPeopleFilters } from './peopleFilters'
 import {
    type Graph,
    type NodeConfig,
@@ -14,7 +15,12 @@ import {
 const WEDNESDAY = new Date('2026-11-04T10:00:00Z')
 const KOLKATA = 'Asia/Kolkata'
 
-const frame = (added: string, extra: Record<string, string> = {}, now = WEDNESDAY, lastRunAt: Date | null = null) => {
+const frame = (
+   added: string,
+   extra: Record<string, string | number> = {},
+   now = WEDNESDAY,
+   lastRunAt: Date | null = null
+) => {
    const { from, until } = timeFrameOf(
       inputPickOf('input.profiles', {
          added,
@@ -62,6 +68,48 @@ describe('the time frame of an input block', () => {
       ).toEqual(['2026-09-30T18:30:00.000Z', '2026-10-31T18:30:00.000Z'])
       expect(frame('custom', { from: '2026-10-01' })).toEqual(['2026-09-30T18:30:00.000Z', null])
       expect(frame('custom', { to: '2026-10-31' })).toEqual([null, '2026-10-31T18:30:00.000Z'])
+   })
+
+   it('should take "older than N days" up to the end of the day N days ago, and "between N and M days ago" with both days in', () => {
+      // 21 days or more: the whole day of 14 October counts, 15 October does not.
+      expect(frame('olderThan', { days: 21 })).toEqual([null, '2026-10-14T18:30:00.000Z'])
+      expect(
+         frame('between', {
+            days: 21,
+            daysTo: 20,
+         })
+      ).toEqual(['2026-10-13T18:30:00.000Z', '2026-10-15T18:30:00.000Z'])
+      expect(
+         frame('between', {
+            days: 7,
+            daysTo: 0,
+         })
+      ).toEqual(['2026-10-27T18:30:00.000Z', '2026-11-04T18:30:00.000Z'])
+   })
+
+   it('should count those days on the clock of the saved zone across a clock change', () => {
+      const york = (added: string, extra: Record<string, number>) => {
+         const { from, until } = timeFrameOf(
+            inputPickOf('input.profiles', {
+               added,
+               timeZone: 'America/New_York',
+               ...extra,
+            }),
+            new Date('2026-11-01T12:00:00Z'),
+            null
+         )
+
+         return [from?.toISOString() ?? null, until?.toISOString() ?? null]
+      }
+
+      // Midnight of 1 November was on summer time (04:00 UTC); midnight of 2 November is on winter time (05:00 UTC).
+      expect(york('olderThan', { days: 1 })).toEqual([null, '2026-11-01T04:00:00.000Z'])
+      expect(
+         york('between', {
+            days: 1,
+            daysTo: 0,
+         })
+      ).toEqual(['2026-10-31T04:00:00.000Z', '2026-11-02T05:00:00.000Z'])
    })
 
    it('should start after the last run, and keep addedSince giving the start', () => {
@@ -113,6 +161,46 @@ const alone = (type: 'input.posts' | 'input.profiles' | 'input.companies', confi
 const problems = (type: 'input.posts' | 'input.profiles' | 'input.companies', config: NodeConfig) =>
    errorsOf(validateGraph(alone(type, config))).map(({ message }) => message)
 
+describe('the Profiles presets', () => {
+   const presets = blockOf('input.profiles').presets ?? []
+
+   it('should offer the six shortcuts for finding people in My network', () => {
+      expect(presets.map(({ label }) => label)).toEqual([
+         'Untouched',
+         'Connected, never messaged',
+         'Invite pending',
+         'No answer to invite',
+         'Waiting for a reply',
+         'Qualified, not invited',
+      ])
+   })
+
+   it('should fill settings the block already has, with valid filters and no error on the graph', () => {
+      for (const { config } of presets) {
+         expect(blockOf('input.profiles').config.safeParse(config).success).toBe(true)
+         expect(typeof config.filters === 'string' && readPeopleFilters(config.filters).error).toBeNull()
+         expect(problems('input.profiles', config)).toEqual([])
+      }
+   })
+
+   it('should say Untouched, and No answer to invite in days', () => {
+      const [untouched, , , noAnswer] = presets
+
+      expect(JSON.parse(String(untouched?.config.filters))).toEqual({
+         connection: 'NOT_CONNECTED',
+         invites: ['NONE'],
+         neverMessaged: true,
+         statuses: ['NEW'],
+      })
+      expect(noAnswer?.config).toMatchObject({
+         dateField: 'invitedOn',
+         added: 'olderThan',
+         days: 21,
+         source: 'network',
+      })
+   })
+})
+
 describe('the settings of the time frame', () => {
    it('should keep a block saved before as it was: added, no custom dates', () => {
       expect(blockOf('input.posts').config.parse({ added: 'week' })).toMatchObject({
@@ -143,6 +231,35 @@ describe('the settings of the time frame', () => {
    })
 
    it('should refuse a date a block cannot look at and a day that is not a day', () => {
+      expect(
+         problems('input.profiles', {
+            added: 'between',
+            days: 5,
+            daysTo: 5,
+         })
+      ).toEqual(['Profiles: "Between N and M days ago" goes from the further day to the nearer one.'])
+      expect(
+         problems('input.profiles', {
+            added: 'between',
+            days: 21,
+            daysTo: 4,
+         })
+      ).toEqual([])
+      expect(
+         problems('input.profiles', {
+            added: 'olderThan',
+            days: 21,
+         })
+      ).toEqual([])
+      expect(
+         problems('input.profiles', {
+            dateField: 'invitedOn',
+            source: 'network',
+         })
+      ).toEqual([])
+      expect(problems('input.posts', { dateField: 'invitedOn' })).toEqual([
+         'Posts: this block cannot look at that date.',
+      ])
       expect(problems('input.posts', { dateField: 'lastRead' })).toEqual([
          'Posts: this block cannot look at that date.',
       ])

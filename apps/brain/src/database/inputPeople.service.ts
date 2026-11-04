@@ -4,6 +4,7 @@ import { type PeopleFilters, readPeopleFilters } from '@automatedLinkedIn/contra
 
 import { type InputFilter } from './linkedInRecord'
 import { peopleWhere } from './peopleFilters'
+import { worksAtWhere } from './peopleWorksAt'
 import { profileUrlOf } from './personContacts'
 import { PrismaService } from './prisma.service'
 
@@ -22,6 +23,7 @@ const COLUMNS = {
    lastContact: 'lastTouchAt',
    lastSent: 'lastSentAt',
    lastReply: 'lastReceivedAt',
+   invitedOn: 'invitedAt',
 } as const
 
 type Column = (typeof COLUMNS)[keyof typeof COLUMNS]
@@ -45,6 +47,7 @@ const whereOf = async (userId: string, filter: InputFilter, network: NetworkPick
          : {}),
       AND: [
          ...(network.people ? peopleWhere(network.people) : []),
+         ...(network.people ? await worksAtWhere(userId, network.people.worksAt) : []),
          ...(filter.since || filter.until
             ? [
                  {
@@ -63,10 +66,23 @@ const whereOf = async (userId: string, filter: InputFilter, network: NetworkPick
    }
 }
 
-// The newest (or oldest) first by the date asked, empty dates last; the id breaks ties.
+// The newest (or oldest) first by the date asked, empty dates last; the id breaks ties. "Best score" puts the highest score first and
+// people with no score last.
 const orderOf = (filter: InputFilter): Prisma.PersonOrderByWithRelationInput[] => {
    const direction = filter.order === 'oldest' ? ('asc' as const) : ('desc' as const)
    const column = columnOf(filter.field)
+
+   if (filter.order === 'score') {
+      return [
+         {
+            score: {
+               sort: 'desc',
+               nulls: 'last',
+            },
+         },
+         { id: 'desc' },
+      ]
+   }
 
    return [
       column === 'firstSeenAt' || column === 'lastTouchAt'

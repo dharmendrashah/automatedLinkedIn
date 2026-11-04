@@ -5,6 +5,7 @@ import { KeptFiles, UploadFiles, UploadRefused } from 'core'
 
 import { type TaskResult } from '@automatedLinkedIn/contracts'
 
+import { limitOf } from './limits'
 import { LinkedInConversationService } from './linkedInConversation.service'
 import { linkedInReplyHooks } from './linkedInReply.hooks'
 import { LinkedInReplyService, REPLY_LIMITS } from './linkedInReply.service'
@@ -450,7 +451,9 @@ describe('LinkedInReplyService (database)', () => {
 
       await PrismaService.client.linkedInReply.createMany({
          data: [
-            ...Array.from({ length: REPLY_LIMITS.perDay - 1 }, (_, index) => row('SENT', index)),
+            ...Array.from({ length: limitOf('repliesPerDay', accountId, new Date(), 'UTC') - 1 }, (_, index) =>
+               row('SENT', index)
+            ),
             row('FAILED', 99),
          ],
       })
@@ -850,7 +853,7 @@ describe('LinkedInReplyService (database)', () => {
       it('should stop at the first messages of the day', async () => {
          await connect('grace')
          await PrismaService.client.linkedInReply.createMany({
-            data: Array.from({ length: REPLY_LIMITS.firstPerDay }, (_, index) => ({
+            data: Array.from({ length: limitOf('firstMessagesPerDay', accountId, new Date(), 'UTC') }, (_, index) => ({
                userId,
                accountId,
                text: 'Hi',

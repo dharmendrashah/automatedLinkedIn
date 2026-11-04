@@ -18,6 +18,8 @@ import {
    apiFilters,
    chipsOf,
    readFilters,
+   waitingFor,
+   withWaitingFor,
    writeFilters,
 } from '@/components/my-network/filters/model'
 import { InviteDialog } from '@/components/my-network/invite-dialog'
@@ -38,6 +40,7 @@ import {
 import { FirstVisit, ResultsLine, Today } from '@/components/my-network/summary'
 import { useAnswer } from '@/components/my-network/use-answer'
 import { useSeenOnLeave } from '@/components/my-network/use-seen-on-leave'
+import { WaitingDays } from '@/components/my-network/waiting-days'
 import { nameOf } from '@/components/my-network/words'
 import { EmptyState, ToAccounts } from '@/components/network/notices'
 import { PageStatus } from '@/components/page-status'
@@ -59,6 +62,7 @@ const PAGE_SIZE = 50
 const TAB_WORDS: Record<View['tab'], string> = {
    NEEDS_ME: 'Needs me',
    WAITING: 'Waiting',
+   NO_ANSWER: 'No answer to invite',
    EVERYONE: 'Everyone',
    DO_NOT_CONTACT: 'Do not contact',
 }
@@ -66,6 +70,7 @@ const TAB_WORDS: Record<View['tab'], string> = {
 const EMPTY_WORDS: Record<View['tab'], string> = {
    NEEDS_ME: 'Nothing needs you right now.',
    WAITING: 'Nobody is waiting for an answer.',
+   NO_ANSWER: 'No invite has waited 21 days or more.',
    EVERYONE: 'Nobody here yet.',
    DO_NOT_CONTACT: 'Nobody is on Do not contact.',
 }
@@ -126,6 +131,9 @@ const MyPeople = ({ workspace, accountId, view, filters, update, pickers }: Peop
       sort: view.sort,
    }
    const { tab: _tab, sort: _sort, ...counted } = query
+   // The two lists to hand over to someone else, with the hand-off columns in their download.
+   const waitingDays = waitingFor(filters)
+   const handoff = view.tab === 'NO_ANSWER' || (view.tab === 'WAITING' && waitingDays !== undefined)
    const counts = trpc.people.counts.useQuery(counted, { placeholderData: previous => previous })
    const people = trpc.people.list.useInfiniteQuery(
       {
@@ -286,9 +294,24 @@ const MyPeople = ({ workspace, accountId, view, filters, update, pickers }: Peop
             }
             onFilters={() => setFiltering(true)}
             onChange={update}
-            onExport={() => exporting.mutate(query)}
+            onExport={() =>
+               exporting.mutate({
+                  ...query,
+                  ...(handoff && { columns: 'handoff' as const }),
+               })
+            }
             onAdd={() => setAdding(true)}
+            extra={
+               view.tab === 'WAITING' ? (
+                  <WaitingDays value={waitingDays} onChange={days => setFilters(withWaitingFor(filters, days))} />
+               ) : null
+            }
          />
+         {handoff ? (
+            <p className="text-muted-foreground text-xs">
+               The download has the hand-off columns. The link in the file opens for you, signed in.
+            </p>
+         ) : null}
          <FilterChips
             value={filters}
             accountName={accountName}

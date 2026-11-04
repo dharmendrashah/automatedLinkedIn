@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => {
       create: vi.fn(),
       listForUser: vi.fn(),
       today: vi.fn(),
+      room: vi.fn(),
       getForUser: vi.fn(),
       revealForUser: vi.fn(),
       updateForUser: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock('database', () => ({
    LinkedInAccountPausedError: mocks.LinkedInAccountPausedError,
    LinkedInVerifyCooldownError: mocks.LinkedInVerifyCooldownError,
    AccountTodayService: { forUser: mocks.today },
+   AccountRoomService: { forUser: mocks.room },
    LinkedInAccountService: {
       create: mocks.create,
       listForUser: mocks.listForUser,
@@ -274,6 +276,15 @@ describe('linkedInAccount resolvers', () => {
 
          await expect(caller(authed()).today()).resolves.toEqual([])
          expect(mocks.today).toHaveBeenCalledWith('u1')
+      })
+   })
+
+   describe('room', () => {
+      it("should read only the current user's limits", async () => {
+         mocks.room.mockResolvedValueOnce([])
+
+         await expect(caller(authed()).room()).resolves.toEqual([])
+         expect(mocks.room).toHaveBeenCalledWith('u1')
       })
    })
 

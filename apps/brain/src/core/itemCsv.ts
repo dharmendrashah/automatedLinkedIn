@@ -24,7 +24,7 @@ const HEADER = [
    'Result',
 ]
 
-const REASONS: Record<Signal['type'], string> = {
+export const REASONS: Record<Signal['type'], string> = {
    commented: 'Commented',
    reacted: 'Reacted',
    employee: 'Works at the company',

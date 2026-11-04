@@ -66,6 +66,36 @@ describe('LinkedInAccountService (database)', () => {
       )
    })
 
+   it('should keep one LinkedIn login with one user, whatever its case or spaces, and never say who holds it', async () => {
+      const rival = await UserService.create({ email: `${randomUUID()}@elitale.com` })
+
+      try {
+         for (const login of [linkedIn, linkedIn.toUpperCase(), ` ${linkedIn} `]) {
+            await expect(LinkedInAccountService.create(rival.id, login, { password: 'x' })).rejects.toThrow(
+               'This LinkedIn account is already used.'
+            )
+         }
+
+         await expect(LinkedInAccountService.create(rival.id, linkedIn, { password: 'x' })).rejects.toBeInstanceOf(
+            LinkedInAccountConflictError
+         )
+
+         const own = await LinkedInAccountService.create(rival.id, 'grace@work.com', { password: 'x' })
+
+         await expect(
+            LinkedInAccountService.updateForUser(rival.id, own.id, { email: 'Ada@Work.com' })
+         ).rejects.toThrow('This LinkedIn account is already used.')
+         await expect(
+            LinkedInAccountService.updateForUser(rival.id, own.id, {
+               email: 'grace@work.com',
+               secrets: { password: 'y' },
+            })
+         ).resolves.toMatchObject({ email: 'grace@work.com' })
+      } finally {
+         await PrismaService.client.user.delete({ where: { id: rival.id } })
+      }
+   })
+
    it('should never expose an account to another user', async () => {
       const owner = await UserService.findByEmail(email)
       const other = await UserService.create({ email: otherEmail })

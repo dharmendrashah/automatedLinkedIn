@@ -14,6 +14,10 @@ const NOW = new Date('2026-10-30T10:00:00.000Z')
 const HOUR = 60 * 60 * 1000
 const ago = (hours: number) => new Date(NOW.getTime() - hours * HOUR)
 const daysOut = (times: Date[]) => times.map(at => Math.round((at.getTime() - NOW.getTime()) / (24 * HOUR)))
+const PLATFORM = {
+   perDay: 20,
+   perWeek: 100,
+}
 
 describe('planInvites', () => {
    it('should plan 20 a day and stop at 100 a week, then go on when the week rolls', () => {
@@ -22,6 +26,7 @@ describe('planInvites', () => {
          started: [],
          planned: [],
          count: 120,
+         limits: PLATFORM,
       })
       const perDay = daysOut(times).reduce<Record<number, number>>(
          (days, day) => ({
@@ -49,6 +54,7 @@ describe('planInvites', () => {
          started: [...Array(15).fill(ago(2)), ...Array(70).fill(ago(72))],
          planned: Array(5).fill(NOW),
          count: 30,
+         limits: PLATFORM,
       })
 
       // 15 sent today and 5 waiting fill today; 70 + 15 + 5 leave 10 for the rest of the week.
@@ -63,8 +69,26 @@ describe('planInvites', () => {
             started: [],
             planned: [],
             count: 1000,
+            limits: PLATFORM,
          }).times.length
       ).toBeLessThan(1000)
+   })
+
+   it('should use the limits of the account and plan only as many days ahead as asked', () => {
+      const { today, times } = planInvites({
+         now: NOW,
+         started: [],
+         planned: [],
+         count: 100,
+         limits: {
+            perDay: 14,
+            perWeek: 70,
+         },
+         days: 1,
+      })
+
+      expect(today).toBe(14)
+      expect(times).toHaveLength(14)
    })
 })
 

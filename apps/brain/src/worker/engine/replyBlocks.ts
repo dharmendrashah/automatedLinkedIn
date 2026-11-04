@@ -8,7 +8,7 @@ import { type Driver, type Plan, runQueued } from './queuedActs'
 import { wordsWriter } from './words'
 
 // "Send message" and "Reply in a conversation" (.plan/account-action-blocks.md): both write through the owner's reply queue, which keeps
-// the daily limits (40 replies and 15 first messages a day for an account, 5 waiting at a time) and sends one by one with a quiet gap.
+// the daily limits of each account (limits.ts: replies and first messages, 5 waiting at a time) and sends one by one with a quiet gap.
 // So the step asks as many as the queue takes, waits for them to go, and asks the rest on its next tick. A message that may have gone
 // ends as UNKNOWN and is never asked again. Nothing goes in a preview, or until "Act for real" is switched on.
 

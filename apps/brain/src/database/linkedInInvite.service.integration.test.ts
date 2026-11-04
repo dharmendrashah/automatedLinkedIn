@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import { limitOf } from './limits'
 import { LinkedInInviteService } from './linkedInInvite.service'
 import { PeopleService } from './people.service'
 import { PeopleIndexService } from './peopleIndex.service'
@@ -109,16 +110,17 @@ describe('LinkedInInviteService (database)', () => {
    it('should plan without queuing, skip a person with a request, and refuse an owner with no account', async () => {
       const ids = await Promise.all(SLUGS.map(personId))
       const plan = await LinkedInInviteService.plan(userId, { personIds: ids })
+      const limit = limitOf('invitesPerDay', accountId, new Date(), 'UTC')
 
       expect(plan).toMatchObject({
          accountId,
-         today: 20,
+         today: limit,
          toInvite: 3,
          unnamed: 0,
          skipped: { REQUEST: 1 },
       })
       expect(plan.sentence).toBe(
-         'You can safely send 20 today. 4 selected: all today. Skipped: 1 with a request pending.'
+         `You can safely send ${limit} today. 4 selected: all today. Skipped: 1 with a request pending.`
       )
       expect(await db.linkedInInvite.count({ where: { userId } })).toBe(0)
       await expect(LinkedInInviteService.plan(otherUserId, { personIds: ids })).rejects.toThrow(
@@ -260,22 +262,85 @@ describe('LinkedInInviteService (database)', () => {
       })
    })
 
-   it('should move an invite pending 3 weeks to be withdrawn', async () => {
+   it('should never withdraw an invite on its own, however long it is pending, and not plan the person again', async () => {
       const [grace] = await invitesOf('grace-h')
 
       await db.linkedInInvite.update({
          where: { id: grace?.id ?? '' },
          data: {
             state: 'SENT',
-            invitedAt: new Date(Date.now() - 22 * 24 * 60 * 60 * 1000),
+            invitedAt: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000),
          },
       })
       vi.spyOn(TaskService, 'request').mockRejectedValueOnce(new Error('not in this test'))
 
       await LinkedInInviteService.dispatchWaiting().catch(() => undefined)
 
-      expect((await invitesOf('grace-h'))[0]).toMatchObject({ state: 'WITHDRAW_QUEUED' })
+      expect((await invitesOf('grace-h'))[0]).toMatchObject({ state: 'SENT' })
+      expect(
+         await db.linkedInInvite.count({
+            where: {
+               userId,
+               state: { in: ['WITHDRAW_QUEUED', 'WITHDRAWING'] },
+            },
+         })
+      ).toBe(0)
+
+      const again = await LinkedInInviteService.invite(userId, { personIds: [await personId('grace-h')] })
+
+      expect(again.queued).toBe(0)
+      expect((await invitesOf('grace-h')).at(-1)).toMatchObject({
+         state: 'SKIPPED',
+         reason: 'An invite is still pending.',
+      })
       vi.restoreAllMocks()
+   })
+
+   it('should pause new invites of an account with 2,850 pending, and say so', async () => {
+      const crowded = (
+         await db.linkedInAccount.create({
+            data: {
+               userId: otherUserId,
+               email: `${randomUUID()}@example.com`,
+               secret: 'x',
+               secretIv: 'x',
+               secretTag: 'x',
+               status: 'ACTIVE',
+               lastVerifiedAt: new Date(),
+            },
+         })
+      ).id
+
+      await db.linkedInInvite.createMany({
+         data: Array.from({ length: 2850 }, (_, index) => ({
+            userId: otherUserId,
+            accountId: crowded,
+            slug: `crowd-${index}`,
+            name: `Crowd ${index}`,
+            state: 'SENT' as const,
+            plannedAt: new Date(),
+            invitedAt: new Date(),
+            startedAt: new Date(),
+         })),
+      })
+      await db.linkedInInvite.create({
+         data: {
+            userId: otherUserId,
+            accountId: crowded,
+            slug: 'waiting-w',
+            name: 'Waiting W',
+            state: 'QUEUED',
+            plannedAt: new Date(Date.now() - 1000),
+         },
+      })
+
+      await expect(LinkedInInviteService.dispatchNext(crowded)).resolves.toEqual({
+         asked: false,
+         reason: 'Too many pending invites',
+      })
+      await expect(LinkedInInviteService.plan(otherUserId, { personIds: [] })).rejects.toThrow(
+         'too many pending invites'
+      )
    })
 
    it('should take back a queued invite only', async () => {

@@ -30,6 +30,24 @@ export class UserService {
       return PrismaService.client.user.findUnique({ where: { email } })
    }
 
+   // Records the owner's acceptance of the notice before the first "Act for real". Only the first time counts; the date stays.
+   public static async acceptRisk(id: string, now = new Date()) {
+      await PrismaService.client.user.updateMany({
+         where: {
+            id,
+            riskAcceptedAt: null,
+         },
+         data: { riskAcceptedAt: now },
+      })
+
+      return (
+         await PrismaService.client.user.findUnique({
+            where: { id },
+            select: { riskAcceptedAt: true },
+         })
+      )?.riskAcceptedAt
+   }
+
    public static findByAuthentikId(authentikId: string) {
       return PrismaService.client.user.findUnique({ where: { authentikId } })
    }
