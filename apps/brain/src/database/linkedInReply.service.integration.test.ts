@@ -529,6 +529,27 @@ describe('LinkedInReplyService (database)', () => {
       })
    })
 
+   it('should count the wait from when a queued reply started sending, not from when it was queued', async () => {
+      const queuedAt = new Date(Date.now() - 2 * REPLY_LIMITS.staleMs)
+      const running = await PrismaService.client.linkedInReply.create({
+         data: {
+            userId,
+            accountId,
+            conversationId,
+            text: 'x',
+            state: 'SENDING',
+            createdAt: queuedAt,
+            startedAt: new Date(),
+         },
+      })
+
+      await expect(LinkedInReplyService.endStale()).resolves.toBe(0)
+      await expect(
+         PrismaService.client.linkedInReply.findUniqueOrThrow({ where: { id: running.id } })
+      ).resolves.toMatchObject({ state: 'SENDING' })
+      await expect(LinkedInReplyService.endStale(new Date(Date.now() + REPLY_LIMITS.staleMs + 1000))).resolves.toBe(1)
+   })
+
    it('should leave a reply that is already sent as sent when a late answer says otherwise', async () => {
       const sent = await LinkedInReplyService.send(userId, conversationId, 'Hi')
       const sessionId = await sessionOf(sent?.id)

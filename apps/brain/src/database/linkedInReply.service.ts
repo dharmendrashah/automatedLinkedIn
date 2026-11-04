@@ -555,12 +555,20 @@ export class LinkedInReplyService {
    }
 
    // A reply still sending long after its task could have ended was lost with its run. It may have gone, so it is unsure, never
-   // failed. Resolves to how many were ended.
+   // failed. A queued reply waits for its turn first, so the time counts from when it started (from when it was made, for an old row
+   // with no start). Resolves to how many were ended.
    public static async endStale(now = new Date()) {
+      const cutoff = new Date(now.getTime() - REPLY_LIMITS.staleMs)
       const { count } = await PrismaService.client.linkedInReply.updateMany({
          where: {
             state: 'SENDING',
-            createdAt: { lt: new Date(now.getTime() - REPLY_LIMITS.staleMs) },
+            OR: [
+               { startedAt: { lt: cutoff } },
+               {
+                  startedAt: null,
+                  createdAt: { lt: cutoff },
+               },
+            ],
          },
          data: {
             state: 'UNKNOWN',
