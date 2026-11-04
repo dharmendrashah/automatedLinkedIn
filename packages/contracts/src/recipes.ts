@@ -204,6 +204,15 @@ const profiles = (config: NodeConfig, filters: object) =>
       ...config,
    }) satisfies NodeConfig
 
+// The small builders every recipe uses, shared with the automations.
+export const recipeParts = {
+   node,
+   wire,
+   shift,
+   presetOf,
+   profiles,
+}
+
 // The recipe: six workflows, switched off, in the order a person moves through them.
 export const buildOutreach = (input: OutreachAnswers, icpId: string): RecipeBuild => {
    const answers = outreachAnswersSchema.parse(input)

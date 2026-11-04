@@ -1,6 +1,6 @@
 # Lead pipeline, phase 10: the sixteen automations (recipes)
 
-- Status: ready for the owner's approval
+- Status: done for the automations whose blocks exist (A1, A10, A11, A13, A14 and the A16 pattern); the other ten wait for blocks, see Outcome
 - Created: 2026-11-04
 - Locked by user: no (all sixteen automations were confirmed on 2026-11-04)
 - Parent: [lead-outreach-pipeline.md](lead-outreach-pipeline.md) (section "Blue-sky automations" holds the ideas and diagrams)
@@ -311,10 +311,10 @@ Each recipe is one entry in the registry of phase 6: its questions are the "Asks
 
 ## Approach
 
-- [ ] The five small changes (C14 to C18) with their tests
-- [ ] Golden graph tests: each recipe's workflows validate with only notes, every act block is off, every paid block shows its price
-- [ ] Wave 1 recipes on a test user as preview runs through the worker (A1 with AI on and off); then wave 2 and 3 as their blocks arrive
-- [ ] Registry entries and the review screens (cost, room, warnings)
+- [ ] The five small changes (C14 to C18) with their tests (C14 was built in phase 7; C15 to C18 not built)
+- [x] Golden graph tests: each built recipe's workflows validate with no error, every block setting parses, every act block is off (`automations.unit.test.ts`); the cost of paid blocks is shown by the editor, not by a recipe review screen
+- [ ] Wave 1 recipes on a test user as preview runs through the worker (not run; no real posts, no model)
+- [x] Registry: all sixteen in `AUTOMATIONS` with what each waits for; `campaign.automations` and `campaign.createAutomation`; no review screen
 
 ## Edge cases and risks
 
@@ -334,4 +334,17 @@ Each recipe is one entry in the registry of phase 6: its questions are the "Asks
 
 ## Outcome
 
-Filled in when done.
+Shipped (not seen in a browser; no run through the worker with real posts; no model call):
+
+- Contracts `automations.ts`: the catalog of the sixteen (`AUTOMATIONS`, with the wave and, for each one that cannot be built yet, the one thing it waits for), one form of answers (`automationAnswersSchema`: name, a saved ideal customer, phrases, accounts, a typed note and message, the customers label, a start time) and `buildAutomation` for A1 Intent radar, A10 Events and community harvest, A11 Second-degree expansion, A13 Inbound capture and A14 Referral loop; A16 is `experimentParts` (a stable split and two labels, the owner draws the two sends). A tail shared by the finders: leave out people already known and customers, Score by signals with tier D kept out of the profile read, Get full profile, Score by signals again, Add label, Add to list.
+- Every built graph validates with no error, every block setting parses, and every act block keeps Act for real off (tests). The two new facts `item.label` and `item.labelConfidence` are offered by If the event says, which A1 and A10 use to branch on the label.
+- Brain `AutomationService.create` (refuses an automation that waits for a block, a missing answer or an ideal customer that is not the owner's; makes the workflows switched off; removes what it made when one fails) and tRPC `campaign.automations` and `campaign.createAutomation`.
+- Checks: lint (0 warnings), ts:check, unit tests, clean `pnpm build --force`, the new integration test and the whole brain suite.
+
+Deviations (deferred, not built):
+
+- Waiting for blocks that do not exist: A2 (people at a saved list of target companies, Top N on companies), A3 (Add label on companies, C15), A4 (Label with AI reading a job text), A5 (Search people from an ideal customer, C16), A6 (the mutual read and AI words for invites), A7 (Compare with my account), A8 (Write words from topics, Write a post from the block before, C13 and C18), A9 (Search people by a former employer), A12 (two stored reads, AI words for messages), A15 (an outcome field on When called by API, C17). Each is in the catalog with its reason.
+- A1 has no comment branch: the urgent posts (asking, switching) go to their authors, tagged `urgent`, and every other post, the unlabelled too, goes to the engagers; Write words for invites and messages is not built, so A13 and A14 send the owner's typed words (with `{first_name}` and the like) and no recipe uses AI words or Ask me first for them.
+- No tier labels or lanes: the tail labels people with the campaign label and a source tag, and tier lanes need an If chain on the tier that is not drawn here.
+- No review screen (cost, room, warnings), no Starter page for the automations, no calibration of outcomes; the editor shows the cost of each paid block as before.
+- The recipes are named after the automation, not placed in a campaign (stage OTHER).
