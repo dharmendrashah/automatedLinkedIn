@@ -66,7 +66,12 @@ export const LOAD_MORE = '[data-test-msg-cross-pillar-visible-beacon] + button'
 // box as a conversation page. It holds no conversation id.
 // Not seen: the window in the second layout, a profile that is not a connection, a person never written to.
 export const PROFILE_MESSAGE = 'a[href*="/messaging/compose/"]:not([aria-label])'
-export const MESSAGE_WINDOW = '[data-view-name="message-overlay-conversation-bubble-item"]'
+// LinkedIn restores the windows an earlier run left open (staging, 2026-11-04, Dharmendra Soni: Jasper Bennett and Dima Grossman stayed
+// open and sat before the new window, so the first one read was the wrong person's), and keeps an empty `hidden` one. Only a shown window
+// counts. A window's header holds a minimize button (`__expand-btn`, only on a window that can minimize) and a close button named
+// "Close your conversation with ..." or "Close your draft conversation"; the other control is the close button.
+export const MESSAGE_WINDOW = '[data-view-name="message-overlay-conversation-bubble-item"]:not(.hidden)'
+export const WINDOW_CLOSE = `${MESSAGE_WINDOW} .msg-overlay-bubble-header__control:not(.msg-overlay-conversation-bubble__expand-btn)`
 export const MESSAGE_WINDOW_TITLE = 'h2.msg-overlay-bubble-header__title'
 export const WINDOW_COMPOSER = `${MESSAGE_WINDOW} ${COMPOSER}`
 export const WINDOW_SEND_BUTTON = `${MESSAGE_WINDOW} ${SEND_BUTTON}`
