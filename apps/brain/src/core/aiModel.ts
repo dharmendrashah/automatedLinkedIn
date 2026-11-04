@@ -9,6 +9,9 @@ import { type Call, type Pack, type Price, type Voice, type WriteSettings, type 
 // The one file that reaches a model (.plan/lead-pipeline-p4-ai-drafts.md). With no provider set up, With AI is off and nothing here runs.
 
 const TIMEOUT_MS = 20_000
+// A thinking model spends its output tokens on thinking first; with only the words' share it stops (MAX_TOKENS) before any answer
+// (staging, gemini-3.6-flash). The words stay short by the prompt and the schema; this only stops the call being cut off.
+const THINKING_HEADROOM_TOKENS = 2048
 
 export const aiConfigured = () =>
    AI_PROVIDER !== '' &&
@@ -33,7 +36,7 @@ export const callModel: Call = async ({ system, prompt, schema, maxOutputTokens 
       output: Output.object({ schema }),
       maxRetries: 0,
       timeout: TIMEOUT_MS,
-      maxOutputTokens,
+      maxOutputTokens: maxOutputTokens + THINKING_HEADROOM_TOKENS,
    })
 
    return {
