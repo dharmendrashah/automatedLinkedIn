@@ -1,5 +1,6 @@
 export { accountProfile } from './accountProfile/accountProfile'
 export { browse } from './browse/browse'
+export { campaign } from './campaign/campaign'
 export { connections } from './connections/connections'
 export { draft } from './draft/draft'
 export { icp } from './icp/icp'

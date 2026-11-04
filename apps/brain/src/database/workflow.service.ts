@@ -51,6 +51,8 @@ const workflowSelect = {
    maybeScore: true,
    maybeEnabled: true,
    enabled: true,
+   campaignId: true,
+   stage: true,
    nextRunAt: true,
    createdAt: true,
    updatedAt: true,
