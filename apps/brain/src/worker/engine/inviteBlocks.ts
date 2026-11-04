@@ -1,12 +1,19 @@
 import { type ItemResult } from 'core'
 
-import { AccountActionService, LinkedInInviteService, VisitPoolService, WorkflowListService } from 'database'
+import {
+   AccountActionService,
+   LinkedInInviteService,
+   RoomTodayService,
+   VisitPoolService,
+   WorkflowListService,
+} from 'database'
 
 import { missingSentence } from '@automatedLinkedIn/contracts'
 
 import { accountIdsOf } from './accountPool'
 import { actFrame } from './actFrame'
-import { type Context, StepError, type StepResult, configOf, peopleOf, textIn } from './context'
+import { type Context, StepError, type StepResult, configOf, numberIn, peopleOf, textIn } from './context'
+import { spreadByRoom } from './inviteSpread'
 import { refusalOf } from './visitRefusal'
 import { wordsWriter } from './words'
 
@@ -14,12 +21,15 @@ import { wordsWriter } from './words'
 // of My network, which spreads the sending over the days inside the account's limits, so a step ends when the invites are planned
 // (or taken back), not when LinkedIn has them. Nothing goes in a preview, or until "Act for real" is switched on (send).
 
+const TOO_MANY_PENDING = 'Too many pending invites.'
+
 const count = (results: Map<string, ItemResult>, status: string) =>
    [...results.values()].filter(result => result.status === status).length
 
 export const sendInvites = async (ctx: Context): Promise<StepResult> => {
    const { run, node } = ctx
    const note = textIn(configOf(node), 'note')
+   const days = numberIn(configOf(node), 'planDays') || 1
    const {
       items: people,
       result,
@@ -41,7 +51,7 @@ export const sendInvites = async (ctx: Context): Promise<StepResult> => {
       return held
    }
 
-   const accounts = await VisitPoolService.accounts(run.userId, accountIdsOf(ctx))
+   const accounts = await VisitPoolService.accounts(run.userId, await accountIdsOf(ctx))
    const usable = accounts.filter(({ status }) => status === 'ACTIVE').map(({ id }) => id)
    const results = new Map<string, ItemResult>()
 
@@ -102,10 +112,16 @@ export const sendInvites = async (ctx: Context): Promise<StepResult> => {
       })
    }
 
-   // The accounts take turns: each person goes to one account, spread evenly.
-   for (const [index, accountId] of usable.entries()) {
-      const mine = askable.filter((_, position) => position % usable.length === index)
+   const rooms = await RoomTodayService.forAccounts(run.userId, usable, 'invite', new Date(), days)
+   // Each person goes to the account with the most room left, so an account with less room does not leave people another could take.
+   const { given, over } = spreadByRoom(askable, rooms)
+   const noRoom = rooms.length > 0 && rooms.every(({ paused }) => paused) ? TOO_MANY_PENDING : 'Left out: no room.'
 
+   for (const { slug } of over) {
+      results.set(slug, result('SKIPPED', noRoom))
+   }
+
+   for (const [accountId, mine] of given) {
       if (mine.length === 0) {
          continue
       }
@@ -125,7 +141,8 @@ export const sendInvites = async (ctx: Context): Promise<StepResult> => {
                workflowId: run.workflowId,
                runId: run.id,
                nodeId: node.id,
-            }
+            },
+            days
          )
 
          for (const outcome of made?.outcomes ?? []) {
@@ -156,8 +173,10 @@ export const sendInvites = async (ctx: Context): Promise<StepResult> => {
    return give(
       results,
       gaps > 0 ? 'PARTIAL' : 'DONE',
-      `Planned ${planned} of ${people.length} connection requests, sent over the coming days inside each account's limits${
-         gaps > 0 ? `; ${gaps} not planned, see each person's result` : ''
+      `Planned ${planned} of ${people.length} connection requests over ${
+         days === 1 ? 'today' : `up to ${days} days`
+      }, inside each account's limits${gaps > 0 ? `; ${gaps} not planned, see each person's result` : ''}. Room today: ${
+         rooms.length > 0 ? rooms.map(({ name, left, limit }) => `${name} ${left} of ${limit} left`).join(', ') : 'none'
       }.`
    )
 }
@@ -185,7 +204,7 @@ export const withdrawInvites = async (ctx: Context): Promise<StepResult> => {
       return held
    }
 
-   const accounts = await VisitPoolService.accounts(run.userId, accountIdsOf(ctx))
+   const accounts = await VisitPoolService.accounts(run.userId, await accountIdsOf(ctx))
    const taken = await LinkedInInviteService.withdraw(
       run.userId,
       accounts.map(({ id }) => id),

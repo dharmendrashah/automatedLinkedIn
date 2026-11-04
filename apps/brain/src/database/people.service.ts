@@ -4,15 +4,17 @@ import { INVITES_LIVE } from 'env'
 
 import { type PersonFit, type PersonStatus, Prisma } from 'generated/prisma/client'
 
-import { type PeopleFilters } from '@automatedLinkedIn/contracts'
+import { INVITE_LIMITS, type PeopleFilters } from '@automatedLinkedIn/contracts'
 
 import { likeOf } from './companyFilters'
 import { ConflictError } from './conflict'
 import { DataReadService } from './dataRead.service'
+import { HandoffService } from './handoff.service'
 import { type ImportEntry, type Imported, LABEL_LIMIT, appendNote, importedOf } from './linkedInRecord'
 import { type PeopleSort, type PeopleTab, orderOf, peopleWhere } from './peopleFilters'
 import { PRIORITY } from './peopleIndex'
 import { PeopleIndexService } from './peopleIndex.service'
+import { worksAtWhere } from './peopleWorksAt'
 import { profileUrlOf } from './personContacts'
 import { PrismaService } from './prisma.service'
 import { WorkflowListService } from './workflowList.service'
@@ -99,6 +101,7 @@ const PICK_CAP = 50
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const DAY_MS = 24 * 60 * 60 * 1000
 const CLOSED: PersonStatus[] = ['NOT_INTERESTED', 'DONE']
+const NO_ANSWER_DAYS = INVITE_LIMITS.pendingDays
 const SLUG_IN_LINK = /linkedin\.com\/in\/([^/?#\s]+)/i
 const EXPORT_HEADER = [
    'Name',
@@ -129,6 +132,14 @@ const TAB_WHERE: Record<PeopleTab, Prisma.PersonWhereInput> = {
       waiting: true,
       status: { notIn: CLOSED },
    },
+   // A connection request sent and not answered for 21 days or more (.plan/lead-pipeline-p1-foundations.md). Nothing withdraws it.
+   get NO_ANSWER(): Prisma.PersonWhereInput {
+      return {
+         doNotContact: false,
+         inviteState: 'PENDING',
+         invitedAt: { lte: new Date(Date.now() - NO_ANSWER_DAYS * DAY_MS) },
+      }
+   },
    EVERYONE: { doNotContact: false },
    DO_NOT_CONTACT: { doNotContact: true },
 }
@@ -138,6 +149,9 @@ const TAB_SQL: Record<PeopleTab, Prisma.Sql> = {
       return Prisma.sql`NOT "doNotContact" AND "priority" >= ${needsMeFrom()} AND "status" NOT IN ('NOT_INTERESTED', 'DONE')`
    },
    WAITING: Prisma.sql`NOT "doNotContact" AND "waiting" AND "status" NOT IN ('NOT_INTERESTED', 'DONE')`,
+   get NO_ANSWER() {
+      return Prisma.sql`NOT "doNotContact" AND "inviteState" = 'PENDING' AND "invitedAt" <= ${new Date(Date.now() - NO_ANSWER_DAYS * DAY_MS)}`
+   },
    EVERYONE: Prisma.sql`NOT "doNotContact"`,
    DO_NOT_CONTACT: Prisma.sql`"doNotContact"`,
 }
@@ -235,6 +249,7 @@ const viewWhere = async (userId: string, seenAt: Date | null, query: ViewQuery):
       AND: [
          ...(query.accountId ? [{ links: { some: { accountId: query.accountId } } }] : []),
          ...(query.filters ? peopleWhere(query.filters) : []),
+         ...(query.filters ? await worksAtWhere(userId, query.filters.worksAt) : []),
          ...(query.onlyNew ? [newWhere(seenAt)] : []),
       ],
       ...(query.foundBy ? { foundBy: { has: query.foundBy } } : {}),
@@ -326,9 +341,10 @@ export class PeopleService {
             where: { AND: [base, TAB_WHERE[tab]] },
             take: COUNT_CAP + 1,
          })
-      const [NEEDS_ME, WAITING, EVERYONE, DO_NOT_CONTACT] = await Promise.all([
+      const [NEEDS_ME, WAITING, NO_ANSWER, EVERYONE, DO_NOT_CONTACT] = await Promise.all([
          count('NEEDS_ME'),
          count('WAITING'),
+         count('NO_ANSWER'),
          count('EVERYONE'),
          count('DO_NOT_CONTACT'),
       ])
@@ -336,6 +352,7 @@ export class PeopleService {
       return {
          NEEDS_ME,
          WAITING,
+         NO_ANSWER,
          EVERYONE,
          DO_NOT_CONTACT,
          cap: COUNT_CAP,
@@ -944,14 +961,18 @@ export class PeopleService {
    }
 
    // The people of one view as a CSV, at most EXPORT_CAP rows; a bigger view is refused. Every export is logged, refused or not.
-   public static async export(userId: string, query: Omit<PeopleQuery, 'cursor' | 'limit'>) {
+   public static async export(
+      userId: string,
+      query: Omit<PeopleQuery, 'cursor' | 'limit'> & { columns?: 'standard' | 'handoff' }
+   ) {
+      const { columns, ...view } = query
       const rows: PeopleRow[] = []
       let cursor: number | undefined
       let refused: boolean
 
       do {
          const page = await PeopleService.list(userId, {
-            ...query,
+            ...view,
             cursor,
             limit: 500,
          })
@@ -973,6 +994,16 @@ export class PeopleService {
          throw new ConflictError(
             `At most ${EXPORT_CAP.toLocaleString('en')} people can be exported at once. Narrow the view first.`
          )
+      }
+
+      if (columns === 'handoff') {
+         return {
+            fileName: 'handoff.csv',
+            csv: await HandoffService.csv(
+               userId,
+               rows.map(({ slug }) => ({ slug }))
+            ),
+         }
       }
 
       const lists = new Map(

@@ -15,7 +15,10 @@ describe('peopleFiltersSchema', () => {
          noLabels: false,
          neverMessaged: false,
          replyWaiting: false,
+         waiting: false,
          statuses: [],
+         fit: [],
+         worksAt: [],
       })
    })
 

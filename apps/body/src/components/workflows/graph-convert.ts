@@ -332,9 +332,17 @@ export const startConfig = (type: string, timeZone: string = browserTimeZone()):
       }
    }
 
-   // Get full profile has no "how many"; it starts with its tick on.
+   // Get full profile has no "how many"; it starts with its tick on, and with the company of each person read.
    if (type === 'collect.profile') {
-      return { keep: true }
+      return {
+         keep: true,
+         readCompany: true,
+      }
+   }
+
+   // A new "Select accounts" uses every signed-in account; blocks saved before keep the accounts they picked.
+   if (type === 'account.select') {
+      return { scope: 'all' }
    }
 
    // Blocks that can keep what they find in the owner's lists start with that on and with 10; saved blocks keep theirs.
@@ -496,11 +504,13 @@ export const summaryOf = (block: Block, config: GraphNode['config'], icpName?: s
    if (block.type === 'account.select') {
       const accounts = listOf(values.accounts).length
 
-      return accounts === 0
-         ? 'Pick the accounts to use'
-         : accounts === 1
-           ? 'Uses 1 account'
-           : `Takes turns across ${accounts} accounts`
+      return values.scope === 'all'
+         ? 'Uses every signed-in account'
+         : accounts === 0
+           ? 'Pick the accounts to use'
+           : accounts === 1
+             ? 'Uses 1 account'
+             : `Takes turns across ${accounts} accounts`
    }
 
    if (block.type === 'account.writePost') {

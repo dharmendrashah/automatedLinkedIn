@@ -54,6 +54,8 @@ describe('input picks', () => {
          dateField: 'added',
          from: '',
          to: '',
+         days: 30,
+         daysTo: 0,
          search: '',
          filters: '',
          source: 'profiles',
@@ -723,13 +725,29 @@ describe('Account Actions', () => {
       expect(estimate.nodes.post?.items).toBe(estimate.nodes.profiles?.items)
    })
 
-   it('should need one to twenty different accounts', () => {
-      const parse = (accounts: string[]) => blockOf('account.select').config.safeParse({ accounts }).success
+   it('should take up to twenty different accounts, and need at least one unless it uses every signed-in account', () => {
+      const parse = (config: Record<string, string | string[]>) =>
+         blockOf('account.select').config.safeParse(config).success
+      const errors = (config: Record<string, string | string[]>) =>
+         errorsOf(
+            validateGraph(
+               chain(
+                  node('start', 'trigger.manual'),
+                  node('pool', 'account.select', config),
+                  node('go', 'account.visitProfile')
+               )
+            )
+         ).filter(({ nodeId }) => nodeId === 'pool')
 
-      expect(parse(['a1'])).toBe(true)
-      expect(parse([])).toBe(false)
-      expect(parse(['a1', 'a1'])).toBe(false)
-      expect(parse(Array.from({ length: 21 }, (_, index) => `a${index}`))).toBe(false)
+      expect(parse({ accounts: ['a1'] })).toBe(true)
+      expect(parse({})).toBe(true)
+      expect(parse({ accounts: ['a1', 'a1'] })).toBe(false)
+      expect(parse({ accounts: Array.from({ length: 21 }, (_, index) => `a${index}`) })).toBe(false)
+      expect(parse({ scope: 'some' })).toBe(false)
+      expect(errors({ accounts: [] })).toHaveLength(1)
+      expect(errors({ scope: 'pick' })).toHaveLength(1)
+      expect(errors({ scope: 'all' })).toHaveLength(0)
+      expect(errors({ accounts: ['a1'] })).toHaveLength(0)
    })
 
    it('should find the nearest account block before a block, and none when there is not one', () => {

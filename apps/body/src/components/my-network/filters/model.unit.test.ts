@@ -14,6 +14,8 @@ import {
    rangeText,
    readBlockFilters,
    readFilters,
+   waitingFor,
+   withWaitingFor,
    writeFilters,
 } from './model'
 
@@ -35,6 +37,7 @@ describe('the page copy of the filter schema', () => {
          connectedTo: 'acc-1',
          connectedAt: { from: '2026-10-01T00:00' },
          invites: ['PENDING'],
+         invitedAt: { to: '2026-10-14T23:59' },
          lastSent: { to: '2026-10-30T23:59' },
          lastReceived: {
             from: '2026-10-01T00:00',
@@ -42,12 +45,15 @@ describe('the page copy of the filter schema', () => {
          },
          neverMessaged: true,
          replyWaiting: true,
+         waiting: true,
          lastTouch: { from: '2026-10-01T09:30' },
          firstSeen: { from: '2026-09-01T00:00' },
          labels: ['hot'],
          labelsMode: 'all',
          noLabels: false,
          statuses: ['NEW'],
+         fit: ['STRONG'],
+         worksAt: ['target'],
          profileRead: false,
       })
 
@@ -168,5 +174,22 @@ describe('chipsOf', () => {
 
    it('shows a time only when it is not the edge of the day', () => {
       expect(rangeText({ from: '2026-10-01T09:30' })).toBe('since 1 Oct 2026, 09:30')
+   })
+})
+
+describe('waiting for at least N days', () => {
+   const now = new Date(2026, 9, 30, 12, 0)
+
+   it('should ask for people whose last message from you is that old, and read it back', () => {
+      const week = withWaitingFor(NO_FILTERS, 7, now)
+
+      expect(week.lastSent).toEqual({ to: '2026-10-23T23:59' })
+      expect(waitingFor(week, now)).toBe(7)
+   })
+
+   it('should clear the range, and not mistake another range for it', () => {
+      expect(withWaitingFor(withWaitingFor(NO_FILTERS, 7, now), null, now).lastSent).toEqual({})
+      expect(waitingFor(NO_FILTERS, now)).toBeUndefined()
+      expect(waitingFor({ ...NO_FILTERS, lastSent: { from: '2026-10-01T00:00', to: '2026-10-23T23:59' } }, now)).toBeUndefined()
    })
 })

@@ -166,6 +166,49 @@ describe('draftPerson filter fields', () => {
       })
    })
 
+   it('should keep when the newest invite went, and not count one that was queued, cancelled or failed', () => {
+      expect(
+         draft({
+            invites: [
+               invite({
+                  state: 'SENT',
+                  invitedAt: at('2026-10-05'),
+               }),
+               invite({
+                  id: 'inv-2',
+                  state: 'ACCEPTED',
+                  invitedAt: at('2026-10-12'),
+               }),
+               invite({
+                  id: 'inv-3',
+                  state: 'QUEUED',
+                  invitedAt: null,
+               }),
+            ],
+         }).invitedAt
+      ).toEqual(at('2026-10-12'))
+      expect(
+         draft({
+            invites: [
+               invite({
+                  state: 'QUEUED',
+                  invitedAt: null,
+               }),
+            ],
+         }).invitedAt
+      ).toBeNull()
+      expect(
+         draft({
+            invites: [
+               invite({
+                  state: 'FAILED',
+                  invitedAt: at('2026-10-05'),
+               }),
+            ],
+         }).invitedAt
+      ).toBeNull()
+   })
+
    it('should not count a removed connection, nor a conversation never answered', () => {
       expect(
          draft({

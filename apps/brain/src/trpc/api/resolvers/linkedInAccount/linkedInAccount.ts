@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { extractLiAt, parseTotpSecret } from 'core'
 
 import {
+   AccountRoomService,
    AccountTodayService,
    LinkedInAccountConflictError,
    LinkedInAccountPausedError,
@@ -116,6 +117,9 @@ const notFound = () =>
 export const linkedInAccount = router({
    // What each account did today for its four daily items and when each comes next. Read only.
    today: ownerProcedure.query(({ ctx }) => AccountTodayService.forUser(ctx.user.id)),
+
+   // Today's limits of each account, what it used and its pending invites. The share of the maximum behind a limit is never shown.
+   room: ownerProcedure.query(({ ctx }) => AccountRoomService.forUser(ctx.user.id)),
 
    create: ownerProcedure.input(createInput).mutation(async ({ ctx, input }) => {
       try {

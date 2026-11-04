@@ -31,6 +31,19 @@ describe('UserService (database)', () => {
       await expect(UserService.findByEmail(email)).resolves.toEqual(created)
    })
 
+   it('should record the notice the owner accepted once, and keep the first date', async () => {
+      const user = await UserService.create({ email: `${randomUUID()}@elitale.com` })
+
+      expect(user.riskAcceptedAt).toBeNull()
+
+      const first = new Date('2026-11-04T10:00:00.000Z')
+
+      await expect(UserService.acceptRisk(user.id, first)).resolves.toEqual(first)
+      await expect(UserService.acceptRisk(user.id, new Date('2026-11-05T10:00:00.000Z'))).resolves.toEqual(first)
+
+      await PrismaService.client.user.delete({ where: { id: user.id } })
+   })
+
    it('should reject a duplicate email', async () => {
       await expect(UserService.create({ email })).rejects.toThrow()
    })

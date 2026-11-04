@@ -1,7 +1,7 @@
 // What My network shows lives in the address (tab, filters, search, open person), so old pages can redirect into a
 // filter and a reload keeps the view.
 
-export const TABS = ['NEEDS_ME', 'WAITING', 'EVERYONE', 'DO_NOT_CONTACT'] as const
+export const TABS = ['NEEDS_ME', 'WAITING', 'NO_ANSWER', 'EVERYONE', 'DO_NOT_CONTACT'] as const
 export const FITS = ['STRONG', 'MAYBE', 'NONE'] as const
 export const SORTS = ['name', 'connectedAt', 'lastSentAt', 'lastReceivedAt', 'lastTouchAt', 'firstSeenAt'] as const
 

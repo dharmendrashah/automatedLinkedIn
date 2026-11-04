@@ -13,6 +13,7 @@ export const FILTER_LIMITS = {
 } as const
 
 export const INVITE_STATES = ['NONE', 'QUEUED', 'PENDING', 'ACCEPTED', 'ENDED'] as const
+export const FITS = ['STRONG', 'MAYBE', 'NONE'] as const
 
 const text = z.string().trim().min(1).max(FILTER_LIMITS.text)
 const values = <T extends z.ZodType>(value: T) => z.array(value).max(FILTER_LIMITS.values).default([])
@@ -38,16 +39,20 @@ export const filtersSchema = z
       connectedTo: z.string().min(1).max(100).optional(),
       connectedAt: localRange,
       invites: values(z.enum(INVITE_STATES)),
+      invitedAt: localRange,
       lastSent: localRange,
       lastReceived: localRange,
       neverMessaged: z.boolean().default(false),
       replyWaiting: z.boolean().default(false),
+      waiting: z.boolean().default(false),
       lastTouch: localRange,
       firstSeen: localRange,
       labels: values(text.toLowerCase()),
       labelsMode: z.enum(['any', 'all']).default('any'),
       noLabels: z.boolean().default(false),
       statuses: values(z.enum(['NEW', 'CONTACTED', 'REPLIED', 'NOT_INTERESTED', 'DONE'])),
+      fit: values(z.enum(FITS)),
+      worksAt: values(text.toLowerCase()),
       profileRead: z.boolean().optional(),
    })
    .refine(
@@ -62,6 +67,12 @@ export type DateRange = z.output<typeof localRange>
 export type PeopleFilters = z.output<typeof filtersSchema>
 export type InviteState = (typeof INVITE_STATES)[number]
 
+const FIT_WORDS: Record<(typeof FITS)[number], string> = {
+   STRONG: 'Qualified',
+   MAYBE: 'Maybe',
+   NONE: 'No fit yet',
+}
+
 export const NO_FILTERS: PeopleFilters = filtersSchema.parse({})
 
 export const INVITE_WORDS: Record<InviteState, string> = {
@@ -72,12 +83,13 @@ export const INVITE_WORDS: Record<InviteState, string> = {
    ENDED: 'Withdrawn or ended',
 }
 
-export const RANGE_KEYS = ['connectedAt', 'lastSent', 'lastReceived', 'lastTouch', 'firstSeen'] as const
+export const RANGE_KEYS = ['connectedAt', 'invitedAt', 'lastSent', 'lastReceived', 'lastTouch', 'firstSeen'] as const
 
 export type RangeKey = (typeof RANGE_KEYS)[number]
 
 export const RANGE_WORDS: Record<RangeKey, string> = {
    connectedAt: 'Connected',
+   invitedAt: 'Invited',
    lastSent: 'Last message from you',
    lastReceived: 'Last reply from them',
    lastTouch: 'Last touch',
@@ -93,6 +105,19 @@ export const fromLocal = (value: string | undefined) => (value ? parse(value, LO
 const days = (from: Date, to: Date): DateRange => ({
    from: local(startOfDay(from)),
    to: local(endOfDay(to)),
+})
+
+// "Waiting for at least N days" on the Waiting tab: the last message from the owner is that old or older.
+export const WAITING_DAYS = [3, 7, 14, 21, 30] as const
+
+const waitingTo = (days: number, now: Date) => local(endOfDay(subDays(now, days)))
+
+export const waitingFor = (filters: PeopleFilters, now = new Date()) =>
+   WAITING_DAYS.find(days => !filters.lastSent.from && filters.lastSent.to === waitingTo(days, now))
+
+export const withWaitingFor = (filters: PeopleFilters, days: number | null, now = new Date()): PeopleFilters => ({
+   ...filters,
+   lastSent: days ? { to: waitingTo(days, now) } : {},
 })
 
 // Quick choices for a date filter: whole days, ending today.
@@ -181,6 +206,11 @@ export const chipsOf = (filters: PeopleFilters, accountName: (id: string) => str
    }
    if (filters.neverMessaged) add('neverMessaged', 'Never messaged', { neverMessaged: false })
    if (filters.replyWaiting) add('replyWaiting', 'Reply waiting', { replyWaiting: false })
+   if (filters.waiting) add('waiting', 'Waiting for their reply', { waiting: false })
+   if (filters.fit.length) add('fit', `Fit: ${listText(filters.fit.map(fit => FIT_WORDS[fit]))}`, { fit: [] })
+   if (filters.worksAt.length) {
+      add('worksAt', `Works at my companies: ${listText(filters.worksAt)}`, { worksAt: [] })
+   }
    if (filters.noLabels) add('noLabels', 'No labels', { noLabels: false })
    if (filters.labels.length) {
       add('labels', `Labels (${filters.labelsMode}): ${listText(filters.labels)}`, {
@@ -218,6 +248,7 @@ export const apiFilters = (filters: PeopleFilters): ApiFilters => {
    return {
       ...filters,
       connectedAt: range(filters.connectedAt),
+      invitedAt: range(filters.invitedAt),
       lastSent: range(filters.lastSent),
       lastReceived: range(filters.lastReceived),
       lastTouch: range(filters.lastTouch),

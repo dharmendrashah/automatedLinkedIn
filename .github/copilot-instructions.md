@@ -89,7 +89,7 @@ Turborepo behaviour differs between versions: read the docs bundled in the insta
 ## Environment
 
 - Copy `apps/brain/.env.example` to `apps/brain/.env`. Tests load `apps/brain/.env.test` (see `.env.test-example`). Never commit `.env*` files except the examples.
-- Variables are validated with `envalid` in `src/env/env.ts`: `DATABASE_URL` (required), `PORT` (default 3001), `NODE_ENV`, `AUTHENTIK_ISSUER`, `AUTHENTIK_CLIENT_ID`, `AUTHENTIK_INTERNAL_URL` (set when brain reaches authentik on another host than the browser, as in Docker) and `CORS_ORIGINS`.
+- Variables are validated with `envalid` in `src/env/env.ts`: `DATABASE_URL` (required), `PORT` (default 3001), `NODE_ENV`, `AUTHENTIK_ISSUER`, `AUTHENTIK_CLIENT_ID`, `AUTHENTIK_INTERNAL_URL` (set when brain reaches authentik on another host than the browser, as in Docker), `APP_URL` (the public address of the web app, used by links in exported files; required in production) and `CORS_ORIGINS`.
 - Local database: `docker compose up -d postgres`, then `postgresql://postgres:postgres@localhost:5432/automatedlinkedin`.
 
 ## Database (Prisma 7.10, stable; the npm `latest` CLI tag is an 8.0 RC, do not upgrade to it)

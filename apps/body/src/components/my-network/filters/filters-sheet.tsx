@@ -176,6 +176,11 @@ export const FiltersSheet = ({
                      value={value.invites}
                      onChange={invites => set({ invites: INVITE_STATES.filter(state => invites.includes(state)) })}
                   />
+                  <DateTimeRangeField
+                     label="Invited between"
+                     value={value.invitedAt}
+                     onChange={invitedAt => set({ invitedAt })}
+                  />
                </Group>
                <Separator />
                <Group title="Activity">
@@ -199,6 +204,11 @@ export const FiltersSheet = ({
                         label="Their reply is waiting for you"
                         checked={value.replyWaiting}
                         onChange={replyWaiting => set({ replyWaiting })}
+                     />
+                     <Tick
+                        label="Waiting for their reply (you wrote last)"
+                        checked={value.waiting}
+                        onChange={waiting => set({ waiting })}
                      />
                   </div>
                   <DateTimeRangeField

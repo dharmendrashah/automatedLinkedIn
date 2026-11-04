@@ -6,6 +6,34 @@ const DAY_MS = 24 * 60 * 60 * 1000
 // What a workflow's "Choose LinkedIn accounts" block reads to take turns (.plan/select-accounts-block.md). Every call is
 // scoped to the owner's own accounts.
 export class VisitPoolService {
+   // Every account of the owner that is signed in (ACTIVE), oldest first, at most `max`; how many were left out for being over the
+   // maximum and how many are not signed in.
+   public static async everySignedIn(userId: string, max: number) {
+      const db = PrismaService.client
+      const [active, notSignedIn] = await Promise.all([
+         db.linkedInAccount.findMany({
+            where: {
+               userId,
+               status: 'ACTIVE',
+            },
+            orderBy: { createdAt: 'asc' },
+            select: { id: true },
+         }),
+         db.linkedInAccount.count({
+            where: {
+               userId,
+               status: { not: 'ACTIVE' },
+            },
+         }),
+      ])
+
+      return {
+         ids: active.slice(0, max).map(({ id }) => id),
+         leftOut: Math.max(0, active.length - max),
+         notSignedIn,
+      }
+   }
+
    // The chosen accounts that are the owner's, with their status, in the order they were listed.
    public static async accounts(userId: string, ids: string[]) {
       const rows = await PrismaService.client.linkedInAccount.findMany({

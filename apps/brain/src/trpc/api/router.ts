@@ -5,6 +5,7 @@ import { router } from 'trpc'
 
 import { createContext } from './context'
 import {
+   acceptRisk,
    accountProfile,
    browse,
    companyPage,
@@ -39,6 +40,7 @@ export type AppRouter = typeof appRouter
 
 export const appRouter = router({
    me,
+   acceptRisk,
    network,
    connections,
    accountProfile,

@@ -31,7 +31,7 @@ export const SKIP_REASONS = {
    DO_NOT_CONTACT: 'on Do not contact',
    CONNECTED: 'already connected',
    REQUEST: 'with a request pending',
-   INVITED: `invited in the last ${INVITE_LIMITS.pendingDays / 7} weeks`,
+   INVITED: 'with an invite still pending',
 } as const
 
 export type SkipReason = keyof typeof SKIP_REASONS
@@ -63,18 +63,23 @@ export const skipReasonOf = (facts: InviteFacts): SkipReason | undefined => {
 const blockOf = (now: Date, at: Date) => Math.floor((at.getTime() - now.getTime()) / DAY_MS)
 
 // When each of `count` new invites of one account may go: today while the day's and the week's room last, then the next days, at
-// most `planDays` ahead. `started` are the account's invites of the last 7 days, `planned` the ones already waiting. Fewer times
-// than `count` means the rest do not fit. The days are 24-hour blocks from now; the send job checks the real limits again.
+// most `days` ahead (14 unless asked). `limits` are the account's own numbers of the day (limits.ts). `started` are the account's
+// invites of the last 7 days, `planned` the ones already waiting. Fewer times than `count` means the rest do not fit. The days are
+// 24-hour blocks from now; the send job checks the real limits again.
 export const planInvites = ({
    now,
    started,
    planned,
    count,
+   limits,
+   days = INVITE_LIMITS.planDays,
 }: {
    now: Date
    started: Date[]
    planned: Date[]
    count: number
+   limits: { perDay: number; perWeek: number }
+   days?: number
 }) => {
    const used = new Map<number, number>()
    const add = (block: number, by = 1) => used.set(block, (used.get(block) ?? 0) + by)
@@ -91,12 +96,12 @@ export const planInvites = ({
          week += usedOn(back)
       }
 
-      return Math.max(0, Math.min(INVITE_LIMITS.perDay - day, INVITE_LIMITS.perWeek - week))
+      return Math.max(0, Math.min(limits.perDay - day, limits.perWeek - week))
    }
    const today = room(0)
    const times: Date[] = []
 
-   for (let block = 0; block < INVITE_LIMITS.planDays && times.length < count; block += 1) {
+   for (let block = 0; block < days && times.length < count; block += 1) {
       const fits = Math.min(room(block), count - times.length)
 
       for (let one = 0; one < fits; one += 1) {
@@ -289,7 +294,7 @@ export const withdrawChange = (outcome: InviteWithdrawOutcome, tries: number, no
       case 'WITHDRAWN':
          return {
             state: 'WITHDRAWN',
-            reason: `Withdrawn after ${INVITE_LIMITS.pendingDays / 7} weeks without an answer.`,
+            reason: 'Withdrawn.',
             withdrawnAt: now,
          }
       case 'NOT_PENDING':

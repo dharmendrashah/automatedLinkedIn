@@ -25,8 +25,15 @@ export type LinkedInSecretsPatch = {
 }
 
 export class LinkedInAccountConflictError extends Error {
+   public constructor(message = 'A LinkedIn account with this email is already stored') {
+      super(message)
+   }
+}
+
+// Another owner already holds this login. The sentence never says who.
+export class LinkedInAccountTakenError extends LinkedInAccountConflictError {
    public constructor() {
-      super('A LinkedIn account with this email is already stored')
+      super('This LinkedIn account is already used.')
    }
 }
 
@@ -124,8 +131,27 @@ const applyPatch = (current: LinkedInSecrets, patch: LinkedInSecretsPatch): Link
 }
 
 export class LinkedInAccountService {
+   // A LinkedIn login belongs to one owner: the sign-in email, trimmed and in any case, may be held by one user only (.plan/lead-pipeline-p1-foundations.md).
+   private static async assertNotTaken(userId: string, email: string) {
+      const taken = await PrismaService.client.linkedInAccount.findFirst({
+         where: {
+            userId: { not: userId },
+            email: {
+               equals: email.trim(),
+               mode: 'insensitive',
+            },
+         },
+         select: { id: true },
+      })
+
+      if (taken) {
+         throw new LinkedInAccountTakenError()
+      }
+   }
+
    public static async create(userId: string, email: string, secrets: LinkedInSecrets) {
       assertCredentials(clean(secrets))
+      await this.assertNotTaken(userId, email)
 
       try {
          return await PrismaService.client.linkedInAccount.create({
@@ -250,6 +276,11 @@ export class LinkedInAccountService {
       // disabled.
       const secretsChanged = Object.values(changes.secrets ?? {}).some(value => value !== undefined)
       const emailChanged = changes.email !== undefined && changes.email !== row.email
+
+      if (emailChanged && changes.email) {
+         await this.assertNotTaken(userId, changes.email)
+      }
+
       const reset = (secretsChanged || emailChanged) && row.status !== 'DISABLED'
 
       try {

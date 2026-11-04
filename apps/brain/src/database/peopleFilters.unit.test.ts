@@ -125,6 +125,26 @@ describe('peopleWhere', () => {
       expect(where({ noLabels: true })).toEqual([{ labels: { isEmpty: true } }])
    })
 
+   it('reads waiting for a reply, when the newest invite went, and the fit of the lists', () => {
+      expect(
+         where({
+            waiting: true,
+            invitedAt: { to: '2026-10-14T23:59:59.999Z' },
+            fit: ['STRONG', 'MAYBE'],
+         })
+      ).toEqual([
+         { invitedAt: { lte: new Date('2026-10-14T23:59:59.999Z') } },
+         { waiting: true },
+         { fit: { in: ['STRONG', 'MAYBE'] } },
+      ])
+      expect(
+         where({
+            waiting: false,
+            fit: [],
+         })
+      ).toEqual([])
+   })
+
    it('asks for every picked skill by default, or any of them', () => {
       expect(where({ skills: ['Salesforce', 'HubSpot'] })).toEqual([
          { skills: { hasEvery: ['Salesforce', 'HubSpot'] } },

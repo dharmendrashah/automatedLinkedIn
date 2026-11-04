@@ -9,5 +9,6 @@ export const me = userProcedure.query(async ({ ctx }) => ({
       email: ctx.user.email,
       name: ctx.user.name,
       role: ctx.user.role,
+      riskAcceptedAt: ctx.user.riskAcceptedAt,
    },
 }))

@@ -2,6 +2,7 @@ import { KeptFiles, UploadFiles, UploadRefused } from 'core'
 
 import { MESSAGE_MAX_CHARS, kindOfName, safeFileName } from '@automatedLinkedIn/contracts'
 
+import { AccountLimitsService } from './accountLimits.service'
 import { LinkedInConnectionService } from './linkedInConnection.service'
 import { MESSAGE_TASK, REPLY_TASK } from './linkedInReply.hooks'
 import { budgetWait } from './postPublication.rules'
@@ -9,13 +10,11 @@ import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
 import { BrowseBudgetError, TaskBusyError, TaskRefusedError, TaskUnavailableError } from './taskErrors'
 
-// Unverified against LinkedIn's own limits; kept in one place (.plan/unibox-send.md, Q2).
+// Unverified against LinkedIn's own limits; kept in one place (.plan/unibox-send.md, Q2). The numbers of a day (replies, first
+// messages) come from limits.ts.
 export const REPLY_LIMITS = {
-   // Replies one account sends in 24 hours, and the quiet time between the starts of two.
-   perDay: 40,
+   // The quiet time between the starts of two replies.
    gapMs: 30_000,
-   // Of those, first messages to connections never written to (.plan/message-connections.md, unverified against LinkedIn's own).
-   firstPerDay: 15,
    // The most replies that may wait their turn on one account (.plan/reply-queue.md).
    queued: 5,
    // The most characters of a reply: the command that carries it may not pass 8 KB as JSON (the task limits it the same).
@@ -159,6 +158,9 @@ export class LinkedInReplyService {
 
       await this.checkLimits(accountId)
 
+      const firstLimit =
+         (await AccountLimitsService.forAccount(accountId, ['firstMessagesPerDay']))?.firstMessagesPerDay ?? 0
+
       // The account row is locked, so two first messages to one person asked at the same time cannot both be saved.
       const reply = await db.$transaction(async tx => {
          await tx.$queryRaw`SELECT "id" FROM "LinkedInAccount" WHERE "id" = ${accountId} FOR UPDATE`
@@ -181,9 +183,9 @@ export class LinkedInReplyService {
             }),
          ])
 
-         if (today >= REPLY_LIMITS.firstPerDay) {
+         if (today >= firstLimit) {
             throw new TaskRefusedError(
-               `This account has sent ${REPLY_LIMITS.firstPerDay} first messages in 24 hours. Try again later.`
+               `This account has sent ${firstLimit} first messages in 24 hours. Try again later.`
             )
          }
 
@@ -608,6 +610,8 @@ export class LinkedInReplyService {
    // Replies that went or may have gone count, and the ones waiting their turn; ones that did not go do not. The quiet time between two
    // replies is not a refusal: the queue keeps it (`dispatchNext`).
    private static async checkLimits(accountId: string, now = Date.now()) {
+      const limit =
+         (await AccountLimitsService.forAccount(accountId, ['repliesPerDay'], new Date(now)))?.repliesPerDay ?? 0
       const recent = await PrismaService.client.linkedInReply.count({
          where: {
             accountId,
@@ -616,10 +620,8 @@ export class LinkedInReplyService {
          },
       })
 
-      if (recent >= REPLY_LIMITS.perDay) {
-         throw new TaskRefusedError(
-            `This account has sent ${REPLY_LIMITS.perDay} replies in 24 hours. Try again later.`
-         )
+      if (recent >= limit) {
+         throw new TaskRefusedError(`This account has sent ${limit} replies in 24 hours. Try again later.`)
       }
 
       const waiting = await PrismaService.client.linkedInReply.count({

@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 
-import { CSV_MAX_ROWS, itemsCsv } from 'core'
+import { CSV_MAX_ROWS, handoffInputOf, itemsCsv } from 'core'
 
 import {
    ConflictError,
    EventDispatchService,
    EventToolsService,
+   HandoffService,
    HookService,
    InputPickService,
    MessagePreviewService,
@@ -475,6 +476,19 @@ export const workflow = router({
             RUN_MISSING
          )
          const base = (fileName || `${input.nodeId}-output`).replace(/[^\p{L}\p{N}_-]+/gu, '-')
+
+         if ((await WorkflowService.csvColumns(ctx.user.id, input.runId, input.nodeId)) === 'handoff') {
+            const people = new Map(
+               items.flatMap(({ item }) =>
+                  item.kind === 'profile' ? [[item.slug, handoffInputOf(item)] as const] : []
+               )
+            )
+
+            return {
+               fileName: `${base}.csv`,
+               csv: await HandoffService.csv(ctx.user.id, [...people.values()]),
+            }
+         }
 
          return {
             fileName: `${base}.csv`,

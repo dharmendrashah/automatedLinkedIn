@@ -23,6 +23,7 @@ import { type Account } from './types'
 import { type SampleKind } from '../browsing/sample'
 import { BrowsingParts, Part } from './drawer-browsing'
 import { GettingReady } from './getting-ready'
+import { LimitsPart } from './limits-part'
 import { SecretCode } from './secret-code'
 import { StatusBadge } from './status-badge'
 import { type ItemState, progressText } from './today'
@@ -143,6 +144,7 @@ const Body = ({
                   onActivity={onActivity}
                   onDirtyChange={onDirtyChange}
                />
+               <LimitsPart accountId={account.id} name={account.displayName ?? account.email} />
                <Part value="sign-in" title="Sign-in details" summary={credentialsText(account)}>
                   <div className="grid gap-4">
                      <div className="flex flex-wrap gap-1">

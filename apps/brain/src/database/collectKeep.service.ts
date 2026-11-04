@@ -200,6 +200,12 @@ const keepJobs = async (userId: string, label: string, jobs: JobItem[]) => {
 }
 
 export class CollectKeepService {
+   // Remembers a company page a block paid for, so it is not paid for again within 30 days and its website, industry and size can be
+   // read later (the hand-off file, the score).
+   public static keepCompanyPage(userId: string, slug: string, snapshot: CompanySnapshotData) {
+      return keepPage(userId, 'COMPANY', slug, snapshot)
+   }
+
    // Keeps what a block found. Safe to run again for the same items: everything is an upsert.
    public static async keep(userId: string, label: string, items: WorkflowItemData[]): Promise<Kept> {
       const people = await keepPeople(

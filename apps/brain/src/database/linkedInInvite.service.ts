@@ -4,6 +4,7 @@ import { type LinkedInInviteState, type Prisma } from 'generated/prisma/client'
 
 import { INVITE_LIMITS, type InvitesFile } from '@automatedLinkedIn/contracts'
 
+import { AccountLimitsService } from './accountLimits.service'
 import {
    COUNTED,
    LIVE,
@@ -18,6 +19,7 @@ import {
    skipReasonOf,
    withdrawChange,
 } from './inviteRules'
+import { pendingLevel } from './limits'
 import { INVITE_TASK } from './linkedInInvite.hooks'
 import { MessageValuesService } from './messageValues.service'
 import { budgetWait } from './postPublication.rules'
@@ -34,12 +36,13 @@ const STALE_MS = 45 * 60 * 1000
 const REFUSED_WAIT_MS = 30 * 60 * 1000
 const STALE_SENTENCE = 'No answer came from the browser. It is not sent again.'
 const BLOCKED_SENTENCE = 'On Do not contact. Nothing was sent.'
+const PAUSED_SENTENCE = 'This account has too many pending invites. New invites for it are paused.'
 
 const SKIP_SENTENCES: Record<SkipReason, string> = {
    DO_NOT_CONTACT: 'On Do not contact.',
    CONNECTED: 'Already connected.',
    REQUEST: 'A connection request is pending.',
-   INVITED: `Invited in the last ${INVITE_LIMITS.pendingDays / 7} weeks.`,
+   INVITED: 'An invite is still pending.',
 }
 
 // Another process took the invites first: they stay as it left them.
@@ -54,6 +57,8 @@ export type InviteRequest = {
    source?: string
    // The workflow block that plans it, so campaigns can be told apart.
    origin?: InviteOrigin
+   // The most days ahead it may be planned; the planner's own number when left out.
+   days?: number
 }
 
 export type InviteOrigin = { workflowId: string; runId: string; nodeId: string }
@@ -98,7 +103,8 @@ const stopped = (
 }
 
 // Connection invites from My network (.plan/network-invites.md): planned per account over the days, sent by `linkedin-invite` runs of
-// up to 5, withdrawn after 3 weeks, and marked accepted by the reads of the newest connections. Every call is scoped to the owner.
+// up to 5, never withdrawn by the tool on its own (an owner may withdraw), and marked accepted by the reads of the newest connections.
+// Every call is scoped to the owner.
 export class LinkedInInviteService {
    // The owner's signed-in accounts that can send, oldest first.
    private static accountsOf(userId: string) {
@@ -294,10 +300,19 @@ export class LinkedInInviteService {
       now: Date
    ) {
       const accounts = await this.accountsOf(userId)
-      const account = accounts.find(({ id }) => id === request.accountId) ?? (await this.roomiest(accounts, now))
+      const open = await this.notPaused(accounts)
+      const chosen = accounts.find(({ id }) => id === request.accountId)
+
+      if (chosen && !open.includes(chosen)) {
+         throw new TaskRefusedError(PAUSED_SENTENCE)
+      }
+
+      const account = chosen ?? (await this.roomiest(open, now))
 
       if (!account) {
-         throw new TaskRefusedError('Inviting needs a signed-in account. Run Test login first.')
+         throw new TaskRefusedError(
+            accounts.length > 0 ? PAUSED_SENTENCE : 'Inviting needs a signed-in account. Run Test login first.'
+         )
       }
 
       const facts = await this.facts(userId, people, now)
@@ -308,6 +323,8 @@ export class LinkedInInviteService {
          now,
          ...(await this.usage(account.id, now)),
          count: toInvite,
+         limits: await this.limitsOf(account.id, now),
+         ...(request.days !== undefined && { days: request.days }),
       })
 
       return {
@@ -350,7 +367,8 @@ export class LinkedInInviteService {
       people: Link[],
       note: string,
       now = new Date(),
-      origin?: InviteOrigin
+      origin?: InviteOrigin,
+      days?: number
    ) {
       const account = await PrismaService.client.linkedInAccount.findFirst({
          where: {
@@ -371,6 +389,7 @@ export class LinkedInInviteService {
             note,
             people,
             ...(origin && { origin }),
+            ...(days !== undefined && { days }),
          },
          now
       )
@@ -400,6 +419,7 @@ export class LinkedInInviteService {
       const { accountId } = plan
       const facts = await this.facts(userId, people, now)
       const db = PrismaService.client
+      const limits = await this.limitsOf(accountId, now)
       const queued = await db.$transaction(async tx => {
          // The account row is locked so two requests at once plan from the same counts.
          await tx.$queryRaw`SELECT "id" FROM "LinkedInAccount" WHERE "id" = ${accountId} FOR UPDATE`
@@ -409,6 +429,8 @@ export class LinkedInInviteService {
             now,
             ...(await this.usage(accountId, now, tx)),
             count: wanted.length,
+            limits,
+            ...(request.days !== undefined && { days: request.days }),
          })
          const rows = wanted.slice(0, times.length).map(({ person }, index) => ({
             userId,
@@ -473,7 +495,7 @@ export class LinkedInInviteService {
                     : {
                          slug: person.slug,
                          state: 'LEFT',
-                         reason: `Does not fit in the next ${INVITE_LIMITS.planDays} days of this account's room.`,
+                         reason: `Does not fit in the next ${request.days ?? INVITE_LIMITS.planDays} days of this account's room.`,
                          plannedAt: null,
                       }
             }),
@@ -646,11 +668,13 @@ export class LinkedInInviteService {
       await this.dropUnwanted(accountId, account.userId)
 
       const { started } = await this.usage(accountId, now)
+      const limits = await this.limitsOf(accountId, now)
       const day = started.filter(at => at.getTime() > now.getTime() - DAY_MS).length
-      const room = Math.max(
-         0,
-         Math.min(INVITE_LIMITS.perRun, INVITE_LIMITS.perDay - day, INVITE_LIMITS.perWeek - started.length)
-      )
+      // An account with too many pending invites sends no new ones; what it has queued waits.
+      const paused = pendingLevel(await this.pendingOf(accountId)) === 'paused'
+      const room = paused
+         ? 0
+         : Math.max(0, Math.min(INVITE_LIMITS.perRun, limits.perDay - day, limits.perWeek - started.length))
       const due: Prisma.LinkedInInviteWhereInput = {
          accountId,
          OR: [{ waitUntil: null }, { waitUntil: { lte: now } }],
@@ -692,7 +716,11 @@ export class LinkedInInviteService {
       if (sends.length === 0 && withdrawals.length === 0) {
          return {
             asked: false,
-            reason: room === 0 ? 'The account used its invites for now' : 'Nothing is due',
+            reason: paused
+               ? 'Too many pending invites'
+               : room === 0
+                 ? 'The account used its invites for now'
+                 : 'Nothing is due',
          }
       }
 
@@ -784,32 +812,11 @@ export class LinkedInInviteService {
       }
    }
 
-   // What the invite-send job does: moves invites pending 3 weeks to be withdrawn, ends runs that never answered, and gives every
-   // account with something due its turn. One item per account it asked for or left.
+   // What the invite-send job does: ends runs that never answered, and gives every account with something due its turn. Pending
+   // invites are never withdrawn here. One item per account it asked for or left.
    public static async dispatchWaiting(now = new Date()) {
       const db = PrismaService.client
-      const old = new Date(now.getTime() - PENDING_MS)
-      const [withdraw, stale] = await Promise.all([
-         db.linkedInInvite.updateMany({
-            where: {
-               OR: [
-                  {
-                     state: 'SENT',
-                     invitedAt: { lt: old },
-                  },
-                  {
-                     state: 'UNKNOWN',
-                     startedAt: { lt: old },
-                  },
-               ],
-            },
-            data: {
-               state: 'WITHDRAW_QUEUED',
-               tries: 0,
-            },
-         }),
-         this.endStale(now),
-      ])
+      const stale = await this.endStale(now)
       const accounts = await db.linkedInInvite.findMany({
          where: {
             OR: [
@@ -843,7 +850,6 @@ export class LinkedInInviteService {
 
       return {
          asked: items.filter(({ result }) => result === 'ASKED').length,
-         withdraw: withdraw.count,
          stale,
          items,
       }
@@ -1038,6 +1044,58 @@ export class LinkedInInviteService {
       }
    }
 
+   // The account's own invite limits of the day (limits.ts); an account that is gone has no room.
+   private static async limitsOf(accountId: string, now: Date) {
+      const limits = await AccountLimitsService.forAccount(accountId, ['invitesPerDay', 'invitesPerWeek'], now)
+
+      return {
+         perDay: limits?.invitesPerDay ?? 0,
+         perWeek: limits?.invitesPerWeek ?? 0,
+      }
+   }
+
+   // Invites of the account sent and not answered; they never expire here, so the count only grows until people answer.
+   private static pendingOf(accountId: string) {
+      return PrismaService.client.linkedInInvite.count({
+         where: {
+            accountId,
+            state: { in: PENDING },
+         },
+      })
+   }
+
+   // The accounts whose new invites are not paused by too many pending ones.
+   private static async notPaused<T extends { id: string }>(accounts: T[]) {
+      const levels = await Promise.all(accounts.map(async ({ id }) => pendingLevel(await this.pendingOf(id))))
+
+      return accounts.filter((_, index) => levels[index] !== 'paused')
+   }
+
+   // How many invites an account may plan for today, by the planner's own numbers, how many fit inside `days` days, and its limit of
+   // the day. An account with too many pending invites has none.
+   public static async roomToday(accountId: string, now = new Date(), days = 1) {
+      const [limits, usage, pending] = await Promise.all([
+         this.limitsOf(accountId, now),
+         this.usage(accountId, now),
+         this.pendingOf(accountId),
+      ])
+      const paused = pendingLevel(pending) === 'paused'
+      const { today, times } = planInvites({
+         now,
+         ...usage,
+         count: limits.perDay * days,
+         limits,
+         days,
+      })
+
+      return {
+         left: paused ? 0 : today,
+         within: paused ? 0 : times.length,
+         limit: limits.perDay,
+         paused,
+      }
+   }
+
    // The account with the most room today, so an owner with several accounts spreads the invites.
    private static async roomiest(accounts: Account[], now: Date) {
       let best: { account: Account; today: number } | undefined
@@ -1047,6 +1105,7 @@ export class LinkedInInviteService {
             now,
             ...(await this.usage(account.id, now)),
             count: 0,
+            limits: await this.limitsOf(account.id, now),
          })
 
          if (!best || today > best.today) {

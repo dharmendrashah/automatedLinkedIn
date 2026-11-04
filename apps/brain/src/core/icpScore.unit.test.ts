@@ -116,6 +116,100 @@ describe('scorePerson', () => {
    })
 })
 
+describe('scoring by the company of the current job', () => {
+   const company: IcpRules = {
+      ...rules,
+      industries: ['Software', 'Fintech'],
+      companySizes: ['51 - 200', '201-500'],
+   }
+   const read = {
+      headline: 'Head of Sales at Acme',
+      location: 'London, UK',
+      read: true,
+   }
+
+   it('should add 15 for the industry and 15 for the size band, both written as plain reasons', () => {
+      const result = scoreIcp(company, {
+         ...read,
+         companyIndustry: 'Software Development',
+         companySize: '51-200',
+      })
+
+      expect(result).toEqual({
+         score: 85,
+         disqualified: false,
+         matched: [
+            'title "head of sales"',
+            'seniority HEAD',
+            'location "london"',
+            'industry "Software"',
+            'company size 51 to 200',
+         ],
+      })
+      expect(explainMatched(result.matched).slice(-2)).toEqual([
+         {
+            label: 'Industry: Software',
+            points: 15,
+         },
+         {
+            label: 'Company size 51 to 200',
+            points: 15,
+         },
+      ])
+   })
+
+   it('should match a size band written with a dash of another kind, and not a size that is outside the bands', () => {
+      expect(
+         scoreIcp(company, {
+            ...read,
+            companySize: '201\u2013500',
+         }).matched
+      ).toContain('company size 201 to 500')
+      expect(
+         scoreIcp(company, {
+            ...read,
+            companySize: '11-50',
+         }).matched
+      ).toEqual(['title "head of sales"', 'seniority HEAD', 'location "london"'])
+   })
+
+   it('should say the profile was not read yet, with no points, when the ideal customer cares about the company', () => {
+      const unread = scoreIcp(company, {
+         headline: 'Head of Sales at Acme',
+         location: null,
+         read: false,
+      })
+
+      expect(unread.score).toBe(50)
+      expect(unread.matched.at(-1)).toBe('profile not read yet')
+      expect(explainMatched(unread.matched).at(-1)).toEqual({
+         label: 'Profile not read yet',
+         points: 0,
+      })
+   })
+
+   it('should not change a score when the ideal customer has no industry or size, read or not', () => {
+      const plain = scoreIcp(rules, {
+         headline: 'Head of Sales at Acme',
+         location: 'London',
+      })
+
+      expect(
+         scoreIcp(rules, {
+            ...read,
+            companyIndustry: 'Software',
+            companySize: '51-200',
+         })
+      ).toEqual(plain)
+      expect(
+         scoreIcp(rules, {
+            ...read,
+            read: false,
+         })
+      ).toEqual(plain)
+   })
+})
+
 describe('scoreIcp', () => {
    it('should add title, seniority and location matches', () => {
       expect(

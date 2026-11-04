@@ -22,6 +22,7 @@ import { type Block, type ConfigValue, type Field } from './types'
 import { LabelMultiSelect } from '../labels/label-multi-select'
 import { AccountPick } from './account-pick'
 import { AccountsPick } from './accounts-pick'
+import { ActForRealToggle } from './act-for-real-toggle'
 import { ApiWorkflowButton } from './api-workflow-button'
 import { BLOCK_ICONS, tileOf } from './block-look'
 import { BlockHooks } from './block-hooks'
@@ -231,7 +232,9 @@ export const BlockSettings = ({
       }
 
       if (item.kind === 'toggle') {
-         return (
+         return item.key === 'actForReal' ? (
+            <ActForRealToggle id={id} checked={value === true} onChange={next => onChange(item.key, next)} />
+         ) : (
             <Checkbox id={id} checked={value === true} onCheckedChange={next => onChange(item.key, next === true)} />
          )
       }
@@ -363,7 +366,13 @@ export const BlockSettings = ({
 
       const current = values[needed.key]
 
-      return 'is' in needed ? current === needed.is : Array.isArray(current) && current.length >= needed.atLeast
+      if ('is' in needed) {
+         return current === needed.is
+      }
+
+      return 'isOneOf' in needed
+         ? typeof current === 'string' && needed.isOneOf.includes(current)
+         : Array.isArray(current) && current.length >= needed.atLeast
    }
    const main = block.fields.filter(item => !item.advanced && shown(item))
    const more = block.fields.filter(item => item.advanced && shown(item))

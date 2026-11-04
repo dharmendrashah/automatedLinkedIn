@@ -33,7 +33,7 @@ const count = (n: number, text: string) => (n > 0 ? [`${n} ${text}`] : [])
 
 export const runAccountRead = async (ctx: Context, driver: ReadDriver, howMany: number): Promise<StepResult> => {
    const { run, node } = ctx
-   const owned = await VisitPoolService.accounts(run.userId, accountIdsOf(ctx))
+   const owned = await VisitPoolService.accounts(run.userId, await accountIdsOf(ctx))
 
    if (owned.length === 0) {
       throw new StepError('None of the chosen accounts was found.', 'ACCOUNTS_MISSING')

@@ -6,11 +6,13 @@ import {
    type PersonSnapshotData,
    type PostItem,
    type WorkflowItemData,
+   domainOfWebsite,
    expandShortPostLink,
    isShortPostLink,
    mergeBySlug,
    parseLinkedInUrl,
    person,
+   profileFacts,
    readItem,
    snapshotFrom,
 } from 'core'
@@ -107,9 +109,10 @@ import { eventTrigger, hookTrigger, ifEvent, messageMood, runEvent } from './eve
 import { sendInvites, withdrawInvites } from './inviteBlocks'
 import { retry, stop, taskResult, wait } from './logicBlocks'
 import { replyToConversations, sendMessages } from './replyBlocks'
+import { fitToRoom, personWait } from './roomBlocks'
 import { runWorkflow } from './runWorkflow'
 import { sendPages } from './sendApi'
-import { applyProfiles, conditionsOf, filterPeople, matches, scorePeople } from './steps'
+import { applyProfiles, conditionsOf, filterPeople, matches, rescorePeople, scorePeople } from './steps'
 import { selectAccounts, visitCompany, visitProfile } from './visitPages'
 import { writePost } from './writePost'
 
@@ -377,13 +380,18 @@ const remembering = (
       save: (items: WorkflowItemData[]) => Promise<unknown>
       // What else a finished request stores, such as the full profiles it came with.
       also?: (rows: Row[]) => Promise<void>
+      // False when the same request must always be asked again (a short window); the default remembers it for a week.
+      reuse?: boolean
    }
 ): Request => ({
    inputKey: spec.inputKey,
    slug: spec.slug,
    params: spec.params,
    recall: async () => {
-      const items = keeps(ctx) ? await CollectCacheService.find(ctx.run.userId, spec.slug, spec.params) : null
+      const items =
+         keeps(ctx) && spec.reuse !== false
+            ? await CollectCacheService.find(ctx.run.userId, spec.slug, spec.params)
+            : null
 
       if (!items) {
          return false
@@ -400,7 +408,10 @@ const remembering = (
 
       if (keeps(ctx)) {
          await spec.also?.(rows)
-         await CollectCacheService.put(ctx.run.userId, spec.slug, spec.params, items)
+
+         if (spec.reuse !== false) {
+            await CollectCacheService.put(ctx.run.userId, spec.slug, spec.params, items)
+         }
       }
    },
 })
@@ -419,6 +430,8 @@ const rememberProfiles = (ctx: Context) => async (rows: Row[]) => {
 const savePosts = (ctx: Context) => async (rows: Record<string, unknown>[]) => {
    await WorkflowRunService.seedItems(ctx.at, postsFrom(rows))
 }
+
+const SHORT_WINDOWS = new Set(['1h', '24h', 'week'])
 
 const findPosts = (ctx: Context) => {
    const config = configOf(ctx.node)
@@ -440,6 +453,8 @@ const findPosts = (ctx: Context) => {
          }),
          map: postsFrom,
          save: seed(ctx),
+         // A search for the last hour, day or week is asked again every time, so a daily run sees today's posts.
+         reuse: !SHORT_WINDOWS.has(textIn(config, 'postedWithin')),
       }),
    ])
 }
@@ -666,12 +681,24 @@ const readPeople = async (ctx: Context, people: PersonItem[]) => {
       }))
    )
    const read = peopleOf(await WorkflowRunService.items(run.id, [at]))
-   const kept = rules ? read.filter(({ band }) => band !== null) : read
+   // The company of the current job, read when the block says so; the people are scored again with what it says.
+   const companies = configOf(node).readCompany === true ? await withCompanies(ctx, read, rules, thresholds) : null
+   const all = companies ? [...companies.kept, ...companies.leftOut] : read
+   const kept = rules ? all.filter(({ band }) => band !== null) : all
    const note = reused.length > 0 ? `${reused.length} read in the last ${RECENT_DAYS} days, not paid again.` : null
 
    return {
       kept,
-      collected,
+      collected: companies
+         ? {
+              ...collected,
+              status:
+                 collected.status === 'PARTIAL' || companies.collected.status === 'PARTIAL'
+                    ? ('PARTIAL' as const)
+                    : ('DONE' as const),
+              message: [collected.message, companies.collected.message].filter(Boolean).join(' ') || undefined,
+           }
+         : collected,
       note,
    }
 }
@@ -1059,6 +1086,75 @@ const pastedCompanies = (ctx: Context) => {
 
 const COMPANY_BATCH = 25
 
+// The company of each person's current job: read when it has not been in the last 30 days (a paid read, shown in the estimate), then
+// put on the person (industry, size band, website domain) and the person is scored again, so the ideal customer's industry and company
+// size count. Only people who still qualify are looked at, so nobody is paid for twice. A preview reads nothing and only uses what
+// was read before.
+const withCompanies = async (
+   ctx: Context,
+   people: PersonItem[],
+   rules: Awaited<ReturnType<typeof rulesOf>> | null,
+   thresholds: ReturnType<typeof thresholdsOf>
+) => {
+   const { run, at } = ctx
+   const candidates = rules ? people.filter(({ band }) => band !== null) : people
+   const snapshots = await PersonSnapshotService.recent(
+      run.userId,
+      candidates.map(({ slug }) => slug)
+   )
+   const companyOf = (item: PersonItem) => {
+      const snapshot = snapshots.get(item.slug)
+
+      return snapshot ? (profileFacts(snapshot).companySlug?.toLowerCase() ?? null) : null
+   }
+   const slugs = [...new Set(candidates.flatMap(item => companyOf(item) ?? []))]
+   const remembered = await CollectKeepService.rememberedCompanies(run.userId, slugs)
+   const toRead = ctx.preview ? [] : slugs.filter(slug => !remembered.has(slug))
+   const batches = Array.from({ length: Math.ceil(toRead.length / COMPANY_BATCH) }, (_, index) =>
+      toRead.slice(index * COMPANY_BATCH, (index + 1) * COMPANY_BATCH)
+   )
+   const collected = await collectEach(
+      ctx,
+      batches.map((batch, index) => ({
+         inputKey: `person-companies-${index}`,
+         slug: 'companies',
+         params: companiesLinksParams(
+            batch.map(slug => `https://www.linkedin.com/company/${encodeURIComponent(slug)}`)
+         ),
+         use: async (rows: Row[]) => {
+            for (const company of companiesFrom(rows)) {
+               if (company.preview) {
+                  await CollectKeepService.keepCompanyPage(run.userId, company.slug, company.preview)
+               }
+            }
+         },
+      }))
+   )
+   const pages = await CollectKeepService.rememberedCompanies(run.userId, slugs)
+   const updated = candidates.map(item => {
+      const page = pages.get(companyOf(item) ?? '')
+
+      return page
+         ? {
+              ...item,
+              companyIndustry: page.industry,
+              companySize: page.employeeRange,
+              companyDomain: domainOfWebsite(page.website),
+           }
+         : item
+   })
+   const scored = rules ? rescorePeople(updated, rules, thresholds) : updated
+
+   await WorkflowRunService.putItems(at, scored)
+
+   return {
+      collected,
+      read: pages.size,
+      kept: scored,
+      leftOut: people.filter(({ slug }) => !candidates.some(item => item.slug === slug)),
+   }
+}
+
 // Company pages: one read in the last 30 days is used again (unless the block reads again), the rest are read in batches.
 const readCompanyPages = async (ctx: Context, companies: CompanyItem[]) => {
    const remembered =
@@ -1215,17 +1311,28 @@ const postsFromLinks = async (ctx: Context): Promise<StepResult> => {
 
 const EMAIL_BATCH = 25
 
-// Work emails of the people whose links are pasted. An email found in the last 90 days is used again; only a person an
-// email was found for is passed on.
+// Work emails of the people that reach the block and of the people whose links are pasted. An email found in the last 90 days (or
+// that the person already carries) is used again; only a person an email was found for is passed on.
 const emailsFromLinks = async (ctx: Context): Promise<StepResult> => {
-   const { people, notes } = await pastedPeople(ctx)
+   const pasted = await pastedPeople(ctx)
+   const reachingAll = mergeBySlug(peopleOf(ctx.inputs))
+   const blocked = await CollectKeepService.blocked(
+      ctx.run.userId,
+      reachingAll.map(({ slug }) => slug)
+   )
+   const people = mergeBySlug([...reachingAll.filter(({ slug }) => !blocked.has(slug)), ...pasted.people])
+   const notes = [
+      ...pasted.notes,
+      blocked.size > 0 ? `${blocked.size} people are on Do not contact and were skipped.` : null,
+   ]
    const known = keeps(ctx)
       ? await CollectKeepService.knownEmails(
            ctx.run.userId,
            people.map(({ slug }) => slug)
         )
       : new Map<string, string>()
-   const toAsk = people.filter(({ slug }) => !known.has(slug))
+   const carried = new Map(people.flatMap(({ slug, email }) => (email ? [[slug, email] as const] : [])))
+   const toAsk = people.filter(({ slug }) => !known.has(slug) && !carried.has(slug))
    const batches = Array.from({ length: Math.ceil(toAsk.length / EMAIL_BATCH) }, (_, index) =>
       toAsk.slice(index * EMAIL_BATCH, (index + 1) * EMAIL_BATCH)
    )
@@ -1233,7 +1340,7 @@ const emailsFromLinks = async (ctx: Context): Promise<StepResult> => {
    await WorkflowRunService.seedItems(
       ctx.at,
       people.flatMap(item => {
-         const email = known.get(item.slug)
+         const email = known.get(item.slug) ?? carried.get(item.slug)
 
          return email
             ? [
@@ -1279,6 +1386,7 @@ const emailsFromLinks = async (ctx: Context): Promise<StepResult> => {
       result,
       ...notes,
       known.size > 0 ? `${known.size} emails found in the last ${EMAIL_REMEMBER_DAYS} days, not paid for again.` : null,
+      carried.size > 0 ? `${carried.size} people already had an email.` : null,
       missing > 0 ? `No email was found for ${missing} of ${people.length} people.` : null
    )
 }
@@ -1532,13 +1640,56 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'collect.adsFromLinks': adsFromLinks,
    'process.dedupe': async ctx => {
       const people = mergeBySlug(peopleOf(ctx.inputs))
+      const posts = postsOf(ctx.inputs)
       const config = configOf(ctx.node)
       const skip = {
          lists: config.skipListed !== false,
          profiles: config.skipProfiles !== false,
       }
+      const status =
+         config.skipDone === false
+            ? new Map<string, string>()
+            : await LinkedInPostService.statusBySlug(
+                 ctx.run.userId,
+                 posts.map(({ slug }) => slug)
+              )
+      const done = posts.filter(({ slug }) => status.get(slug) === 'PROCESSED')
+      // A post that is not in the owner's posts was not kept by Find posts, so it cannot be recognised.
+      const unknown = config.skipDone === false ? 0 : posts.filter(({ slug }) => !status.has(slug)).length
+      const other = ctx.inputs.filter(({ kind }) => kind !== 'profile' && kind !== 'post')
 
-      return keepItems(ctx, await notSeen(ctx.run.userId, people, skip), people.length)
+      // What was left out as processed is kept for an Else block after this one, with the reason.
+      await WorkflowRunService.replaceItems(
+         elseKey(ctx, ctx.node.id),
+         done.map(post => ({
+            ...post,
+            result: {
+               action: 'dedupe',
+               status: 'SKIPPED',
+               account: null,
+               at: null,
+               reason: 'Already processed.',
+            },
+         }))
+      )
+
+      const result = await keepItems(
+         ctx,
+         [...(await notSeen(ctx.run.userId, people, skip)), ...posts.filter(post => !done.includes(post)), ...other],
+         ctx.inputs.length
+      )
+
+      return {
+         ...result,
+         ...(done.length + unknown > 0 && {
+            message: [
+               done.length > 0 ? `${done.length} posts already processed went to Else.` : undefined,
+               unknown > 0 ? 'Turn on Keep in Find posts to remember posts.' : undefined,
+            ]
+               .filter(Boolean)
+               .join(' '),
+         }),
+      }
    },
    'process.filter': async ctx => {
       const people = mergeBySlug(peopleOf(ctx.inputs))
@@ -1560,6 +1711,7 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
       return keepItems(ctx, best, people.length)
    },
    'process.merge': merge,
+   'process.room': fitToRoom,
    'process.messageMood': messageMood,
    'process.tag': async ctx => {
       const people = mergeBySlug(peopleOf(ctx.inputs))
@@ -1584,6 +1736,7 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'logic.forEach': forEach,
    'logic.runWorkflow': runWorkflow,
    'logic.wait': wait,
+   'logic.personWait': personWait,
    'logic.taskResult': taskResult,
    'logic.retry': retry,
    'logic.stop': stop,

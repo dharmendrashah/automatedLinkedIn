@@ -74,7 +74,7 @@ export type InputFilter<S extends string = string> = {
    labelMatch: LabelMatch
    withoutLabels: string[]
    statuses: S[]
-   order: 'newest' | 'oldest'
+   order: 'newest' | 'oldest' | 'score'
 }
 
 export const EVERYTHING: InputFilter<never> = {

@@ -398,6 +398,26 @@ export class LinkedInPostService {
 
       return count
    }
+
+   // The status of the owner's posts that have these slugs, by slug; a post the owner does not have is missing.
+   public static async statusBySlug(userId: string, slugs: string[]) {
+      if (slugs.length === 0) {
+         return new Map<string, LinkedInPostStatus>()
+      }
+
+      const rows = await PrismaService.client.linkedInPost.findMany({
+         where: {
+            userId,
+            slug: { in: slugs },
+         },
+         select: {
+            slug: true,
+            status: true,
+         },
+      })
+
+      return new Map(rows.map(({ slug, status }) => [slug, status]))
+   }
 }
 
 const waitingWhere = (userId: string, filter: InputFilter<never>) => ({

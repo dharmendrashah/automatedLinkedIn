@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
       replaceItems: vi.fn(),
       factsFor: vi.fn(),
       accountNames: vi.fn(),
+      roomToday: vi.fn(),
    }
 })
 
@@ -51,6 +52,7 @@ vi.mock('database', async () => ({
    AccountNotReadyError: mocks.AccountNotReadyError,
    TaskRefusedError: mocks.TaskRefusedError,
    VisitPoolService: { accounts: mocks.accounts },
+   RoomTodayService: { forAccounts: mocks.roomToday },
    WorkflowListService: { seenAmong: mocks.seenAmong },
    AccountActionService: {
       ofStep: mocks.ofStep,
@@ -175,6 +177,17 @@ beforeEach(() => {
    mocks.ofStep.mockResolvedValue([])
    mocks.factsFor.mockResolvedValue(new Map())
    mocks.accountNames.mockResolvedValue(new Map())
+   mocks.roomToday.mockImplementation(async (_user: string, ids: string[]) =>
+      ids.map(accountId => ({
+         accountId,
+         name: accountId,
+         signedIn: true,
+         left: 10,
+         limit: 15,
+         within: 10,
+         paused: false,
+      }))
+   )
 })
 
 describe('sendInvites', () => {
@@ -239,7 +252,8 @@ describe('sendInvites', () => {
          expect.objectContaining({
             runId: 'r1',
             nodeId: 'n1',
-         })
+         }),
+         1
       )
       expect(mocks.ask).toHaveBeenCalledWith('r1', 'n1', 'ada', 'a1', 'DONE', {
          status: 'PLANNED',
@@ -367,6 +381,90 @@ describe('sendInvites', () => {
          bob: 'LEFT',
       })
       expect(result.status).toBe('PARTIAL')
+   })
+
+   it('should give more people to the account with more room, pass the days ahead, and leave out what no room holds', async () => {
+      mocks.accounts.mockResolvedValue([
+         {
+            id: 'a1',
+            status: 'ACTIVE',
+         },
+         {
+            id: 'a2',
+            status: 'ACTIVE',
+         },
+      ])
+      mocks.roomToday.mockResolvedValue([
+         {
+            accountId: 'a1',
+            name: 'Sam',
+            signedIn: true,
+            left: 1,
+            limit: 15,
+            within: 1,
+            paused: false,
+         },
+         {
+            accountId: 'a2',
+            name: 'Ada',
+            signedIn: true,
+            left: 0,
+            limit: 15,
+            within: 0,
+            paused: false,
+         },
+      ])
+      mocks.inviteFrom.mockImplementation(async (_user: string, _account: string, people: { slug: string }[]) => ({
+         outcomes: people.map(({ slug }) => ({
+            slug,
+            state: 'QUEUED',
+            reason: null,
+            plannedAt: new Date(),
+         })),
+      }))
+
+      const result = await sendInvites(
+         context('account.sendInvite', {
+            settings: {
+               actForReal: true,
+               planDays: 3,
+            },
+            pool: ['a1', 'a2'],
+         })
+      )
+
+      expect(mocks.roomToday).toHaveBeenCalledWith('u1', ['a1', 'a2'], 'invite', expect.any(Date), 3)
+      expect(mocks.inviteFrom).toHaveBeenCalledTimes(1)
+      expect(mocks.inviteFrom.mock.calls[0]?.[1]).toBe('a1')
+      expect(mocks.inviteFrom.mock.calls[0]?.[6]).toBe(3)
+      expect(resultsOf()).toEqual({
+         ada: 'PLANNED',
+         bob: 'SKIPPED',
+      })
+      expect(result.message).toContain('Room today: Sam 1 of 15 left, Ada 0 of 15 left.')
+   })
+
+   it('should say too many pending invites when every account is paused', async () => {
+      mocks.roomToday.mockResolvedValue([
+         {
+            accountId: 'a1',
+            name: 'Sam',
+            signedIn: true,
+            left: 0,
+            limit: 15,
+            within: 0,
+            paused: true,
+         },
+      ])
+
+      await sendInvites(context('account.sendInvite', armed))
+
+      const reasons = (mocks.replaceItems.mock.calls[0]?.[1] as { result: { reason: string } }[]).map(
+         ({ result }) => result.reason
+      )
+
+      expect(mocks.inviteFrom).not.toHaveBeenCalled()
+      expect(reasons).toEqual(['Too many pending invites.', 'Too many pending invites.'])
    })
 
    it('should fail when no chosen account is signed in', async () => {

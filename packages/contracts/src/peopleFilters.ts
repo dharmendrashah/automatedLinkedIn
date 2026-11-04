@@ -12,6 +12,8 @@ export const PEOPLE_FILTER_LIMITS = {
 
 export const PERSON_INVITE_STATES = ['NONE', 'QUEUED', 'PENDING', 'ACCEPTED', 'ENDED'] as const
 export const PERSON_STATUSES = ['NEW', 'CONTACTED', 'REPLIED', 'NOT_INTERESTED', 'DONE'] as const
+// How well the lists scored them: Strong is a qualified list member, None is not in a list with a fit.
+export const PERSON_FITS = ['STRONG', 'MAYBE', 'NONE'] as const
 
 const text = z.string().trim().min(1).max(PEOPLE_FILTER_LIMITS.text)
 const values = <T extends z.ZodType>(value: T) => z.array(value).max(PEOPLE_FILTER_LIMITS.values).default([])
@@ -43,16 +45,23 @@ export const peopleFiltersSchema = z
       connectedTo: z.string().min(1).max(100).optional(),
       connectedAt: dateRangeSchema.optional(),
       invites: values(z.enum(PERSON_INVITE_STATES)),
+      // When the newest invite went.
+      invitedAt: dateRangeSchema.optional(),
       lastSent: dateRangeSchema.optional(),
       lastReceived: dateRangeSchema.optional(),
       neverMessaged: z.boolean().default(false),
       replyWaiting: z.boolean().default(false),
+      // We wrote last and no answer came (Waiting for a reply).
+      waiting: z.boolean().default(false),
       lastTouch: dateRangeSchema.optional(),
       firstSeen: dateRangeSchema.optional(),
       labels: values(text.toLowerCase()),
       labelsMode: z.enum(['any', 'all']).default('any'),
       noLabels: z.boolean().default(false),
       statuses: values(z.enum(PERSON_STATUSES)),
+      fit: values(z.enum(PERSON_FITS)),
+      // People who work at a company saved in /companies with one of these labels.
+      worksAt: values(text.toLowerCase()),
       profileRead: z.boolean().optional(),
    })
    .refine(

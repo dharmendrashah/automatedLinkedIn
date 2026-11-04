@@ -5,9 +5,12 @@ exports[`blocks before they became one definition > should keep the sets of bloc
   "elseSources": [
     "logic.if",
     "logic.ifEvent",
+    "logic.personWait",
     "logic.retry",
     "logic.runWorkflow",
     "logic.taskResult",
+    "process.dedupe",
+    "process.room",
   ],
   "pool": [
     "account.answerRequests",
@@ -26,6 +29,7 @@ exports[`blocks before they became one definition > should keep the sets of bloc
   "takesAnything": [
     "account.select",
     "account.writePost",
+    "collect.emailsFromLinks",
     "collect.profile",
     "logic.ifEvent",
     "logic.retry",
@@ -34,7 +38,9 @@ exports[`blocks before they became one definition > should keep the sets of bloc
     "logic.taskResult",
     "logic.wait",
     "output.return",
+    "process.dedupe",
     "process.merge",
+    "process.room",
   ],
   "visit": [
     "account.visitCompany",
@@ -411,15 +417,15 @@ exports[`blocks before they became one definition > should keep what every block
   },
   {
     "plain": {
-      "costMicros": 0,
-      "items": 0,
+      "costMicros": 180000,
+      "items": 9,
     },
     "preview": {
       "howMany": 500,
     },
     "sized": {
-      "costMicros": 0,
-      "items": 0,
+      "costMicros": 180000,
+      "items": 9,
     },
     "type": "collect.emailsFromLinks",
   },
@@ -534,6 +540,20 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 9,
     },
     "type": "process.topN",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "process.room",
   },
   {
     "plain": {
@@ -674,6 +694,20 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 9,
     },
     "type": "logic.wait",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "logic.personWait",
   },
   {
     "plain": {

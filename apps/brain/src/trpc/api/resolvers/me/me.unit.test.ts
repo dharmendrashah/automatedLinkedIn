@@ -47,6 +47,7 @@ const row = {
    name: 'Ada',
    role: 'USER',
    authentikId: 'sub-1',
+   riskAcceptedAt: null,
    createdAt: new Date(),
    updatedAt: new Date(),
 }
@@ -56,6 +57,7 @@ const projection = {
    email: 'ada@elitale.com',
    name: 'Ada',
    role: 'USER',
+   riskAcceptedAt: null,
 }
 
 const caller = (ctx: Partial<Context>) => router({ me }).createCaller(ctx as Context)
