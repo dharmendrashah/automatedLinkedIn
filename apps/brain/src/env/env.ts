@@ -87,6 +87,35 @@ export class Environment {
             default: '',
             docs: 'https://docs.abuseipdb.com/#check-endpoint',
          }),
+         AI_PROVIDER: string({
+            desc: 'The provider of With AI in Write words. Empty: With AI is off and the block says AI is not set up',
+            example: 'google',
+            choices: ['', 'google', 'openai-compatible'] as const,
+            default: '',
+         }),
+         AI_MODEL: string({
+            desc: "The provider's model id, a small fast one",
+            example: 'gemini-2.5-flash-lite',
+            default: '',
+         }),
+         AI_API_KEY: string({
+            desc: 'The key of a paid plan of the provider (an unpaid key may be used for training: check the provider terms first)',
+            example: 'xxxxxxxxxxxxxx',
+            default: '',
+         }),
+         AI_BASE_URL: string({
+            desc: 'The address of an OpenAI compatible endpoint. Only for the openai-compatible provider',
+            example: 'https://api.example.com/v1',
+            default: '',
+         }),
+         AI_PRICE_INPUT_MICROS: num({
+            desc: 'Price of a million input tokens, in millionths of a dollar. The cost of a call is booked from it',
+            default: 0,
+         }),
+         AI_PRICE_OUTPUT_MICROS: num({
+            desc: 'Price of a million output tokens, in millionths of a dollar',
+            default: 0,
+         }),
          SPIDER_GCS_BUCKET: string({
             desc: 'Google Cloud Storage bucket spider records sessions in. Brain only signs links to its recordings/ files. Empty: the Sessions page works without recordings',
             example: 'my-spider-bucket',

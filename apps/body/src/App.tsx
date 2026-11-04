@@ -5,6 +5,7 @@ import { Navigate, Route, Routes } from 'react-router'
 
 import { DashboardLayout } from './layouts/DashboardLayout'
 import { PublicLayout } from './layouts/PublicLayout'
+import { Approve } from './pages/Approve'
 import { Callback } from './pages/Callback'
 import { Companies } from './pages/Companies'
 import { HealthStatus } from './pages/HealthStatus'
@@ -131,6 +132,7 @@ const App = () => (
          <Route path="/sessions" element={<Sessions />} />
          <Route path="/healthstatus" element={<HealthStatus />} />
          <Route path="/jobs" element={<Jobs />} />
+         <Route path="/approve" element={<Approve />} />
          <Route path="/profile" element={<Profile />} />
       </Route>
    </Routes>

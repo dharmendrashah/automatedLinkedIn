@@ -726,6 +726,18 @@ export class PeopleService {
                slug,
             },
          })
+         await tx.postAct.deleteMany({
+            where: {
+               userId,
+               slug,
+            },
+         })
+         await tx.draft.deleteMany({
+            where: {
+               userId,
+               slug,
+            },
+         })
          await tx.linkedInInvitation.deleteMany({
             where: {
                userId,

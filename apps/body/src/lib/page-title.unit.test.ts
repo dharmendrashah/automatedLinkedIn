@@ -23,6 +23,7 @@ describe('titleFor', () => {
       ['/sessions', 'Sessions'],
       ['/healthstatus', 'Service status'],
       ['/jobs', 'Cron monitor'],
+      ['/approve', 'To approve'],
       ['/profile', 'Profile'],
    ])('should name %s', (path, title) => {
       expect(titleFor(path)).toBe(title)

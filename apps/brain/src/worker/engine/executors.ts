@@ -105,7 +105,7 @@ import {
    thresholdsOf,
    wordsIn,
 } from './context'
-import { reactToPosts } from './engageBlocks'
+import { commentOnPosts, reactToPosts } from './engageBlocks'
 import { eventTrigger, hookTrigger, ifEvent, messageMood, runEvent } from './eventBlocks'
 import { sendInvites, withdrawInvites } from './inviteBlocks'
 import { retry, stop, taskResult, wait } from './logicBlocks'
@@ -116,6 +116,7 @@ import { runWorkflow } from './runWorkflow'
 import { sendPages } from './sendApi'
 import { applyProfiles, conditionsOf, filterPeople, matches, rescorePeople, scorePeople } from './steps'
 import { selectAccounts, visitCompany, visitProfile } from './visitPages'
+import { approvedTrigger, askMeFirst, writeWordsOnPosts } from './writeBlocks'
 import { writePost } from './writePost'
 
 const DONE: StepResult = {
@@ -1646,6 +1647,7 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'trigger.taskEvent': eventTrigger,
    'trigger.messageArrived': eventTrigger,
    'trigger.hook': hookTrigger,
+   'trigger.approved': approvedTrigger,
    'input.posts': inputPosts,
    'input.profiles': inputProfiles,
    'input.companies': inputCompanies,
@@ -1747,6 +1749,7 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'process.merge': merge,
    'process.room': fitToRoom,
    'process.messageMood': messageMood,
+   'process.write': writeWordsOnPosts,
    'process.tag': async ctx => {
       const people = mergeBySlug(peopleOf(ctx.inputs))
       const tags = wordsIn(configOf(ctx.node), 'tags')
@@ -1768,6 +1771,7 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'logic.ifEvent': ifEvent,
    'logic.ifPerson': ifPerson,
    'logic.split': splitPeople,
+   'logic.approve': askMeFirst,
    'collect.chat': getChat,
    'logic.else': elseBlock,
    'logic.forEach': forEach,
@@ -1791,6 +1795,7 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'account.replyToConversation': replyToConversations,
    'account.removeConnection': removeConnections,
    'account.reactToPost': reactToPosts,
+   'account.commentOnPost': commentOnPosts,
    'output.list': addToList,
    'output.markPosts': markPosts,
    'output.csv': exportCsv,

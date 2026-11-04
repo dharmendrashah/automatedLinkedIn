@@ -180,6 +180,7 @@ const AUTOMATIC = new Set([
    'trigger.workflow',
    'trigger.taskEvent',
    'trigger.messageArrived',
+   'trigger.approved',
 ])
 
 // How many workflows may start one another in a row.
@@ -736,7 +737,7 @@ export class WorkflowService {
 
       const runGraph = trigger === 'PREVIEW' ? previewGraph(main) : main
       const { posts, totalMicros } = await WorkflowService.estimate(userId, runGraph, false, workflowId)
-      const fromOutside = trigger === 'API' || trigger === 'WORKFLOW' || trigger === 'EVENT'
+      const fromOutside = trigger === 'API' || trigger === 'WORKFLOW' || trigger === 'EVENT' || trigger === 'APPROVAL'
 
       if (usesPosts(graph) && posts === 0 && !fromOutside) {
          throw new ConflictError('No posts are waiting in your posts list. Add some posts first.')

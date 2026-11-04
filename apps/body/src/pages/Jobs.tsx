@@ -1,6 +1,6 @@
 import { FailureCard } from '@/components/failure-card'
 import { workerBanner } from '@/components/jobs/describe'
-import { ActsSwitch } from '@/components/jobs/acts-switch'
+import { ActsSwitch, AiSwitch } from '@/components/jobs/acts-switch'
 import { JobCard } from '@/components/jobs/job-card'
 import { JobRunsDrawer } from '@/components/jobs/job-runs-drawer'
 import { MessageReads } from '@/components/jobs/message-reads'
@@ -78,6 +78,7 @@ export const Jobs = () => {
          ) : null}
 
          <ActsSwitch />
+         <AiSwitch />
 
          <Tabs defaultValue="jobs" className="gap-4">
             <TabsList>

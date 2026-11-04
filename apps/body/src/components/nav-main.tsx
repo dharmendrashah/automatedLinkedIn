@@ -2,6 +2,7 @@ import {
    SidebarGroup,
    SidebarGroupContent,
    SidebarMenu,
+   SidebarMenuBadge,
    SidebarMenuButton,
    SidebarMenuItem,
 } from '@/components/ui/sidebar'
@@ -12,6 +13,8 @@ export type NavItem = {
    title: string
    to: string
    icon: LucideIcon
+   // A count beside the title; none when it is 0.
+   badge?: number
 }
 
 export const NavMain = ({ items }: { items: NavItem[] }) => {
@@ -33,6 +36,7 @@ export const NavMain = ({ items }: { items: NavItem[] }) => {
                            <span>{item.title}</span>
                         </Link>
                      </SidebarMenuButton>
+                     {item.badge ? <SidebarMenuBadge>{item.badge}</SidebarMenuBadge> : null}
                   </SidebarMenuItem>
                ))}
             </SidebarMenu>

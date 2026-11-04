@@ -27,6 +27,8 @@
       "postinstall": "pnpm db:generate"
    },
    "dependencies": {
+      "@ai-sdk/google": "^4.0.111",
+      "@ai-sdk/openai-compatible": "^3.0.84",
       "@automatedLinkedIn/config": "workspace:*",
       "@automatedLinkedIn/contracts": "workspace:*",
       "@google-cloud/run": "^4.2.0",
@@ -35,6 +37,7 @@
       "@prisma/client": "7.10.0",
       "@trpc/client": "^11.19.0",
       "@trpc/server": "^11.19.0",
+      "ai": "^7.0.162",
       "amqplib": "^2.2.0",
       "cookie-parser": "^1.4.7",
       "cors": "^2.8.6",

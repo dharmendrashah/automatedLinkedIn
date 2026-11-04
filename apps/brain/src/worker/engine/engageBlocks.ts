@@ -4,11 +4,19 @@ import {
    AccountActionService,
    type EngageAccounts,
    type EngageCandidate,
+   type EngageWish,
    LinkedInEngageService,
    WorkflowRunService,
 } from 'database'
 
-import { REACTIONS, type Reaction } from '@automatedLinkedIn/contracts'
+import {
+   DRAFT_LIMITS,
+   REACTIONS,
+   type Reaction,
+   WRITE_REASONS,
+   checkWords,
+   renderTemplate,
+} from '@automatedLinkedIn/contracts'
 
 import { accountIdsOf } from './accountPool'
 import { actFrame } from './actFrame'
@@ -24,20 +32,16 @@ import {
    wordsIn,
 } from './context'
 
-// "React to post" (.plan/lead-pipeline-p3-engage.md): plans one reaction per post through the act queue, inside each account's daily
-// limit. The posts it plans go on; the rest go to an Else with one fixed sentence each, so nothing is lost. In a preview, or while
-// "Act for real" is off, it decides the same and queues nothing.
+// "React to post" and "Comment on post" (.plan/lead-pipeline-p3-engage.md, .plan/lead-pipeline-p4-ai-drafts.md): plan one act per post through
+// the act queue, inside each account's daily limit. The posts they plan go on; the rest go to an Else with one fixed sentence each, so
+// nothing is lost. In a preview, or while "Act for real" is off, they decide the same and queue nothing.
 
 const NO_AUTHOR = 'The author of the post is not known.'
-const HELD = {
-   preview: 'A preview reacts to nothing.',
-   off: 'Act for real is off.',
-} as const
 
 const isReaction = (value: string): value is Reaction => REACTIONS.some(reaction => reaction === value)
 
 // Who wrote the post: the person Get posts of people asked for, else the author's link the post came with.
-const authorOf = (post: PostItem) => {
+export const authorOf = (post: PostItem) => {
    if (post.authorSlug) {
       return post.authorSlug
    }
@@ -52,6 +56,8 @@ const authorOf = (post: PostItem) => {
 
    return undefined
 }
+
+export const firstNameOf = (post: PostItem) => post.preview?.author.name?.trim().split(/\s+/)[0] || undefined
 
 const momentOf = (value: string | null | undefined) => {
    const time = value ? Date.parse(value) : Number.NaN
@@ -68,16 +74,31 @@ const candidateOf = (post: PostItem, slug: string): EngageCandidate => ({
    postedAt: momentOf(post.preview?.postedAt),
 })
 
-export const reactToPosts = async (ctx: Context): Promise<StepResult> => {
+type Prepared = { words: string; mode: 'TEMPLATE' | 'AI' } | { skip: string }
+
+type Engage = {
+   action: string
+   // "reacts to", for "A preview reacts to nothing."
+   verb: string
+   past: string
+   wish: EngageWish
+   // The words for one post (a comment), or why it has none.
+   prepare?: (post: PostItem) => Prepared
+}
+
+const engage = async (ctx: Context, spec: Engage): Promise<StepResult> => {
    const { run, node } = ctx
    const config = configOf(node)
-   const reactions = wordsIn(config, 'reactions').filter(isReaction)
+   const held = {
+      preview: `A preview ${spec.verb} nothing.`,
+      off: 'Act for real is off.',
+   }
    const { items: posts, result } = actFrame(
       ctx,
-      'reactToPost',
+      spec.action,
       {
-         verb: 'reacts to',
-         past: 'reacted to',
+         verb: spec.verb,
+         past: spec.past,
          needsArm: true,
       },
       postsOf
@@ -106,21 +127,24 @@ export const reactToPosts = async (ctx: Context): Promise<StepResult> => {
 
    for (const post of posts.filter(({ slug }) => !results.has(slug))) {
       const author = authorOf(post)
+      const prepared = spec.prepare?.(post)
 
-      if (author) {
-         candidates.set(post.slug, candidateOf(post, author))
-      } else {
+      if (!author) {
          results.set(post.slug, result('SKIPPED', NO_AUTHOR))
+      } else if (prepared && 'skip' in prepared) {
+         results.set(post.slug, result('SKIPPED', prepared.skip))
+      } else {
+         candidates.set(post.slug, {
+            ...candidateOf(post, author),
+            ...prepared,
+         })
       }
    }
 
    const outcomes = await LinkedInEngageService.plan(run.userId, {
       accounts,
       candidates: [...candidates.values()],
-      wish: {
-         act: 'REACT',
-         reactions,
-      },
+      wish: spec.wish,
       daysApart: numberIn(config, 'daysApart'),
       dryRun: !armed,
       ...(armed && {
@@ -147,7 +171,7 @@ export const reactToPosts = async (ctx: Context): Promise<StepResult> => {
             at: null,
          })
       } else {
-         results.set(slug, result('NOT_ASKED', ctx.preview ? HELD.preview : HELD.off, outcome.accountId))
+         results.set(slug, result('NOT_ASKED', ctx.preview ? held.preview : held.off, outcome.accountId))
       }
    }
 
@@ -156,7 +180,6 @@ export const reactToPosts = async (ctx: Context): Promise<StepResult> => {
 
    for (const post of posts) {
       const done = results.get(post.slug) ?? result('SKIPPED', NO_AUTHOR)
-
       const item = {
          ...post,
          result: done,
@@ -177,6 +200,55 @@ export const reactToPosts = async (ctx: Context): Promise<StepResult> => {
       ...kept,
       message: `${posts.length} in, ${onward.length} ${armed ? 'planned' : 'would be planned'}, ${aside.length} to Else${
          aside.length > 0 ? ' (see each post\u2019s reason)' : ''
-      }.${armed ? '' : ` ${ctx.preview ? HELD.preview : `${HELD.off} Switch it on after a preview.`}`}`,
+      }.${armed ? '' : ` ${ctx.preview ? held.preview : `${held.off} Switch it on after a preview.`}`}`,
    }
+}
+
+export const reactToPosts = (ctx: Context) =>
+   engage(ctx, {
+      action: 'reactToPost',
+      verb: 'reacts to',
+      past: 'reacted to',
+      wish: {
+         act: 'REACT',
+         reactions: wordsIn(configOf(ctx.node), 'reactions').filter(isReaction),
+      },
+   })
+
+// A brace in the words of another block is a brace, not a variable.
+const literal = (text: string) => text.replaceAll('{', '\\{').replaceAll('}', '\\}')
+
+export const commentOnPosts = (ctx: Context) => {
+   const template = textIn(configOf(ctx.node), 'words')
+
+   return engage(ctx, {
+      action: 'commentOnPost',
+      verb: 'comments on',
+      past: 'commented on',
+      wish: {
+         act: 'COMMENT',
+         words: '',
+      },
+      prepare: post => {
+         const written = post.written?.trim() ?? ''
+         const filled = template.replaceAll('{written}', literal(written))
+         const words = renderTemplate(filled, { author_first_name: firstNameOf(post) }).text.trim()
+
+         if ((template.includes('{written}') && written === '') || words === '') {
+            return { skip: WRITE_REASONS.EMPTY }
+         }
+
+         const failed = checkWords({
+            text: words,
+            maxChars: DRAFT_LIMITS.commentChars,
+         }).some(({ ok }) => !ok)
+
+         return failed
+            ? { skip: WRITE_REASONS.UNSUITABLE }
+            : {
+                 words,
+                 mode: post.writtenMode === 'AI' ? 'AI' : 'TEMPLATE',
+              }
+      },
+   })
 }

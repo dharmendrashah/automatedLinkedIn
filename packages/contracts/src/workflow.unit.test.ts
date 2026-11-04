@@ -615,6 +615,7 @@ describe('Account Actions', () => {
          'account.replyToConversation',
          'account.removeConnection',
          'account.reactToPost',
+         'account.commentOnPost',
       ])
    })
 

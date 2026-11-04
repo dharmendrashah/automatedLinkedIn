@@ -91,6 +91,9 @@ export type PostItem = WithResult & {
    authorScore?: number | null
    // The post as the data service returned it, when a block found it.
    preview?: PostSnapshotData | null
+   // The words Write words put on the post, or the owner approved, and how they were written.
+   written?: string | null
+   writtenMode?: 'TEXTS' | 'AI' | null
 }
 
 export type CompanyItem = WithResult & {
@@ -281,6 +284,8 @@ const itemSchema = z.discriminatedUnion('kind', [
       authorSlug: z.string().nullable().optional(),
       authorScore: z.number().nullable().optional(),
       preview: postSchema.nullable().optional(),
+      written: z.string().nullable().optional(),
+      writtenMode: z.enum(['TEXTS', 'AI']).nullable().optional(),
       result: resultSchema,
       facts: factsSchema,
    }),

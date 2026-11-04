@@ -38,6 +38,8 @@ import { NetworkFiltersField } from './network-filters-field'
 import { PostField } from './post-field'
 import { ScheduleSettings } from './schedule-settings'
 import { Chips, ChipsInput, SearchPick, Stepper } from './setting-inputs'
+import { TextsField } from './texts-field'
+import { VoicePick } from './voice-pick'
 
 type Choice = { id: string; name: string }
 
@@ -200,6 +202,22 @@ export const BlockSettings = ({
 
       if (item.kind === 'composer') {
          return <MessageComposer id={id} use={item.use} value={textOf(value)} onChange={next => onChange(item.key, next)} />
+      }
+
+      if (item.kind === 'texts') {
+         return (
+            <TextsField
+               id={id}
+               value={Array.isArray(value) ? value.map(String) : []}
+               max={item.max}
+               chars={item.chars}
+               onChange={next => onChange(item.key, next)}
+            />
+         )
+      }
+
+      if (item.kind === 'voice') {
+         return <VoicePick id={id} value={textOf(value)} onChange={next => onChange(item.key, next)} />
       }
 
       if (item.kind === 'draft') {

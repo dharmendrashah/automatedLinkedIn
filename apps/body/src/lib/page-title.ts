@@ -30,6 +30,7 @@ const ROUTES: Array<[RegExp, string]> = [
    [/^\/sessions$/, 'Sessions'],
    [/^\/healthstatus$/, 'Service status'],
    [/^\/jobs$/, 'Cron monitor'],
+   [/^\/approve$/, 'To approve'],
    [/^\/profile$/, 'Profile'],
 ]
 
