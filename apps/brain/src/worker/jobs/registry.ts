@@ -1,7 +1,9 @@
 import { unique } from '../registry'
 import { accountDaily } from './accountDaily'
+import { approvalStart } from './approvalStart'
 import { connectionImport } from './connectionImport'
 import { dataReads } from './dataReads'
+import { draftsSweep } from './draftsSweep'
 import { engageSend } from './engageSend'
 import { eventDispatch } from './eventDispatch'
 import { invitationImport } from './invitationImport'
@@ -43,4 +45,6 @@ export const JOBS = unique('job', [
    inviteSend,
    engageSend,
    eventDispatch,
+   approvalStart,
+   draftsSweep,
 ])

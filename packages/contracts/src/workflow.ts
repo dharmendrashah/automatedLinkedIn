@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { readCompanyFilters } from './companyFilters'
+import { DRAFT_LIMITS, WRITE_LIMITS } from './draft'
 import { ENGAGE_LIMITS, REACTIONS, REACTION_LABELS } from './engage'
 import { EVENT_PHASES, type EventTriggerSettings, ORIGIN_KINDS, factsOf } from './events'
 import { FILTERS_TEXT_MAX } from './filtersText'
@@ -108,6 +109,10 @@ export type Field = (
    | { key: string; label: string; kind: 'draft' }
    // The words of an invite note, a message or a reply, written with variables and spintax (.plan/message-composer.md).
    | { key: string; label: string; kind: 'composer'; use: MessageUse; max: number }
+   // Up to `max` texts, one box each, with variables and spintax; each version is checked against `chars`.
+   | { key: string; label: string; kind: 'texts'; max: number; chars: number }
+   // One of the owner's writing voices, with a way to make a new one.
+   | { key: string; label: string; kind: 'voice' }
 ) & {
    hint?: string
    advanced?: boolean
@@ -252,7 +257,7 @@ export const accountSettings = (hours: number) => ({
 })
 
 // The blocks that may use the account that sent the person an invite ("inviter"): it needs no "Select accounts" before it.
-const INVITER_BLOCKS = new Set<string>(['account.reactToPost'])
+const INVITER_BLOCKS = new Set<string>(['account.reactToPost', 'account.commentOnPost'])
 
 // The wait each Account Actions block starts with, in hours.
 export const ACCOUNT_BLOCK_HOURS = {
@@ -269,6 +274,7 @@ export const ACCOUNT_BLOCK_HOURS = {
    'account.replyToConversation': 8,
    'account.removeConnection': 8,
    'account.reactToPost': 8,
+   'account.commentOnPost': 8,
 } as const
 
 // The most characters of a message or reply: the command that carries it may not pass 8 KB as JSON (the task limits it the same).
@@ -1347,6 +1353,7 @@ export const BLOCK_TYPES = [
    'trigger.workflow',
    'trigger.taskEvent',
    'trigger.messageArrived',
+   'trigger.approved',
    'trigger.hook',
    'input.posts',
    'input.profiles',
@@ -1379,6 +1386,7 @@ export const BLOCK_TYPES = [
    'process.room',
    'process.tag',
    'process.messageMood',
+   'process.write',
    'process.merge',
    'score.icp',
    'collect.profile',
@@ -1387,6 +1395,7 @@ export const BLOCK_TYPES = [
    'logic.ifEvent',
    'logic.ifPerson',
    'logic.split',
+   'logic.approve',
    'logic.else',
    'logic.runWorkflow',
    'logic.wait',
@@ -1409,6 +1418,7 @@ export const BLOCK_TYPES = [
    'account.replyToConversation',
    'account.removeConnection',
    'account.reactToPost',
+   'account.commentOnPost',
    'output.list',
    'output.markPosts',
    'output.csv',
@@ -1897,6 +1907,48 @@ const batchFields: Field[] = [
       advanced: true,
    },
 ]
+
+const WRITE_HOW = optionsOf([
+   ['texts', 'From my texts'],
+   ['ai', 'With AI'],
+])
+
+const WRITE_LENGTH_OPTIONS = optionsOf([
+   ['short', 'Short'],
+   ['medium', 'Medium'],
+   ['long', 'Long'],
+])
+
+const APPROVED_WHAT = optionsOf([
+   ['any', 'Anything'],
+   ['COMMENT', 'Comments'],
+   ['MESSAGE', 'First messages'],
+   ['REPLY', 'Replies'],
+])
+
+const APPROVED_FROM = optionsOf([
+   ['this', 'This workflow'],
+   ['any', 'Any workflow'],
+])
+
+const EXPIRE_OPTIONS = optionsOf(
+   DRAFT_LIMITS.expireHours.map(hours => [String(hours), hours === 168 ? '7 days' : `${hours} hours`])
+)
+
+const WRITE_STARTER =
+   '{Great point|Well said}, {author_first_name:there}. Which part of this took you longest to get right?'
+
+// The texts of Write words and the words of Comment on post: broken braces, unknown variables, and a version over what LinkedIn takes.
+const commentTextProblems = (label: string, texts: unknown[], nodeId: string): GraphError[] =>
+   texts.flatMap((text, at) =>
+      typeof text === 'string'
+         ? templateProblems(text, { maxChars: DRAFT_LIMITS.commentChars }).map(message => ({
+              nodeId,
+              level: 'error' as const,
+              message: `${label}${texts.length > 1 ? ` (text ${at + 1})` : ''}: ${message}`,
+           }))
+         : []
+   )
 
 const BLOCKS = {
    'trigger.manual': {
@@ -2494,6 +2546,57 @@ const BLOCKS = {
             advanced: true,
          },
          ...batchFields,
+      ],
+   },
+   'trigger.approved': {
+      group: 'Triggers',
+      liveness: 'always',
+      label: 'When I approve',
+      summary:
+         'Starts when you approve words in the inbox. Gives the posts you approved, each with the words you approved (or edited).',
+      input: null,
+      output: 'post',
+      config: z.object({
+         what: oneOf(APPROVED_WHAT, 'any'),
+         from: oneOf(APPROVED_FROM, 'this'),
+         groupMinutes: z
+            .number()
+            .int()
+            .min(DRAFT_LIMITS.groupMinutes.min)
+            .max(DRAFT_LIMITS.groupMinutes.max)
+            .default(DRAFT_LIMITS.groupMinutes.default),
+         maxPerHour: z
+            .number()
+            .int()
+            .min(DRAFT_LIMITS.runsPerHour.min)
+            .max(DRAFT_LIMITS.runsPerHour.max)
+            .default(DRAFT_LIMITS.runsPerHour.default),
+      }),
+      fields: [
+         {
+            key: 'what',
+            label: 'What',
+            kind: 'select',
+            options: APPROVED_WHAT,
+         },
+         {
+            key: 'from',
+            label: 'From',
+            kind: 'select',
+            options: APPROVED_FROM,
+         },
+         {
+            key: 'groupMinutes',
+            label: 'Group for (minutes)',
+            kind: 'int',
+            min: DRAFT_LIMITS.groupMinutes.min,
+            max: DRAFT_LIMITS.groupMinutes.max,
+            hint: 'Approvals close together start one run.',
+         },
+         {
+            ...maxPerHourField,
+            advanced: true,
+         },
       ],
    },
    'input.profiles': {
@@ -4034,6 +4137,184 @@ const BLOCKS = {
          },
       ],
    },
+   'process.write': {
+      group: 'Process',
+      flow: 'Takes posts, puts words on each; an Else after it gets the ones it did not write for',
+      flags: {
+         takesAnything: true,
+         keepsAside: true,
+      },
+      validate: node => {
+         const { how, voice, texts } = settingsOf(node)
+
+         if (how === 'ai') {
+            return voice
+               ? []
+               : [
+                    {
+                       nodeId: node.id,
+                       level: 'error',
+                       message: 'Write words: pick a voice.',
+                    },
+                 ]
+         }
+
+         return commentTextProblems('Write words', Array.isArray(texts) ? texts : [], node.id)
+      },
+      label: 'Write words',
+      costHint: 'With AI: about $0.002 for each item. From my texts is free.',
+      summary:
+         'Puts words on each post: one of your own texts, or words an AI writes in your voice. Posts it did not write for go to Else with a reason. It sends nothing.',
+      sample: {
+         in: {
+            link: 'https://www.linkedin.com/posts/ada-lovelace_engines-activity-7300000000000000000-AbCd',
+            author: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            link: 'https://www.linkedin.com/posts/ada-lovelace_engines-activity-7300000000000000000-AbCd',
+            written: 'Three days is a big jump. Which step did you remove first?',
+            result: {
+               action: 'write',
+               status: 'WRITTEN',
+            },
+         },
+      },
+      input: 'post',
+      output: 'post',
+      config: z.object({
+         how: oneOf(WRITE_HOW, 'texts'),
+         texts: z
+            .array(z.string().trim().min(1).max(TEMPLATE_RAW_MAX.text))
+            .min(1)
+            .max(WRITE_LIMITS.texts)
+            .default([WRITE_STARTER]),
+         voice: z.string().max(100).default(''),
+         goal: z.string().trim().max(WRITE_LIMITS.goalChars).default(''),
+         length: oneOf(WRITE_LENGTH_OPTIONS, 'short'),
+         language: z.string().trim().max(40).default(''),
+         skipSensitive: toggle(true),
+         minChars: z
+            .number()
+            .int()
+            .min(WRITE_LIMITS.minPostChars.min)
+            .max(WRITE_LIMITS.minPostChars.max)
+            .default(WRITE_LIMITS.minPostChars.default),
+         atMost: z
+            .number()
+            .int()
+            .min(WRITE_LIMITS.perRun.min)
+            .max(WRITE_LIMITS.perRun.max)
+            .default(WRITE_LIMITS.perRun.default),
+         extra: z.string().trim().max(WRITE_LIMITS.extraChars).default(''),
+      }),
+      fields: [
+         {
+            key: 'how',
+            label: 'How',
+            kind: 'select',
+            options: WRITE_HOW,
+            hint: 'Texts are free. AI costs a little.',
+         },
+         {
+            key: 'texts',
+            label: 'My texts',
+            kind: 'texts',
+            max: WRITE_LIMITS.texts,
+            chars: DRAFT_LIMITS.commentChars,
+            showWhen: {
+               key: 'how',
+               is: 'texts',
+            },
+            hint: 'Picked one at a time, in turn. Spintax {a|b} and {author_first_name} work.',
+         },
+         {
+            key: 'voice',
+            label: 'Voice',
+            kind: 'voice',
+            showWhen: {
+               key: 'how',
+               is: 'ai',
+            },
+            hint: 'Who you are and how you sound.',
+         },
+         {
+            key: 'goal',
+            label: 'Goal (optional)',
+            kind: 'text',
+            showWhen: {
+               key: 'how',
+               is: 'ai',
+            },
+            hint: 'What this message is for.',
+         },
+         {
+            key: 'length',
+            label: 'Length',
+            kind: 'select',
+            options: WRITE_LENGTH_OPTIONS,
+            showWhen: {
+               key: 'how',
+               is: 'ai',
+            },
+            hint: 'Short is one sentence.',
+         },
+         {
+            key: 'language',
+            label: 'Language (empty: the same as the post)',
+            kind: 'text',
+            advanced: true,
+            showWhen: {
+               key: 'how',
+               is: 'ai',
+            },
+         },
+         {
+            key: 'skipSensitive',
+            label: 'Skip sensitive posts',
+            kind: 'toggle',
+            advanced: true,
+            showWhen: {
+               key: 'how',
+               is: 'ai',
+            },
+         },
+         {
+            key: 'minChars',
+            label: 'Skip posts under (characters)',
+            kind: 'int',
+            min: WRITE_LIMITS.minPostChars.min,
+            max: WRITE_LIMITS.minPostChars.max,
+            advanced: true,
+            showWhen: {
+               key: 'how',
+               is: 'ai',
+            },
+         },
+         {
+            key: 'atMost',
+            label: 'Write at most (a run)',
+            kind: 'int',
+            min: WRITE_LIMITS.perRun.min,
+            max: WRITE_LIMITS.perRun.max,
+            advanced: true,
+            showWhen: {
+               key: 'how',
+               is: 'ai',
+            },
+            hint: 'Caps the cost of one run.',
+         },
+         {
+            key: 'extra',
+            label: 'Extra instructions',
+            kind: 'textarea',
+            advanced: true,
+            showWhen: {
+               key: 'how',
+               is: 'ai',
+            },
+         },
+      ],
+   },
    'process.tag': {
       group: 'Process',
       label: 'Add label',
@@ -4048,6 +4329,83 @@ const BLOCKS = {
             kind: 'words',
             suggest: 'labels',
             hint: `Up to ${LABEL_MAX}, 30 characters each.`,
+         },
+      ],
+   },
+   'logic.approve': {
+      group: 'Logic',
+      flow: 'Takes posts with words, puts them in your inbox and stops there; an Else after it gets the rest',
+      flags: {
+         takesAnything: true,
+         keepsAside: true,
+      },
+      validate: (node, graph) =>
+         graph.nodes.some(({ type }) => type === 'trigger.approved')
+            ? []
+            : [
+                 {
+                    nodeId: node.id,
+                    level: 'note',
+                    message: 'Ask me first: approving does nothing until you add "When I approve".',
+                 },
+              ],
+      label: 'Ask me first',
+      summary:
+         'Puts each post and its words in your inbox and stops there. "When I approve" goes on with the ones you approve. Nothing goes on from here.',
+      sample: {
+         in: {
+            link: 'https://www.linkedin.com/posts/ada-lovelace_engines-activity-7300000000000000000-AbCd',
+            written: 'Three days is a big jump. Which step did you remove first?',
+         },
+         out: {
+            link: 'https://www.linkedin.com/posts/ada-lovelace_engines-activity-7300000000000000000-AbCd',
+            result: {
+               action: 'approve',
+               status: 'DRAFTED',
+            },
+         },
+      },
+      input: 'post',
+      output: 'post',
+      config: z.object({
+         perDay: z
+            .number()
+            .int()
+            .min(DRAFT_LIMITS.perDay.min)
+            .max(DRAFT_LIMITS.perDay.max)
+            .default(DRAFT_LIMITS.perDay.default),
+         expire: oneOf(EXPIRE_OPTIONS, String(DRAFT_LIMITS.expireDefault)),
+         keepWaiting: z
+            .number()
+            .int()
+            .min(DRAFT_LIMITS.keepWaiting.min)
+            .max(DRAFT_LIMITS.keepWaiting.max)
+            .default(DRAFT_LIMITS.keepWaiting.default),
+      }),
+      fields: [
+         {
+            key: 'perDay',
+            label: 'At most (a day)',
+            kind: 'int',
+            min: DRAFT_LIMITS.perDay.min,
+            max: DRAFT_LIMITS.perDay.max,
+            hint: 'How many you can read in a day.',
+         },
+         {
+            key: 'expire',
+            label: 'Expire after',
+            kind: 'select',
+            options: EXPIRE_OPTIONS,
+            hint: 'Old posts make stale comments.',
+         },
+         {
+            key: 'keepWaiting',
+            label: 'Keep at most (waiting)',
+            kind: 'int',
+            min: DRAFT_LIMITS.keepWaiting.min,
+            max: DRAFT_LIMITS.keepWaiting.max,
+            advanced: true,
+            hint: 'Stops queuing while many wait.',
          },
       ],
    },
@@ -5500,6 +5858,94 @@ const BLOCKS = {
          ...accountFields(ACCOUNT_BLOCK_HOURS['account.reactToPost'], true),
       ],
    },
+   'account.commentOnPost': {
+      group: 'Account Actions',
+      flags: {
+         usesAccounts: true,
+         keepsAside: true,
+      },
+      unit: 'comments',
+      validate: (node, graph) => {
+         const { words } = settingsOf(node)
+
+         return [
+            ...actOffNote('Comment on post', 'comments')(node),
+            ...(typeof words === 'string' && words.trim() !== ''
+               ? commentTextProblems('Comment on post', [words], node.id)
+               : [
+                    {
+                       nodeId: node.id,
+                       level: 'error' as const,
+                       message: 'Comment on post: write the words.',
+                    },
+                 ]),
+            ...(typeof words === 'string' &&
+            words.includes('{written}') &&
+            !nodeBefore(graph, node.id, 'process.write') &&
+            !nodeBefore(graph, node.id, 'trigger.approved')
+               ? [
+                    {
+                       nodeId: node.id,
+                       level: 'note' as const,
+                       message: 'Comment on post uses {written}: add "Write words" or "When I approve" before it.',
+                    },
+                 ]
+               : []),
+         ]
+      },
+      label: 'Comment on post',
+      api: [accountApi('the id of one of your accounts that comments')],
+      summary:
+         'Comments on the posts that reach it with the words you set (by default the words from the block before), from the account that sent the author an invite, inside each account\u2019s daily limit. Posts it plans go on; the rest go to Else with a reason.',
+      sample: {
+         in: {
+            link: 'https://www.linkedin.com/posts/ada-lovelace_engines-activity-7300000000000000000-AbCd',
+            author: 'https://www.linkedin.com/in/ada-lovelace',
+            written: 'Three days is a big jump. Which step did you remove first?',
+         },
+         out: {
+            link: 'https://www.linkedin.com/posts/ada-lovelace_engines-activity-7300000000000000000-AbCd',
+            result: {
+               action: 'commentOnPost',
+               status: 'PLANNED',
+            },
+         },
+      },
+      input: 'post',
+      output: 'post',
+      config: z.object({
+         words: z.string().trim().max(TEMPLATE_RAW_MAX.text).default('{written}'),
+         daysApart: z
+            .number()
+            .int()
+            .min(ENGAGE_LIMITS.daysApart.min)
+            .max(ENGAGE_LIMITS.daysApart.max)
+            .default(ENGAGE_LIMITS.daysApart.default),
+         ...actSettings,
+         ...accountSettings(ACCOUNT_BLOCK_HOURS['account.commentOnPost']),
+         accountMode: z.enum(['inviter', 'pool', 'one', 'event']).default('inviter'),
+      }),
+      fields: [
+         {
+            key: 'words',
+            label: 'Words',
+            kind: 'textarea',
+            disarms: true,
+            hint: 'Leave {written} to use the words from Write words or the inbox. Variables and spintax work.',
+         },
+         {
+            key: 'daysApart',
+            label: 'Days between two acts on one person',
+            kind: 'int',
+            min: ENGAGE_LIMITS.daysApart.min,
+            max: ENGAGE_LIMITS.daysApart.max,
+            advanced: true,
+            hint: 'Counts reactions and comments both. A stable extra of up to a day is added so acts do not fall on one hour.',
+         },
+         actField,
+         ...accountFields(ACCOUNT_BLOCK_HOURS['account.commentOnPost'], true),
+      ],
+   },
    'output.csv': {
       group: 'Output',
       flags: { keepsResults: true },
@@ -5943,7 +6389,7 @@ export const topoOrder = (graph: Graph) => {
 }
 
 // How a run was started, and the triggers that fire for it. By hand and a preview fire every trigger.
-export type RunStart = 'MANUAL' | 'SCHEDULE' | 'PREVIEW' | 'API' | 'WORKFLOW' | 'EVENT' | 'HOOK'
+export type RunStart = 'MANUAL' | 'SCHEDULE' | 'PREVIEW' | 'API' | 'WORKFLOW' | 'EVENT' | 'HOOK' | 'APPROVAL'
 
 const FIRES: Record<RunStart, readonly BlockType[] | null> = {
    MANUAL: null,
@@ -5953,6 +6399,7 @@ const FIRES: Record<RunStart, readonly BlockType[] | null> = {
    WORKFLOW: ['trigger.workflow'],
    EVENT: ['trigger.taskEvent', 'trigger.messageArrived'],
    HOOK: ['trigger.hook'],
+   APPROVAL: ['trigger.approved'],
 }
 
 // Whether a trigger block starts a run. When the graph has no trigger of the kind that started the run, every trigger

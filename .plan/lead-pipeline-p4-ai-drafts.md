@@ -1,6 +1,6 @@
 # Lead pipeline, phase 4: words and approval (Write words, Ask me first, When I approve, Comment on post, the inbox)
 
-- Status: ready for the owner's approval (revision 2: one thing per block, screens and negative cases added)
+- Status: sub-step 4a (comments) built offline; 4b and 4c not started (see Outcome)
 - Created: 2026-11-03
 - Locked by user: no
 - Parent: [lead-outreach-pipeline.md](lead-outreach-pipeline.md) (decisions, block design rules, what every block hands on)
@@ -351,9 +351,9 @@ flowchart TD
 
 ## Approach
 
-- [ ] Read `WorkflowTriggerService.startFromApi` and the run queue in the code; confirm the direct approval start fits (or ask the owner before any change)
-- [ ] Tests first: guards on a golden set (an ordinary post, a short one, a tragedy, one that gives orders, one in another language, one of ours), the service with mock models, caps and switch, the draft states, the approval start (a double click, a worker restart, a failed start, a workflow switched off, two workflows)
-- [ ] 4a: AI service, `PlatformSetting` caps, voice, `Draft`, B7, B8, B9, B10, the inbox and badge, `drafts-sweep`, status module, retention, notices; an opt-in live test; a preview on real posts
+- [x] Read `WorkflowTriggerService.startFromApi` and the run queue in the code; confirm the direct approval start fits (it does: `WorkflowService.startRun(userId, workflowId, 'APPROVAL', runKey, { input })` carries the draft ids and queues behind a live run; the new trigger value `APPROVAL` is an additive enum value)
+- [x] Tests first: guards (contracts `draft.unit.test.ts`), the AI writer with a fake model, the write, ask and approved blocks with mocks, the draft service, the budget, the approval start (a double click, two passes at once, a workflow switched off, no workflow, the group window) and one real engine run of an approved chain. Not done: a golden set of posts through a real model, a restart in the middle of a start
+- [~] 4a: AI service, `PlatformSetting` caps, voice, `Draft`, B7, B8, B9, B10, the inbox and badge, `drafts-sweep`, retention. Done, except: the status page module, the alarms, the AI chat notice (needs 4b), an opt-in live test, a preview on real posts
 - [ ] 4b: first messages: B7 on people with the chat, `{written}` in Send message; R-flow Stage 4 With AI
 - [ ] 4c: replies: B7 on conversations, `{written}` in Reply; build R5 as the real-path check
 - [ ] Build Stage 3 with comments and Stage 4 With AI on a test user; drafts on a test account only, live after the owner's go-ahead
@@ -376,4 +376,10 @@ flowchart TD
 
 ## Outcome
 
-Filled in when done.
+Status: 4a (comments) is built offline and tested; no real model was called, nothing ran in a browser or on LinkedIn.
+
+Shipped: contracts `draft.ts` (limits, fixed sentences, the checks, the voice) and the blocks `process.write`, `logic.approve`, `trigger.approved`, `account.commentOnPost` (accountMode `inviter`); template variables `{written}` and `{author_first_name}`; migration `20261104150000_lead_pipeline_drafts` (`Draft` with a partial unique index while waiting, `WritingVoice`, `WorkflowTrigger.APPROVAL`); `DraftService`, `VoiceService`, `AiBudgetService`, `ApprovalStartService`; `core/aiWriter` (prompt, one call, no retries) and `core/aiModel` (the only file that imports the AI SDK, `ai` 7 with Google and OpenAI compatible providers, env `AI_*`, off when `AI_PROVIDER` is empty); jobs `approval-start` and `drafts-sweep`; routers `draft` and `voice`, and the admin `jobs.ai` and `jobs.setAi`; the To approve page with a sidebar count, the Voice picker, the texts field and the AI switch on the Cron monitor. Erasing a person now also deletes their `PostAct` and `Draft` rows (the act queue of phase 3 missed it).
+
+Deviations: only posts get words (4b and 4c are not started, so `{written}` works in Comment on post only and the variable is listed in the other composers without a value); texts are picked in turn from a start that depends on the run, not by "least recently used in a week"; Ask me first has a main output that never carries items so an Else can be connected (it has no "leaf" kind); the approval run queue limit is the engine's 10 (`DRAFT_LIMITS.queuedRuns` 3 holds approvals back before they start) and a held approval waits until it expires, there is no separate 6 hour drop; the preview of Write words writes for up to 3 posts and is counted in the ledger as `ai:preview:` calls (10 previews of 3 a day); no status page module, alarms, AI notice, or provider terms check; the opt-in live test is not written; no body component tests (the pure checks are tested in contracts).
+
+Follow-ups: 4b and 4c; the status module and alarms; the AI notice with 4b; staging gets the `AI_*` values only when the operator wants With AI; a real-model run with a paid key.

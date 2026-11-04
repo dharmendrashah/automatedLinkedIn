@@ -18,6 +18,7 @@ describe('descriptions of what a call may feed', () => {
             'account.getConnections',
             'account.getConversations',
             'account.getRequests',
+            'account.commentOnPost',
             'account.reactToPost',
             'account.removeConnection',
             'account.replyToConversation',

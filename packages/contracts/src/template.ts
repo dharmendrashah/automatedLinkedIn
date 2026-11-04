@@ -85,6 +85,14 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
    variable('reacted_date', 'Time', 'Date they reacted', '21 Oct 2026', 'A reaction a workflow found'),
    variable('reacted_ago', 'Time', 'How long ago they reacted', '4 days ago', 'A reaction a workflow found'),
    variable('account_first_name', 'You', 'First name of the sending account', 'Sam', 'The account that writes'),
+   variable('author_first_name', 'Person', 'First name of the post author', 'Ada', 'The post a workflow found'),
+   variable(
+      'written',
+      'Activity',
+      'The words Write words wrote',
+      'Three days is a big jump. Which step did you remove first?',
+      'Write words, or the words you approved'
+   ),
 ]
 
 const KNOWN = new Set(TEMPLATE_VARIABLES.map(({ key }) => key))

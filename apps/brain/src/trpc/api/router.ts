@@ -10,6 +10,7 @@ import {
    browse,
    companyPage,
    connections,
+   draft,
    icp,
    jobs,
    label,
@@ -32,6 +33,7 @@ import {
    task,
    unibox,
    usage,
+   voice,
    workflow,
    workflowList,
 } from './resolvers'
@@ -47,6 +49,7 @@ export const appRouter = router({
    browse,
    companyPage,
    postPage,
+   draft,
    icp,
    jobs,
    label,
@@ -66,6 +69,7 @@ export const appRouter = router({
    task,
    unibox,
    usage,
+   voice,
    workflow,
    workflowList,
 })

@@ -5,7 +5,7 @@ import { type PostItem } from 'core/workflowItem'
 import { type Graph } from '@automatedLinkedIn/contracts'
 
 import { type Context } from './context'
-import { reactToPosts } from './engageBlocks'
+import { commentOnPosts, reactToPosts } from './engageBlocks'
 
 const mocks = vi.hoisted(() => ({
    plan: vi.fn(),
@@ -48,11 +48,11 @@ const post = (slug: string, fields: Partial<PostItem> = {}): PostItem => ({
    ...fields,
 })
 
-const graph = (settings: Settings): Graph => ({
+const graph = (settings: Settings, type: 'account.reactToPost' | 'account.commentOnPost'): Graph => ({
    nodes: [
       {
          id: 'n1',
-         type: 'account.reactToPost',
+         type,
          config: settings,
          position: {
             x: 0,
@@ -63,8 +63,11 @@ const graph = (settings: Settings): Graph => ({
    edges: [],
 })
 
-const context = (inputs: PostItem[], overrides: { preview?: boolean; settings?: Settings } = {}): Context => {
-   const built = graph(overrides.settings ?? {})
+const context = (
+   inputs: PostItem[],
+   overrides: { preview?: boolean; settings?: Settings; type?: 'account.commentOnPost' } = {}
+): Context => {
+   const built = graph(overrides.settings ?? {}, overrides.type ?? 'account.reactToPost')
 
    return {
       run: {
@@ -204,5 +207,84 @@ describe('reactToPosts', () => {
       await reactToPosts(context([post('1', { authorSlug: 'ada' })]))
 
       expect(mocks.plan.mock.calls[0]?.[1].candidates[0]).toMatchObject({ slug: 'ada' })
+   })
+})
+
+describe('commentOnPosts', () => {
+   const url = (slug: string) => `https://www.linkedin.com/feed/update/urn:li:activity:${slug}`
+   const withWords = (slug: string, fields: Partial<PostItem> = {}) =>
+      post(slug, {
+         written: 'Which step went first?',
+         writtenMode: 'AI',
+         ...fields,
+      })
+   const comment = (inputs: PostItem[], settings: Settings = {}) =>
+      commentOnPosts(
+         context(inputs, {
+            type: 'account.commentOnPost',
+            settings: {
+               actForReal: true,
+               ...settings,
+            },
+         })
+      )
+
+   it('should plan each post with its own words, how they were written, and the name of the author', async () => {
+      mocks.plan.mockResolvedValue(new Map([[url('1'), planned()]]))
+
+      const author = { name: 'Ada Lovelace' }
+      const preview = { author } as PostItem['preview']
+
+      await comment([withWords('1', { preview })], { words: 'Hi {author_first_name}. {written}' })
+
+      expect(mocks.plan.mock.calls[0]?.[1]).toMatchObject({
+         wish: { act: 'COMMENT' },
+         candidates: [
+            {
+               slug: '1-author',
+               words: 'Hi Ada. Which step went first?',
+               mode: 'AI',
+            },
+         ],
+      })
+   })
+
+   it('should read written words with braces as they are, and call words from texts a template', async () => {
+      mocks.plan.mockResolvedValue(new Map([[url('1'), planned()]]))
+
+      await comment([
+         withWords('1', {
+            written: 'Use {first_name} wisely?',
+            writtenMode: 'TEXTS',
+         }),
+      ])
+
+      expect(mocks.plan.mock.calls[0]?.[1].candidates[0]).toMatchObject({
+         words: 'Use {first_name} wisely?',
+         mode: 'TEMPLATE',
+      })
+   })
+
+   it('should leave a post with no words, or words that fail a check, to Else without asking the queue', async () => {
+      mocks.plan.mockResolvedValue(new Map())
+
+      await comment([post('1'), withWords('2', { written: 'See https://example.com' })])
+
+      expect(mocks.plan.mock.calls[0]?.[1].candidates).toEqual([])
+      expect(ids(0)).toEqual(['1:SKIPPED:Words are empty.', '2:SKIPPED:Not suitable.'])
+   })
+
+   it('should say nothing was commented in a preview', async () => {
+      mocks.plan.mockResolvedValue(new Map([[url('1'), planned()]]))
+
+      const result = await commentOnPosts(
+         context([withWords('1')], {
+            type: 'account.commentOnPost',
+            preview: true,
+         })
+      )
+
+      expect(result.message).toContain('A preview comments on nothing.')
+      expect(mocks.plan.mock.calls[0]?.[1]).toMatchObject({ dryRun: true })
    })
 })

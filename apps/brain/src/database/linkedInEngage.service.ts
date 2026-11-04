@@ -29,6 +29,9 @@ export type EngageCandidate = {
    authorHeadline: string | null
    excerpt: string | null
    postedAt: Date | null
+   // The words for this post when each post has its own (a comment), and how they were written.
+   words?: string
+   mode?: 'TEMPLATE' | 'AI'
 }
 
 export type EngageWish = { act: 'REACT'; reactions: Reaction[] } | { act: 'COMMENT'; words: string }
@@ -256,7 +259,8 @@ export class LinkedInEngageService {
                postedAt: candidate.postedAt,
                act: wish.act,
                reaction,
-               words: wish.act === 'COMMENT' ? wish.words : null,
+               words: wish.act === 'COMMENT' ? (candidate.words ?? wish.words) : null,
+               ...(candidate.mode && { mode: candidate.mode }),
                plannedAt: now,
                ...(request.origin && {
                   originWorkflowId: request.origin.workflowId,

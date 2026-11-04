@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
    messageReads: vi.fn(),
    actsSwitch: vi.fn(),
    setActs: vi.fn(),
+   ai: vi.fn(),
+   setAi: vi.fn(),
 }))
 
 vi.mock('database', () => ({
@@ -61,6 +63,8 @@ describe('jobs resolvers', () => {
       ['messageReads', c => c.messageReads()],
       ['acts', c => c.acts()],
       ['setActs', c => c.setActs({ on: false })],
+      ['ai', c => c.ai()],
+      ['setAi', c => c.setAi({ on: false })],
    ]
 
    it.each(calls)('should refuse %s to a signed-in user who is not the admin', async (_, call) => {
@@ -72,6 +76,7 @@ describe('jobs resolvers', () => {
       expect(mocks.messageReads).not.toHaveBeenCalled()
       expect(mocks.actsSwitch).not.toHaveBeenCalled()
       expect(mocks.setActs).not.toHaveBeenCalled()
+      expect(mocks.setAi).not.toHaveBeenCalled()
    })
 
    it.each(calls)('should refuse %s without a token', async (_, call) => {
@@ -109,6 +114,16 @@ describe('jobs resolvers', () => {
       await expect(caller(asUser('ADMIN')).setActs({ on: false })).resolves.toMatchObject({ on: false })
 
       expect(mocks.setActs).toHaveBeenCalledWith(false, 'ada@elitale.com')
+   })
+
+   it('should let the admin read and change the AI switch', async () => {
+      mocks.ai.mockResolvedValueOnce({ on: true })
+      mocks.setAi.mockResolvedValueOnce({ on: false })
+
+      await expect(caller(asUser('ADMIN')).ai()).resolves.toEqual({ on: true })
+      await expect(caller(asUser('ADMIN')).setAi({ on: false })).resolves.toEqual({ on: false })
+
+      expect(mocks.setAi).toHaveBeenCalledWith({ on: false }, 'ada@elitale.com')
    })
 
    it('should page the runs of a job, without idle ones unless asked, 50 at a time', async () => {

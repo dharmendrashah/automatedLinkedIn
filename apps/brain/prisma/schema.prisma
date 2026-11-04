@@ -41,6 +41,8 @@ model User {
   invitations       LinkedInInvitation[]
   sentInvites       LinkedInInvite[]
   postActs          PostAct[]
+  drafts            Draft[]
+  writingVoices     WritingVoice[]
   connections       LinkedInConnection[]
   accountProfiles   LinkedInAccountProfile[]
   firstDaysUsed     FirstDayUsed[]
@@ -230,6 +232,8 @@ enum WorkflowTrigger {
   EVENT
   // A hook of a block: a small run of the same workflow, started by the host run's block.
   HOOK
+  // Started by the owner approving drafts in the inbox (.plan/lead-pipeline-p4-ai-drafts.md).
+  APPROVAL
 }
 
 enum WorkflowRunStatus {
@@ -2059,6 +2063,81 @@ model PlatformSetting {
   value     Json
   changedBy String?
   updatedAt DateTime @updatedAt
+}
+
+enum DraftKind {
+  COMMENT
+  MESSAGE
+  REPLY
+}
+
+enum DraftState {
+  DRAFTED
+  APPROVED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+// Words a workflow wrote that wait for the owner to decide (.plan/lead-pipeline-p4-ai-drafts.md). The inbox only decides: approving marks
+// the draft APPROVED, and the job `approval-start` starts the workflow's "When I approve" with it. `startedRunId` is the idempotency of that
+// start. `item`, `card`, `words` and `originalWords` hold other people's and the owner's words: emptied after 30 days, the row stays.
+// One draft waits for a target at a time (a partial unique index in the migration).
+model Draft {
+  id               String     @id @default(uuid(7))
+  userId           String
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind             DraftKind
+  // TEXTS or AI.
+  mode             String
+  // The person the words are for (the post's author) and what they are about (the post key).
+  slug             String
+  targetKey        String
+  item             Json?
+  card             Json?
+  words            String?
+  originalWords    String?
+  maxChars         Int
+  state            DraftState @default(DRAFTED)
+  // A fixed sentence the owner can read: why it was cancelled or is not going on.
+  reason           String?
+  rejectReason     String?
+  expiresAt        DateTime
+  draftedAt        DateTime   @default(now())
+  decidedAt        DateTime?
+  originWorkflowId String
+  originRunId      String
+  originNodeId     String
+  voiceId          String?
+  model            String?
+  inputTokens      Int        @default(0)
+  outputTokens     Int        @default(0)
+  costMicros       Int        @default(0)
+  startedRunId     String?
+  startedAt        DateTime?
+  clearedAt        DateTime?
+
+  @@index([userId, state, draftedAt])
+  @@index([state, expiresAt])
+  @@index([state, startedRunId, decidedAt])
+  @@index([userId, kind, slug])
+}
+
+// How the owner's words sound, picked by Write words (.plan/lead-pipeline-p4-ai-drafts.md).
+model WritingVoice {
+  id        String   @id @default(uuid(7))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  about     String   @default("")
+  tone      String   @default("friendly")
+  language  String   @default("")
+  avoid     String[]
+  rules     String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, name])
 }
 
 // A finished `linkedin-invite` run that waits to be stored; the same shape and lifecycle as InvitationImport. It holds no names.

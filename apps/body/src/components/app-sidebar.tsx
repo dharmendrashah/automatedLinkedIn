@@ -14,6 +14,7 @@ import {
    Activity,
    Briefcase,
    Building2,
+   ClipboardCheck,
    ExternalLink,
    FileText,
    Inbox,
@@ -41,6 +42,7 @@ const navMain: NavItem[] = [
    { title: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
    { title: 'Unibox', to: '/unibox', icon: Inbox },
    { title: 'My network', to: '/network', icon: UserPlus },
+   { title: 'To approve', to: '/approve', icon: ClipboardCheck },
    { title: 'Write a post', to: '/posting', icon: SquarePen },
    { title: 'LinkedIn accounts', to: '/accounts', icon: Briefcase },
    { title: 'LinkedIn companies', to: '/companies', icon: Building2 },
@@ -71,6 +73,11 @@ export const AppSidebar = (props: ComponentProps<typeof Sidebar>) => {
    })
    const items =
       me.data?.user?.role === 'ADMIN' ? [...navMain.slice(0, -1), cronMonitor, ...navMain.slice(-1)] : navMain
+   const waiting = trpc.draft.counts.useQuery(undefined, {
+      retry: false,
+      refetchInterval: 60_000,
+      staleTime: 30_000,
+   }).data?.waiting
 
    return (
       <Sidebar collapsible="offcanvas" {...props}>
@@ -87,7 +94,7 @@ export const AppSidebar = (props: ComponentProps<typeof Sidebar>) => {
             </SidebarMenu>
          </SidebarHeader>
          <SidebarContent>
-            <NavMain items={items} />
+            <NavMain items={items.map(item => (item.to === '/approve' ? { ...item, badge: waiting } : item))} />
             <NavSecondary items={navSecondary} className="mt-auto" />
          </SidebarContent>
          <SidebarFooter>{user ? <NavUser profile={toProfile(user.profile)} /> : null}</SidebarFooter>

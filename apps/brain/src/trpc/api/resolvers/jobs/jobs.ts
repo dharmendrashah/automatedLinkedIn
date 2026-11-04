@@ -48,4 +48,11 @@ export const jobs = router({
    setActs: adminProcedure
       .input(z.object({ on: z.boolean() }))
       .mutation(({ ctx, input }) => PlatformSettingService.setActs(input.on, ctx.user.email)),
+
+   // The switch and the caps of With AI (.plan/lead-pipeline-p4-ai-drafts.md).
+   ai: adminProcedure.query(() => PlatformSettingService.ai()),
+
+   setAi: adminProcedure
+      .input(z.object({ on: z.boolean() }))
+      .mutation(({ ctx, input }) => PlatformSettingService.setAi(input, ctx.user.email)),
 })
