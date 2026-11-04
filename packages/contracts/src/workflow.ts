@@ -1420,6 +1420,10 @@ export const BLOCK_TYPES = [
    'account.getConnections',
    'account.getRequests',
    'account.getConversations',
+   'account.getNotifications',
+   'account.getViewers',
+   'account.getFeed',
+   'account.getMutual',
    'account.answerRequests',
    'account.sendInvite',
    'account.withdrawInvite',
@@ -2060,6 +2064,28 @@ const PATTERN_PARTS = optionsOf([
    ['sizes', 'Company sizes'],
    ['industries', 'Industries'],
    ['places', 'Places'],
+])
+
+const OWN_SINCE = optionsOf([
+   ['24h', '24 hours'],
+   ['3d', '3 days'],
+   ['7d', '7 days'],
+   ['14d', '14 days'],
+   ['30d', '30 days'],
+])
+
+const NOTIFICATION_PICKS = optionsOf([
+   ['viewed', 'Viewed me'],
+   ['engaged', 'Engaged with my posts'],
+   ['accepted', 'Accepted'],
+   ['life', 'Life events'],
+   ['mentions', 'Mentions'],
+])
+
+const FEED_SHOWS = optionsOf([
+   ['posts', 'Posts'],
+   ['life', 'Life events'],
+   ['both', 'Both'],
 ])
 
 const BLOCKS = {
@@ -5945,6 +5971,143 @@ const BLOCKS = {
          },
          ...accountFields(ACCOUNT_BLOCK_HOURS['account.getConversations']),
       ],
+   },
+   'account.getNotifications': {
+      group: 'Account Actions',
+      costHint: 'free',
+      validate: storedScopeProblems('Get notifications'),
+      label: 'Get notifications',
+      summary:
+         'Gives the people behind the notifications your accounts have stored (who viewed you, engaged with your posts, accepted, changed jobs). It opens nothing on LinkedIn and acts on nothing; a person whose notification names no profile is not given.',
+      sample: {
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            facts: {
+               'notification.kinds': 'viewed, reacted',
+               'notification.count': 2,
+            },
+         },
+      },
+      input: 'start',
+      output: 'profile',
+      config: z.object({
+         ...storedScopeConfig,
+         since: oneOf(OWN_SINCE, '7d'),
+         kinds: someOf(NOTIFICATION_PICKS).default(['viewed', 'engaged', 'accepted', 'life']),
+      }),
+      fields: [
+         ...storedScopeFields,
+         {
+            key: 'since',
+            label: 'Since',
+            kind: 'select',
+            options: OWN_SINCE,
+            hint: 'Only newer ones.',
+         },
+         {
+            key: 'kinds',
+            label: 'Kinds',
+            kind: 'multi',
+            options: NOTIFICATION_PICKS,
+         },
+      ],
+   },
+   'account.getViewers': {
+      group: 'Account Actions',
+      costHint: 'free',
+      validate: storedScopeProblems('Get profile viewers'),
+      label: 'Get profile viewers',
+      summary:
+         'Gives the people the profile viewers page named, from what your accounts have stored. A free account sees only totals and groups of companies, never names, so it gives no one; the step says how many were in groups.',
+      sample: {
+         out: {
+            name: 'Ada Lovelace',
+            headline: 'Founder at Analytical Engines',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+      },
+      input: 'start',
+      output: 'profile',
+      config: z.object({
+         ...storedScopeConfig,
+         since: oneOf(OWN_SINCE, '30d'),
+      }),
+      fields: [
+         ...storedScopeFields,
+         {
+            key: 'since',
+            label: 'Since',
+            kind: 'select',
+            options: OWN_SINCE,
+            hint: 'A free account sees companies, not people.',
+         },
+      ],
+   },
+   'account.getFeed': {
+      group: 'Account Actions',
+      costHint: 'free',
+      validate: storedScopeProblems('Get my feed posts'),
+      label: 'Get my feed posts',
+      summary:
+         'Gives the authors of the posts and life events your accounts saw in their feed, from what is stored. The feed gives no link to a post, so the people are given, not the posts.',
+      sample: {
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            facts: { 'feed.kind': 'lifeEvent' },
+         },
+      },
+      input: 'start',
+      output: 'profile',
+      config: z.object({
+         ...storedScopeConfig,
+         since: oneOf(OWN_SINCE, '24h'),
+         show: oneOf(FEED_SHOWS, 'both'),
+      }),
+      fields: [
+         ...storedScopeFields,
+         {
+            key: 'since',
+            label: 'Since',
+            kind: 'select',
+            options: OWN_SINCE,
+         },
+         {
+            key: 'show',
+            label: 'Show',
+            kind: 'select',
+            options: FEED_SHOWS,
+            hint: 'Life events: new job, anniversary.',
+         },
+      ],
+   },
+   'account.getMutual': {
+      group: 'Account Actions',
+      flags: { keepsAside: true },
+      costHint: 'free',
+      validate: storedScopeProblems('Get mutual connections'),
+      label: 'Get mutual connections',
+      summary:
+         'Adds to each person how many connections they share with your accounts, from the reads that are stored. People with no stored read go to Else: it reads nothing on LinkedIn.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            facts: {
+               'mutual.count': 4,
+               'mutual.first': 'bob-babbage',
+            },
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object(storedScopeConfig),
+      fields: storedScopeFields,
    },
    'account.answerRequests': {
       group: 'Account Actions',

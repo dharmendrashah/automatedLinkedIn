@@ -1,6 +1,7 @@
 import {
    Activity,
    Ban,
+   Bell,
    Briefcase,
    Building,
    Building2,
@@ -145,6 +146,10 @@ export const BLOCK_ICONS: Record<Block['type'], LucideIcon> = {
    'account.getConnections': Users,
    'account.getRequests': UserRound,
    'account.getConversations': MessageSquare,
+   'account.getNotifications': Bell,
+   'account.getViewers': Eye,
+   'account.getFeed': Newspaper,
+   'account.getMutual': Users,
    'account.answerRequests': CheckCheck,
    'account.sendInvite': UserPlus,
    'account.withdrawInvite': UserMinus,

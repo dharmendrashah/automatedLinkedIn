@@ -4,6 +4,7 @@ import { type Prisma, type WorkflowListMemberState, type WorkflowListMemberStatu
 
 import { ConflictError, uniqueOr } from './conflict'
 import { orNull, pageArgs } from './linkedInRecord'
+import { forgetOwnPages } from './ownPages.service'
 import { PrismaService } from './prisma.service'
 
 export const EXPORT_LIMIT = 10_000
@@ -482,6 +483,7 @@ export class WorkflowListService {
                slug: member.slug,
             },
          })
+         await forgetOwnPages(tx, userId, [member.slug])
 
          return count
       })

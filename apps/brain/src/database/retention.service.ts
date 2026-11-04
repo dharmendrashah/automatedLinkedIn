@@ -2,6 +2,7 @@ import { Prisma } from 'generated/prisma/client'
 
 import { FirstDayUsedService } from './firstDayUsed.service'
 import { JobRunService } from './jobRun.service'
+import { OwnPagesService } from './ownPages.service'
 import { PrismaService } from './prisma.service'
 import { SignalService } from './signal.service'
 
@@ -141,6 +142,7 @@ export class RetentionService {
       const jobRuns = await JobRunService.cleanup(now)
       const firstDaysUsed = await FirstDayUsedService.sweep(now)
       const signals = await SignalService.cleanup(now)
+      const ownPages = await OwnPagesService.cleanup(now)
 
       return {
          items: items.count,
@@ -159,6 +161,7 @@ export class RetentionService {
          jobRuns,
          firstDaysUsed,
          signals: signals.people + signals.companies + signals.excerpts,
+         ownPages,
       }
    }
 }

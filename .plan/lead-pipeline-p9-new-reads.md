@@ -1,6 +1,6 @@
 # Lead pipeline, phase 9: new reads (notifications, profile viewers, my feed, mutual connections)
 
-- Status: ready for the owner's approval
+- Status: done for the brain side (stores, imports, signals, blocks); the four spider reads and their screens are not built, see Outcome
 - Created: 2026-11-04
 - Locked by user: no (the three reads were approved on 2026-11-04: who viewed my profile, my feed, notifications; the mutual-connections read is added for automation A6, which the owner asked to include)
 - Parent: [lead-outreach-pipeline.md](lead-outreach-pipeline.md)
@@ -147,12 +147,12 @@ flowchart TD
 
 ## Approach
 
-- [ ] Recording sessions on a real account for each page; fixtures; notes (account, date, layout)
-- [ ] Tests first: the schemas of the four files, one reader test per fixture and layout, one test per verdict with the hands mocked, the `/uas/login` test, an e2e stand-in page for each new page shape
-- [ ] 9a S2 notifications and its block (also gives faster accept detection); 9b S3 viewers; 9c S4 the feed capture and its block; 9d S5 mutual and its block (last, on tier A only)
-- [ ] Brain: migration (additive: the four imports, the four stores, the schedule columns), import jobs, signal writers, retention
-- [ ] Today checklist items, the signals list, the quick filter
-- [ ] Spider task checklist (`.github/skills/spider-task-writer/assets/checklist.md`) copied here and ticked per task
+- [ ] Recording sessions on a real account for each page; fixtures; notes (account, date, layout) (needs the owner's recordings; not done)
+- [x] Tests first: the schemas of the four files (`reads.unit.test.ts`), the importers and readers on a real database (`ownPages.integration.test.ts`), the four blocks with the stores mocked and through the engine (`ownPageBlocks.unit.test.ts`, `ownPageBlocks.integration.test.ts`); no reader, verdict, `/uas/login` or e2e test because no spider task was written
+- [ ] 9a S2 notifications, 9b S3 viewers, 9c S4 the feed capture, 9d S5 mutual: the spider tasks (not built, no browser code until the recordings exist); the four blocks are built over the stores
+- [x] Brain: migration (additive: the four stores `AccountNotification`, `ProfileViewer`, `FeedPost`, `MutualRead`), import services, signal writers, retention, erasure and Do not contact; no import jobs or schedule columns (nothing produces the files yet)
+- [ ] Today checklist items, the signals list, the quick filter (not built)
+- [ ] Spider task checklist (not applicable: no task written)
 
 ## Edge cases and risks
 
@@ -173,4 +173,20 @@ flowchart TD
 
 ## Outcome
 
-Filled in when done.
+Shipped (not seen in a browser; nothing was run against LinkedIn; no spider code):
+
+- Contracts `reads.ts`: the schemas of the four files (`notifications.json`, `viewers.json`, `feed.json`, `mutual.json`), the notification, viewer-group and feed kinds, how long each is kept (30, 30, 14, 30 days) and `shownAgoMs` ("9m", "2h", "1d", "3w"). The shapes follow this plan; the pages were only partly recorded, so they may change when a spider task is written.
+- Migration `20261104180000_lead_pipeline_reads` (additive): `AccountNotification`, `ProfileViewer`, `FeedPost`, `MutualRead`, each with the owner and the account id (plain text, no relation); a `key` makes a row the same row when a read sees it again.
+- `OwnPagesService`: `importNotifications`, `importViewers`, `importFeed`, `importMutual` (a person on Do not contact or suppressed is dropped and counted; rows are stored once; signals are written: `viewed`, `engagedOurPost`, `accepted`, `jobchange`, `mutual`), the four reads back, `cleanup` in the retention job, and `forgetOwnPages` in erasure, Do not contact and Stop contacting them.
+- Blocks `account.getNotifications`, `account.getViewers`, `account.getFeed`, `account.getMutual` (Account Actions group, free, they read the stored rows of every signed-in account, the ones of Select accounts, or one; they act on nothing and open nothing). Notifications, viewers and the feed give people (a slug is all a row has); a free account's viewers page gives only groups, so the step says how many were counted in groups; Mutual adds `mutual.count` and `mutual.first` and sends people without a stored read to Else ("Not read yet.").
+- Checks: lint (0 warnings), ts:check, unit tests, clean `pnpm build --force`, the new integration tests and the whole brain integration suite.
+
+Deviations (deferred, not built):
+
+- The four spider tasks S2 to S5 (and the `linkedin-browse` v2 feed capture), their `budget`s, fixtures, verdict tests and the `ACCOUNT_ACTION_TASKS` lines: no browser code until the owner shares recordings. So nothing produces the four files yet; the blocks give nothing until a task or an import does. The import services are ready to be called by a worker job.
+- No "Read from LinkedIn first" setting, no import jobs, no schedule columns on the account, no `reads` platform switch.
+- "Since: the last time" is not offered (it needs a per-block memory); the choices are 24 hours to 30 days.
+- A viewers group row names a company by text only (no company link), so it cannot become a company signal or a company item; no `viewed` company signal.
+- The feed gives authors, not posts (no post key): Get my feed posts gives people with the fact `feed.kind`; no post items. A feed life event does not write `jobchange` or `funding` (unrecorded).
+- An accepted notification does not set `LinkedInInvite.acceptedAt` or the person's state; a person seen only by a read does not join My network with a reason sentence.
+- Not built: the Today checklist items, the Signals list in the person drawer, the quick filter "Showed interest in the last N days", the variable `{mutual_name}`, the daily limit of 10 mutual reads (a read is not made here).

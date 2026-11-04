@@ -11,6 +11,7 @@ import { ConflictError } from './conflict'
 import { DataReadService } from './dataRead.service'
 import { HandoffService } from './handoff.service'
 import { type ImportEntry, type Imported, LABEL_LIMIT, appendNote, importedOf } from './linkedInRecord'
+import { forgetOwnPages } from './ownPages.service'
 import { type PeopleSort, type PeopleTab, orderOf, peopleWhere } from './peopleFilters'
 import { PRIORITY } from './peopleIndex'
 import { PeopleIndexService } from './peopleIndex.service'
@@ -699,6 +700,7 @@ export class PeopleService {
          })
          await tx.personSnapshot.deleteMany({ where })
          await tx.personSignal.deleteMany({ where })
+         await forgetOwnPages(tx, userId, slugs)
 
          return slugs.length
       })
@@ -811,6 +813,7 @@ export class PeopleService {
                slug,
             },
          })
+         await forgetOwnPages(tx, userId, [slug])
          await tx.dataRead.deleteMany({
             where: {
                userId,
