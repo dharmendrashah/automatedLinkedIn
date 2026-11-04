@@ -12,7 +12,13 @@ import {
    WINDOW_SEND_BUTTON,
 } from '../../linkedin/markup'
 import { type Before, SEND_REQUEST, createMessageBox, handOverPage } from '../../linkedin/messageBox'
-import { hasProfileMessage, newestIsOurs, parseMessageWindow, parseThread } from '../../linkedin/messageReader'
+import {
+   hasProfileMessage,
+   newestIsOurs,
+   parseMessageWindow,
+   parseMessageWindows,
+   parseThread,
+} from '../../linkedin/messageReader'
 import { PACE } from '../../linkedin/pace'
 import { SignedOut, createSession } from '../../linkedin/session'
 import { type AnswerWatch } from '../../scraping/driver'
@@ -143,11 +149,23 @@ export const sendMessage = async (
       return html
    }
 
-   // The windows an earlier run left open come back with the page and sit before the new one; they are closed so the window read is the
-   // one just opened. A window that cannot be closed is left, and the recipient check then refuses it.
-   const closeOldWindows = async () => {
-      for (let closed = 0; closed < MAX_CLOSES && window(await hands.html()).open; closed += 1) {
-         if (!(await hands.clickSelector(WINDOW_CLOSE))) {
+   // The windows an earlier run left open come back with the page and sit before the new one. The new one is the window with a box that
+   // is for this person; the others are closed so the box typed in is the right one. A window that cannot be closed is left, and the
+   // recipient check then refuses the first window when it is not this person's.
+   const ownIndex = (html: string) =>
+      parseMessageWindows(html, today()).findIndex(shown => shown.composer.present && windowIsFor(shown, input))
+
+   const closeOtherWindows = async () => {
+      for (let closed = 0; closed < MAX_CLOSES; closed += 1) {
+         const html = await hands.html()
+         const own = ownIndex(html)
+         const other = parseMessageWindows(html, today()).findIndex((_, index) => index !== own)
+
+         if (own < 0 || other < 0) {
+            return
+         }
+
+         if (!(await hands.clickNth(WINDOW_CLOSE, other, ''))) {
             log('An old message window could not be closed')
 
             return
@@ -203,11 +221,10 @@ export const sendMessage = async (
          return { outcome: 'NO_MESSAGE_BUTTON' }
       }
 
-      let opened = window('')
+      let html = ''
 
-      for (let press = 1; press <= WINDOW_PRESSES && !opened.open; press += 1) {
+      for (let press = 1; press <= WINDOW_PRESSES && ownIndex(html) < 0; press += 1) {
          await reader.wait(PAUSES.settle)
-         await closeOldWindows()
 
          if (!(await hands.clickSelector(PROFILE_MESSAGE))) {
             log('The profile shows no Message link')
@@ -215,12 +232,16 @@ export const sendMessage = async (
             return { outcome: 'NO_MESSAGE_BUTTON' }
          }
 
-         opened = window(await until(WINDOW_LOOKS, html => window(html).composer.present))
+         html = await until(WINDOW_LOOKS, page => ownIndex(page) >= 0)
 
-         if (!opened.composer.present && press < WINDOW_PRESSES) {
+         if (ownIndex(html) < 0 && press < WINDOW_PRESSES) {
             log('The message window did not open, pressing Message again')
          }
       }
+
+      await closeOtherWindows()
+
+      const opened = window(await hands.html())
 
       if (!opened.composer.present) {
          log(opened.open ? 'The message window has no place to write' : 'The message window did not open')
