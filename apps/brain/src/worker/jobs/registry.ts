@@ -1,6 +1,7 @@
 import { unique } from '../registry'
 import { accountDaily } from './accountDaily'
 import { approvalStart } from './approvalStart'
+import { campaignRollup } from './campaignRollup'
 import { connectionImport } from './connectionImport'
 import { dataReads } from './dataReads'
 import { draftsSweep } from './draftsSweep'
@@ -47,4 +48,5 @@ export const JOBS = unique('job', [
    eventDispatch,
    approvalStart,
    draftsSweep,
+   campaignRollup,
 ])

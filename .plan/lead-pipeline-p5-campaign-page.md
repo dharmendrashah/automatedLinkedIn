@@ -1,6 +1,7 @@
 # Lead pipeline, phase 5: campaign page (the morning screen, funnel, fleet health)
 
-- Status: ready for the owner's approval (no open question)- Created: 2026-11-03
+- Status: built offline (see Outcome)
+- Created: 2026-11-03
 - Locked by user: no
 - Parent: [lead-outreach-pipeline.md](lead-outreach-pipeline.md)
 
@@ -133,11 +134,11 @@ flowchart TD
 
 ## Approach
 
-- [ ] Tests first: each funnel count on a seeded database with two campaigns, the rollup (recompute is idempotent), the health word from signals, the alarm rule
-- [ ] Migration (additive) and the campaign pickers on a workflow
-- [ ] Queries and the rollup job; tRPC `campaign` router (owner scoped)
-- [ ] The page: needs-you list, funnel, cuts, accounts strip, Pause everything; the list page; a link from the dashboard
-- [ ] Real path: run Stages 1, 2, 4 for a test campaign and read the page against the database
+- [x] Tests first: the health word, the label, the periods and the alarm rule (contracts `campaign.unit.test.ts`); each funnel count on a seeded database with two campaigns, the cuts, pause and resume, and the rollup written twice (`campaign.service.integration.test.ts`)
+- [x] Migration (additive) and the campaign pickers on a workflow
+- [x] Queries and the rollup job; tRPC `campaign` router (owner scoped)
+- [~] The page: needs-you list, funnel, cuts, accounts strip, Pause everything; the list page. Not done: the link from the dashboard, the header alerts, cost per qualified lead, the calibration cuts
+- [ ] Real path: run Stages 1, 2, 4 for a test campaign and read the page against the database. Not done
 
 ## Edge cases and risks
 
@@ -156,4 +157,8 @@ flowchart TD
 
 ## Outcome
 
-Filled in when done.
+Shipped: contracts `campaign.ts` (stages, periods, `campaignLabelOf`, `healthOf`, the accept-drop rule); migration `20261104160000_lead_pipeline_campaigns` (`Campaign`, `CampaignDay`, `Workflow.campaignId` and `stage`); `CampaignService` (create, delete, place, pause with an optional cancel of queued acts, invites and waiting drafts, resume of the same workflows), `CampaignStatsService` (funnel, cuts by fit, note and account, the warm-up test against the `control` label, the score histogram, needs-you), `FleetHealthService` (Healthy, Warning or Paused with reasons), `CampaignRollupService` and the job `campaign-rollup`; router `campaign`; pages `/campaigns` and `/campaigns/:id`, the Campaign and Stage pickers in the workflow settings, a sidebar entry.
+
+Deviations: the funnel reads people by the campaign label and invites by `originWorkflowId`; Messaged, Replied and Silent come from the person's last sent and received times (replies carry no origin yet, so they are not told apart by workflow), and Handed over counts people with the campaign label and `handed-off` changed in the period. The page reads the tables live; the rollup keeps the daily numbers but nothing reads it yet. Not built: cost per qualified lead, the cuts by keyword, finder, tier, signal, source and variant, the wallet and AI cap items of Needs you, the header alerts, the CSV button (a link opens the people in My network with the campaign label), a dashboard link, and the real-path run. Not seen in a browser.
+
+Follow-ups: reply origin (with 4b), cost per qualified lead from the step calls, header alerts.

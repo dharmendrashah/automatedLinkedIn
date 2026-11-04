@@ -21,6 +21,7 @@ import { useNavigate } from 'react-router'
 import { type Workflow } from './types'
 
 import { trpc } from '../../trpc'
+import { CampaignPlace } from './campaign-place'
 
 // Name and the two thresholds: qualified at or above the first number, maybe between the two.
 export const WorkflowSettings = ({ workflow }: { workflow: Workflow }) => {
@@ -65,6 +66,7 @@ export const WorkflowSettings = ({ workflow }: { workflow: Workflow }) => {
                onChange={event => setValues(current => ({ ...current, name: event.target.value }))}
             />
          </div>
+         <CampaignPlace workflowId={workflow.id} campaignId={workflow.campaignId} stage={workflow.stage} />
          <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
                <Label htmlFor="qualify-score">Qualified at or above</Label>

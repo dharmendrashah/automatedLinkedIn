@@ -7,6 +7,8 @@ import { DashboardLayout } from './layouts/DashboardLayout'
 import { PublicLayout } from './layouts/PublicLayout'
 import { Approve } from './pages/Approve'
 import { Callback } from './pages/Callback'
+import { Campaign } from './pages/Campaign'
+import { Campaigns } from './pages/Campaigns'
 import { Companies } from './pages/Companies'
 import { HealthStatus } from './pages/HealthStatus'
 import { Icps } from './pages/Icps'
@@ -133,6 +135,8 @@ const App = () => (
          <Route path="/healthstatus" element={<HealthStatus />} />
          <Route path="/jobs" element={<Jobs />} />
          <Route path="/approve" element={<Approve />} />
+         <Route path="/campaigns" element={<Campaigns />} />
+         <Route path="/campaigns/:id" element={<Campaign />} />
          <Route path="/profile" element={<Profile />} />
       </Route>
    </Routes>

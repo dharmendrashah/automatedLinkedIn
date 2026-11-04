@@ -43,6 +43,7 @@ model User {
   postActs          PostAct[]
   drafts            Draft[]
   writingVoices     WritingVoice[]
+  campaigns         Campaign[]
   connections       LinkedInConnection[]
   accountProfiles   LinkedInAccountProfile[]
   firstDaysUsed     FirstDayUsed[]
@@ -276,6 +277,10 @@ model Workflow {
   nextRunAt    DateTime?
   // SHA-256 of the API token; the token itself is shown once.
   apiTokenHash String?
+  // The campaign this workflow belongs to and where it sits in it (.plan/lead-pipeline-p5-campaign-page.md); none is fine.
+  campaignId   String?
+  campaign     Campaign?            @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  stage        CampaignStage        @default(OTHER)
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
   runs         WorkflowRun[]
@@ -286,6 +291,62 @@ model Workflow {
 
   @@unique([userId, name])
   @@index([enabled, nextRunAt])
+  @@index([campaignId])
+}
+
+enum CampaignStage {
+  DISCOVER
+  INVITE
+  WARM_UP
+  FIRST_MESSAGE
+  HAND_OFF
+  NO_ANSWER
+  OTHER
+}
+
+// A group of workflows that work one goal together, and the label its people carry (.plan/lead-pipeline-p5-campaign-page.md). Deleting
+// a campaign keeps its workflows, people and labels. `pausedWorkflowIds` are the workflows Pause everything switched off, so Resume
+// switches back on only those.
+model Campaign {
+  id                String        @id @default(uuid(7))
+  userId            String
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name              String
+  label             String
+  icpId             String?
+  voiceId           String?
+  pausedAt          DateTime?
+  pausedWorkflowIds String[]
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  workflows         Workflow[]
+  days              CampaignDay[]
+
+  @@unique([userId, name])
+  @@unique([userId, label])
+}
+
+// What a campaign did in one UTC day, kept past the 14 days run items live. Rewritten for the last 2 days on every pass of the job.
+model CampaignDay {
+  campaignId     String
+  campaign       Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  // YYYY-MM-DD, UTC.
+  day            String
+  found          Int      @default(0)
+  qualified      Int      @default(0)
+  invited        Int      @default(0)
+  accepted       Int      @default(0)
+  messaged       Int      @default(0)
+  replied        Int      @default(0)
+  handedOver     Int      @default(0)
+  draftsMade     Int      @default(0)
+  draftsApproved Int      @default(0)
+  draftsRejected Int      @default(0)
+  draftsExpired  Int      @default(0)
+  aiCostMicros   Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  @@id([campaignId, day])
 }
 
 // What an input block of a workflow took in a run, for "Skip what this workflow already took"
