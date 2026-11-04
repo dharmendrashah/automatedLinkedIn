@@ -4,6 +4,7 @@ exports[`blocks before they became one definition > should keep the sets of bloc
 {
   "elseSources": [
     "account.commentOnPost",
+    "account.getMutual",
     "account.reactToPost",
     "collect.changes",
     "logic.approve",
@@ -1062,6 +1063,62 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 7,
     },
     "type": "account.getConversations",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.getNotifications",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.getViewers",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.getFeed",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "account.getMutual",
   },
   {
     "plain": {

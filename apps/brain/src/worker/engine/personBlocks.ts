@@ -29,7 +29,7 @@ import { onMainSide } from './splitRules'
 // stored; none opens LinkedIn or costs anything.
 
 // The accounts a block looks at: any signed-in account of the owner (the default), the ones of "Select accounts", or one.
-const storedAccountsOf = async (ctx: Context) =>
+export const storedAccountsOf = async (ctx: Context) =>
    textIn(configOf(ctx.node), 'accountMode') === 'any'
       ? (await VisitPoolService.everySignedIn(ctx.run.userId, MAX_POOL)).ids
       : accountIdsOf(ctx)

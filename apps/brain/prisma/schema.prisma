@@ -29,39 +29,43 @@ model User {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  linkedInAccounts  LinkedInAccount[]
-  linkedInCompanies LinkedInCompany[]
-  linkedInPosts     LinkedInPost[]
-  linkedInProfiles  LinkedInProfile[]
-  companyJobs       LinkedInCompanyJob[]
-  collectSearches   CollectSearchCache[]
-  spiderSessions    SpiderSession[]
-  conversations     LinkedInConversation[]
-  replies           LinkedInReply[]
-  invitations       LinkedInInvitation[]
-  sentInvites       LinkedInInvite[]
-  postActs          PostAct[]
-  drafts            Draft[]
-  writingVoices     WritingVoice[]
-  campaigns         Campaign[]
-  connections       LinkedInConnection[]
-  accountProfiles   LinkedInAccountProfile[]
-  firstDaysUsed     FirstDayUsed[]
-  profileVisits     LinkedInPageVisit[]
-  postDrafts        PostDraft[]
-  postPublications  PostPublication[]
-  workflowLists     WorkflowList[]
-  suppressions      Suppression[]
-  personSnapshots   PersonSnapshot[]
-  personSignals     PersonSignal[]
-  companySignals    CompanySignal[]
-  pageSnapshots     PageSnapshot[]
-  dataReads         DataRead[]
-  icps              Icp[]
-  companyViews      CompanyView[]
-  workflows         Workflow[]
-  people            Person[]
-  messageTemplates  MessageTemplate[]
+  linkedInAccounts     LinkedInAccount[]
+  linkedInCompanies    LinkedInCompany[]
+  linkedInPosts        LinkedInPost[]
+  linkedInProfiles     LinkedInProfile[]
+  companyJobs          LinkedInCompanyJob[]
+  collectSearches      CollectSearchCache[]
+  spiderSessions       SpiderSession[]
+  conversations        LinkedInConversation[]
+  replies              LinkedInReply[]
+  invitations          LinkedInInvitation[]
+  sentInvites          LinkedInInvite[]
+  postActs             PostAct[]
+  drafts               Draft[]
+  writingVoices        WritingVoice[]
+  campaigns            Campaign[]
+  connections          LinkedInConnection[]
+  accountProfiles      LinkedInAccountProfile[]
+  firstDaysUsed        FirstDayUsed[]
+  profileVisits        LinkedInPageVisit[]
+  postDrafts           PostDraft[]
+  postPublications     PostPublication[]
+  workflowLists        WorkflowList[]
+  suppressions         Suppression[]
+  personSnapshots      PersonSnapshot[]
+  personSignals        PersonSignal[]
+  companySignals       CompanySignal[]
+  accountNotifications AccountNotification[]
+  profileViewers       ProfileViewer[]
+  feedPosts            FeedPost[]
+  mutualReads          MutualRead[]
+  pageSnapshots        PageSnapshot[]
+  dataReads            DataRead[]
+  icps                 Icp[]
+  companyViews         CompanyView[]
+  workflows            Workflow[]
+  people               Person[]
+  messageTemplates     MessageTemplate[]
 }
 
 enum WorkflowListMemberState {
@@ -192,6 +196,74 @@ model CompanySignal {
   @@unique([userId, slug, type, via, day])
   @@index([userId, slug])
   @@index([at])
+}
+
+// What an account's own pages showed (.plan/lead-pipeline-p9-new-reads.md), stored from the files of a read: notifications (30 days), who
+// viewed the profile (30), the feed (14) and the mutual connections of a person (30). `key` makes a row the same row when a read sees it
+// again. Fixed words, slugs and times; no text of a notification is kept.
+model AccountNotification {
+  id        String   @id @default(uuid(7))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId String
+  kind      String
+  slug      String?
+  at        DateTime
+  key       String
+  createdAt DateTime @default(now())
+
+  @@unique([accountId, key])
+  @@index([userId, at])
+}
+
+model ProfileViewer {
+  id        String   @id @default(uuid(7))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId String
+  // `person`, or a group row: `works-at`, `found-through-profile`, `connection-hiring`, `other`.
+  kind      String
+  slug      String?
+  company   String?
+  count     Int      @default(1)
+  at        DateTime
+  key       String
+  createdAt DateTime @default(now())
+
+  @@unique([accountId, key])
+  @@index([userId, at])
+}
+
+model FeedPost {
+  id         String   @id @default(uuid(7))
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId  String
+  authorSlug String?
+  // The feed gives no post key: a hash of the first 200 characters is the post's identity.
+  hash       String
+  excerpt    String
+  kind       String
+  at         DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([accountId, hash])
+  @@index([userId, at])
+}
+
+model MutualRead {
+  id        String   @id @default(uuid(7))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId String
+  slug      String
+  count     Int
+  // Up to 10 profile slugs of people the account is connected to.
+  mutual    String[]
+  readAt    DateTime @default(now())
+
+  @@unique([accountId, slug])
+  @@index([userId, readAt])
 }
 
 enum PageKind {

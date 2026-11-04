@@ -110,6 +110,7 @@ import { commentOnPosts, reactToPosts } from './engageBlocks'
 import { eventTrigger, hookTrigger, ifEvent, messageMood, runEvent } from './eventBlocks'
 import { sendInvites, withdrawInvites } from './inviteBlocks'
 import { retry, stop, taskResult, wait } from './logicBlocks'
+import { getFeed, getMutual, getNotifications, getViewers } from './ownPageBlocks'
 import { getChat, ifPerson, splitPeople } from './personBlocks'
 import { bestPerCompany, scoreCompanies, scoreSignals, spaceOut, stopContacting } from './rankBlocks'
 import { classifyItems, detectChanges, findThePattern } from './readBlocks'
@@ -1807,6 +1808,10 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'account.getConnections': getConnections,
    'account.getRequests': getRequests,
    'account.getConversations': getConversations,
+   'account.getNotifications': getNotifications,
+   'account.getViewers': getViewers,
+   'account.getFeed': getFeed,
+   'account.getMutual': getMutual,
    'account.answerRequests': answerRequests,
    'account.sendInvite': sendInvites,
    'account.withdrawInvite': withdrawInvites,
