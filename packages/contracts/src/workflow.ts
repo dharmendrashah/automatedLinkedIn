@@ -8,6 +8,7 @@ import { FILTERS_TEXT_MAX } from './filtersText'
 import { HOOK_START_ID, hooksSchema, splitHooks } from './hooks'
 import { INDUSTRY_PAIRS } from './industries'
 import { INVITE_LIMITS } from './invites'
+import { LABEL_LIMITS, labelsError } from './labels'
 import { type PeopleFiltersInput, readPeopleFilters } from './peopleFilters'
 import {
    PERSON_CHECK_ROWS,
@@ -1387,6 +1388,8 @@ export const BLOCK_TYPES = [
    'process.room',
    'process.tag',
    'process.bestPer',
+   'process.classify',
+   'process.pattern',
    'process.messageMood',
    'process.write',
    'process.merge',
@@ -1395,6 +1398,7 @@ export const BLOCK_TYPES = [
    'score.company',
    'collect.profile',
    'collect.chat',
+   'collect.changes',
    'logic.if',
    'logic.ifEvent',
    'logic.ifPerson',
@@ -2040,6 +2044,23 @@ const tierProblem =
                  message: `${label}: the tier lines must go down, A above B above C.`,
               },
            ]
+
+const READ_OPTIONS = optionsOf([
+   ['auto', 'By kind: post text, headline or last message'],
+   ['post', 'Post text'],
+   ['headline', 'Headline'],
+   ['message', 'Last message'],
+])
+
+const PATTERN_PARTS = optionsOf([
+   ['titles', 'Titles'],
+   ['companies', 'Companies'],
+   ['schools', 'Schools'],
+   ['skills', 'Skills'],
+   ['sizes', 'Company sizes'],
+   ['industries', 'Industries'],
+   ['places', 'Places'],
+])
 
 const BLOCKS = {
    'trigger.manual': {
@@ -4536,6 +4557,140 @@ const BLOCKS = {
          },
       ],
    },
+   'process.classify': {
+      group: 'Process',
+      flags: {
+         takesAnything: true,
+         keepsAside: true,
+      },
+      flow: 'Takes posts, people or conversations, puts one of your labels on each by reading its text; an Else after it gets the rest',
+      costHint: 'AI cost; capped per run',
+      validate: node => {
+         const lines = Array.isArray(node.config.labels) ? node.config.labels.map(String) : []
+         const problem = labelsError(lines)
+
+         return problem
+            ? [
+                 {
+                    nodeId: node.id,
+                    level: 'error',
+                    message: `Label with AI: ${problem}`,
+                 },
+              ]
+            : []
+      },
+      label: 'Label with AI',
+      summary:
+         'Reads the text of each item and puts one of your labels on it, when the AI is sure enough. Items it cannot label (not sure, nothing to read, AI off or over its limit) go to Else. It only reads and labels; it never writes to anyone.',
+      sample: {
+         in: {
+            link: 'https://www.linkedin.com/posts/ada-lovelace_engines-activity-7300000000000000000-AbCd',
+            text: 'Can anyone recommend a tool to schedule our outreach?',
+         },
+         out: {
+            link: 'https://www.linkedin.com/posts/ada-lovelace_engines-activity-7300000000000000000-AbCd',
+            facts: {
+               'item.label': 'asking',
+               'item.labelConfidence': 90,
+            },
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         read: oneOf(READ_OPTIONS, 'auto'),
+         labels: z
+            .array(
+               z
+                  .string()
+                  .trim()
+                  .max(LABEL_LIMITS.nameChars + LABEL_LIMITS.meaningChars + 4)
+            )
+            .max(LABEL_LIMITS.max)
+            .default([]),
+         minConfidence: z.number().int().min(50).max(95).default(70),
+         alsoTag: toggle(true),
+         atMost: z.number().int().min(1).max(500).default(100),
+      }),
+      fields: [
+         {
+            key: 'read',
+            label: 'Read',
+            kind: 'select',
+            options: READ_OPTIONS,
+            hint: 'What the AI reads.',
+         },
+         {
+            key: 'labels',
+            label: 'Labels',
+            kind: 'words',
+            hint: `${LABEL_LIMITS.min} to ${LABEL_LIMITS.max}, each as name: what it means, such as asking: asks for a tool or advice.`,
+         },
+         {
+            key: 'minConfidence',
+            label: 'Sure at least (percent)',
+            kind: 'int',
+            min: 50,
+            max: 95,
+            hint: 'Below this the item goes to Else.',
+         },
+         {
+            key: 'alsoTag',
+            label: 'Also tag the person',
+            kind: 'toggle',
+            advanced: true,
+            hint: 'Adds the label label:name to people.',
+         },
+         {
+            key: 'atMost',
+            label: 'Read at most, a run',
+            kind: 'int',
+            min: 1,
+            max: 500,
+            advanced: true,
+            hint: 'Caps the cost of one run.',
+         },
+      ],
+   },
+   'process.pattern': {
+      group: 'Process',
+      costHint: 'free',
+      flow: 'Takes people with a profile read, passes them on unchanged and sums up what they have in common',
+      label: 'Find the pattern',
+      summary:
+         'Counts what the people that reach it have in common (titles, companies, schools, skills, company sizes, industries, places) from their stored profile reads, and says the most common in the step message. Rules only, no AI.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object({
+         top: z.number().int().min(3).max(20).default(10),
+         parts: someOf(PATTERN_PARTS).default(PATTERN_PARTS.map(({ value }) => value)),
+      }),
+      fields: [
+         {
+            key: 'top',
+            label: 'Show the top',
+            kind: 'int',
+            min: 3,
+            max: 20,
+         },
+         {
+            key: 'parts',
+            label: 'Look at',
+            kind: 'multi',
+            options: PATTERN_PARTS,
+         },
+      ],
+   },
    'process.bestPer': {
       group: 'Process',
       flags: { keepsAside: true },
@@ -4928,6 +5083,46 @@ const BLOCKS = {
             kind: 'toggle',
             advanced: true,
             hint: 'Before anything is shown or sent on.',
+         },
+      ],
+   },
+   'collect.changes': {
+      group: 'Collect',
+      flags: {
+         scores: true,
+         keepsAside: true,
+      },
+      flow: 'Takes people, gives the ones whose newest stored profile read shows a new role; an Else after it gets the rest',
+      costHint: 'free',
+      label: 'Detect changes',
+      summary:
+         'Looks at the newest stored profile read of each person and keeps the ones who started a new role lately. It reads nothing on LinkedIn: a person never read, or with no new role, goes to Else. Keep writes a "new role" signal on the person.',
+      sample: {
+         in: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+         },
+         out: {
+            name: 'Ada Lovelace',
+            link: 'https://www.linkedin.com/in/ada-lovelace',
+            facts: {
+               'change.kind': 'new_role',
+               'change.role': 'Head of Growth',
+               'change.since': '2026-09-01',
+            },
+         },
+      },
+      input: 'profile',
+      output: 'profile',
+      config: z.object({ withinDays: z.number().int().min(7).max(365).default(90) }),
+      fields: [
+         {
+            key: 'withinDays',
+            label: 'Started within the last (days)',
+            kind: 'int',
+            min: 7,
+            max: 365,
+            hint: 'A position with a start date inside this window counts as a new role.',
          },
       ],
    },

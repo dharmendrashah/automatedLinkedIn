@@ -30,6 +30,32 @@ export class PersonSnapshotService {
       })
    }
 
+   // The newest stored read of each of these people, however old, by slug. Nothing is read from LinkedIn.
+   public static async forSlugs(userId: string, slugs: string[]) {
+      if (slugs.length === 0) {
+         return new Map<string, PersonSnapshotData>()
+      }
+
+      const rows = await PrismaService.client.personSnapshot.findMany({
+         where: {
+            userId,
+            slug: { in: slugs },
+         },
+         select: {
+            slug: true,
+            data: true,
+         },
+      })
+
+      return new Map(
+         rows.flatMap(({ slug, data }) => {
+            const snapshot = readSnapshot(data)
+
+            return snapshot ? [[slug, snapshot] as const] : []
+         })
+      )
+   }
+
    // Full profiles read in the last 30 days among these people, by slug, so a run does not pay for them again.
    public static async recent(userId: string, slugs: string[], now = new Date()) {
       if (slugs.length === 0) {

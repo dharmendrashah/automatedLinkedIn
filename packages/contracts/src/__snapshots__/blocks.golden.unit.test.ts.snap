@@ -5,6 +5,7 @@ exports[`blocks before they became one definition > should keep the sets of bloc
   "elseSources": [
     "account.commentOnPost",
     "account.reactToPost",
+    "collect.changes",
     "logic.approve",
     "logic.if",
     "logic.ifEvent",
@@ -16,6 +17,7 @@ exports[`blocks before they became one definition > should keep the sets of bloc
     "logic.split",
     "logic.taskResult",
     "process.bestPer",
+    "process.classify",
     "process.dedupe",
     "process.room",
     "process.write",
@@ -52,6 +54,7 @@ exports[`blocks before they became one definition > should keep the sets of bloc
     "logic.taskResult",
     "logic.wait",
     "output.return",
+    "process.classify",
     "process.dedupe",
     "process.merge",
     "process.room",
@@ -624,6 +627,34 @@ exports[`blocks before they became one definition > should keep what every block
       "costMicros": 0,
       "items": 9,
     },
+    "type": "process.classify",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "process.pattern",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
     "type": "process.messageMood",
   },
   {
@@ -723,6 +754,20 @@ exports[`blocks before they became one definition > should keep what every block
       "items": 9,
     },
     "type": "collect.chat",
+  },
+  {
+    "plain": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "preview": {
+      "howMany": 500,
+    },
+    "sized": {
+      "costMicros": 0,
+      "items": 9,
+    },
+    "type": "collect.changes",
   },
   {
     "plain": {

@@ -1,6 +1,6 @@
 # Lead pipeline, phase 8: reading blocks (Label with AI, Find the pattern, Detect changes, Compare with my account)
 
-- Status: ready for the owner's approval
+- Status: done (N3, N6 and a reduced N7 built offline; N9 and C13 deferred, see Outcome)
 - Created: 2026-11-04
 - Locked by user: no (N3, N6, N7, N9 approved in principle on 2026-11-04)
 - Parent: [lead-outreach-pipeline.md](lead-outreach-pipeline.md)
@@ -151,12 +151,12 @@ One thing: finds what a person shares with the account that will write to them.
 
 ## Approach
 
-- [ ] Tests first: the label schema and the answer check, the pattern counts, the change detection on two snapshots, the shared facts on two profiles
-- [ ] N3 on the AI service of phase 4 (a new kind `classify`, ledger label "AI labels")
-- [ ] "Suggest from my solution" (kind `suggest`, ledger label "AI suggestions"); `LabelExample` and "Use my examples"; the correction control; "From my verdicts" on N6
-- [ ] N6, N7, N9 (contract entry, executor, icon, registry tests); the Output tab for N6 and the "Use as ideal customer" button
-- [ ] C13: the third Write words kind, the inbox kind, the two block changes
-- [ ] Build A1 and A5 (phase 10) on a test user as the real-path check
+- [x] Tests first: the label schema and the answer check (`aiLabeler.unit.test.ts`, `labels.unit.test.ts`), the pattern counts and the change detection (`pattern.unit.test.ts`); the shared facts are not built
+- [x] N3 on the AI service of phase 4 (the same `callModel`, caps and `ai` switch; ledger label "AI labels"; the kind is the labeller's own schema, not a new enum value)
+- [ ] "Suggest from my solution" (kind `suggest`); `LabelExample` and "Use my examples"; the correction control; "From my verdicts" on N6 (deferred)
+- [x] N6, N7 (reduced), contract entries, executors (`worker/engine/readBlocks.ts`), icons, registry tests; N9 not built; the Output tab report and "Use as ideal customer" button for N6 not built (the report is the step message)
+- [ ] C13: the third Write words kind, the inbox kind, the two block changes (deferred)
+- [ ] Build A1 and A5 (phase 10) on a test user as the real-path check (phase 10)
 
 ## Edge cases and risks
 
@@ -179,4 +179,19 @@ One thing: finds what a person shares with the account that will write to them.
 
 ## Outcome
 
-Filled in when done.
+Shipped (not seen in a browser, no real model call; no provider is set up in the tests):
+
+- Contracts `labels.ts` (a label is a line `name: what it means`, 2 to 8, name up to 24 characters, meaning up to 120, names distinct) and three block entries: `process.classify` (Label with AI), `process.pattern` (Find the pattern), `collect.changes` (Detect changes).
+- Brain `core/aiLabeler.ts` (pack and answer check: the labels are the system text, the text read is quoted data with contact details removed and at most 2,000 characters, one call, no retry; an answer not on the list, below the line, or `none` is "Not sure."), `core/pattern.ts` (`findPattern`, `newRoleOf`, `startOf`), `PersonSnapshotService.forSlugs`, and the executors in `worker/engine/readBlocks.ts`.
+- Label with AI: items go to Else with one reason (Not sure., Nothing to read., AI is not set up., Paused by the admin., AI limit reached., AI did not answer.); labelled items carry the facts `item.label` and `item.labelConfidence`, and people the tag `label:<name>`; each call is booked as "AI labels" in the ledger (the AI caps and switch apply); a run reads at most the "Read at most" number, a preview three.
+- Find the pattern: counts once per person, shares of the people who have that part, from stored profile reads and the item's company size and industry; fewer than 5 full profiles says "Too few to see a pattern. Read more profiles."; people pass on unchanged.
+- Detect changes: keeps people whose newest stored read has a position that has not ended and started inside the window; facts `change.kind`, `change.role`, `change.since`; the signal `jobchange` (not in a preview) is dated the day the role started.
+- Checks: lint (0 warnings), ts:check, unit tests, clean `pnpm build --force`, the new integration test and the whole brain suite.
+
+Deviations (deferred, not built):
+
+- N7 does not compare two reads: the snapshot table keeps one read per person, so "changed company, headline or place since the previous read" and "Read again first" are not possible; it finds a new role from the start date of the current position in the newest stored read.
+- N9 Compare with my account is not built: there is no read of the account's own profile yet ("Get my profile"), so it could only ever answer "Read the account's own profile first.". The variables `{shared_school}`, `{shared_employer}`, `{shared_city}`, `{new_role}` are not added.
+- Label with AI reads post text, headline and last message only (no About, no job text); no "Suggest from my solution", no `LabelExample` and "Use my examples", no "Wrong label, use" control, no "From my verdicts" on Find the pattern.
+- Find the pattern has no Output tab report, ticks or "Use as ideal customer" button; its report is the step message.
+- C13 (a third Write words kind from topics, the POST draft kind, "Write a post" taking `{written}`, `{written}` in an invite note) is not built.
