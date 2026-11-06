@@ -11,7 +11,7 @@ import {
    WINDOW_COMPOSER,
    WINDOW_SEND_BUTTON,
 } from '../../linkedin/markup'
-import { type Before, SEND_REQUEST, createMessageBox, handOverPage } from '../../linkedin/messageBox'
+import { type Before, SEND_REQUEST, createMessageBox, handOverPage, refusedBy } from '../../linkedin/messageBox'
 import {
    hasProfileMessage,
    newestIsOurs,
@@ -51,10 +51,11 @@ type Deps = {
 
 // Through a slow proxy a profile can take half a minute to draw, and the window a few seconds to open.
 const READY_LOOKS = 20
-const WINDOW_LOOKS = 12
-// The profile draws its Message link before its page scripts run, and a press then opens nothing (staging, 2026-11-04, no window on
-// any of three runs); the link is pressed again, up to this many times, after the page has had time to settle. Nothing is typed before.
-const WINDOW_PRESSES = 3
+// About 45 s for a window to open after a press (a slow proxy draws it 20 s or more later), then 20 looks for its box.
+const WINDOW_LOOKS = 30
+const BOX_LOOKS = 20
+// A press on a window still coming opens another one, so a press is made only while no window is open.
+const WINDOW_PRESSES = 2
 // Old windows closed before a press (LinkedIn keeps a few at most).
 const MAX_CLOSES = 4
 
@@ -149,30 +150,30 @@ export const sendMessage = async (
       return html
    }
 
-   // The windows an earlier run left open come back with the page and sit before the new one. The new one is the window with a box that
-   // is for this person; the others are closed so the box typed in is the right one. A window that cannot be closed is left, and the
-   // recipient check then refuses the first window when it is not this person's.
+   // The window with a box that is for this person, or -1.
    const ownIndex = (html: string) =>
       parseMessageWindows(html, today()).findIndex(shown => shown.composer.present && windowIsFor(shown, input))
+   const windowCount = (html: string) => parseMessageWindows(html, today()).length
 
+   // Closes every message window but this person's (all of them when none is theirs). False when one could not be closed.
    const closeOtherWindows = async () => {
       for (let closed = 0; closed < MAX_CLOSES; closed += 1) {
          const html = await hands.html()
          const own = ownIndex(html)
          const other = parseMessageWindows(html, today()).findIndex((_, index) => index !== own)
 
-         if (own < 0 || other < 0) {
-            return
+         if (other < 0) {
+            return true
          }
 
          if (!(await hands.clickNth(WINDOW_CLOSE, other, ''))) {
-            log('An old message window could not be closed')
-
-            return
+            return false
          }
 
          await reader.wait(PAUSES.click)
       }
+
+      return false
    }
 
    // The newest conversation of /messaging/ is the one just written to; it is handed over only when it says so itself.
@@ -221,9 +222,15 @@ export const sendMessage = async (
          return { outcome: 'NO_MESSAGE_BUTTON' }
       }
 
-      let html = ''
+      if (!(await closeOtherWindows())) {
+         log('An old message window could not be closed')
 
-      for (let press = 1; press <= WINDOW_PRESSES && ownIndex(html) < 0; press += 1) {
+         return { outcome: 'WRONG_RECIPIENT' }
+      }
+
+      let html = await hands.html()
+
+      for (let press = 1; press <= WINDOW_PRESSES && windowCount(html) === 0; press += 1) {
          await reader.wait(PAUSES.settle)
 
          if (!(await hands.clickSelector(PROFILE_MESSAGE))) {
@@ -232,19 +239,33 @@ export const sendMessage = async (
             return { outcome: 'NO_MESSAGE_BUTTON' }
          }
 
-         html = await until(WINDOW_LOOKS, page => ownIndex(page) >= 0)
+         html = await until(WINDOW_LOOKS, page => windowCount(page) > 0)
 
-         if (ownIndex(html) < 0 && press < WINDOW_PRESSES) {
+         if (windowCount(html) === 0 && press < WINDOW_PRESSES) {
             log('The message window did not open, pressing Message again')
          }
       }
 
-      await closeOtherWindows()
+      if (windowCount(html) > 0) {
+         html = await until(BOX_LOOKS, page => ownIndex(page) >= 0)
+      }
 
-      const opened = window(await hands.html())
+      if (ownIndex(html) >= 0) {
+         await closeOtherWindows()
+      }
 
-      if (!opened.composer.present) {
-         log(opened.open ? 'The message window has no place to write' : 'The message window did not open')
+      // Typing only into the one window open, so a duplicate that is still there is never the one written in.
+      const windows = parseMessageWindows(await hands.html(), today())
+      const [opened] = windows
+
+      if (windows.length > 1) {
+         log('More than one message window is open')
+
+         return { outcome: 'WRONG_RECIPIENT' }
+      }
+
+      if (!opened?.composer.present) {
+         log(opened ? 'The message window has no place to write' : 'The message window did not open')
 
          return { outcome: 'NO_COMPOSER' }
       }
@@ -315,7 +336,8 @@ export const sendMessage = async (
 
       const { outcome } = await box.confirm(watch, input.text, before)
 
-      if (outcome === 'NOT_SENT') {
+      // Words left in the box with no answer from LinkedIn do not prove the send did nothing: the message may have gone elsewhere.
+      if (outcome === 'NOT_SENT' && refusedBy(watch.statuses())) {
          return {
             outcome: 'FAILED',
             why: 'NOT_SENT',
@@ -326,7 +348,7 @@ export const sendMessage = async (
          await handOverNewest()
       }
 
-      return { outcome }
+      return { outcome: outcome === 'NOT_SENT' ? 'UNKNOWN' : outcome }
    } catch (error) {
       if (error instanceof SignedOut) {
          return { outcome: pressed ? 'UNKNOWN' : 'SIGNED_OUT' }

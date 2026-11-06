@@ -26,6 +26,8 @@ const LOOKS = 10
 export const SEND_REQUEST = ['voyagerMessagingDashMessengerMessages', 'action=createMessage']
 const accepted = (status: number) => status >= 200 && status < 300
 const refused = (status: number) => status >= 400 && status < 500
+// Whether LinkedIn answered the send request and refused every answer it gave.
+export const refusedBy = (statuses: number[]) => statuses.length > 0 && statuses.every(refused)
 // How many looks for the send button to come alive once the words are typed.
 const ENABLE_LOOKS = 8
 // How many times the page is scrolled a little to bring the send button into view (run 896e63b8: a notice at the top pushed the
@@ -137,7 +139,7 @@ export const createMessageBox = ({ hands, reader, log, box, send, scope, message
       }
 
       // The box is tidied on a best effort: it must not change what is known about the send.
-      if (statuses.length > 0 && statuses.every(refused)) {
+      if (refusedBy(statuses)) {
          log('LinkedIn refused the message')
          await clear().catch(() => undefined)
 
