@@ -790,6 +790,40 @@ describe('LinkedInReplyService (database)', () => {
          })
       })
 
+      it('should keep the workflow, run and block that asked for a first message', async () => {
+         await connect('grace')
+
+         const started = await LinkedInReplyService.start(userId, accountId, 'grace', 'Hello', {
+            workflowId: 'w-campaign',
+            runId: 'r-1',
+            nodeId: 'n-message',
+         })
+
+         await expect(
+            PrismaService.client.linkedInReply.findUniqueOrThrow({ where: { id: started?.id ?? '' } })
+         ).resolves.toMatchObject({
+            originWorkflowId: 'w-campaign',
+            originRunId: 'r-1',
+            originNodeId: 'n-message',
+         })
+      })
+
+      it('should keep the workflow, run and block that asked for a reply in a conversation', async () => {
+         const reply = await LinkedInReplyService.send(userId, conversationId, 'Hi', undefined, {
+            workflowId: 'w-campaign',
+            runId: 'r-2',
+            nodeId: 'n-reply',
+         })
+
+         await expect(
+            PrismaService.client.linkedInReply.findUniqueOrThrow({ where: { id: reply?.id ?? '' } })
+         ).resolves.toMatchObject({
+            originWorkflowId: 'w-campaign',
+            originRunId: 'r-2',
+            originNodeId: 'n-reply',
+         })
+      })
+
       it('should queue the first message with the person, and start the message task with what it needs', async () => {
          await connect('grace')
 

@@ -233,8 +233,45 @@ describe('campaigns (database)', () => {
          state: 'QUEUED',
          invitedAt: null,
       })
+      await db.linkedInReply.createMany({
+         data: [
+            {
+               userId,
+               accountId,
+               text: 'Queued by the campaign',
+               state: 'QUEUED',
+               recipientSlug: 'q1',
+               originWorkflowId: workflowA,
+               originRunId: 'r1',
+               originNodeId: 'message',
+            },
+            {
+               userId,
+               accountId,
+               text: 'Queued by another campaign',
+               state: 'QUEUED',
+               recipientSlug: 'q2',
+               originWorkflowId: workflowB,
+               originRunId: 'r2',
+               originNodeId: 'message',
+            },
+            {
+               userId,
+               accountId,
+               text: 'Already sending',
+               state: 'SENDING',
+               recipientSlug: 'q3',
+               originWorkflowId: workflowA,
+               originRunId: 'r3',
+               originNodeId: 'message',
+            },
+         ],
+      })
 
       expect(await CampaignService.pause(userId, first.id, false)).toEqual({ switchedOff: 1 })
+      expect((await db.linkedInReply.findFirstOrThrow({ where: { text: 'Queued by the campaign' } })).state).toBe(
+         'QUEUED'
+      )
       expect((await db.workflow.findUniqueOrThrow({ where: { id: workflowA } })).enabled).toBe(false)
       expect((await db.workflow.findUniqueOrThrow({ where: { id: workflowB } })).enabled).toBe(true)
       expect((await db.linkedInInvite.findFirstOrThrow({ where: { slug: 'queued-1' } })).state).toBe('QUEUED')
@@ -242,6 +279,14 @@ describe('campaigns (database)', () => {
       await CampaignService.pause(userId, first.id, true)
 
       expect((await db.linkedInInvite.findFirstOrThrow({ where: { slug: 'queued-1' } })).state).toBe('CANCELLED')
+      expect(await db.linkedInReply.findFirstOrThrow({ where: { text: 'Queued by the campaign' } })).toMatchObject({
+         state: 'FAILED',
+         failure: 'The campaign was paused.',
+      })
+      expect((await db.linkedInReply.findFirstOrThrow({ where: { text: 'Queued by another campaign' } })).state).toBe(
+         'QUEUED'
+      )
+      expect((await db.linkedInReply.findFirstOrThrow({ where: { text: 'Already sending' } })).state).toBe('SENDING')
       expect((await db.draft.findFirstOrThrow({ where: { targetKey: 'activity:1' } })).state).toBe('CANCELLED')
       expect(await CampaignService.resume(userId, first.id)).toEqual({ switchedOn: 1 })
       expect((await db.workflow.findUniqueOrThrow({ where: { id: workflowA } })).enabled).toBe(true)

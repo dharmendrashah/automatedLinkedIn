@@ -1,4 +1,4 @@
-import { LinkedInReplyService, ReplyActService, WorkflowListService } from 'database'
+import { LinkedInReplyService, ReplyActService, type ReplyOrigin, WorkflowListService } from 'database'
 
 import { missingSentence } from '@automatedLinkedIn/contracts'
 
@@ -19,6 +19,12 @@ const MESSAGES: Driver = {
    limit: /in 24 hours/,
    limitReason: 'The account reached its limit for today. Left for the next run.',
 }
+
+const originOf = ({ run, node }: Context): ReplyOrigin => ({
+   workflowId: run.workflowId,
+   runId: run.id,
+   nodeId: node.id,
+})
 
 export const sendMessages = async (ctx: Context): Promise<StepResult> => {
    const { run, node } = ctx
@@ -88,7 +94,8 @@ export const sendMessages = async (ctx: Context): Promise<StepResult> => {
                   plan.targets.push({
                      slug: person.slug,
                      accountId,
-                     ask: () => LinkedInReplyService.start(run.userId, accountId, person.slug, words.text),
+                     ask: () =>
+                        LinkedInReplyService.start(run.userId, accountId, person.slug, words.text, originOf(ctx)),
                   })
                }
             }
@@ -180,7 +187,8 @@ export const replyToConversations = async (ctx: Context): Promise<StepResult> =>
                   plan.targets.push({
                      slug: conversation.slug,
                      accountId: row.accountId,
-                     ask: () => LinkedInReplyService.send(run.userId, conversation.slug, words.text),
+                     ask: () =>
+                        LinkedInReplyService.send(run.userId, conversation.slug, words.text, undefined, originOf(ctx)),
                   })
                }
             }
