@@ -2,6 +2,7 @@ import { browserDetection } from './browserDetection'
 import { type TaskDefinition } from './defineTask'
 import { createLinkedinBrowse } from './linkedinBrowse'
 import { createLinkedinConnections } from './linkedinConnections'
+import { createLinkedinEngage } from './linkedinEngage'
 import { createLinkedinInvitations } from './linkedinInvitations'
 import { createLinkedinInvite } from './linkedinInvite'
 import { createLinkedinLogin } from './linkedinLogin'
@@ -33,4 +34,5 @@ export const buildTasks = (config: TaskConfig): TaskDefinition[] => [
    createLinkedinInvite({ baseUrl: config.linkedin.baseUrl }),
    createLinkedinViewProfile({ baseUrl: config.linkedin.baseUrl }),
    createLinkedinViewCompany({ baseUrl: config.linkedin.baseUrl }),
+   createLinkedinEngage({ baseUrl: config.linkedin.baseUrl }),
 ]

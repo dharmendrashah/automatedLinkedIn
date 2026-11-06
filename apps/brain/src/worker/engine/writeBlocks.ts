@@ -13,7 +13,7 @@ import {
    WRITE_REASONS,
    type WriteReason,
    checkWords,
-   engagePostOf,
+   engageKeyOf,
    failedReason,
    renderTemplate,
 } from '@automatedLinkedIn/contracts'
@@ -325,7 +325,7 @@ export const askMeFirst = async (ctx: Context): Promise<StepResult> => {
 
    for (const post of posts) {
       const author = authorOf(post)
-      const key = engagePostOf(post.url)?.key
+      const key = engageKeyOf(post.url)?.key
 
       if (!post.written?.trim()) {
          aside.set(post.slug, APPROVE_REASONS.NO_WORDS)
