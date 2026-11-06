@@ -288,7 +288,7 @@ export const Campaign = () => {
                      checked={stopQueued}
                      onCheckedChange={next => setStopQueued(next === true)}
                   />
-                  <Label htmlFor="stop-queued">Also stop queued acts and waiting drafts</Label>
+                  <Label htmlFor="stop-queued">Also stop queued acts, invites, drafts and messages</Label>
                </div>
                <DialogFooter>
                   <Button variant="outline" onClick={() => setPausing(false)}>

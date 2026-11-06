@@ -1666,6 +1666,10 @@ model LinkedInReply {
   waitReason     String?
   waitUntil      DateTime?
   waitZone       String?
+  // The workflow block that asked for it, so a campaign's pause can cancel what is still queued; null for a message made by hand.
+  originWorkflowId String?
+  originRunId    String?
+  originNodeId   String?
 
   @@index([accountId, createdAt])
   @@index([accountId, startedAt])

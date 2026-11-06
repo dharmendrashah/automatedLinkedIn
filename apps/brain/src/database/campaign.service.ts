@@ -189,6 +189,16 @@ export class CampaignService {
                reason: PAUSED,
             },
          })
+         await db.linkedInReply.updateMany({
+            where: {
+               ...origin,
+               state: 'QUEUED',
+            },
+            data: {
+               state: 'FAILED',
+               failure: PAUSED,
+            },
+         })
       }
 
       return { switchedOff: on.length }

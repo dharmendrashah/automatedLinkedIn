@@ -10,6 +10,16 @@ import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
 import { BrowseBudgetError, TaskBusyError, TaskRefusedError, TaskUnavailableError } from './taskErrors'
 
+// The workflow block that asked for a reply, so a campaign's pause can find it.
+export type ReplyOrigin = { workflowId: string; runId: string; nodeId: string }
+
+const originColumns = (origin?: ReplyOrigin) =>
+   origin && {
+      originWorkflowId: origin.workflowId,
+      originRunId: origin.runId,
+      originNodeId: origin.nodeId,
+   }
+
 // Unverified against LinkedIn's own limits; kept in one place (.plan/unibox-send.md, Q2). The numbers of a day (replies, first
 // messages) come from limits.ts.
 export const REPLY_LIMITS = {
@@ -56,7 +66,13 @@ const refusal = async <T>(work: () => Promise<T>): Promise<T> => {
 export class LinkedInReplyService {
    // Starts the reply and resolves to its id; null when the conversation is not the owner's. Throws TaskRefusedError with a
    // sentence when it cannot be sent now (the limits, an account that is busy or not signed in).
-   public static async send(userId: string, conversationId: string, text: string, uploadId?: string) {
+   public static async send(
+      userId: string,
+      conversationId: string,
+      text: string,
+      uploadId?: string,
+      origin?: ReplyOrigin
+   ) {
       const conversation = await PrismaService.client.linkedInConversation.findFirst({
          where: {
             id: conversationId,
@@ -96,6 +112,7 @@ export class LinkedInReplyService {
             attachments: files,
             state: 'QUEUED',
             ...(uploadId && { uploadId }),
+            ...originColumns(origin),
          },
          select: { id: true },
       })
@@ -112,7 +129,7 @@ export class LinkedInReplyService {
    // A message to a connection of the owner's account, from New message: it goes on in the conversation the account already has with the
    // person, or is the first message of a new one (task `linkedin-message`). Null when the person is not a connection of that account of
    // the owner. Throws TaskRefusedError with a sentence when it cannot be sent now.
-   public static async start(userId: string, accountId: string, slug: string, text: string) {
+   public static async start(userId: string, accountId: string, slug: string, text: string, origin?: ReplyOrigin) {
       const db = PrismaService.client
       const connection = await db.linkedInConnection.findFirst({
          where: {
@@ -201,6 +218,7 @@ export class LinkedInReplyService {
                state: 'QUEUED',
                recipientSlug: slug,
                recipientName: connection.name,
+               ...originColumns(origin),
             },
             select: { id: true },
          })

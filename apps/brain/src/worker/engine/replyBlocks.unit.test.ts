@@ -145,6 +145,7 @@ const context = (
    return {
       run: {
          id: 'r1',
+         workflowId: 'w1',
          userId: 'u1',
          startedAt: new Date(),
          stopRequestedAt: null,
@@ -245,7 +246,11 @@ describe('sendMessages', () => {
          sendMessages(context('account.sendMessage', [ada, bob, cat], { settings: armed }))
       ).rejects.toBeInstanceOf(Waiting)
 
-      expect(mocks.start).toHaveBeenCalledWith('u1', 'a1', 'ada', 'Hi Ada at Analytical Engines')
+      expect(mocks.start).toHaveBeenCalledWith('u1', 'a1', 'ada', 'Hi Ada at Analytical Engines', {
+         workflowId: 'w1',
+         runId: 'r1',
+         nodeId: 'n1',
+      })
       expect(mocks.ask).toHaveBeenCalledWith('r1', 'n1', 'ada', 'a1', 'ASKED', { ref: 'm-ada' })
       expect(mocks.ask).toHaveBeenCalledWith('r1', 'n1', 'bob', '', 'DONE', {
          status: 'SKIPPED',
@@ -496,7 +501,11 @@ describe('replyToConversations', () => {
       ).rejects.toBeInstanceOf(Waiting)
 
       expect(mocks.send).toHaveBeenCalledTimes(1)
-      expect(mocks.send).toHaveBeenCalledWith('u1', 'c1', 'Hi Ada at Analytical Engines')
+      expect(mocks.send).toHaveBeenCalledWith('u1', 'c1', 'Hi Ada at Analytical Engines', undefined, {
+         workflowId: 'w1',
+         runId: 'r1',
+         nodeId: 'n1',
+      })
       expect(mocks.ask).toHaveBeenCalledWith('r1', 'n1', 'c2', '', 'DONE', {
          status: 'SKIPPED',
          reason: 'They did not write last.',
