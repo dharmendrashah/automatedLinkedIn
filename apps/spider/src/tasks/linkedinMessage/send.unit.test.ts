@@ -36,6 +36,13 @@ type Page = {
    compose?: { recipients: string[]; profile: string }
    // Windows the browser profile kept open from earlier runs, by name; each press of the close button removes the first.
    stale?: string[]
+   // Reads of the page after a press before the window shows, and then before its box shows.
+   drawsAfter?: number
+   boxAfter?: number
+   // The window is open when the page loads (an earlier run left it for this person).
+   preOpen?: boolean
+   // Windows that open with the window, as a press that landed late leaves them.
+   lateStale?: string[]
    // The close button of an old window cannot be pressed.
    staleStays?: boolean
 }
@@ -55,10 +62,12 @@ const setup = (page: Page = {}) => {
    const { messageLink = true, opens = true, title = 'Ada Lovelace', composer = true, history = [] } = page
    const { typingWorks = true, sendWorks = true, appears = true, inboxTitle = 'Ada Lovelace', inboxOurs = true } = page
    let at = ''
-   let open = false
+   let open = page.preOpen ?? false
    let typed = ''
    let pressed = 0
-   let stale = [...(page.stale ?? [])]
+   let reads = 0
+   let openedAt = 0
+   let others = [...(page.stale ?? [])]
    const calls: string[] = []
    const attached: Array<{ name: string; content: string }> = []
    const html = () => {
@@ -70,7 +79,10 @@ const setup = (page: Page = {}) => {
          })}</body></html>`
       }
 
-      const old = (open ? stale : [])
+      const drawn = open && reads - openedAt >= (page.drawsAfter ?? 0)
+      const boxDrawn = drawn && reads - openedAt >= (page.drawsAfter ?? 0) + (page.boxAfter ?? 0)
+      const boxShown = composer && boxDrawn
+      const old = others
          .map(name =>
             messageWindowMarkup({
                title: name,
@@ -85,12 +97,12 @@ const setup = (page: Page = {}) => {
 
       return `<html><body>${old}${profileMarkup({
          messageLink,
-         ...(open && {
+         ...(drawn && {
             window: {
                title,
                ...(page.compose && { compose: page.compose }),
                messages: [...history, ...(pressed > 0 && appears ? [ours('2-sent')] : [])],
-               ...(composer && {
+               ...(boxShown && {
                   composer: {
                      typed,
                      sendDisabled: typed === '' || !sendWorks,
@@ -101,7 +113,11 @@ const setup = (page: Page = {}) => {
       })}</body></html>`
    }
    const browser = {
-      pageHtml: vi.fn(async () => html()),
+      pageHtml: vi.fn(async () => {
+         reads += 1
+
+         return html()
+      }),
       inspect: vi.fn(async () => ({
          url: at,
          title: '',
@@ -121,18 +137,25 @@ const setup = (page: Page = {}) => {
 
          calls.push(`close window ${index}`)
 
-         if (page.staleStays || index >= stale.length) {
+         if (page.staleStays || index >= others.length) {
             return false
          }
 
-         stale = stale.filter((_, position) => position !== index)
+         others = others.filter((_, position) => position !== index)
 
          return true
       }),
       clickSelector: vi.fn(async (selector: string) => {
          if (selector === PROFILE_MESSAGE) {
             calls.push('click message')
-            open = opens && calls.filter(call => call === 'click message').length >= (page.opensOnPress ?? 1)
+            const next = opens && calls.filter(call => call === 'click message').length >= (page.opensOnPress ?? 1)
+
+            if (next && !open) {
+               openedAt = reads
+               others.push(...(page.lateStale ?? []))
+            }
+
+            open = next
 
             return messageLink
          }
@@ -257,11 +280,8 @@ describe('sendMessage', () => {
          appears: false,
       })
 
-      // The words stay in the box and the old message of ours is not this one: not sent, never taken as sent.
-      await expect(run()).resolves.toEqual({
-         outcome: 'FAILED',
-         why: 'NOT_SENT',
-      })
+      // The old message of ours is not this one, and the words stay in the box with no answer: unsure, never taken as sent.
+      await expect(run()).resolves.toEqual({ outcome: 'UNKNOWN' })
       expect(calls).toContain('press send')
    })
 
@@ -313,11 +333,55 @@ describe('sendMessage', () => {
       expect(calls.filter(call => call === 'press send')).toHaveLength(1)
    })
 
-   it('should press Message only three times when no window ever opens', async () => {
+   it('should press Message only twice when no window ever opens', async () => {
       const { run, calls } = setup({ opens: false })
 
       await expect(run()).resolves.toEqual({ outcome: 'NO_COMPOSER' })
-      expect(calls.filter(call => call === 'click message')).toHaveLength(3)
+      expect(calls.filter(call => call === 'click message')).toHaveLength(2)
+   })
+
+   it('should press Message once when the window draws long after the press, and type once', async () => {
+      const { run, calls } = setup({ drawsAfter: 25 })
+
+      await expect(run()).resolves.toEqual({ outcome: 'SENT' })
+      expect(calls.filter(call => call === 'click message')).toHaveLength(1)
+      expect(calls.filter(call => call === 'type')).toHaveLength(1)
+      expect(calls.filter(call => call === 'press send')).toHaveLength(1)
+   })
+
+   it('should not press Message again while the window is open and its box is still drawing', async () => {
+      const { run, calls } = setup({ boxAfter: 15 })
+
+      await expect(run()).resolves.toEqual({ outcome: 'SENT' })
+      expect(calls.filter(call => call === 'click message')).toHaveLength(1)
+   })
+
+   it('should keep the window an earlier run left open for this person, and press nothing', async () => {
+      const { run, calls } = setup({ preOpen: true })
+
+      await expect(run()).resolves.toEqual({ outcome: 'SENT' })
+      expect(calls.filter(call => call === 'click message')).toHaveLength(0)
+      expect(calls.some(call => call.startsWith('close window'))).toBe(false)
+   })
+
+   it('should close a duplicate window that opens with this one before typing, and write in this one', async () => {
+      const { run, calls } = setup({ lateStale: ['Jasper Bennett'] })
+
+      await expect(run()).resolves.toEqual({ outcome: 'SENT' })
+      expect(calls.indexOf('close window 0')).toBeGreaterThanOrEqual(0)
+      expect(calls.indexOf('close window 0')).toBeLessThan(calls.indexOf('type'))
+      expect(calls.filter(call => call === 'press send')).toHaveLength(1)
+   })
+
+   it('should type nothing when a duplicate window cannot be closed', async () => {
+      const { run, calls, markAttempt } = setup({
+         lateStale: ['Jasper Bennett'],
+         staleStays: true,
+      })
+
+      await expect(run()).resolves.toEqual({ outcome: 'WRONG_RECIPIENT' })
+      expect(typedNothing(calls)).toBe(true)
+      expect(markAttempt).not.toHaveBeenCalled()
    })
 
    it('should type nothing when the window is with someone else', async () => {
@@ -421,10 +485,7 @@ describe('sendMessage', () => {
 
       const silent = setup({ appears: false })
 
-      await expect(silent.run()).resolves.toEqual({
-         outcome: 'FAILED',
-         why: 'NOT_SENT',
-      })
+      await expect(silent.run()).resolves.toEqual({ outcome: 'UNKNOWN' })
 
       for (const { calls } of [accepted, refused, silent]) {
          expect(calls.filter(call => call === 'press send')).toHaveLength(1)
