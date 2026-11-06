@@ -43,7 +43,7 @@ Evidence: issue #198 (run `4c9033cc`, 2026-11-04: presses at 53, 76, 98 s, dupli
 
 ## Approach
 
-- [ ] 0. Not done: the kept run is not in the workspace and gcloud needs an interactive re-login (owner to run `gcloud auth login`, then the read). Was: read the kept run of `4c9033cc` (`result.json`, `timeline.json`, `failure.html`, `logs.json`): which window holds the typed words, which one got the send click, and the time from press to window. Record the findings in the plan.
+- [x] 0. Kept run `4c9033cc` read (2026-11-06, from the bucket, before the fix): Message pressed at 53 s, 77 s and 99 s (about 22 s apart), box clicked at 110 s, 133 characters typed in 28 s, send at 143 s, verdict FAILED at 160 s. The window's arrival time is not in the timeline (it is in the run's logs). (`result.json`, `timeline.json`, `failure.html`, `logs.json`): which window holds the typed words, which one got the send click, and the time from press to window. Record the findings in the plan.
 - [x] 1. Tests first in [send.unit.test.ts](apps/spider/src/tasks/linkedinMessage/send.unit.test.ts):
   - a window that draws after the old budget (about 30 s of looks) gets exactly one press and one typing;
   - a window that is open but whose box is not drawn yet gets no second press;
@@ -85,4 +85,5 @@ Evidence: issue #198 (run `4c9033cc`, 2026-11-04: presses at 53, 76, 98 s, dupli
 - Deviation: the shared `confirm` still says `NOT_SENT` for words left in the box, so `linkedin-reply` keeps its verdict and tests; the UNKNOWN rule is applied in the message task only. Say if the reply task should follow.
 - Checks run: `pnpm lint`, `pnpm ts:check`, `pnpm test:unit:run` (1,371 passed), `pnpm build` all pass; send tests 57 passed (message and reply). One real-browser e2e test (`readMessages`, not related) timed out once in a focused run.
 - Time limit (Q5): `timeoutMs` is 5 min. Worst estimated path about 4 min. `budget.estimateS` stays 90 (it settles to the measured browser time).
-- Not run: step 0 (the kept run) and step 7 (staging run). Follow-ups: check what the runner answers when the 5 min limit hits after send was pressed (should be UNKNOWN, not a retry); check that the budget estimate of 90 s still fits.
+- Deployed: PR 202 merged (merge commit `13c051e`, 2026-11-06 03:22 UTC), staging deploy run `42156153935` succeeded. No `linkedin-message` run has been made since the deploy (the newest kept run is from 2026-11-04), so step 7 is pending a real first message.
+- Not run: step 7 (staging run). Follow-ups: check what the runner answers when the 5 min limit hits after send was pressed (should be UNKNOWN, not a retry); check that the budget estimate of 90 s still fits.
