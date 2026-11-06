@@ -198,6 +198,26 @@ export const INVITE_REQUEST = ['voyagerRelationshipsDashMemberRelationships', 'v
 export const INVITE_BUTTON = 'button'
 export const INVITE_NOTE_BOX = 'textarea'
 export const INVITE_EMAIL = 'input[type="email"]'
+
+// The post page an engage act opens (.plan/lead-pipeline-p3-engage.md; recorded 2026-11-03 and 2026-11-04, en-US, one Free test
+// account). The reaction control shows its state in its label, so a plain click on it is Like; the other reactions are picked from the
+// popover that the opener button shows. Read from the saved pages; the picker's gesture and a zero-reaction post are unverified.
+export const ENGAGE_STATE = 'button[aria-label^="Reaction button state:"]'
+export const ENGAGE_PICKER_OPEN = 'button[aria-label="Open reactions menu"]'
+export const ENGAGE_PICKER_CHOICE = (label: string) => `[data-floating-ui-portal] button[aria-label="${label}"]`
+// The comment box (a tiptap editor), and the Comment button under it, which only shows once the box has words.
+export const ENGAGE_EDITOR =
+   'div[contenteditable="true"][role="textbox"][aria-label="Text editor for creating comment"]'
+export const ENGAGE_SUBMIT = '[id*="commentButtonSection"] button[type="button"]'
+// The Repost button of a post opens a menu whose first item is "Repost with thoughts" (recorded 2026-11-06, en-US). The menu items and
+// the compose page's Repost button have no stable name, so they are pressed by their place, which the reader finds from the page.
+// A comment's Reply button, and the Reply button of the reply box that opens under it (the reader finds both by their place).
+export const ENGAGE_REPLY_OPEN = 'button[aria-label="Reply"]'
+export const ENGAGE_REPOST_OPEN = 'button[aria-label="Repost"]'
+export const ENGAGE_REPOST_MENU = '[popover] [role="button"]'
+export const ENGAGE_BUTTONS = 'button[type="button"]'
+// What a press by place must not land on: a link.
+export const ENGAGE_AVOID = 'a[href]'
 export const INVITE_QUESTION_WORDS = 'Add a note to your invitation?'
 export const ADD_NOTE_WORDS = 'Add a note'
 export const SEND_WITHOUT_NOTE_WORDS = 'Send without a note'

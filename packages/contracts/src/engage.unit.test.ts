@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { ENGAGE_LIMITS, engageFileSchema, engageInputSchema, engagePostOf } from './engage'
+import {
+   ENGAGE_LIMITS,
+   engageFileSchema,
+   engageInputSchema,
+   engageKeyOf,
+   engagePostOf,
+   engageShareLinkOf,
+} from './engage'
 
 const id = (n: number) => `0195c8a0-0000-7000-8000-00000000000${n}`
 const POST = 'https://www.linkedin.com/feed/update/urn:li:activity:7520195721216827392/'
@@ -27,6 +34,137 @@ describe('engagePostOf', () => {
       expect(engagePostOf('https://evil.example/feed/update/urn:li:activity:7520195721216827392/')).toBeNull()
       expect(engagePostOf('https://www.linkedin.com/in/ada/')).toBeNull()
       expect(engagePostOf(undefined)).toBeNull()
+   })
+})
+
+describe('repost instantly', () => {
+   it('should take a repost instantly with no words, refuse words on it, and not count it among the acts with words', () => {
+      const act = (fields: Record<string, unknown>) => ({
+         id: id(1),
+         kind: 'repost_instant',
+         postUrl: POST,
+         ...fields,
+      })
+      const accepted = (acts: unknown[]) => engageInputSchema.safeParse({ acts }).success
+
+      expect(accepted([act({})])).toBe(true)
+      expect(accepted([act({ text: 'Worth a read' })])).toBe(false)
+      expect(
+         accepted(
+            Array.from({ length: 4 }, (_u, n) => ({
+               id: id(n),
+               kind: 'repost_instant',
+               postUrl: POST,
+            }))
+         )
+      ).toBe(true)
+   })
+})
+
+describe('comment on a comment', () => {
+   const COMMENT = '7524398140846673920'
+
+   it('should take a reply with words on a comment of the post, and refuse one with no comment number or no words, and a comment number on any other act', () => {
+      const act = (fields: Record<string, unknown>) => ({
+         id: id(1),
+         kind: 'comment_reply',
+         postUrl: POST,
+         commentId: COMMENT,
+         text: 'Thanks for sharing',
+         ...fields,
+      })
+      const accepted = (acts: unknown[]) => engageInputSchema.safeParse({ acts }).success
+
+      expect(accepted([act({})])).toBe(true)
+      expect(accepted([act({ commentId: undefined })])).toBe(false)
+      expect(accepted([act({ text: undefined })])).toBe(false)
+      expect(
+         accepted([
+            {
+               id: id(1),
+               kind: 'comment',
+               postUrl: POST,
+               text: 'Hi',
+               commentId: COMMENT,
+            },
+         ])
+      ).toBe(false)
+   })
+
+   it('should count a reply among the acts with words in a run', () => {
+      const reply = (n: number) => ({
+         id: id(n),
+         kind: 'comment_reply',
+         postUrl: POST,
+         commentId: COMMENT,
+         text: 'Hi',
+      })
+
+      expect(engageInputSchema.safeParse({ acts: Array.from({ length: 4 }, (_u, n) => reply(n)) }).success).toBe(false)
+   })
+
+   it('should read the replied and the comment-gone outcomes in the file', () => {
+      const file = (outcome: string) =>
+         engageFileSchema.safeParse({
+            contract: 1,
+            captured_at: '2026-11-06T10:00:00.000Z',
+            acts: [
+               {
+                  id: id(1),
+                  outcome,
+               },
+            ],
+         }).success
+
+      expect(file('REPLIED')).toBe(true)
+      expect(file('COMMENT_GONE')).toBe(true)
+   })
+})
+
+describe('engageKeyOf', () => {
+   it('should key a post by its activity id, and a share address by its own number, and refuse other addresses', () => {
+      expect(engageKeyOf(POST)).toEqual({
+         link: POST,
+         key: 'activity:7520195721216827392',
+      })
+      expect(
+         engageKeyOf(
+            'https://www.linkedin.com/posts/shahjadkhan_if-youre-looking-out-for-a-job-as-an-sdr-share-7523074151054684160-4cJx/?utm_source=share'
+         )
+      ).toEqual({
+         link: 'https://www.linkedin.com/posts/shahjadkhan_if-youre-looking-out-for-a-job-as-an-sdr-share-7523074151054684160-4cJx/',
+         key: 'share:7523074151054684160',
+      })
+      expect(engageKeyOf('https://www.linkedin.com/in/ada/')).toBeNull()
+   })
+})
+
+describe('engageShareLinkOf', () => {
+   const SHARE =
+      'https://www.linkedin.com/posts/shahjadkhan_if-youre-looking-out-for-a-job-as-an-sdr-share-7523074151054684160-4cJx/?utm_source=share&utm_medium=member_desktop&rcm=ACoAAClNCsoBzc-n8600RZ_DetcLx5CiA2IybkM'
+   const SHARE_CLEAN =
+      'https://www.linkedin.com/posts/shahjadkhan_if-youre-looking-out-for-a-job-as-an-sdr-share-7523074151054684160-4cJx/'
+
+   it('should name a share address by its own link, without the query, and refuse any other address', () => {
+      expect(engageShareLinkOf(SHARE)).toBe(SHARE_CLEAN)
+      expect(engageShareLinkOf(POST)).toBeNull()
+      expect(engageShareLinkOf('https://evil.example/posts/ada_x-share-7523074151054684160-4cJx/')).toBeNull()
+      expect(engageShareLinkOf(undefined)).toBeNull()
+   })
+
+   it('should take a comment on a share address, as an act of a run', () => {
+      expect(
+         engageInputSchema.safeParse({
+            acts: [
+               {
+                  id: id(1),
+                  kind: 'comment',
+                  postUrl: SHARE,
+                  text: 'Nice',
+               },
+            ],
+         }).success
+      ).toBe(true)
    })
 })
 
@@ -89,6 +227,39 @@ describe('engageInputSchema', () => {
             kind: 'react',
             extra: true,
          })
+      ).toBe(false)
+   })
+
+   it('should take a repost with thoughts, and refuse one without words, a reaction, or a fourth act with words', () => {
+      const repost = (fields: Record<string, unknown>) =>
+         engageInputSchema.safeParse({
+            acts: [
+               {
+                  id: id(1),
+                  kind: 'repost',
+                  postUrl: POST,
+                  ...fields,
+               },
+            ],
+         }).success
+
+      expect(repost({ text: 'Worth a read' })).toBe(true)
+      expect(repost({})).toBe(false)
+      expect(
+         repost({
+            text: 'Worth a read',
+            reaction: 'like',
+         })
+      ).toBe(false)
+      expect(
+         engageInputSchema.safeParse({
+            acts: Array.from({ length: 4 }, (_u, n) => ({
+               id: id(n),
+               kind: 'repost',
+               postUrl: POST,
+               text: 'Hi',
+            })),
+         }).success
       ).toBe(false)
    })
 

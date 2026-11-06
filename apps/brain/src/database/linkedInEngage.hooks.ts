@@ -22,7 +22,7 @@ const NOTHING_PRESSED = new Set([
 ])
 
 // The verdicts the task hands its file over with.
-const HANDS_OVER = new Set(['DONE', 'PARTIAL', 'LIMIT_REACHED', 'RESTRICTED', 'SIGNED_OUT'])
+const HANDS_OVER = new Set(['DONE', 'PARTIAL', 'NONE_DONE', 'LIMIT_REACHED', 'RESTRICTED', 'SIGNED_OUT'])
 
 const HOUR_MS = 60 * 60 * 1000
 

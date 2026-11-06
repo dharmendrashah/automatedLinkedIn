@@ -5,8 +5,7 @@ import { postLinkOf } from './posting'
 export const ENGAGE_CONTRACT_VERSION = 1
 
 // Reactions and comments an account makes on other people's posts, through the task `linkedin-engage` (.plan/lead-pipeline-p3-engage.md).
-// One file per run, named `engage.json`, says what became of each act. The task is not built yet: it waits for recordings of the post
-// page, so brain plans, queues and stores acts but none is sent until the task is registered in the spider.
+// One file per run, named `engage.json`, says what became of each act.
 export const ENGAGE_TASK = 'linkedin-engage'
 
 // Not LinkedIn's numbers (they are not published): the daily limits live in `limits.ts`; these are how one run and one person are paced.
@@ -56,6 +55,7 @@ export const ENGAGE_ACTS = ['REACT', 'COMMENT'] as const
 export type EngageAct = (typeof ENGAGE_ACTS)[number]
 
 const POSTS_PATH = /^\/posts\/[^/]*-(activity|ugcPost)-(\d{10,25})-[A-Za-z0-9_]+\/?$/
+const SHARE_PATH = /^\/posts\/[^/]*-share-(\d{10,25})-[A-Za-z0-9_]+\/?$/
 
 // The post's own address and a key that names it, or null when the link is not one the page opens by its id. A `/posts/...-share-<id>-`
 // link is left out: its number is not the post's activity id (recorded 2026-11-04). The key is the same for every link to one post.
@@ -88,30 +88,89 @@ export const engagePostOf = (value: string | undefined): { link: string; key: st
       : null
 }
 
+// The address of a share of a post ("Copy link to post"), without its query. Its number is not the post's own: the task reads the post's
+// key from the page it opens.
+export const engageShareLinkOf = (value: string | undefined): string | null => {
+   if (!value || !URL.canParse(value)) {
+      return null
+   }
+
+   const { protocol, hostname, pathname } = new URL(value)
+
+   return protocol === 'https:' && hostname === 'www.linkedin.com' && SHARE_PATH.test(pathname)
+      ? `https://www.linkedin.com${pathname}`
+      : null
+}
+
+// The key that names a post in brain: its activity key, or `share:<number>` for a share address (its own number, not the activity key).
+export const engageKeyOf = (value: string | undefined): { link: string; key: string } | null => {
+   const post = engagePostOf(value)
+
+   if (post !== null) {
+      return post
+   }
+
+   const link = engageShareLinkOf(value)
+
+   if (link === null) {
+      return null
+   }
+
+   const [, id] = SHARE_PATH.exec(new URL(link).pathname) ?? []
+
+   return id === undefined
+      ? null
+      : {
+           link,
+           key: `share:${id}`,
+        }
+}
+
 export const engageActSchema = z
    .strictObject({
       // Brain's own id of the act: the task only hands it back.
       id: z.uuid(),
-      kind: z.enum(['react', 'comment']),
+      kind: z.enum(['react', 'comment', 'repost', 'repost_instant', 'comment_reply']),
       postUrl: z.string().max(500),
       reaction: z.enum(REACTIONS).optional(),
       // The owner's own words; never put into a result, a log or an event.
       text: z.string().trim().min(1).max(ENGAGE_LIMITS.commentChars).optional(),
       // The author's name as stored, to check it is the right post.
       authorName: z.string().trim().min(1).max(200).optional(),
+      // The number of the comment a reply is written on (the comment's own id on the post).
+      commentId: z
+         .string()
+         .regex(/^\d{10,25}$/)
+         .optional(),
    })
-   .refine(act => engagePostOf(act.postUrl) !== null, 'postUrl must be a post address')
-   .refine(act => act.kind === 'comment' || act.text === undefined, 'only a comment has words')
-   .refine(act => act.kind !== 'comment' || act.text !== undefined, 'a comment needs words')
+   .refine(
+      act => engagePostOf(act.postUrl) !== null || engageShareLinkOf(act.postUrl) !== null,
+      'postUrl must be a post address'
+   )
+   .refine(
+      act =>
+         (act.kind !== 'comment' && act.kind !== 'repost' && act.kind !== 'comment_reply') || act.text !== undefined,
+      'a comment, a reply or a repost with thoughts needs words'
+   )
+   .refine(
+      act => act.kind === 'comment' || act.kind === 'repost' || act.kind === 'comment_reply' || act.text === undefined,
+      'only a comment, a reply or a repost with thoughts has words'
+   )
+   .refine(act => act.kind === 'comment_reply' || act.commentId === undefined, 'only a reply has a comment number')
+   .refine(act => act.kind !== 'comment_reply' || act.commentId !== undefined, 'a reply needs a comment number')
+   .refine(act => act.kind !== 'react' || act.reaction !== undefined, 'a react needs a reaction')
+   .refine(act => act.kind === 'react' || act.reaction === undefined, 'only a react has a reaction')
 
 export const engageInputSchema = z
    .strictObject({ acts: z.array(engageActSchema).min(1).max(ENGAGE_LIMITS.perRun) })
    .refine(
-      input => input.acts.filter(({ kind }) => kind === 'comment').length <= ENGAGE_LIMITS.commentsPerRun,
-      `At most ${ENGAGE_LIMITS.commentsPerRun} comments in one run`
+      input =>
+         input.acts.filter(({ kind }) => kind === 'comment' || kind === 'repost' || kind === 'comment_reply').length <=
+         ENGAGE_LIMITS.commentsPerRun,
+      `At most ${ENGAGE_LIMITS.commentsPerRun} comments, replies and reposts with thoughts in one run`
    )
 
-// REACTED, COMMENTED: it went and the page showed it. ALREADY_REACTED: the post already showed a reaction, nothing pressed (a second press
+// REACTED, COMMENTED, REPOSTED: it went and the page showed it. ALREADY_REACTED: the post already showed a reaction, nothing pressed (a second press
 // would take it back). POST_GONE: the address led to no post, or not the one asked for. COMMENTS_OFF: the post has no comment box.
 // REFUSED: LinkedIn answered with an error or a warning, so the run stopped. UNKNOWN: the button was pressed and the page did not say.
 // NOT_TRIED: the run stopped before its turn, or a step did not show, nothing pressed.
@@ -121,6 +180,9 @@ export const ENGAGE_OUTCOMES = [
    'ALREADY_REACTED',
    'POST_GONE',
    'COMMENTS_OFF',
+   'REPOSTED',
+   'REPLIED',
+   'COMMENT_GONE',
    'REFUSED',
    'UNKNOWN',
    'NOT_TRIED',
@@ -129,7 +191,15 @@ export const ENGAGE_OUTCOMES = [
 export type EngageOutcome = (typeof ENGAGE_OUTCOMES)[number]
 
 // The verdicts the task answers with (never the runner's own codes).
-export const ENGAGE_VERDICTS = ['DONE', 'PARTIAL', 'SIGNED_OUT', 'LIMIT_REACHED', 'RESTRICTED', 'ERROR'] as const
+export const ENGAGE_VERDICTS = [
+   'DONE',
+   'PARTIAL',
+   'NONE_DONE',
+   'SIGNED_OUT',
+   'LIMIT_REACHED',
+   'RESTRICTED',
+   'ERROR',
+] as const
 
 export const engageFileSchema = z.strictObject({
    contract: z.literal(ENGAGE_CONTRACT_VERSION),

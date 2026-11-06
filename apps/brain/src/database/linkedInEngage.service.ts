@@ -1,6 +1,6 @@
 import { type Prisma } from 'generated/prisma/client'
 
-import { ENGAGE_LIMITS, ENGAGE_TASK, type EngageFile, type Reaction, engagePostOf } from '@automatedLinkedIn/contracts'
+import { ENGAGE_LIMITS, ENGAGE_TASK, type EngageFile, type Reaction, engageKeyOf } from '@automatedLinkedIn/contracts'
 
 import { AccountRoomService, roomLeft } from './accountRoom.service'
 import { ENGAGE_REASONS, postTooOld, reactionFor, waitAfterAct } from './engageRules'
@@ -101,7 +101,7 @@ export class LinkedInEngageService {
       }
 
       const db = PrismaService.client
-      const posts = new Map(candidates.map(candidate => [candidate.postUrl, engagePostOf(candidate.postUrl)]))
+      const posts = new Map(candidates.map(candidate => [candidate.postUrl, engageKeyOf(candidate.postUrl)]))
       const slugs = [...new Set(candidates.map(({ slug }) => slug))]
       const keys = [...new Set([...posts.values()].flatMap(post => (post ? [post.key] : [])))]
       const inviter = request.accounts.mode === 'inviter'
@@ -292,7 +292,7 @@ export class LinkedInEngageService {
          })
 
          if (count === 0) {
-            const candidate = candidates.find(({ postUrl }) => engagePostOf(postUrl)?.key === row.postKey)
+            const candidate = candidates.find(({ postUrl }) => engageKeyOf(postUrl)?.key === row.postKey)
 
             if (candidate) {
                out.set(

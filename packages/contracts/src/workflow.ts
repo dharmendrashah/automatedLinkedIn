@@ -302,6 +302,7 @@ export const ACCOUNT_ACTION_TASKS: Record<string, { blocks: string[] } | { plann
    'linkedin-invite': { blocks: ['account.sendInvite', 'account.withdrawInvite'] },
    'linkedin-view-profile': { blocks: ['account.visitProfile'] },
    'linkedin-view-company': { blocks: ['account.visitCompany'] },
+   'linkedin-engage': { blocks: ['account.reactToPost'] },
 }
 
 // What a block's account settings say; text that does not fit reads as the defaults, so a bad value elsewhere in the block never
