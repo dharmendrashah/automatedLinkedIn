@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { fakeDataClient } from 'core/fakeDataClient'
 
-import { PrismaService, UserService, WalletService, WorkflowService } from 'database'
+import { CampaignService, PrismaService, UserService, WalletService, WorkflowService } from 'database'
 
 import { type Graph, type GraphNode } from '@automatedLinkedIn/contracts'
 
@@ -117,7 +117,7 @@ const deps = (client: ReturnType<typeof fakeClient>) => ({
 let userId: string
 
 // Runs a one-block workflow to its end and answers what the data service was asked.
-const runOnce = async (graph: Graph, preview = false) => {
+const runOnce = async (graph: Graph, preview = false, campaignId: string | null = null) => {
    await PrismaService.client.workflow.deleteMany({
       where: {
          userId,
@@ -136,6 +136,9 @@ const runOnce = async (graph: Graph, preview = false) => {
       goal: null,
       graph,
    })
+   if (campaignId) {
+      await CampaignService.place(userId, workflow.id, campaignId, 'DISCOVER')
+   }
    const run = await WorkflowService.startRun(
       userId,
       workflow.id,
@@ -288,6 +291,29 @@ describe('collect blocks (database)', () => {
          tags: [LABEL],
       })
       expect((await runOnce(graph)).asked).toEqual([])
+   })
+
+   it('should keep what it finds under the campaign label when the workflow is in a campaign', async () => {
+      const campaign = await CampaignService.create(userId, { name: 'Release preview' })
+
+      await runOnce(
+         one('collect.searchCompanies', {
+            query: 'saas',
+            howMany: 5,
+            keep: true,
+         }),
+         false,
+         campaign.id
+      )
+      const tagged = await PrismaService.client.linkedInCompany.findMany({
+         where: {
+            userId,
+            tags: { has: campaign.label },
+         },
+         select: { tags: true },
+      })
+
+      expect(tagged.length).toBeGreaterThan(0)
    })
 
    it('should keep a job under its company and add the company with the label', async () => {

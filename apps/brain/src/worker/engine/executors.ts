@@ -1038,7 +1038,7 @@ const withKeep =
 
       const kept = await CollectKeepService.keep(
          ctx.run.userId,
-         keepLabelOf(ctx.run.workflow.name),
+         ctx.run.workflow.campaign?.label ?? keepLabelOf(ctx.run.workflow.name),
          await WorkflowRunService.items(ctx.run.id, [ctx.at])
       )
 

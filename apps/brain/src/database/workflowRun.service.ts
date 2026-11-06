@@ -141,6 +141,7 @@ export class WorkflowRunService {
                select: {
                   outputListId: true,
                   name: true,
+                  campaign: { select: { label: true } },
                },
             },
          },
