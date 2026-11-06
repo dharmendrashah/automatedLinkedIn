@@ -7278,7 +7278,14 @@ const edgeNotes = (graph: Graph, byId: Map<string, GraphNode>): GraphError[] =>
          ]
       }
 
-      if (gives === null || gives === needs || needs === 'start' || TAKES_ANYTHING.has(target.type)) {
+      // A block that takes anything passes on what it gets, so its output kind is not fixed.
+      if (
+         gives === null ||
+         gives === needs ||
+         needs === 'start' ||
+         TAKES_ANYTHING.has(target.type) ||
+         TAKES_ANYTHING.has(source.type)
+      ) {
          return []
       }
 

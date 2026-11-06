@@ -237,6 +237,52 @@ describe('validateGraph', () => {
       ])
    })
 
+   it('should not note posts that a block which takes anything passes on', () => {
+      const graph: Graph = {
+         nodes: [
+            {
+               id: 'find',
+               type: 'collect.findPosts',
+               config: {},
+               position: {
+                  x: 0,
+                  y: 0,
+               },
+            },
+            {
+               id: 'dedupe',
+               type: 'process.dedupe',
+               config: {},
+               position: {
+                  x: 240,
+                  y: 0,
+               },
+            },
+            {
+               id: 'commenters',
+               type: 'collect.commenters',
+               config: {},
+               position: {
+                  x: 480,
+                  y: 0,
+               },
+            },
+         ],
+         edges: [
+            {
+               from: 'find',
+               to: 'dedupe',
+            },
+            {
+               from: 'dedupe',
+               to: 'commenters',
+            },
+         ],
+      }
+
+      expect(validateGraph(graph).filter(({ nodeId }) => nodeId === 'commenters')).toEqual([])
+   })
+
    it('should only note a missing trigger, an orphan, a list without scoring and a loop, never block on them', () => {
       const loop: Graph = {
          ...flagship,
