@@ -21,7 +21,9 @@ export const createAuthConfig = (env: AuthEnv, origin: string): AuthConfig => {
          redirect_uri: `${origin}/callback`,
          post_logout_redirect_uri: `${origin}/`,
          response_type: 'code',
-         scope: 'openid profile email',
+         scope: 'openid profile email offline_access',
+         // A stored refresh token renews the session without the iframe.
+         automaticSilentRenew: true,
       },
       // authentik only accepts a relative `next`, so resume the OIDC request by its path and query.
       signupUrl: authorizeUrl => {

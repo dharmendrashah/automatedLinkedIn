@@ -14,7 +14,8 @@ describe('createAuthConfig', () => {
          redirect_uri: 'http://localhost:3000/callback',
          post_logout_redirect_uri: 'http://localhost:3000/',
          response_type: 'code',
-         scope: 'openid profile email',
+         scope: 'openid profile email offline_access',
+         automaticSilentRenew: true,
       })
       expect(config.accountUrl).toBe('http://localhost:9000/if/user/')
    })
