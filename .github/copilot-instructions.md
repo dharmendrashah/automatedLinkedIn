@@ -22,6 +22,16 @@ Applies to any task that changes behaviour, schema, config, infra, or more than 
 
 Plans are committed with the work; they are the record of locked product decisions. Custom agents follow this workflow too.
 
+## Elephant-Goldfish Model (EGM) skills (when running an `egm-*` skill)
+
+- EGM is vendored at `vendor/elephant-goldfish-model` (pinned commit in `.plan/install-egm.md`). Do not edit it. Its skills are linked in `.github/skills/egm-*`.
+- EGM package root: `vendor/elephant-goldfish-model`. Resolve its `agents/`, `resources/` and `docs/` against that root, and user files against this repo.
+- Before a skill runs, list `.plan/`, read the plans for the same area, and read this file.
+- EGM artifact directory: `.plan/egm`. Drafts, concepts briefs and review reports stay there. The folder is gitignored.
+- When the user approves the design, write `.plan/<kebab-case-name>.md` from `.plan/_template.md`. Map the design to Goal, Requirements, Scope and non-goals, Approach, Edge cases and risks, Verification and Outcome. Status is `draft` until approved.
+- The user's approval of the final design locks the plan (`locked`, "Locked by user: yes, <date>"). Do not execute before that, then follow steps 5 and 6 of the planning workflow above.
+- VS Code has no named EGM personas. For a reviewer, spawn a general-purpose subagent and tell it to read `agents/<persona>.md` first.
+
 ## Engineering principles (always)
 
 - Follow SOLID, YAGNI and KISS in all code. Build only what the task needs, and pick the simplest design that works.
