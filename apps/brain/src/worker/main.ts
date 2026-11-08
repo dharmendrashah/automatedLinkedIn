@@ -5,11 +5,12 @@ import 'dotenv/config'
 import '../aliases'
 
 import { MessageBroker } from 'core'
-import { log } from 'core/log'
 
 import { BUILD_TIME, GIT_SHA, WORKER_HEALTH_PORT, WORKER_ROLES, WORKER_SHUTDOWN_GRACE_MS } from 'env'
 
 import { JobRunService, PrismaService, TaskDispatchService } from 'database'
+
+import { createLogger } from '@automatedLinkedIn/logger'
 
 import { createWorkerConfig } from './config'
 import { CONSUMERS } from './consumers/registry'
@@ -18,6 +19,7 @@ import { RunRecorder } from './jobs/runRecorder'
 import { WorkerRuntime } from './runtime'
 
 const instance = hostname()
+const log = createLogger({ service: 'brain:worker' })
 
 const runtime = new WorkerRuntime(
    createWorkerConfig({
@@ -32,6 +34,7 @@ const runtime = new WorkerRuntime(
       isDatabaseHealthy: () => PrismaService.isHealthy(),
       isBrokerHealthy: () => MessageBroker.isHealthy(),
       taskDispatch: () => TaskDispatchService.waiting(),
+      log,
       recorder: new RunRecorder(runs =>
          JobRunService.recordMany(runs, {
             instance,
