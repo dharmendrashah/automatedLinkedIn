@@ -5,8 +5,10 @@ import { downloadFile } from '@/lib/download-file'
 import { readableError } from '@/lib/trpc-error'
 import { Download, Loader2 } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router'
 
 import { type RouterOutputs, trpc } from '../../trpc'
+import { detailOf, internalPathOf, nameOf } from './block-output-rows'
 import { ChatDigestButton } from './chat-digest'
 
 type Item = RouterOutputs['workflow']['output']['items'][number] & { from?: string }
@@ -23,40 +25,6 @@ const KIND_LABELS = {
    conversation: 'Conversation',
 } as const
 
-const nameOf = ({ item }: Item) => {
-   switch (item.kind) {
-      case 'post':
-         return item.slug
-      case 'job':
-         return item.title ?? item.slug
-      case 'ad':
-         return item.headline ?? item.slug
-      default:
-         return item.name ?? item.slug
-   }
-}
-
-const detailOf = ({ item }: Item) => {
-   switch (item.kind) {
-      case 'profile':
-         return [item.headline, item.email, item.score === null ? null : `score ${item.score}`, ...item.tags]
-            .filter(Boolean)
-            .join(' · ')
-      case 'company':
-         return item.hiring.join(', ')
-      case 'job':
-         return [item.company, item.location, item.salary].filter(Boolean).join(' · ')
-      case 'ad':
-         return [item.advertiser, item.format].filter(Boolean).join(' · ')
-      case 'conversation':
-         return [item.lastFrom === 'ME' ? 'You wrote last' : item.lastFrom === 'THEM' ? 'They wrote last' : null, item.lastText]
-            .filter(Boolean)
-            .join(': ')
-      default:
-         return item.author ?? ''
-   }
-}
-
 // "Chat: 12 messages, they wrote last", "none stored" or "not read" (none stored does not mean none exist).
 const chatText = ({ item }: Item) => {
    if (item.kind !== 'profile' || !item.chat) {
@@ -70,6 +38,23 @@ const chatText = ({ item }: Item) => {
       : stored
         ? `${messages} messages${lastFrom ? `, ${lastFrom === 'ME' ? 'you' : 'they'} wrote last` : ''}`
         : 'None stored'
+}
+
+const NAME_CLASS = 'font-medium underline-offset-4 hover:underline'
+
+// A row opens its page in the app when it has one; otherwise its name links to LinkedIn in a new tab.
+const NameLink = ({ row }: { row: Item }) => {
+   const path = internalPathOf(row.item)
+
+   return path ? (
+      <Link className={NAME_CLASS} to={path}>
+         {nameOf(row)}
+      </Link>
+   ) : (
+      <a className={NAME_CLASS} href={row.item.url} target="_blank" rel="noreferrer noopener">
+         {nameOf(row)}
+      </a>
+   )
 }
 
 type Props = {
@@ -196,14 +181,7 @@ export const BlockOutput = ({
                      <TableRow key={`${row.round}-${row.from ?? ''}-${row.item.kind}-${row.item.slug}`}>
                         <TableCell className="text-muted-foreground">{KIND_LABELS[row.item.kind]}</TableCell>
                         <TableCell>
-                           <a
-                              className="font-medium underline-offset-4 hover:underline"
-                              href={row.item.url}
-                              target="_blank"
-                              rel="noreferrer noopener"
-                           >
-                              {nameOf(row)}
-                           </a>
+                           <NameLink row={row} />
                         </TableCell>
                         <TableCell className="text-muted-foreground max-w-md truncate">{detailOf(row)}</TableCell>
                         {digest ? (
