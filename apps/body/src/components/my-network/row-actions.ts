@@ -80,6 +80,10 @@ export const inviteBlock = (row: ActionRow, invitesLive: boolean) => {
       return 'Already connected'
    }
 
+   if (row.links.some(({ kind, accountId }) => kind === 'REQUEST' && accountId)) {
+      return 'Accept their request instead'
+   }
+
    return INVITE_HELD[row.inviteState] ?? (invitesLive ? null : 'Invites are not on yet')
 }
 

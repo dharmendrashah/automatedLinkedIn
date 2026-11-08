@@ -28,6 +28,13 @@ const connection = (accountId: string, day: string) => ({
    at: at(day),
 })
 
+const request = (accountId: string, day: string) => ({
+   kind: 'REQUEST' as const,
+   accountId,
+   sourceId: `req-${accountId}`,
+   at: at(day),
+})
+
 describe('messageAction', () => {
    it('opens the newest conversation of any account', () => {
       expect(
@@ -137,5 +144,9 @@ describe('inviteBlock', () => {
       expect(inviteBlock(row({ connectedAt: at('2026-01-01') }), true)).toBe('Already connected')
       expect(inviteBlock(row({ inviteState: 'PENDING' }), true)).toBe('Invite already sent')
       expect(inviteBlock(row({ inviteState: 'QUEUED' }), true)).toBe('Invite already queued')
+   })
+
+   it('offers no invite to someone who sent a request: Accept is the action', () => {
+      expect(inviteBlock(row({ links: [request('a1', '2026-10-01')] }), true)).toBe('Accept their request instead')
    })
 })
