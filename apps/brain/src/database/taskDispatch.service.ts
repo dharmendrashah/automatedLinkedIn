@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { TaskQueue } from 'core'
+import { log } from 'core/log'
 
 import { TASK_TRIGGERS, type TaskCommand, taskResultSchema } from '@automatedLinkedIn/contracts'
 
@@ -42,6 +43,7 @@ const FAILURES = {
 type Claimed = {
    attempts: number
    giveUpFailures: number
+   correlationId: string | null
    ageMs: number
 }
 
@@ -83,8 +85,8 @@ class PublishTimeout extends Error {
    }
 }
 
-const publishWithin = (command: TaskCommand) => {
-   const publishing = TaskQueue.publish(command)
+const publishWithin = (command: TaskCommand, correlationId?: string) => {
+   const publishing = TaskQueue.publish(command, correlationId)
    let timer: NodeJS.Timeout | undefined
 
    // A publish that loses the race may still fail later; that must not become an unhandled rejection.
@@ -145,7 +147,7 @@ export class TaskDispatchService {
       }
 
       try {
-         await publishWithin(built.command)
+         await publishWithin(built.command, claimed.correlationId ?? undefined)
       } catch (error) {
          return this.retry(session, claimed, error instanceof PublishTimeout ? FAILURES.timeout : FAILURES.broker, true)
       }
@@ -153,9 +155,11 @@ export class TaskDispatchService {
       await this.remove(sessionId)
 
       if (claimed.attempts > 0) {
-         console.log(
-            `worker task-dispatch published ${session.task} ${session.id} after ${claimed.attempts} failed attempt(s)`
-         )
+         log.info('Task dispatch: published after failed attempts', {
+            taskId: session.id,
+            task: session.task,
+            attempts: claimed.attempts,
+         })
       }
 
       return { outcome: 'published' }
@@ -199,7 +203,10 @@ export class TaskDispatchService {
             }
          } catch (error) {
             // One row that cannot be handled must not stop the others; it is tried again on the next wake-up.
-            console.error(`worker task-dispatch could not handle ${sessionId}: ${(error as Error).name}`)
+            log.error('Task dispatch: could not handle a row', {
+               taskId: sessionId,
+               error,
+            })
          }
       }
 
@@ -227,7 +234,7 @@ export class TaskDispatchService {
          `UPDATE "TaskDispatch"
           SET "claimedUntil" = ${NOW} + ${LEASE_S}::float8 * interval '1 second'
           WHERE "sessionId" = $1 AND ("claimedUntil" IS NULL OR "claimedUntil" < ${NOW})
-          RETURNING "attempts", "giveUpFailures",
+          RETURNING "attempts", "giveUpFailures", "correlationId",
                     (extract(epoch FROM (${NOW} - "createdAt")) * 1000)::float8 AS "ageMs"`,
          sessionId
       )
@@ -344,7 +351,12 @@ export class TaskDispatchService {
 
       // The first failure is worth a line; the retries that follow are not.
       if (attempts === 0) {
-         console.error(`worker task-dispatch could not publish ${session.task} ${session.id}: ${reason}`)
+         log.error('Task dispatch: could not publish', {
+            code: 'PUBLISH_FAILED',
+            taskId: session.id,
+            task: session.task,
+            reason,
+         })
       }
 
       return {
@@ -381,9 +393,12 @@ export class TaskDispatchService {
             })
          )
       } catch (error) {
-         console.error(
-            `worker task-dispatch could not end ${session.task} ${session.id} as ${verdict}: ${(error as Error).name}`
-         )
+         log.error('Task dispatch: could not end a task', {
+            taskId: session.id,
+            task: session.task,
+            verdict,
+            error,
+         })
 
          if (claimed.giveUpFailures + 1 < MAX_GIVE_UP_FAILURES) {
             await PrismaService.client.$executeRawUnsafe(
@@ -403,7 +418,11 @@ export class TaskDispatchService {
       }
 
       await this.remove(session.id)
-      console.error(`worker task-dispatch gave up on ${session.task} ${session.id}: ${verdict}`)
+      log.error('Task dispatch: gave up on a task', {
+         taskId: session.id,
+         task: session.task,
+         verdict,
+      })
 
       return { outcome: 'gave-up' }
    }

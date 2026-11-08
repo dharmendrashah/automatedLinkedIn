@@ -3,6 +3,7 @@ import 'dotenv/config'
 import './aliases'
 
 import { HttpServer, MessageBroker, TakeoverRelay } from 'core'
+import { log } from 'core/log'
 
 import { ADMIN_EMAIL } from 'env'
 
@@ -16,7 +17,7 @@ Middlewares.config(app)
 
 // The platform owner's role follows ADMIN_EMAIL at every start, for a user who signed in before it was set.
 UserService.syncAdmin(ADMIN_EMAIL).catch((error: unknown) => {
-   console.error(`Could not apply ADMIN_EMAIL: ${error instanceof Error ? error.message : 'unknown error'}`)
+   log.error('Could not apply ADMIN_EMAIL', { error })
 })
 
 // The pictures of a page a worker holds for its owner (human takeover). They stay here because the tRPC calls read them
@@ -29,7 +30,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
          .then(consumer => consumer.stop())
          .then(() => Promise.all([PrismaService.disconnect(), MessageBroker.disconnect()]))
          .then(() => {
-            console.log(`database and broker connections closed`)
+            log.info('Database and broker connections closed')
          })
          .finally(() => {
             process.exit(0)

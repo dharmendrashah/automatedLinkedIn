@@ -172,8 +172,6 @@ describe('linkedInProfile resolvers', () => {
    })
 
    describe('visit', () => {
-      beforeEach(() => vi.spyOn(console, 'error').mockImplementation(() => undefined))
-
       it('should ask for a visit of a saved profile or a pasted link, as the owner and with the account named', async () => {
          mocks.requestVisit.mockResolvedValue({ id: 's1' })
 

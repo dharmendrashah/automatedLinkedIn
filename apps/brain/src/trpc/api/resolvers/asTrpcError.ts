@@ -1,5 +1,7 @@
 import { TRPCError } from '@trpc/server'
 
+import { log } from 'core/log'
+
 import { ProxyServerOwnershipError, TaskOwnershipError, TaskRecentError, TaskRefusedError } from 'database'
 
 // What is safe to say to the browser when a task could not be requested. Anything unexpected is logged here and reported without
@@ -27,7 +29,7 @@ export const asTrpcError = (error: unknown) => {
       })
    }
 
-   console.error(`Tasks: ${(error as Error).message}`)
+   log.error('Task request failed', { error })
 
    return new TRPCError({
       code: 'INTERNAL_SERVER_ERROR',

@@ -69,7 +69,6 @@ const caller = (authenticated = true) =>
 describe('takeover router', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
    })
 
    it('should refuse a caller who is not signed in', async () => {

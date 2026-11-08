@@ -1,7 +1,9 @@
+import { maskText } from '@automatedLinkedIn/logger'
+
 import { type ExtractedRecord, type SessionCookie } from '../types'
 
 import { type LoginSession } from '../scraping/driver'
-import { maskText, maskUrl } from './masking'
+import { maskUrl } from './masking'
 import { type Recorder, type StepCall, type StepEntry } from './recorder'
 
 type StepRecorder = Pick<Recorder, 'addStep' | 'log' | 'addSecret' | 'saveScreenshot' | 'saveFailureHtml'>

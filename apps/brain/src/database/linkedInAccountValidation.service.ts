@@ -1,3 +1,5 @@
+import { log } from 'core/log'
+
 import { LinkedInAccountService } from './linkedInAccount.service'
 import { PrismaService } from './prisma.service'
 import { retryRefusal } from './sessionRetry'
@@ -82,7 +84,10 @@ export class LinkedInAccountValidationService {
                },
             })
          } else if (!(error instanceof TaskRefusedError)) {
-            console.error(`Could not request the check of account ${row.id}: ${(error as Error).message}`)
+            log.error('Could not request the check of an account', {
+               accountId: row.id,
+               error,
+            })
          }
 
          return null

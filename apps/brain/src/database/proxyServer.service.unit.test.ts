@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { log } from 'core/log'
+
 import {
    ProxyServerNotUsableError,
    ProxyServerOwnershipError,
@@ -133,7 +135,6 @@ describe('toProxyConfig', () => {
 describe('ProxyServerService', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
       mocks.findManySession.mockResolvedValue([])
       mocks.isConfigured.mockReturnValue(true)
       mocks.transaction.mockImplementation((operations: Promise<unknown>[]) => Promise.all(operations))
@@ -1112,8 +1113,11 @@ describe('ProxyServerService', () => {
          mocks.createTest.mockRejectedValue(new Error('connection lost'))
 
          await expect(ProxyServerService.create('u1', input)).resolves.toMatchObject({ id: 'p1' })
-         expect(console.error).toHaveBeenCalledWith(expect.stringContaining('connection lost'))
-         expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain('hunter2')
+         expect(log.error).toHaveBeenCalledWith(
+            'Could not save the test history of a proxy',
+            expect.objectContaining({ error: expect.objectContaining({ message: 'connection lost' }) })
+         )
+         expect(JSON.stringify(vi.mocked(log.error).mock.calls)).not.toContain('hunter2')
       })
 
       describe('history', () => {

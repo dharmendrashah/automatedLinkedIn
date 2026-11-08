@@ -94,6 +94,8 @@ export const reportSchema = z.strictObject({
       .max(20),
 })
 
+const correlationIdSchema = z.string().regex(/^[A-Za-z0-9-]{8,64}$/)
+
 export const taskResultSchema = z.strictObject({
    contract: z.literal(TASK_CONTRACT_VERSION),
    task_id: z.uuid(),
@@ -113,6 +115,8 @@ export const taskResultSchema = z.strictObject({
    finished_at: z.iso.datetime(),
    // How long the browser stayed open, in seconds: what the account's browsing time counts. Absent when it never opened.
    browser_seconds: z.number().int().min(0).max(86_400).optional(),
+   // The correlation ID of the request or message that started the run (.plan/egm/logging_design_draft.md).
+   correlation_id: correlationIdSchema.optional(),
 })
 
 export const verdictToneSchema = z.enum(['success', 'failure', 'neutral'])

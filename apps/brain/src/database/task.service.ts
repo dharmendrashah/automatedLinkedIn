@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 
 import { CloudRunJob } from 'core'
+import { log } from 'core/log'
 
 import { type Prisma } from 'generated/prisma/client'
 
@@ -13,6 +14,7 @@ import {
    type TaskTrigger,
    originOfTrigger,
 } from '@automatedLinkedIn/contracts'
+import { currentCorrelationId } from '@automatedLinkedIn/logger'
 
 import { BrowseBudgetService, DEFAULT_BUDGET } from './browseBudget.service'
 import { PrismaService } from './prisma.service'
@@ -245,7 +247,12 @@ export class TaskService {
             'before',
             definition.needs.account
          )
-         await tx.taskDispatch.create({ data: { sessionId: id } })
+         await tx.taskDispatch.create({
+            data: {
+               sessionId: id,
+               correlationId: currentCorrelationId() ?? null,
+            },
+         })
          await options.onStart?.(id, tx)
       })
 
@@ -255,7 +262,10 @@ export class TaskService {
          await TaskDispatchService.dispatch(id)
       } catch (error) {
          // The task is saved: the worker publishes it.
-         console.error(`Could not publish the task ${task} right away: ${(error as Error).name}`)
+         log.error('Could not publish the task right away', {
+            task,
+            errorName: (error as Error).name,
+         })
       }
 
       // Starts a spider job for it. The task-dispatch job asks again within seconds if this start fails.
@@ -356,12 +366,20 @@ export class TaskService {
                started += 1
             } catch (error) {
                if (!(error instanceof TaskRefusedError)) {
-                  console.error(`Could not start ${definition.task} after ${event}: ${(error as Error).message}`)
+                  log.error('Could not start a task after an event', {
+                     task: definition.task,
+                     event,
+                     error,
+                  })
                }
             }
          }
       } catch (error) {
-         console.error(`Could not handle ${event} for proxy ${proxyId}: ${(error as Error).message}`)
+         log.error('Could not handle an event for a proxy', {
+            event,
+            proxyId,
+            error,
+         })
       }
 
       return started

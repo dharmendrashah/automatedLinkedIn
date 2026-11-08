@@ -3,9 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { ARTIFACT_NAME_PATTERN, type Artifact } from '@automatedLinkedIn/contracts'
+import { createLogger, maskText } from '@automatedLinkedIn/logger'
 
 import { type ObjectStore } from '../storage/store'
-import { maskHeaders, maskText, maskUrl } from './masking'
+import { maskHeaders, maskUrl } from './masking'
+
+const log = createLogger({ service: 'spider' })
 
 type RecordingMode = 'off' | 'failures' | 'always'
 
@@ -466,7 +469,10 @@ export class Recorder implements RunRecorder {
 
          return prefix
       } catch (error) {
-         console.error(`Could not save the recording of ${this.options.id}: ${maskText((error as Error).message)}`)
+         log.error('Could not save the recording', {
+            id: this.options.id,
+            error,
+         })
 
          return undefined
       } finally {

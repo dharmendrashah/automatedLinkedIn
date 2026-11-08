@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { log } from 'core/log'
+
 import { router } from 'trpc'
 
 import { type Context } from '../../context'
@@ -96,7 +98,6 @@ const created = {
 describe('proxyServer resolvers', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
    })
 
    describe.each([
@@ -137,7 +138,10 @@ describe('proxyServer resolvers', () => {
          mocks.requestIfWaiting.mockRejectedValue(new Error('ECONNREFUSED'))
 
          await expect(run()).resolves.toMatchObject({ id: 'p1' })
-         expect(console.error).toHaveBeenCalledWith(expect.stringContaining('ECONNREFUSED'))
+         expect(log.error).toHaveBeenCalledWith(
+            'Could not request the validation of an account',
+            expect.objectContaining({ error: expect.objectContaining({ message: 'ECONNREFUSED' }) })
+         )
       })
    })
 

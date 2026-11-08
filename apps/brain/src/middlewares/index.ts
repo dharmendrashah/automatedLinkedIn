@@ -9,6 +9,7 @@ import { CORS_ORIGINS } from 'env'
 import { initializeTrpc } from 'trpc/api/router'
 
 import { Cdn } from './cdn'
+import { inCorrelation } from './correlation'
 import { Health } from './health'
 import { WorkflowApi } from './workflowApi'
 
@@ -25,11 +26,15 @@ export class Middlewares {
       app.use(
          cors({
             origin: origins.includes('*') ? true : origins,
-            allowedHeaders: ['authorization', 'content-type'],
+            allowedHeaders: ['authorization', 'content-type', 'x-correlation-id'],
          }) as RequestHandler
       )
 
       app.use(cookieParser() as RequestHandler)
+
+      app.use((request, _response, next) =>
+         inCorrelation(request.get('x-correlation-id'), request.ip ?? 'unknown', () => next?.())
+      )
 
       Health.config(app)
 

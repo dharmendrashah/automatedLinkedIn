@@ -12,7 +12,7 @@ import { MessageBroker } from './messageBroker'
 // and the catalog of tasks are consumed by the brain worker (src/worker).
 export class TaskQueue {
    // Resolves once the broker has taken the message, so a caller can tell a lost publish from a delivered one.
-   public static async publish(command: TaskCommand) {
+   public static async publish(command: TaskCommand, correlationId?: string) {
       const valid = taskCommandSchema.parse(command)
       const channel = await MessageBroker.confirmChannel()
 
@@ -22,6 +22,7 @@ export class TaskQueue {
          persistent: true,
          contentType: 'application/json',
          messageId: valid.task_id,
+         ...(correlationId && { headers: { 'x-correlation-id': correlationId } }),
       })
 
       await channel.waitForConfirms()

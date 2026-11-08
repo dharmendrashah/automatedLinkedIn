@@ -1,6 +1,8 @@
 import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { log } from 'core/log'
+
 import { TAKEOVER_FRAME_QUEUE, TAKEOVER_FRAME_TTL_MS, TAKEOVER_INPUT_EXCHANGE } from '@automatedLinkedIn/contracts'
 
 import { TakeoverRateError, TakeoverRelay } from './takeoverRelay'
@@ -147,8 +149,6 @@ describe('TakeoverRelay', () => {
 
       it('should not log what the owner typed', async () => {
          const channel = fakeChannel()
-         const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)
-         const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
          mocks.confirmChannel.mockResolvedValue(channel)
 
@@ -157,7 +157,9 @@ describe('TakeoverRelay', () => {
             text: 'secret-code-123',
          })
 
-         expect(JSON.stringify([...log.mock.calls, ...error.mock.calls])).not.toContain('secret-code-123')
+         expect(JSON.stringify([...vi.mocked(log.info).mock.calls, ...vi.mocked(log.error).mock.calls])).not.toContain(
+            'secret-code-123'
+         )
       })
 
       it('should refuse a run that is sent far more inputs than a person could make, so a bug cannot flood a browser', async () => {

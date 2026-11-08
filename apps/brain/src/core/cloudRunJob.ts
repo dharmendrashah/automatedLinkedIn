@@ -4,6 +4,7 @@ import { CLOUD_RUN_JOB } from 'env'
 
 import { TASK_QUEUE } from '@automatedLinkedIn/contracts'
 
+import { log } from './log'
 import { MessageBroker } from './messageBroker'
 
 // Cloud Run lists the newest executions first. A running execution missed because it is older than this page can only
@@ -38,7 +39,7 @@ export class CloudRunJob {
       this.turn = run.catch(() => undefined)
 
       return run.catch((error: unknown) => {
-         console.error(`Could not start a spider job: ${(error as Error).name}`)
+         log.error('Could not start a spider job', { errorName: (error as Error).name })
 
          return { started: 0 }
       })
@@ -82,7 +83,10 @@ export class CloudRunJob {
       }
 
       if (missing > 0) {
-         console.log(`Started ${missing} spider job execution(s) for ${waiting} waiting task(s).`)
+         log.info('Started spider job executions', {
+            missing,
+            waiting,
+         })
       }
 
       return { started: Math.max(missing, 0) }

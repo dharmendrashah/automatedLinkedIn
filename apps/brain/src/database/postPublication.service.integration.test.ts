@@ -604,7 +604,6 @@ describe('PostPublicationService (database)', () => {
 
       it('should try again later when the files could not be deleted', async () => {
          vi.spyOn(PostFiles, 'remove').mockResolvedValue(1)
-         vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
          const went = await publication({
             state: 'POSTED',

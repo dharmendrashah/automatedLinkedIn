@@ -41,7 +41,7 @@ describe('Middlewares', () => {
 
       expect(mocks.cors).toHaveBeenCalledWith({
          origin: ['http://localhost:3000', 'http://localhost:5173'],
-         allowedHeaders: ['authorization', 'content-type'],
+         allowedHeaders: ['authorization', 'content-type', 'x-correlation-id'],
       })
    })
 
@@ -57,7 +57,7 @@ describe('Middlewares', () => {
 
       expect(mocks.cors).toHaveBeenCalledWith({
          origin: true,
-         allowedHeaders: ['authorization', 'content-type'],
+         allowedHeaders: ['authorization', 'content-type', 'x-correlation-id'],
       })
    })
 

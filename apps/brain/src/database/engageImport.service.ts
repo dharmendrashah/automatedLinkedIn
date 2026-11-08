@@ -1,4 +1,5 @@
 import { MessageFiles } from 'core'
+import { log } from 'core/log'
 
 import { engageFileSchema } from '@automatedLinkedIn/contracts'
 
@@ -104,7 +105,10 @@ export class EngageImportService {
                lastError: (error as Error).name,
             },
          })
-         console.error(`worker engage-import could not store ${sessionId}: ${(error as Error).name}`)
+         log.error('Engage import could not store a session', {
+            sessionId,
+            errorName: (error as Error).name,
+         })
 
          return last ? ('failed' as const) : ('retried' as const)
       }

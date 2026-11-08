@@ -319,7 +319,6 @@ describe('Recorder', () => {
       const run = await recorder
 
       store.put.mockRejectedValue(new Error('denied'))
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
       await expect(run.finish({ failed: false })).resolves.toBeUndefined()
       await expect(stat(run.dir)).rejects.toThrow()

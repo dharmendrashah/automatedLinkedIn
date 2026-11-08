@@ -1,5 +1,7 @@
 import 'dotenv/config'
 
+import { createLogger } from '@automatedLinkedIn/logger'
+
 import { buildApp } from './api/app'
 import { BUILD_TIME, GIT_SHA, PORT, RABBITMQ_URL, SPIDER_ALLOWED_HOSTS } from './env'
 import { Broker } from './messaging/broker'
@@ -47,10 +49,15 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
    })
 }
 
+const log = createLogger({ service: 'spider' })
+
 app.listen({
    port: PORT,
    host: '0.0.0.0',
 }).catch((error: unknown) => {
-   console.error(`spider api could not start: ${error instanceof Error ? error.message : 'unknown error'}`)
+   log.error('spider api could not start', {
+      code: 'WORKER_CRASHED',
+      error,
+   })
    process.exit(1)
 })

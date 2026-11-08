@@ -1,5 +1,7 @@
 import { type Channel, type Message } from 'amqplib'
 
+import { createIdGate, createLogger, withCorrelation } from '@automatedLinkedIn/logger'
+
 import { type ScrapeTaskCommand } from '../types'
 
 import { AccountBusyError, ShutdownError } from '../scraping/errors'
@@ -67,12 +69,22 @@ type OnceChannel = HandlerChannel & Pick<Channel, 'get'>
 // RabbitMQ gives no delay or limit to nack-with-requeue (a failing task would spin), so a failure is
 // retried by publishing a copy with a counter after a back-off. While it waits, this worker takes no
 // other message, which is the same as running one task at a time.
+const consumerLog = createLogger({ service: 'spider' })
+const resolveId = createIdGate(consumerLog)
+
+// The message's x-correlation-id is kept when valid, so the run is traced to the request that queued it.
+const correlationOf = (message: Message): string => {
+   const raw: unknown = message.properties.headers?.['x-correlation-id']
+
+   return resolveId(typeof raw === 'string' ? raw : undefined, 'rabbitmq')
+}
+
 const createHandler = <T>(
    channel: HandlerChannel,
    { parse, label, handler, onExhausted }: QueueSpec<T>,
    {
       republish,
-      log = console,
+      log = consumerLog,
       sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
       backoffMs = BACKOFF_MS,
       busyDelayMs = BUSY_DELAY_MS,
@@ -157,7 +169,7 @@ const createHandler = <T>(
       }
    }
 
-   return async (message: Message) => {
+   const handle = async (message: Message) => {
       let item: T
 
       try {
@@ -200,6 +212,8 @@ const createHandler = <T>(
 
       await retry(message, item, error instanceof Error ? error.message : 'unknown error')
    }
+
+   return (message: Message) => withCorrelation(correlationOf(message), () => handle(message))
 }
 
 // Long-running mode: takes one message at a time and keeps taking them until stopped.

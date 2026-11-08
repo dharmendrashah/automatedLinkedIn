@@ -11,6 +11,11 @@ import { SpiderSessionService } from './spiderSession.service'
 import { TaskService } from './task.service'
 import { UserService } from './user.service'
 
+// The browsing budget (working hours, pacing, rest) has its own tests; this file is about the task flow.
+vi.hoisted(() => {
+   process.env.BROWSE_BUDGET = 'false'
+})
+
 // Needs PostgreSQL. The broker is replaced: only what brain writes to the database is under test.
 const mocks = vi.hoisted(() => ({ publish: vi.fn() }))
 
@@ -135,7 +140,7 @@ describe('TaskService (database)', () => {
             proxy: 'http://203.0.113.5:8080',
          },
       })
-      expect(mocks.publish).toHaveBeenCalledWith(
+      expect(mocks.publish.mock.calls[0][0]).toEqual(
          expect.objectContaining({
             task: TASK,
             task_id: id,
@@ -218,8 +223,6 @@ describe('TaskService (database)', () => {
          started_at: session.startedAt.toISOString(),
          finished_at: new Date().toISOString(),
       }
-
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
       await expect(TaskService.applyResult(result)).resolves.toBe(true)
       await expect(TaskService.applyResult(result)).resolves.toBe(false)

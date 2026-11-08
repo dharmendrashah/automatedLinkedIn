@@ -5,7 +5,9 @@ import { useAuth } from 'react-oidc-context'
 
 import { userManager } from '../auth/userManager'
 import { authHeadersOf } from './authHeaders'
+import { newCorrelationId } from './correlationId'
 import { createTrpcUrl } from './config'
+import { failedRequestLink, stampCorrelation } from './requestErrors'
 import { trpc } from './trpc'
 
 export const TrpcProvider = ({ children }: { children: ReactNode }) => {
@@ -14,9 +16,19 @@ export const TrpcProvider = ({ children }: { children: ReactNode }) => {
    const [client] = useState(() =>
       trpc.createClient({
          links: [
+            failedRequestLink(),
             httpBatchLink({
                url: createTrpcUrl(import.meta.env),
-               headers: () => authHeadersOf(userManager),
+               headers: async ({ opList }) => {
+                  const correlationId = newCorrelationId()
+
+                  stampCorrelation(opList, correlationId)
+
+                  return {
+                     ...(await authHeadersOf(userManager)),
+                     'x-correlation-id': correlationId,
+                  }
+               },
             }),
          ],
       })

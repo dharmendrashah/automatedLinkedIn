@@ -1,4 +1,5 @@
 import { dailyTime, nextMessagesTime, timezoneOfCountry } from 'core'
+import { log } from 'core/log'
 
 import { PROFILE_TRIES } from './accountLoading'
 import { FirstDayUsedService } from './firstDayUsed.service'
@@ -185,7 +186,11 @@ const askFor = async (
       }
    } catch (error) {
       if (!(error instanceof TaskRefusedError)) {
-         console.error(`Could not request ${what} of account ${id}: ${(error as Error).message}`)
+         log.error('Could not request an account read', {
+            what,
+            accountId: id,
+            error,
+         })
       }
 
       return {
@@ -280,7 +285,10 @@ const requestMessages = async (account: Due, now: Date, firstDay = false): Promi
       }
    } catch (error) {
       if (!(error instanceof TaskRefusedError)) {
-         console.error(`Could not request the daily read of the messages of account ${id}: ${(error as Error).message}`)
+         log.error('Could not request the daily read of the messages', {
+            accountId: id,
+            error,
+         })
       }
 
       return {

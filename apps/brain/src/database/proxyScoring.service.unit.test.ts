@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { log } from 'core/log'
+
 import { Prisma } from 'generated/prisma/client'
 
 import { ProxyScoringService } from './proxyScoring.service'
@@ -100,7 +102,6 @@ describe('ProxyScoringService', () => {
       vi.resetAllMocks()
       vi.useFakeTimers()
       vi.setSystemTime(NOW)
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
       mocks.isConfigured.mockReturnValue(true)
       mocks.findFirstProxy.mockResolvedValue(null)
       mocks.updateProxy.mockResolvedValue({})
@@ -357,7 +358,7 @@ describe('ProxyScoringService', () => {
          mocks.findUniqueProxy.mockRejectedValue(new Error('database down'))
 
          expect(() => ProxyScoringService.scoreSoon('p1')).not.toThrow()
-         await vi.waitFor(() => expect(console.error).toHaveBeenCalled())
+         await vi.waitFor(() => expect(log.error).toHaveBeenCalled())
       })
    })
 

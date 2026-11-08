@@ -5,8 +5,12 @@ import { join } from 'node:path'
 import { type Readable, Transform, type Writable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
+import { createLogger } from '@automatedLinkedIn/logger'
+
 import { ObjectNotFoundError, profileKey } from '../storage/store'
 import { sealStream, unsealStream } from './sealStream'
+
+const log = createLogger({ service: 'spider' })
 
 // An account's browser profile for one run: the folder the browser uses, whether it came back from an earlier run, and
 // what to do with it afterwards (.plan/account-browser-profile.md).
@@ -148,7 +152,7 @@ export class BucketProfiles implements Profiles {
    }
 
    private warn(message: string) {
-      const warn = this.options.warn ?? console.warn
+      const warn = this.options.warn ?? ((message: string) => log.warn(message))
 
       warn(message)
    }

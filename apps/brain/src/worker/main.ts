@@ -5,6 +5,7 @@ import 'dotenv/config'
 import '../aliases'
 
 import { MessageBroker } from 'core'
+import { log } from 'core/log'
 
 import { BUILD_TIME, GIT_SHA, WORKER_HEALTH_PORT, WORKER_ROLES, WORKER_SHUTDOWN_GRACE_MS } from 'env'
 
@@ -60,7 +61,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
          .stop()
          .then(() => Promise.all([PrismaService.disconnect(), MessageBroker.disconnect()]))
          .then(() => {
-            console.log('brain worker stopped, database and broker connections closed')
+            log.info('Brain worker stopped; database and broker connections closed')
          })
          .finally(() => {
             process.exit(0)
@@ -69,6 +70,6 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 }
 
 runtime.start().catch((error: unknown) => {
-   console.error(`The brain worker could not start: ${error instanceof Error ? error.message : 'unknown error'}`)
+   log.error('The brain worker could not start', { error })
    process.exit(1)
 })

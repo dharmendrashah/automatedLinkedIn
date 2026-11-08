@@ -1,5 +1,9 @@
 import { type ChannelModel, type ConfirmChannel, connect } from 'amqplib'
 
+import { createLogger } from '@automatedLinkedIn/logger'
+
+const log = createLogger({ service: 'spider' })
+
 // How long an unreachable broker may stall a caller, such as the /health probe.
 const CONNECT_TIMEOUT_MS = 3000
 
@@ -22,7 +26,12 @@ export class Broker {
             this.open = connection
 
             // Without an error listener an emitted 'error' would crash the process.
-            connection.on('error', (error: Error) => console.error(`RabbitMQ connection error: ${error.message}`))
+            connection.on('error', (error: Error) =>
+               log.error('RabbitMQ connection error', {
+                  code: 'WORKER_CRASHED',
+                  error,
+               })
+            )
             connection.on('close', () => {
                this.pending = undefined
                this.open = undefined
@@ -45,7 +54,12 @@ export class Broker {
       this.publishing ??= this.connection()
          .then(connection => connection.createConfirmChannel())
          .then(channel => {
-            channel.on('error', (error: Error) => console.error(`RabbitMQ channel error: ${error.message}`))
+            channel.on('error', (error: Error) =>
+               log.error('RabbitMQ channel error', {
+                  code: 'WORKER_CRASHED',
+                  error,
+               })
+            )
             channel.on('close', () => {
                this.publishing = undefined
             })
@@ -64,7 +78,12 @@ export class Broker {
    public async consumeChannel() {
       const channel = await (await this.connection()).createChannel()
 
-      channel.on('error', (error: Error) => console.error(`RabbitMQ channel error: ${error.message}`))
+      channel.on('error', (error: Error) =>
+         log.error('RabbitMQ channel error', {
+            code: 'WORKER_CRASHED',
+            error,
+         })
+      )
 
       return channel
    }

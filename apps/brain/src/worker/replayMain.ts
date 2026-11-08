@@ -3,6 +3,7 @@ import 'dotenv/config'
 import '../aliases'
 
 import { MessageBroker } from 'core'
+import { log } from 'core/log'
 
 import { PrismaService } from 'database'
 
@@ -23,7 +24,10 @@ const run = async () => {
    try {
       const moved = await replayDead(channel, consumer)
 
-      console.log(`Moved ${moved} message(s) from ${consumer.queue}.dead back to ${consumer.queue}`)
+      log.info('Moved messages back from the dead-letter queue', {
+         moved,
+         queue: consumer.queue,
+      })
    } finally {
       await channel.close().catch(() => undefined)
    }
@@ -31,7 +35,7 @@ const run = async () => {
 
 run()
    .catch((error: unknown) => {
-      console.error(error instanceof Error ? error.message : 'unknown error')
+      log.error('Replay failed', { error })
       process.exitCode = 1
    })
    .finally(() => Promise.all([PrismaService.disconnect(), MessageBroker.disconnect()]))

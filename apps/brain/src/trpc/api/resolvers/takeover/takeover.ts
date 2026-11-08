@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
 import { TakeoverRateError } from 'core'
+import { log } from 'core/log'
 
 import { TakeoverNotFoundError, TakeoverService } from 'database'
 
@@ -34,7 +35,7 @@ const asTrpcError = (error: unknown) => {
       })
    }
 
-   console.error(`Takeover: ${(error as Error).name}`)
+   log.error('Takeover request failed', { errorName: (error as Error).name })
 
    return new TRPCError({
       code: 'INTERNAL_SERVER_ERROR',

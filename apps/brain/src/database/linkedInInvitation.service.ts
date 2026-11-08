@@ -1,3 +1,5 @@
+import { log } from 'core/log'
+
 import { INVITATION_LIMITS, type InvitationAction, type InvitationsFile } from '@automatedLinkedIn/contracts'
 
 import { type InvitationStatus, planStore } from './invitationRules'
@@ -323,7 +325,10 @@ export class LinkedInInvitationService {
                   budget: error instanceof BrowseBudgetError,
                })
             } else {
-               console.error(`Could not ask for the connection requests of account ${id}: ${(error as Error).message}`)
+               log.error('Could not ask for the connection requests of an account', {
+                  accountId: id,
+                  error,
+               })
                result.skipped.push({
                   accountId: id,
                   reason: NOT_ASKED,

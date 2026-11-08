@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { log } from 'core/log'
+
 import { SECURITY_CHECK_MESSAGE } from '@automatedLinkedIn/contracts'
 
 import {
@@ -48,7 +50,6 @@ const validationId = '0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11'
 describe('LinkedInAccountValidationService', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
    })
 
    describe('request', () => {
@@ -122,7 +123,10 @@ describe('LinkedInAccountValidationService', () => {
          mocks.request.mockRejectedValue(new Error('database down'))
 
          await expect(LinkedInAccountValidationService.request(row.id)).resolves.toBe(false)
-         expect(console.error).toHaveBeenCalledWith(expect.stringContaining('database down'))
+         expect(log.error).toHaveBeenCalledWith(
+            'Could not request the check of an account',
+            expect.objectContaining({ error: expect.objectContaining({ message: 'database down' }) })
+         )
       })
    })
 

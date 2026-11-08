@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { log } from 'core/log'
+
 import { CloudRunJob } from './cloudRunJob'
 
 const mocks = vi.hoisted(() => ({
@@ -39,8 +41,6 @@ describe('CloudRunJob.start', () => {
       mocks.env.CLOUD_RUN_JOB = JOB
       mocks.listExecutions.mockResolvedValue([[]])
       mocks.runJob.mockResolvedValue([{}])
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
-      vi.spyOn(console, 'log').mockImplementation(() => undefined)
    })
 
    it('should do nothing and call no API when no job is configured', async () => {
@@ -119,8 +119,8 @@ describe('CloudRunJob.start', () => {
       mocks.runJob.mockRejectedValueOnce(denied).mockResolvedValueOnce([{}])
 
       await expect(CloudRunJob.start()).resolves.toEqual({ started: 0 })
-      expect(console.error).toHaveBeenCalledWith('Could not start a spider job: PermissionDeniedError')
-      expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain('secret-detail')
+      expect(log.error).toHaveBeenCalledWith('Could not start a spider job', { errorName: 'PermissionDeniedError' })
+      expect(JSON.stringify(vi.mocked(log.error).mock.calls)).not.toContain('secret-detail')
 
       await expect(CloudRunJob.start()).resolves.toEqual({ started: 1 })
    })

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { log } from 'core/log'
+
 import { type TaskCatalogEntry } from '@automatedLinkedIn/contracts'
 
 import { ProxyServerOwnershipError } from './proxyServer.service'
@@ -146,7 +148,6 @@ const ago = (ms: number) => new Date(Date.now() - ms)
 describe('TaskService', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
       for (const key of Object.keys(TASK_HOOKS)) {
          delete TASK_HOOKS[key]
@@ -277,7 +278,12 @@ describe('TaskService', () => {
             },
             tx
          )
-         expect(mocks.createDispatch).toHaveBeenCalledWith({ data: { sessionId: id } })
+         expect(mocks.createDispatch).toHaveBeenCalledWith({
+            data: {
+               sessionId: id,
+               correlationId: null,
+            },
+         })
          expect(mocks.dispatch).toHaveBeenCalledWith(id)
          expect(mocks.startSpiderJobs).toHaveBeenCalledTimes(1)
          expect(mocks.createDispatch.mock.invocationCallOrder[0]).toBeLessThan(
@@ -738,7 +744,10 @@ describe('TaskService', () => {
          mocks.findDefinitions.mockRejectedValue(new Error('database down'))
 
          await expect(TaskService.emit('proxy.active', { proxyId: 'p1' })).resolves.toBe(0)
-         expect(console.error).toHaveBeenCalledWith(expect.stringContaining('database down'))
+         expect(log.error).toHaveBeenCalledWith(
+            'Could not handle an event for a proxy',
+            expect.objectContaining({ error: expect.objectContaining({ message: 'database down' }) })
+         )
       })
    })
 

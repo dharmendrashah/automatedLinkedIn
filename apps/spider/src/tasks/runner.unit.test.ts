@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import { type TaskCommand, type TaskResult, runPrefix } from '@automatedLinkedIn/contracts'
+import { createLogger } from '@automatedLinkedIn/logger'
 
 import { type ProxyConfig } from '../types'
 
@@ -1024,6 +1025,51 @@ describe('a task that needs an account', () => {
          })
       })
 
+      it('should log the lookup failure as PROXY_FAILED with its cause before answering it', async () => {
+         const { run, exitGeo, deps, published } = withIdentities()
+         const log = {
+            debug: vi.fn(),
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            fatal: vi.fn(),
+            flush: vi.fn(),
+         }
+
+         deps.log = log
+         exitGeo.mockRejectedValueOnce(new Error('ip-api unreachable'))
+
+         await run(accountCommand)
+
+         expect(log.error).toHaveBeenCalledWith(
+            'The browser could not start through the proxy',
+            expect.objectContaining({
+               code: 'PROXY_FAILED',
+               cause: 'PROXY_LOOKUP_FAILED',
+               error: expect.objectContaining({ message: 'ip-api unreachable' }),
+            })
+         )
+         expect(published[0]).toMatchObject({ verdict: 'PROXY_FAILED' })
+      })
+
+      it('should still answer PROXY_FAILED when the log cannot be written', async () => {
+         const { run, exitGeo, deps, published } = withIdentities()
+
+         deps.log = createLogger({
+            service: 'spider',
+            stream: {
+               write: () => {
+                  throw new Error('stdout is gone')
+               },
+            },
+         })
+         exitGeo.mockRejectedValueOnce(new Error('ip-api unreachable'))
+
+         await run(accountCommand)
+
+         expect(published[0]).toMatchObject({ verdict: 'PROXY_FAILED' })
+      })
+
       it('should let the broker retry when the new language cannot be written', async () => {
          const { run, identities, deps } = withIdentities()
 
@@ -1131,15 +1177,26 @@ describe('a task that needs an account', () => {
 
       it('should skip a command whose result was already published: no browser, no second result', async () => {
          const { run, deps, store, published } = setup()
+         const log = {
+            debug: vi.fn(),
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            fatal: vi.fn(),
+            flush: vi.fn(),
+         }
 
+         deps.log = log
          store.objects.set(doneKey, '{}')
-         vi.spyOn(console, 'log').mockImplementation(() => undefined)
 
          await expect(run()).resolves.toBeUndefined()
 
          expect(deps.driver.open).not.toHaveBeenCalled()
          expect(published).toEqual([])
-         expect(console.log).toHaveBeenCalledWith(expect.stringContaining('skipped'))
+         expect(log.info).toHaveBeenCalledWith(
+            'spider job skipped, its result was already published',
+            expect.objectContaining({ taskId: command.task_id })
+         )
       })
 
       it('should skip it while holding the account, release the account, and never open the credentials', async () => {
@@ -1164,25 +1221,49 @@ describe('a task that needs an account', () => {
       })
 
       it('should run when the marker cannot be read for another reason than not being there, and say so', async () => {
-         const { run, store, published } = setup()
+         const { run, deps, store, published } = setup()
+         const log = {
+            debug: vi.fn(),
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            fatal: vi.fn(),
+            flush: vi.fn(),
+         }
 
+         deps.log = log
          store.get.mockRejectedValueOnce(new Error('bucket unavailable'))
 
          await run()
 
          expect(published).toHaveLength(1)
-         expect(console.error).toHaveBeenCalledWith(expect.stringContaining('bucket unavailable'))
+         expect(log.error).toHaveBeenCalledWith(
+            'Could not look for the done marker',
+            expect.objectContaining({ error: expect.objectContaining({ message: 'bucket unavailable' }) })
+         )
       })
 
       it('should still answer when the marker cannot be written', async () => {
-         const { run, store, published } = setup()
+         const { run, deps, store, published } = setup()
+         const log = {
+            debug: vi.fn(),
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            fatal: vi.fn(),
+            flush: vi.fn(),
+         }
 
+         deps.log = log
          store.create.mockRejectedValueOnce(new Error('bucket unavailable'))
 
          await expect(run()).resolves.toBeUndefined()
 
          expect(published).toHaveLength(1)
-         expect(console.error).toHaveBeenCalledWith(expect.stringContaining('bucket unavailable'))
+         expect(log.error).toHaveBeenCalledWith(
+            'Could not write the done marker',
+            expect.objectContaining({ error: expect.objectContaining({ message: 'bucket unavailable' }) })
+         )
       })
 
       it('should write no marker for a run that failed for the broker to retry, so its retry is not skipped', async () => {
