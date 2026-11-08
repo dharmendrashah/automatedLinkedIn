@@ -173,6 +173,23 @@ export class EventToolsService {
          )
       }
 
+      if (mode === 'replay') {
+         const replayed = await PrismaService.client.workflowRun.findFirst({
+            where: {
+               userId,
+               workflowId,
+               runKey: { startsWith: `event-replay:${eventId}:${workflowId}:` },
+               startedAt: { gte: new Date(Date.now() - REPLAY_WINDOW_MS) },
+            },
+            select: { id: true },
+         })
+
+         if (replayed) {
+            throw new ConflictError('This event was already replayed for this workflow in the last ten minutes.')
+         }
+      }
+
+      // Same key for two replays that start at once, so only one of them is saved.
       const window = Math.floor(Date.now() / REPLAY_WINDOW_MS)
       const run = await WorkflowService.startRun(
          userId,
