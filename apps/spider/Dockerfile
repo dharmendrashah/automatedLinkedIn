@@ -56,6 +56,17 @@ RUN node node_modules/camoufox/dist/__main__.js fetch
 # ~/.cache/ms-playwright, where playwright-core looks for it at run time.
 RUN node node_modules/playwright-core/cli.js install ffmpeg
 
+# Camoufox maps a proxy's exit address to its country, timezone and language with a GeoIP database. It downloads the database
+# when the copy is missing or more than eight days old, and a fresh worker container starts with none, so it is fetched here,
+# into the cache folder the browser lives in. BUILD_TIME changes with each build, so each build gets a current database.
+FROM browsers AS geoip
+ARG BUILD_TIME=unknown
+RUN echo "GeoIP database for build $BUILD_TIME" \
+   && for attempt in 1 2 3; do \
+      node --input-type=module -e "import { downloadMmdb } from 'camoufox/dist/geolocation.js'; await downloadMmdb(undefined, undefined, true)" && exit 0; \
+      sleep 20; \
+   done; exit 1
+
 # The libraries are Firefox's runtime needs; xvfb is the virtual display Camoufox runs on instead of plain headless.
 FROM node:25-bookworm-slim AS worker
 ENV NODE_ENV=production SPIDER_HEADLESS=virtual
@@ -66,7 +77,7 @@ RUN apt-get update \
       libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 libx11-6 libx11-xcb1 libxcb-shm0 libxcb1 \
       libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxt6 libxtst6 xvfb \
    && rm -rf /var/lib/apt/lists/*
-COPY --from=browsers --chown=node:node /home/node/.cache /home/node/.cache
+COPY --from=geoip --chown=node:node /home/node/.cache /home/node/.cache
 WORKDIR /app
 COPY --from=worker-build /out/package.json ./
 COPY --from=worker-build /out/node_modules ./node_modules
