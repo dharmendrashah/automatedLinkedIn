@@ -106,6 +106,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 ## Gotchas
 
 - `packages/logger` exports need an `import` condition (`./dist/index.mjs`); a `require`-only map fails under Vitest with "is not exported under the conditions".
+- A workspace package with an `exports` map must also list `./dist/index.js`: brain's `aliases.ts` maps each `@automatedLinkedIn/*` dependency to that path, and without it `pnpm --filter brain run dev` fails with ERR_PACKAGE_PATH_NOT_EXPORTED.
 - Logger output is pino on stdout, not `console`. Brain tests mock `core/log` globally in `apps/brain/vitest.setup.ts` (calls cleared after each test); assert on `log.error` or `log.info` from `core/log`, never on `console`.
 - Brain integration tests that book the browsing budget depend on the clock (working hours, pacing, rest). A test that is not about the budget sets `BROWSE_BUDGET=false` in `vi.hoisted` (done in taskDispatch, task.service, eventDispatch and linkedInLogin); a test that is about the budget must pin its clock.
 - Pino's level formatter sets `severity`; the event's own `severity` must be removed before the write, or the JSON line has the key twice.
