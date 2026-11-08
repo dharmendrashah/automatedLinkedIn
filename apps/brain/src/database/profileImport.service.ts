@@ -1,4 +1,5 @@
 import { MessageFiles } from 'core'
+import { log } from 'core/log'
 
 import { type Prisma } from 'generated/prisma/client'
 
@@ -160,7 +161,10 @@ export class ProfileImportService {
                lastError: (error as Error).name,
             },
          })
-         console.error(`worker profile-import could not store ${sessionId}: ${(error as Error).name}`)
+         log.error('Profile import could not store a session', {
+            sessionId,
+            errorName: (error as Error).name,
+         })
 
          return last ? ('failed' as const) : ('retry' as const)
       }

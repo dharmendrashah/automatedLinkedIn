@@ -1,0 +1,9 @@
+{
+   "extends": "@automatedLinkedIn/tsconfig/node.json",
+   "compilerOptions": {
+      "outDir": "dist",
+      "composite": true
+   },
+   "include": ["src"],
+   "references": []
+}

@@ -1384,6 +1384,8 @@ model TaskDispatch {
   giveUpFailures Int           @default(0)
   // A fixed sentence or an error class, never message content.
   lastError      String?
+  // The correlation ID of the request that accepted the task, so a retried publish carries the same ID.
+  correlationId  String?
 
   @@index([nextAttemptAt])
 }

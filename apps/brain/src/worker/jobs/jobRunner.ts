@@ -1,8 +1,14 @@
+import { randomUUID } from 'node:crypto'
+
 import { type JobRunInput } from 'database'
+
+import { createLogger, withCorrelation } from '@automatedLinkedIn/logger'
 
 import { type JobDefinition } from './defineJob'
 
 type Log = { info: (message: string) => void; error: (message: string) => void }
+
+const jobLog = createLogger({ service: 'brain' })
 
 type Report = Pick<JobRunInput, 'outcome' | 'summary' | 'counts' | 'items' | 'error'>
 
@@ -44,7 +50,7 @@ export class JobRunner {
 
    private failureStreak = 0
 
-   public constructor(definition: JobDefinition, log: Log = console, record?: (run: JobRunInput) => void) {
+   public constructor(definition: JobDefinition, log: Log = jobLog, record?: (run: JobRunInput) => void) {
       this.definition = definition
       this.log = log
       this.record = record
@@ -93,7 +99,7 @@ export class JobRunner {
          return Promise.resolve()
       }
 
-      this.current = this.execute().finally(() => {
+      this.current = withCorrelation(randomUUID(), () => this.execute()).finally(() => {
          this.current = undefined
       })
 

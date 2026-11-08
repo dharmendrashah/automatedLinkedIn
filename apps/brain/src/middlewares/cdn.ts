@@ -1,6 +1,7 @@
 import { type Application } from 'express'
 
 import { CdnFetchError, type CdnFetchFailure, CdnFiles, parseRemoteUrl, publicUrlOf, urlHash } from 'core'
+import { log } from 'core/log'
 
 import { CdnFileService } from 'database'
 
@@ -100,7 +101,10 @@ const fetchAndSave = async (url: URL, hash: string) => {
       return stored.bucketUrl
    } catch (error) {
       await CdnFileService.release(hash).catch((releaseError: unknown) => {
-         console.error('cdn: could not release a claim', hash, releaseError)
+         log.error('cdn: could not release a claim', {
+            hash,
+            error: releaseError,
+         })
       })
 
       throw error
@@ -181,7 +185,11 @@ export class Cdn {
             }
 
             // Host and hash only: the query of a remote URL can hold tokens.
-            console.error('cdn: could not cache a file', url.hostname, hash, error)
+            log.error('cdn: could not cache a file', {
+               host: url.hostname,
+               hash,
+               error,
+            })
 
             return fail(500, 'The file could not be cached.')
          }

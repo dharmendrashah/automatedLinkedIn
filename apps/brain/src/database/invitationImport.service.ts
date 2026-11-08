@@ -1,4 +1,5 @@
 import { MessageFiles } from 'core'
+import { log } from 'core/log'
 
 import { invitationsFileSchema } from '@automatedLinkedIn/contracts'
 
@@ -136,7 +137,10 @@ export class InvitationImportService {
                lastError: (error as Error).name,
             },
          })
-         console.error(`worker invitation-import could not store ${sessionId}: ${(error as Error).name}`)
+         log.error('Invitation import could not store a session', {
+            sessionId,
+            errorName: (error as Error).name,
+         })
 
          return last ? ('failed' as const) : ('retry' as const)
       }

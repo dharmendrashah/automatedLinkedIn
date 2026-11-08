@@ -1,8 +1,48 @@
 import { type Mock, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { currentCorrelationId } from '@automatedLinkedIn/logger'
+
 import { AccountBusyError, ShutdownError } from '../scraping/errors'
 import { MAX_RETRIES, consumeOnce, consumeQueue, consumeTasks } from './consumer'
 import { TASK_QUEUE } from './topology'
+
+describe('correlation of a consumed job', () => {
+   it('should run the job inside the correlation ID its message carries', async () => {
+      const job = {
+         content: Buffer.from('{}'),
+         properties: { headers: { 'x-correlation-id': 'abcdef12-3456' } },
+      }
+      const channel = {
+         get: vi.fn().mockResolvedValue(job),
+         ack: vi.fn(),
+         nack: vi.fn(),
+      }
+      let seen: string | undefined
+      const handler = vi.fn(async () => {
+         seen = currentCorrelationId()
+      })
+
+      await consumeOnce(
+         channel as never,
+         {
+            queue: TASK_QUEUE,
+            parse: () => ({}),
+            label: () => 'demo',
+            handler,
+         },
+         {
+            log: {
+               info: vi.fn(),
+               error: vi.fn(),
+            },
+            republish: vi.fn(async () => undefined),
+            sleep: vi.fn(async () => undefined),
+         }
+      )
+
+      expect(seen).toBe('abcdef12-3456')
+   })
+})
 
 const command = {
    task_id: '0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11',

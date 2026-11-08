@@ -1,4 +1,5 @@
 import { PostFiles } from 'core'
+import { log } from 'core/log'
 
 import {
    type Graph,
@@ -36,6 +37,9 @@ export const dropFiles = async (keys: string[]) => {
    const failed = await PostFiles.remove(keys).catch(() => keys.length)
 
    if (failed > 0) {
-      console.error(`Post files: ${failed} of ${keys.length} could not be deleted`)
+      log.error('Post files could not be deleted', {
+         failed,
+         total: keys.length,
+      })
    }
 }

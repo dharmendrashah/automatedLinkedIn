@@ -1,5 +1,7 @@
 import { type ConfirmChannel, type ConsumeMessage } from 'amqplib'
 
+import { createIdGate, createLogger, withCorrelation } from '@automatedLinkedIn/logger'
+
 import { DEAD_QUEUE_OPTIONS, deadQueueName } from './deadQueue'
 import { type ConsumerDefinition, DEFAULT_PREFETCH, DEFAULT_RETRY } from './defineConsumer'
 
@@ -40,6 +42,16 @@ const readRetries = (message: ConsumeMessage) => {
 // A connection that is refused arrives as an error without a message, so the name says what happened.
 const reasonOf = (error: unknown) => (error instanceof Error ? error.message || error.name : 'unknown error')
 
+const consumerLog = createLogger({ service: 'brain' })
+const resolveId = createIdGate(consumerLog)
+
+// The message's x-correlation-id is kept when valid, so the job is traced to the request that queued it.
+const correlationOf = (message: ConsumeMessage): string => {
+   const raw: unknown = message.properties.headers?.['x-correlation-id']
+
+   return resolveId(typeof raw === 'string' ? raw : undefined, 'rabbitmq')
+}
+
 // Runs one queue for the worker: takes messages, acknowledges after the handler finished, and on a failure retries by
 // publishing a copy after a back-off (RabbitMQ gives no delay or limit to nack-with-requeue, so a failing message would
 // spin). A message that cannot be parsed, or that used up its retries, goes to `<queue>.dead` and is acknowledged.
@@ -78,7 +90,7 @@ export class ConsumerRunner {
    public constructor(definition: ConsumerDefinition, options: RunnerOptions) {
       this.definition = definition
       this.options = options
-      this.log = options.log ?? console
+      this.log = options.log ?? consumerLog
    }
 
    public state(): ConsumerState {
@@ -118,7 +130,7 @@ export class ConsumerRunner {
             definition.queue,
             message => {
                if (message) {
-                  this.track(this.handle(channel, message))
+                  this.track(withCorrelation(correlationOf(message), () => this.handle(channel, message)))
                }
             },
             { noAck: false }

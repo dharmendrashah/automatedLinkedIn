@@ -4,6 +4,8 @@ import { RABBITMQ_URL } from 'env'
 
 import { assertAccountTopology } from '@automatedLinkedIn/contracts'
 
+import { log } from './log'
+
 // How long an unreachable broker may stall a caller, such as the /health probe.
 const CONNECT_TIMEOUT_MS = 3000
 
@@ -21,7 +23,7 @@ export class MessageBroker {
             this.open = connection
 
             // Without an error listener an emitted 'error' would crash the process.
-            connection.on('error', (error: Error) => console.error(`RabbitMQ connection error: ${error.message}`))
+            connection.on('error', (error: Error) => log.error('RabbitMQ connection error', { error }))
             connection.on('close', () => {
                this.pending = undefined
                this.open = undefined
@@ -44,7 +46,7 @@ export class MessageBroker {
       this.publisher ??= this.connection()
          .then(connection => connection.createConfirmChannel())
          .then(channel => {
-            channel.on('error', (error: Error) => console.error(`RabbitMQ channel error: ${error.message}`))
+            channel.on('error', (error: Error) => log.error('RabbitMQ channel error', { error }))
             channel.on('close', () => {
                this.publisher = undefined
             })

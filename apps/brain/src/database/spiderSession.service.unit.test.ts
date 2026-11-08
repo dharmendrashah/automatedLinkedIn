@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { log } from 'core/log'
+
 import {
    SESSION_FILE_PATTERN,
    SpiderRecordingUnavailableError,
@@ -48,7 +50,6 @@ const PREFIX = 'recordings/validate/0d9f5b6e-0c58-4b4e-9d4b-9b8f5b0f6a11/2026101
 describe('SpiderSessionService', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
       mocks.transaction.mockImplementation(async (work: (tx: unknown) => unknown) =>
          work({
             spiderSession: { updateMany: mocks.updateMany },
@@ -414,7 +415,10 @@ describe('SpiderSessionService', () => {
          mocks.deleteMany.mockRejectedValue(new Error('database down'))
 
          await expect(SpiderSessionService.deleteExpired()).resolves.toBeUndefined()
-         expect(console.error).toHaveBeenCalledWith(expect.stringContaining('database down'))
+         expect(log.error).toHaveBeenCalledWith(
+            'Could not delete old sessions',
+            expect.objectContaining({ error: expect.objectContaining({ message: 'database down' }) })
+         )
       })
    })
 
@@ -567,7 +571,10 @@ describe('SpiderSessionService', () => {
          expect(mocks.createArtifacts.mock.calls[0][0].data.map((file: { path: string }) => file.path)).toEqual([
             `${folder}/video.webm`,
          ])
-         expect(console.error).toHaveBeenCalledWith(expect.stringContaining('2'))
+         expect(log.error).toHaveBeenCalledWith(
+            'Dropped files outside the session folder',
+            expect.objectContaining({ dropped: 2 })
+         )
       })
 
       it('should keep no recording prefix when no file was kept', async () => {

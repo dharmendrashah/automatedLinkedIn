@@ -3,11 +3,12 @@ import { FingerprintGenerator } from 'fingerprint-generator'
 
 import { type BrowserContext, type Page, type Response, type Route } from 'playwright-core'
 
+import { maskText } from '@automatedLinkedIn/logger'
+
 import { type ExtractedRecord, type SessionCookie } from '../types'
 
 import { type DeviceIdentity } from '../identity/deviceIdentity'
 import { attachRecorder } from '../recording/attachRecorder'
-import { maskText } from '../recording/masking'
 import { type RunRecorder } from '../recording/recorder'
 import {
    type BrowserDriver,

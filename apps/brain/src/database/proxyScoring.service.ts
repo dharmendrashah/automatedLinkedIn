@@ -1,5 +1,6 @@
 import { scoreProxy } from './proxyScore'
 import { type AbuseDetail, AbuseIpDbError, AbuseIpDbService } from 'core'
+import { log } from 'core/log'
 
 import { Prisma, type ProxyServerStatus } from 'generated/prisma/client'
 
@@ -181,7 +182,10 @@ export class ProxyScoringService {
    // Scores after a save without making the save wait for a second network call. A failure is only logged.
    public static scoreSoon(proxyId: string) {
       ProxyScoringService.score(proxyId).catch((error: unknown) => {
-         console.error(`Could not score proxy ${proxyId}: ${(error as Error).message}`)
+         log.error('Could not score a proxy', {
+            proxyId,
+            error,
+         })
       })
    }
 
@@ -273,7 +277,10 @@ export class ProxyScoringService {
 
          await PrismaService.client.proxyScore.deleteMany({ where: { scoredAt: { lt: cutoff } } })
       } catch (error) {
-         console.error(`Could not save the score history of proxy ${proxyServerId}: ${(error as Error).message}`)
+         log.error('Could not save the score history of a proxy', {
+            proxyServerId,
+            error,
+         })
       }
    }
 }

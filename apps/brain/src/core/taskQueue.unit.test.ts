@@ -37,6 +37,21 @@ describe('TaskQueue.publish', () => {
       vi.resetAllMocks()
    })
 
+   it('should send the correlation ID as the x-correlation-id message header', async () => {
+      const channel = fakeChannel()
+
+      mocks.confirmChannel.mockResolvedValue(channel)
+
+      await TaskQueue.publish(command, 'abcdef12-3456')
+
+      expect(channel.publish).toHaveBeenCalledWith(
+         EXCHANGE,
+         TASK_KEY,
+         expect.any(Buffer),
+         expect.objectContaining({ headers: { 'x-correlation-id': 'abcdef12-3456' } })
+      )
+   })
+
    it('should publish a persistent message on the task key and wait for the broker to confirm', async () => {
       const channel = fakeChannel()
 

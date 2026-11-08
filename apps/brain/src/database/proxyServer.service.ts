@@ -1,5 +1,6 @@
 import { pickBest, reputationState, scoreLabel, scoreParts } from './proxyScore'
 import { type AbuseDetail, AbuseIpDbService, CryptoService, IpInfoError, IpInfoService, type ProxyExchange } from 'core'
+import { log } from 'core/log'
 
 import { type ProxyProtocol, type ProxyServer } from 'generated/prisma/client'
 
@@ -172,7 +173,10 @@ const saveTest = async (proxyServerId: string, outcome: TestOutcome) => {
       })
       await PrismaService.client.proxyTest.deleteMany({ where: { testedAt: { lt: historyCutoff() } } })
    } catch (error) {
-      console.error(`Could not save the test history of proxy ${proxyServerId}: ${(error as Error).message}`)
+      log.error('Could not save the test history of a proxy', {
+         proxyServerId,
+         error,
+      })
    }
 }
 

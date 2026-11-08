@@ -3,6 +3,8 @@ import http from 'http'
 
 import { PORT } from 'env'
 
+import { log } from './log'
+
 export class HttpServer {
    public static create() {
       const app = express()
@@ -10,8 +12,7 @@ export class HttpServer {
       const server = http.createServer(app)
 
       server.listen(PORT, '0.0.0.0', () => {
-         console.log(`🚀 Server has launched`)
-         console.log(`Please visit to http://localhost:${PORT}`)
+         log.info('Server has launched', { port: PORT })
       })
 
       return { app }

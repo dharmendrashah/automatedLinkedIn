@@ -66,7 +66,6 @@ const caller = () =>
 describe('task resolvers', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
    })
 
    it('should list the tasks the worker announced, with the labels of the answers the runner gives itself', async () => {

@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
 import { RecordingLinks } from 'core'
+import { log } from 'core/log'
 
 import {
    LinkedInAccountPausedError,
@@ -107,7 +108,7 @@ const asTrpcError = (error: unknown) => {
       })
    }
 
-   console.error(`Sessions: ${(error as Error).message}`)
+   log.error('Session request failed', { error })
 
    return new TRPCError({
       code: 'INTERNAL_SERVER_ERROR',

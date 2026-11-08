@@ -31,6 +31,7 @@
       "@ai-sdk/openai-compatible": "^3.0.84",
       "@automatedLinkedIn/config": "workspace:*",
       "@automatedLinkedIn/contracts": "workspace:*",
+      "@automatedLinkedIn/logger": "workspace:*",
       "@google-cloud/run": "^4.2.0",
       "@google-cloud/storage": "^8.4.0",
       "@prisma/adapter-pg": "7.10.0",

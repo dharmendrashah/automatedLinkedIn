@@ -153,6 +153,21 @@ describe('taskCommandSchema', () => {
 })
 
 describe('taskResultSchema', () => {
+   it('should accept a result that carries a valid correlation ID, and reject a malformed one', () => {
+      expect(
+         taskResultSchema.parse({
+            ...result,
+            correlation_id: 'abcdef12-3456',
+         })
+      ).toMatchObject({ correlation_id: 'abcdef12-3456' })
+      expect(
+         taskResultSchema.safeParse({
+            ...result,
+            correlation_id: 'bad id!',
+         }).success
+      ).toBe(false)
+   })
+
    it('should accept a result as the spider publishes it', () => {
       expect(taskResultSchema.parse(result)).toEqual(result)
    })

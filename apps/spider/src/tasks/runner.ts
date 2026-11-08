@@ -9,6 +9,7 @@ import {
    runPrefix,
    taskResultSchema,
 } from '@automatedLinkedIn/contracts'
+import { type Logger, createLogger, currentCorrelationId } from '@automatedLinkedIn/logger'
 
 import { type ProxyConfig } from '../types'
 
@@ -21,7 +22,7 @@ import { RecordedDetectionSession } from '../recording/recordedDetectionSession'
 import { type Recorder } from '../recording/recorder'
 import { type AccountLock } from '../scraping/accountLock'
 import { type DetectionDriver, type DetectionSession, type SessionControl, type StorageState } from '../scraping/driver'
-import { AccountBusyError, ShutdownError, TaskError } from '../scraping/errors'
+import { AccountBusyError, ProxyLookupError, ShutdownError, TaskError } from '../scraping/errors'
 import { type HostPolicy } from '../scraping/policy'
 import { type HostRateLimiter } from '../scraping/rateLimiter'
 import { type RobotsGuard } from '../scraping/robots'
@@ -37,6 +38,20 @@ import { type AccountValidator } from './linkedinLogin/accountValidator'
 import { type Download, fetchPostFiles, fetchUploads } from './uploads'
 
 const MAX_ARTIFACTS = 300
+
+const defaultLog = createLogger({ service: 'spider' })
+
+// The original error is logged: the task answer only says the browser could not start.
+const logProxyFailure = (log: Logger, command: TaskCommand, error: TaskError) => {
+   const lookup = error instanceof ProxyLookupError
+
+   log.error('The browser could not start through the proxy', {
+      code: 'PROXY_FAILED',
+      ...(lookup && { cause: 'PROXY_LOOKUP_FAILED' }),
+      taskId: command.task_id,
+      error: lookup ? error.original : error,
+   })
+}
 // A sign-in that is not done in this long is given up, as the sign-in task does.
 const SIGN_IN_LIMIT_MS = 3 * 60 * 1000
 // After a sign-in the feed is waited on and scrolled a little, as a person does before doing anything else.
@@ -68,6 +83,8 @@ export type RunnerDeps = {
    identities?: Pick<IdentityStore, 'forAccount' | 'pin'>
    // Where a proxy's traffic leaves. With `identities` it keeps the account's timezone and language true to the proxy.
    exitGeo?: (proxy: ProxyConfig) => Promise<ExitRegion>
+   // Where the runner writes its failure events. Without it they go to stdout as JSON.
+   log?: Logger
    // The cookies an account keeps between runs. Without it nothing is restored or kept (the local devtools).
    sessions?: Pick<SessionVault, 'load' | 'save'>
    // With it every task that uses an account starts from the feed and signs the account in again when LinkedIn does not accept
@@ -191,6 +208,7 @@ const withLimit = <T>(work: Promise<T>, ms: number, signal?: AbortSignal) => {
 // for problems the broker should retry (the browser crashing, the task throwing), and answers by itself for everything a
 // retry cannot fix.
 export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
+   const log = deps.log ?? defaultLog
    if (deps.signal?.aborted) {
       throw new ShutdownError()
    }
@@ -212,7 +230,10 @@ export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
          return true
       } catch (error) {
          if (!(error instanceof ObjectNotFoundError)) {
-            console.error(`Could not look for the done marker of ${command.task_id}: ${(error as Error).message}`)
+            log.error('Could not look for the done marker', {
+               taskId: command.task_id,
+               error,
+            })
          }
 
          return false
@@ -229,12 +250,18 @@ export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
             'application/json'
          )
       } catch (error) {
-         console.error(`Could not write the done marker of ${command.task_id}: ${(error as Error).message}`)
+         log.error('Could not write the done marker', {
+            taskId: command.task_id,
+            error,
+         })
       }
    }
 
    const skipDuplicate = () => {
-      console.log(`spider job skipped, its result was already published: Task ${command.task} ${command.task_id}`)
+      log.info('spider job skipped, its result was already published', {
+         taskId: command.task_id,
+         task: command.task,
+      })
    }
 
    const publish = async (
@@ -258,6 +285,7 @@ export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
             started_at: new Date(startedAt).toISOString(),
             finished_at: new Date(now()).toISOString(),
             ...(browserSeconds !== undefined && { browser_seconds: browserSeconds }),
+            ...(currentCorrelationId() && { correlation_id: currentCorrelationId() }),
          })
       )
       await markDone()
@@ -342,7 +370,11 @@ export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
          worker: { build: deps.workerBuild },
       })
    } catch (error) {
-      console.error(`Could not tell brain that ${command.task_id} began: ${(error as Error).message}`)
+      log.error('Could not tell brain that the task began', {
+         code: 'PUBLISH_FAILED',
+         taskId: command.task_id,
+         error,
+      })
    }
 
    let profile: ProfileCheckout | undefined
@@ -510,7 +542,10 @@ const execute = async (
             )
             await deps.store.put(`${saved}/manifest.json`, JSON.stringify({ artifacts }), 'application/json')
          } catch (error) {
-            console.error(`Could not save the manifest of ${command.task_id}: ${(error as Error).message}`)
+            ;(deps.log ?? defaultLog).error('Could not save the manifest', {
+               taskId: command.task_id,
+               error,
+            })
          }
       }
 
@@ -524,11 +559,17 @@ const execute = async (
             stillSignedIn)
       ) {
          await deps.sessions?.save(account.id, state).catch(error => {
-            console.error(`Could not keep the session of ${account.id}: ${(error as Error).message}`)
+            ;(deps.log ?? defaultLog).error('Could not keep the session of the account', {
+               accountId: account.id,
+               error,
+            })
          })
          // The browser is closed by now, so the profile folder is complete.
          await profile?.keep().catch(error => {
-            console.error(`Could not keep the browser profile of ${account.id}: ${(error as Error).message}`)
+            ;(deps.log ?? defaultLog).error('Could not keep the browser profile of the account', {
+               accountId: account.id,
+               error,
+            })
          })
       }
 
@@ -545,8 +586,8 @@ const execute = async (
       // The proxy's exit decides the account's timezone, and its language while the country stays the same. A lookup that
       // fails is a proxy that does not work, never a reason to start with whatever the host would show.
       if (account && device && command.proxy && deps.identities && deps.exitGeo) {
-         const exit = await deps.exitGeo(command.proxy).catch(() => {
-            throw new TaskError('The exit address of the proxy could not be looked up')
+         const exit = await deps.exitGeo(command.proxy).catch(original => {
+            throw new ProxyLookupError(original)
          })
          const kept = regionToKeep(device, exit)
 
@@ -591,6 +632,7 @@ const execute = async (
    } catch (error) {
       // A proxy that does not work is an answer to this task, not a reason to retry it.
       if (error instanceof TaskError) {
+         logProxyFailure(deps.log ?? defaultLog, command, error)
          return finish(
             {
                status: 'FAILED',

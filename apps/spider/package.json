@@ -31,6 +31,7 @@
    },
    "dependencies": {
       "@automatedLinkedIn/contracts": "workspace:*",
+      "@automatedLinkedIn/logger": "workspace:*",
       "@google-cloud/storage": "^8.4.0",
       "amqplib": "^2.2.0",
       "camoufox": "0.5.8",

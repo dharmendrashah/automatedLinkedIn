@@ -1,4 +1,5 @@
 import { KeptFiles, UploadFiles, UploadRefused } from 'core'
+import { log } from 'core/log'
 
 import { MESSAGE_MAX_CHARS, kindOfName, safeFileName } from '@automatedLinkedIn/contracts'
 
@@ -55,7 +56,7 @@ const refusal = async <T>(work: () => Promise<T>): Promise<T> => {
          throw new TaskRefusedError(error.message)
       }
 
-      console.error(`Uploads: ${(error as Error).message}`)
+      log.error('Reply uploads failed', { error })
 
       throw new TaskRefusedError('Files cannot be sent right now. Try again in a moment.')
    }
@@ -120,7 +121,10 @@ export class LinkedInReplyService {
       // When the account is free this starts it now; otherwise the reply-send job does when its turn comes. A failure here is the
       // job's to retry, never the owner's to see: the reply is saved.
       await this.dispatchNext(accountId).catch((error: unknown) => {
-         console.error(`Could not start the queued replies of account ${accountId}: ${(error as Error).message}`)
+         log.error('Could not start the queued replies of an account', {
+            accountId,
+            error,
+         })
       })
 
       return { id: reply.id }
@@ -225,7 +229,10 @@ export class LinkedInReplyService {
       })
 
       await this.dispatchNext(accountId).catch((error: unknown) => {
-         console.error(`Could not start the queued replies of account ${accountId}: ${(error as Error).message}`)
+         log.error('Could not start the queued replies of an account', {
+            accountId,
+            error,
+         })
       })
 
       return { id: reply.id }
@@ -626,7 +633,10 @@ export class LinkedInReplyService {
             })
             kept += 1
          } catch (error) {
-            console.error(`Could not keep the files of reply ${id}: ${(error as Error).name}`)
+            log.error('Could not keep the files of a reply', {
+               replyId: id,
+               errorName: (error as Error).name,
+            })
          }
       }
 

@@ -3,11 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { MessageBroker } from './messageBroker'
 
-const mocks = vi.hoisted(() => ({ connect: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+   connect: vi.fn(),
+   log: { error: vi.fn() },
+}))
 
 vi.mock('amqplib', () => ({ connect: mocks.connect }))
 
 vi.mock('env', () => ({ RABBITMQ_URL: 'amqp://user:pass@localhost:5672/test' }))
+
+vi.mock('./log', () => ({ log: mocks.log }))
 
 // A stand-in for the amqplib connection: an emitter with a close() we can observe.
 const fakeConnection = () => Object.assign(new EventEmitter(), { close: vi.fn().mockResolvedValue(undefined) })
@@ -16,7 +21,6 @@ describe('MessageBroker', () => {
    beforeEach(async () => {
       await MessageBroker.disconnect()
       vi.resetAllMocks()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
    })
 
    afterEach(() => {
@@ -74,17 +78,16 @@ describe('MessageBroker', () => {
       await expect(MessageBroker.isHealthy()).resolves.toBe(true)
    })
 
-   it('should log the error message without the connection url', async () => {
+   it('should log the error message', async () => {
       const connection = fakeConnection()
       mocks.connect.mockResolvedValue(connection)
 
       await MessageBroker.isHealthy()
       connection.emit('error', new Error('socket hang up'))
 
-      const logged = JSON.stringify(vi.mocked(console.error).mock.calls)
+      const fields = { error: expect.objectContaining({ message: 'socket hang up' }) }
 
-      expect(logged).toContain('socket hang up')
-      expect(logged).not.toContain('pass')
+      expect(mocks.log.error).toHaveBeenCalledWith('RabbitMQ connection error', fields)
    })
 
    it('should report unhealthy instead of hanging when the connect never answers', async () => {

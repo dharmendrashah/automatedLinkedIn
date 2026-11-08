@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { log } from 'core/log'
+
 import { ProxyScoringJob } from './proxyScoringJob'
 
 const mocks = vi.hoisted(() => ({
@@ -40,7 +42,6 @@ describe('ProxyScoringJob', () => {
    beforeEach(() => {
       vi.resetAllMocks()
       ProxyScoringJob.reset()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
       mocks.claim.mockResolvedValue(true)
       mocks.score.mockResolvedValue(ok)
       mocks.retest.mockResolvedValue({ status: 'ACTIVE' })
@@ -190,7 +191,7 @@ describe('ProxyScoringJob', () => {
             failed: 0,
             items: [],
          })
-         expect(console.error).not.toHaveBeenCalled()
+         expect(log.error).not.toHaveBeenCalled()
       })
    })
 })

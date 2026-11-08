@@ -69,7 +69,6 @@ const caller = () =>
 describe('connections resolvers', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
    })
 
    it('should hand the owner’s id, never one from the input, to every call', async () => {

@@ -1,6 +1,7 @@
 import 'dotenv/config'
 
 import { TASK_QUEUE, type TaskCommand, taskCommandSchema } from '@automatedLinkedIn/contracts'
+import { createLogger } from '@automatedLinkedIn/logger'
 
 import {
    GIT_SHA,
@@ -71,7 +72,7 @@ const main = async () => {
    const policy = HostPolicy.fromList(SPIDER_ALLOWED_HOSTS, SPIDER_ROBOTS_EXEMPT_HOSTS)
    const store = new GcsStore(SPIDER_GCS_BUCKET)
    const broker = new Broker(RABBITMQ_URL)
-   const warn = (message: string) => console.warn(message)
+   const warn = (message: string) => log.warn(message)
    const accountLock = new AccountLock(store, SPIDER_ACCOUNT_LOCK_TTL_MS, Date.now, { warn })
    const profiles = new BucketProfiles(store, LINKEDIN_CRED_ENC_KEY, { warn })
    const limiter = new HostRateLimiter(SPIDER_MIN_DELAY_MS)
@@ -83,7 +84,7 @@ const main = async () => {
    // At least `failures` unless the operator turns it off: a failed run keeps its final picture and page. A recording holds what the
    // browser showed, so `off` stays possible.
    if (!policy.allowsUrl(SPIDER_LINKEDIN_BASE_URL)) {
-      console.error(
+      log.error(
          `${SPIDER_LINKEDIN_BASE_URL} is not in SPIDER_ALLOWED_HOSTS: LinkedIn sign-in checks will report an error`
       )
    }
@@ -230,7 +231,10 @@ const main = async () => {
 
       working = () => run
       run.then(() => leave(0)).catch((error: unknown) => {
-         console.error(`spider run failed: ${error instanceof Error ? error.message : 'unknown error'}`)
+         log.error('spider run failed', {
+            code: 'WORKER_CRASHED',
+            error,
+         })
 
          return leave(1)
       })
@@ -267,12 +271,12 @@ const main = async () => {
          }
 
          if (SPIDER_RUN_ONCE) {
-            console.error('The broker channel closed during the run; the result is sent over a new connection')
+            log.warn('The broker channel closed during the run; the result is sent over a new connection')
 
             return
          }
 
-         console.error('The broker channel closed; exiting so the worker restarts')
+         log.error('The broker channel closed; exiting so the worker restarts', { code: 'WORKER_CRASHED' })
          process.exit(1)
       })
    }
@@ -280,14 +284,14 @@ const main = async () => {
    for (const signal of ['SIGINT', 'SIGTERM']) {
       process.once(signal, () => {
          stopping = true
-         console.log(
+         log.info(
             `spider worker is stopping: finishing the run in progress, for at most ${SPIDER_SHUTDOWN_GRACE_MS} ms`
          )
 
          // A run that does not finish in time is given back to the queue, and the next worker redoes it from the last good
          // profile. The container's own limit (the job's or the pod's grace period) is longer than this, so this decides first.
          const timer = setTimeout(() => {
-            console.warn('spider worker ran out of time: handing the run in progress back to the queue')
+            log.warn('spider worker ran out of time: handing the run in progress back to the queue')
             stop.abort()
          }, SPIDER_SHUTDOWN_GRACE_MS)
 
@@ -299,10 +303,15 @@ const main = async () => {
       })
    }
 
-   console.log(SPIDER_RUN_ONCE ? 'spider worker is running one task' : 'spider worker is waiting for tasks')
+   log.info(SPIDER_RUN_ONCE ? 'spider worker is running one task' : 'spider worker is waiting for tasks')
 }
 
+const log = createLogger({ service: 'spider' })
+
 main().catch((error: unknown) => {
-   console.error(`spider worker could not start: ${error instanceof Error ? error.message : 'unknown error'}`)
+   log.error('spider worker could not start', {
+      code: 'WORKER_CRASHED',
+      error,
+   })
    process.exit(1)
 })

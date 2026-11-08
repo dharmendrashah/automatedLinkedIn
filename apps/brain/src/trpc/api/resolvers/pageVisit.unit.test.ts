@@ -63,7 +63,6 @@ const caller = (kind: 'PROFILE' | 'COMPANY') =>
 describe('visitProcedure', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
    })
 
    it('should ask for a saved company, or a pasted company link, as the owner', async () => {

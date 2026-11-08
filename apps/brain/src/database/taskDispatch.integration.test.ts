@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { CryptoService } from 'core'
 
 import { type TaskCatalogEntry } from '@automatedLinkedIn/contracts'
+import { withCorrelation } from '@automatedLinkedIn/logger'
 
 import { PrismaService } from './prisma.service'
 import { SpiderSessionService } from './spiderSession.service'
@@ -11,6 +12,11 @@ import { TaskService } from './task.service'
 import { TaskDispatchService } from './taskDispatch.service'
 import { TASK_HOOKS } from './taskHooks'
 import { UserService } from './user.service'
+
+// The browsing budget (working hours, pacing, rest) has its own tests; this file is about the task outbox.
+vi.hoisted(() => {
+   process.env.BROWSE_BUDGET = 'false'
+})
 
 // Needs PostgreSQL. RabbitMQ is replaced so a broker that refuses a task can be made to happen on purpose.
 const mocks = vi.hoisted(() => ({ publish: vi.fn() }))
@@ -159,8 +165,6 @@ describe('the task outbox (PostgreSQL)', () => {
    beforeEach(() => {
       mocks.publish.mockReset()
       mocks.publish.mockResolvedValue(undefined)
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
-      vi.spyOn(console, 'log').mockImplementation(() => undefined)
    })
 
    afterAll(async () => {
@@ -228,6 +232,29 @@ describe('the task outbox (PostgreSQL)', () => {
 
       expect(mocks.publish).toHaveBeenCalledTimes(2)
       await expect(row(id)).resolves.toBeNull()
+   })
+
+   it('should publish a retry with the correlation ID it was saved with', async () => {
+      mocks.publish.mockRejectedValueOnce(new Error('nack from broker'))
+
+      await finishEarlierSessions()
+      const { id } = await withCorrelation('retry-correlation-1', () =>
+         TaskService.request({
+            userId,
+            task: 'browser-detection',
+            proxyId,
+            trigger: 'manual',
+         })
+      )
+
+      mocks.publish.mockResolvedValue(undefined)
+      await PrismaService.client.taskDispatch.update({
+         where: { sessionId: id },
+         data: { nextAttemptAt: new Date(Date.now() - 1000) },
+      })
+      await TaskDispatchService.dispatchDue()
+
+      expect(mocks.publish).toHaveBeenLastCalledWith(expect.objectContaining({ task_id: id }), 'retry-correlation-1')
    })
 
    it('should publish a task whose process stopped after it was saved, once it is old enough', async () => {

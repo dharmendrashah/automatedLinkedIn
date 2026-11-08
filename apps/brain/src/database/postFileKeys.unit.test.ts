@@ -39,7 +39,6 @@ describe('post file keys', () => {
 
    it('should delete files and never fail the caller when they cannot be deleted', async () => {
       mocks.remove.mockResolvedValueOnce(0).mockRejectedValueOnce(new Error('bucket down'))
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
       await expect(dropFiles(['a'])).resolves.toBeUndefined()
       await expect(dropFiles(['b'])).resolves.toBeUndefined()

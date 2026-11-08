@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
 import { extractLiAt, parseTotpSecret } from 'core'
+import { log } from 'core/log'
 
 import {
    AccountRoomService,
@@ -102,7 +103,10 @@ const requestValidation = async (id: string) => {
    try {
       await LinkedInAccountValidationService.request(id)
    } catch (error) {
-      console.error(`Could not request the validation of account ${id}: ${(error as Error).message}`)
+      log.error('Could not request the validation of an account', {
+         accountId: id,
+         error,
+      })
    }
 }
 

@@ -1,4 +1,5 @@
 import { MessageFiles } from 'core'
+import { log } from 'core/log'
 
 import { connectionsFileSchema } from '@automatedLinkedIn/contracts'
 
@@ -136,7 +137,10 @@ export class ConnectionImportService {
                lastError: (error as Error).name,
             },
          })
-         console.error(`worker connection-import could not store ${sessionId}: ${(error as Error).name}`)
+         log.error('Connection import could not store a session', {
+            sessionId,
+            errorName: (error as Error).name,
+         })
 
          return last ? ('failed' as const) : ('retry' as const)
       }

@@ -10,6 +10,11 @@ import { PrismaService } from './prisma.service'
 import { TaskService } from './task.service'
 import { UserService } from './user.service'
 
+// The browsing budget (working hours, pacing, rest) has its own tests; this file is about the sign-in check.
+vi.hoisted(() => {
+   process.env.BROWSE_BUDGET = 'false'
+})
+
 // Needs PostgreSQL. The broker is replaced: only what brain writes to the database is under test.
 const mocks = vi.hoisted(() => ({ publish: vi.fn() }))
 

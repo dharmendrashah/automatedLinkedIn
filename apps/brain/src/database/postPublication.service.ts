@@ -1,4 +1,5 @@
 import { PostFiles } from 'core'
+import { log } from 'core/log'
 
 import { type PostPublication, type PostPublicationState } from 'generated/prisma/client'
 
@@ -178,7 +179,10 @@ export class PostPublicationService {
       // here is the job's to retry, never the owner's to see: the post is saved.
       if (!plannedAt) {
          await this.dispatchNext(draft.accountId, now).catch((error: unknown) => {
-            console.error(`Could not start the queued posts of account ${draft.accountId}: ${(error as Error).message}`)
+            log.error('Could not start the queued posts of an account', {
+               accountId: draft.accountId,
+               error,
+            })
          })
       }
 
@@ -225,7 +229,10 @@ export class PostPublicationService {
 
       if (!plannedAt) {
          await this.dispatchNext(accountId, now).catch((error: unknown) => {
-            console.error(`Could not start the queued posts of account ${accountId}: ${(error as Error).message}`)
+            log.error('Could not start the queued posts of an account', {
+               accountId,
+               error,
+            })
          })
       }
 
@@ -706,7 +713,7 @@ export class PostPublicationService {
          const keys = keysOf(blocksOf({ blocks }) ?? [])
 
          if (keys.length > 0 && (await PostFiles.remove(keys).catch(() => keys.length)) > 0) {
-            console.error(`Post files: the files of post ${id} could not be deleted`)
+            log.error('Post files could not be deleted', { postId: id })
 
             continue
          }

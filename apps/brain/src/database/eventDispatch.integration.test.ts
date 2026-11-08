@@ -14,6 +14,11 @@ import { WalletService } from './wallet.service'
 import { WorkflowService } from './workflow.service'
 import { WorkflowListenerService } from './workflowListener.service'
 
+// The browsing budget (working hours, pacing, rest) has its own tests; this file is about event dispatch.
+vi.hoisted(() => {
+   process.env.BROWSE_BUDGET = 'false'
+})
+
 // Needs PostgreSQL. The broker is replaced: only what brain writes to the database is under test (.plan/workflow-events-and-hooks.md).
 const mocks = vi.hoisted(() => ({ publish: vi.fn() }))
 
@@ -362,7 +367,7 @@ describe('task events (database)', () => {
 
       const { started } = await dispatch()
       const [run] = await runsOf(mine)
-      const [delivery] = await PrismaService.client.workflowDelivery.findMany({ where: { workflowId: mine } })
+      const delivery = await PrismaService.client.workflowDelivery.findFirstOrThrow({ where: { runId: run.id } })
 
       expect(started.started).toBeGreaterThanOrEqual(1)
       expect(run).toMatchObject({

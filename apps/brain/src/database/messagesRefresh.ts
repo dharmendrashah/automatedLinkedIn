@@ -1,3 +1,5 @@
+import { log } from 'core/log'
+
 import { shortKey } from '@automatedLinkedIn/contracts'
 
 import { MESSAGES_TASK } from './linkedInMessages.hooks'
@@ -161,7 +163,10 @@ export class MessagesRefresh {
                   reason: 'Reading messages is not available yet. Try again in a moment.',
                })
             } else {
-               console.error(`Could not request the messages of account ${id}: ${(error as Error).name}`)
+               log.error('Could not request the messages of an account', {
+                  accountId: id,
+                  errorName: (error as Error).name,
+               })
                result.skipped.push({
                   accountId: id,
                   reason: 'Something went wrong. Try again in a moment.',

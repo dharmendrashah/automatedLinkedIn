@@ -42,7 +42,6 @@ describe('Broker', () => {
    it('should reconnect after the connection closes, and survive an error event', async () => {
       const first = connection()
       const connect = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(connection())
-      const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
       const broker = brokerWith(connect)
 
       await broker.connection()
@@ -53,8 +52,6 @@ describe('Broker', () => {
       await broker.connection()
 
       expect(connect).toHaveBeenCalledTimes(2)
-      expect(error).toHaveBeenCalled()
-      error.mockRestore()
    })
 
    it('should reuse one confirm channel for publishing and open a fresh channel for consuming', async () => {

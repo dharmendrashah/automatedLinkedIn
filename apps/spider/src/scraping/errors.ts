@@ -8,6 +8,16 @@ export class TaskError extends Error {
    }
 }
 
+// The exit address of a proxy could not be looked up. The task answers PROXY_FAILED; the original error is logged.
+export class ProxyLookupError extends TaskError {
+   public readonly original: unknown
+
+   public constructor(original: unknown) {
+      super('The exit address of the proxy could not be looked up')
+      this.original = original
+   }
+}
+
 // Another task is running for the same account. The task did nothing wrong and is not failed: the consumer
 // publishes it again after a short wait, without using up a retry.
 export class AccountBusyError extends Error {

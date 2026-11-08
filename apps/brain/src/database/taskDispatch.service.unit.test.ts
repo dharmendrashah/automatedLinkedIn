@@ -15,9 +15,14 @@ const mocks = vi.hoisted(() => ({
    fail: vi.fn(),
    readCatalog: vi.fn(),
    applyTaskResult: vi.fn(),
+   log: {
+      info: vi.fn(),
+      error: vi.fn(),
+   },
 }))
 
 vi.mock('core', () => ({ TaskQueue: { publish: mocks.publish } }))
+vi.mock('core/log', () => ({ log: mocks.log }))
 
 vi.mock('./prisma.service', () => ({
    PrismaService: {
@@ -78,10 +83,11 @@ const session = (overrides: Record<string, unknown> = {}) => ({
    ...overrides,
 })
 
-const claimed = (overrides: Record<string, number> = {}) => [
+const claimed = (overrides: Record<string, number | string | null> = {}) => [
    {
       attempts: 0,
       giveUpFailures: 0,
+      correlationId: null,
       ageMs: 1000,
       ...overrides,
    },
@@ -92,8 +98,6 @@ const picked = { config: { server: 'http://proxy.example.net:8080' } }
 describe('TaskDispatchService', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
-      vi.spyOn(console, 'log').mockImplementation(() => undefined)
       mocks.queryRaw.mockResolvedValue(claimed())
       mocks.findSession.mockResolvedValue(session())
       mocks.readCatalog.mockResolvedValue([entry()])
@@ -114,18 +118,21 @@ describe('TaskDispatchService', () => {
          await expect(TaskDispatchService.dispatch(SESSION_ID)).resolves.toEqual({ outcome: 'published' })
 
          expect(mocks.pickForAccount).toHaveBeenCalledWith('acc1', 'p1')
-         expect(mocks.publish).toHaveBeenCalledWith({
-            contract: 1,
-            task_id: SESSION_ID,
-            user_id: 'u1',
-            task: 'browser-detection',
-            task_version: 1,
-            // The folder of the run is computed from this, so it must be the session's own time to the millisecond.
-            requested_at: '2026-10-16T10:00:00.123Z',
-            trigger: 'manual',
-            proxy: picked.config,
-            input: { word: 'hello' },
-         })
+         expect(mocks.publish).toHaveBeenCalledWith(
+            {
+               contract: 1,
+               task_id: SESSION_ID,
+               user_id: 'u1',
+               task: 'browser-detection',
+               task_version: 1,
+               // The folder of the run is computed from this, so it must be the session's own time to the millisecond.
+               requested_at: '2026-10-16T10:00:00.123Z',
+               trigger: 'manual',
+               proxy: picked.config,
+               input: { word: 'hello' },
+            },
+            undefined
+         )
          expect(mocks.deleteDispatch).toHaveBeenCalledWith({ where: { sessionId: SESSION_ID } })
          expect(mocks.publish.mock.invocationCallOrder[0]).toBeLessThan(
             mocks.deleteDispatch.mock.invocationCallOrder[0]
@@ -178,8 +185,17 @@ describe('TaskDispatchService', () => {
                   tag: 'dGFn',
                   key_version: 1,
                },
-            })
+            }),
+            undefined
          )
+      })
+
+      it('should publish the message with the correlation ID the task was accepted with', async () => {
+         mocks.queryRaw.mockResolvedValue(claimed({ correlationId: 'abcdef12-3456' }))
+
+         await TaskDispatchService.dispatch(SESSION_ID)
+
+         expect(mocks.publish).toHaveBeenCalledWith(expect.anything(), 'abcdef12-3456')
       })
 
       it('should never send credentials to a task that does not need an account', async () => {
@@ -237,7 +253,7 @@ describe('TaskDispatchService', () => {
             await TaskDispatchService.dispatch(SESSION_ID)
 
             expect(JSON.stringify(mocks.executeRaw.mock.calls)).not.toContain('hunter2')
-            expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain('hunter2')
+            expect(JSON.stringify(mocks.log.error.mock.calls)).not.toContain('hunter2')
          })
 
          it('should wait longer after each failure, up to the longest wait', async () => {
@@ -261,7 +277,7 @@ describe('TaskDispatchService', () => {
             mocks.queryRaw.mockResolvedValue(claimed({ attempts: 1 }))
             await TaskDispatchService.dispatch(SESSION_ID)
 
-            expect(console.error).toHaveBeenCalledTimes(1)
+            expect(mocks.log.error).toHaveBeenCalledTimes(1)
          })
 
          it('should say when it published after failures', async () => {
@@ -269,7 +285,10 @@ describe('TaskDispatchService', () => {
 
             await TaskDispatchService.dispatch(SESSION_ID)
 
-            expect(console.log).toHaveBeenCalledWith(expect.stringContaining('after 2 failed attempt'))
+            expect(mocks.log.info).toHaveBeenCalledWith(
+               'Task dispatch: published after failed attempts',
+               expect.objectContaining({ attempts: 2 })
+            )
          })
 
          it('should not wait for a broker that never confirms: it times out after 5 seconds', async () => {

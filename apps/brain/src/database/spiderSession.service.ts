@@ -1,3 +1,5 @@
+import { log } from 'core/log'
+
 import { SESSION_RECORDING_RETENTION_DAYS } from 'env'
 
 import { type Prisma, type ProxyProtocol, type SpiderSessionStatus } from 'generated/prisma/client'
@@ -270,7 +272,7 @@ export class SpiderSessionService {
 
          await PrismaService.client.spiderSession.deleteMany({ where: { startedAt: { lt: cutoff } } })
       } catch (error) {
-         console.error(`Could not delete old sessions: ${(error as Error).message}`)
+         log.error('Could not delete old sessions', { error })
       }
    }
 
@@ -328,9 +330,10 @@ export class SpiderSessionService {
       const kept = result.artifacts.filter(({ path }) => artifactPathUnder(prefix, path))
 
       if (kept.length < result.artifacts.length) {
-         console.error(
-            `Dropped ${result.artifacts.length - kept.length} file(s) of ${result.task_id} outside its folder`
-         )
+         log.error('Dropped files outside the session folder', {
+            dropped: result.artifacts.length - kept.length,
+            taskId: result.task_id,
+         })
       }
 
       const finishedAt = new Date(result.finished_at)

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { KeptFiles, UploadFiles, UploadRefused } from 'core'
+import { log } from 'core/log'
 
 import { type TaskResult } from '@automatedLinkedIn/contracts'
 
@@ -693,8 +694,6 @@ describe('LinkedInReplyService (database)', () => {
       })
 
       it("should say a plain sentence, and log the cause, when the bucket fails for a reason that is not the owner's", async () => {
-         const log = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-
          vi.spyOn(UploadFiles, 'form').mockRejectedValueOnce(
             new Error('brain@project.iam.gserviceaccount.com does not have storage.objects.list access to the bucket')
          )
@@ -707,7 +706,8 @@ describe('LinkedInReplyService (database)', () => {
             'Files cannot be sent right now. Try again in a moment.'
          )
          expect(requested).toEqual([])
-         expect(log).toHaveBeenCalledWith(expect.stringContaining('storage.objects.list'))
+         const cause = expect.objectContaining({ message: expect.stringContaining('storage.objects.list') })
+         expect(log.error).toHaveBeenCalledWith('Reply uploads failed', { error: cause })
       })
 
       it('should refuse an upload with no files in it, and one with a type that cannot be sent, before anything starts', async () => {
@@ -759,7 +759,6 @@ describe('LinkedInReplyService (database)', () => {
             data: { filesKeptAt: null },
          })
          moveUpload.mockRejectedValueOnce(new Error('bucket down'))
-         vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
          await expect(LinkedInReplyService.keepFiles()).resolves.toBe(0)
          await expect(LinkedInReplyService.keepFiles()).resolves.toBe(1)

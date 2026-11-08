@@ -1,3 +1,5 @@
+import { log } from 'core/log'
+
 import { type JobItemInput } from './jobRun.service'
 import { ProxyScoringService } from './proxyScoring.service'
 import { ProxyServerService } from './proxyServer.service'
@@ -81,7 +83,10 @@ export class ProxyScoringJob {
                   result: 'FAILED',
                   reason: 'The test or the scoring failed; it is tried again on the next pass',
                })
-               console.error(`Could not score proxy ${proxy.id}: ${(error as Error).message}`)
+               log.error('Could not score a proxy', {
+                  proxyId: proxy.id,
+                  error,
+               })
             }
          }
       } finally {

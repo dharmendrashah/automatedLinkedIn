@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { log } from 'core/log'
+
 import { router } from 'trpc'
 
 import { type Context } from '../../context'
@@ -90,7 +92,6 @@ describe('linkedInAccount resolvers', () => {
    beforeEach(() => {
       vi.resetAllMocks()
       mocks.request.mockResolvedValue(true)
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
    })
 
    it('should reject an anonymous caller', async () => {
@@ -248,7 +249,10 @@ describe('linkedInAccount resolvers', () => {
                password: 'pw',
             })
          ).resolves.toMatchObject({ id: 'a1' })
-         expect(console.error).toHaveBeenCalledWith(expect.stringContaining('database down'))
+         expect(log.error).toHaveBeenCalledWith(
+            'Could not request the validation of an account',
+            expect.objectContaining({ error: expect.objectContaining({ message: 'database down' }) })
+         )
       })
    })
 

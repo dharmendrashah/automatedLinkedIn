@@ -183,7 +183,6 @@ describe('sweepDue', () => {
 describe('MessagesRefresh.request', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
       announce(2)
       mocks.request.mockResolvedValue({ id: 's' })
    })

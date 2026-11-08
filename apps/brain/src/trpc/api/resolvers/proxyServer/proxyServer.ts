@@ -1,6 +1,8 @@
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
+import { log } from 'core/log'
+
 import {
    LinkedInAccountValidationService,
    ProxyServerNotUsableError,
@@ -73,9 +75,10 @@ const validateWaitingAccount = async (proxy: { linkedInAccountId: string; status
    try {
       await LinkedInAccountValidationService.requestIfWaiting(proxy.linkedInAccountId)
    } catch (error) {
-      console.error(
-         `Could not request the validation of account ${proxy.linkedInAccountId}: ${(error as Error).message}`
-      )
+      log.error('Could not request the validation of an account', {
+         accountId: proxy.linkedInAccountId,
+         error,
+      })
    }
 }
 

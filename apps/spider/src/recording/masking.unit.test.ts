@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { maskHeaders, maskText, maskUrl } from './masking'
+import { maskHeaders, maskUrl } from './masking'
 
 describe('maskHeaders', () => {
    it('should hide the values of cookies, authorization and tokens but keep what was there', () => {
@@ -51,18 +51,5 @@ describe('maskUrl', () => {
 
    it('should mask a value that is not an address at all', () => {
       expect(maskUrl('not a url?token=abc')).toBe('not a url?token=***')
-   })
-})
-
-describe('maskText', () => {
-   it('should hide credentials in addresses, tokens and sensitive parameters', () => {
-      expect(maskText('Proxy socks5://bob:hunter2@10.0.0.1:1080 failed; Bearer abc.def; password=letmein&x=1')).toBe(
-         'Proxy socks5://***@10.0.0.1:1080 failed; Bearer ***; password=***&x=1'
-      )
-   })
-
-   it('should cut a long message', () => {
-      expect(maskText('a'.repeat(3000))).toHaveLength(2001)
-      expect(maskText('a'.repeat(3000)).endsWith('…')).toBe(true)
    })
 })

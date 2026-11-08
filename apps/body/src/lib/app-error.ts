@@ -1,3 +1,5 @@
+import { logToConsole } from '@automatedLinkedIn/logger/browser'
+
 // A lazy page whose file is gone because a new version was deployed since the app was opened.
 const NEW_VERSION =
    /dynamically imported module|Importing a module script failed|Unable to preload CSS|Loading chunk \d+ failed/i
@@ -10,5 +12,10 @@ export const errorDetails = (error: Error, path: string, at: Date) =>
 
 // Every error the app catches comes here; Sentry will be sent from this one place.
 export const reportError = (error: Error, context: { where: string; componentStack?: string | null }) => {
-   console.error(`[${context.where}]`, error, context.componentStack ?? '')
+   logToConsole('body', 'error', `Unhandled error in ${context.where}`, {
+      code: 'BODY_ERROR',
+      where: context.where,
+      error,
+      componentStack: context.componentStack ?? undefined,
+   })
 }

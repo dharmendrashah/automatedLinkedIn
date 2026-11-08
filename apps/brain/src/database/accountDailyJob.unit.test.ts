@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { log } from 'core/log'
+
 import { AccountDailyJob } from './accountDailyJob'
 import { TaskRefusedError, TaskUnavailableError } from './taskErrors'
 
@@ -125,7 +127,6 @@ const movedTo = (
 describe('AccountDailyJob, the first day of a new account', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
       mocks.updateMany.mockResolvedValue({ count: 1 })
       mocks.updateAccount.mockResolvedValue({})
       mocks.countSessions.mockResolvedValue(0)
@@ -364,7 +365,6 @@ describe('AccountDailyJob, the first day of a new account', () => {
 describe('AccountDailyJob, the connection requests', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
       mocks.updateMany.mockResolvedValue({ count: 1 })
       mocks.updateAccount.mockResolvedValue({})
       mocks.countSessions.mockResolvedValue(0)
@@ -435,7 +435,7 @@ describe('AccountDailyJob, the connection requests', () => {
          ],
       })
       expect(movedTo('nextInvitationsAt')).toEqual([])
-      expect(console.error).not.toHaveBeenCalled()
+      expect(log.error).not.toHaveBeenCalled()
    })
 
    it('should log an unexpected failure without its details in the sentence, and try again on the next pass', async () => {
@@ -450,7 +450,7 @@ describe('AccountDailyJob, the connection requests', () => {
             },
          ],
       })
-      expect(console.error).toHaveBeenCalled()
+      expect(log.error).toHaveBeenCalled()
       expect(movedTo('nextInvitationsAt')).toEqual([])
    })
 
@@ -473,7 +473,6 @@ describe('AccountDailyJob, the connection requests', () => {
 describe('AccountDailyJob', () => {
    beforeEach(() => {
       vi.resetAllMocks()
-      vi.spyOn(console, 'error').mockImplementation(() => undefined)
       mocks.updateMany.mockResolvedValue({ count: 1 })
       mocks.updateAccount.mockResolvedValue({})
       mocks.countSessions.mockResolvedValue(0)
@@ -558,7 +557,7 @@ describe('AccountDailyJob', () => {
          reads: 0,
       })
       expect(mocks.updateMany).not.toHaveBeenCalled()
-      expect(console.error).not.toHaveBeenCalled()
+      expect(log.error).not.toHaveBeenCalled()
    })
 
    it('should list every account it was due for: asked with the session, or left with the reason', async () => {
@@ -636,7 +635,7 @@ describe('AccountDailyJob', () => {
 
       await run()
 
-      expect(console.error).not.toHaveBeenCalled()
+      expect(log.error).not.toHaveBeenCalled()
    })
 
    it('should walk the whole inbox in batches the first time, and stop at the rows it knows on the later reads, the next in 2 hours', async () => {
