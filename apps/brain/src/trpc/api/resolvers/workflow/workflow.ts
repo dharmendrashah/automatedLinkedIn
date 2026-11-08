@@ -13,6 +13,7 @@ import {
    MessagePreviewService,
    MessageTemplateService,
    PersonStateService,
+   WorkflowOutputLinkService,
    WorkflowRunService,
    WorkflowService,
    WorkflowTriggerService,
@@ -420,7 +421,7 @@ export const workflow = router({
       .query(async ({ ctx, input }) => {
          const { page, pageSize, ...query } = input
 
-         return present(
+         const found = present(
             await WorkflowService.output(ctx.user.id, {
                ...query,
                skip: (page - 1) * pageSize,
@@ -428,6 +429,11 @@ export const workflow = router({
             }),
             RUN_MISSING
          )
+
+         return {
+            ...found,
+            items: await WorkflowOutputLinkService.addLinks(ctx.user.id, found.items),
+         }
       }),
 
    // One page of what reached a block in a run: the output of the blocks before it, with the block each item came from.
@@ -441,7 +447,7 @@ export const workflow = router({
       .query(async ({ ctx, input }) => {
          const { page, pageSize, ...query } = input
 
-         return present(
+         const found = present(
             await WorkflowService.input(ctx.user.id, {
                ...query,
                skip: (page - 1) * pageSize,
@@ -449,6 +455,11 @@ export const workflow = router({
             }),
             RUN_MISSING
          )
+
+         return {
+            ...found,
+            items: await WorkflowOutputLinkService.addLinks(ctx.user.id, found.items),
+         }
       }),
 
    inputCsv: ownerProcedure

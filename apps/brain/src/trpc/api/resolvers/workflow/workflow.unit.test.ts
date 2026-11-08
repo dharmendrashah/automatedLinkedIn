@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
    problems: vi.fn(),
    readGraph: vi.fn(),
    output: vi.fn(),
+   addLinks: vi.fn((_userId: string, rows: unknown[]) => rows),
    csvColumns: vi.fn(),
    handoffCsv: vi.fn(),
    itemsCsv: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock('database', () => ({
    InputPickService: {},
    HandoffService: { csv: mocks.handoffCsv },
    WorkflowRunService: {},
+   WorkflowOutputLinkService: { addLinks: mocks.addLinks },
    WorkflowTriggerService: {},
    WorkflowService: {
       create: mocks.create,
@@ -174,6 +176,7 @@ describe('workflow resolvers (saving, deleting and reading what reached a block)
          skip: 20,
          take: 10,
       })
+      expect(mocks.addLinks).toHaveBeenCalledWith('u1', [])
 
       mocks.input.mockResolvedValueOnce(null)
 
