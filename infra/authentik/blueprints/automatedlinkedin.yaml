@@ -29,6 +29,8 @@ entries:
         - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-openid]]
         - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-email]]
         - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-profile]]
+        # Without this mapping authentik issues no refresh token, even when offline_access is asked for.
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-offline_access]]
       # Deployed hosts come from APP_URL (no trailing slash), defaulting to the compose host.
       # The vite dev server entries stay so `pnpm dev` keeps working.
       redirect_uris:

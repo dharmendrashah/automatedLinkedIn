@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
 
 import { userManager } from '../auth/userManager'
+import { authHeadersOf } from './authHeaders'
 import { createTrpcUrl } from './config'
 import { trpc } from './trpc'
 
@@ -15,11 +16,7 @@ export const TrpcProvider = ({ children }: { children: ReactNode }) => {
          links: [
             httpBatchLink({
                url: createTrpcUrl(import.meta.env),
-               headers: async () => {
-                  const user = await userManager.getUser()
-
-                  return user && !user.expired ? { authorization: `Bearer ${user.access_token}` } : {}
-               },
+               headers: () => authHeadersOf(userManager),
             }),
          ],
       })
