@@ -36,6 +36,31 @@ const BANDS = {
 } as const
 
 export class CampaignStatsService {
+   // The newest real Discover run of a campaign: never a preview, a hook or another stage. A live run has no finish time yet.
+   public static lastDiscoverRun(userId: string, campaignId: string) {
+      return PrismaService.client.workflowRun.findFirst({
+         where: {
+            userId,
+            kind: 'MAIN',
+            trigger: { not: 'PREVIEW' },
+            workflow: {
+               userId,
+               campaignId,
+               stage: 'DISCOVER',
+            },
+         },
+         orderBy: { startedAt: 'desc' },
+         select: {
+            status: true,
+            startedAt: true,
+            finishedAt: true,
+            message: true,
+            qualified: true,
+            maybe: true,
+         },
+      })
+   }
+
    public static async overview(userId: string, campaignId: string, period: CampaignPeriod, now = new Date()) {
       const db = PrismaService.client
       const campaign = await db.campaign.findFirst({
@@ -218,6 +243,7 @@ export class CampaignStatsService {
 
       return {
          campaign,
+         lastDiscoverRun: await CampaignStatsService.lastDiscoverRun(userId, campaignId),
          workflows: workflows.map(({ runs, ...workflow }) => ({
             ...workflow,
             lastRun: runs[0] ?? null,

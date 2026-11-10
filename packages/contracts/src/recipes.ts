@@ -214,7 +214,7 @@ export const recipeParts = {
 }
 
 // The recipe: six workflows, switched off, in the order a person moves through them.
-export const buildOutreach = (input: OutreachAnswers, icpId: string): RecipeBuild => {
+export const buildOutreach = (input: OutreachAnswers, icpId: string, discoverId?: string): RecipeBuild => {
    const answers = outreachAnswersSchema.parse(input)
    const label = campaignLabelOf(answers.name)
    const { time, timeZone } = answers.when
@@ -257,11 +257,13 @@ export const buildOutreach = (input: OutreachAnswers, icpId: string): RecipeBuil
          node('commenters', 'collect.commenters', 3, 0, { howMany: 50 }),
          node('reactors', 'collect.reactors', 3, 1, { howMany: 50 }),
          node('people', 'process.dedupe', 4, 0),
-         node('score', 'score.icp', 5, 0, { icpId }),
-         node('profile', 'collect.profile', 6, 0),
-         node('score2', 'score.icp', 7, 0, { icpId }),
-         node('label', 'process.tag', 8, 0, { tags: [label] }),
-         node('list', 'output.list', 9, 0),
+         node('profile', 'collect.profile', 5, 0, {
+            readLimit: 200,
+            reread: false,
+         }),
+         node('score', 'score.icp', 6, 0, { icpId }),
+         node('label', 'process.tag', 7, 0, { tags: [label] }),
+         node('list', 'output.list', 8, 0),
          node('done', 'output.markPosts', 3, 3),
       ],
       edges: wire([
@@ -271,26 +273,30 @@ export const buildOutreach = (input: OutreachAnswers, icpId: string): RecipeBuil
          ['posts', 'reactors'],
          ['commenters', 'people'],
          ['reactors', 'people'],
-         ['people', 'score'],
-         ['score', 'profile'],
-         ['profile', 'score2'],
-         ['score2', 'label'],
+         ['people', 'profile'],
+         ['profile', 'score'],
+         ['score', 'label'],
          ['label', 'list'],
          ['posts', 'done'],
       ]),
    }
 
    // 2 Invite: the newest qualified people who are not connected yet, inside today's limit; the best carry the note.
+   // With Discover's id it starts when Discover finishes; without one it keeps its clock time.
    const invite = (id: string, column: number, row: number, note: string) =>
       node(id, 'account.sendInvite', column, row, {
          note,
          planDays: 1,
       })
+   const inviteStart =
+      discoverId === undefined
+         ? schedule(shift(time, 1))
+         : node('trigger', 'trigger.workflow', 0, 0, { workflowId: discoverId })
    const inviteGraph: Graph =
       answers.note === ''
          ? {
               nodes: [
-                 schedule(shift(time, 1)),
+                 inviteStart,
                  node(
                     'people',
                     'input.profiles',
@@ -299,7 +305,8 @@ export const buildOutreach = (input: OutreachAnswers, icpId: string): RecipeBuil
                     profiles(
                        {
                           howMany: 100,
-                          added: '30d',
+                          added: 'any',
+                          order: 'newest',
                        },
                        {
                           labels: [label],
@@ -322,7 +329,7 @@ export const buildOutreach = (input: OutreachAnswers, icpId: string): RecipeBuil
            }
          : {
               nodes: [
-                 schedule(shift(time, 1)),
+                 inviteStart,
                  node(
                     'people',
                     'input.profiles',
@@ -331,7 +338,8 @@ export const buildOutreach = (input: OutreachAnswers, icpId: string): RecipeBuil
                     profiles(
                        {
                           howMany: 100,
-                          added: '30d',
+                          added: 'any',
+                          order: 'newest',
                        },
                        {
                           labels: [label],

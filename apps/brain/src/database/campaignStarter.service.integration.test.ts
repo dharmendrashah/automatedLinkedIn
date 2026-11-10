@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { type OutreachAnswers } from '@automatedLinkedIn/contracts'
 
 import { CampaignStarterService } from './campaignStarter.service'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
-import { WorkflowService } from './workflow.service'
+import { WorkflowService, readGraph } from './workflow.service'
 
 // Needs PostgreSQL. The Starter makes the ideal customer, the campaign and six workflows that are off, and nothing when it fails.
 
@@ -128,6 +128,58 @@ describe('the Starter (database)', () => {
       ).rejects.toBeTruthy()
 
       expect(await db.workflow.count({ where: { userId } })).toBe(workflows)
+      expect(await db.campaign.count({ where: { userId } })).toBe(before.campaigns)
+      expect(await db.icp.count({ where: { userId } })).toBe(before.icps)
+   })
+
+   it('should make Discover first and start Invite when Discover finishes, not on a clock', async () => {
+      const made = await CampaignStarterService.createOutreach(userId, {
+         ...answers,
+         name: 'Chained',
+      })
+      const [discover, invite] = made.workflows
+      const inviteGraph = readGraph((await db.workflow.findUniqueOrThrow({ where: { id: invite?.id ?? '' } })).graph)
+
+      expect(discover?.stage).toBe('DISCOVER')
+      expect(invite?.stage).toBe('INVITE')
+      expect(inviteGraph.nodes.filter(({ type }) => type.startsWith('trigger.'))).toEqual([
+         expect.objectContaining({
+            type: 'trigger.workflow',
+            config: { workflowId: discover?.id },
+         }),
+      ])
+   })
+
+   it('should remove every workflow, the campaign and the ideal customer when the fifth one cannot be made', async () => {
+      const before = {
+         workflows: await db.workflow.count({ where: { userId } }),
+         campaigns: await db.campaign.count({ where: { userId } }),
+         icps: await db.icp.count({ where: { userId } }),
+      }
+      const create = WorkflowService.create.bind(WorkflowService)
+      let calls = 0
+      const spy = vi.spyOn(WorkflowService, 'create').mockImplementation((...args) => {
+         calls += 1
+
+         if (calls === 5) {
+            return Promise.reject(new Error('injected'))
+         }
+
+         return create(...args)
+      })
+
+      try {
+         await expect(
+            CampaignStarterService.createOutreach(userId, {
+               ...answers,
+               name: 'Rolled back',
+            })
+         ).rejects.toThrow('injected')
+      } finally {
+         spy.mockRestore()
+      }
+
+      expect(await db.workflow.count({ where: { userId } })).toBe(before.workflows)
       expect(await db.campaign.count({ where: { userId } })).toBe(before.campaigns)
       expect(await db.icp.count({ where: { userId } })).toBe(before.icps)
    })

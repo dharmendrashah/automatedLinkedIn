@@ -203,26 +203,80 @@ describe('Get full profile', () => {
       expect(validateGraph(joined).filter(({ nodeId }) => nodeId === 'read')).toEqual([])
    })
 
-   it('should leave a block saved before it as it was: no companies read, nothing kept, no re-read', () => {
+   it('should leave a block saved before it as it was: no companies read, nothing kept, no re-read, no limit', () => {
       const spec = blockOf('collect.profile')
 
-      expect(spec.version).toBe(2)
+      expect(spec.version).toBe(3)
       expect(spec.migrate?.[1]?.({})).toEqual({ readCompanies: false })
+      expect(spec.migrate?.[2]?.({})).toEqual({ readLimit: 0 })
       expect(spec.config.parse({})).toMatchObject({
          readCompanies: true,
          readCompany: false,
          keep: false,
          reread: false,
+         readLimit: 0,
       })
    })
 
-   it('should offer the tick, the links and the re-read', () => {
+   it('should offer the tick, the links, the read limit and the re-read', () => {
       expect(blockOf('collect.profile').fields.map(({ key }) => key)).toEqual([
          'links',
          'readCompanies',
          'readCompany',
          'keep',
+         'readLimit',
          'reread',
       ])
+   })
+
+   it('should price at most the read limit when one is set, and the whole input when it is not', () => {
+      expect(
+         costOf('collect.profile', {
+            links: LINKS,
+            readLimit: 1,
+         })
+      ).toEqual({
+         items: 1,
+         costMicros: 4_000,
+      })
+      expect(
+         costOf('collect.profile', {
+            links: LINKS,
+            readLimit: 0,
+         })
+      ).toEqual({
+         items: 2,
+         costMicros: 2 * 4_000,
+      })
+   })
+
+   it('should refuse a re-read together with a read limit', () => {
+      expect(
+         validateGraph(
+            alone('collect.profile', {
+               links: LINKS,
+               reread: true,
+               readLimit: 5,
+            })
+         )
+            .filter(({ level }) => level === 'error')
+            .map(({ message }) => message)
+      ).toEqual(['Re-read and a read limit cannot be used together.'])
+      expect(
+         errorsOf(
+            validateGraph(
+               alone('collect.profile', {
+                  links: LINKS,
+                  reread: true,
+                  readLimit: 0,
+               })
+            )
+         )
+      ).toEqual([])
+   })
+
+   it('should keep a read limit between 0 and 1000', () => {
+      expect(blockOf('collect.profile').config.safeParse({ readLimit: 1001 }).success).toBe(false)
+      expect(blockOf('collect.profile').config.safeParse({ readLimit: 200 }).success).toBe(true)
    })
 })

@@ -1584,6 +1584,8 @@ const linksField = (label: string, hint: string = LINKS_HINT): Field => ({
 
 const linkCount = (node: GraphNode) => countOf(node, 'links')
 
+const readLimitOf = (node: GraphNode) => (typeof node.config.readLimit === 'number' ? node.config.readLimit : 0)
+
 // A block that works from pasted links has nothing to do without one.
 const needsLinks =
    (label: string) =>
@@ -2562,10 +2564,12 @@ const BLOCKS = {
       flags: {
          scores: true,
          takesAnything: true,
+         keepsAside: true,
       },
       unit: 'profiles and companies',
       estimate: (node, incoming) => {
-         const items = incoming + linkCount(node)
+         const all = incoming + linkCount(node)
+         const items = readLimitOf(node) > 0 ? Math.min(all, readLimitOf(node)) : all
          // Their company is read once for the people who work there; the estimate counts one for each person, the most it can cost.
          const company = node.config.readCompany === true ? PRICE_MICROS.company : 0
 
@@ -2575,28 +2579,42 @@ const BLOCKS = {
          }
       },
       previewCap: 1,
-      validate: (node, graph) =>
-         linkCount(node) === 0 && parentsOf(graph, node.id).length === 0
+      validate: (node, graph) => [
+         ...(linkCount(node) === 0 && parentsOf(graph, node.id).length === 0
             ? [
                  {
                     nodeId: node.id,
-                    level: 'note',
+                    level: 'note' as const,
                     message:
                        'Get full profile has nothing before it, so it gets nothing. Paste links or connect a block.',
                  },
               ]
-            : [],
+            : []),
+         ...(node.config.reread === true && readLimitOf(node) > 0
+            ? [
+                 {
+                    nodeId: node.id,
+                    level: 'error' as const,
+                    message: 'Re-read and a read limit cannot be used together.',
+                 },
+              ]
+            : []),
+      ],
       label: 'Get full profile',
       summary:
          'Reads the full details of every person and company that reaches it or whose link you paste, and scores people again if a Score block came before.',
       flow: 'Takes people, companies or pasted links, gives them with their full details',
       costHint: 'about $0.004 per person or company, and $0.004 more for each company of a person',
-      // Blocks saved before companies were read keep passing them through.
-      version: 2,
+      // Blocks saved before companies were read keep passing them through; before the read limit, they have none.
+      version: 3,
       migrate: {
          1: config => ({
             ...config,
             readCompanies: false,
+         }),
+         2: config => ({
+            ...config,
+            readLimit: 0,
          }),
       },
       input: 'start',
@@ -2607,6 +2625,8 @@ const BLOCKS = {
          // A block saved before keeps it off; a new block starts with it on.
          readCompany: toggle(false),
          keep: toggle(false),
+         // New people read per run, the rest go to Else; 0 reads everyone.
+         readLimit: z.number().int().min(0).max(1000).default(0),
          reread: toggle(false),
       }),
       fields: [
@@ -2631,6 +2651,14 @@ const BLOCKS = {
             label: 'Update my lists with what it reads',
             kind: 'toggle',
             hint: "New people join My network and new companies join Companies under this workflow's name; the ones already there get what was read. People on Do not contact are never added.",
+         },
+         {
+            key: 'readLimit',
+            label: 'Read at most, new people per run (0 = no limit)',
+            kind: 'int',
+            min: 0,
+            max: 1000,
+            hint: 'People over the limit go to Else and are not passed on. The cost shown is an upper bound.',
          },
          {
             key: 'reread',
