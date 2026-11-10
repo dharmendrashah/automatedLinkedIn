@@ -8,6 +8,7 @@ import {
    PEOPLE_SORTS,
    PEOPLE_TABS,
    PeopleService,
+   PersonScoreService,
    PersonService,
 } from 'database'
 
@@ -126,6 +127,18 @@ export const people = router({
    get: ownerProcedure
       .input(z.object({ id }))
       .query(async ({ ctx, input }) => present(await PeopleService.get(ctx.user.id, input.id), NO_PERSON)),
+
+   // Scores one person against the ideal customer the owner picks, or queues the profile read it needs first.
+   rescore: ownerProcedure
+      .input(
+         z.object({
+            id,
+            icpId: id,
+         })
+      )
+      .mutation(async ({ ctx, input }) =>
+         present(await orConflict(PersonScoreService.rescore(ctx.user.id, input.id, input.icpId)), NO_PERSON)
+      ),
 
    // The person of a profile on My network, so any page opens the same drawer; null when they are not on it.
    find: ownerProcedure

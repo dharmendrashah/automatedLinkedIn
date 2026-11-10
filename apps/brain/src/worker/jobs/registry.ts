@@ -1,3 +1,5 @@
+import { personScore } from './personScore'
+
 import { unique } from '../registry'
 import { accountDaily } from './accountDaily'
 import { approvalStart } from './approvalStart'
@@ -43,6 +45,7 @@ export const JOBS = unique('job', [
    postSend,
    postSweep,
    peopleIndex,
+   personScore,
    inviteSend,
    engageSend,
    eventDispatch,

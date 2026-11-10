@@ -1991,6 +1991,14 @@ model Person {
   doNotContact   Boolean                  @default(false)
   fit            PersonFit                @default(NONE)
   score          Int?
+  // The score the owner asked for against one ideal customer (.plan/rescore-person.md); the list scores above do not change.
+  icpScore           Int?
+  icpScoreReasons    Json?
+  icpScoreIcpId      String?
+  icpScoreIcpName    String?
+  icpScoredAt        DateTime?
+  // The ideal customer a rescore waits for until the profile is read; null when none waits.
+  icpScoreWaitingFor String?
   // Why they are here, in one line: what brought them in, their own words when there are some, a link, and when.
   reasonKind     PersonLinkKind?
   reasonText     String?

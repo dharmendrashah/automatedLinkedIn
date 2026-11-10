@@ -604,6 +604,11 @@ export class PeopleService {
             ...rowSelect,
             notes: true,
             score: true,
+            icpScore: true,
+            icpScoreReasons: true,
+            icpScoreIcpName: true,
+            icpScoredAt: true,
+            icpScoreWaitingFor: true,
             links: {
                select: {
                   kind: true,

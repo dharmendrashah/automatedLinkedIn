@@ -321,6 +321,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-11-10: Rescore a person against an ideal customer (`.plan/rescore-person.md`, branch `feat/rescore-person`): six nullable `Person.icp*` columns (migration `20261110150000_person_icp_score`, additive; the staging migrate job applies it), `people.rescore`, job `person-score` (every minute, finishes rescores waiting for a profile read), a Score control in the drawer and a row action. AI judgement in a rescore is not covered by a test yet.
 - 2026-11-10: My network score filter and score bar (PR #216): `score` filter (bands RED under 40, YELLOW 40 to 69, GREEN 70 and up, nulls match none), score sort with nulls last, Score CSV column last, Score section in Filters with chips, sortable Score column with shadcn progress bar.
 
 - 2026-11-10: Score against an ideal customer, AI judgement (`.plan/score-icp-ai-judgement.md`, in progress): off-by-default `aiJudgement` with a blend weight `aiWeight` (default 30) on `score.icp`; `IcpJudgement` table (migration `20261110130000_icp_judgement`) with 30-day reuse, erasure and retention; judgement in `core/aiScore.ts` and `worker/engine/scoreJudge.ts`. Local gate green; the staging preview with the flag on is still open.
