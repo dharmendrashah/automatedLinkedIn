@@ -75,7 +75,14 @@ export class AiBudgetService {
    // Books one call: a billed call is booked even when its words were dropped.
    public static async record(
       userId: string,
-      call: { id: string; workflowId: string; runId: string; amountMicros: number; label: string; preview: boolean },
+      call: {
+         id: string
+         workflowId: string | null
+         runId: string | null
+         amountMicros: number
+         label: string
+         preview: boolean
+      },
       now = new Date()
    ) {
       await PrismaService.client.spendLedger.createMany({

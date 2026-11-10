@@ -1,11 +1,14 @@
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Mail, MessageSquare, PanelRight, Phone, UserPlus } from 'lucide-react'
-import { type ReactNode } from 'react'
+import { Mail, MessageSquare, PanelRight, Phone, Target, UserPlus } from 'lucide-react'
+import { type ReactNode, useState } from 'react'
 
 import { type PersonRow } from './types'
 
+import { trpc } from '../../trpc'
 import { inviteBlock, messageAction } from './row-actions'
+import { RescoreControl } from './rescore'
 import { nameOf } from './words'
 
 type Props = {
@@ -56,6 +59,31 @@ const Action = ({
    </Tooltip>
 )
 
+// The row's score against an ideal customer; the score is read only when the popover opens.
+const ScoreAction = ({ row }: { row: PersonRow }) => {
+   const [open, setOpen] = useState(false)
+   const name = nameOf(row)
+   const detail = trpc.people.get.useQuery({ id: row.id }, { enabled: open, retry: false })
+
+   return (
+      <Popover open={open} onOpenChange={setOpen}>
+         <Tooltip>
+            <TooltipTrigger asChild>
+               <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-8" aria-label={`Score ${name}`}>
+                     <Target />
+                  </Button>
+               </PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent>{`Score ${name}`}</TooltipContent>
+         </Tooltip>
+         <PopoverContent align="end" className="w-auto">
+            {detail.data ? <RescoreControl person={detail.data} /> : <span className="text-sm">Loading…</span>}
+         </PopoverContent>
+      </Popover>
+   )
+}
+
 // The row's own actions, shown on hover, on keyboard focus and always on screens without hover. Clicks never open the drawer.
 export const RowActions = ({ row, invitesLive, onInvite, onPreview }: Props) => {
    const message = messageAction(row)
@@ -77,6 +105,7 @@ export const RowActions = ({ row, invitesLive, onInvite, onPreview }: Props) => 
             icon={<UserPlus />}
             {...(blocked ? { disabled: blocked } : { onClick: () => onInvite(row) })}
          />
+         <ScoreAction row={row} />
          <Action label="Quick preview" icon={<PanelRight />} onClick={() => onPreview(row)} />
          <Action label="Email" icon={<Mail />} disabled="Coming soon" />
          <Action label="Phone" icon={<Phone />} disabled="Coming soon" />

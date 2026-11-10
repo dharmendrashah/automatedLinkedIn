@@ -11,8 +11,18 @@ describe('Score against an ideal customer: AI judgement', () => {
    })
 
    it('should keep the AI weight between 0 and 100', () => {
-      expect(blockOf('score.icp').config.safeParse({ icpId: 'icp-1', aiWeight: 101 }).success).toBe(false)
-      expect(blockOf('score.icp').config.safeParse({ icpId: 'icp-1', aiWeight: 0 }).success).toBe(true)
+      expect(
+         blockOf('score.icp').config.safeParse({
+            icpId: 'icp-1',
+            aiWeight: 101,
+         }).success
+      ).toBe(false)
+      expect(
+         blockOf('score.icp').config.safeParse({
+            icpId: 'icp-1',
+            aiWeight: 0,
+         }).success
+      ).toBe(true)
    })
 
    it('should offer the judgement and its weight as fields', () => {

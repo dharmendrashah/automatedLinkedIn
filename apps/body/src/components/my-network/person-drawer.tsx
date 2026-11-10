@@ -55,6 +55,7 @@ import { ChatPane } from './chat-pane'
 import { HistoryPane } from './history-pane'
 import { inviteBlock, isDiscovery, messageAction } from './row-actions'
 import { nextAfter, nextStepOf } from './rows'
+import { RescoreControl } from './rescore'
 import { type Ask } from './use-answer'
 import { FIT_WORDS, STATUSES, foundByWord, isStatus, nameOf } from './words'
 
@@ -312,6 +313,7 @@ const WorkBar = ({
             </SelectContent>
          </Select>
          {person.fit === 'NONE' ? null : <Badge variant="secondary">{FIT_WORDS[person.fit]}</Badge>}
+         <RescoreControl person={person} />
          {isDiscovery(person) ? <Badge variant="secondary">Discovery</Badge> : null}
          <span className="text-muted-foreground text-xs">Labels</span>
          <LabelCell
