@@ -115,6 +115,7 @@ const EXPORT_HEADER = [
    'Status',
    'Labels',
    'Last touch',
+   'Score',
 ]
 
 // People ready to invite are in Needs me only while invites are live.
@@ -167,6 +168,7 @@ const rowSelect = {
    status: true,
    labels: true,
    fit: true,
+   score: true,
    reasonKind: true,
    reasonText: true,
    reasonUrl: true,
@@ -1102,6 +1104,7 @@ export class PeopleService {
                row.fit === 'NONE' ? '' : row.fit === 'STRONG' ? 'Strong' : 'Maybe',
                row.status,
                row.labels.join('; '),
+               row.score === null ? '' : String(row.score),
                row.lastTouchAt.toISOString().slice(0, 10),
             ])
          ),

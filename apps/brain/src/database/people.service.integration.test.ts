@@ -221,6 +221,44 @@ describe('PeopleService (database)', () => {
       expect((await PeopleService.workspace(otherUserId)).accounts).toEqual([])
    })
 
+   it('should filter by score band, and sort by score with the unscored last', async () => {
+      await db.person.updateMany({
+         where: {
+            userId,
+            slug: 'person-0',
+         },
+         data: { score: 85 },
+      })
+      await db.person.updateMany({
+         where: {
+            userId,
+            slug: 'person-1',
+         },
+         data: { score: 50 },
+      })
+      await db.person.updateMany({
+         where: {
+            userId,
+            slug: 'person-2',
+         },
+         data: { score: null },
+      })
+
+      const slugsOf = async (extra: Partial<Parameters<typeof PeopleService.list>[1]>) =>
+         ((await view(extra))?.items ?? []).map(({ slug }) => slug)
+
+      expect(await slugsOf({ filters: peopleFiltersSchema.parse({ score: ['GREEN'] }) })).toEqual(['person-0'])
+      expect(await slugsOf({ filters: peopleFiltersSchema.parse({ score: ['RED', 'YELLOW'] }) })).toEqual(['person-1'])
+      expect(
+         await slugsOf({
+            sort: {
+               by: 'score',
+               desc: true,
+            },
+         })
+      ).toEqual(['person-0', 'person-1', 'person-2'])
+   })
+
    it('should count the tabs, and move a person out of Needs me when the owner closes them', async () => {
       expect(await PeopleService.counts(userId, {})).toMatchObject({
          NEEDS_ME: 3,
@@ -311,7 +349,7 @@ describe('PeopleService (database)', () => {
       const exported = await PeopleService.export(userId, { tab: 'EVERYONE' })
 
       expect(exported.csv.split('\r\n')[0]).toBe(
-         '"Name","Profile link","Headline","Company","Reason","Found by","Fit","Status","Labels","Last touch"'
+         '"Name","Profile link","Headline","Company","Reason","Found by","Fit","Status","Labels","Last touch","Score"'
       )
       expect(await db.peopleExport.findFirst({ where: { userId } })).toMatchObject({
          rows: 2,

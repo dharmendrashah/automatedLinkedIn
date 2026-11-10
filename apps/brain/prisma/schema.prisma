@@ -2034,6 +2034,7 @@ model Person {
   @@index([userId, priority, lastTouchAt, id])
   @@index([userId, waiting, lastTouchAt, id])
   @@index([userId, lastTouchAt, id])
+  @@index([userId, score])
   @@index([userId, firstSeenAt])
   @@index([userId, companySlug])
   @@index([foundBy], type: Gin)

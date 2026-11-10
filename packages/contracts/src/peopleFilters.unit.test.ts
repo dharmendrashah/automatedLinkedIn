@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { PEOPLE_FILTER_LIMITS, peopleFiltersSchema } from './peopleFilters'
+import { PEOPLE_FILTER_LIMITS, SCORE_BANDS, peopleFiltersSchema, scoreBandOf } from './peopleFilters'
+
+describe('score bands', () => {
+   it('puts red below 40, yellow from 40 to 69, and green from 70', () => {
+      expect([0, 39, 40, 69, 70, 100].map(scoreBandOf)).toEqual(['RED', 'RED', 'YELLOW', 'YELLOW', 'GREEN', 'GREEN'])
+   })
+
+   it('keeps the three bands in order', () => {
+      expect(SCORE_BANDS).toEqual(['RED', 'YELLOW', 'GREEN'])
+   })
+})
 
 describe('peopleFiltersSchema', () => {
    it('fills the empty lists and flags of an empty filter', () => {
@@ -18,8 +28,14 @@ describe('peopleFiltersSchema', () => {
          waiting: false,
          statuses: [],
          fit: [],
+         score: [],
          worksAt: [],
       })
+   })
+
+   it('keeps score bands and refuses an unknown one', () => {
+      expect(peopleFiltersSchema.parse({ score: ['GREEN', 'RED'] }).score).toEqual(['GREEN', 'RED'])
+      expect(peopleFiltersSchema.safeParse({ score: ['BLUE'] }).success).toBe(false)
    })
 
    it('keeps a full filter, trimming text and lower-casing labels', () => {

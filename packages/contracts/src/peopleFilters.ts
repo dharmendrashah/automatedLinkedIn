@@ -14,6 +14,15 @@ export const PERSON_INVITE_STATES = ['NONE', 'QUEUED', 'PENDING', 'ACCEPTED', 'E
 export const PERSON_STATUSES = ['NEW', 'CONTACTED', 'REPLIED', 'NOT_INTERESTED', 'DONE'] as const
 // How well the lists scored them: Strong is a qualified list member, None is not in a list with a fit.
 export const PERSON_FITS = ['STRONG', 'MAYBE', 'NONE'] as const
+// The score bands of My network (.plan/network-score-filter.md): red below 40, yellow from 40 to 69, green from 70.
+export const SCORE_BANDS = ['RED', 'YELLOW', 'GREEN'] as const
+export const SCORE_BAND_FROM = {
+   YELLOW: 40,
+   GREEN: 70,
+} as const
+
+export const scoreBandOf = (score: number): (typeof SCORE_BANDS)[number] =>
+   score >= SCORE_BAND_FROM.GREEN ? 'GREEN' : score >= SCORE_BAND_FROM.YELLOW ? 'YELLOW' : 'RED'
 
 const text = z.string().trim().min(1).max(PEOPLE_FILTER_LIMITS.text)
 const values = <T extends z.ZodType>(value: T) => z.array(value).max(PEOPLE_FILTER_LIMITS.values).default([])
@@ -60,6 +69,8 @@ export const peopleFiltersSchema = z
       noLabels: z.boolean().default(false),
       statuses: values(z.enum(PERSON_STATUSES)),
       fit: values(z.enum(PERSON_FITS)),
+      // The score bands (Person.score, the best score of the person's lists); an unscored person matches none.
+      score: values(z.enum(SCORE_BANDS)),
       // People who work at a company saved in /companies with one of these labels.
       worksAt: values(text.toLowerCase()),
       profileRead: z.boolean().optional(),

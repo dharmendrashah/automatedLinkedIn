@@ -6,6 +6,43 @@ import { PEOPLE_SORTS, orderOf, peopleWhere } from './peopleFilters'
 
 const where = (input: Record<string, unknown>) => peopleWhere(peopleFiltersSchema.parse(input))
 
+describe('score bands and the score sort', () => {
+   it('matches red below 40, yellow from 40 to 69, and green from 70; bands are alternatives', () => {
+      expect(where({ score: ['RED'] })).toEqual([{ OR: [{ score: { lt: 40 } }] }])
+      expect(where({ score: ['YELLOW', 'GREEN'] })).toEqual([
+         {
+            OR: [
+               {
+                  score: {
+                     gte: 40,
+                     lt: 70,
+                  },
+               },
+               { score: { gte: 70 } },
+            ],
+         },
+      ])
+   })
+
+   it('sorts by score with the unscored last', () => {
+      expect(PEOPLE_SORTS).toContain('score')
+      expect(
+         orderOf('EVERYONE', {
+            by: 'score',
+            desc: true,
+         })
+      ).toEqual([
+         {
+            score: {
+               sort: 'desc',
+               nulls: 'last',
+            },
+         },
+         { id: 'desc' },
+      ])
+   })
+})
+
 describe('peopleWhere', () => {
    it('asks nothing of an empty filter', () => {
       expect(where({})).toEqual([])
@@ -186,6 +223,7 @@ describe('orderOf', () => {
          'lastReceivedAt',
          'lastTouchAt',
          'firstSeenAt',
+         'score',
       ])
    })
 })

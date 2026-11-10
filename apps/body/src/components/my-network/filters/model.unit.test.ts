@@ -91,6 +91,14 @@ describe('filters in the address', () => {
       expect(writeFilters(NO_FILTERS)).toBeNull()
    })
 
+   it('keeps the score bands in the address and shows them as one chip', () => {
+      const filters = filtersSchema.parse({ score: ['GREEN', 'RED'] })
+
+      expect(readFilters(writeFilters(filters))).toEqual(filters)
+      expect(chipsOf(filters).map(({ text }) => text)).toEqual(['Score: Green, Red'])
+      expect(apiFilters(filters).score).toEqual(['GREEN', 'RED'])
+   })
+
    it.each([
       ['not json', '{'],
       ['an unknown key', '{"salary":1}'],

@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { type ReactNode, useId } from 'react'
 
 import { countText } from '../rows'
+import { SCORE_BANDS, SCORE_WORDS } from '../score'
 import { STATUSES } from '../words'
 import { DateTimeRangeField } from './date-time-range'
 import { Choice, MultiPick, type Option, TextField, YesNo } from './fields'
@@ -258,6 +259,13 @@ export const FiltersSheet = ({
                      onChange={picked =>
                         set({ statuses: STATUSES.flatMap(([status]) => (picked.includes(status) ? [status] : [])) })
                      }
+                  />
+                  <MultiPick
+                     label="Score"
+                     placeholder="Any score"
+                     options={SCORE_BANDS.map(band => ({ value: band, label: SCORE_WORDS[band] }))}
+                     value={value.score}
+                     onChange={picked => set({ score: SCORE_BANDS.filter(band => picked.includes(band)) })}
                   />
                   <YesNo
                      label="Profile"
