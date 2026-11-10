@@ -813,6 +813,12 @@ export class PeopleService {
                slug,
             },
          })
+         await tx.icpJudgement.deleteMany({
+            where: {
+               userId,
+               slug,
+            },
+         })
          await forgetOwnPages(tx, userId, [slug])
          await tx.dataRead.deleteMany({
             where: {

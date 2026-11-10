@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { judgeKept } from './scoreJudge'
 import {
    type CompanyItem,
    type PersonItem,
@@ -1865,9 +1866,30 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
    'score.icp': async ctx => {
       const people = mergeBySlug(peopleOf(ctx.inputs))
       const rules = await rulesOf(ctx.run.userId, ctx.node)
-      const { kept } = scorePeople(people, rules, thresholdsOf(ctx.run, ctx.node))
+      const thresholds = thresholdsOf(ctx.run, ctx.node)
+      const { kept } = scorePeople(people, rules, thresholds)
+      const config = configOf(ctx.node)
 
-      return keepItems(ctx, kept, people.length)
+      if (config.aiJudgement !== true) {
+         return keepItems(ctx, kept, people.length)
+      }
+
+      const judged = await judgeKept(
+         {
+            userId: ctx.run.userId,
+            workflowId: ctx.run.workflowId,
+            runId: ctx.run.id,
+            preview: ctx.preview,
+            icpId: textIn(config, 'icpId'),
+            balanceMicros: () => ctx.deps.client.balanceMicros(),
+         },
+         kept,
+         rules,
+         thresholds,
+         numberIn(config, 'aiWeight')
+      )
+
+      return addNote(await keepItems(ctx, judged.kept, people.length), judged.note)
    },
    'score.signals': scoreSignals,
    'score.company': scoreCompanies,

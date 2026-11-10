@@ -2392,6 +2392,7 @@ const BLOCKS = {
       group: 'Process',
       flags: { scores: true },
       label: 'Score against an ideal customer',
+      costHint: 'free; with the AI judgement on, one AI call per kept person',
       summary:
          'Gives each person a score from 0 to 100 and keeps the qualified and maybe ones. Uses company size and industry when the profile and the company were read.',
       presets: [
@@ -2428,6 +2429,9 @@ const BLOCKS = {
             qualifyScore: z.number().int().min(1).max(100).default(60),
             maybeScore: z.number().int().min(1).max(100).default(40),
             keepMaybe: toggle(true),
+            // Off by default: when on, the AI gives each kept person a fit that is blended into the score (.plan/score-icp-ai-judgement.md).
+            aiJudgement: toggle(false),
+            aiWeight: z.number().int().min(0).max(100).default(30),
          })
          .refine(({ qualifyScore, maybeScore }) => maybeScore < qualifyScore, {
             message: 'must be lower than the qualified score',
@@ -2459,6 +2463,22 @@ const BLOCKS = {
             min: 1,
             max: 100,
             advanced: true,
+         },
+         {
+            key: 'aiJudgement',
+            label: 'Also ask the AI for a judgement',
+            kind: 'toggle',
+            advanced: true,
+            hint: 'The AI reads each kept person and gives a fit from 0 to 100, blended into the score. Costs AI money; off by default.',
+         },
+         {
+            key: 'aiWeight',
+            label: 'AI share of the score (percent)',
+            kind: 'int',
+            min: 0,
+            max: 100,
+            advanced: true,
+            hint: '0 keeps the rules only; 100 uses the AI alone.',
          },
       ],
    },
