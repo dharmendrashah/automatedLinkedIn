@@ -221,6 +221,44 @@ describe('PeopleService (database)', () => {
       expect((await PeopleService.workspace(otherUserId)).accounts).toEqual([])
    })
 
+   it('should filter by score band, and sort by score with the unscored last', async () => {
+      await db.person.updateMany({
+         where: {
+            userId,
+            slug: 'person-0',
+         },
+         data: { score: 85 },
+      })
+      await db.person.updateMany({
+         where: {
+            userId,
+            slug: 'person-1',
+         },
+         data: { score: 50 },
+      })
+      await db.person.updateMany({
+         where: {
+            userId,
+            slug: 'person-2',
+         },
+         data: { score: null },
+      })
+
+      const slugsOf = async (extra: Partial<Parameters<typeof PeopleService.list>[1]>) =>
+         ((await view(extra))?.items ?? []).map(({ slug }) => slug)
+
+      expect(await slugsOf({ filters: peopleFiltersSchema.parse({ score: ['GREEN'] }) })).toEqual(['person-0'])
+      expect(await slugsOf({ filters: peopleFiltersSchema.parse({ score: ['RED', 'YELLOW'] }) })).toEqual(['person-1'])
+      expect(
+         await slugsOf({
+            sort: {
+               by: 'score',
+               desc: true,
+            },
+         })
+      ).toEqual(['person-0', 'person-1', 'person-2'])
+   })
+
    it('should count the tabs, and move a person out of Needs me when the owner closes them', async () => {
       expect(await PeopleService.counts(userId, {})).toMatchObject({
          NEEDS_ME: 3,
@@ -245,6 +283,29 @@ describe('PeopleService (database)', () => {
 
    it('should erase a person everywhere and keep only their suppression and a dated entry', async () => {
       const [person] = (await view({ search: 'mia' }))?.items ?? []
+
+      const judged = await db.icp.create({
+         data: {
+            userId,
+            name: 'Erasure judged',
+            includeTitles: [],
+            excludeTitles: [],
+            seniorities: [],
+            industries: [],
+            companySizes: [],
+            locations: [],
+            problemKeywords: [],
+         },
+      })
+
+      await db.icpJudgement.create({
+         data: {
+            userId,
+            icpId: judged.id,
+            slug: 'person-2',
+            fit: 70,
+         },
+      })
 
       await PeopleService.erase(userId, person?.id ?? '')
       await PeopleIndexService.refresh(userId, ['person-2'])
@@ -274,13 +335,21 @@ describe('PeopleService (database)', () => {
          })
       ).toBe(1)
       expect(await db.personErasure.count({ where: { userId } })).toBe(1)
+      expect(
+         await db.icpJudgement.count({
+            where: {
+               userId,
+               slug: 'person-2',
+            },
+         })
+      ).toBe(0)
    })
 
    it('should export a view with fixed columns and log it', async () => {
       const exported = await PeopleService.export(userId, { tab: 'EVERYONE' })
 
       expect(exported.csv.split('\r\n')[0]).toBe(
-         '"Name","Profile link","Headline","Company","Reason","Found by","Fit","Status","Labels","Last touch"'
+         '"Name","Profile link","Headline","Company","Reason","Found by","Fit","Status","Labels","Last touch","Score"'
       )
       expect(await db.peopleExport.findFirst({ where: { userId } })).toMatchObject({
          rows: 2,

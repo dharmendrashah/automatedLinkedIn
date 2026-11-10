@@ -3,7 +3,7 @@
 
 export const TABS = ['NEEDS_ME', 'WAITING', 'NO_ANSWER', 'EVERYONE', 'DO_NOT_CONTACT'] as const
 export const FITS = ['STRONG', 'MAYBE', 'NONE'] as const
-export const SORTS = ['name', 'connectedAt', 'lastSentAt', 'lastReceivedAt', 'lastTouchAt', 'firstSeenAt'] as const
+export const SORTS = ['name', 'score', 'connectedAt', 'lastSentAt', 'lastReceivedAt', 'lastTouchAt', 'firstSeenAt'] as const
 
 export type Tab = (typeof TABS)[number]
 export type Fit = (typeof FITS)[number]

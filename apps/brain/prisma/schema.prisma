@@ -62,6 +62,7 @@ model User {
   pageSnapshots        PageSnapshot[]
   dataReads            DataRead[]
   icps                 Icp[]
+  icpJudgements        IcpJudgement[]
   companyViews         CompanyView[]
   workflows            Workflow[]
   people               Person[]
@@ -776,8 +777,25 @@ model Icp {
   problemKeywords String[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  judgements      IcpJudgement[]
 
   @@unique([userId, name])
+}
+
+// The AI's fit judgement of one person for one ideal customer (.plan/score-icp-ai-judgement.md). Read for 30 days so a rerun does not pay
+// again; deleted with the person (erasure), the ideal customer, or the owner, and after 30 days by retention.
+model IcpJudgement {
+  id       String   @id @default(uuid(7))
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  icpId    String
+  icp      Icp      @relation(fields: [icpId], references: [id], onDelete: Cascade)
+  slug     String
+  fit      Int
+  judgedAt DateTime @default(now())
+
+  @@unique([userId, slug, icpId])
+  @@index([judgedAt])
 }
 
 enum LinkedInPostStatus {
@@ -2016,6 +2034,7 @@ model Person {
   @@index([userId, priority, lastTouchAt, id])
   @@index([userId, waiting, lastTouchAt, id])
   @@index([userId, lastTouchAt, id])
+  @@index([userId, score])
   @@index([userId, firstSeenAt])
   @@index([userId, companySlug])
   @@index([foundBy], type: Gin)

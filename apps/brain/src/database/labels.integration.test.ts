@@ -208,6 +208,37 @@ describe('labels and input picks (database)', () => {
       })
    })
 
+   it('should count a person once for a label, when a list and My network both hold it', async () => {
+      const list = await PrismaService.client.workflowList.create({
+         data: {
+            userId,
+            name: `Once ${randomUUID().slice(0, 8)}`,
+         },
+      })
+
+      await PrismaService.client.workflowListMember.create({
+         data: {
+            listId: list.id,
+            slug: 'once-person',
+            url: 'https://www.linkedin.com/in/once-person',
+            tags: ['once-label'],
+         },
+      })
+      await PrismaService.client.person.create({
+         data: {
+            userId,
+            slug: 'once-person',
+            labels: ['once-label'],
+            lastTouchAt: new Date(),
+         },
+      })
+
+      expect((await LabelService.list(userId)).find(({ label }) => label === 'once-label')).toMatchObject({
+         people: 1,
+         total: 1,
+      })
+   })
+
    it('should list the labels the owner put on My network people', async () => {
       await PrismaService.client.person.create({
          data: {

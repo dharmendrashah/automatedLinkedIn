@@ -19,11 +19,16 @@ export class LabelService {
             UNION ALL
             SELECT unnest(tags), 'posts' FROM "LinkedInPost" WHERE "userId" = ${userId} AND "archivedAt" IS NULL
             UNION ALL
-            SELECT unnest(member.tags), 'people' FROM "WorkflowListMember" AS member
-               JOIN "WorkflowList" AS list ON list.id = member."listId"
-               WHERE list."userId" = ${userId}
-            UNION ALL
-            SELECT unnest(labels), 'people' FROM "Person" WHERE "userId" = ${userId}
+            SELECT d.label, 'people' AS kind FROM (
+               SELECT DISTINCT x.label, x.slug FROM (
+                  SELECT unnest(member.tags) AS label, member."slug" FROM "WorkflowListMember" AS member
+                     JOIN "WorkflowList" AS list ON list.id = member."listId"
+                     WHERE list."userId" = ${userId}
+                  UNION ALL
+                  SELECT unnest(person."labels") AS label, person."slug" FROM "Person" AS person
+                     WHERE person."userId" = ${userId}
+               ) AS x
+            ) AS d
          ) AS labelled
          GROUP BY label, kind`
       const byLabel = new Map<string, LabelCount>()

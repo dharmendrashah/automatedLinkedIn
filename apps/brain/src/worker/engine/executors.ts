@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { judgeKept } from './scoreJudge'
 import {
    type CompanyItem,
    type PersonItem,
@@ -30,6 +31,7 @@ import {
    LinkedInCompanyService,
    LinkedInPostService,
    LinkedInProfileService,
+   PeopleLabelService,
    PersonSnapshotService,
    PostPageService,
    RECENT_DAYS,
@@ -91,6 +93,7 @@ import {
    type Request,
    type StepResult,
    Waiting,
+   aside,
    collectEach,
    companiesOf,
    configOf,
@@ -114,6 +117,7 @@ import { getFeed, getMutual, getNotifications, getViewers } from './ownPageBlock
 import { getChat, ifPerson, splitPeople } from './personBlocks'
 import { bestPerCompany, scoreCompanies, scoreSignals, spaceOut, stopContacting } from './rankBlocks'
 import { classifyItems, detectChanges, findThePattern } from './readBlocks'
+import { cutOf, withoutSlugs } from './readLimit'
 import { replyToConversations, sendMessages } from './replyBlocks'
 import { fitToRoom, personWait } from './roomBlocks'
 import { runWorkflow } from './runWorkflow'
@@ -670,22 +674,37 @@ const searchPeople = (ctx: Context) => {
    ])
 }
 
+// Campaign labels are written by a real run of a campaign workflow, never by a preview.
+const labelsCampaign = (ctx: Context) => !ctx.preview && Boolean(ctx.run.workflow.campaign)
+
+const labelOf = ({ slug, tags }: PersonItem) => ({
+   slug,
+   tags,
+})
+
+// Process tag labels only the people who have a row; the list step builds the rows of the people it inserts.
+const EXISTING_ROWS = { build: false }
+
+const overflowOf = (dropped: number) => (dropped > 0 ? `${dropped} labels did not fit.` : null)
+
 // Reads the full profile of everyone it gets who was not read yet. A full profile the owner got in the last 30 days
 // is used again instead of paid for (unless the block reads again), and every one it pays for is kept so the drawer
 // shows it. After a Score block they are scored again and the ones that no longer fit are dropped; without one they
-// keep no score. It leaves the step's output to its caller.
-const readPeople = async (ctx: Context, people: PersonItem[]) => {
+// keep no score. It leaves the step's output to its caller. `reuse` is the stored reads a caller already looked up.
+const readPeople = async (ctx: Context, people: PersonItem[], reuse?: Map<string, PersonSnapshotData>) => {
    const { run, node, graph, at } = ctx
    const scoring = scoringNodeBefore(graph, node.id)
    const rules = scoring ? await rulesOf(run.userId, scoring) : null
    const thresholds = thresholdsOf(run, scoring)
    const pending = people.filter(({ enriched }) => !enriched)
-   const stored = rereads(ctx)
-      ? new Map<string, PersonSnapshotData>()
-      : await PersonSnapshotService.recent(
-           run.userId,
-           pending.map(({ slug }) => slug)
-        )
+   const stored =
+      reuse ??
+      (rereads(ctx)
+         ? new Map<string, PersonSnapshotData>()
+         : await PersonSnapshotService.recent(
+              run.userId,
+              pending.map(({ slug }) => slug)
+           ))
    const reused = pending.filter(({ slug }) => stored.has(slug))
    const toRead = pending.filter(({ slug }) => !stored.has(slug)).sort((a, b) => a.slug.localeCompare(b.slug))
    const batches = Array.from({ length: Math.ceil(toRead.length / ENRICH_BATCH) }, (_, index) =>
@@ -821,12 +840,25 @@ const addToList = async (ctx: Context): Promise<StepResult> => {
       }))
    )
 
-   return {
-      status: 'DONE',
-      itemsIn: people.length,
-      itemsOut: people.length,
-      message: `${added} new in the list.`,
-   }
+   const dropped = labelsCampaign(ctx)
+      ? (
+           await PeopleLabelService.label(
+              ctx.run.userId,
+              people.filter(({ slug }) => added.slugs.includes(slug)).map(labelOf),
+              { build: true }
+           )
+        ).dropped
+      : 0
+
+   return addNote(
+      {
+         status: 'DONE',
+         itemsIn: people.length,
+         itemsOut: people.length,
+         message: `${added.count} new in the list.`,
+      },
+      overflowOf(dropped)
+   )
 }
 
 const markPosts = async (ctx: Context): Promise<StepResult> => {
@@ -1542,6 +1574,43 @@ const pastedPeopleAndCompanies = (urls: string[]) => {
    }
 }
 
+// Chooses the new people this read pays for. The first pass records the people it cut under the block's Else key; a later
+// pass (after Waiting) reads that record back, so the cut is decided once.
+const limitedPeople = async (ctx: Context, people: PersonItem[], limit: number) => {
+   const recorded = peopleOf(await WorkflowRunService.items(ctx.run.id, [elseKey(ctx, ctx.node.id)]))
+
+   if (recorded.length > 0) {
+      return {
+         passed: withoutSlugs(
+            people,
+            recorded.map(({ slug }) => slug)
+         ),
+         stored: undefined,
+         cut: recorded,
+      }
+   }
+
+   const stored = await PersonSnapshotService.recent(
+      ctx.run.userId,
+      people.filter(({ enriched }) => !enriched).map(({ slug }) => slug)
+   )
+   const cut = cutOf(people, new Set(stored.keys()), limit)
+
+   await WorkflowRunService.replaceItems(
+      elseKey(ctx, ctx.node.id),
+      aside(cut, 'readLimit', 'Over the read limit of this run.')
+   )
+
+   return {
+      passed: withoutSlugs(
+         people,
+         cut.map(({ slug }) => slug)
+      ),
+      stored,
+      cut,
+   }
+}
+
 // Reads the full details of the people and companies that reach it and of the links pasted in it. Posts become their
 // authors; companies it does not read, and anything else, pass through. The output is written once, when both reads
 // are done, because the engine runs a step again until its requests have finished.
@@ -1586,8 +1655,11 @@ const readFull = async (ctx: Context): Promise<StepResult> => {
       }
    }
 
+   const limit = numberIn(config, 'readLimit')
+   const limited = limit > 0 ? await limitedPeople(ctx, people, limit) : null
+
    // Both reads are started before the step waits for either.
-   const read = await settled(() => readPeople(ctx, people))
+   const read = await settled(() => readPeople(ctx, limited?.passed ?? people, limited?.stored))
 
    // A company that already has its page, from a search, is not read again.
    await WorkflowRunService.seedItems(
@@ -1618,7 +1690,10 @@ const readFull = async (ctx: Context): Promise<StepResult> => {
       pasted.dropped > 0
          ? `${pasted.dropped} links were not LinkedIn profile or company links and were skipped.`
          : null,
-      blocked.size > 0 ? `${blocked.size} people are on Do not contact and were skipped.` : null
+      blocked.size > 0 ? `${blocked.size} people are on Do not contact and were skipped.` : null,
+      limited && limited.cut.length > 0
+         ? `${limited.cut.length} people were over the read limit of ${limit} and went to Else.`
+         : null
    )
 }
 
@@ -1774,15 +1849,47 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
             ...new Set([...(prefix === '' ? item.tags : item.tags.filter(tag => !tag.startsWith(prefix))), ...tags]),
          ],
       }))
+      const result = await keepItems(ctx, tagged, people.length)
 
-      return keepItems(ctx, tagged, people.length)
+      if (!labelsCampaign(ctx)) {
+         return result
+      }
+
+      const { dropped, withoutRow } = await PeopleLabelService.label(ctx.run.userId, tagged.map(labelOf), EXISTING_ROWS)
+
+      return addNote(
+         result,
+         withoutRow > 0 ? `${withoutRow} people have no row yet; they are labelled when they are listed.` : null,
+         overflowOf(dropped)
+      )
    },
    'score.icp': async ctx => {
       const people = mergeBySlug(peopleOf(ctx.inputs))
       const rules = await rulesOf(ctx.run.userId, ctx.node)
-      const { kept } = scorePeople(people, rules, thresholdsOf(ctx.run, ctx.node))
+      const thresholds = thresholdsOf(ctx.run, ctx.node)
+      const { kept } = scorePeople(people, rules, thresholds)
+      const config = configOf(ctx.node)
 
-      return keepItems(ctx, kept, people.length)
+      if (config.aiJudgement !== true) {
+         return keepItems(ctx, kept, people.length)
+      }
+
+      const judged = await judgeKept(
+         {
+            userId: ctx.run.userId,
+            workflowId: ctx.run.workflowId,
+            runId: ctx.run.id,
+            preview: ctx.preview,
+            icpId: textIn(config, 'icpId'),
+            balanceMicros: () => ctx.deps.client.balanceMicros(),
+         },
+         kept,
+         rules,
+         thresholds,
+         numberIn(config, 'aiWeight')
+      )
+
+      return addNote(await keepItems(ctx, judged.kept, people.length), judged.note)
    },
    'score.signals': scoreSignals,
    'score.company': scoreCompanies,

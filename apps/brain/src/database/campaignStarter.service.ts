@@ -14,6 +14,8 @@ import { WorkflowService } from './workflow.service'
 
 const isSeniority = (value: string) => SENIORITIES.some(level => level === value.toUpperCase())
 
+type Stage = ReturnType<typeof buildOutreach>['workflows'][number]
+
 export class CampaignStarterService {
    public static async createOutreach(userId: string, input: OutreachAnswers) {
       const answers = outreachAnswersSchema.parse(input)
@@ -73,8 +75,7 @@ export class CampaignStarterService {
          })
 
          const workflows: Array<{ id: string; stage: string; name: string }> = []
-
-         for (const { stage, name, graph } of recipe.workflows) {
+         const place = async ({ stage, name, graph }: Stage) => {
             const workflow = await WorkflowService.create(userId, {
                name,
                goal: null,
@@ -88,6 +89,21 @@ export class CampaignStarterService {
                stage,
                name,
             })
+
+            return workflow
+         }
+
+         // Discover is made first: Invite starts when it finishes, so its id is needed before the other stages are built.
+         const [discover] = recipe.workflows
+
+         if (!discover) {
+            throw new ConflictError('The outreach recipe has no Discover stage.')
+         }
+
+         const discoverWorkflow = await place(discover)
+
+         for (const stage of buildOutreach(answers, icpId, discoverWorkflow.id).workflows.slice(1)) {
+            await place(stage)
          }
 
          return {

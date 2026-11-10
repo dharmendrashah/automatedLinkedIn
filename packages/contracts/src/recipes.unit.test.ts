@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { type OutreachAnswers, buildOutreach, capacityOf, outreachAnswersSchema } from './recipes'
-import { validateGraph } from './workflow'
+import { type Graph, validateGraph } from './workflow'
 import { blockOf } from './workflow'
 
 const answers: OutreachAnswers = {
@@ -17,14 +17,62 @@ const answers: OutreachAnswers = {
    },
 }
 
-const build = (extra: Partial<OutreachAnswers> = {}) =>
+const build = (extra: Partial<OutreachAnswers> = {}, discoverId?: string) =>
    buildOutreach(
       {
          ...answers,
          ...extra,
       },
-      'icp-1'
+      'icp-1',
+      discoverId
    )
+
+const linked = (graph: Graph | undefined, from: string, to: string) =>
+   graph?.edges.some(edge => edge.from === from && edge.to === to) ?? false
+
+describe('the Discover stage', () => {
+   it('should read the profile before its one Score, with a read limit of 200', () => {
+      const graph = build().workflows[0]?.graph
+
+      expect(graph?.nodes.filter(({ type }) => type === 'score.icp').map(({ id }) => id)).toEqual(['score'])
+      expect(graph?.nodes.find(({ id }) => id === 'profile')?.config).toEqual({
+         readLimit: 200,
+         reread: false,
+      })
+      expect(linked(graph, 'people', 'profile')).toBe(true)
+      expect(linked(graph, 'profile', 'score')).toBe(true)
+      expect(linked(graph, 'score', 'label')).toBe(true)
+      expect(linked(graph, 'label', 'list')).toBe(true)
+      expect(graph?.nodes.some(({ id }) => id === 'score2')).toBe(false)
+   })
+})
+
+describe('the Invite trigger', () => {
+   it('should start on Discover, not on a clock, when Discover is given, in both branches', () => {
+      for (const extra of [{}, { note: '' }]) {
+         const invite = build(extra, 'discover-1').workflows[1]?.graph
+         const triggers = invite?.nodes.filter(({ type }) => type.startsWith('trigger.')) ?? []
+
+         expect(triggers).toEqual([
+            expect.objectContaining({
+               type: 'trigger.workflow',
+               config: { workflowId: 'discover-1' },
+            }),
+         ])
+         expect(invite?.nodes.find(({ id }) => id === 'people')?.config).toMatchObject({
+            howMany: 100,
+            added: 'any',
+            order: 'newest',
+         })
+      }
+   })
+
+   it('should keep the schedule when no Discover is given', () => {
+      const invite = build().workflows[1]?.graph
+
+      expect(invite?.nodes.find(({ id }) => id === 'trigger')?.type).toBe('trigger.schedule')
+   })
+})
 
 describe('the outreach recipe', () => {
    it('should build six workflows in order, with the campaign label and the stage of each', () => {

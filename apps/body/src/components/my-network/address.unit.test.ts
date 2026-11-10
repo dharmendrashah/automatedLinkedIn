@@ -30,6 +30,10 @@ describe('readView', () => {
       expect(sortParam(view.sort)).toBe('-lastTouchAt')
       expect(readView(new URLSearchParams('sort=salary')).sort).toBeUndefined()
    })
+
+   it('reads the score sort', () => {
+      expect(readView(new URLSearchParams('sort=-score')).sort).toEqual({ by: 'score', desc: true })
+   })
 })
 
 describe('changeView', () => {

@@ -31,6 +31,7 @@ import { SortHeader } from '../table/sort-header'
 import { isDiscovery } from './row-actions'
 import { RowActions } from './row-actions-cell'
 import { type NextStep, PRIORITY, nextStepOf } from './rows'
+import { ScoreBar } from './score-bar'
 import { StatusChip } from './status-chip'
 import { nameOf } from './words'
 
@@ -131,7 +132,7 @@ const AccountChips = ({
 // Only the visible rows are drawn (TanStack Virtual), so thousands of people scroll smoothly; brain sorts and pages them.
 const features = tableFeatures({ rowSortingFeature })
 const column = createColumnHelper<typeof features, PersonRow>()
-const SORTS: Array<PeopleSort['by']> = ['name', 'lastTouchAt']
+const SORTS: Array<PeopleSort['by']> = ['name', 'score', 'lastTouchAt']
 const ROW_HEIGHT = 57
 // Ask for the next page this many rows before the end.
 const LOAD_AHEAD = 15
@@ -139,6 +140,7 @@ const LOAD_AHEAD = 15
 const CELL_CLASS: Record<string, string> = {
    choose: 'w-10',
    name: 'max-w-80',
+   score: 'w-32',
    reason: 'max-w-96 text-sm whitespace-normal',
    labels: 'max-w-56',
    lastTouchAt: 'text-sm',
@@ -253,6 +255,13 @@ const columnsOf = ({
             <SortHeader label="Person" sorted={header.getIsSorted()} onClick={header.getToggleSortingHandler()} />
          ),
          cell: ({ row }) => <PersonCell row={row.original} />,
+      }),
+      column.accessor('score', {
+         header: ({ column: header }) => (
+            <SortHeader label="Score" sorted={header.getIsSorted()} onClick={header.getToggleSortingHandler()} />
+         ),
+         sortDescFirst: true,
+         cell: ({ row }) => <ScoreBar score={row.original.score} />,
       }),
       column.display({
          id: 'reason',

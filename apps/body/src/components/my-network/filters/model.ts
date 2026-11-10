@@ -5,6 +5,7 @@ import { endOfDay, format, parse, startOfDay, startOfMonth, subDays } from 'date
 import { z } from 'zod'
 
 import { type RouterInputs } from '../../../trpc'
+import { SCORE_BANDS, SCORE_NAMES } from '../score'
 import { statusWord } from '../words'
 
 export const FILTER_LIMITS = {
@@ -52,6 +53,7 @@ export const filtersSchema = z
       noLabels: z.boolean().default(false),
       statuses: values(z.enum(['NEW', 'CONTACTED', 'REPLIED', 'NOT_INTERESTED', 'DONE'])),
       fit: values(z.enum(FITS)),
+      score: values(z.enum(SCORE_BANDS)),
       worksAt: values(text.toLowerCase()),
       profileRead: z.boolean().optional(),
    })
@@ -208,6 +210,9 @@ export const chipsOf = (filters: PeopleFilters, accountName: (id: string) => str
    if (filters.replyWaiting) add('replyWaiting', 'Reply waiting', { replyWaiting: false })
    if (filters.waiting) add('waiting', 'Waiting for their reply', { waiting: false })
    if (filters.fit.length) add('fit', `Fit: ${listText(filters.fit.map(fit => FIT_WORDS[fit]))}`, { fit: [] })
+   if (filters.score.length) {
+      add('score', `Score: ${listText(filters.score.map(band => SCORE_NAMES[band]))}`, { score: [] })
+   }
    if (filters.worksAt.length) {
       add('worksAt', `Works at my companies: ${listText(filters.worksAt)}`, { worksAt: [] })
    }

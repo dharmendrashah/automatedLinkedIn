@@ -89,7 +89,7 @@ export const Campaign = () => {
       return <p className="text-destructive px-4 text-sm lg:px-6">{page.error?.message ?? 'Campaign not found'}</p>
    }
 
-   const { campaign, funnel, cuts, warmUp, histogram, needsYou, accounts, workflows } = page.data
+   const { campaign, lastDiscoverRun, funnel, cuts, warmUp, histogram, needsYou, accounts, workflows } = page.data
    const paused = campaign.pausedAt !== null
    const steps = [
       ['Found', funnel.found],
@@ -153,6 +153,19 @@ export const Campaign = () => {
             )}
          </section>
 
+         <section className="grid gap-1 rounded-xl border px-4 py-3 text-sm">
+            <h3 className="text-sm font-medium">Last Discover run</h3>
+            {lastDiscoverRun === null ? (
+               <p className="text-muted-foreground text-xs">Nothing yet. Discover has not run.</p>
+            ) : lastDiscoverRun.finishedAt === null ? (
+               <p>{`Running since ${new Date(lastDiscoverRun.startedAt).toLocaleString('en-US')}`}</p>
+            ) : (
+               <p>
+                  {`${lastDiscoverRun.status.toLowerCase()}, finished ${new Date(lastDiscoverRun.finishedAt).toLocaleString('en-US')}: ${lastDiscoverRun.qualified} qualified, ${lastDiscoverRun.maybe} maybe.${lastDiscoverRun.message ? ` ${lastDiscoverRun.message}` : ''}`}
+               </p>
+            )}
+         </section>
+
          <section className="grid gap-2 rounded-xl border px-4 py-3">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                {steps.map(([label, count], at) => (
@@ -164,7 +177,7 @@ export const Campaign = () => {
                   </span>
                ))}
             </div>
-            {funnel.found === 0 && funnel.invited === 0 ? (
+            {funnel.found === 0 && funnel.invited === 0 && lastDiscoverRun === null ? (
                <p className="text-muted-foreground text-xs">Nothing yet. Invites start after Discover runs.</p>
             ) : null}
             <Compare

@@ -332,7 +332,7 @@ describe('validateGraph', () => {
          edges: [
             ...without(flagship, 'list').edges.filter(({ to }) => to !== 'done'),
             {
-               from: 'enrich',
+               from: 'score',
                to: 'else',
             },
          ],

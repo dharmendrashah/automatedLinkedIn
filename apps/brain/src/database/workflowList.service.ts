@@ -291,12 +291,17 @@ export class WorkflowListService {
          skipDuplicates: true,
       })
 
-      return count
+      return {
+         count,
+         slugs: fresh.map(({ slug }) => slug),
+      }
    }
 
    // People the owner picked outside a run; null when the list is not theirs.
    public static async addPicked(userId: string, listId: string, people: RunMember[]) {
-      return (await ownsList(userId, listId)) ? WorkflowListService.addFromRun(userId, listId, null, people) : null
+      return (await ownsList(userId, listId))
+         ? (await WorkflowListService.addFromRun(userId, listId, null, people)).count
+         : null
    }
 
    // The owner's list member with this slug (a person is in at most one of the owner's lists), with why they were found.

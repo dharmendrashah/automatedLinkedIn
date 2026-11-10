@@ -1,6 +1,7 @@
 import { Prisma } from 'generated/prisma/client'
 
 import { FirstDayUsedService } from './firstDayUsed.service'
+import { IcpJudgementService } from './icpJudgement.service'
 import { JobRunService } from './jobRun.service'
 import { OwnPagesService } from './ownPages.service'
 import { PrismaService } from './prisma.service'
@@ -162,6 +163,7 @@ export class RetentionService {
          firstDaysUsed,
          signals: signals.people + signals.companies + signals.excerpts,
          ownPages,
+         judgements: await IcpJudgementService.prune(now),
       }
    }
 }

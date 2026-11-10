@@ -1,6 +1,6 @@
 import { type Prisma } from 'generated/prisma/client'
 
-import { type PeopleFilters } from '@automatedLinkedIn/contracts'
+import { type PeopleFilters, type SCORE_BANDS, SCORE_BAND_FROM } from '@automatedLinkedIn/contracts'
 
 import { PRIORITY } from './peopleIndex'
 
@@ -15,6 +15,7 @@ export const PEOPLE_SORTS = [
    'lastReceivedAt',
    'lastTouchAt',
    'firstSeenAt',
+   'score',
 ] as const
 
 export type PeopleTab = (typeof PEOPLE_TABS)[number]
@@ -60,6 +61,19 @@ const labelsWhere = ({ labels, labelsMode }: PeopleFilters) =>
 const skillsWhere = ({ skills, skillsMode }: PeopleFilters) =>
    skillsMode === 'any' ? { hasSome: skills } : { hasEvery: skills }
 
+// A null score is in no band: comparisons never match null.
+const scoreBandWhere = (band: (typeof SCORE_BANDS)[number]): Where =>
+   band === 'RED'
+      ? { score: { lt: SCORE_BAND_FROM.YELLOW } }
+      : band === 'YELLOW'
+        ? {
+             score: {
+                gte: SCORE_BAND_FROM.YELLOW,
+                lt: SCORE_BAND_FROM.GREEN,
+             },
+          }
+        : { score: { gte: SCORE_BAND_FROM.GREEN } }
+
 export const peopleWhere = (filters: PeopleFilters): Where[] => [
    ...when(Boolean(filters.name), { name: contains(filters.name ?? '') }),
    ...when(filters.companies.length > 0, anyOf('company', filters.companies)),
@@ -96,6 +110,7 @@ export const peopleWhere = (filters: PeopleFilters): Where[] => [
    ...when(filters.noLabels, { labels: { isEmpty: true } }),
    ...when(filters.statuses.length > 0, { status: { in: filters.statuses } }),
    ...when(filters.fit.length > 0, { fit: { in: filters.fit } }),
+   ...when(filters.score.length > 0, { OR: filters.score.map(scoreBandWhere) }),
    ...when(filters.profileRead !== undefined, { profileRead: filters.profileRead }),
 ]
 
