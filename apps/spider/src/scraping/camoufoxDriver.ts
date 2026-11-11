@@ -22,7 +22,7 @@ import {
    type SessionControl,
    type StorageState,
 } from './driver'
-import { TaskError } from './errors'
+import { SiteRefused, TaskError } from './errors'
 
 export type CamoufoxOptions = {
    actionTimeoutMs: number
@@ -1038,7 +1038,7 @@ class CamoufoxSession implements DetectionSession {
 
       // A block or a rate limit from the site is respected, never worked around.
       if (response && response.status() >= 400) {
-         throw new Error(`The site answered ${response.status()}`)
+         throw new SiteRefused(response.status())
       }
 
       if (waitForSelector) {

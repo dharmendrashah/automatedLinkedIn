@@ -8,6 +8,15 @@ export class TaskError extends Error {
    }
 }
 
+// The site answered a page with an error status (a 404 or a 500 as well as a block). The driver throws it; the runner decides
+// what it means for the task.
+export class SiteRefused extends Error {
+   public constructor(public readonly status: number) {
+      super(`The site answered ${status}`)
+      this.name = 'SiteRefused'
+   }
+}
+
 // The exit address of a proxy could not be looked up. The task answers PROXY_FAILED; the original error is logged.
 export class ProxyLookupError extends TaskError {
    public readonly original: unknown

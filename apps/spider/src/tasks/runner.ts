@@ -22,7 +22,7 @@ import { RecordedDetectionSession } from '../recording/recordedDetectionSession'
 import { type Recorder } from '../recording/recorder'
 import { type AccountLock } from '../scraping/accountLock'
 import { type DetectionDriver, type DetectionSession, type SessionControl, type StorageState } from '../scraping/driver'
-import { AccountBusyError, ProxyLookupError, ShutdownError, TaskError } from '../scraping/errors'
+import { AccountBusyError, ProxyLookupError, ShutdownError, SiteRefused, TaskError } from '../scraping/errors'
 import { type HostPolicy } from '../scraping/policy'
 import { type HostRateLimiter } from '../scraping/rateLimiter'
 import { type RobotsGuard } from '../scraping/robots'
@@ -57,6 +57,8 @@ const SIGN_IN_LIMIT_MS = 3 * 60 * 1000
 // After a sign-in the feed is waited on and scrolled a little, as a person does before doing anything else.
 const AFTER_SIGN_IN_WAIT_MS = 5000
 const AFTER_SIGN_IN_SCROLL_PX = 700
+// LinkedIn's bot refusal (999) and a rate limit (429): the site is asking the visitor to stop.
+const BLOCKED_STATUSES = [429, 999]
 
 export type RecordingRequest = {
    task: string
@@ -683,7 +685,12 @@ const execute = async (
 
       try {
          return await browser.goto(address)
-      } catch {
+      } catch (error) {
+         // LinkedIn answers 999 and 429 to a visit it refuses. The run stops; it never retries or signs in again against it.
+         if (error instanceof SiteRefused && BLOCKED_STATUSES.includes(error.status)) {
+            throw new VisitError('blocked', `The site blocked the page (HTTP ${error.status}).`)
+         }
+
          throw new VisitError('load', 'The page did not load.')
       }
    }

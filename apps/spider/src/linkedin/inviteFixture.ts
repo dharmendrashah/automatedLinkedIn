@@ -16,6 +16,7 @@ export const profileMarkup = ({
    pending = false,
    menuOpen = false,
    menuConnect = true,
+   messaged = false,
 }: {
    slug?: string
    name?: string
@@ -23,6 +24,7 @@ export const profileMarkup = ({
    pending?: boolean
    menuOpen?: boolean
    menuConnect?: boolean
+   messaged?: boolean
 } = {}) => `<main>
    <nav><ul><li><button aria-label="More" aria-expanded="false">More</button></li></ul></nav>
    <header>${own ? connect(_slug, name, '736436677') : ''}</header>
@@ -30,7 +32,7 @@ export const profileMarkup = ({
       ${own ? connect(_slug, name, '736436677', `https://www.linkedin.com/preload/custom-invite/?vanityName=${encodeURIComponent(_slug)}&amp;lipi=urn%3Ali%3Apage`) : ''}
       ${own ? connect(_slug, name, '736436677') : ''}
       ${pending ? `<button aria-label="Pending, click to withdraw invitation sent to ${name}">Pending</button>` : ''}
-      <a href="/messaging/compose/?profileUrn=x">Message</a>
+      ${messaged ? '<a href="/messaging/compose/?profileUrn=x">Message</a>' : ''}
       <button componentkey="top-card-more" aria-expanded="${menuOpen}" type="button"><span>More</span></button>
    </section>
    <aside>

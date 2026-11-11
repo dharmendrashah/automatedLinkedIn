@@ -30,7 +30,7 @@ export type TaskOutcome = {
 // A page that could not be opened for a reason the task can describe in its own words.
 export class VisitError extends StepFailed {
    public constructor(
-      public readonly reason: 'not-allowed' | 'robots' | 'robots-unreadable' | 'load',
+      public readonly reason: 'not-allowed' | 'robots' | 'robots-unreadable' | 'load' | 'blocked',
       message: string
    ) {
       super(message)

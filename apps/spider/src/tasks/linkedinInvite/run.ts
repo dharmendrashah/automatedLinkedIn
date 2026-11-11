@@ -448,6 +448,16 @@ export const runInvites = async (
       }
 
       if (connects.length === 0) {
+         if (actions.messaged) {
+            log('The profile shows a Message button and no Connect, so it is already a connection')
+            sent[index] = {
+               id: invite.id,
+               outcome: 'ALREADY_CONNECTED',
+            }
+
+            return
+         }
+
          log('The profile shows no Connect button, nor one in its More menu')
          await keepPage('no-connect')
          sent[index] = {

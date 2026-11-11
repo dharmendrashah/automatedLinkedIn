@@ -13,6 +13,7 @@ import {
    NOTES_OUT_WORDS,
    NOTE_UPSELL,
    PENDING_LABEL,
+   PROFILE_MESSAGE,
    SEND_INVITE_WORDS,
    SEND_WITHOUT_NOTE_WORDS,
    SENT_ROW,
@@ -57,6 +58,8 @@ export type ProfileActions = {
    pending: boolean
    // Something that only shows once the page has drawn its buttons.
    drawn: boolean
+   // The profile's own Message link, which carries no name (see PROFILE_MESSAGE). Connected people have it, and so may others.
+   messaged: boolean
 }
 
 export const parseProfileActions = (html: string, slug: string, name: string): ProfileActions => {
@@ -95,6 +98,7 @@ export const parseProfileActions = (html: string, slug: string, name: string): P
       ...(memberId && { memberId }),
       pending,
       drawn: links.length > 0 || pending || root.querySelector('a[href*="/messaging/compose/"]') !== null,
+      messaged: root.querySelector(PROFILE_MESSAGE) !== null,
    }
 }
 

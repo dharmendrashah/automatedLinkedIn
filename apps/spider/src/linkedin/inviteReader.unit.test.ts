@@ -21,8 +21,25 @@ describe('parseProfileActions', () => {
          memberId: '736436677',
          pending: false,
          drawn: true,
+         messaged: false,
       })
       expect(parseProfileActions(profileMarkup(), 'grace-hopper', 'Grace Hopper').connects).toEqual([3])
+   })
+
+   it('should say messaged only when the profile has its own unnamed Message link', () => {
+      expect(
+         parseProfileActions(
+            profileMarkup({
+               own: false,
+               messaged: true,
+            }),
+            'ada-lovelace',
+            'Ada Lovelace'
+         )
+      ).toMatchObject({
+         connects: [],
+         messaged: true,
+      })
    })
 
    it('should match a slug written percent-encoded or in another case', () => {
@@ -41,6 +58,7 @@ describe('parseProfileActions', () => {
          menu: [],
          pending: false,
          drawn: true,
+         messaged: false,
       })
    })
 
