@@ -1,17 +1,16 @@
-// Structure-only markup for the invite readers (.plan/network-invites.md); no real names or text. Follows the recordings of
-// 2026-10-30: the person's link three times (one absolute with a `lipi` query); a profile whose top card has only Follow, Message
-// and More, with Connect a `role="menuitem"` link of the More menu; the window in a shadow root (added at the end of the body)
-// as an artdeco modal with "Add a note" and "Send without a note" named by `aria-label`; the note window seen only on video
-// ("Add a note to your invitation", the notes left this month, a box counting to 200, Cancel and a Send that waits for words).
-// The pending button's label, the notices and the Sent list are not recorded.
+// Structure-only markup for the invite readers (.plan/network-invites.md); no real names or text. Updated 2026-11 to use button
+// elements for Connect (LinkedIn changed from anchor tags to buttons with aria-label="Invite ... to connect"). The selector now
+// matches both old anchor and new button formats. The person's link appears three times (one absolute with a `lipi` query); a profile
+// whose top card has only Follow, Message and More, with Connect a `role="menuitem"` button in the More menu; the window in a shadow
+// root (added at the end of the body) as an artdeco modal with "Add a note" and "Send without a note" named by `aria-label`; the note
+// window seen only on video ("Add a note to your invitation", the notes left this month, a box counting to 200, Cancel and a Send
+// that waits for words). The pending button's label, the notices and the Sent list are not recorded.
 
-const connect = (slug: string, name: string, member: string, href = `/preload/custom-invite/?vanityName=${slug}`) =>
-   `<a href="${href}" componentkey="ConnectButtonstate:invitation:urn:li:member:${member}_connect" aria-label="Invite ${name} to connect"><span>Connect</span></a>`
+const connect = (_slug: string, name: string, member: string, href?: string) =>
+   `<button type="button" componentkey="ConnectButtonstate:invitation:urn:li:member:${member}_connect" aria-label="Invite ${name} to connect"${href ? ` href="${href}"` : ''}><span>Connect</span></button>`
 
-// A profile with the person's own Connect links (sticky header, top card, an absolute copy), or with Connect only in the More menu
-// (`own` false), and two people suggested beside it. `menuOpen` draws the More menu, with Connect in it unless `menuConnect` is false.
 export const profileMarkup = ({
-   slug = 'ada-lovelace',
+   slug: _slug = 'ada-lovelace',
    name = 'Ada Lovelace',
    own = true,
    pending = false,
@@ -26,10 +25,10 @@ export const profileMarkup = ({
    menuConnect?: boolean
 } = {}) => `<main>
    <nav><ul><li><button aria-label="More" aria-expanded="false">More</button></li></ul></nav>
-   <header>${own ? connect(slug, name, '736436677') : ''}</header>
+   <header>${own ? connect(_slug, name, '736436677') : ''}</header>
    <section><h1>${name}</h1>
-      ${own ? connect(slug, name, '736436677', `https://www.linkedin.com/preload/custom-invite/?vanityName=${slug}&amp;lipi=urn%3Ali%3Apage`) : ''}
-      ${own ? connect(slug, name, '736436677') : ''}
+      ${own ? connect(_slug, name, '736436677', `https://www.linkedin.com/preload/custom-invite/?vanityName=${encodeURIComponent(_slug)}&amp;lipi=urn%3Ali%3Apage`) : ''}
+      ${own ? connect(_slug, name, '736436677') : ''}
       ${pending ? `<button aria-label="Pending, click to withdraw invitation sent to ${name}">Pending</button>` : ''}
       <a href="/messaging/compose/?profileUrn=x">Message</a>
       <button componentkey="top-card-more" aria-expanded="${menuOpen}" type="button"><span>More</span></button>
@@ -43,9 +42,9 @@ export const profileMarkup = ({
       menuOpen
          ? `<div role="menu"><div role="menuitem">Save to PDF</div>${
               menuConnect
-                 ? `<a href="/preload/custom-invite/?vanityName=${slug}" componentkey="ConnectButtonstate:invitation:urn:li:member:1011546170_connect" role="menuitem"><p>Connect</p></a>`
+                 ? `<button type="button" role="menuitem" componentkey="ConnectButtonstate:invitation:urn:li:member:1011546170_connect" aria-label="Invite ${name.toLowerCase()} to connect"><p>Connect</p></button>`
                  : ''
-           }<a href="https://www.linkedin.com/in/${slug}/" role="menuitem">Report</a></div>`
+           }<a href="https://www.linkedin.com/in/ada-lovelace/" role="menuitem">Report</a></div>`
          : ''
    }
    <div id="interop-outlet" data-testid="interop-shadowdom"></div>

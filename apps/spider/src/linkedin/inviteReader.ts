@@ -2,7 +2,6 @@ import { type HTMLElement, parse } from 'node-html-parser'
 
 import {
    ADD_NOTE_WORDS,
-   CONNECT_LINK,
    CONNECT_MEMBER,
    INVITE_BUTTON,
    INVITE_EMAIL,
@@ -61,10 +60,28 @@ export type ProfileActions = {
 
 export const parseProfileActions = (html: string, slug: string, name: string): ProfileActions => {
    const root = parse(html)
-   const links = root.querySelectorAll(CONNECT_LINK)
-   const own = links.flatMap((link, index) =>
-      slugKey(vanityOf(link.getAttribute('href') ?? '')) === slugKey(slug) ? [index] : []
+   // Match both old anchor format (a[href*="/preload/custom-invite/"]) and new button format
+   // (button[aria-label*="Invite"][aria-label*="to connect"])
+   const links = root.querySelectorAll(
+      'a[href*="/preload/custom-invite/"], button[aria-label*="Invite"][aria-label*="to connect"]'
    )
+   const slugKey_slug = slugKey(slug)
+   const own = links.flatMap((link, index) => {
+      // For anchors, extract slug from href vanityName query param
+      const hrefSlug = vanityOf(link.getAttribute('href') ?? '')
+      if (hrefSlug) {
+         return slugKey(hrefSlug) === slugKey_slug ? [index] : []
+      }
+      // For buttons, extract slug from aria-label if it contains the slug-like text
+      const ariaLabel = link.getAttribute('aria-label') ?? ''
+      // aria-label format: "Invite FirstName LastName to connect"
+      // Try to match if the name is in the aria-label (case-insensitive)
+      const [first] = name.split(/\s+/)
+      if (first && ariaLabel.toLowerCase().includes(first.toLowerCase())) {
+         return [index]
+      }
+      return []
+   })
    const inMenu = (index: number) => links[index]?.getAttribute('role') === 'menuitem'
    const connects = own.filter(index => !inMenu(index))
    const menu = own.filter(inMenu)
