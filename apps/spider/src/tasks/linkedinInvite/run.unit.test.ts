@@ -18,6 +18,7 @@ import {
    SENT_ROW_WITHDRAW,
    WITHDRAW_DIALOG_BUTTON,
 } from '../../linkedin/markup'
+import { VisitError } from '../defineTask'
 import { answerFor } from './answer'
 import { runInvites } from './run'
 
@@ -44,6 +45,10 @@ type Page = {
    // Slugs whose top card shows only More, with Connect in its menu (recorded 2026-10-30).
    menuOnly?: string[]
    pending?: string[]
+   // Slugs whose profile shows a Message link with no Connect: a connection (or someone else on some layouts).
+   messaged?: string[]
+   // Slugs whose profile answers HTTP 999, LinkedIn's block for too many visits.
+   blocked?: string[]
    // The note's words do not land in the box, so Send stays greyed.
    typingLost?: boolean
    // Where a visit ends instead of the address asked for, by slug.
@@ -63,6 +68,10 @@ type Page = {
    sentRows?: string[]
    // How many rows of the Sent list draw at first; one more draws with each scroll.
    sentShown?: number
+   // The Connect or the Withdraw confirm press lands, then the page throws (the connection drops).
+   throwAfter?: 'connect' | 'confirm'
+   // No copy of the Connect link can be pressed.
+   unpressable?: boolean
 }
 
 const wordsOf = (html: string, index: number) => {
@@ -72,7 +81,15 @@ const wordsOf = (html: string, index: number) => {
 }
 
 const setup = (page: Page = {}) => {
-   const { noConnect = [], menuOnly = [], pending = [], lands = {}, afterSend = 'answered' } = page
+   const {
+      noConnect = [],
+      menuOnly = [],
+      pending = [],
+      messaged = [],
+      blocked = [],
+      lands = {},
+      afterSend = 'answered',
+   } = page
    const invited = new Set<string>()
    const pendingNow = new Set<string>()
    const rows = new Set(page.sentRows ?? [])
@@ -112,6 +129,7 @@ const setup = (page: Page = {}) => {
          pending: pending.includes(slug) || shownPending,
          menuOpen,
          menuConnect: !noConnect.includes(slug),
+         messaged: messaged.includes(slug),
       })}${dialogHtml()}</body></html>`
    }
    const send = () => {
@@ -142,7 +160,7 @@ const setup = (page: Page = {}) => {
       })),
       clickNth: vi.fn(async (selector: string, index: number) => {
          if (selector === CONNECT_LINK) {
-            if (page.headerHidden && index === 0) {
+            if (page.unpressable || (page.headerHidden && index === 0)) {
                return false
             }
 
@@ -153,6 +171,10 @@ const setup = (page: Page = {}) => {
                send()
             } else {
                dialog = 'choice'
+            }
+
+            if (page.throwAfter === 'connect') {
+               throw new Error('The page closed after the press.')
             }
 
             return true
@@ -173,6 +195,10 @@ const setup = (page: Page = {}) => {
                rows.delete(withdrawing)
                heard.push(200)
                withdrawing = undefined
+
+               if (page.throwAfter === 'confirm') {
+                  throw new Error('The page closed after the press.')
+               }
             }
 
             return true
@@ -251,6 +277,10 @@ const setup = (page: Page = {}) => {
       browser: browser as never,
       visit: vi.fn(async (url: string) => {
          const [, asked = ''] = /\/in\/([^/]+)\//.exec(url) ?? []
+
+         if (blocked.includes(asked)) {
+            throw new VisitError('blocked', 'The site blocked the page (HTTP 999).')
+         }
 
          slug = asked
          at = lands[asked] ?? url
@@ -335,6 +365,36 @@ describe('runInvites', () => {
       expect(calls.some(call => call.startsWith('connect'))).toBe(false)
       expect(attached.some(({ name }) => name.startsWith('no-connect'))).toBe(true)
       expect(file().sent.map(({ outcome }) => outcome)).toEqual(['NO_CONNECT', 'ALREADY_PENDING'])
+   })
+
+   it('should call a profile with a Message link and no Connect ALREADY_CONNECTED, and press nothing for it', async () => {
+      const { run, calls, context, file } = setup({
+         noConnect: ['ada-lovelace'],
+         messaged: ['ada-lovelace'],
+      })
+
+      await run(both)
+      expect(calls.some(call => call === 'connect ada-lovelace')).toBe(false)
+      expect(context.markAttempt).toHaveBeenCalledTimes(1)
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['ALREADY_CONNECTED', 'SENT'])
+   })
+
+   it('should stop at a block on the first profile before any press, and not visit it again in this run', async () => {
+      const { run, calls, context } = setup({ blocked: ['ada-lovelace'] })
+
+      await expect(run(both)).rejects.toMatchObject({ reason: 'blocked' })
+      expect(context.visit).toHaveBeenCalledTimes(1)
+      expect(context.markAttempt).not.toHaveBeenCalled()
+      expect(calls.some(call => call.startsWith('connect'))).toBe(false)
+   })
+
+   it('should hand over the invite sent before a block, warn about the block, and press nothing more', async () => {
+      const { run, calls, context, file } = setup({ blocked: ['grace-hopper'] })
+
+      await expect(run(both)).resolves.toMatchObject({ outcome: 'PARTIAL' })
+      expect(calls.filter(call => call.startsWith('send'))).toEqual(['send ada-lovelace'])
+      expect(context.warn).toHaveBeenCalledWith(expect.stringContaining('blocked'))
+      expect(file().sent[0]?.outcome).toBe('SENT')
    })
 
    it('should send without the note when LinkedIn has no free notes left, typing nothing, and skip the note for the rest of the run', async () => {
@@ -550,6 +610,48 @@ describe('runInvites', () => {
       expect(calls.filter(call => call === 'confirm withdraw')).toHaveLength(1)
       expect(file().withdrawn.map(({ outcome }) => outcome)).toEqual(['WITHDRAWN', 'NOT_PENDING'])
       expect(attached.some(({ name }) => name.startsWith('sent-list'))).toBe(true)
+   })
+
+   it('should keep an invite unsure, not not sent, when the page throws after Connect was pressed', async () => {
+      const { run, calls, file } = setup({ throwAfter: 'connect' })
+
+      await expect(run(both)).resolves.toMatchObject({ outcome: 'UNKNOWN' })
+      expect(calls.filter(call => call.startsWith('connect'))).toEqual(['connect ada-lovelace'])
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['UNSURE', 'NOT_SENT'])
+   })
+
+   it('should keep a withdrawal unsure when the page throws after its Withdraw confirm press', async () => {
+      const { run, file } = setup({
+         sentRows: ['ada-lovelace'],
+         throwAfter: 'confirm',
+      })
+
+      await expect(
+         run({
+            send: [],
+            withdraw: [
+               {
+                  id: ID_A,
+                  slug: 'ada-lovelace',
+                  name: 'Ada Lovelace',
+               },
+            ],
+         })
+      ).resolves.toMatchObject({ outcome: 'UNKNOWN' })
+      expect(file().withdrawn.map(({ outcome }) => outcome)).toEqual(['UNSURE'])
+   })
+
+   it('should call an invite NOT_SENT when no copy of Connect could be pressed, so brain can queue it again', async () => {
+      const { run, calls, file } = setup({ unpressable: true })
+
+      await expect(
+         run({
+            send: [ADA],
+            withdraw: [],
+         })
+      ).resolves.toMatchObject({ outcome: 'PARTIAL' })
+      expect(calls.some(call => call.startsWith('send'))).toBe(false)
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['NOT_SENT'])
    })
 })
 

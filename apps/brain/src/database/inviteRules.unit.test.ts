@@ -198,6 +198,13 @@ describe('sendChange and withdrawChange', () => {
    it('should call an invite no longer pending withdrawn and try an unclear withdrawal again', () => {
       expect(withdrawChange('NOT_PENDING', 0, NOW).state).toBe('WITHDRAWN')
       expect(withdrawChange('UNSURE', 0, NOW).state).toBe('WITHDRAW_QUEUED')
-      expect(withdrawChange('UNSURE', 2, NOW).state).toBe('WITHDRAWN')
+   })
+
+   it('should keep an invite SENT, not WITHDRAWN, when the withdrawal gives up after 3 tries', () => {
+      expect(withdrawChange('UNSURE', 2, NOW)).toEqual({
+         state: 'SENT',
+         reason: 'Withdraw failed after 3 tries; the invite may still be pending on LinkedIn.',
+         tries: 3,
+      })
    })
 })

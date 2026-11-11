@@ -192,7 +192,8 @@ export const connectionMenuButton = (slug: string) => {
 // note"]`. The note window (video only): "Add a note to your invitation", "2 personalized invitations remaining for this month.", a
 // box counting to 200, Cancel, and a Send that waits for words; the same request as without a note.
 // NOT SEEN: the note box's markup, the email and weekly-limit notices, a month with no notes left, the Sent list and Withdraw.
-export const CONNECT_LINK = 'a[href*="/preload/custom-invite/"]'
+// Updated 2026-11: LinkedIn changed to use button elements with aria-label="Invite ... to connect" instead of anchor tags.
+export const CONNECT_LINK = 'a[href*="/preload/custom-invite/"], button[aria-label*="Invite"][aria-label*="to connect"]'
 export const CONNECT_MEMBER = /^ConnectButtonstate:invitation:urn:li:member:(\d{1,20})_connect$/
 export const INVITE_REQUEST = ['voyagerRelationshipsDashMemberRelationships', 'verifyQuotaAndCreate']
 export const INVITE_BUTTON = 'button'

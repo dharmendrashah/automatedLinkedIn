@@ -448,6 +448,16 @@ export const runInvites = async (
       }
 
       if (connects.length === 0) {
+         if (actions.messaged) {
+            log('The profile shows a Message button and no Connect, so it is already a connection')
+            sent[index] = {
+               id: invite.id,
+               outcome: 'ALREADY_CONNECTED',
+            }
+
+            return
+         }
+
          log('The profile shows no Connect button, nor one in its More menu')
          await keepPage('no-connect')
          sent[index] = {
@@ -467,6 +477,12 @@ export const runInvites = async (
 
       // Listening starts before the press, so LinkedIn's answer to the invite request is not missed.
       const watch = hands.watchAnswers('POST', INVITE_REQUEST)
+      // Set before the press: if the page throws after it, the invite is UNSURE, not NOT_SENT.
+      sent[index] = {
+         id: invite.id,
+         outcome: 'UNSURE',
+         ...member,
+      }
 
       try {
          let pressed = await pressConnect(connects)
@@ -488,12 +504,6 @@ export const runInvites = async (
          }
 
          log('Pressed Connect')
-         // Until the page says otherwise, the invite may or may not have left.
-         sent[index] = {
-            id: invite.id,
-            outcome: 'UNSURE',
-            ...member,
-         }
 
          const withNote = Boolean(invite.note) && !notesOut
          const first = await throughDialog(invite, watch, withNote)
@@ -585,18 +595,24 @@ export const runInvites = async (
       const watch = hands.watchAnswers('POST', WITHDRAW_REQUEST)
 
       try {
+         // Set before the press: if the page throws after it, the withdrawal is UNSURE, not NOT_CLICKED.
+         withdrawn[index] = {
+            id: invite.id,
+            outcome: 'UNSURE',
+         }
+
          if (!(await hands.clickNth(WITHDRAW_DIALOG_BUTTON, confirm, '', false))) {
             log('The Withdraw button of the window could not be pressed')
+            withdrawn[index] = {
+               id: invite.id,
+               outcome: 'NOT_CLICKED',
+            }
             await closeDialog()
 
             return
          }
 
          log('Pressed Withdraw')
-         withdrawn[index] = {
-            id: invite.id,
-            outcome: 'UNSURE',
-         }
 
          const gone = (page: string) => withdrawConfirm(page) < 0 && parseSentInvites(page, invite.slug).withdraw < 0
          const html = await until(DIALOG_LOOKS, page => answerOf(watch) !== undefined || gone(page))
@@ -662,7 +678,8 @@ export const runInvites = async (
       }
    }
 
-   const result = (outcome?: InviteRun['outcome']): InviteRun => {
+   // Settles first, so the verdict and the handed-over items agree.
+   const result = (verdict?: 'SIGNED_OUT' | 'RESTRICTED'): InviteRun => {
       if (repeated) {
          settleRepeated()
       }
@@ -676,14 +693,9 @@ export const runInvites = async (
 
       return {
          outcome:
-            outcome ??
-            (repeated || isUnsure()
+            repeated || isUnsure()
                ? 'UNKNOWN'
-               : limited
-                 ? 'LIMIT_REACHED'
-                 : settled && allWithdrawn
-                   ? 'DONE'
-                   : 'PARTIAL'),
+               : (verdict ?? (limited ? 'LIMIT_REACHED' : settled && allWithdrawn ? 'DONE' : 'PARTIAL')),
          sent,
          withdrawn,
       }
@@ -736,11 +748,11 @@ export const runInvites = async (
       return result()
    } catch (error) {
       if (error instanceof SignedOut) {
-         return result(isUnsure() ? 'UNKNOWN' : 'SIGNED_OUT')
+         return result('SIGNED_OUT')
       }
 
       if (error instanceof Restricted) {
-         return result(isUnsure() ? 'UNKNOWN' : 'RESTRICTED')
+         return result('RESTRICTED')
       }
 
       // Once something was pressed, whatever went wrong may have come after it took.

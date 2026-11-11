@@ -13,6 +13,7 @@ import {
    NOTES_OUT_WORDS,
    NOTE_UPSELL,
    PENDING_LABEL,
+   PROFILE_MESSAGE,
    SEND_INVITE_WORDS,
    SEND_WITHOUT_NOTE_WORDS,
    SENT_ROW,
@@ -57,24 +58,38 @@ export type ProfileActions = {
    pending: boolean
    // Something that only shows once the page has drawn its buttons.
    drawn: boolean
+   // The profile's own Message link, which carries no name (see PROFILE_MESSAGE). Connected people have it, and so may others.
+   messaged: boolean
 }
 
 export const parseProfileActions = (html: string, slug: string, name: string): ProfileActions => {
    const root = parse(html)
    const links = root.querySelectorAll(CONNECT_LINK)
-   const own = links.flatMap((link, index) =>
-      slugKey(vanityOf(link.getAttribute('href') ?? '')) === slugKey(slug) ? [index] : []
-   )
+   const slugKey_slug = slugKey(slug)
+   const fullName = clean(name).toLowerCase()
+   const ownButtonLabel = clean(`invite ${fullName} to connect`)
+   const own = links.flatMap((link, index) => {
+      const hrefSlug = vanityOf(link.getAttribute('href') ?? '')
+      if (hrefSlug) {
+         return slugKey(hrefSlug) === slugKey_slug ? [index] : []
+      }
+      // A button names its person in full; a first name alone also fits the people suggested beside the profile.
+      return clean(link.getAttribute('aria-label')).toLowerCase() === ownButtonLabel ? [index] : []
+   })
    const inMenu = (index: number) => links[index]?.getAttribute('role') === 'menuitem'
-   const connects = own.filter(index => !inMenu(index))
-   const menu = own.filter(inMenu)
+   // A link is pressed before a button: the button is the fallback when the link cannot be pressed.
+   const linksFirst = (indexes: number[]) => [
+      ...indexes.filter(index => links[index]?.tagName === 'A'),
+      ...indexes.filter(index => links[index]?.tagName !== 'A'),
+   ]
+   const connects = linksFirst(own.filter(index => !inMenu(index)))
+   const menu = linksFirst(own.filter(inMenu))
    const [, memberId] = CONNECT_MEMBER.exec(links[own[0] ?? -1]?.getAttribute('componentkey') ?? '') ?? []
-   const [first = ''] = name.toLowerCase().split(/\s+/)
-   // The people suggested beside the profile may have invites of their own on their way, so the button must name this person.
+   // The people suggested beside the profile may have invites of their own on their way, so the label must name this person.
    const pending = root.querySelectorAll('button, a').some(element => {
       const label = element.getAttribute('aria-label') ?? element.text.trim()
 
-      return PENDING_LABEL.test(label) && first !== '' && label.toLowerCase().includes(first)
+      return PENDING_LABEL.test(label) && fullName !== '' && label.toLowerCase().includes(fullName)
    })
 
    return {
@@ -83,6 +98,7 @@ export const parseProfileActions = (html: string, slug: string, name: string): P
       ...(memberId && { memberId }),
       pending,
       drawn: links.length > 0 || pending || root.querySelector('a[href*="/messaging/compose/"]') !== null,
+      messaged: root.querySelector(PROFILE_MESSAGE) !== null,
    }
 }
 
