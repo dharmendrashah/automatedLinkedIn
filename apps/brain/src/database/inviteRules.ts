@@ -306,10 +306,9 @@ export const withdrawChange = (outcome: InviteWithdrawOutcome, tries: number, no
       default:
          return tries + 1 >= GIVE_UP_AFTER
             ? {
-                 state: 'WITHDRAWN',
-                 reason: 'It could not be withdrawn; check the Sent list on LinkedIn.',
+                 state: 'SENT',
+                 reason: 'Withdraw failed after 3 tries; the invite may still be pending on LinkedIn.',
                  tries: tries + 1,
-                 withdrawnAt: now,
               }
             : {
                  state: 'WITHDRAW_QUEUED',

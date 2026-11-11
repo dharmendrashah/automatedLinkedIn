@@ -68,6 +68,10 @@ type Page = {
    sentRows?: string[]
    // How many rows of the Sent list draw at first; one more draws with each scroll.
    sentShown?: number
+   // The Connect or the Withdraw confirm press lands, then the page throws (the connection drops).
+   throwAfter?: 'connect' | 'confirm'
+   // No copy of the Connect link can be pressed.
+   unpressable?: boolean
 }
 
 const wordsOf = (html: string, index: number) => {
@@ -156,7 +160,7 @@ const setup = (page: Page = {}) => {
       })),
       clickNth: vi.fn(async (selector: string, index: number) => {
          if (selector === CONNECT_LINK) {
-            if (page.headerHidden && index === 0) {
+            if (page.unpressable || (page.headerHidden && index === 0)) {
                return false
             }
 
@@ -167,6 +171,10 @@ const setup = (page: Page = {}) => {
                send()
             } else {
                dialog = 'choice'
+            }
+
+            if (page.throwAfter === 'connect') {
+               throw new Error('The page closed after the press.')
             }
 
             return true
@@ -187,6 +195,10 @@ const setup = (page: Page = {}) => {
                rows.delete(withdrawing)
                heard.push(200)
                withdrawing = undefined
+
+               if (page.throwAfter === 'confirm') {
+                  throw new Error('The page closed after the press.')
+               }
             }
 
             return true
@@ -598,6 +610,48 @@ describe('runInvites', () => {
       expect(calls.filter(call => call === 'confirm withdraw')).toHaveLength(1)
       expect(file().withdrawn.map(({ outcome }) => outcome)).toEqual(['WITHDRAWN', 'NOT_PENDING'])
       expect(attached.some(({ name }) => name.startsWith('sent-list'))).toBe(true)
+   })
+
+   it('should keep an invite unsure, not not sent, when the page throws after Connect was pressed', async () => {
+      const { run, calls, file } = setup({ throwAfter: 'connect' })
+
+      await expect(run(both)).resolves.toMatchObject({ outcome: 'UNKNOWN' })
+      expect(calls.filter(call => call.startsWith('connect'))).toEqual(['connect ada-lovelace'])
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['UNSURE', 'NOT_SENT'])
+   })
+
+   it('should keep a withdrawal unsure when the page throws after its Withdraw confirm press', async () => {
+      const { run, file } = setup({
+         sentRows: ['ada-lovelace'],
+         throwAfter: 'confirm',
+      })
+
+      await expect(
+         run({
+            send: [],
+            withdraw: [
+               {
+                  id: ID_A,
+                  slug: 'ada-lovelace',
+                  name: 'Ada Lovelace',
+               },
+            ],
+         })
+      ).resolves.toMatchObject({ outcome: 'UNKNOWN' })
+      expect(file().withdrawn.map(({ outcome }) => outcome)).toEqual(['UNSURE'])
+   })
+
+   it('should call an invite NOT_SENT when no copy of Connect could be pressed, so brain can queue it again', async () => {
+      const { run, calls, file } = setup({ unpressable: true })
+
+      await expect(
+         run({
+            send: [ADA],
+            withdraw: [],
+         })
+      ).resolves.toMatchObject({ outcome: 'PARTIAL' })
+      expect(calls.some(call => call.startsWith('send'))).toBe(false)
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['NOT_SENT'])
    })
 })
 
