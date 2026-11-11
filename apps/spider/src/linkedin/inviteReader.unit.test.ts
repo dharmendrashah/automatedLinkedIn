@@ -83,6 +83,29 @@ describe('parseProfileActions', () => {
       ).toBe(true)
    })
 
+   it('should not take a suggested person whose name contains the first name', () => {
+      const html = `<main>
+         <aside><button componentkey="ConnectButtonstate:invitation:urn:li:member:999_connect" aria-label="Invite Adalbert Ng to connect"><span>Connect</span></button>
+            <p>Pending, click to withdraw invitation sent to Adalbert Ng</p></aside>
+         <section><button componentkey="ConnectButtonstate:invitation:urn:li:member:111_connect" aria-label="Invite Ada Lovelace to connect"><span>Connect</span></button></section>
+      </main>`
+
+      expect(parseProfileActions(html, 'ada-lovelace', 'Ada Lovelace')).toMatchObject({
+         connects: [1],
+         memberId: '111',
+         pending: false,
+      })
+   })
+
+   it('should press the preload link before the button when the person has both', () => {
+      const html = `<main>
+         <button componentkey="ConnectButtonstate:invitation:urn:li:member:111_connect" aria-label="Invite Ada Lovelace to connect"><span>Connect</span></button>
+         <a href="/preload/custom-invite/?vanityName=ada-lovelace" aria-label="Invite Ada Lovelace to connect">Connect</a>
+      </main>`
+
+      expect(parseProfileActions(html, 'ada-lovelace', 'Ada Lovelace').connects).toEqual([1, 0])
+   })
+
    it('should say not drawn for a page with no buttons yet', () => {
       expect(parseProfileActions('<main><h1>Ada</h1></main>', 'ada', 'Ada').drawn).toBe(false)
    })

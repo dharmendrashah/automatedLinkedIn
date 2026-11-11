@@ -2,6 +2,7 @@ import { type HTMLElement, parse } from 'node-html-parser'
 
 import {
    ADD_NOTE_WORDS,
+   CONNECT_LINK,
    CONNECT_MEMBER,
    INVITE_BUTTON,
    INVITE_EMAIL,
@@ -60,38 +61,32 @@ export type ProfileActions = {
 
 export const parseProfileActions = (html: string, slug: string, name: string): ProfileActions => {
    const root = parse(html)
-   // Match both old anchor format (a[href*="/preload/custom-invite/"]) and new button format
-   // (button[aria-label*="Invite"][aria-label*="to connect"])
-   const links = root.querySelectorAll(
-      'a[href*="/preload/custom-invite/"], button[aria-label*="Invite"][aria-label*="to connect"]'
-   )
+   const links = root.querySelectorAll(CONNECT_LINK)
    const slugKey_slug = slugKey(slug)
+   const fullName = clean(name).toLowerCase()
+   const ownButtonLabel = clean(`invite ${fullName} to connect`)
    const own = links.flatMap((link, index) => {
-      // For anchors, extract slug from href vanityName query param
       const hrefSlug = vanityOf(link.getAttribute('href') ?? '')
       if (hrefSlug) {
          return slugKey(hrefSlug) === slugKey_slug ? [index] : []
       }
-      // For buttons, extract slug from aria-label if it contains the slug-like text
-      const ariaLabel = link.getAttribute('aria-label') ?? ''
-      // aria-label format: "Invite FirstName LastName to connect"
-      // Try to match if the name is in the aria-label (case-insensitive)
-      const [first] = name.split(/\s+/)
-      if (first && ariaLabel.toLowerCase().includes(first.toLowerCase())) {
-         return [index]
-      }
-      return []
+      // A button names its person in full; a first name alone also fits the people suggested beside the profile.
+      return clean(link.getAttribute('aria-label')).toLowerCase() === ownButtonLabel ? [index] : []
    })
    const inMenu = (index: number) => links[index]?.getAttribute('role') === 'menuitem'
-   const connects = own.filter(index => !inMenu(index))
-   const menu = own.filter(inMenu)
+   // A link is pressed before a button: the button is the fallback when the link cannot be pressed.
+   const linksFirst = (indexes: number[]) => [
+      ...indexes.filter(index => links[index]?.tagName === 'A'),
+      ...indexes.filter(index => links[index]?.tagName !== 'A'),
+   ]
+   const connects = linksFirst(own.filter(index => !inMenu(index)))
+   const menu = linksFirst(own.filter(inMenu))
    const [, memberId] = CONNECT_MEMBER.exec(links[own[0] ?? -1]?.getAttribute('componentkey') ?? '') ?? []
-   const [first = ''] = name.toLowerCase().split(/\s+/)
-   // The people suggested beside the profile may have invites of their own on their way, so the button must name this person.
+   // The people suggested beside the profile may have invites of their own on their way, so the label must name this person.
    const pending = root.querySelectorAll('button, a').some(element => {
       const label = element.getAttribute('aria-label') ?? element.text.trim()
 
-      return PENDING_LABEL.test(label) && first !== '' && label.toLowerCase().includes(first)
+      return PENDING_LABEL.test(label) && fullName !== '' && label.toLowerCase().includes(fullName)
    })
 
    return {
