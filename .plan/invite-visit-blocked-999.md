@@ -1,6 +1,6 @@
 # Invite run stops on a LinkedIn 999 profile block
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: done <!-- draft | locked | in progress | done -->
 - Created: 2026-11-11
 - Locked by user: yes, 2026-11-11 <!-- change to "yes, <date>" only after the user confirms -->
 
@@ -43,12 +43,12 @@ Open questions: none. Decided by the user on 2026-11-11:
 - [x] Confirm the open questions with the user and mark the plan `locked`.
 - [x] Add a `blocked` reason to `VisitError` and throw it from `CamoufoxDriver.goto` (as `SiteRefused`) only for status 999 or 429; other statuses keep the `load` path.
 - [x] In `linkedinInvite/run.ts`, a block before the first press rethrows and ends the run `ERROR` (`linkedinInvite/index.ts`), with nothing pressed, so the invites stay queued. A block after a press keeps the existing `attempted` path (PARTIAL, handover). Deviation: the remaining invites are not marked `NOT_ATTEMPTED`; brain returns them to the queue.
-- [ ] Pace the list: 5 seconds after each invite. Not done: the owner gap `INVITE_LIMITS.gapSeconds` (30 to 90 s) stays. Open question, see Outcome.
+- [x] Pace the list: decided 2026-11-11 to keep the owner gap `INVITE_LIMITS.gapSeconds` (30 to 90 s), not 5 s. See Outcome.
 - [x] `ALREADY_CONNECTED` already exists in `INVITE_SEND_OUTCOMES` and brain's `inviteRules.ts`, so no contract bump. Deviation from the plan.
 - [x] Parse `Message` with no Connect as `ALREADY_CONNECTED` in `inviteReader.ts` (`parseProfileActions`, `messaged`); `sendOne` returns it without a press.
 - [x] Unit tests: Message without Connect gives ALREADY_CONNECTED with no press; a 999 before any press rejects with reason `blocked` and no connect; a 999 after a send gives PARTIAL, no further connect, a warning. Not written: the 404 case and the 5-second pause case.
-- [ ] Cooldown for the later scheduled run: not built. No value was given. Open question, see Outcome.
-- [ ] Update `MEMORY.md` and the Outcome section; run the definition of done (done locally, passed; the commit is not yet made).
+- [x] Cooldown: decided 2026-11-11, no fixed cooldown. The next scheduled run after a block retries "until something runs again". No code.
+- [x] Update `MEMORY.md` and the Outcome section; run the definition of done.
 
 
 ## Edge cases and risks
@@ -71,19 +71,14 @@ Open questions: none. Decided by the user on 2026-11-11:
 
 ## Outcome
 
-Status stays `in progress` until the user answers the open questions below.
-
-Shipped (uncommitted until the user confirms the commit): a `blocked` `VisitError` for HTTP 429 and 999 (`SiteRefused` in `scraping/errors.ts`, mapped in `tasks/runner.ts`); a `Message` link with no Connect becomes `ALREADY_CONNECTED` with no press (`inviteReader.ts`, `linkedinInvite/run.ts`); unit tests as above. Definition of done passed locally: `pnpm lint`, `pnpm ts:check`, `pnpm test:unit:run` (brain 1867, spider 1429) and `pnpm build`. Not run on staging.
+Shipped: a `blocked` `VisitError` for HTTP 429 and 999 (`SiteRefused` in `scraping/errors.ts`, mapped in `tasks/runner.ts`); a `Message` link with no Connect becomes `ALREADY_CONNECTED` with no press (`inviteReader.ts`, `linkedinInvite/run.ts`); unit tests as above. Definition of done passed locally: `pnpm lint`, `pnpm ts:check`, `pnpm test:unit:run` (brain 1867, spider 1429) and `pnpm build`. Not run on staging.
 
 Deviations from the plan:
-- Pacing: the plan says 5 s after each invite. The owner gap is 30 to 90 s (`INVITE_LIMITS.gapSeconds`, shared with brain). Kept as is.
-- Cooldown: no cooldown exists. A retry happens at the next scheduled run, which may hit the block again.
+- Pacing: the plan said 5 s after each invite. The user chose to keep the owner gap of 30 to 90 s (`INVITE_LIMITS.gapSeconds`, shared with brain).
+- Cooldown: the user chose no fixed cooldown. The next scheduled run after a block retries; it may hit the block again.
 - `ALREADY_CONNECTED` needed no contract change.
 - Remaining invites are not marked `NOT_ATTEMPTED`; they stay queued.
 
-Open questions:
-- Pacing: keep 30 to 90 s between invites (recommended), or 5 s?
-- Cooldown: how long a later run waits after a block?
-- Casey Copeland and Chase Lacewell: are they 1st-degree connections? A profile with Message and no Connect may also be a non-connection on some layouts.
+Not verified: Casey Copeland and Chase Lacewell are assumed to be 1st-degree connections. A profile with Message and no Connect may also be a non-connection on some layouts; the user accepted this risk.
 
-Cause of the 999 (proxy exit, request rate or session) is unknown.
+Cause of the 999 (proxy exit, request rate or session) is unknown. Staging check after deploy: one invite job with a block should show `ERROR` with the block recorded and the rest queued.
