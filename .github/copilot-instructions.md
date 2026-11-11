@@ -8,6 +8,7 @@ LinkedIn outreach automation, built as a pnpm + Turborepo monorepo. Keep answers
 - When a task is done, update `MEMORY.md` before you finish: add new decisions, gotchas, or open items, remove or fix entries that are now wrong, and add one changelog line. Skip it only if nothing durable changed.
 - Keep entries short and factual. Never write secrets, tokens, or the git remote URL into it.
 - This applies to every custom agent too. Do not create other documentation files to record this; use `MEMORY.md`.
+- always claude, find the implicit state machines in my code and writing the code or all the changed code
 
 ## Planning workflow (always, for non-trivial tasks)
 
