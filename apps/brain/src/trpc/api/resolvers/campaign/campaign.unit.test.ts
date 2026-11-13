@@ -66,6 +66,17 @@ describe('campaign insights resolver', () => {
       expect(mocks.insights).toHaveBeenCalledWith('u1', 'c1', '30d')
    })
 
+   it('should pass the all time period through to the service', async () => {
+      mocks.insights.mockResolvedValueOnce({ state: 'empty' })
+
+      await caller().insights({
+         id: 'c1',
+         period: 'all',
+      })
+
+      expect(mocks.insights).toHaveBeenCalledWith('u1', 'c1', 'all')
+   })
+
    it('should default to the 7 day period', async () => {
       mocks.insights.mockResolvedValueOnce({ state: 'empty' })
 

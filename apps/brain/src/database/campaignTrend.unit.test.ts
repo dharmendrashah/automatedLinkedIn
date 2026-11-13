@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import type { CampaignCounts, CampaignTrendDay } from '@automatedLinkedIn/contracts'
+import { CAMPAIGN_TREND_ALL_DAYS, type CampaignCounts, type CampaignTrendDay } from '@automatedLinkedIn/contracts'
 
 import {
+   allTimeDays,
    cutoffOf,
    dayKeyOf,
    gateOf,
@@ -256,5 +257,20 @@ describe('campaignTrend', () => {
          status: 'hidden',
          reason: 'walletLow',
       })
+   })
+
+   it('should run an all time range from the first day to today, oldest first', () => {
+      expect(allTimeDays('2026-11-10', NOW)).toEqual(['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13'])
+   })
+
+   it('should cap an all time range at the yearly limit', () => {
+      const days = allTimeDays('2020-01-01', NOW)
+
+      expect(days).toHaveLength(CAMPAIGN_TREND_ALL_DAYS)
+      expect(days.at(-1)).toBe(dayKeyOf(NOW))
+   })
+
+   it('should still return today when the first day is in the future', () => {
+      expect(allTimeDays('2026-11-20', NOW)).toEqual(['2026-11-13'])
    })
 })

@@ -1,4 +1,5 @@
 import {
+   CAMPAIGN_TREND_ALL_DAYS,
    CAMPAIGN_TREND_GATE,
    type CampaignCounts,
    type CampaignInsights,
@@ -31,6 +32,12 @@ export const cutoffOf = (now: Date) => dayKeyOf(new Date(now.getTime() - INCOMPL
 // `count` days ending today, oldest first.
 export const historyDays = (count: number, now: Date) =>
    Array.from({ length: count }, (_, index) => dayKeyOf(new Date(now.getTime() - (count - 1 - index) * DAY_MS)))
+
+// From `firstDay` to today, oldest first, capped at CAMPAIGN_TREND_ALL_DAYS so the query stays bounded.
+export const allTimeDays = (firstDay: string, now: Date) => {
+   const span = Math.round((Date.parse(dayKeyOf(now)) - Date.parse(firstDay)) / DAY_MS) + 1
+   return historyDays(Math.min(Math.max(span, 1), CAMPAIGN_TREND_ALL_DAYS), now)
+}
 
 // The latest complete days the gate looks at, oldest first.
 export const windowDays = (now: Date) => historyDays(WINDOW_DAYS, new Date(now.getTime() - INCOMPLETE_DAYS * DAY_MS))

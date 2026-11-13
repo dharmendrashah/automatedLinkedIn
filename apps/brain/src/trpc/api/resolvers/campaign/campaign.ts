@@ -14,6 +14,7 @@ import {
    type AutomationId,
    CAMPAIGN_PERIODS,
    CAMPAIGN_STAGES,
+   CAMPAIGN_TREND_PERIODS,
    automationAnswersSchema,
    campaignInputSchema,
    isAutomationId,
@@ -56,7 +57,7 @@ export const campaign = router({
       .input(
          z.object({
             id,
-            period: z.enum(['7d', '30d']).default('7d'),
+            period: z.enum(CAMPAIGN_TREND_PERIODS).default('7d'),
          })
       )
       .query(async ({ ctx, input }) =>

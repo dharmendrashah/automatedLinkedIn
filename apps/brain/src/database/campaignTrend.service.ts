@@ -2,12 +2,14 @@ import type {
    CampaignCapacityMissing,
    CampaignCounts,
    CampaignInsights,
+   CampaignTrendPeriod,
    CampaignTrendState,
 } from '@automatedLinkedIn/contracts'
 
 import { CampaignStatsService } from './campaignStats.service'
 import {
    type TrendContext,
+   allTimeDays,
    cutoffOf,
    dayKeyOf,
    gateOf,
@@ -27,9 +29,7 @@ import { WalletService } from './wallet.service'
 
 // The trend of a campaign for the campaign page (.plan/campaign-detail-insights.md). Read only; the pure rules live in campaignTrend.ts.
 
-export type InsightsPeriod = '7d' | '30d'
-
-const PERIOD_DAYS: Record<InsightsPeriod, number> = {
+const PERIOD_DAYS: Record<Exclude<CampaignTrendPeriod, 'all'>, number> = {
    '7d': 7,
    '30d': 30,
 }
@@ -38,7 +38,7 @@ export class CampaignTrendService {
    public static async insights(
       userId: string,
       campaignId: string,
-      period: InsightsPeriod,
+      period: CampaignTrendPeriod,
       now = new Date()
    ): Promise<CampaignInsights | null> {
       const db = PrismaService.client
@@ -134,7 +134,12 @@ export class CampaignTrendService {
       const anyNonZero = Object.values(dayTotals._sum).some(total => (total ?? 0) > 0)
       const empty = liveFound === 0 && liveInvited === 0 && !anyNonZero
 
-      const days = historyDays(PERIOD_DAYS[period], now)
+      const creationDay = dayKeyOf(campaign.createdAt)
+      const firstRow = dayTotals._min.day ?? creationDay
+      const days =
+         period === 'all'
+            ? allTimeDays(firstRow < creationDay ? firstRow : creationDay, now)
+            : historyDays(PERIOD_DAYS[period], now)
       const window = windowDays(now)
       const from = days[0] < window[0] ? days[0] : window[0]
       const dayRows = await db.campaignDay.findMany({
@@ -153,9 +158,9 @@ export class CampaignTrendService {
          },
       })
 
-      const since = sinceOf(dayKeyOf(campaign.createdAt), hasRows ? dayTotals._min.day : null)
+      const since = sinceOf(creationDay, hasRows ? dayTotals._min.day : null)
       const context: TrendContext = {
-         creationDay: dayKeyOf(campaign.createdAt),
+         creationDay,
          since,
          cutoff: cutoffOf(now),
          rows: new Map(dayRows.map(({ day, ...counts }): [string, CampaignCounts] => [day, counts])),

@@ -31,6 +31,13 @@ export const CAMPAIGN_PERIODS = ['today', '7d', '30d'] as const
 
 export type CampaignPeriod = (typeof CAMPAIGN_PERIODS)[number]
 
+// The trend chart periods. `all` runs back to the campaign's first day, capped (see CAMPAIGN_TREND_ALL_DAYS).
+export const CAMPAIGN_TREND_PERIODS = ['7d', '30d', 'all'] as const
+
+export type CampaignTrendPeriod = (typeof CAMPAIGN_TREND_PERIODS)[number]
+
+export const CAMPAIGN_TREND_ALL_DAYS = 365
+
 export const CAMPAIGN_LIMITS = {
    nameMax: 60,
    // The most campaigns an owner keeps.
