@@ -5,6 +5,7 @@ import {
    CampaignService,
    CampaignStarterService,
    CampaignStatsService,
+   CampaignTrendService,
    FleetHealthService,
 } from 'database'
 
@@ -48,6 +49,18 @@ export const campaign = router({
       )
       .query(async ({ ctx, input }) =>
          present(await CampaignStatsService.overview(ctx.user.id, input.id, input.period), MISSING)
+      ),
+
+   // Trend, gate, capacity and projection for the campaign page; Today shows the live funnel only, so it is not offered here.
+   insights: ownerProcedure
+      .input(
+         z.object({
+            id,
+            period: z.enum(['7d', '30d']).default('7d'),
+         })
+      )
+      .query(async ({ ctx, input }) =>
+         present(await CampaignTrendService.insights(ctx.user.id, input.id, input.period), MISSING)
       ),
 
    // Puts a workflow in a campaign (or in none) at a stage.

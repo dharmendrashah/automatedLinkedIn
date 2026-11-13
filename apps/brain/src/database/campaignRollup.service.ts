@@ -7,7 +7,7 @@ import { PrismaService } from './prisma.service'
 const DAY_MS = 24 * 60 * 60 * 1000
 const DAYS_REWRITTEN = 2
 
-const dayOf = (date: Date) => date.toISOString().slice(0, 10)
+export const dayOf = (date: Date) => date.toISOString().slice(0, 10)
 
 export class CampaignRollupService {
    public static async run(now = new Date()) {

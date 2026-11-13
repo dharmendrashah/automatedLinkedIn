@@ -21,12 +21,15 @@ import {
    isSmallSample,
    rateOf,
 } from '@automatedLinkedIn/contracts'
-import { useState } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
-
 import { trpc } from '../trpc'
 
+// The insights panel carries recharts, so it loads with its own chunk.
+const CampaignInsightsPanel = lazy(() =>
+   import('@/components/campaigns/campaign-insights-panel').then(({ CampaignInsightsPanel: panel }) => ({ default: panel }))
+)
 const PERIOD_LABELS: Record<CampaignPeriod, string> = {
    today: 'Today',
    '7d': '7 days',
@@ -68,6 +71,11 @@ export const Campaign = () => {
    const [stopQueued, setStopQueued] = useState(false)
    const [line, setLine] = useState(60)
    const page = trpc.campaign.overview.useQuery({ id, period }, { retry: false })
+   // The trend has no Today view, so the query is off there and the period sent is a placeholder.
+   const insights = trpc.campaign.insights.useQuery(
+      { id, period: period === 'today' ? '7d' : period },
+      { enabled: period !== 'today', retry: false }
+   )
    const refresh = () => utils.campaign.overview.invalidate({ id })
    const pause = trpc.campaign.pause.useMutation({
       onSuccess: async () => {
@@ -104,6 +112,17 @@ export const Campaign = () => {
    const passing = histogram.slice(Math.floor(line / 10)).reduce((sum, count) => sum + count, 0)
    const filters = encodeURIComponent(JSON.stringify({ labels: [campaign.label] }))
 
+   const renderInsights = () => {
+      if (period === 'today') return null
+      if (insights.isPending) return <Skeleton className="h-64 w-full rounded-xl" />
+      if (insights.error) return <p className="text-destructive text-sm">{insights.error.message}</p>
+      return insights.data ? (
+         <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+            <CampaignInsightsPanel insights={insights.data} period={period} campaignLabel={campaign.label} />
+         </Suspense>
+      ) : null
+   }
+
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
          <div className="flex flex-wrap items-center justify-between gap-3">
@@ -134,6 +153,8 @@ export const Campaign = () => {
                )}
             </div>
          </div>
+
+         {renderInsights()}
 
          <section className="grid gap-2 rounded-xl border px-4 py-3">
             <h3 className="text-sm font-medium">Needs you</h3>
@@ -177,7 +198,7 @@ export const Campaign = () => {
                   </span>
                ))}
             </div>
-            {funnel.found === 0 && funnel.invited === 0 && lastDiscoverRun === null ? (
+            {period === 'today' && funnel.found === 0 && funnel.invited === 0 && lastDiscoverRun === null ? (
                <p className="text-muted-foreground text-xs">Nothing yet. Invites start after Discover runs.</p>
             ) : null}
             <Compare

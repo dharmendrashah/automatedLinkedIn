@@ -463,4 +463,36 @@ describe('LinkedInInviteService (database)', () => {
       expect((await invitesOf('zed-n'))[0]).toMatchObject({ state: 'CANCELLED' })
       expect((await invitesOf('yan-q'))[0]).toMatchObject({ state: 'WITHDRAW_QUEUED' })
    })
+
+   it('should count only the signed-in, not stopped accounts as usable capacity', async () => {
+      const now = new Date()
+      const account = (
+         email: string,
+         data: Partial<{ status: 'ACTIVE' | 'NEEDS_REAUTH'; invitesStoppedAt: Date; invitesStopUntil: Date }>
+      ) =>
+         db.linkedInAccount.create({
+            data: {
+               userId: otherUserId,
+               email,
+               secret: 'x',
+               secretIv: 'x',
+               secretTag: 'x',
+               status: 'ACTIVE',
+               lastVerifiedAt: now,
+               ...data,
+            },
+         })
+      const usable = await account(`${randomUUID()}@example.com`, {})
+      await account(`${randomUUID()}@example.com`, {
+         invitesStoppedAt: now,
+         invitesStopUntil: new Date(now.getTime() + 86_400_000),
+      })
+      await account(`${randomUUID()}@example.com`, { status: 'NEEDS_REAUTH' })
+
+      expect(await LinkedInInviteService.usableCapacityOf(otherUserId, now)).toEqual({
+         perDay: limitOf('invitesPerDay', usable.id, now, 'UTC'),
+         perWeek: limitOf('invitesPerWeek', usable.id, now, 'UTC'),
+         usableAccounts: 1,
+      })
+   })
 })
