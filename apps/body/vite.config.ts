@@ -25,6 +25,8 @@ export default defineConfig({
    resolve: {
       alias: {
          '@': path.resolve(import.meta.dirname, 'src'),
+         // Contracts' dist is CommonJS for brain; the body needs its ES source to get named exports in dev.
+         '@automatedLinkedIn/contracts': path.resolve(import.meta.dirname, '../../packages/contracts/src/index.ts'),
       },
    },
    server: {

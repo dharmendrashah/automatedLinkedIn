@@ -270,6 +270,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - The elitale.com organisation enforces domain restricted sharing (`iam.allowedPolicyMemberDomains`, customer `C049im8al`): granting `allUsers` answers `412 ... do not belong to a permitted customer`. The only exception is a project-level policy that allows all for resources tagged `public-access=allowed` (`matchTagId`, ids in `deploy/gcp-setup.md`); only `gs://automate-linkedin-511215-cdn` carries that tag. Never tag another resource with it. `gcloud storage buckets create --public-access-prevention` is a switch (no value): passing it enforces prevention.
 
 - A LinkedIn 999 (or 429) on a profile visit is a block, not a page load error: `CamoufoxDriver.goto` throws `SiteRefused`, `runner.visit` maps it to `VisitError('blocked')`, and `ensureSignedIn` / `openFeed` do not treat it as a load failure, so a block never starts a re-login (`tasks/runner.ts`, `tasks/ensureSignedIn.ts`).
+- `packages/contracts` `dist` is CJS only (brain needs it). The body dev server aliases `@automatedLinkedIn/contracts` to `src/index.ts` (`apps/body/vite.config.ts`), so contracts source must stay browser-safe: no `node:` imports. `receivedKey` (node `createHash`) lives in `apps/spider/src/storage/receivedKey.ts`. A node import in contracts passes `vite build` (tree-shaken) but breaks `vite dev`.
 - On a LinkedIn profile, a Message link with no Connect can mean a 1st-degree connection (`inviteReader.ts` `messaged`), but suggested people's Message links are named `Send a message to <name>`; the profile's own Message link is unnamed (`markup.ts` `PROFILE_MESSAGE`). Test the fixture with `messaged` opt-in (`inviteFixture.ts`).
 
 ## Open items
@@ -327,6 +328,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - Logging (`.plan/plan.md`, open): the code is done; the staging checks (G7 event, Cloud Run stdout line, dry-run counts) and the staging overhead are not run. The devtools CLI stays on `console` by decision. The brain result schema (`taskResultSchema`) is strict and has `correlation_id`: deploy brain before spider, and roll back spider before brain. Render errors (`reportError`) still have no request ID.
 
 ## Changelog
+
+- 2026-11-13: Body dev fix (`.plan/body-dev-contracts-source.md`): contracts loads from source in the body dev server (alias in `apps/body/vite.config.ts`), and `receivedKey` moved from contracts to spider because `node:crypto` broke the browser in dev. Verified: full chain passes and the dev server serves contracts source; the signed-in drafts screen was not opened.
 
 - 2026-11-13: Campaign insights (`.plan/campaign-detail-insights.md`, uncommitted on `main`): `campaign.insights` (7d or 30d only) reads `CampaignDay` and live invite data; the trend shows only after the gate (14 complete UTC days, 20 invites in them), Today shows the live funnel only. The panel is lazy-loaded, so `index` dropped to 624.68 kB. Not run on staging yet (EXPLAIN ANALYZE and real-path check are open in the plan).
 
