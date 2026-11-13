@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="930" viewBox="0 0 1200 930" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+  <title>Campaign detail, empty state wireframe (illustrative values)</title>
+  <rect width="1200" height="930" fill="#f8fafc"/>
+
+  <!-- Header card -->
+  <rect x="40" y="30" width="1120" height="96" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="64" y="72" font-size="22" font-weight="600" fill="#0f172a">Campaign "test"</text>
+  <rect x="64" y="84" width="74" height="24" rx="12" fill="#dcfce7"/>
+  <text x="76" y="101" font-size="12" fill="#166534">Running</text>
+  <text x="152" y="101" font-size="12" fill="#64748b">Updated 21:10</text>
+  <rect x="740" y="50" width="250" height="36" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+  <rect x="740" y="50" width="84" height="36" rx="8" fill="#f1f5f9"/>
+  <text x="764" y="73" font-size="13" fill="#0f172a">Today</text>
+  <text x="850" y="73" font-size="13" fill="#64748b">7d</text>
+  <text x="916" y="73" font-size="13" fill="#64748b">30d</text>
+  <rect x="1008" y="50" width="120" height="36" rx="8" fill="#0f172a"/>
+  <text x="1040" y="73" font-size="13" font-weight="500" fill="#ffffff">Pause</text>
+
+  <!-- Empty card: what the accounts can reach -->
+  <rect x="40" y="150" width="1120" height="352" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <circle cx="82" cy="190" r="18" fill="#e0e7ff"/>
+  <circle cx="82" cy="190" r="6" fill="#4338ca"/>
+  <text x="112" y="196" font-size="18" font-weight="600" fill="#0f172a">What your accounts can reach</text>
+  <text x="112" y="220" font-size="14" fill="#64748b">Nothing found yet. This is the daily capacity the connected accounts can give this campaign.</text>
+
+  <rect x="64" y="244" width="340" height="88" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="84" y="270" font-size="12" fill="#64748b">Invites per day</text>
+  <text x="84" y="306" font-size="28" font-weight="600" fill="#0f172a">12</text>
+  <rect x="424" y="244" width="340" height="88" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="444" y="270" font-size="12" fill="#64748b">Invites per week</text>
+  <text x="444" y="306" font-size="28" font-weight="600" fill="#0f172a">84</text>
+  <rect x="784" y="244" width="340" height="88" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="804" y="270" font-size="12" fill="#64748b">Usable accounts</text>
+  <text x="804" y="306" font-size="28" font-weight="600" fill="#0f172a">2</text>
+
+  <text x="64" y="364" font-size="14" font-weight="600" fill="#0f172a">Setup checklist</text>
+  <circle cx="72" cy="388" r="6" fill="#16a34a"/>
+  <text x="90" y="392" font-size="14" fill="#0f172a">Connect a LinkedIn account</text>
+  <rect x="980" y="376" width="128" height="26" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="1006" y="393" font-size="12" fill="#0f172a">Done</text>
+  <circle cx="72" cy="424" r="6" fill="#d97706"/>
+  <text x="90" y="428" font-size="14" fill="#0f172a">Add a workflow to this campaign</text>
+  <rect x="980" y="412" width="128" height="26" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="1008" y="429" font-size="12" fill="#0f172a">Open</text>
+  <circle cx="72" cy="460" r="6" fill="#d97706"/>
+  <text x="90" y="464" font-size="14" fill="#0f172a">Run Discover once</text>
+  <rect x="980" y="448" width="128" height="26" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="1008" y="465" font-size="12" fill="#0f172a">Open</text>
+
+  <!-- Alert -->
+  <rect x="40" y="524" width="1120" height="56" rx="10" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="64" y="557" font-size="14" fill="#1e3a8a">Invites start after Discover runs. Trend and projection appear after 14 complete days with 20 invites.</text>
+
+  <!-- Live funnel tiles -->
+  <text x="40" y="614" font-size="14" font-weight="600" fill="#0f172a">Funnel (live)</text>
+  <rect x="40" y="628" width="126" height="84" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="182" y="628" width="126" height="84" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="324" y="628" width="126" height="84" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="466" y="628" width="126" height="84" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="608" y="628" width="126" height="84" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="750" y="628" width="126" height="84" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="892" y="628" width="126" height="84" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="1034" y="628" width="126" height="84" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="54" y="652" font-size="12" fill="#64748b">Found</text>
+  <text x="196" y="652" font-size="12" fill="#64748b">Qualified</text>
+  <text x="338" y="652" font-size="12" fill="#64748b">Invited</text>
+  <text x="480" y="652" font-size="12" fill="#64748b">Accepted</text>
+  <text x="622" y="652" font-size="12" fill="#64748b">Messaged</text>
+  <text x="764" y="652" font-size="12" fill="#64748b">Replied</text>
+  <text x="906" y="652" font-size="12" fill="#64748b">Silent</text>
+  <text x="1048" y="652" font-size="12" fill="#64748b">Handed over</text>
+  <text x="54" y="692" font-size="24" font-weight="600" fill="#0f172a">0</text>
+  <text x="196" y="692" font-size="24" font-weight="600" fill="#0f172a">0</text>
+  <text x="338" y="692" font-size="24" font-weight="600" fill="#0f172a">0</text>
+  <text x="480" y="692" font-size="24" font-weight="600" fill="#0f172a">0</text>
+  <text x="622" y="692" font-size="24" font-weight="600" fill="#0f172a">0</text>
+  <text x="764" y="692" font-size="24" font-weight="600" fill="#0f172a">0</text>
+  <text x="906" y="692" font-size="24" font-weight="600" fill="#0f172a">0</text>
+  <text x="1048" y="692" font-size="24" font-weight="600" fill="#0f172a">0</text>
+
+  <!-- Lists strip and workflows -->
+  <rect x="40" y="740" width="548" height="130" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="64" y="770" font-size="14" font-weight="600" fill="#0f172a">People lists</text>
+  <text x="64" y="802" font-size="13" fill="#64748b">Qualified 0    Maybe 0    Not yet handled 0</text>
+  <rect x="64" y="822" width="150" height="32" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="80" y="843" font-size="13" fill="#0f172a">Open qualified</text>
+  <rect x="612" y="740" width="548" height="130" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="636" y="770" font-size="14" font-weight="600" fill="#0f172a">Workflows</text>
+  <text x="636" y="802" font-size="13" fill="#64748b">No workflow attached yet.</text>
+  <rect x="636" y="822" width="150" height="32" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="656" y="843" font-size="13" fill="#0f172a">Add workflow</text>
+
+  <text x="40" y="906" font-size="12" fill="#94a3b8">Illustrative wireframe. Values are placeholders, not real campaign data.</text>
+</svg>

@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1190" viewBox="0 0 1200 1190" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+  <title>Campaign detail, full state wireframe (illustrative values)</title>
+  <rect width="1200" height="1190" fill="#f8fafc"/>
+
+  <!-- Header card -->
+  <rect x="40" y="30" width="1120" height="96" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="64" y="72" font-size="22" font-weight="600" fill="#0f172a">Campaign "Founders in Berlin"</text>
+  <rect x="64" y="84" width="74" height="24" rx="12" fill="#dcfce7"/>
+  <text x="76" y="101" font-size="12" fill="#166534">Running</text>
+  <text x="152" y="101" font-size="12" fill="#64748b">Updated 21:10 · last 7 days</text>
+  <rect x="740" y="50" width="250" height="36" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+  <rect x="824" y="50" width="84" height="36" rx="8" fill="#f1f5f9"/>
+  <text x="764" y="73" font-size="13" fill="#64748b">Today</text>
+  <text x="850" y="73" font-size="13" fill="#0f172a">7d</text>
+  <text x="916" y="73" font-size="13" fill="#64748b">30d</text>
+  <rect x="1008" y="50" width="120" height="36" rx="8" fill="#0f172a"/>
+  <text x="1040" y="73" font-size="13" font-weight="500" fill="#ffffff">Pause</text>
+
+  <!-- Summary tiles: 4 tiles, x = 40, 324, 608, 892, width 268 -->
+  <rect x="40" y="150" width="268" height="96" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="60" y="176" font-size="12" fill="#64748b">Found</text>
+  <text x="60" y="216" font-size="28" font-weight="600" fill="#0f172a">248</text>
+  <text x="180" y="216" font-size="12" fill="#64748b">so far</text>
+  <rect x="324" y="150" width="268" height="96" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="344" y="176" font-size="12" fill="#64748b">Qualified</text>
+  <text x="344" y="216" font-size="28" font-weight="600" fill="#0f172a">61</text>
+  <rect x="608" y="150" width="268" height="96" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="628" y="176" font-size="12" fill="#64748b">Invited</text>
+  <text x="628" y="216" font-size="28" font-weight="600" fill="#0f172a">52</text>
+  <rect x="892" y="150" width="268" height="96" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="912" y="176" font-size="12" fill="#64748b">Accepted</text>
+  <text x="912" y="216" font-size="28" font-weight="600" fill="#0f172a">14</text>
+  <rect x="1024" y="196" width="112" height="22" rx="11" fill="#fef3c7"/>
+  <text x="1034" y="211" font-size="11" fill="#92400e">can double count</text>
+
+  <!-- Trend card -->
+  <rect x="40" y="266" width="760" height="300" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="64" y="296" font-size="16" font-weight="600" fill="#0f172a">Daily trend</text>
+  <text x="64" y="316" font-size="12" fill="#64748b">Invited and found per day. A missing day is a gap, not zero.</text>
+  <line x1="80" y1="520" x2="780" y2="520" stroke="#cbd5e1"/>
+  <line x1="80" y1="350" x2="80" y2="520" stroke="#cbd5e1"/>
+  <polyline points="110,470 190,440 270,452 350,410 430,420 510,380" fill="none" stroke="#6366f1" stroke-width="3"/>
+  <polyline points="590,392 670,360 750,350" fill="none" stroke="#6366f1" stroke-width="3"/>
+  <polyline points="110,500 190,490 270,494 350,470 430,474 510,460 590,450 670,438 750,430" fill="none" stroke="#14b8a6" stroke-width="3"/>
+  <line x1="550" y1="350" x2="550" y2="520" stroke="#e2e8f0" stroke-dasharray="4 4"/>
+  <text x="530" y="340" font-size="11" fill="#64748b">no row</text>
+  <rect x="600" y="332" width="10" height="10" fill="#6366f1"/>
+  <text x="616" y="341" font-size="12" fill="#0f172a">Invited</text>
+  <rect x="680" y="332" width="10" height="10" fill="#14b8a6"/>
+  <text x="696" y="341" font-size="12" fill="#0f172a">Found</text>
+
+  <!-- Projection card -->
+  <rect x="816" y="266" width="344" height="300" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="840" y="296" font-size="16" font-weight="600" fill="#0f172a">Next 7 days</text>
+  <text x="840" y="316" font-size="12" fill="#64748b">From 14 complete days, capped by accounts.</text>
+  <text x="840" y="370" font-size="22" font-weight="600" fill="#0f172a">18 to 26 invites</text>
+  <rect x="840" y="394" width="296" height="12" rx="6" fill="#e2e8f0"/>
+  <rect x="880" y="394" width="170" height="12" rx="6" fill="#6366f1"/>
+  <text x="840" y="436" font-size="12" fill="#64748b">Low 18</text>
+  <text x="1136" y="436" font-size="12" fill="#64748b" text-anchor="end">High 26</text>
+  <rect x="840" y="462" width="296" height="48" rx="8" fill="#fef3c7"/>
+  <text x="852" y="482" font-size="12" fill="#92400e">Paused campaigns count in the share.</text>
+
+  <!-- Histogram card: baseline y=800, tallest bar top at y=650 -->
+  <rect x="40" y="586" width="548" height="260" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="64" y="616" font-size="16" font-weight="600" fill="#0f172a">Scores of the people found</text>
+  <rect x="64" y="700" width="36" height="100" fill="#c7d2fe"/>
+  <rect x="112" y="670" width="36" height="130" fill="#c7d2fe"/>
+  <rect x="160" y="650" width="36" height="150" fill="#6366f1"/>
+  <rect x="208" y="690" width="36" height="110" fill="#c7d2fe"/>
+  <rect x="256" y="720" width="36" height="80" fill="#c7d2fe"/>
+  <rect x="304" y="745" width="36" height="55" fill="#c7d2fe"/>
+  <rect x="352" y="765" width="36" height="35" fill="#c7d2fe"/>
+  <line x1="60" y1="800" x2="580" y2="800" stroke="#cbd5e1"/>
+  <text x="64" y="824" font-size="12" fill="#64748b">Score bands, low to high</text>
+  <text x="400" y="824" font-size="12" fill="#0f172a">At or above: 60</text>
+
+  <!-- Who accepts card -->
+  <rect x="612" y="586" width="548" height="260" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="636" y="616" font-size="16" font-weight="600" fill="#0f172a">Who accepts</text>
+  <line x1="636" y1="632" x2="1136" y2="632" stroke="#e2e8f0"/>
+  <text x="636" y="654" font-size="12" fill="#64748b">Group</text>
+  <text x="900" y="654" font-size="12" fill="#64748b">Accept rate</text>
+  <text x="1040" y="654" font-size="12" fill="#64748b">Sample</text>
+  <text x="636" y="690" font-size="14" fill="#0f172a">Fit: strong</text>
+  <text x="900" y="690" font-size="14" fill="#0f172a">38%</text>
+  <rect x="1040" y="676" width="84" height="22" rx="11" fill="#f1f5f9"/>
+  <text x="1054" y="691" font-size="12" fill="#334155">24 people</text>
+  <text x="636" y="726" font-size="14" fill="#0f172a">Fit: partial</text>
+  <text x="900" y="726" font-size="14" fill="#0f172a">14%</text>
+  <rect x="1040" y="712" width="84" height="22" rx="11" fill="#fef3c7"/>
+  <text x="1046" y="727" font-size="12" fill="#92400e">small sample</text>
+  <text x="636" y="762" font-size="14" fill="#0f172a">Account: Alex</text>
+  <text x="900" y="762" font-size="14" fill="#0f172a">31%</text>
+  <rect x="1040" y="748" width="84" height="22" rx="11" fill="#dcfce7"/>
+  <text x="1056" y="763" font-size="12" fill="#166534">HEALTHY</text>
+
+  <!-- Funnel: 8 tiles, x = 40 + i*141, width 128 (ends at 1155) -->
+  <text x="40" y="884" font-size="14" font-weight="600" fill="#0f172a">Funnel (last 7 days)</text>
+  <rect x="40" y="896" width="128" height="78" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="181" y="896" width="128" height="78" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="322" y="896" width="128" height="78" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="463" y="896" width="128" height="78" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="604" y="896" width="128" height="78" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="745" y="896" width="128" height="78" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="886" y="896" width="128" height="78" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="1027" y="896" width="128" height="78" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="54" y="914" font-size="12" fill="#64748b">Found</text>
+  <text x="195" y="914" font-size="12" fill="#64748b">Qualified</text>
+  <text x="336" y="914" font-size="12" fill="#64748b">Invited</text>
+  <text x="477" y="914" font-size="12" fill="#64748b">Accepted</text>
+  <text x="618" y="914" font-size="12" fill="#64748b">Messaged</text>
+  <text x="759" y="914" font-size="12" fill="#64748b">Replied</text>
+  <text x="900" y="914" font-size="12" fill="#64748b">Silent</text>
+  <text x="1041" y="914" font-size="12" fill="#64748b">Handed over</text>
+  <text x="54" y="944" font-size="22" font-weight="600" fill="#0f172a">248</text>
+  <text x="195" y="944" font-size="22" font-weight="600" fill="#0f172a">61</text>
+  <text x="336" y="944" font-size="22" font-weight="600" fill="#0f172a">52</text>
+  <text x="477" y="944" font-size="22" font-weight="600" fill="#0f172a">14</text>
+  <text x="618" y="944" font-size="22" font-weight="600" fill="#0f172a">9</text>
+  <text x="759" y="944" font-size="22" font-weight="600" fill="#0f172a">3</text>
+  <text x="900" y="944" font-size="22" font-weight="600" fill="#0f172a">21</text>
+  <text x="1041" y="944" font-size="22" font-weight="600" fill="#0f172a">6</text>
+  <rect x="54" y="958" width="100" height="5" rx="2.5" fill="#e2e8f0"/>
+  <rect x="54" y="958" width="100" height="5" rx="2.5" fill="#6366f1"/>
+  <rect x="195" y="958" width="100" height="5" rx="2.5" fill="#e2e8f0"/>
+  <rect x="195" y="958" width="25" height="5" rx="2.5" fill="#6366f1"/>
+  <rect x="336" y="958" width="100" height="5" rx="2.5" fill="#e2e8f0"/>
+  <rect x="336" y="958" width="21" height="5" rx="2.5" fill="#6366f1"/>
+
+  <!-- Lists strip -->
+  <rect x="40" y="990" width="1120" height="84" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="64" y="1020" font-size="14" font-weight="600" fill="#0f172a">People lists</text>
+  <text x="64" y="1048" font-size="13" fill="#64748b">Qualified 61   Maybe 44   Not yet handled 12</text>
+  <rect x="800" y="1012" width="150" height="32" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="818" y="1033" font-size="13" fill="#0f172a">Open qualified</text>
+  <rect x="966" y="1012" width="150" height="32" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="984" y="1033" font-size="13" fill="#0f172a">Open maybe</text>
+
+  <text x="40" y="1110" font-size="12" fill="#94a3b8">Illustrative wireframe. Values are placeholders, not real campaign data. Charts are animated only when reduced motion is off.</text>
+</svg>
