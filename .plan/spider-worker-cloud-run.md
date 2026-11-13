@@ -1,6 +1,6 @@
 # Spider worker on Cloud Run (Docker), on demand, off Kubernetes
 
-- Status: locked
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: locked
 - Created: 2026-10-28
 - Locked by user: yes, 2026-10-28 (answers 1 to 11, then A to E)
 

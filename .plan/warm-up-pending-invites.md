@@ -1,6 +1,6 @@
 # Warm-up for people with a pending invite (release preview campaign)
 
-- Status: locked <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: locked <!-- draft | locked | in progress | done -->
 - Created: 2026-11-06
 - Locked by user: yes, 2026-11-06 <!-- change to "yes, <date>" only after the user confirms -->
 - Parent: [release-preview-outreach.md](release-preview-outreach.md)

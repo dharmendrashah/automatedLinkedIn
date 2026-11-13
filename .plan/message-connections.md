@@ -1,6 +1,6 @@
 # Message connections: start a conversation, or continue one, from the Unibox, the Connections page and a workflow block
 
-- Status: locked, in progress (UI and UX first, on the sample source; brain, task and block follow)
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: locked, in progress (UI and UX first, on the sample source; brain, task and block follow)
 - Created: 2026-10-29
 - Locked by user: yes, 2026-10-29 ("lock it and start working on the UI and UX"; the assumed answers 5, 7 and 9 stand; the two people for the recording and the live-send agreement are still needed before steps 0 and 7)
 

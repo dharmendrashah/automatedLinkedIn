@@ -1,6 +1,6 @@
 # Link LinkedIn accounts: approach, study of moaljumaa/linki, and safety requirements
 
-- Status: draft <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: draft <!-- draft | locked | in progress | done -->
 - Created: 2026-10-11
 - Locked by user: no. NO CODE until the decision in D1 is made and this plan is locked.
 

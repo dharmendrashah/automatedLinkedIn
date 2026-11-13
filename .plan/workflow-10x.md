@@ -1,6 +1,6 @@
 # Workflows 10x: results first, live runs, spend control, guided setup
 
-- Status: locked
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: locked
 - Created: 2026-10-18
 - Locked by user: yes, 2026-10-18
 

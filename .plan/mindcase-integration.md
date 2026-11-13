@@ -1,6 +1,6 @@
 # Mindcase: LinkedIn data from an outside API, in its own project
 
-- Status: draft
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: draft
 - Created: 2026-10-14
 - Locked by user: no
 

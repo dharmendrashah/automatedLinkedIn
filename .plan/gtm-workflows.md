@@ -1,6 +1,6 @@
 # GTM workflows: find people who show interest, score them against an ICP, move them into lists
 
-- Status: locked (Phase 1 in progress, see `.plan/gtm-phase-1-lists-icp.md`)
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: locked (Phase 1 in progress, see `.plan/gtm-phase-1-lists-icp.md`)
 - Created: 2026-10-17
 - Locked by user: yes, 2026-10-17
 

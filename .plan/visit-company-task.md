@@ -1,6 +1,6 @@
 # View a company: open a company page, wait 5 seconds, scroll the whole page
 
-- Status: built, waiting for the live run <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: built, waiting for the live run <!-- draft | locked | in progress | done -->
 - Created: 2026-10-24
 - Locked by user: yes, 2026-10-24 (every default of the seven open questions accepted: built even though it alerts nobody by name, saved companies and pasted links, one shared cap of 15 a day with the 30 day rule and a 3 minute gap, task `linkedin-view-company` titled "View a company", wait 5 to 6 s, the profile code made generic, branch `feat/view-company-task` on top of `feat/view-profile-task` which was pushed first as PR #93)
 

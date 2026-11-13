@@ -1,6 +1,6 @@
 # My network: one page to work every profile of the agency's LinkedIn accounts
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-10-30
 - Locked by user: yes, 2026-10-30 ("lock it and work on phase 1")
 - Version: 6. Persona reviews of the `/people` drafts: round 1 Agency Owner 6, GTM Engineer 6, Sales Rep 6, Founder 4, Platform

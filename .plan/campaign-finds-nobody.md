@@ -1,6 +1,6 @@
 # Campaign finds nobody (Discover never reaches the label)
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress <!-- draft | locked | in progress | done -->
 - Author: Dharmendra Soni
 - Created: 2026-11-10
 - Locked by user: yes, 2026-11-10 <!-- change to "yes, <date>" only after the user confirms -->

@@ -1,6 +1,6 @@
 # LinkedIn daily visit: always succeed when LinkedIn can be reached
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-10-28
 - Locked by user: yes, 2026-10-28 for the three requirements below ("plan it and show me the plan and work on it"). The open questions at the end were answered by the defaults written there; the user can change one before the PR is merged.
 

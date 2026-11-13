@@ -1,6 +1,6 @@
 # Takeover at scale
 
-- Status: draft
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: draft
 - Created: 2026-10-16
 - Locked by user: no
 

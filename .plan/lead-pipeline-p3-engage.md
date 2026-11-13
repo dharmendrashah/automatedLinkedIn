@@ -1,6 +1,6 @@
 # Lead pipeline, phase 3: engage (React to post, the engage task, the act queue)
 
-- Status: brain side built; spider task built and unit-tested on 2026-11-06, waiting for the owner's live test and lock (see Outcome)
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: brain side built; spider task built and unit-tested on 2026-11-06, waiting for the owner's live test and lock (see Outcome)
 - Created: 2026-11-03
 - Locked by user: no
 - Parent: [lead-outreach-pipeline.md](lead-outreach-pipeline.md)

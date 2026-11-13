@@ -1,6 +1,6 @@
 # My network: read the connection requests once a day, automatically
 
-- Status: built and tested 2026-10-27; waits for a real run on staging (step 8) and the merge
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: built and tested 2026-10-27; waits for a real run on staging (step 8) and the merge
 - Created: 2026-10-27
 - Locked by user: yes, 2026-10-27
 - Builds on: `.plan/my-network-invitations.md` (the page, the task `linkedin-invitations`, brain tables and job). That plan locked "read on demand only"; this one changes it on the owner's request of 2026-10-27.

@@ -1,6 +1,6 @@
 # Account profile backend: store the read profile, serve the page, read on first visit and on a button
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-10-24
 - Locked by user: yes, 2026-10-24 (every default of the nine open questions accepted; question 9, the live read, still needs the owner's go-ahead at that moment)
 

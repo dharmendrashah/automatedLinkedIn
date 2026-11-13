@@ -1,6 +1,6 @@
 # My network: received connection requests (see them, Accept or Ignore)
 
-- Status: locked; slice 1 (the UI) built and seen in a browser; slice 2 (the task) built, tested against fixtures and a stand-in page, and read-only run live once on tripti.verma (2026-10-27, DONE, 5 requests); no answer has been clicked live yet; slice 3 (brain and the live page) built and tested, not run end to end in a browser against a real account
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: locked; slice 1 (the UI) built and seen in a browser; slice 2 (the task) built, tested against fixtures and a stand-in page, and read-only run live once on tripti.verma (2026-10-27, DONE, 5 requests); no answer has been clicked live yet; slice 3 (brain and the live page) built and tested, not run end to end in a browser against a real account
 - Created: 2026-10-27
 - Locked by user: yes, 2026-10-27 (answers below; photos kept, no deletion policy yet, Start anyway allowed)
 

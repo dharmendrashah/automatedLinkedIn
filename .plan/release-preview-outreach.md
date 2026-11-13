@@ -1,6 +1,6 @@
 # Release preview program: find and onboard 5 qualified users in 2 weeks
 
-- Status: draft <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: draft <!-- draft | locked | in progress | done -->
 - Created: 2026-11-06
 - Locked by user: no <!-- change to "yes, <date>" only after the user confirms -->
 

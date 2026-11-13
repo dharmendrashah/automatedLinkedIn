@@ -1,6 +1,6 @@
 # linkedin-message: slow window gets pressed again and opens duplicate New message windows (#198)
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-11-05
 - Locked by user: yes, 2026-11-05
 

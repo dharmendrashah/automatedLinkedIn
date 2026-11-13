@@ -1,6 +1,6 @@
 # LinkedIn messages: one run for the whole inbox, no refresh, only new messages after that
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-10-29
 - Locked by user: yes, 2026-10-29, for Q1, Q2, Q4 and the sweep answer below (all the recommended options). Q3 (pace) was not asked; the default stands until the user says otherwise.
 

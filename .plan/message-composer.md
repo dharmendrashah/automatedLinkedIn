@@ -1,6 +1,6 @@
 # Message composer: variables, spintax and sample templates for invites, messages and replies
 
-- Status: locked
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: locked
 - Created: 2026-11-03
 - Locked by user: yes, 2026-11-03 (same branch and PR #181, new commits)
 

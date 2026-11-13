@@ -1,6 +1,6 @@
 # Scheduler architecture: scheduling at scale, with as little code per use case as possible
 
-- Status: draft, on hold (2026-10-14: the owner finds it over-engineered for now, to be revisited) <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: draft, on hold (2026-10-14: the owner finds it over-engineered for now, to be revisited) <!-- draft | locked | in progress | done -->
 - Created: 2026-10-14
 - Locked by user: no <!-- change to "yes, <date>" only after the user confirms -->
 

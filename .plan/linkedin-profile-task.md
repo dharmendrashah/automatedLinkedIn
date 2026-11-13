@@ -1,6 +1,6 @@
 # Spider task `linkedin-profile`: read an account's own profile
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-10-24
 - Locked by user: yes, 2026-10-24 ("all defaults are fine": the two steps, all detail pages up to 14 loads, suggestions and recommenders read as shown and never opened, analytics read, 10 posts and 10 comments, no schedule, recordings as for messages, synthetic fixtures only)
 
