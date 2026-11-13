@@ -5,7 +5,6 @@ import {
    type TaskCommand,
    type TaskResult,
    type TaskStarted,
-   receivedKey,
    runPrefix,
    taskResultSchema,
 } from '@automatedLinkedIn/contracts'
@@ -28,6 +27,7 @@ import { type HostRateLimiter } from '../scraping/rateLimiter'
 import { type RobotsGuard } from '../scraping/robots'
 import { type ProfileCheckout, type Profiles } from '../sessions/profiles'
 import { type SessionVault } from '../sessions/sessionVault'
+import { receivedKey } from '../storage/receivedKey'
 import { ObjectNotFoundError, type ObjectStore } from '../storage/store'
 import { type Handover } from '../takeover/waitForOwner'
 import { type Credentials } from './credentials'
