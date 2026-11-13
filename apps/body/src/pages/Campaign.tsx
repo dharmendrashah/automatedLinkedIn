@@ -1,5 +1,9 @@
-import { Button } from '@/components/ui/button'
+import { CampaignFunnel } from '@/components/campaigns/campaign-funnel'
+import { CampaignSummaryTiles } from '@/components/campaigns/campaign-summary-tiles'
 import { GoLive } from '@/components/campaigns/go-live'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
    Dialog,
@@ -11,22 +15,40 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { readableError } from '@/lib/trpc-error'
+import { keepPreviousData } from '@tanstack/react-query'
+import { ArrowLeft, LayoutDashboard, Pause, Play, UserRound, Users, Workflow } from 'lucide-react'
+import { Suspense, lazy, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router'
+import { toast } from 'sonner'
+
 import {
    CAMPAIGN_PERIODS,
    type CampaignPeriod,
+   type CampaignTrendPeriod,
    HEALTH_WORDS,
    STAGE_LABELS,
    isSmallSample,
    rateOf,
 } from '@automatedLinkedIn/contracts'
-import { useState } from 'react'
-import { Link, useParams } from 'react-router'
-import { toast } from 'sonner'
 
 import { trpc } from '../trpc'
 
+// The insights panel and the histogram carry recharts, so they load with their own chunk.
+const CampaignInsightsPanel = lazy(() =>
+   import('@/components/campaigns/campaign-insights-panel').then(({ CampaignInsightsPanel: panel }) => ({
+      default: panel,
+   }))
+)
+const ScoresHistogram = lazy(() =>
+   import('@/components/campaigns/scores-histogram').then(({ ScoresHistogram: histogramChart }) => ({
+      default: histogramChart,
+   }))
+)
 const PERIOD_LABELS: Record<CampaignPeriod, string> = {
    today: 'Today',
    '7d': '7 days',
@@ -37,6 +59,12 @@ const HEALTH_LABELS: Record<(typeof HEALTH_WORDS)[number], string> = {
    HEALTHY: 'Healthy',
    WARNING: 'Warning',
    PAUSED: 'Paused',
+}
+
+const HEALTH_VARIANTS: Record<(typeof HEALTH_WORDS)[number], 'default' | 'destructive' | 'secondary'> = {
+   HEALTHY: 'default',
+   WARNING: 'destructive',
+   PAUSED: 'secondary',
 }
 
 const percent = (part: number, whole: number) => {
@@ -58,16 +86,58 @@ const Compare = ({ label, one, two }: { label: string; one: Group; two: Group })
 
 type Group = { name: string; invited: number; accepted: number }
 
+const TABS = [
+   { value: 'overview', label: 'Overview', icon: LayoutDashboard },
+   { value: 'people', label: 'People', icon: UserRound },
+   { value: 'accounts', label: 'Accounts', icon: Users },
+   { value: 'workflows', label: 'Workflows', icon: Workflow },
+] as const
+
+type CampaignTab = (typeof TABS)[number]['value']
+
+// Tabs only when the trend is there to read; otherwise every section stacks on one page.
+const TabPanel = ({ value, tabbed, children }: { value: CampaignTab; tabbed: boolean; children: React.ReactNode }) =>
+   tabbed ? (
+      <TabsContent value={value} className="grid gap-4">
+         {children}
+      </TabsContent>
+   ) : (
+      <div className="grid gap-4">{children}</div>
+   )
+
 // The morning screen of a campaign (.plan/lead-pipeline-p5-campaign-page.md): what needs the owner, what the campaign did, and how the
 // accounts are.
 export const Campaign = () => {
    const { id = '' } = useParams()
    const utils = trpc.useUtils()
    const [period, setPeriod] = useState<CampaignPeriod>('7d')
+   const [trendPeriod, setTrendPeriod] = useState<CampaignTrendPeriod>('7d')
    const [pausing, setPausing] = useState(false)
    const [stopQueued, setStopQueued] = useState(false)
    const [line, setLine] = useState(60)
+   const [params, setParams] = useSearchParams()
+   const requestedTab = params.get('tab')
+   const tab = TABS.find(each => each.value === requestedTab)?.value ?? 'overview'
+   const setTab = (next: string) =>
+      setParams(
+         prev => {
+            const copy = new URLSearchParams(prev)
+            copy.set('tab', next)
+            return copy
+         },
+         { replace: true }
+      )
    const page = trpc.campaign.overview.useQuery({ id, period }, { retry: false })
+   // The trend has no Today view, so the query is off there and the period sent is a placeholder.
+   const insights = trpc.campaign.insights.useQuery(
+      { id, period: period === 'today' ? '7d' : period },
+      { enabled: period !== 'today', retry: false }
+   )
+   // The trend card has its own 7 days / 30 days / All time toggle, so it keeps its own query.
+   const trend = trpc.campaign.insights.useQuery(
+      { id, period: trendPeriod },
+      { enabled: period !== 'today', placeholderData: keepPreviousData, retry: false }
+   )
    const refresh = () => utils.campaign.overview.invalidate({ id })
    const pause = trpc.campaign.pause.useMutation({
       onSuccess: async () => {
@@ -91,201 +161,264 @@ export const Campaign = () => {
 
    const { campaign, lastDiscoverRun, funnel, cuts, warmUp, histogram, needsYou, accounts, workflows } = page.data
    const paused = campaign.pausedAt !== null
-   const steps = [
-      ['Found', funnel.found],
-      ['Qualified', funnel.qualified],
-      ['Invited', funnel.invited],
-      ['Accepted', funnel.accepted],
-      ['Messaged', funnel.messaged],
-      ['Replied', funnel.replied],
-      ['Silent', funnel.silent],
-      ['Handed over', funnel.handedOver],
-   ] as const
    const passing = histogram.slice(Math.floor(line / 10)).reduce((sum, count) => sum + count, 0)
    const filters = encodeURIComponent(JSON.stringify({ labels: [campaign.label] }))
+   const tabbed = period !== 'today' && insights.data !== undefined && insights.data.state !== 'empty'
+
+   const renderInsights = () => {
+      if (period === 'today') return null
+      if (insights.isPending) return <Skeleton className="h-64 w-full rounded-xl" />
+      if (insights.error) return <p className="text-destructive text-sm">{insights.error.message}</p>
+      return insights.data ? (
+         <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+            <CampaignInsightsPanel
+               insights={insights.data}
+               trend={{ history: trend.data?.history, period: trendPeriod, onPeriodChange: setTrendPeriod }}
+               campaignLabel={campaign.label}
+            />
+         </Suspense>
+      ) : null
+   }
 
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
-         <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="grid gap-1">
-               <h2 className="text-lg font-semibold">{`Campaign: ${campaign.name}`}</h2>
-               <Link className="text-muted-foreground text-xs underline" to="/campaigns">
-                  All campaigns
-               </Link>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-               <Tabs value={period} onValueChange={next => setPeriod(next as CampaignPeriod)}>
-                  <TabsList>
+         <Card>
+            <CardHeader>
+               <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={paused ? 'secondary' : 'default'}>
+                     {paused ? <Pause aria-hidden /> : <Play aria-hidden />}
+                     {paused ? 'Paused' : 'Running'}
+                  </Badge>
+                  <Link
+                     className="text-muted-foreground inline-flex items-center gap-1 text-xs underline"
+                     to="/campaigns"
+                  >
+                     <ArrowLeft aria-hidden className="size-3" />
+                     All campaigns
+                  </Link>
+               </div>
+               <CardTitle className="text-lg">{campaign.name}</CardTitle>
+               <CardDescription>Campaign: {campaign.label}</CardDescription>
+               <CardAction className="flex flex-wrap items-center gap-3">
+                  <ToggleGroup
+                     type="single"
+                     variant="outline"
+                     value={period}
+                     aria-label="Period"
+                     onValueChange={next => {
+                        if (next) setPeriod(next as CampaignPeriod)
+                     }}
+                  >
                      {CAMPAIGN_PERIODS.map(each => (
-                        <TabsTrigger key={each} value={each}>
+                        <ToggleGroupItem key={each} value={each} aria-label={PERIOD_LABELS[each]}>
                            {PERIOD_LABELS[each]}
-                        </TabsTrigger>
+                        </ToggleGroupItem>
                      ))}
-                  </TabsList>
-               </Tabs>
-               {paused ? (
-                  <Button disabled={resume.isPending} onClick={() => resume.mutate({ id })}>
-                     Paused. Resume
-                  </Button>
-               ) : (
-                  <Button variant="outline" onClick={() => setPausing(true)}>
-                     Pause everything
-                  </Button>
-               )}
-            </div>
-         </div>
+                  </ToggleGroup>
+                  {paused ? (
+                     <Button disabled={resume.isPending} onClick={() => resume.mutate({ id })}>
+                        <Play aria-hidden />
+                        Resume
+                     </Button>
+                  ) : (
+                     <Button variant="outline" onClick={() => setPausing(true)}>
+                        <Pause aria-hidden />
+                        Pause everything
+                     </Button>
+                  )}
+               </CardAction>
+            </CardHeader>
+         </Card>
 
-         <section className="grid gap-2 rounded-xl border px-4 py-3">
-            <h3 className="text-sm font-medium">Needs you</h3>
-            {needsYou.length === 0 ? (
-               <p className="text-muted-foreground text-sm">Nothing.</p>
-            ) : (
-               <ul className="grid gap-1 text-sm">
-                  {needsYou.map(item => (
-                     <li key={`${item.kind}-${item.text}`} className="flex flex-wrap items-center gap-2">
-                        <span>{item.text}</span>
-                        <Button asChild size="sm" variant="outline">
-                           <Link to={item.to}>Open</Link>
-                        </Button>
-                     </li>
+         <CampaignSummaryTiles funnel={funnel} history={insights.data?.history} />
+
+         <Tabs value={tab} onValueChange={setTab} className="grid gap-4">
+            {tabbed ? (
+               <TabsList className="w-full justify-start overflow-x-auto">
+                  {TABS.map(({ value, label, icon: Icon }) => (
+                     <TabsTrigger key={value} value={value}>
+                        <Icon aria-hidden />
+                        {label}
+                     </TabsTrigger>
                   ))}
-               </ul>
-            )}
-         </section>
-
-         <section className="grid gap-1 rounded-xl border px-4 py-3 text-sm">
-            <h3 className="text-sm font-medium">Last Discover run</h3>
-            {lastDiscoverRun === null ? (
-               <p className="text-muted-foreground text-xs">Nothing yet. Discover has not run.</p>
-            ) : lastDiscoverRun.finishedAt === null ? (
-               <p>{`Running since ${new Date(lastDiscoverRun.startedAt).toLocaleString('en-US')}`}</p>
-            ) : (
-               <p>
-                  {`${lastDiscoverRun.status.toLowerCase()}, finished ${new Date(lastDiscoverRun.finishedAt).toLocaleString('en-US')}: ${lastDiscoverRun.qualified} qualified, ${lastDiscoverRun.maybe} maybe.${lastDiscoverRun.message ? ` ${lastDiscoverRun.message}` : ''}`}
-               </p>
-            )}
-         </section>
-
-         <section className="grid gap-2 rounded-xl border px-4 py-3">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-               {steps.map(([label, count], at) => (
-                  <span key={label} className="flex items-center gap-2">
-                     {at > 0 ? <span className="text-muted-foreground">{'\u2192'}</span> : null}
-                     <span>
-                        {label} <span className="font-semibold">{count}</span>
-                     </span>
-                  </span>
-               ))}
-            </div>
-            {funnel.found === 0 && funnel.invited === 0 && lastDiscoverRun === null ? (
-               <p className="text-muted-foreground text-xs">Nothing yet. Invites start after Discover runs.</p>
+               </TabsList>
             ) : null}
-            <Compare
-               label="Notes"
-               one={{ name: 'with a note', ...(cuts.byNote.find(cut => cut.key === 'with') ?? { invited: 0, accepted: 0 }) }}
-               two={{ name: 'without', ...(cuts.byNote.find(cut => cut.key === 'without') ?? { invited: 0, accepted: 0 }) }}
-            />
-            <Compare
-               label="Warm-up"
-               one={{ name: 'with', ...warmUp.warm }}
-               two={{ name: 'control', ...warmUp.control }}
-            />
-            <p className="text-muted-foreground text-xs">
-               A person in two campaigns is counted in each. Invites count from the day the workflow joined.
-            </p>
-         </section>
 
-         <section className="flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 text-sm">
-            <span>{`Handed over in this period: ${funnel.handedOver} people`}</span>
-            <Button asChild size="sm" variant="outline">
-               <Link to={`/network?filters=${filters}`}>Open these people</Link>
-            </Button>
-         </section>
-
-         <section className="grid gap-2 rounded-xl border px-4 py-3">
-            <h3 className="text-sm font-medium">Who accepts</h3>
-            <div className="grid gap-4 md:grid-cols-2">
-               <CutTable title="By fit" rows={cuts.byBand} />
-               <CutTable title="By account" rows={cuts.byAccount} />
-            </div>
-         </section>
-
-         <section className="grid gap-2 rounded-xl border px-4 py-3">
-            <h3 className="text-sm font-medium">Scores of the people found</h3>
-            <div className="flex h-16 items-end gap-1" aria-label="Scores in groups of ten">
-               {histogram.map((count, bucket) => (
-                  <div
-                     key={bucket}
-                     title={`${bucket * 10} to ${bucket * 10 + 9}: ${count}`}
-                     className="bg-primary/70 w-full rounded-sm"
-                     style={{ height: `${Math.max(4, (count / Math.max(...histogram, 1)) * 100)}%` }}
-                  />
-               ))}
-            </div>
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-               <Label htmlFor="score-line">At or above</Label>
-               <input
-                  id="score-line"
-                  type="range"
-                  min={0}
-                  max={90}
-                  step={10}
-                  value={line}
-                  onChange={event => setLine(Number(event.target.value))}
-               />
-               <span>{`${line}: ${passing} people`}</span>
-            </div>
-         </section>
-
-         <section className="grid gap-2 rounded-xl border px-4 py-3">
-            <h3 className="text-sm font-medium">Accounts</h3>
-            {accounts.length === 0 ? (
-               <p className="text-muted-foreground text-sm">No account yet.</p>
-            ) : (
-               <ul className="grid gap-1 text-sm">
-                  {accounts.map(account => (
-                     <li key={account.accountId} className="grid gap-0.5">
-                        <span>
-                           <span className="font-medium">{account.name}</span>{' '}
-                           {HEALTH_LABELS[account.health]}
-                           {account.health === 'PAUSED' ? '' : `, invites ${account.invites.used}/${account.invites.limit} today`}
-                           {`, pending ${account.pending.count.toLocaleString('en-US')} (${Math.round(account.pending.share * 100)} %)`}
-                        </span>
-                        {account.reasons.map(reason => (
-                           <span key={reason} className="text-muted-foreground text-xs">
-                              {reason}
-                           </span>
+            <TabPanel value="overview" tabbed={tabbed}>
+               <section className="grid gap-2 rounded-xl border px-4 py-3">
+                  <h3 className="text-sm font-medium">Needs you</h3>
+                  {needsYou.length === 0 ? (
+                     <p className="text-muted-foreground text-sm">Nothing.</p>
+                  ) : (
+                     <ul className="grid gap-1 text-sm">
+                        {needsYou.map(item => (
+                           <li key={`${item.kind}-${item.text}`} className="flex flex-wrap items-center gap-2">
+                              <span>{item.text}</span>
+                              <Button asChild size="sm" variant="outline">
+                                 <Link to={item.to}>Open</Link>
+                              </Button>
+                           </li>
                         ))}
-                     </li>
-                  ))}
-               </ul>
-            )}
-         </section>
+                     </ul>
+                  )}
+               </section>
 
-         <GoLive workflows={workflows} onChanged={() => void refresh()} />
+               {renderInsights()}
 
-         <section className="grid gap-2 rounded-xl border px-4 py-3">
-            <h3 className="text-sm font-medium">Workflows</h3>
-            {workflows.length === 0 ? (
-               <p className="text-muted-foreground text-sm">
-                  Add workflows to this campaign from their settings.
-               </p>
-            ) : (
-               <ul className="grid gap-1 text-sm">
-                  {workflows.map(workflow => (
-                     <li key={workflow.id} className="flex flex-wrap items-center gap-2">
-                        <Link className="underline" to={`/workflows/${workflow.id}`}>
-                           {workflow.name}
-                        </Link>
-                        <span className="text-muted-foreground">
-                           {`${STAGE_LABELS[workflow.stage]}, ${workflow.enabled ? 'on' : 'off'}`}
-                           {workflow.lastRun ? `, last run ${workflow.lastRun.status.toLowerCase()}` : ''}
-                        </span>
-                     </li>
-                  ))}
-               </ul>
-            )}
-         </section>
+               <section className="grid gap-1 rounded-xl border px-4 py-3 text-sm">
+                  <h3 className="text-sm font-medium">Last Discover run</h3>
+                  {lastDiscoverRun === null ? (
+                     <p className="text-muted-foreground text-xs">Nothing yet. Discover has not run.</p>
+                  ) : lastDiscoverRun.finishedAt === null ? (
+                     <p>{`Running since ${new Date(lastDiscoverRun.startedAt).toLocaleString('en-US')}`}</p>
+                  ) : (
+                     <p>
+                        {`${lastDiscoverRun.status.toLowerCase()}, finished ${new Date(lastDiscoverRun.finishedAt).toLocaleString('en-US')}: ${lastDiscoverRun.qualified} qualified, ${lastDiscoverRun.maybe} maybe.${lastDiscoverRun.message ? ` ${lastDiscoverRun.message}` : ''}`}
+                     </p>
+                  )}
+               </section>
+            </TabPanel>
+
+            <TabPanel value="people" tabbed={tabbed}>
+               <section className="grid gap-2 rounded-xl border px-4 py-3">
+                  <CampaignFunnel funnel={funnel} />
+                  {period === 'today' && funnel.found === 0 && funnel.invited === 0 && lastDiscoverRun === null ? (
+                     <p className="text-muted-foreground text-xs">Nothing yet. Invites start after Discover runs.</p>
+                  ) : null}
+                  <Compare
+                     label="Notes"
+                     one={{
+                        name: 'with a note',
+                        ...(cuts.byNote.find(cut => cut.key === 'with') ?? { invited: 0, accepted: 0 }),
+                     }}
+                     two={{
+                        name: 'without',
+                        ...(cuts.byNote.find(cut => cut.key === 'without') ?? { invited: 0, accepted: 0 }),
+                     }}
+                  />
+                  <Compare
+                     label="Warm-up"
+                     one={{ name: 'with', ...warmUp.warm }}
+                     two={{ name: 'control', ...warmUp.control }}
+                  />
+                  <p className="text-muted-foreground text-xs">
+                     A person in two campaigns is counted in each. Invites count from the day the workflow joined.
+                  </p>
+               </section>
+
+               <section className="flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 text-sm">
+                  <span>Open the people handed over in this period.</span>
+                  <Button asChild size="sm" variant="outline">
+                     <Link to={`/network?filters=${filters}`}>Open these people</Link>
+                  </Button>
+               </section>
+
+               <Card>
+                  <CardHeader>
+                     <CardTitle>Who accepts</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid gap-6 md:grid-cols-2">
+                     <CutTable title="By fit" rows={cuts.byBand} />
+                     <CutTable title="By account" rows={cuts.byAccount} />
+                  </CardContent>
+               </Card>
+
+               <Suspense fallback={<Skeleton className="h-48 w-full" />}>
+                  <ScoresHistogram histogram={histogram} line={line} passing={passing} onLineChange={setLine} />
+               </Suspense>
+            </TabPanel>
+
+            <TabPanel value="accounts" tabbed={tabbed}>
+               <Card>
+                  <CardHeader>
+                     <CardTitle>Accounts</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                     {accounts.length === 0 ? (
+                        <p className="text-muted-foreground text-sm">No account yet.</p>
+                     ) : (
+                        <Table>
+                           <TableHeader>
+                              <TableRow>
+                                 <TableHead>Account</TableHead>
+                                 <TableHead>Health</TableHead>
+                                 <TableHead>Invites today</TableHead>
+                                 <TableHead>Pending</TableHead>
+                              </TableRow>
+                           </TableHeader>
+                           <TableBody>
+                              {accounts.map(account => (
+                                 <TableRow key={account.accountId}>
+                                    <TableCell className="font-medium">{account.name}</TableCell>
+                                    <TableCell>
+                                       <div className="grid gap-1">
+                                          <Badge variant={HEALTH_VARIANTS[account.health]}>
+                                             {HEALTH_LABELS[account.health]}
+                                          </Badge>
+                                          {account.reasons.map(reason => (
+                                             <span key={reason} className="text-muted-foreground text-xs">
+                                                {reason}
+                                             </span>
+                                          ))}
+                                       </div>
+                                    </TableCell>
+                                    <TableCell>
+                                       {account.health === 'PAUSED'
+                                          ? 'Paused'
+                                          : `${account.invites.used}/${account.invites.limit}`}
+                                    </TableCell>
+                                    <TableCell>
+                                       {`${account.pending.count.toLocaleString('en-US')} (${Math.round(account.pending.share * 100)} %)`}
+                                    </TableCell>
+                                 </TableRow>
+                              ))}
+                           </TableBody>
+                        </Table>
+                     )}
+                  </CardContent>
+               </Card>
+            </TabPanel>
+
+            <TabPanel value="workflows" tabbed={tabbed}>
+               <GoLive workflows={workflows} onChanged={() => void refresh()} />
+
+               <Card>
+                  <CardHeader>
+                     <CardTitle className="flex items-center gap-2">
+                        <Workflow aria-hidden className="size-4" />
+                        Workflows
+                     </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                     {workflows.length === 0 ? (
+                        <p className="text-muted-foreground text-sm">
+                           Add workflows to this campaign from their settings.
+                        </p>
+                     ) : (
+                        <ul className="grid gap-2 text-sm">
+                           {workflows.map(workflow => (
+                              <li
+                                 key={workflow.id}
+                                 className="bg-muted/40 flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"
+                              >
+                                 <Link
+                                    className="font-medium underline-offset-4 hover:underline"
+                                    to={`/workflows/${workflow.id}`}
+                                 >
+                                    {workflow.name}
+                                 </Link>
+                                 <span className="text-muted-foreground">
+                                    {`${STAGE_LABELS[workflow.stage]}, ${workflow.enabled ? 'on' : 'off'}`}
+                                    {workflow.lastRun ? `, last run ${workflow.lastRun.status.toLowerCase()}` : ''}
+                                 </span>
+                              </li>
+                           ))}
+                        </ul>
+                     )}
+                  </CardContent>
+               </Card>
+            </TabPanel>
+         </Tabs>
 
          <Dialog open={pausing} onOpenChange={setPausing}>
             <DialogContent>
@@ -317,15 +450,48 @@ export const Campaign = () => {
    )
 }
 
-const CutTable = ({ title, rows }: { title: string; rows: Array<{ key: string; label: string; invited: number; accepted: number }> }) => (
-   <div className="grid gap-1 text-sm">
-      <p className="font-medium">{title}</p>
-      {rows.length === 0 ? <p className="text-muted-foreground">No invites yet.</p> : null}
-      {rows.map(row => (
-         <p key={row.key}>
-            {`${row.label}: ${percent(row.accepted, row.invited)} accepted of ${row.invited}`}
-            {isSmallSample(row.invited) ? <span className="text-muted-foreground"> (small sample)</span> : null}
-         </p>
-      ))}
+const CutTable = ({
+   title,
+   rows,
+}: {
+   title: string
+   rows: Array<{ key: string; label: string; invited: number; accepted: number }>
+}) => (
+   <div className="grid gap-2">
+      <p className="text-sm font-medium">{title}</p>
+      {rows.length === 0 ? (
+         <p className="text-muted-foreground text-sm">No invites yet.</p>
+      ) : (
+         <Table>
+            <TableHeader>
+               <TableRow>
+                  <TableHead>Group</TableHead>
+                  <TableHead className="text-right">Accepted</TableHead>
+                  <TableHead className="text-right">Invited</TableHead>
+               </TableRow>
+            </TableHeader>
+            <TableBody>
+               {rows.map(row => (
+                  <TableRow key={row.key}>
+                     <TableCell>{row.label}</TableCell>
+                     <TableCell className="text-right">{percent(row.accepted, row.invited)}</TableCell>
+                     <TableCell className="text-right">
+                        {row.invited}
+                        {isSmallSample(row.invited) ? (
+                           <Tooltip>
+                              <TooltipTrigger asChild>
+                                 <Badge variant="outline" className="ml-2">
+                                    small sample
+                                 </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>Too few invites to read a rate from.</TooltipContent>
+                           </Tooltip>
+                        ) : null}
+                     </TableCell>
+                  </TableRow>
+               ))}
+            </TableBody>
+         </Table>
+      )}
    </div>
 )

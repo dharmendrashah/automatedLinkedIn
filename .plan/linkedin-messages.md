@@ -1,6 +1,6 @@
 # Read the messages of each LinkedIn account (spider first)
 
-- Status: in progress
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress
 - Created: 2026-10-22
 - Locked by user: yes, 2026-10-22 (answers to Q1 to Q5 below)
 

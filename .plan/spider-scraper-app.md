@@ -1,6 +1,6 @@
 # Spider: asynchronous distributed scraper app (Fastify API + Playwright worker)
 
-- Status: locked
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: locked
 - Created: 2026-10-11
 - Locked by user: yes, 2026-10-11 (Option A, answers below)
 - Superseded in part on 2026-10-12 by `.plan/camoufox-browser.md`: the browser is now Camoufox, fingerprint spoofing is

@@ -1,6 +1,6 @@
 # Browsing time budget per LinkedIn account (safe, moderate, aggressive)
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-10-25
 - Locked by user: yes, 2026-10-25 (answers below; plan only, not built yet)
 

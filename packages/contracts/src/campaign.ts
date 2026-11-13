@@ -31,6 +31,13 @@ export const CAMPAIGN_PERIODS = ['today', '7d', '30d'] as const
 
 export type CampaignPeriod = (typeof CAMPAIGN_PERIODS)[number]
 
+// The trend chart periods. `all` runs back to the campaign's first day, capped (see CAMPAIGN_TREND_ALL_DAYS).
+export const CAMPAIGN_TREND_PERIODS = ['7d', '30d', 'all'] as const
+
+export type CampaignTrendPeriod = (typeof CAMPAIGN_TREND_PERIODS)[number]
+
+export const CAMPAIGN_TREND_ALL_DAYS = 365
+
 export const CAMPAIGN_LIMITS = {
    nameMax: 60,
    // The most campaigns an owner keeps.
@@ -162,4 +169,76 @@ export const acceptDropped = ({
       now !== null &&
       now < before / 2
    )
+}
+
+// The trend shows a projection only after this many complete days with at least this many invites in them.
+export const CAMPAIGN_TREND_GATE = {
+   completeDays: 14,
+   invites: 20,
+} as const
+
+export type CampaignTrendState = 'empty' | 'tooEarly' | 'trend'
+
+export type CampaignCounts = {
+   found: number
+   qualified: number
+   invited: number
+   accepted: number
+   messaged: number
+   replied: number
+}
+
+// A day with no row is never shown as zero: `notStarted` is before the campaign, `beforeHistory` is before `since`,
+// `noData` is a complete day after `since` with no rollup row, `pending` is today or yesterday with no row yet.
+export type CampaignTrendDay =
+   | { day: string; state: 'counted'; counts: CampaignCounts }
+   | { day: string; state: 'notStarted' | 'beforeHistory' | 'noData' | 'pending' }
+
+export type CampaignRange = { low: number; high: number }
+
+export type CampaignProjectionHidden = 'tooEarly' | 'noAccounts' | 'zeroCap' | 'paused' | 'walletLow'
+
+export type CampaignProjection =
+   | { status: 'hidden'; reason: CampaignProjectionHidden }
+   | {
+        status: 'shown'
+        next7: CampaignRange
+        next30: CampaignRange
+        basis: {
+           latestPace: number
+           previousPace: number
+           capacity: { perDay: number; perWeek: number }
+           share: { perDay: number; perWeek: number }
+           shareDenominator: number
+        }
+     }
+
+export type CampaignCapacityMissing = 'noAccounts' | 'noWorkflow' | 'noDiscoverRun'
+
+export type CampaignInsights = {
+   state: CampaignTrendState
+   since: string | null
+   // ISO time of the latest rollup row, null when there is none.
+   updatedAt: string | null
+   history: CampaignTrendDay[]
+   // Only the counts that are safe to add across days: messaged and replied are per-day last-touch values.
+   totals: Pick<CampaignCounts, 'found' | 'qualified' | 'invited' | 'accepted'> & {
+      skippedDays: number
+      sinceApplies: boolean
+   }
+   gate: {
+      completeDays: number
+      missingDays: number
+      invites: number
+      needed: { days: number; invites: number }
+   }
+   projection: CampaignProjection
+   lists: { qualified: number; maybe: number; notYetHandled: number }
+   capacity: {
+      perDay: number
+      perWeek: number
+      usableAccounts: number
+      share: { perDay: number; perWeek: number }
+      missing: CampaignCapacityMissing[]
+   }
 }

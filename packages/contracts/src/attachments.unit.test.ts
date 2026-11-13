@@ -7,7 +7,6 @@ import {
    extensionOf,
    keptPrefix,
    kindOfName,
-   receivedKey,
    replyFileSchema,
    safeFileName,
    sentKey,
@@ -51,15 +50,6 @@ describe('attachments', () => {
 
       expect(keptPrefix('u1', 'a1')).toBe('kept/u1/a1/')
       expect(sentKey('u1', 'a1', upload, 'cv.pdf')).toBe(`kept/u1/a1/sent/${upload}/cv.pdf`)
-   })
-
-   it('should name a received file by its message and place, the same on every read, whatever the message id holds', () => {
-      const key = receivedKey('u1', 'a1', 'urn:li:msg_message:(urn:li:fsd_profile:X,2-abc==)', 0, '../plan.png')
-
-      expect(key).toMatch(/^kept\/u1\/a1\/received\/[0-9a-f]{32}\/0-plan\.png$/)
-      expect(receivedKey('u1', 'a1', 'urn:li:msg_message:(urn:li:fsd_profile:X,2-abc==)', 0, '../plan.png')).toBe(key)
-      expect(receivedKey('u1', 'a1', 'other', 0, 'plan.png')).not.toBe(key)
-      expect(receivedKey('u1', 'a1', 'm', 1, '')).toMatch(/\/1-file$/)
    })
 
    it('should recognise an upload id and a reply file', () => {

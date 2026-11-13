@@ -1,6 +1,6 @@
 # Account Actions: every spider task as a workflow block
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-11-02
 - Locked by user: yes, 2026-11-02 (every answer below, the last three on 2026-11-02: all improvements of Write a post and Reply in a conversation, and no new tasks)
 

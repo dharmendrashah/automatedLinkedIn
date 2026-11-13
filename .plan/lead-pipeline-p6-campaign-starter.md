@@ -1,6 +1,6 @@
 # Lead pipeline, phase 6: Campaign Starter
 
-- Status: built offline (see Outcome)
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: built offline (see Outcome)
 - Created: 2026-11-03
 - Locked by user: no (the owner said: plan it, do not build it)
 - Parent: [lead-outreach-pipeline.md](lead-outreach-pipeline.md)

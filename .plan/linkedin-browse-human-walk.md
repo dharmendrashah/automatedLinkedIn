@@ -1,6 +1,6 @@
 # A daily visit that browses like a person: feed, posts and profiles, back and forth
 
-- Status: locked
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: locked
 - Created: 2026-10-19
 - Locked by user: yes, 2026-10-19 (answers below); the walk code waits for the real page capture (approach step 2)
 

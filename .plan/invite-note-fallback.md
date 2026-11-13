@@ -1,6 +1,6 @@
 # Invite with a note, else without: the free-notes fallback
 
-- Status: in progress (devtools run passed; staging run after deploy)
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress (devtools run passed; staging run after deploy)
 - Created: 2026-10-31
 - Locked by user: yes, 2026-10-31 (answers below)
 

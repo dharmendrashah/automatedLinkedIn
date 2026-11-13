@@ -1,6 +1,6 @@
 # Visit a profile: open any saved profile, wait 5 seconds, scroll the whole page
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-10-24
 - Locked by user: yes, 2026-10-24 (answers: saved profiles and pasted links both; one profile per click; limits 15 a day, never twice in 30 days, 3 minutes between visits; the do-not-contact list is NOT checked; wait 5 to 6 s; the dialog does not promise an alert; the task is called "View someone's profile" (`linkedin-view-profile`); branch from main)
 

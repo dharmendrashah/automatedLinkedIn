@@ -1,6 +1,6 @@
 # Spider devtools: manually browse through a saved proxy and record steps for writing tasks
 
-- Status: locked <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: locked <!-- draft | locked | in progress | done -->
 - Created: 2026-10-15
 - Locked by user: yes, 2026-10-15 (answers recorded under Requirements)
 

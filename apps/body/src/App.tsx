@@ -7,9 +7,6 @@ import { DashboardLayout } from './layouts/DashboardLayout'
 import { PublicLayout } from './layouts/PublicLayout'
 import { Approve } from './pages/Approve'
 import { Callback } from './pages/Callback'
-import { Campaign } from './pages/Campaign'
-import { Campaigns } from './pages/Campaigns'
-import { NewCampaign } from './pages/NewCampaign'
 import { Companies } from './pages/Companies'
 import { HealthStatus } from './pages/HealthStatus'
 import { Icps } from './pages/Icps'
@@ -42,6 +39,11 @@ const AccountProfile = lazy(() =>
 )
 // The post canvas carries the blocks, the preview and the schedule dialog, and is only opened after an account is picked.
 const PostingCanvas = lazy(() => import('./pages/PostingCanvas').then(({ PostingCanvas: page }) => ({ default: page })))
+// The campaign page carries the analytics charts, the funnel and the tabs, and is only opened from the campaigns list.
+const Campaign = lazy(() => import('./pages/Campaign').then(({ Campaign: page }) => ({ default: page })))
+// The campaigns list and the new-campaign form share the campaign tables and cards, and are opened from the same place.
+const Campaigns = lazy(() => import('./pages/Campaigns').then(({ Campaigns: page }) => ({ default: page })))
+const NewCampaign = lazy(() => import('./pages/NewCampaign').then(({ NewCampaign: page }) => ({ default: page })))
 
 const App = () => (
    <Routes>
@@ -136,9 +138,30 @@ const App = () => (
          <Route path="/healthstatus" element={<HealthStatus />} />
          <Route path="/jobs" element={<Jobs />} />
          <Route path="/approve" element={<Approve />} />
-         <Route path="/campaigns" element={<Campaigns />} />
-         <Route path="/campaigns/new" element={<NewCampaign />} />
-         <Route path="/campaigns/:id" element={<Campaign />} />
+         <Route
+            path="/campaigns"
+            element={
+               <Suspense fallback={null}>
+                  <Campaigns />
+               </Suspense>
+            }
+         />
+         <Route
+            path="/campaigns/new"
+            element={
+               <Suspense fallback={null}>
+                  <NewCampaign />
+               </Suspense>
+            }
+         />
+         <Route
+            path="/campaigns/:id"
+            element={
+               <Suspense fallback={null}>
+                  <Campaign />
+               </Suspense>
+            }
+         />
          <Route path="/profile" element={<Profile />} />
       </Route>
    </Routes>

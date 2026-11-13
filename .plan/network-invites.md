@@ -1,6 +1,6 @@
 # My network, phase 2: invites, acceptance, withdraw and the full results line
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-10-30
 - Locked by user: yes, 2026-10-30 (build offline first, record later; hold an invite whose note is refused; P1 to P5 as proposed)
 - Parent: `.plan/network-hub.md` (locked 2026-10-30; sections 3, 4, 5 and phase 2). Branch `feat/network-invites`.

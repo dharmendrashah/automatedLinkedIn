@@ -1,6 +1,6 @@
 # My connections: read an account's connections, then Message and Remove from a page
 
-- Status: built; live checks pending (a read run on a test account, then one real removal when the owner agrees) <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: built; live checks pending (a read run on a test account, then one real removal when the owner agrees) <!-- draft | locked | in progress | done -->
 - Created: 2026-10-28
 - Locked by user: yes, 2026-10-28 (answers below)
 

@@ -1,6 +1,6 @@
 # Visit blocks: say why they are waiting, and stop waiting forever on a blocked task
 
-- Status: built, waiting for a live re-run <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: built, waiting for a live re-run <!-- draft | locked | in progress | done -->
 - Created: 2026-10-25
 - Locked by user: yes, 2026-10-25 (all proposed defaults accepted)
 

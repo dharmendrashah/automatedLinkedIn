@@ -1,6 +1,6 @@
 # Takeover alert
 
-- Status: locked
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: locked
 - Created: 2026-10-16
 - Locked by user: yes, 2026-10-16 ("do this and continue"; the open questions are settled by the defaults in the next section)
 

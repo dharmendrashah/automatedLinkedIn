@@ -1,6 +1,6 @@
 # Lead pipeline: find posts, find engagers, invite, warm up, message, hand off
 
-- Status: ready for the owner's approval (revision 9, 2026-11-04: the twelve finders, all sixteen automations, the nine new blocks N1 to N9, the ranking model and the notification, viewer, feed and mutual reads are confirmed by the owner and carried into phase plans 7 to 10; nothing is built)
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: ready for the owner's approval (revision 9, 2026-11-04: the twelve finders, all sixteen automations, the nine new blocks N1 to N9, the ranking model and the notification, viewer, feed and mutual reads are confirmed by the owner and carried into phase plans 7 to 10; nothing is built)
 - Created: 2026-11-03
 - Locked by user: not yet (the executive plan was approved on 2026-11-04; this revision adds the screens and the block design for approval)
 - Phase plans: [p1 foundations](lead-pipeline-p1-foundations.md), [p2 checks](lead-pipeline-p2-checks.md), [p3 engage](lead-pipeline-p3-engage.md), [p4 words and approval](lead-pipeline-p4-ai-drafts.md), [p5 campaign page](lead-pipeline-p5-campaign-page.md), [p6 campaign starter](lead-pipeline-p6-campaign-starter.md), [p7 ranking](lead-pipeline-p7-ranking.md), [p8 reading blocks](lead-pipeline-p8-reading-blocks.md), [p9 new reads](lead-pipeline-p9-new-reads.md), [p10 automations](lead-pipeline-p10-automations.md)

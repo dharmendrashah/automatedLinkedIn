@@ -118,6 +118,9 @@ export class LinkedInInviteService {
             id: true,
             email: true,
             displayName: true,
+            invitesStoppedAt: true,
+            invitesStopUntil: true,
+            lastVerifiedAt: true,
          },
       })
    }
@@ -1117,6 +1120,19 @@ export class LinkedInInviteService {
       }
 
       return best?.account
+   }
+
+   // Summed daily and weekly invite limits of the accounts that can send now (same rules as dispatch).
+   public static async usableCapacityOf(userId: string, now = new Date()) {
+      const accounts = await this.accountsOf(userId)
+      const open = (await this.notPaused(accounts)).filter(account => !stopped(account, now))
+      const limits = await Promise.all(open.map(({ id }) => this.limitsOf(id, now)))
+
+      return {
+         perDay: limits.reduce((total, { perDay }) => total + perDay, 0),
+         perWeek: limits.reduce((total, { perWeek }) => total + perWeek, 0),
+         usableAccounts: open.length,
+      }
    }
 
    private static skipCounts(facts: Array<{ skip: SkipReason | undefined }>) {

@@ -1,6 +1,6 @@
 # Lead pipeline, phase 4: words and approval (Write words, Ask me first, When I approve, Comment on post, the inbox)
 
-- Status: sub-step 4a (comments) built offline; 4b and 4c not started (see Outcome)
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: sub-step 4a (comments) built offline; 4b and 4c not started (see Outcome)
 - Created: 2026-11-03
 - Locked by user: no
 - Parent: [lead-outreach-pipeline.md](lead-outreach-pipeline.md) (decisions, block design rules, what every block hands on)

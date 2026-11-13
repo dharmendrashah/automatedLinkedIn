@@ -1,6 +1,6 @@
 # Workflow events and hooks: one model for "something happened"
 
-- Status: locked <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: locked <!-- draft | locked | in progress | done -->
 - Created: 2026-11-03
 - Locked by user: yes, 2026-11-03 <!-- change to "yes, <date>" only after the user confirms -->
 

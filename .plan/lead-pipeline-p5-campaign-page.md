@@ -1,6 +1,6 @@
 # Lead pipeline, phase 5: campaign page (the morning screen, funnel, fleet health)
 
-- Status: built offline (see Outcome)
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: built offline (see Outcome)
 - Created: 2026-11-03
 - Locked by user: no
 - Parent: [lead-outreach-pipeline.md](lead-outreach-pipeline.md)

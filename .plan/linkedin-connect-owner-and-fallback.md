@@ -1,6 +1,6 @@
 # LinkedIn Connect: match the person by full name, and fall back to the button
 
-- Status: locked
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: locked
 - Created: 2026-11-11
 - Locked by user: yes, 2026-11-11
 

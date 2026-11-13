@@ -1,6 +1,6 @@
 # Structured logging and correlation IDs across the apps
 
-- Status: in progress
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress
 - Created: 2026-11-08
 - Locked by user: yes, 2026-11-08
 - Design: [.plan/egm/logging_design_draft.md](egm/logging_design_draft.md) (locked 2026-11-08; review rounds 1 to 13 in `.plan/egm/`)

@@ -1,6 +1,6 @@
 # Smart shutdown for the staging environment
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-10-13
 - Locked by user: yes, 2026-10-13 (decisions below). Code can start after the spider log check.
 

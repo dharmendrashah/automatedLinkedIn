@@ -1,6 +1,6 @@
 # Logic blocks: Wait, Task result (yes or no) and Retry, for every block
 
-- Status: built, waiting for the live run <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: built, waiting for the live run <!-- draft | locked | in progress | done -->
 - Created: 2026-10-25
 - Locked by user: yes, 2026-10-25 (answers below)
 

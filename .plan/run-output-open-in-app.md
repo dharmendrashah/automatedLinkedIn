@@ -1,6 +1,6 @@
 # Run output rows open the app's own pages
 
-- Status: in progress <!-- draft | locked | in progress | done -->
+- Status: rejected (2026-11-13, not done; owner asked to focus only on campaign-detail-insights). Was: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-11-08
 - Locked by user: yes, 2026-11-08 (author approved the design draft, option B for `/network`)
 
