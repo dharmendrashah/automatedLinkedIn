@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { readableError } from '@/lib/trpc-error'
+import { keepPreviousData } from '@tanstack/react-query'
 import { ArrowLeft, LayoutDashboard, Pause, Play, UserRound, Users, Workflow } from 'lucide-react'
 import { Suspense, lazy, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
@@ -28,6 +29,7 @@ import { toast } from 'sonner'
 import {
    CAMPAIGN_PERIODS,
    type CampaignPeriod,
+   type CampaignTrendPeriod,
    HEALTH_WORDS,
    STAGE_LABELS,
    isSmallSample,
@@ -109,6 +111,7 @@ export const Campaign = () => {
    const { id = '' } = useParams()
    const utils = trpc.useUtils()
    const [period, setPeriod] = useState<CampaignPeriod>('7d')
+   const [trendPeriod, setTrendPeriod] = useState<CampaignTrendPeriod>('7d')
    const [pausing, setPausing] = useState(false)
    const [stopQueued, setStopQueued] = useState(false)
    const [line, setLine] = useState(60)
@@ -129,6 +132,11 @@ export const Campaign = () => {
    const insights = trpc.campaign.insights.useQuery(
       { id, period: period === 'today' ? '7d' : period },
       { enabled: period !== 'today', retry: false }
+   )
+   // The trend card has its own 7 days / 30 days / All time toggle, so it keeps its own query.
+   const trend = trpc.campaign.insights.useQuery(
+      { id, period: trendPeriod },
+      { enabled: period !== 'today', placeholderData: keepPreviousData, retry: false }
    )
    const refresh = () => utils.campaign.overview.invalidate({ id })
    const pause = trpc.campaign.pause.useMutation({
@@ -163,7 +171,11 @@ export const Campaign = () => {
       if (insights.error) return <p className="text-destructive text-sm">{insights.error.message}</p>
       return insights.data ? (
          <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
-            <CampaignInsightsPanel insights={insights.data} period={period} campaignLabel={campaign.label} />
+            <CampaignInsightsPanel
+               insights={insights.data}
+               trend={{ history: trend.data?.history, period: trendPeriod, onPeriodChange: setTrendPeriod }}
+               campaignLabel={campaign.label}
+            />
          </Suspense>
       ) : null
    }
@@ -218,7 +230,7 @@ export const Campaign = () => {
             </CardHeader>
          </Card>
 
-         <CampaignSummaryTiles funnel={funnel} />
+         <CampaignSummaryTiles funnel={funnel} history={insights.data?.history} />
 
          <Tabs value={tab} onValueChange={setTab} className="grid gap-4">
             {tabbed ? (
@@ -233,8 +245,6 @@ export const Campaign = () => {
             ) : null}
 
             <TabPanel value="overview" tabbed={tabbed}>
-               {renderInsights()}
-
                <section className="grid gap-2 rounded-xl border px-4 py-3">
                   <h3 className="text-sm font-medium">Needs you</h3>
                   {needsYou.length === 0 ? (
@@ -252,6 +262,8 @@ export const Campaign = () => {
                      </ul>
                   )}
                </section>
+
+               {renderInsights()}
 
                <section className="grid gap-1 rounded-xl border px-4 py-3 text-sm">
                   <h3 className="text-sm font-medium">Last Discover run</h3>

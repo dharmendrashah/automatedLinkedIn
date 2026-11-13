@@ -1,14 +1,23 @@
 import {
    CAMPAIGN_TREND_GATE,
    type CampaignCapacityMissing,
+   type CampaignCounts,
    type CampaignInsights,
    type CampaignProjection,
    type CampaignProjectionHidden,
    type CampaignTrendDay,
+   type CampaignTrendPeriod,
+   rateOf,
 } from '@automatedLinkedIn/contracts'
 
 type Gate = CampaignInsights['gate']
 type Basis = Extract<CampaignProjection, { status: 'shown' }>['basis']
+
+export const TREND_PERIOD_LABELS: Record<CampaignTrendPeriod, string> = {
+   '7d': '7 days',
+   '30d': '30 days',
+   all: 'All time',
+}
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
 
@@ -66,6 +75,41 @@ export const listStripCounts = (lists: CampaignInsights['lists'], campaignLabel:
       to: networkTo({ labels: [campaignLabel], statuses: ['NEW'] }),
    },
 ]
+
+export type FunnelStage = 'found' | 'qualified' | 'invited' | 'accepted'
+
+// Stage-to-stage rate. A zero previous stage has no rate, so it is null rather than a misleading 0%.
+export const conversionRates = (
+   funnel: Record<FunnelStage, number>
+): { from: FunnelStage; to: FunnelStage; rate: number | null }[] => [
+   { from: 'found', to: 'qualified', rate: rateOf(funnel.qualified, funnel.found) },
+   { from: 'qualified', to: 'invited', rate: rateOf(funnel.invited, funnel.qualified) },
+   { from: 'invited', to: 'accepted', rate: rateOf(funnel.accepted, funnel.invited) },
+]
+
+const SPARKLINE_DAYS = 14
+
+// A gap day stays null so the line breaks instead of dropping to zero.
+export const sparklineSeries = (history: CampaignTrendDay[], stage: keyof CampaignCounts) =>
+   history.slice(-SPARKLINE_DAYS).map(entry => (entry.state === 'counted' ? entry.counts[stage] : null))
+
+// The running total skips days that were not counted, and a gap keeps the total so far.
+export const cumulativeSeries = (history: CampaignTrendDay[], stage: keyof CampaignCounts) => {
+   let total = 0
+   return history.map(entry => {
+      if (entry.state !== 'counted') return { day: entry.day, total: null }
+      total += entry.counts[stage]
+      return { day: entry.day, total }
+   })
+}
+
+export const projectionBand = (projection: CampaignProjection) => {
+   if (projection.status !== 'shown') return null
+   return [
+      { label: 'Next 7 days', low: projection.next7.low, high: projection.next7.high },
+      { label: 'Next 30 days', low: projection.next30.low, high: projection.next30.high },
+   ]
+}
 
 export const projectionBasis = (basis: Basis) =>
    `Based on ${basis.latestPace.toFixed(1)} invites a day over the last 7 complete days and ${basis.previousPace.toFixed(1)} a day over the 7 before. Capped at this campaign's share: ${basis.share.perDay} a day and ${basis.share.perWeek} a week, split across ${plural(basis.shareDenominator, 'campaign')}.`

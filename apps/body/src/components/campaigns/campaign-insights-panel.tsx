@@ -1,16 +1,23 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Sparkles, TriangleAlert } from 'lucide-react'
 
-import type { CampaignInsights, CampaignPeriod } from '@automatedLinkedIn/contracts'
+import type { CampaignInsights, CampaignTrendDay, CampaignTrendPeriod } from '@automatedLinkedIn/contracts'
 
 import { CampaignCapacity } from './campaign-capacity'
-import { prefersReducedMotion, projectionBasis, projectionNote } from './campaign-insights'
+import { prefersReducedMotion, projectionBand, projectionBasis, projectionNote } from './campaign-insights'
 import { CampaignListsStrip } from './campaign-lists-strip'
 import { CampaignTrendChart } from './campaign-trend-chart'
 
 type Insights = CampaignInsights
-type Range = { low: number; high: number }
+type Band = { label: string; low: number; high: number }
+
+export type CampaignTrend = {
+   history: CampaignTrendDay[] | undefined
+   period: CampaignTrendPeriod
+   onPeriodChange: (next: CampaignTrendPeriod) => void
+}
 
 const todayKey = () => new Date().toISOString().slice(0, 10)
 
@@ -18,18 +25,18 @@ const formatTime = (iso: string) => new Date(iso).toLocaleTimeString([], { hour:
 
 const percentOf = (value: number, max: number) => `${(value / max) * 100}%`
 
-const RangeRow = ({ label, range, max }: { label: string; range: Range; max: number }) => (
+const RangeRow = ({ band, max }: { band: Band; max: number }) => (
    <div className="grid gap-2">
       <div className="flex items-center justify-between gap-2 text-sm">
-         <span className="font-medium">{label}</span>
+         <span className="font-medium">{band.label}</span>
          <span className="tabular-nums">
-            {range.low} to {range.high} invites
+            {band.low} to {band.high} invites
          </span>
       </div>
       <div className="bg-muted relative h-2 rounded-full">
          <div
             className="bg-primary absolute inset-y-0 rounded-full"
-            style={{ left: percentOf(range.low, max), width: percentOf(range.high - range.low, max) }}
+            style={{ left: percentOf(band.low, max), width: percentOf(band.high - band.low, max) }}
          />
       </div>
    </div>
@@ -55,8 +62,9 @@ const ProjectionBlock = ({ insights }: { insights: Insights }) => {
          </Card>
       )
    }
+   const bands = projectionBand(projection) ?? []
    // Both ranges share one scale so the 7-day and 30-day bars compare.
-   const max = Math.max(projection.next30.high, 1)
+   const max = Math.max(...bands.map(band => band.high), 1)
    return (
       <Card>
          <CardHeader>
@@ -64,8 +72,9 @@ const ProjectionBlock = ({ insights }: { insights: Insights }) => {
             <CardDescription>At this pace, not a forecast. {projectionBasis(projection.basis)}</CardDescription>
          </CardHeader>
          <CardContent className="grid gap-4">
-            <RangeRow label="Next 7 days" range={projection.next7} max={max} />
-            <RangeRow label="Next 30 days" range={projection.next30} max={max} />
+            {bands.map(band => (
+               <RangeRow key={band.label} band={band} max={max} />
+            ))}
          </CardContent>
       </Card>
    )
@@ -94,11 +103,11 @@ const TrendSummary = ({ insights }: { insights: Insights }) => {
 
 export const CampaignInsightsPanel = ({
    insights,
-   period,
+   trend,
    campaignLabel,
 }: {
    insights: Insights
-   period: CampaignPeriod
+   trend: CampaignTrend
    campaignLabel: string
 }) => {
    if (insights.state === 'empty') return <CampaignCapacity insights={insights} />
@@ -114,7 +123,16 @@ export const CampaignInsightsPanel = ({
          ) : (
             <TrendSummary insights={insights} />
          )}
-         {period !== 'today' && <CampaignTrendChart key={period} history={insights.history} animate={animate} />}
+         {trend.history ? (
+            <CampaignTrendChart
+               history={trend.history}
+               period={trend.period}
+               onPeriodChange={trend.onPeriodChange}
+               animate={animate}
+            />
+         ) : (
+            <Skeleton aria-hidden className="h-80 w-full rounded-xl" />
+         )}
          <ProjectionBlock insights={insights} />
          <CampaignListsStrip lists={insights.lists} campaignLabel={campaignLabel} />
       </section>
