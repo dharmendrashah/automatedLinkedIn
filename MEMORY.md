@@ -334,6 +334,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-11-14: Campaign chat: the hint under each question is now a tooltip behind a question-mark icon, and every assistant message has a bird avatar (`OutreachChat.tsx`); looked at in a throwaway preview, not on the signed-in page.
+
 - 2026-11-14: Removed the Create campaign pop-up; the chat now asks the name, then whether the campaign runs outreach (No makes an empty campaign, Yes continues the outreach questions); page title is "New campaign" (`.plan/campaign-create-in-chat.md`); repo gate passes, not walked in a browser (sign-in needed).
 
 - 2026-11-14: New outreach campaign page became a full-window, one-question-at-a-time chat (fixed bottom composer, chips for choices) with a progress bar, answers kept in `sessionStorage`, and the old form behind "Edit all fields" (`.plan/campaign-outreach-chat-onboarding.md`); repo gate passes, browser walk not done.

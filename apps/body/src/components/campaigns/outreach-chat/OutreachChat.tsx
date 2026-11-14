@@ -1,4 +1,5 @@
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
    DropdownMenu,
@@ -8,7 +9,8 @@ import {
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Progress } from '@/components/ui/progress'
-import { MoreHorizontal } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Bird, CircleHelp, MoreHorizontal } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { Link } from 'react-router'
 
@@ -46,7 +48,14 @@ const Bubble = ({
    action?: React.ReactNode
    children: React.ReactNode
 }) => (
-   <div className={from === 'user' ? 'flex items-end justify-end gap-2' : 'flex justify-start'}>
+   <div className={from === 'user' ? 'flex items-end justify-end gap-2' : 'flex items-end justify-start gap-2'}>
+      {from === 'assistant' ? (
+         <Avatar className="size-8" aria-hidden>
+            <AvatarFallback className="bg-blue-500/10 text-blue-600 dark:text-blue-400">
+               <Bird className="size-4" />
+            </AvatarFallback>
+         </Avatar>
+      ) : null}
       {action}
       <div
          className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm break-words whitespace-pre-wrap md:max-w-[70%] ${
@@ -130,8 +139,21 @@ export const OutreachChat = ({
             {STEPS.slice(0, at + 1).map(({ id, question, hint }) => (
                <div key={id} className="grid gap-3">
                   <Bubble from="assistant">
-                     {question}
-                     <span className="text-muted-foreground mt-1 block text-xs">{hint}</span>
+                     <span className="flex items-center gap-1.5">
+                        {question}
+                        <Tooltip>
+                           <TooltipTrigger asChild>
+                              <button
+                                 type="button"
+                                 aria-label={`More about: ${question}`}
+                                 className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 rounded-full outline-none focus-visible:ring-[3px]"
+                              >
+                                 <CircleHelp aria-hidden className="size-4" />
+                              </button>
+                           </TooltipTrigger>
+                           <TooltipContent className="max-w-xs">{hint}</TooltipContent>
+                        </Tooltip>
+                     </span>
                   </Bubble>
                   {id !== current ? (
                      <Bubble
