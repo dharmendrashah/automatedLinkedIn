@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { backfillText, formatPipelineUsd, formulaText, parseWorth, sourceLine } from './pipeline-format'
+import { formatPipelineUsd, formulaText, parseWorth, sourceLine } from './pipeline-format'
 
 describe('pipeline text', () => {
    it('writes the sum of the example in the request', () => {
@@ -27,20 +27,5 @@ describe('parseWorth', () => {
       expect(parseWorth('0')).toBe('invalid')
       expect(parseWorth('lots')).toBe('invalid')
       expect(parseWorth('99999999')).toBe('invalid')
-   })
-})
-
-describe('backfillText', () => {
-   it('tells what was counted, what waits for the AI, and what was left alone', () => {
-      expect(
-         backfillText({ counted: 3, queued: 12, alreadyKnown: 0, noCampaign: 2, leftForNextPress: 5, aiOff: false })
-      ).toBe(
-         'Counted 3 positive replies. 12 unclear replies are being read by the AI in the background. 5 more wait for the next press. 2 people are in no campaign, so nothing was counted for them.'
-      )
-      expect(
-         backfillText({ counted: 0, queued: 0, alreadyKnown: 4, noCampaign: 0, leftForNextPress: 0, aiOff: true })
-      ).toBe(
-         'No new positive reply was found by the rules. AI reading is switched off, so unclear replies were left alone.'
-      )
    })
 })

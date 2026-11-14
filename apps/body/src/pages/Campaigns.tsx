@@ -1,5 +1,4 @@
 import { CampaignListItem } from '@/components/campaigns/campaign-list-item'
-import { PositiveRepliesBar } from '@/components/campaigns/positive-replies-bar'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -44,7 +43,6 @@ export const Campaigns = () => {
 
          {campaigns.length > 0 ? (
             <>
-               <PositiveRepliesBar totalUsd={pipeline.data?.totalUsd ?? null} />
                <p className="text-muted-foreground text-xs">
                   Qualified, invited, accepted and replied cover the last 14 complete days. Pipeline is every positive
                   reply so far times its monthly worth times 12. Next 30 days is a projection and shows once a campaign

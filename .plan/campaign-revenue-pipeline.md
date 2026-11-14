@@ -60,7 +60,7 @@ Proposed (the owner can change these before lock):
 ## Decisions added when AI was brought in (locked 2026-11-14)
 
 7. The word rules decide when they are sure; the AI decides the rest (see Requirements).
-8. Privacy: the text of one unclear private reply, and nothing else, may go to the configured AI model, through the existing admin switch and caps. A per-owner switch "Use AI to read unclear replies" on the Campaigns page is on by default; switched off, only the rules count.
+8. Privacy: the text of one unclear private reply, and nothing else, may go to the configured AI model, through the existing admin switch and caps. A per-owner switch (`positiveReply.setAiReads`, on by default; its button was removed from the Campaigns page on 2026-11-14, so it has no screen yet); switched off, only the rules count.
 9. The AI must be at least 70 out of 100 sure before a reply counts (one fixed number in contracts).
 10. The one-time read of existing replies makes at most 200 AI calls per press; the rest wait for the next press.
 
@@ -135,7 +135,7 @@ Shipped (not seen in a browser, not deployed; the migration must be applied with
 - Data: one additive migration `20261114160000_positive_replies`: `PositiveReply` (one row per campaign and person by profile slug, state COUNTED or REMOVED, source RULES, AI or MARKED), `PositiveReplyCheck` (the queue of replies waiting for the AI, ids only), `Campaign.replyValueUsd` (whole USD a month) and `User.aiReadsReplies` (default on).
 - Contracts: `positiveReply.ts` (`pipelineOf` = replies x (monthly x 12), `replyLeanOf` = yes, no or unsure from the word rules plus a strong-phrase list and a hedge check, limits, schemas); `outreachAnswersSchema` takes an optional `replyValueUsd`.
 - Brain: `PositiveReplyService` (attribution by newest invite then the one campaign label, `ingest` after messages are stored, `checkWaiting` for the AI step with the existing switch and caps and the call booked as "AI replies", `mark`, `unmark`, `forConversation`, `pipeline`, `setReplyValue`, `backfill`), `core/aiReplyReader.ts` (reuses `labelText`, needs 70 out of 100), the worker job `positive-reply-check`, the tRPC router `positiveReply`, and the starter stores the worth when the chat makes a campaign.
-- Body: a pipeline card on the campaign page (the sum written out, the split by source, the worth set in place), a Pipeline column and a total bar on the Campaigns list with the one-time "Count positive replies from my existing messages" button and the AI switch, toggle buttons per campaign in the Unibox details panel, and an optional last question in the campaign chat and in "Edit all fields".
+- Body: a pipeline card on the campaign page (the sum written out, the split by source, the worth set in place), a Pipeline column on the Campaigns list (the bar with the total, the one-time "Count positive replies from my existing messages" button and the AI switch was removed on 2026-11-14 at the owner's request; `positiveReply.backfill` and `setAiReads` stay in the API with no screen), toggle buttons per campaign in the Unibox details panel, and an optional last question in the campaign chat and in "Edit all fields".
 - Tests: contracts (formula, schema, `replyLeanOf`), `aiReplyReader`, `campaignOfReply`, `PositiveReplyService` integration (rule yes, no, AI yes, AI unsure, AI off or failing, removed stays removed, owner scoping, the 10 x 100 x 12 = 12,000 example, backfill and its repeat), a store-level test, the starter storing the worth, and the pipeline text helpers.
 
 Deviations from the plan:

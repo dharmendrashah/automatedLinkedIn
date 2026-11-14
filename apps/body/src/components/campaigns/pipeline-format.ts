@@ -35,30 +35,3 @@ export const sourceLine = ({ rules, ai, marked }: { rules: number; ai: number; m
    ]
       .filter(Boolean)
       .join(', ')
-
-type Backfill = {
-   counted: number
-   queued: number
-   alreadyKnown: number
-   noCampaign: number
-   leftForNextPress: number
-   aiOff: boolean
-}
-
-// What one press of "count positive replies from my existing messages" did, in plain sentences.
-export const backfillText = ({ counted, queued, noCampaign, leftForNextPress, aiOff }: Backfill) =>
-   [
-      counted > 0
-         ? `Counted ${counted} positive ${counted === 1 ? 'reply' : 'replies'}.`
-         : 'No new positive reply was found by the rules.',
-      queued > 0
-         ? `${queued} unclear ${queued === 1 ? 'reply is' : 'replies are'} being read by the AI in the background.`
-         : '',
-      aiOff ? 'AI reading is switched off, so unclear replies were left alone.' : '',
-      leftForNextPress > 0 ? `${leftForNextPress} more wait for the next press.` : '',
-      noCampaign > 0
-         ? `${noCampaign} ${noCampaign === 1 ? 'person is' : 'people are'} in no campaign, so nothing was counted for them.`
-         : '',
-   ]
-      .filter(Boolean)
-      .join(' ')
