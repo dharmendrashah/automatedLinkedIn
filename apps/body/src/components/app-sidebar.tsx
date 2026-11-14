@@ -1,4 +1,4 @@
-import { type NavItem, NavMain } from '@/components/nav-main'
+import { NavMain } from '@/components/nav-main'
 import { type ExternalLink as ExternalNavLink, NavSecondary } from '@/components/nav-secondary'
 import { NavUser } from '@/components/nav-user'
 import {
@@ -10,27 +10,7 @@ import {
    SidebarMenuButton,
    SidebarMenuItem,
 } from '@/components/ui/sidebar'
-import {
-   Activity,
-   Briefcase,
-   Building2,
-   ClipboardCheck,
-   ExternalLink,
-   FileText,
-   Inbox,
-   LayoutDashboard,
-   Megaphone,
-   Network,
-   Send,
-   SquarePen,
-   Target,
-   Timer,
-   UserCircle,
-   UserPlus,
-   Video,
-   Wallet,
-   Workflow as WorkflowIcon,
-} from 'lucide-react'
+import { ExternalLink, Send } from 'lucide-react'
 import { type ComponentProps } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { Link } from 'react-router'
@@ -38,32 +18,7 @@ import { Link } from 'react-router'
 import { authConfig } from '../auth/authConfig'
 import { toProfile } from '../auth/profile'
 import { trpc } from '../trpc'
-
-const navMain: NavItem[] = [
-   { title: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
-   { title: 'Unibox', to: '/unibox', icon: Inbox },
-   { title: 'My network', to: '/network', icon: UserPlus },
-   { title: 'To approve', to: '/approve', icon: ClipboardCheck },
-   { title: 'Campaigns', to: '/campaigns', icon: Megaphone },
-   { title: 'Write a post', to: '/posting', icon: SquarePen },
-   { title: 'LinkedIn accounts', to: '/accounts', icon: Briefcase },
-   { title: 'LinkedIn companies', to: '/companies', icon: Building2 },
-   { title: 'LinkedIn posts', to: '/posts', icon: FileText },
-   { title: 'Workflows', to: '/workflows', icon: WorkflowIcon },
-   { title: 'Ideal customers', to: '/icps', icon: Target },
-   { title: 'Usage', to: '/usage', icon: Wallet },
-   { title: 'Proxies', to: '/proxies', icon: Network },
-   { title: 'Sessions', to: '/sessions', icon: Video },
-   { title: 'Service status', to: '/healthstatus', icon: Activity },
-   { title: 'Profile', to: '/profile', icon: UserCircle },
-]
-
-// Only the platform owner sees it; the page and the API refuse everyone else as well.
-const cronMonitor: NavItem = {
-   title: 'Cron monitor',
-   to: '/jobs',
-   icon: Timer,
-}
+import { groupsFor } from './nav-groups'
 
 const navSecondary: ExternalNavLink[] = [{ title: 'Manage account', href: authConfig.accountUrl, icon: ExternalLink }]
 
@@ -73,8 +28,6 @@ export const AppSidebar = (props: ComponentProps<typeof Sidebar>) => {
       retry: false,
       staleTime: 5 * 60 * 1000,
    })
-   const items =
-      me.data?.user?.role === 'ADMIN' ? [...navMain.slice(0, -1), cronMonitor, ...navMain.slice(-1)] : navMain
    const waiting = trpc.draft.counts.useQuery(undefined, {
       retry: false,
       refetchInterval: 60_000,
@@ -96,7 +49,7 @@ export const AppSidebar = (props: ComponentProps<typeof Sidebar>) => {
             </SidebarMenu>
          </SidebarHeader>
          <SidebarContent>
-            <NavMain items={items.map(item => (item.to === '/approve' ? { ...item, badge: waiting } : item))} />
+            <NavMain groups={groupsFor({ admin: me.data?.user?.role === 'ADMIN', waiting })} />
             <NavSecondary items={navSecondary} className="mt-auto" />
          </SidebarContent>
          <SidebarFooter>{user ? <NavUser profile={toProfile(user.profile)} /> : null}</SidebarFooter>

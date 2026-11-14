@@ -334,6 +334,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-11-14: Sidebar menu is grouped (Work, Outreach, LinkedIn, Settings) with one icon colour per group; data and the admin/badge rules live in `apps/body/src/components/nav-groups.ts` (`.plan/sidebar-groups-and-colour.md`); LinkedIn labels shortened to Accounts, Companies, Posts (page titles unchanged); not seen signed in or in dark theme.
+
 - 2026-11-14: Campaign chat has no Review step any more: the last answer (or "Use default" on it) makes the outreach campaign at once and opens `/campaigns/:id`; "Edit all fields" ends in "Create campaign"; a failure shows its sentence with "Try again" (`.plan/campaign-create-without-review.md`); not run on the signed-in page.
 
 - 2026-11-14: Campaign chat and "Edit all fields" use toggle buttons for every choice (titles and places from the built-in lists plus an add-your-own field, accounts, warm-up, saved customer); no select, radios, checkboxes or suggestion dropdowns there (`.plan/campaign-chat-button-choices.md`).
