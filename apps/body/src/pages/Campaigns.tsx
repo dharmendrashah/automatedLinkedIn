@@ -1,88 +1,15 @@
 import { CampaignListItem } from '@/components/campaigns/campaign-list-item'
 import { Button } from '@/components/ui/button'
-import {
-   Dialog,
-   DialogContent,
-   DialogDescription,
-   DialogFooter,
-   DialogHeader,
-   DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { readableError } from '@/lib/trpc-error'
-import { ArrowLeft, CircleHelp, FolderPlus, Plus, Sparkles } from 'lucide-react'
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router'
-
-import { CAMPAIGN_LIMITS } from '@automatedLinkedIn/contracts'
+import { Plus } from 'lucide-react'
+import { Link } from 'react-router'
 
 import { trpc } from '../trpc'
 
-type CreateStep = 'choice' | 'name'
-
-const CHOICE_CLASS =
-   'flex w-full items-start gap-3 rounded-lg border p-4 pr-12 text-left transition-colors outline-none hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
-const ICON_CHIP = 'flex size-9 shrink-0 items-center justify-center rounded-md [&_svg]:size-4'
-const OUTREACH_EXAMPLES = [
-   'A software vendor finds ops leaders who posted about a tool they outgrew.',
-   'A recruiter reacts to posts from engineers who are looking at hiring, then messages those who accept.',
-   'A consultant warms up CFOs with likes on their posts before the first message goes out.',
-   'An agency hands people who never answered after 21 days to a CSV for its sales team.',
-]
-const EMPTY_EXAMPLES = [
-   'Test a new market with its own Discover workflow, apart from your main outreach.',
-   'Keep a referral list from a partner in its own campaign, with its own invited and accepted counts.',
-   'Follow up one webinar or event, with workflows you add and switch on yourself.',
-   'Create it now and add workflows from their settings once you are ready.',
-]
-
-// Sits beside the option, not inside it: a button cannot nest in the option's link or button.
-const ExamplesTip = ({ label, items }: { label: string; items: string[] }) => (
-   <Tooltip>
-      <TooltipTrigger asChild>
-         <button
-            type="button"
-            aria-label={label}
-            className="absolute top-3 right-3 rounded-full p-1 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
-         >
-            <CircleHelp aria-hidden className="size-4" />
-         </button>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-xs">
-         <span className="grid gap-1.5">
-            <span className="font-semibold">For example</span>
-            {items.map(item => (
-               <span key={item} className="flex items-start gap-2">
-                  <span aria-hidden className="mt-1.5 size-1 shrink-0 rounded-full bg-current" />
-                  {item}
-               </span>
-            ))}
-         </span>
-      </TooltipContent>
-   </Tooltip>
-)
-
 // The campaigns of the owner (.plan/lead-pipeline-p5-campaign-page.md): a name, the workflows in it, and the page of each.
 export const Campaigns = () => {
-   const utils = trpc.useUtils()
-   const navigate = useNavigate()
    const list = trpc.campaign.list.useQuery(undefined, { retry: false })
-   const [step, setStep] = useState<CreateStep | null>(null)
-   const [name, setName] = useState('')
-   const closeDialog = () => {
-      setStep(null)
-      setName('')
-   }
-   const create = trpc.campaign.create.useMutation({
-      onSuccess: async made => {
-         await utils.campaign.list.invalidate()
-         closeDialog()
-         void navigate(`/campaigns/${made.id}`)
-      },
-   })
    const campaigns = list.data ?? []
 
    return (
@@ -95,9 +22,11 @@ export const Campaigns = () => {
                </p>
             </div>
             <div className="flex flex-wrap gap-2">
-               <Button onClick={() => setStep('choice')}>
-                  <Plus />
-                  Create campaign
+               <Button asChild>
+                  <Link to="/campaigns/new">
+                     <Plus />
+                     Create campaign
+                  </Link>
                </Button>
             </div>
          </div>
@@ -139,95 +68,6 @@ export const Campaigns = () => {
                </div>
             </>
          ) : null}
-
-         <Dialog open={step !== null} onOpenChange={open => (open ? undefined : closeDialog())}>
-            <DialogContent>
-               {step === 'choice' ? (
-                  <>
-                     <DialogHeader>
-                        <DialogTitle>Create campaign</DialogTitle>
-                        <DialogDescription>Choose how to start. You can change the workflows later.</DialogDescription>
-                     </DialogHeader>
-                     <div className="grid gap-3">
-                        <div className="relative">
-                           <Link
-                              to="/campaigns/new"
-                              onClick={closeDialog}
-                              aria-describedby="campaign-outreach-desc"
-                              className={CHOICE_CLASS}
-                           >
-                              <span className={`${ICON_CHIP} bg-blue-500/10 text-blue-600 dark:text-blue-400`}>
-                                 <Sparkles aria-hidden />
-                              </span>
-                              <span className="grid gap-1">
-                                 <span className="font-medium">Outreach campaign</span>
-                                 <span id="campaign-outreach-desc" className="text-muted-foreground text-sm">
-                                    Answer a few questions. We build six workflows for you, all switched off.
-                                 </span>
-                              </span>
-                           </Link>
-                           <ExamplesTip label="Examples of outreach campaigns" items={OUTREACH_EXAMPLES} />
-                        </div>
-                        <div className="relative">
-                           <button
-                              type="button"
-                              aria-describedby="campaign-empty-desc"
-                              className={CHOICE_CLASS}
-                              onClick={() => setStep('name')}
-                           >
-                              <span className={`${ICON_CHIP} bg-violet-500/10 text-violet-600 dark:text-violet-400`}>
-                                 <FolderPlus aria-hidden />
-                              </span>
-                              <span className="grid gap-1">
-                                 <span className="font-medium">Without campaign</span>
-                                 <span id="campaign-empty-desc" className="text-muted-foreground text-sm">
-                                    An empty campaign. Add your own workflows to it later.
-                                 </span>
-                              </span>
-                           </button>
-                           <ExamplesTip label="Examples of campaigns without workflows" items={EMPTY_EXAMPLES} />
-                        </div>
-                     </div>
-                  </>
-               ) : null}
-               {step === 'name' ? (
-                  <>
-                     <DialogHeader>
-                        <DialogTitle>New campaign</DialogTitle>
-                        <DialogDescription>
-                           Its people get a label made from the name. Deleting the campaign later keeps the workflows
-                           and the people.
-                        </DialogDescription>
-                     </DialogHeader>
-                     <Input
-                        aria-label="Campaign name"
-                        maxLength={CAMPAIGN_LIMITS.nameMax}
-                        value={name}
-                        onChange={event => setName(event.target.value)}
-                     />
-                     {create.error ? <p className="text-destructive text-sm">{readableError(create.error)}</p> : null}
-                     <DialogFooter>
-                        <Button
-                           variant="outline"
-                           onClick={() => {
-                              create.reset()
-                              setStep('choice')
-                           }}
-                        >
-                           <ArrowLeft />
-                           Back
-                        </Button>
-                        <Button
-                           disabled={name.trim() === '' || create.isPending}
-                           onClick={() => create.mutate({ name })}
-                        >
-                           Create
-                        </Button>
-                     </DialogFooter>
-                  </>
-               ) : null}
-            </DialogContent>
-         </Dialog>
       </div>
    )
 }

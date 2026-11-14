@@ -16,17 +16,18 @@ const form = (patch: Partial<Form> = {}): Form => ({ ...emptyForm('Asia/Kolkata'
 
 describe('nextStep and progressOf', () => {
    it('goes back to a reopened step, then on to the first one not done', () => {
-      const done: StepId[] = ['name', 'phrases', 'accounts']
+      const done: StepId[] = ['name', 'kind', 'phrases', 'accounts']
 
       expect(nextStep(done)).toBe('customer')
-      expect(nextStep(['name', 'accounts'])).toBe('phrases')
+      expect(nextStep(['name', 'kind', 'accounts'])).toBe('phrases')
    })
 
-   it('counts a skipped step as done and reaches Review after the tenth', () => {
-      expect(progressOf(['name', 'phrases'])).toMatchObject({ done: 2, current: 3, total: 11, percent: 18 })
+   it('counts a skipped step as done and reaches Review after the last question', () => {
+      expect(progressOf(['name', 'kind'])).toMatchObject({ done: 2, current: 3, total: 12, percent: 17 })
 
       const all: StepId[] = [
          'name',
+         'kind',
          'phrases',
          'customer',
          'accounts',
@@ -39,7 +40,15 @@ describe('nextStep and progressOf', () => {
       ]
 
       expect(nextStep(all)).toBeNull()
-      expect(progressOf(all)).toMatchObject({ done: 10, current: 11 })
+      expect(progressOf(all)).toMatchObject({ done: 11, current: 12 })
+   })
+})
+
+describe('kind', () => {
+   it('is asked after the name and counts as answered only after choosing yes', () => {
+      expect(nextStep(['name'])).toBe('kind')
+      expect(stepProblems('kind', form(), 8)).toEqual(['Choose yes or no.'])
+      expect(stepProblems('kind', form({ outreach: true }), 8)).toEqual([])
    })
 })
 

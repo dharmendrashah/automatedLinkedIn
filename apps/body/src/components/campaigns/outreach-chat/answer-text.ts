@@ -5,6 +5,8 @@ export const answerText = (id: StepId, form: Form, context: { icpName: string | 
    switch (id) {
       case 'name':
          return form.name
+      case 'kind':
+         return form.outreach ? 'Yes, outreach' : 'No, empty'
       case 'phrases':
          return form.phrases.join(', ')
       case 'customer':

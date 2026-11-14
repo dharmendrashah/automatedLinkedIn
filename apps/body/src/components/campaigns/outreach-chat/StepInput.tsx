@@ -34,6 +34,10 @@ type Props = {
    onDone: () => void
    // Puts the step's fields back to their start and records it as done.
    onSkip: () => void
+   // "No, an empty campaign": makes it and ends the chat.
+   onEmpty: () => void
+   // A campaign is being made: the choices wait.
+   busy: boolean
 }
 
 const PROBLEM = 'Write a whole number from 1 to 50.'
@@ -50,7 +54,7 @@ const Chip = ({ selected, ...props }: React.ComponentProps<typeof Button> & { se
 )
 
 // The composer under the thread: option chips for choices, a field and a send button for typed answers.
-export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSkip }: Props) => {
+export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSkip, onEmpty, busy }: Props) => {
    const root = useRef<HTMLDivElement>(null)
    const [shown, setShown] = useState(false)
    const [describing, setDescribing] = useState(form.icpId === '')
@@ -105,6 +109,25 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
                      onChange={event => set({ name: event.target.value })}
                      onKeyDown={enter}
                   />
+               ),
+            }
+         case 'kind':
+            return {
+               options: (
+                  <>
+                     <Chip
+                        disabled={busy}
+                        onClick={() => {
+                           set({ outreach: true })
+                           onDone()
+                        }}
+                     >
+                        Yes, build the outreach workflows
+                     </Chip>
+                     <Chip disabled={busy} onClick={onEmpty}>
+                        No, an empty campaign
+                     </Chip>
+                  </>
                ),
             }
          case 'phrases':

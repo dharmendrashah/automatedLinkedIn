@@ -30,6 +30,7 @@ import { trpc } from '../trpc'
 // shows what will be made before anything is. The answers are kept in sessionStorage until the campaign is created.
 export const NewCampaign = () => {
    const navigate = useNavigate()
+   const utils = trpc.useUtils()
    const timeZone = browserTimeZone()
    const accounts = trpc.linkedInAccount.list.useQuery(undefined, { retry: false })
    const icps = trpc.icp.list.useQuery(undefined, { retry: false })
@@ -39,8 +40,9 @@ export const NewCampaign = () => {
 
    const forget = (id: StepId) => setDraft(current => ({ ...current, done: current.done.filter(each => each !== id) }))
    const create = trpc.campaign.createOutreach.useMutation({
-      onSuccess: made => {
+      onSuccess: async made => {
          clearDraft()
+         await utils.campaign.list.invalidate()
          void navigate(`/campaigns/${made.campaignId}`)
       },
       onError: error => {
@@ -49,6 +51,22 @@ export const NewCampaign = () => {
             forget('name')
             setNotice(readableError(error))
          }
+      },
+   })
+
+   // "No" at the kind question: an empty campaign with the typed name, then the chat is over.
+   const createEmpty = trpc.campaign.create.useMutation({
+      onSuccess: async made => {
+         clearDraft()
+         await utils.campaign.list.invalidate()
+         void navigate(`/campaigns/${made.id}`)
+      },
+      onError: error => {
+         if (error.data?.code === 'CONFLICT') {
+            forget('name')
+         }
+
+         setNotice(readableError(error))
       },
    })
 
@@ -153,8 +171,10 @@ export const NewCampaign = () => {
             onDone={finish}
             onSkip={skip}
             onReopen={forget}
-            onEditAll={() => setMode('form')}
+            onEditAll={form.outreach ? () => setMode('form') : undefined}
             onStartOver={startOver}
+            onEmpty={() => createEmpty.mutate({ name: form.name })}
+            busy={createEmpty.isPending}
          />
       )
    }

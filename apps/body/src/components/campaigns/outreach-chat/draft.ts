@@ -12,6 +12,7 @@ const KEY = 'outreach-chat-draft'
 const draftSchema = z.object({
    form: z.object({
       name: z.string(),
+      outreach: z.boolean(),
       phrases: z.array(z.string()),
       titles: z.array(z.string()),
       locations: z.array(z.string()),

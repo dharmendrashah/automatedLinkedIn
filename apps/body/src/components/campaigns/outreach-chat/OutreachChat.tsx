@@ -30,8 +30,11 @@ type Props = {
    onDone: (id: StepId) => void
    onSkip: (id: StepId) => void
    onReopen: (id: StepId) => void
-   onEditAll: () => void
+   // Left out until "Yes": the one-page form is the outreach form.
+   onEditAll?: () => void
    onStartOver: () => void
+   onEmpty: () => void
+   busy: boolean
 }
 
 const Bubble = ({
@@ -71,6 +74,8 @@ export const OutreachChat = ({
    onReopen,
    onEditAll,
    onStartOver,
+   onEmpty,
+   busy,
 }: Props) => {
    const end = useRef<HTMLDivElement>(null)
    const progress = progressOf(done)
@@ -104,7 +109,7 @@ export const OutreachChat = ({
                   </Button>
                </DropdownMenuTrigger>
                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={onEditAll}>Edit all fields</DropdownMenuItem>
+                  {onEditAll ? <DropdownMenuItem onSelect={onEditAll}>Edit all fields</DropdownMenuItem> : null}
                   <DropdownMenuItem onSelect={onStartOver}>Start over</DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
@@ -120,8 +125,7 @@ export const OutreachChat = ({
             className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto px-4 py-4 lg:px-6"
          >
             <Bubble from="assistant">
-               Hi. I will ask ten short questions and build six workflows for you, switched off. Nothing acts on
-               LinkedIn until you switch it on.
+               Hi. Let&apos;s set up a campaign. Nothing acts on LinkedIn until you switch it on.
             </Bubble>
             {STEPS.slice(0, at + 1).map(({ id, question, hint }) => (
                <div key={id} className="grid gap-3">
@@ -167,6 +171,8 @@ export const OutreachChat = ({
                used={used}
                onDone={() => onDone(current)}
                onSkip={() => onSkip(current)}
+               onEmpty={onEmpty}
+               busy={busy}
             />
          </div>
       </div>

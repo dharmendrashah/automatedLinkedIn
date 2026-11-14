@@ -1,6 +1,7 @@
 import { type OutreachAnswers, capacityOf, outreachAnswersSchema } from '@automatedLinkedIn/contracts'
 
-// The ten questions of the outreach chat, in order. Review is the eleventh step (.plan/campaign-outreach-chat-onboarding.md).
+// The questions of the campaign chat, in order: a name, whether it runs outreach, then the ten outreach questions. Review is the
+// last step (.plan/campaign-outreach-chat-onboarding.md, .plan/campaign-create-in-chat.md).
 export const STEPS = [
    {
       id: 'name',
@@ -8,6 +9,13 @@ export const STEPS = [
       question: 'What should we call this campaign?',
       hint: '1 to 60 characters. The people it finds get a label made from it.',
       path: 'name',
+   },
+   {
+      id: 'kind',
+      required: true,
+      question: 'Should this campaign run outreach?',
+      hint: 'Yes: we build six workflows for you, all switched off. No: an empty campaign, and you add your own workflows later.',
+      path: 'outreach',
    },
    {
       id: 'phrases',
@@ -78,6 +86,8 @@ export type StepId = (typeof STEPS)[number]['id']
 
 export type Form = {
    name: string
+   // True once "Yes" is chosen. "No" makes an empty campaign and ends the chat, so it is never stored.
+   outreach: boolean
    phrases: string[]
    titles: string[]
    locations: string[]
@@ -97,6 +107,7 @@ export type Form = {
 
 export const emptyForm = (timeZone: string): Form => ({
    name: '',
+   outreach: false,
    phrases: [],
    titles: [],
    locations: [],
@@ -146,6 +157,7 @@ export const answersOf = (form: Form, suggested: number): OutreachAnswers => ({
 
 const FIELDS: Record<StepId, Array<keyof Form>> = {
    name: ['name'],
+   kind: ['outreach'],
    phrases: ['phrases'],
    customer: ['icpId', 'titles', 'locations'],
    accounts: ['accountMode', 'accountIds'],
@@ -205,6 +217,10 @@ export const parsePosts = (text: string) => {
 // What is wrong with one step's own answer. The schema is the source of truth; its issues are filtered by the step they belong
 // to, so an empty later step never adds a problem here.
 export const stepProblems = (id: StepId, form: Form, suggested: number) => {
+   if (id === 'kind') {
+      return form.outreach ? [] : ['Choose yes or no.']
+   }
+
    const step = STEPS.find(each => each.id === id)
    const parsed = outreachAnswersSchema.safeParse(answersOf(form, suggested))
    const found = parsed.success
