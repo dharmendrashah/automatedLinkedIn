@@ -25,6 +25,32 @@ type CreateStep = 'choice' | 'name'
 const CHOICE_CLASS =
    'flex w-full items-start gap-3 rounded-lg border p-4 text-left transition-colors outline-none hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
 const ICON_CHIP = 'flex size-9 shrink-0 items-center justify-center rounded-md [&_svg]:size-4'
+const OUTREACH_EXAMPLES = [
+   'A software vendor finds ops leaders who posted about a tool they outgrew.',
+   'A recruiter reacts to posts from engineers who are looking at hiring, then messages those who accept.',
+   'A consultant warms up CFOs with likes on their posts before the first message goes out.',
+   'An agency hands people who never answered after 21 days to a CSV for its sales team.',
+]
+const EMPTY_EXAMPLES = [
+   'Test a new market with its own Discover workflow, apart from your main outreach.',
+   'Keep a referral list from a partner in its own campaign, with its own invited and accepted counts.',
+   'Follow up one webinar or event, with workflows you add and switch on yourself.',
+   'Create it now and add workflows from their settings once you are ready.',
+]
+
+const Examples = ({ items }: { items: string[] }) => (
+   <>
+      <span className="font-medium text-foreground text-xs">For example</span>
+      <span className="grid gap-1 text-xs">
+         {items.map(item => (
+            <span key={item} className="flex items-start gap-2">
+               <span aria-hidden className="mt-1.5 size-1 shrink-0 rounded-full bg-current" />
+               {item}
+            </span>
+         ))}
+      </span>
+   </>
+)
 
 // The campaigns of the owner (.plan/lead-pipeline-p5-campaign-page.md): a name, the workflows in it, and the page of each.
 export const Campaigns = () => {
@@ -121,8 +147,9 @@ export const Campaigns = () => {
                            </span>
                            <span className="grid gap-1">
                               <span className="font-medium">Outreach campaign</span>
-                              <span id="campaign-outreach-desc" className="text-muted-foreground text-sm">
-                                 Answer a few questions. We build six workflows for you, all switched off.
+                              <span id="campaign-outreach-desc" className="grid gap-2 text-muted-foreground text-sm">
+                                 <span>Answer a few questions. We build six workflows for you, all switched off.</span>
+                                 <Examples items={OUTREACH_EXAMPLES} />
                               </span>
                            </span>
                         </Link>
@@ -137,8 +164,9 @@ export const Campaigns = () => {
                            </span>
                            <span className="grid gap-1">
                               <span className="font-medium">Without campaign</span>
-                              <span id="campaign-empty-desc" className="text-muted-foreground text-sm">
-                                 An empty campaign. Add your own workflows to it later.
+                              <span id="campaign-empty-desc" className="grid gap-2 text-muted-foreground text-sm">
+                                 <span>An empty campaign. Add your own workflows to it later.</span>
+                                 <Examples items={EMPTY_EXAMPLES} />
                               </span>
                            </span>
                         </button>

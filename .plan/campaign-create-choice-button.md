@@ -87,3 +87,10 @@ Assumed (the owner can change these before lock):
 - Deviations: no Cancel button in the name step (X and Esc close it). `aria-describedby` uses the static ids `campaign-outreach-desc` and `campaign-empty-desc`. No DOM test added, because body has no component test setup.
 - Verified: root gate (`pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build`) passed with 0 lint warnings and 0 errors. Not checked in a browser (no signed-in session).
 - Follow-ups: check the dialog at 375 px and 1440 px, in light and dark mode, and with the keyboard, once a signed-in session is available.
+
+## Addendum: use case examples (2026-11-14)
+
+- Request: "add a lot of use cases example as well". Each option now lists four "For example" lines inside its described text.
+- Outreach examples follow the six workflows in `packages/contracts/src/recipes.ts`: find people from posts, invite and message, warm up by reactions, hand off silent people, and hand off invites with no answer after 21 days.
+- Without campaign examples: a new market test, a partner referral list, a one-off event follow-up, and create now and add workflows later.
+- Verified: root gate passed (0 lint warnings, 0 errors). Browser layout check still pending.
