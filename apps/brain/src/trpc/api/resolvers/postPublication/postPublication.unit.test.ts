@@ -52,6 +52,7 @@ const user = {
    inboxSeenAt: null,
    peopleSeenAt: null,
    riskAcceptedAt: null,
+   aiReadsReplies: true,
 }
 
 const authed = (): Partial<Context> => ({

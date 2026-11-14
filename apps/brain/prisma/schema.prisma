@@ -26,9 +26,13 @@ model User {
   peopleSeenAt   DateTime?
   // When the owner accepted, once, the notice shown before the first "Act for real": LinkedIn's rules forbid automation and the risk is theirs.
   riskAcceptedAt DateTime?
+  // Whether an unclear reply may be read by the AI to see if it is a positive reply (.plan/campaign-revenue-pipeline.md); off means only the word rules count.
+  aiReadsReplies Boolean   @default(true)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  positiveReplies      PositiveReply[]
+  positiveReplyChecks  PositiveReplyCheck[]
   linkedInAccounts     LinkedInAccount[]
   linkedInCompanies    LinkedInCompany[]
   linkedInPosts        LinkedInPost[]
@@ -429,10 +433,14 @@ model Campaign {
   voiceId           String?
   pausedAt          DateTime?
   pausedWorkflowIds String[]
+  // What one positive reply is worth in whole USD a month (.plan/campaign-revenue-pipeline.md); the pipeline is replies x this x 12. Null until the owner says.
+  replyValueUsd     Int?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   workflows         Workflow[]
   days              CampaignDay[]
+  positiveReplies   PositiveReply[]
+  positiveReplyChecks PositiveReplyCheck[]
 
   @@unique([userId, name])
   @@unique([userId, label])
@@ -2359,4 +2367,67 @@ model InviteImport {
   importedAt    DateTime?
 
   @@index([status, nextAttemptAt])
+}
+
+enum PositiveReplyState {
+  // Counted in the campaign's pipeline.
+  COUNTED
+  // The owner took it out: it stays so no detection counts the person again.
+  REMOVED
+}
+
+// Who or what counted it: the word rules, the AI (for a reply the rules were not sure about), or the owner by hand.
+enum PositiveReplySource {
+  RULES
+  AI
+  MARKED
+}
+
+enum PositiveReplyCheckState {
+  // The rules were not sure; waits for the AI.
+  WAITING
+  DONE
+  SKIPPED
+}
+
+// One person who answered a campaign with interest (.plan/campaign-revenue-pipeline.md). One row per person (by profile slug) and campaign, so
+// thirty people are thirty replies however many messages they wrote. No message text is kept here.
+model PositiveReply {
+  id             String              @id @default(uuid(7))
+  userId         String
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignId     String
+  campaign       Campaign            @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  slug           String
+  state          PositiveReplyState  @default(COUNTED)
+  source         PositiveReplySource
+  conversationId String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@unique([campaignId, slug])
+  @@index([userId, campaignId, state])
+}
+
+// A reply the word rules were not sure about, waiting for one AI read. Holds ids only, never the text: the job reads the message when it
+// runs, and a message the retention removed ends the check as skipped.
+model PositiveReplyCheck {
+  id             String                  @id @default(uuid(7))
+  userId         String
+  user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignId     String
+  campaign       Campaign                @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  messageId      String
+  conversationId String
+  slug           String
+  state          PositiveReplyCheckState @default(WAITING)
+  // A fixed sentence for the end of a check.
+  reason         String?
+  attempts       Int                     @default(0)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@unique([messageId, campaignId])
+  @@index([state, createdAt])
+  @@index([userId, state])
 }

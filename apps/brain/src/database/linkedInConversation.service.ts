@@ -1,4 +1,5 @@
 import { KeptFiles } from 'core'
+import { log } from 'core/log'
 
 import { type Prisma } from 'generated/prisma/client'
 
@@ -7,6 +8,7 @@ import { type MessagesFile, keptPrefix, sentKey } from '@automatedLinkedIn/contr
 import { summaryOf, timelineOf } from './conversationImport'
 import { withPeople } from './conversationPeople'
 import { type ConversationReply, latestReplies, pendingFirstMessages } from './conversationReply'
+import { PositiveReplyService } from './positiveReply.service'
 import { PrismaService } from './prisma.service'
 import { settleUnsureReplies, words } from './replySettle'
 
@@ -501,11 +503,36 @@ export class LinkedInConversationService {
                },
             })
 
-            return fresh.length
+            return {
+               conversationId: row.id,
+               count: fresh.length,
+               theirs: fresh.filter(message => message.direction === 'THEM').map(message => message.linkedInId),
+            }
          })
 
          conversations += 1
-         messages += added
+         messages += added.count
+
+         // New words from the person may be a positive reply (.plan/campaign-revenue-pipeline.md). It never breaks reading messages.
+         if (added.theirs.length > 0) {
+            try {
+               const stored = await PrismaService.client.linkedInMessage.findMany({
+                  where: {
+                     conversationId: added.conversationId,
+                     linkedInId: { in: added.theirs },
+                  },
+                  select: { id: true },
+               })
+
+               await PositiveReplyService.ingest(
+                  owner.userId,
+                  added.conversationId,
+                  stored.map(({ id }) => id)
+               )
+            } catch (error) {
+               log.error('Positive reply detection failed for a conversation', { error })
+            }
+         }
       }
 
       const { account } = file

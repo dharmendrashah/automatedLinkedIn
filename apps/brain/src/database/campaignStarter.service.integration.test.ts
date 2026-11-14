@@ -183,4 +183,21 @@ describe('the Starter (database)', () => {
       expect(await db.campaign.count({ where: { userId } })).toBe(before.campaigns)
       expect(await db.icp.count({ where: { userId } })).toBe(before.icps)
    })
+   it('should keep what one positive reply is worth a month on the campaign it makes, and leave it empty when none is given', async () => {
+      const worth = await CampaignStarterService.createOutreach(userId, {
+         ...answers,
+         name: 'Worth of a reply',
+         replyValueUsd: 100,
+      })
+      const unset = await CampaignStarterService.createOutreach(userId, {
+         ...answers,
+         name: 'No worth given',
+      })
+
+      const worthRow = await db.campaign.findUniqueOrThrow({ where: { id: worth.campaignId } })
+      const unsetRow = await db.campaign.findUniqueOrThrow({ where: { id: unset.campaignId } })
+
+      expect(worthRow.replyValueUsd).toBe(100)
+      expect(unsetRow.replyValueUsd).toBeNull()
+   })
 })

@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { CAMPAIGN_LIMITS, type CampaignStage, campaignLabelOf } from './campaign'
 import { PLATFORM_MAX } from './limits'
+import { replyValueSchema } from './positiveReply'
 import { templateProblems } from './template'
 import { type Graph, type GraphNode, type NodeConfig, blockOf } from './workflow'
 
@@ -81,6 +82,8 @@ export const outreachAnswersSchema = z
          }),
       handOffUrl: z.string().trim().max(500).default(''),
       postsPerDay: z.number().int().min(1).max(50).default(8),
+      // What one positive reply is worth a month, in whole USD (.plan/campaign-revenue-pipeline.md); the owner may leave it for later.
+      replyValueUsd: replyValueSchema.optional(),
    })
    .superRefine((answers, context) => {
       if (answers.customer.icpId === '' && answers.customer.includeTitles.length === 0) {

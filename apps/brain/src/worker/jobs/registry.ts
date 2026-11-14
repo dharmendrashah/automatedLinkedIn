@@ -13,6 +13,7 @@ import { invitationImport } from './invitationImport'
 import { inviteSend } from './inviteSend'
 import { messageImport } from './messageImport'
 import { peopleIndex } from './peopleIndex'
+import { positiveReplyCheck } from './positiveReplyCheck'
 import { postSend } from './postSend'
 import { postSweep } from './postSweep'
 import { profileImport } from './profileImport'
@@ -46,6 +47,7 @@ export const JOBS = unique('job', [
    postSweep,
    peopleIndex,
    personScore,
+   positiveReplyCheck,
    inviteSend,
    engageSend,
    eventDispatch,

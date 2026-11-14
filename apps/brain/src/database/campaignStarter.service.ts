@@ -71,7 +71,10 @@ export class CampaignStarterService {
          made.campaign = campaign.id
          await db.campaign.update({
             where: { id: campaign.id },
-            data: { icpId },
+            data: {
+               icpId,
+               replyValueUsd: answers.replyValueUsd ?? null,
+            },
          })
 
          const workflows: Array<{ id: string; stage: string; name: string }> = []

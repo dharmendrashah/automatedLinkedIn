@@ -2,6 +2,7 @@ import { CampaignFunnel } from '@/components/campaigns/campaign-funnel'
 import { STATE_META } from '@/components/campaigns/campaign-list-format'
 import { CampaignSummaryTiles } from '@/components/campaigns/campaign-summary-tiles'
 import { GoLive } from '@/components/campaigns/go-live'
+import { PipelineCard } from '@/components/campaigns/pipeline-card'
 import { ProjectionValue } from '@/components/campaigns/projection-value'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -246,6 +247,8 @@ export const Campaign = () => {
          </Card>
 
          <CampaignSummaryTiles funnel={funnel} history={insights.data?.history} />
+
+         <PipelineCard campaignId={id} />
 
          <Tabs value={tab} onValueChange={setTab} className="grid gap-4">
             {tabbed ? (

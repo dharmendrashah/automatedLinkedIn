@@ -24,7 +24,7 @@ describe('nextStep and progressOf', () => {
    })
 
    it('counts a skipped step as done and reaches Review after the last question', () => {
-      expect(progressOf(['name', 'kind'])).toMatchObject({ done: 2, current: 3, total: 12, percent: 17 })
+      expect(progressOf(['name', 'kind'])).toMatchObject({ done: 2, current: 3, total: 13, percent: 15 })
 
       const all: StepId[] = [
          'name',
@@ -38,10 +38,11 @@ describe('nextStep and progressOf', () => {
          'when',
          'handOff',
          'posts',
+         'worth',
       ]
 
       expect(nextStep(all)).toBeNull()
-      expect(progressOf(all)).toMatchObject({ done: 11, current: 12 })
+      expect(progressOf(all)).toMatchObject({ done: 12, current: 13 })
    })
 })
 
@@ -66,6 +67,7 @@ describe('isComplete', () => {
       'when',
       'handOff',
       'posts',
+      'worth',
    ]
    const filled = form({ name: 'Acme', outreach: true, phrases: ['need leads'], titles: ['CEO'], message: 'Hi' })
 

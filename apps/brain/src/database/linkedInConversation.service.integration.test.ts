@@ -5,6 +5,7 @@ import { KeptFiles } from 'core'
 
 import { type MessagesFile } from '@automatedLinkedIn/contracts'
 
+import { CampaignService } from './campaign.service'
 import { LinkedInConversationService } from './linkedInConversation.service'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
@@ -726,5 +727,52 @@ describe('LinkedInConversationService (database)', () => {
       await expect(
          PrismaService.client.linkedInMessage.count({ where: { conversation: { accountId } } })
       ).resolves.toBe(0)
+   })
+   it('should count a new positive reply from a person of a campaign when their message is stored, and never break the read', async () => {
+      const campaign = await CampaignService.create(userId, { name: `Replies ${randomUUID().slice(0, 8)}` })
+
+      await PrismaService.client.person.create({
+         data: {
+            userId,
+            slug: 'ada-pos',
+            labels: [campaign.label],
+            lastTouchAt: new Date(),
+         },
+      })
+
+      const positive = file({
+         id: '2-ada-pos',
+         participants: [
+            {
+               ...ADA,
+               profileUrl: 'https://www.linkedin.com/in/ada-pos/',
+            },
+         ],
+         messages: [message('p1', 'THEM', '09:00', "I'm interested, let's talk")],
+      })
+
+      const mine = await account(userId)
+
+      await expect(
+         LinkedInConversationService.store(
+            {
+               userId,
+               accountId: mine.id,
+            },
+            positive
+         )
+      ).resolves.toMatchObject({ messages: 1 })
+      expect(
+         await PrismaService.client.positiveReply.findFirst({
+            where: {
+               userId,
+               campaignId: campaign.id,
+               slug: 'ada-pos',
+            },
+         })
+      ).toMatchObject({
+         state: 'COUNTED',
+         source: 'RULES',
+      })
    })
 })

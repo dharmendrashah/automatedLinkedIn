@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react'
 
 import { CAMPAIGN_LIMITS } from '@automatedLinkedIn/contracts'
 
+import { parseWorth } from '../pipeline-format'
 import { ChoiceButtons } from './ChoiceButtons'
 import type { Lists } from './StepInput'
 import type { Form } from './steps'
@@ -179,6 +180,28 @@ export const AllFields = ({
             value={form.postsPerDay ?? suggested}
             onChange={event => set({ postsPerDay: event.target.value === '' ? null : Number(event.target.value) })}
          />
+      </Field>
+
+      <Field
+         label="11. What one positive reply is worth"
+         hint="Whole USD a month. The revenue pipeline is positive replies x this x 12. You can set it later on the campaign page."
+      >
+         <div className="flex items-center gap-2">
+            <span className="text-sm">$</span>
+            <Input
+               inputMode="numeric"
+               aria-label="Worth of one positive reply, in USD a month"
+               className="w-32"
+               placeholder="100"
+               value={form.replyValueUsd ?? ''}
+               onChange={event => {
+                  const worth = parseWorth(event.target.value)
+
+                  set({ replyValueUsd: worth === 'invalid' ? form.replyValueUsd : worth })
+               }}
+            />
+            <span className="text-sm">a month</span>
+         </div>
       </Field>
 
       {error ? <p className="text-destructive text-sm">{error}</p> : null}

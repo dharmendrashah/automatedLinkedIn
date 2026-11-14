@@ -181,6 +181,7 @@ export {
 } from './taskErrors'
 export { PersonService } from './person.service'
 export { PersonScoreService, type RescoreResult } from './personScore.service'
+export { type BackfillResult, type PipelineStats, PositiveReplyService } from './positiveReply.service'
 export { PersonSnapshotService, RECENT_DAYS } from './personSnapshot.service'
 export { CollectKeepService, COMPANY_REMEMBER_DAYS, EMAIL_REMEMBER_DAYS, type Kept } from './collectKeep.service'
 export { CollectCacheService } from './collectCache.service'

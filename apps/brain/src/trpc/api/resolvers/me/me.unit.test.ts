@@ -48,6 +48,7 @@ const row = {
    role: 'USER',
    authentikId: 'sub-1',
    riskAcceptedAt: null,
+   aiReadsReplies: true,
    createdAt: new Date(),
    updatedAt: new Date(),
 }
