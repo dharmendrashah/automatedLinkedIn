@@ -242,3 +242,43 @@ export type CampaignInsights = {
       missing: CampaignCapacityMissing[]
    }
 }
+
+export const CAMPAIGN_LIST_STATES = ['NO_WORKFLOWS', 'PAUSED', 'NOT_STARTED', 'RUNNING'] as const
+
+export type CampaignListState = (typeof CAMPAIGN_LIST_STATES)[number]
+
+export const campaignListStateOf = ({
+   workflows,
+   paused,
+   since,
+}: {
+   workflows: number
+   paused: boolean
+   since: string | null
+}): CampaignListState => {
+   if (workflows === 0) return 'NO_WORKFLOWS'
+   if (paused) return 'PAUSED'
+   if (since === null) return 'NOT_STARTED'
+   return 'RUNNING'
+}
+
+export type CampaignListNumbers = {
+   qualified: number
+   invited: number
+   // Null when nothing was invited in the window; can pass 100% for invites sent before the window.
+   acceptRate: number | null
+   replied: number
+}
+
+// Numbers cover the last 14 complete days. Null numbers and projection mean "not shown", never zero.
+export type CampaignListRow = {
+   id: string
+   name: string
+   workflows: number
+   pausedAt: string | null
+   createdAt: string
+   state: CampaignListState
+   numbers: CampaignListNumbers | null
+   gate: CampaignInsights['gate']
+   projection: CampaignProjection | null
+}
