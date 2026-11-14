@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { LOCATIONS, TITLES } from '@/components/workflows/chip-values'
 import { Chips, ChipsInput } from '@/components/workflows/setting-inputs'
+import { Loader2 } from 'lucide-react'
 
 import { CAMPAIGN_LIMITS } from '@automatedLinkedIn/contracts'
 
@@ -27,7 +28,9 @@ export const AllFields = ({
    suggested,
    used,
    problems,
-   onReview,
+   error,
+   busy,
+   onCreate,
 }: {
    form: Form
    set: (patch: Partial<Form>) => void
@@ -35,7 +38,9 @@ export const AllFields = ({
    suggested: number
    used: number
    problems: string[]
-   onReview: () => void
+   error: string | null
+   busy: boolean
+   onCreate: () => void
 }) => (
    <div className="grid gap-6">
       <Field label="1. Name" hint="1 to 60 characters. The people it finds get a label made from it.">
@@ -176,6 +181,7 @@ export const AllFields = ({
          />
       </Field>
 
+      {error ? <p className="text-destructive text-sm">{error}</p> : null}
       {problems.length > 0 ? (
          <ul className="text-destructive grid gap-1 text-sm">
             {problems.map(problem => (
@@ -184,8 +190,9 @@ export const AllFields = ({
          </ul>
       ) : null}
       <div>
-         <Button disabled={problems.length > 0} onClick={onReview}>
-            Review
+         <Button disabled={problems.length > 0 || busy} onClick={onCreate}>
+            {busy ? <Loader2 className="animate-spin" /> : null}
+            Create campaign
          </Button>
       </div>
    </div>

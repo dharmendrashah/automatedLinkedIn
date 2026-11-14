@@ -7,27 +7,27 @@ import {
    STEPS,
    type StepId,
    answersOf,
+   isComplete,
    nextStep,
    reconcile,
    resetStep,
    stepProblems,
    suggestedPostsOf,
 } from '@/components/campaigns/outreach-chat/steps'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { browserTimeZone } from '@/components/workflows/schedule-text'
 import { readableError } from '@/lib/trpc-error'
-import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 
-import { STAGE_LABELS, buildOutreach, capacityOf, outreachAnswersSchema } from '@automatedLinkedIn/contracts'
+import { outreachAnswersSchema } from '@automatedLinkedIn/contracts'
 
 import { trpc } from '../trpc'
 
-// A chat that builds the six workflows of the outreach pipeline, switched off (.plan/campaign-outreach-chat-onboarding.md,
-// .plan/lead-pipeline-p6-campaign-starter.md). Plain words, safe defaults; nothing here names a block or a threshold. The review
-// shows what will be made before anything is. The answers are kept in sessionStorage until the campaign is created.
+// A chat that makes a campaign (.plan/campaign-outreach-chat-onboarding.md, .plan/campaign-create-in-chat.md,
+// .plan/campaign-create-without-review.md): a name, then either an empty campaign or the six workflows of the outreach pipeline,
+// switched off. There is no review: the last answer makes the campaign and opens its page. The answers are kept in sessionStorage
+// until the campaign is made.
 export const NewCampaign = () => {
    const navigate = useNavigate()
    const utils = trpc.useUtils()
@@ -39,46 +39,37 @@ export const NewCampaign = () => {
    const [notice, setNotice] = useState<string | null>(null)
 
    const forget = (id: StepId) => setDraft(current => ({ ...current, done: current.done.filter(each => each !== id) }))
+   // A failure shows its sentence; a name or label already taken also goes back to the name question, with every answer kept.
+   const failed = (error: { message: string; data?: { code?: string } | null }) => {
+      if (error.data?.code === 'CONFLICT') {
+         forget('name')
+         setMode('chat')
+      }
+
+      setNotice(readableError(error))
+   }
+   const opened = async (id: string) => {
+      clearDraft()
+      await utils.campaign.list.invalidate()
+      void navigate(`/campaigns/${id}`)
+   }
    const create = trpc.campaign.createOutreach.useMutation({
-      onSuccess: async made => {
-         clearDraft()
-         await utils.campaign.list.invalidate()
-         void navigate(`/campaigns/${made.campaignId}`)
-      },
-      onError: error => {
-         // A name or label already taken: back to the name question, with every answer kept.
-         if (error.data?.code === 'CONFLICT') {
-            forget('name')
-            setNotice(readableError(error))
-         }
-      },
+      onSuccess: made => opened(made.campaignId),
+      onError: failed,
    })
-
-   // "No" at the kind question: an empty campaign with the typed name, then the chat is over.
+   // "No" at the kind question: an empty campaign with the typed name.
    const createEmpty = trpc.campaign.create.useMutation({
-      onSuccess: async made => {
-         clearDraft()
-         await utils.campaign.list.invalidate()
-         void navigate(`/campaigns/${made.id}`)
-      },
-      onError: error => {
-         if (error.data?.code === 'CONFLICT') {
-            forget('name')
-         }
-
-         setNotice(readableError(error))
-      },
+      onSuccess: made => opened(made.id),
+      onError: failed,
    })
 
    const accountList = accounts.data ?? []
+   const signedInIds = accountList.filter(({ status }) => status === 'ACTIVE').map(({ id }) => id)
    const form = reconcile(draft.form, {
       accountIds: accounts.data ? accountList.map(({ id }) => id) : null,
       icpIds: icps.data ? icps.data.map(({ id }) => id) : null,
    })
-   const { used, suggested } = suggestedPostsOf(
-      form,
-      accountList.filter(({ status }) => status === 'ACTIVE').map(({ id }) => id)
-   )
+   const { used, suggested } = suggestedPostsOf(form, signedInIds)
    // A step whose answer no longer holds (an account was removed, say) is asked again.
    const done = draft.done.filter(id => stepProblems(id, form, suggested).length === 0)
    const current = nextStep(done)
@@ -88,21 +79,31 @@ export const NewCampaign = () => {
       icps: icps.data ?? [],
       icpsFailed: icps.isError,
    }
-   const answers = answersOf(form, suggested)
-   const parsed = outreachAnswersSchema.safeParse(answers)
+   const parsed = outreachAnswersSchema.safeParse(answersOf(form, suggested))
    const problems = parsed.success ? [] : [...new Set(parsed.error.issues.map(({ message }) => message))]
-   const capacity = capacityOf(used, parsed.success ? parsed.data.postsPerDay : (form.postsPerDay ?? suggested))
+   const busy = create.isPending || createEmpty.isPending
 
    useEffect(() => saveDraft({ form, done: draft.done }), [form, draft.done])
 
    const set = (patch: Partial<Form>) => setDraft(c => ({ ...c, form: { ...c.form, ...patch } }))
-   const finish = (id: StepId) => {
+   // Makes the campaign once the answers are all in and valid; never twice at the same time.
+   const makeIfComplete = (nextForm: Form, nextDone: StepId[]) => {
+      const answered = suggestedPostsOf(nextForm, signedInIds).suggested
+      const result = outreachAnswersSchema.safeParse(answersOf(nextForm, answered))
+
+      if (!busy && isComplete(nextDone, nextForm, answered) && result.success) {
+         create.mutate(result.data)
+      }
+   }
+   const finish = (id: StepId, patch: Partial<Form> = {}) => {
       setNotice(null)
-      setDraft(c => ({ ...c, done: c.done.includes(id) ? c.done : [...c.done, id] }))
+      setDraft(c => ({ form: { ...c.form, ...patch }, done: c.done.includes(id) ? c.done : [...c.done, id] }))
+      makeIfComplete({ ...form, ...patch }, [...new Set([...done, id])])
    }
    const skip = (id: StepId) => {
       setNotice(null)
       setDraft(c => ({ form: resetStep(c.form, id, timeZone), done: c.done.includes(id) ? c.done : [...c.done, id] }))
+      makeIfComplete(resetStep(form, id, timeZone), [...new Set([...done, id])])
    }
    const startOver = () => {
       clearDraft()
@@ -110,54 +111,7 @@ export const NewCampaign = () => {
       setDraft(freshDraft(timeZone))
    }
 
-   if (mode === 'chat' && current === null && parsed.success) {
-      const { workflows } = buildOutreach(answers, 'review')
-
-      return (
-         <div className="grid w-full gap-4 px-4 lg:px-6">
-            <h2 className="text-lg font-semibold">{`Review: ${parsed.data.name}`}</h2>
-            <ol className="flex flex-wrap items-center gap-2 text-sm">
-               {workflows.map(({ stage, graph }, at) => (
-                  <li key={stage} className="flex items-center gap-2">
-                     {at > 0 ? <span className="text-muted-foreground">{'\u2192'}</span> : null}
-                     <span className="rounded-lg border px-3 py-2">
-                        {`${at + 1} ${STAGE_LABELS[stage]}`}
-                        <span className="text-muted-foreground block text-xs">{`${graph.nodes.length} blocks`}</span>
-                     </span>
-                  </li>
-               ))}
-            </ol>
-            <p className="text-sm">{capacity.sentence}</p>
-            {parsed.data.postsPerDay > capacity.suggestedPosts && used > 0 ? (
-               <p className="text-muted-foreground text-sm">{`${capacity.suggestedPosts} posts a day is enough for these accounts.`}</p>
-            ) : null}
-            <p className="text-sm">
-               {accountList.some(({ status }) => status !== 'ACTIVE')
-                  ? `${accountList.filter(({ status }) => status !== 'ACTIVE').length} accounts are not signed in and will be skipped.`
-                  : 'Every account is signed in.'}
-            </p>
-            <p className="text-sm font-medium">
-               Nothing will act on LinkedIn yet: every stage is off and "Act for real" is off in every block.
-            </p>
-            {create.error && !notice ? (
-               <Alert variant="destructive">
-                  <AlertDescription>{readableError(create.error)}</AlertDescription>
-               </Alert>
-            ) : null}
-            <div className="flex gap-2">
-               <Button variant="outline" onClick={() => forget('posts')}>
-                  Back
-               </Button>
-               <Button disabled={create.isPending} onClick={() => create.mutate(parsed.data)}>
-                  {create.isPending ? <Loader2 className="animate-spin" /> : null}
-                  Create the campaign
-               </Button>
-            </div>
-         </div>
-      )
-   }
-
-   if (mode === 'chat' && current !== null) {
+   if (mode === 'chat') {
       return (
          <OutreachChat
             form={form}
@@ -174,7 +128,8 @@ export const NewCampaign = () => {
             onEditAll={form.outreach ? () => setMode('form') : undefined}
             onStartOver={startOver}
             onEmpty={() => createEmpty.mutate({ name: form.name })}
-            busy={createEmpty.isPending}
+            onCreate={() => (parsed.success ? create.mutate(parsed.data) : undefined)}
+            busy={busy}
          />
       )
    }
@@ -199,9 +154,15 @@ export const NewCampaign = () => {
             suggested={suggested}
             used={used}
             problems={problems}
-            onReview={() => {
+            error={notice}
+            busy={busy}
+            onCreate={() => {
+               setNotice(null)
                setDraft(c => ({ ...c, done: STEPS.map(({ id }) => id) }))
-               setMode('chat')
+
+               if (parsed.success) {
+                  create.mutate(parsed.data)
+               }
             }}
          />
       </div>

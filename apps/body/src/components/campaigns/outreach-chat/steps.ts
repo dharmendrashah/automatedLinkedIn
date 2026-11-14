@@ -234,10 +234,14 @@ export const stepProblems = (id: StepId, form: Form, suggested: number) => {
    return [...new Set(found)]
 }
 
+// Every question answered and every answer valid: the campaign can be made, with no review in between.
+export const isComplete = (done: StepId[], form: Form, suggested: number) =>
+   STEPS.every(({ id }) => done.includes(id) && stepProblems(id, form, suggested).length === 0)
+
 // Done steps are the ones answered or skipped. The next one is the first not done.
 export const nextStep = (done: StepId[]) => STEPS.find(({ id }) => !done.includes(id))?.id ?? null
 
-// "Step 3 of 11": the step in front of the user (Review is the eleventh), and how much is done.
+// The step in front of the user (one past the last question once all are answered), and how much is done.
 export const progressOf = (done: StepId[]) => {
    const total = STEPS.length + 1
    const at = STEPS.findIndex(({ id }) => !done.includes(id))

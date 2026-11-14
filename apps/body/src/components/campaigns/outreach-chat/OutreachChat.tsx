@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Progress } from '@/components/ui/progress'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Bird, CircleHelp, MoreHorizontal } from 'lucide-react'
+import { Bird, CircleHelp, Loader2, MoreHorizontal } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { Link } from 'react-router'
 
@@ -23,19 +23,22 @@ type Props = {
    set: (patch: Partial<Form>) => void
    // Steps answered or skipped, with the ones that no longer hold left out.
    done: StepId[]
-   current: StepId
+   // Null once every question is answered: the campaign is being made.
+   current: StepId | null
    lists: Lists
    suggested: number
    used: number
    // A sentence from the server, for example a name already taken.
    notice: string | null
-   onDone: (id: StepId) => void
+   onDone: (id: StepId, patch?: Partial<Form>) => void
    onSkip: (id: StepId) => void
    onReopen: (id: StepId) => void
    // Left out until "Yes": the one-page form is the outreach form.
    onEditAll?: () => void
    onStartOver: () => void
    onEmpty: () => void
+   // Makes the outreach campaign again after a failure.
+   onCreate: () => void
    busy: boolean
 }
 
@@ -84,11 +87,12 @@ export const OutreachChat = ({
    onEditAll,
    onStartOver,
    onEmpty,
+   onCreate,
    busy,
 }: Props) => {
    const thread = useRef<HTMLDivElement>(null)
    const progress = progressOf(done)
-   const at = STEPS.findIndex(({ id }) => id === current)
+   const at = current === null ? STEPS.length - 1 : STEPS.findIndex(({ id }) => id === current)
    const icpName = lists.icps.find(({ id }) => id === form.icpId)?.name ?? null
 
    // The thread scrolls to the newest message (not the window), without motion when the user asked for none.
@@ -96,7 +100,7 @@ export const OutreachChat = ({
       const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
       thread.current?.scrollTo({ top: thread.current.scrollHeight, behavior: calm ? 'auto' : 'smooth' })
-   }, [current, done.length, notice])
+   }, [current, done.length, notice, busy])
 
    return (
       // Cancels the layout padding and takes the rest of the window under the header.
@@ -180,19 +184,32 @@ export const OutreachChat = ({
             ) : null}
          </div>
          <div className="bg-background max-h-[50vh] overflow-y-auto border-t px-4 py-3 lg:px-6">
-            <StepInput
-               key={current}
-               id={current}
-               form={form}
-               set={set}
-               lists={lists}
-               suggested={suggested}
-               used={used}
-               onDone={() => onDone(current)}
-               onSkip={() => onSkip(current)}
-               onEmpty={onEmpty}
-               busy={busy}
-            />
+            {current === null ? (
+               busy ? (
+                  <p className="text-muted-foreground flex items-center gap-2 text-sm">
+                     <Loader2 className="size-4 animate-spin" />
+                     Creating your campaign
+                  </p>
+               ) : (
+                  <Button variant="outline" size="sm" className="rounded-full" onClick={onCreate}>
+                     Try again
+                  </Button>
+               )
+            ) : (
+               <StepInput
+                  key={current}
+                  id={current}
+                  form={form}
+                  set={set}
+                  lists={lists}
+                  suggested={suggested}
+                  used={used}
+                  onDone={patch => onDone(current, patch)}
+                  onSkip={() => onSkip(current)}
+                  onEmpty={onEmpty}
+                  busy={busy}
+               />
+            )}
          </div>
       </div>
    )

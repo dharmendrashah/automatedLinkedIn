@@ -32,7 +32,7 @@ type Props = {
    suggested: number
    used: number
    // Records the step as answered.
-   onDone: () => void
+   onDone: (patch?: Partial<Form>) => void
    // Puts the step's fields back to their start and records it as done.
    onSkip: () => void
    // "No, an empty campaign": makes it and ends the chat.
@@ -81,11 +81,7 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
          return
       }
 
-      if (id === 'posts') {
-         set({ postsPerDay: posts })
-      }
-
-      onDone()
+      onDone(id === 'posts' ? { postsPerDay: posts } : undefined)
    }
    // Enter sends; in a text area, Shift+Enter makes a new line.
    const enter = (event: React.KeyboardEvent) => {
@@ -116,13 +112,7 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
             return {
                options: (
                   <>
-                     <Chip
-                        disabled={busy}
-                        onClick={() => {
-                           set({ outreach: true })
-                           onDone()
-                        }}
-                     >
+                     <Chip disabled={busy} onClick={() => onDone({ outreach: true })}>
                         Yes, build the outreach workflows
                      </Chip>
                      <Chip disabled={busy} onClick={onEmpty}>
@@ -139,13 +129,7 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
                   lists.icps.length > 0 ? (
                      <>
                         {lists.icps.map(icp => (
-                           <Chip
-                              key={icp.id}
-                              onClick={() => {
-                                 set({ icpId: icp.id, titles: [], locations: [] })
-                                 onDone()
-                              }}
-                           >
+                           <Chip key={icp.id} onClick={() => onDone({ icpId: icp.id, titles: [], locations: [] })}>
                               {icp.name}
                            </Chip>
                         ))}
@@ -189,10 +173,7 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
                   <>
                      <Chip
                         selected={form.accountMode === 'all'}
-                        onClick={() => {
-                           set({ accountMode: 'all', accountIds: [] })
-                           onDone()
-                        }}
+                        onClick={() => onDone({ accountMode: 'all', accountIds: [] })}
                      >
                         Every signed-in account
                      </Chip>

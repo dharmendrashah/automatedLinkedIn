@@ -4,6 +4,7 @@ import {
    type Form,
    type StepId,
    emptyForm,
+   isComplete,
    nextStep,
    parsePosts,
    progressOf,
@@ -49,6 +50,36 @@ describe('kind', () => {
       expect(nextStep(['name'])).toBe('kind')
       expect(stepProblems('kind', form(), 8)).toEqual(['Choose yes or no.'])
       expect(stepProblems('kind', form({ outreach: true }), 8)).toEqual([])
+   })
+})
+
+describe('isComplete', () => {
+   const all: StepId[] = [
+      'name',
+      'kind',
+      'phrases',
+      'customer',
+      'accounts',
+      'note',
+      'message',
+      'warmUp',
+      'when',
+      'handOff',
+      'posts',
+   ]
+   const filled = form({ name: 'Acme', outreach: true, phrases: ['need leads'], titles: ['CEO'], message: 'Hi' })
+
+   it('is true only when every question is answered and every answer holds', () => {
+      expect(isComplete(all, filled, 8)).toBe(true)
+      expect(
+         isComplete(
+            all.filter(id => id !== 'posts'),
+            filled,
+            8
+         )
+      ).toBe(false)
+      expect(isComplete(all, { ...filled, message: '' }, 8)).toBe(false)
+      expect(isComplete(all, { ...filled, outreach: false }, 8)).toBe(false)
    })
 })
 
