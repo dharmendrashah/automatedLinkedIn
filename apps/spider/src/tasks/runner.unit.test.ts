@@ -403,6 +403,8 @@ describe('runTask', () => {
          status: 'FAILED',
          verdict: 'INVALID_INPUT',
       })
+      // It names the field that failed, never what was in it.
+      expect(published[0]?.message).toContain('word')
       expect(JSON.stringify(published[0])).not.toContain('42')
       expect(deps.driver.open).not.toHaveBeenCalled()
    })

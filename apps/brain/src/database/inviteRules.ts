@@ -5,6 +5,8 @@ import {
    type InviteSendOutcome,
    type InviteWithdrawOutcome,
    type TemplateValues,
+   inviteSendSchema,
+   inviteWithdrawSchema,
    renderTemplate,
 } from '@automatedLinkedIn/contracts'
 
@@ -178,6 +180,30 @@ export const fillNote = (note: string | undefined, values: TemplateValues) => {
 }
 
 const GIVE_UP_AFTER = 3
+
+export const UNUSABLE_INVITE_SENTENCE = 'The profile address or name could not be used. Nothing was sent.'
+export const UNUSABLE_WITHDRAW_SENTENCE =
+   'The profile address could not be used to withdraw it. It may still be pending on LinkedIn.'
+
+type SendRow = { id: string; slug: string; name: string; note?: string | undefined }
+type WithdrawRow = { id: string; slug: string; name: string }
+
+// An invite as the invite task takes it; a note is left out when there is none.
+export const sendInput = ({ id, slug, name, note }: SendRow) => ({
+   id,
+   slug,
+   name,
+   ...(note && { note }),
+})
+
+// Splits what is due into what the task will accept and what its schema would refuse. One refused row makes the spider refuse the
+// whole run (INVALID_INPUT), so a row that cannot be asked for is ended here and the others go.
+export const askable = <S extends SendRow, W extends WithdrawRow>(sends: S[], withdrawals: W[]) => ({
+   sends: sends.filter(row => inviteSendSchema.safeParse(sendInput(row)).success),
+   refusedSends: sends.filter(row => !inviteSendSchema.safeParse(sendInput(row)).success),
+   withdrawals: withdrawals.filter(row => inviteWithdrawSchema.safeParse(row).success),
+   refusedWithdrawals: withdrawals.filter(row => !inviteWithdrawSchema.safeParse(row).success),
+})
 
 export type InviteChange = {
    state: LinkedInInviteState

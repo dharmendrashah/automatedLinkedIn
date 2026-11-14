@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+   askable,
    fillNote,
    inviteSentence,
    notesBackAt,
@@ -206,5 +207,68 @@ describe('sendChange and withdrawChange', () => {
          reason: 'Withdraw failed after 3 tries; the invite may still be pending on LinkedIn.',
          tries: 3,
       })
+   })
+})
+
+describe('askable', () => {
+   const ID = (n: number) => `00000000-0000-4000-8000-00000000000${n}`
+   const good = {
+      id: ID(1),
+      slug: 'ada-l',
+      name: 'Ada Lovelace',
+   }
+
+   it('keeps what the invite task accepts and sets aside what its schema would refuse', () => {
+      const accented = {
+         id: ID(2),
+         slug: 'fran\u00e7ois-d',
+         name: 'Fran\u00e7ois D',
+      }
+      const longName = {
+         id: ID(3),
+         slug: 'grace-h',
+         name: 'G'.repeat(201),
+      }
+      const longNote = {
+         id: ID(4),
+         slug: 'alan-t',
+         name: 'Alan T',
+         note: 'n'.repeat(201),
+      }
+      const result = askable([good, accented, longName, longNote], [])
+
+      expect(result.sends).toEqual([good])
+      expect(result.refusedSends.map(({ id }) => id)).toEqual([ID(2), ID(3), ID(4)])
+   })
+
+   it('treats a withdrawal the same way', () => {
+      const result = askable(
+         [],
+         [
+            good,
+            {
+               id: ID(2),
+               slug: 'fran\u00e7ois-d',
+               name: 'Fran\u00e7ois D',
+            },
+         ]
+      )
+
+      expect(result.withdrawals).toEqual([good])
+      expect(result.refusedWithdrawals.map(({ id }) => id)).toEqual([ID(2)])
+   })
+
+   it('leaves a note out of the input when there is none, as the task expects', () => {
+      expect(
+         askable(
+            [
+               {
+                  ...good,
+                  note: undefined,
+               },
+            ],
+            []
+         ).sends
+      ).toHaveLength(1)
    })
 })

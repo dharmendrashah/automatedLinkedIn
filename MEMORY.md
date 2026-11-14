@@ -334,6 +334,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-11-14: Staging invite runs ended `INVALID_INPUT` for one account: a person's slug with an accented letter (`ç`) fails the invite contract (`A-Za-z0-9_%-` only), the spider refused the whole batch, and brain re-queued the same invites (tries 42) so nothing went out since 13 Nov. Fixed in `.plan/invite-unusable-profile-address.md`: brain ends rows the contract would refuse before asking (`askable`), and the runner's refusal names the failing fields. Read staging with `/Users/soni/gcloud/google-cloud-sdk/bin` on PATH (gcloud and the GKE auth plugin live there; `gcloud auth login --update-adc` when the login expires), `kubectl exec -i` into `brain-worker` with a script on stdin (`node -`, the root filesystem is read-only), and `gcloud logging read` for the `spider-worker` Cloud Run job. Open: accented slugs are not invitable until the right encoding is verified on a real profile.
 - 2026-11-14: Workflows list redesigned (`.plan/workflows-list-redesign.md`): icons, a Campaign column (name from `workflow.list`, which now selects `campaign.name`), and the last run's Found, Qualified, Maybe and Cost in their own columns (`workflow-row.ts`, `workflow-list-cells.tsx`); List and Started columns removed; not seen signed in.
 
 - 2026-11-14: Sidebar groups are collapsible and start closed except the group of the current page (`activeGroupLabel` in `nav-groups.ts`); a closed group shows the sum of its badges so pending approvals stay visible.

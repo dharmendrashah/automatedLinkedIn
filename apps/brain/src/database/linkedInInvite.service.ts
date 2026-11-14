@@ -10,12 +10,16 @@ import {
    LIVE,
    PENDING,
    type SkipReason,
+   UNUSABLE_INVITE_SENTENCE,
+   UNUSABLE_WITHDRAW_SENTENCE,
+   askable,
    fillNote,
    inviteSentence,
    noteSentOf,
    notesBackAt,
    planInvites,
    sendChange,
+   sendInput,
    skipReasonOf,
    withdrawChange,
 } from './inviteRules'
@@ -727,7 +731,41 @@ export class LinkedInInviteService {
          }
       }
 
-      const ready = await this.withNames(sends)
+      // The spider refuses a whole run when one row does not fit its schema, so a row it would refuse is ended here (a profile address
+      // with an accented letter, say) and the rest go. Left in the queue it would be asked for again by every run, for ever.
+      const named = await this.withNames(sends)
+      const ask = askable(named, withdrawals)
+
+      await db.linkedInInvite.updateMany({
+         where: {
+            id: { in: ask.refusedSends.map(({ id }) => id) },
+            state: 'QUEUED',
+         },
+         data: {
+            state: 'FAILED',
+            reason: UNUSABLE_INVITE_SENTENCE,
+         },
+      })
+      await db.linkedInInvite.updateMany({
+         where: {
+            id: { in: ask.refusedWithdrawals.map(({ id }) => id) },
+            state: 'WITHDRAW_QUEUED',
+         },
+         data: {
+            state: 'SENT',
+            reason: UNUSABLE_WITHDRAW_SENTENCE,
+         },
+      })
+
+      const ready = ask.sends
+      const askedWithdrawals = ask.withdrawals
+
+      if (ready.length === 0 && askedWithdrawals.length === 0) {
+         return {
+            asked: false,
+            reason: 'Invites that could not be used were ended',
+         }
+      }
 
       try {
          await TaskService.request({
@@ -736,19 +774,14 @@ export class LinkedInInviteService {
             accountId,
             trigger: 'automatic',
             input: {
-               send: ready.map(({ id, slug, name, note }) => ({
-                  id,
-                  slug,
-                  name,
-                  ...(note && { note }),
-               })),
-               withdraw: withdrawals,
+               send: ready.map(sendInput),
+               withdraw: askedWithdrawals,
                ...(account.notesOutUntil && account.notesOutUntil > now && { notesOut: true }),
             },
             onStart: async (sessionId, tx) => {
                const sending = await tx.linkedInInvite.updateMany({
                   where: {
-                     id: { in: sends.map(({ id }) => id) },
+                     id: { in: ready.map(({ id }) => id) },
                      state: 'QUEUED',
                   },
                   data: {
@@ -772,7 +805,7 @@ export class LinkedInInviteService {
                }
                const withdrawing = await tx.linkedInInvite.updateMany({
                   where: {
-                     id: { in: withdrawals.map(({ id }) => id) },
+                     id: { in: askedWithdrawals.map(({ id }) => id) },
                      state: 'WITHDRAW_QUEUED',
                   },
                   data: {
@@ -781,7 +814,7 @@ export class LinkedInInviteService {
                   },
                })
 
-               if (sending.count !== sends.length || withdrawing.count !== withdrawals.length) {
+               if (sending.count !== ready.length || withdrawing.count !== askedWithdrawals.length) {
                   throw new InvitesTaken()
                }
             },
