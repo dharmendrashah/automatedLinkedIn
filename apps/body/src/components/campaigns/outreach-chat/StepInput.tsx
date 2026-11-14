@@ -1,13 +1,14 @@
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { ChipsInput } from '@/components/workflows/setting-inputs'
+import { LOCATIONS, TITLES } from '@/components/workflows/chip-values'
+import { Chips, ChipsInput } from '@/components/workflows/setting-inputs'
 import { ArrowUp } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { CAMPAIGN_LIMITS, capacityOf } from '@automatedLinkedIn/contracts'
 
+import { ChoiceButtons } from './ChoiceButtons'
 import { type Form, STEPS, type StepId, parsePosts, stepProblems } from './steps'
 
 export type Account = {
@@ -161,10 +162,21 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
                   ) : null,
                fields: describing ? (
                   <>
-                     <ChipsInput id="titles" kind="titles" value={form.titles} onChange={titles => set({ titles })} />
-                     <ChipsInput
+                     <p className="text-muted-foreground text-xs">Job titles</p>
+                     <ChoiceButtons
+                        id="titles"
+                        kind="titles"
+                        ownLabel="Add a job title"
+                        options={TITLES.slice(0, 16)}
+                        value={form.titles}
+                        onChange={titles => set({ titles })}
+                     />
+                     <p className="text-muted-foreground text-xs">Places (optional)</p>
+                     <ChoiceButtons
                         id="locations"
                         kind="locations"
+                        ownLabel="Add a place"
+                        options={LOCATIONS.slice(0, 14)}
                         value={form.locations}
                         onChange={locations => set({ locations })}
                      />
@@ -192,24 +204,23 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
                   </>
                ),
                fields:
-                  form.accountMode === 'pick'
-                     ? lists.accounts.map(account => (
-                          <label key={account.id} className="flex items-center gap-2 text-sm">
-                             <Checkbox
-                                checked={form.accountIds.includes(account.id)}
-                                onCheckedChange={on =>
-                                   set({
-                                      accountIds:
-                                         on === true
-                                            ? [...form.accountIds, account.id]
-                                            : form.accountIds.filter(each => each !== account.id),
-                                   })
-                                }
-                             />
-                             {account.status === 'ACTIVE' ? account.email : `${account.email} (not signed in)`}
-                          </label>
-                       ))
-                     : null,
+                  form.accountMode === 'pick' ? (
+                     <Chips
+                        id="accounts"
+                        options={lists.accounts.map(account => ({
+                           value: account.id,
+                           label: account.status === 'ACTIVE' ? account.email : `${account.email} (not signed in)`,
+                        }))}
+                        isOn={each => form.accountIds.includes(each)}
+                        onToggle={each =>
+                           set({
+                              accountIds: form.accountIds.includes(each)
+                                 ? form.accountIds.filter(item => item !== each)
+                                 : [...form.accountIds, each],
+                           })
+                        }
+                     />
+                  ) : null,
             }
          case 'note':
             return {
@@ -242,19 +253,19 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
             return {
                fields: (
                   <>
-                     <div className="flex flex-wrap gap-4">
-                        <label className="flex items-center gap-2 text-sm">
-                           <Checkbox checked={form.reactions} onCheckedChange={on => set({ reactions: on === true })} />
-                           React to their posts
-                        </label>
-                        <label className="flex items-center gap-2 text-sm">
-                           <Checkbox
-                              checked={form.comments === 'texts'}
-                              onCheckedChange={on => set({ comments: on === true ? 'texts' : 'off' })}
-                           />
-                           Comment with my texts
-                        </label>
-                     </div>
+                     <Chips
+                        id="warm-up"
+                        options={[
+                           { value: 'reactions', label: 'React to their posts' },
+                           { value: 'comments', label: 'Comment with my texts' },
+                        ]}
+                        isOn={each => (each === 'reactions' ? form.reactions : form.comments === 'texts')}
+                        onToggle={each =>
+                           each === 'reactions'
+                              ? set({ reactions: !form.reactions })
+                              : set({ comments: form.comments === 'texts' ? 'off' : 'texts' })
+                        }
+                     />
                      {form.comments === 'texts' ? (
                         <Textarea
                            aria-label="Comment texts, one on each line"

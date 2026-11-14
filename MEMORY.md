@@ -334,6 +334,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-11-14: Campaign chat and "Edit all fields" use toggle buttons for every choice (titles and places from the built-in lists plus an add-your-own field, accounts, warm-up, saved customer); no select, radios, checkboxes or suggestion dropdowns there (`.plan/campaign-chat-button-choices.md`).
+
 - 2026-11-14: Campaign chat: the hint under each question is now a tooltip behind a question-mark icon, and every assistant message has a bird avatar (`OutreachChat.tsx`); looked at in a throwaway preview, not on the signed-in page.
 
 - 2026-11-14: Removed the Create campaign pop-up; the chat now asks the name, then whether the campaign runs outreach (No makes an empty campaign, Yes continues the outreach questions); page title is "New campaign" (`.plan/campaign-create-in-chat.md`); repo gate passes, not walked in a browser (sign-in needed).

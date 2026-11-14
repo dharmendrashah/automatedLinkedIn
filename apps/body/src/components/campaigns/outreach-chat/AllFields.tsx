@@ -1,12 +1,13 @@
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { ChipsInput } from '@/components/workflows/setting-inputs'
+import { LOCATIONS, TITLES } from '@/components/workflows/chip-values'
+import { Chips, ChipsInput } from '@/components/workflows/setting-inputs'
 
 import { CAMPAIGN_LIMITS } from '@automatedLinkedIn/contracts'
 
+import { ChoiceButtons } from './ChoiceButtons'
 import type { Lists } from './StepInput'
 import type { Form } from './steps'
 
@@ -49,62 +50,58 @@ export const AllFields = ({
          <ChipsInput id="phrases" value={form.phrases} onChange={phrases => set({ phrases })} />
       </Field>
       <Field label="3. Who is your ideal customer?" hint="Job titles are enough. Or use one you saved.">
-         <ChipsInput id="titles" kind="titles" value={form.titles} onChange={titles => set({ titles })} />
-         <ChipsInput
+         {lists.icps.length > 0 ? (
+            <Chips
+               id="saved-customer"
+               options={[
+                  { value: '', label: 'Describe a new one' },
+                  ...lists.icps.map(icp => ({ value: icp.id, label: icp.name })),
+               ]}
+               isOn={each => each === form.icpId}
+               onToggle={icpId => set({ icpId })}
+            />
+         ) : null}
+         <ChoiceButtons
+            id="titles"
+            kind="titles"
+            ownLabel="Add a job title"
+            options={TITLES.slice(0, 16)}
+            value={form.titles}
+            onChange={titles => set({ titles })}
+         />
+         <ChoiceButtons
             id="locations"
             kind="locations"
+            ownLabel="Add a place"
+            options={LOCATIONS.slice(0, 14)}
             value={form.locations}
             onChange={locations => set({ locations })}
          />
-         {lists.icps.length > 0 ? (
-            <select
-               className="border-input h-9 rounded-md border bg-transparent px-2 text-sm"
-               aria-label="A saved ideal customer"
-               value={form.icpId}
-               onChange={event => set({ icpId: event.target.value })}
-            >
-               <option value="">Describe a new one above</option>
-               {lists.icps.map(icp => (
-                  <option key={icp.id} value={icp.id}>
-                     {icp.name}
-                  </option>
-               ))}
-            </select>
-         ) : null}
       </Field>
       <Field label="4. Which accounts?">
-         <div className="flex gap-4 text-sm">
-            <label className="flex items-center gap-2">
-               <input type="radio" checked={form.accountMode === 'all'} onChange={() => set({ accountMode: 'all' })} />
-               Every signed-in account
-            </label>
-            <label className="flex items-center gap-2">
-               <input
-                  type="radio"
-                  checked={form.accountMode === 'pick'}
-                  onChange={() => set({ accountMode: 'pick' })}
-               />
-               Pick
-            </label>
-         </div>
-         {form.accountMode === 'pick'
-            ? lists.accounts.map(account => (
-                 <label key={account.id} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                       checked={form.accountIds.includes(account.id)}
-                       onCheckedChange={on =>
-                          set({
-                             accountIds:
-                                on === true
-                                   ? [...form.accountIds, account.id]
-                                   : form.accountIds.filter(id => id !== account.id),
-                          })
-                       }
-                    />
-                    {account.email}
-                 </label>
-              ))
-            : null}
+         <Chips
+            id="account-mode"
+            options={[
+               { value: 'all', label: 'Every signed-in account' },
+               { value: 'pick', label: 'Pick' },
+            ]}
+            isOn={each => each === form.accountMode}
+            onToggle={each => set({ accountMode: each === 'pick' ? 'pick' : 'all' })}
+         />
+         {form.accountMode === 'pick' ? (
+            <Chips
+               id="accounts"
+               options={lists.accounts.map(account => ({ value: account.id, label: account.email }))}
+               isOn={each => form.accountIds.includes(each)}
+               onToggle={each =>
+                  set({
+                     accountIds: form.accountIds.includes(each)
+                        ? form.accountIds.filter(id => id !== each)
+                        : [...form.accountIds, each],
+                  })
+               }
+            />
+         ) : null}
       </Field>
       <Field
          label="5. Connection note (optional)"
@@ -119,17 +116,19 @@ export const AllFields = ({
          label="7. Warm-up"
          hint="While an invite is pending, the account reacts to their posts. A comment waits for your approval."
       >
-         <label className="flex items-center gap-2 text-sm">
-            <Checkbox checked={form.reactions} onCheckedChange={on => set({ reactions: on === true })} />
-            React to their posts
-         </label>
-         <label className="flex items-center gap-2 text-sm">
-            <Checkbox
-               checked={form.comments === 'texts'}
-               onCheckedChange={on => set({ comments: on === true ? 'texts' : 'off' })}
-            />
-            Comment with my texts
-         </label>
+         <Chips
+            id="warm-up"
+            options={[
+               { value: 'reactions', label: 'React to their posts' },
+               { value: 'comments', label: 'Comment with my texts' },
+            ]}
+            isOn={each => (each === 'reactions' ? form.reactions : form.comments === 'texts')}
+            onToggle={each =>
+               each === 'reactions'
+                  ? set({ reactions: !form.reactions })
+                  : set({ comments: form.comments === 'texts' ? 'off' : 'texts' })
+            }
+         />
          {form.comments === 'texts' ? (
             <Textarea
                aria-label="Comment texts, one on each line"

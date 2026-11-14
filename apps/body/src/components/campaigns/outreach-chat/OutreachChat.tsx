@@ -179,7 +179,7 @@ export const OutreachChat = ({
                </Alert>
             ) : null}
          </div>
-         <div className="bg-background border-t px-4 py-3 lg:px-6">
+         <div className="bg-background max-h-[50vh] overflow-y-auto border-t px-4 py-3 lg:px-6">
             <StepInput
                key={current}
                id={current}
