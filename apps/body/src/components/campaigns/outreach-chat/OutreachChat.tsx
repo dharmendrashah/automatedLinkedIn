@@ -133,9 +133,6 @@ export const OutreachChat = ({
             aria-label="Campaign setup"
             className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto px-4 py-4 lg:px-6"
          >
-            <Bubble from="assistant">
-               Hi. Let&apos;s set up a campaign. Nothing acts on LinkedIn until you switch it on.
-            </Bubble>
             {STEPS.slice(0, at + 1).map(({ id, question, hint }) => (
                <div key={id} className="grid gap-3">
                   <Bubble from="assistant">
