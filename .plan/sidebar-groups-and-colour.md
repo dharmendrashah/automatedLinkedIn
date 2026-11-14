@@ -43,7 +43,7 @@ Proposed (the owner can change these before lock):
 1. The four groups and their members are as proposed.
 2. The LinkedIn labels are shortened to Accounts, Companies, Posts.
 3. One colour per group, on the icon only.
-4. All groups open (no collapsing).
+4. All groups open (no collapsing). Changed 2026-11-14 at the owner's request: every group starts collapsed, except the one holding the current page (see Outcome).
 5. New branch `feat/sidebar-groups-and-colour` from the latest `main` (PR #220 is merged).
 
 ## Scope and non-goals
@@ -78,5 +78,7 @@ Proposed (the owner can change these before lock):
 ## Outcome
 
 Shipped: `nav-groups.ts` (four groups, `groupsFor`), `nav-main.tsx` renders labelled groups with a colour per group on the icons (Work blue, Outreach violet, LinkedIn teal, Settings amber), `app-sidebar.tsx` uses it; three LinkedIn labels shortened; the badge and the admin-only Cron monitor kept. Unit test `nav-groups.unit.test.ts`. Root gate passes. Page titles and routes unchanged ("Accounts" in the menu, "LinkedIn accounts" on the page).
+
+Change (2026-11-14): groups collapse. Each label is a button that opens and closes its group (`Collapsible` from `radix-ui`, no edit to `components/ui/*`). A group starts closed unless it holds the current page (`activeGroupLabel`); a group the user opened or closed by hand keeps that choice. A closed group shows the sum of its badges beside the label, so pending approvals stay visible while Work is closed. Looked at in the throwaway harness (light theme).
 
 Follow-ups: look at the real sidebar signed in, in dark theme and narrow; the full menu is taller than a 768 px screen, so it scrolls there.

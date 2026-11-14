@@ -88,3 +88,9 @@ export const groupsFor = ({ admin, waiting }: { admin: boolean; waiting?: number
          item.to === APPROVE ? { ...item, badge: waiting } : item,
       ]),
    }))
+
+export const isActivePath = (to: string, pathname: string) => pathname === to || pathname.startsWith(`${to}/`)
+
+// The group holding the page being looked at, so it is the one that starts open.
+export const activeGroupLabel = (groups: NavGroup[], pathname: string) =>
+   groups.find(group => group.items.some(item => isActivePath(item.to, pathname)))?.label ?? null
