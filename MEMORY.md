@@ -107,6 +107,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Gotchas
 
+- Campaign replies differ by screen: the campaign list sums the per-day replied counts (one person who replies on two days counts twice), while the detail `totalsOf` does not sum replied. Unique people needs a backend change (`.plan/campaign-list-and-detail-icons.md`).
 - `db:migrate:dev` (prisma migrate dev) asks to reset the local database when an applied migration was edited (seen 2026-11-10: `20261103100100_block_hooks`). Never accept the reset. To add a table: `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` for the SQL, write the migration folder by hand, then `db:migrate:deploy`.
 - Killed integration runs leave `automatedlinkedin_test_it_*` databases (820 seen, 11 GB) and `PostgreSQL.*` segments in the local Postgres container's `/dev/shm`; the next run then fails with "No space left on device" in the template migration or in afterAll. Drop only the `_it_` databases (never `automatedlinkedin`, `automatedlinkedin_test`, `authentik`) and restart `postgres` (`docker compose restart postgres`) after the leftover runs are gone, not while a run is still going.
 
@@ -275,6 +276,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Open items
 
+- Campaign list and detail (`.plan/campaign-list-and-detail-icons.md`, done in code): not seen in a browser at 375 and 1440 px. The "All" trend period's 365-day cap is still unconfirmed by the owner.
+
 - Campaign insights (`.plan/campaign-detail-insights.md`, in progress): the gate values 14 days and 20 invites are drafts until staging numbers are in. Still open: `EXPLAIN ANALYZE` of the `insights` read on staging (no index on `LinkedInInvite.originWorkflowId` yet), the real-path check in the browser, and the product defaults (a Discover run that found nobody counts as run; equal capacity split; paused campaign in the denominator).
 - Vite chunk-size warning (pre-existing at `2f85f66`, not changed): `schemas` (zod, 573.67 kB) and `index` (624.68 kB) exceed 500 kB. `apps/body/vite.config.ts` `codeSplitting` has a comment saying chunks stay under the warning; they do not. Pick a fix: raise the limit, switch zod to zod/mini, or lazy-load more routes.
 - Campaign finds nobody (`.plan/campaign-finds-nobody.md`, in progress, locked 2026-11-10): code done locally and gated; not deployed. Still open: staging deploy (needs a push to `main`) and the real-path check on staging. The first Score used to drop people before their profile was read (173 in, 2 out across four staging runs), and no `lead-*` label was ever written to `Person.labels`; Discover now reads profiles before one Score and labels every listed person.
@@ -328,6 +331,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - Logging (`.plan/plan.md`, open): the code is done; the staging checks (G7 event, Cloud Run stdout line, dry-run counts) and the staging overhead are not run. The devtools CLI stays on `console` by decision. The brain result schema (`taskResultSchema`) is strict and has `correlation_id`: deploy brain before spider, and roll back spider before brain. Render errors (`reportError`) still have no request ID.
 
 ## Changelog
+
+- 2026-11-14: Campaign list and detail state, numbers and 30-day projection (`.plan/campaign-list-and-detail-icons.md`): `campaign.list` returns the 14-day numbers and the gated projection per campaign (`CampaignListService`, one grouped read per list call). Verified: lint, ts:check, unit tests, build, brain integration (606 passed). Browser check at 375 and 1440 px not run.
 
 - 2026-11-13: Body dev fix (`.plan/body-dev-contracts-source.md`): contracts loads from source in the body dev server (alias in `apps/body/vite.config.ts`), and `receivedKey` moved from contracts to spider because `node:crypto` broke the browser in dev. Verified: full chain passes and the dev server serves contracts source; the signed-in drafts screen was not opened.
 
