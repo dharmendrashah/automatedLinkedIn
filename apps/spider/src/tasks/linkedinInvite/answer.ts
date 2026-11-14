@@ -51,6 +51,13 @@ export const answerFor = (run: InviteRun): TaskOutcome => {
             verdict: 'RESTRICTED',
             message: 'LinkedIn showed a restriction notice, so nothing more was pressed.',
          }
+      case 'BLOCKED':
+         return {
+            status: 'FAILED',
+            verdict: 'BLOCKED',
+            message: 'LinkedIn refused to open a page (HTTP 999 or 429), so nothing more was pressed.',
+            report: counted(run),
+         }
       case 'SIGNED_OUT':
          return {
             status: 'FAILED',

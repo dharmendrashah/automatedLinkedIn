@@ -308,9 +308,15 @@ export const runTask = async (command: TaskCommand, deps: RunnerDeps) => {
 
    const input = task.input.safeParse(command.input)
 
-   // Never echoes the input: it came from outside.
+   // Never echoes the input: it came from outside. It names the fields that failed (their paths, never their values), so the
+   // session page says what to look at.
    if (!input.success) {
-      return refuse('INVALID_INPUT', 'The input does not match what this task expects.')
+      const fields = [...new Set(input.error.issues.map(({ path }) => path.join('.') || 'the input as a whole'))]
+
+      return refuse(
+         'INVALID_INPUT',
+         `The input does not match what this task expects: ${fields.slice(0, 5).join(', ')}.`
+      )
    }
 
    if (task.needs.proxy === 'required' && !command.proxy) {

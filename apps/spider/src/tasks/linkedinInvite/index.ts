@@ -47,6 +47,10 @@ export const createLinkedinInvite = ({ baseUrl }: Options) =>
             label: 'Account restricted',
             tone: 'failure',
          },
+         BLOCKED: {
+            label: 'LinkedIn blocked a page',
+            tone: 'failure',
+         },
          SIGNED_OUT: {
             label: 'Signed out',
             tone: 'failure',

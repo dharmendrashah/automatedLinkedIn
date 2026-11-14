@@ -496,3 +496,100 @@ describe('LinkedInInviteService (database)', () => {
       })
    })
 })
+
+describe('LinkedInInviteService.dispatchNext with a profile address the invite task refuses (database)', () => {
+   let owner: string
+   let sender: string
+
+   beforeAll(async () => {
+      owner = (await UserService.create({ email: `${randomUUID()}@elitale.com` })).id
+      sender = (
+         await db.linkedInAccount.create({
+            data: {
+               userId: owner,
+               email: `${randomUUID()}@example.com`,
+               secret: 'x',
+               secretIv: 'x',
+               secretTag: 'x',
+               status: 'ACTIVE',
+               lastVerifiedAt: new Date(),
+            },
+         })
+      ).id
+   })
+
+   afterAll(async () => {
+      await db.user.deleteMany({ where: { id: owner } })
+   })
+
+   it('should end the invite the spider would refuse and send the others, so one bad address never blocks the account', async () => {
+      const due = new Date(Date.now() - 60_000)
+      const make = (slug: string, name: string) =>
+         db.linkedInInvite.create({
+            data: {
+               userId: owner,
+               accountId: sender,
+               slug,
+               name,
+               plannedAt: due,
+            },
+         })
+      const bad = await make('fran\u00e7ois-d', 'Fran\u00e7ois D')
+      const good = await make('ada-l', 'Ada L')
+      const sessionId = randomUUID()
+      const request = vi.spyOn(TaskService, 'request').mockImplementation(async options => {
+         await db.$transaction(tx => options.onStart?.(sessionId, tx) ?? Promise.resolve())
+
+         return { id: sessionId } as Awaited<ReturnType<typeof TaskService.request>>
+      })
+
+      await expect(LinkedInInviteService.dispatchNext(sender)).resolves.toEqual({ asked: true })
+      expect((request.mock.calls[0]?.[0].input as { send: Array<{ id: string }> }).send.map(({ id }) => id)).toEqual([
+         good.id,
+      ])
+      request.mockRestore()
+
+      expect(await db.linkedInInvite.findUniqueOrThrow({ where: { id: bad.id } })).toMatchObject({
+         state: 'FAILED',
+         reason: 'The profile address or name could not be used. Nothing was sent.',
+      })
+      expect(await db.linkedInInvite.findUniqueOrThrow({ where: { id: good.id } })).toMatchObject({
+         state: 'SENDING',
+         sessionId,
+      })
+   })
+
+   it('should ask for no run when every due invite is one the spider would refuse, and not again next time', async () => {
+      const only = await db.user.create({ data: { email: `${randomUUID()}@elitale.com` } })
+      const alone = (
+         await db.linkedInAccount.create({
+            data: {
+               userId: only.id,
+               email: `${randomUUID()}@example.com`,
+               secret: 'x',
+               secretIv: 'x',
+               secretTag: 'x',
+               status: 'ACTIVE',
+               lastVerifiedAt: new Date(),
+            },
+         })
+      ).id
+      const bad = await db.linkedInInvite.create({
+         data: {
+            userId: only.id,
+            accountId: alone,
+            slug: 'jos\u00e9-m',
+            name: 'Jos\u00e9 M',
+            plannedAt: new Date(Date.now() - 60_000),
+         },
+      })
+      const request = vi.spyOn(TaskService, 'request')
+
+      await expect(LinkedInInviteService.dispatchNext(alone)).resolves.toMatchObject({ asked: false })
+      await expect(LinkedInInviteService.dispatchNext(alone)).resolves.toMatchObject({ asked: false })
+      expect(request).not.toHaveBeenCalled()
+      expect(await db.linkedInInvite.findUniqueOrThrow({ where: { id: bad.id } })).toMatchObject({ state: 'FAILED' })
+      request.mockRestore()
+      await db.user.delete({ where: { id: only.id } })
+   })
+})

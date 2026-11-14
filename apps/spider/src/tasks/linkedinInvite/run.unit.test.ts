@@ -379,19 +379,32 @@ describe('runInvites', () => {
       expect(file().sent.map(({ outcome }) => outcome)).toEqual(['ALREADY_CONNECTED', 'SENT'])
    })
 
-   it('should stop at a block on the first profile before any press, and not visit it again in this run', async () => {
-      const { run, calls, context } = setup({ blocked: ['ada-lovelace'] })
+   it('should stop at a block on the first profile before any press, hand every invite over as not sent, and not visit it again', async () => {
+      const { run, calls, context, file } = setup({ blocked: ['ada-lovelace'] })
 
-      await expect(run(both)).rejects.toMatchObject({ reason: 'blocked' })
+      await expect(run(both)).resolves.toMatchObject({ outcome: 'BLOCKED' })
       expect(context.visit).toHaveBeenCalledTimes(1)
       expect(context.markAttempt).not.toHaveBeenCalled()
       expect(calls.some(call => call.startsWith('connect'))).toBe(false)
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['NOT_SENT', 'NOT_SENT'])
+   })
+
+   it('should keep what a first profile settled without a press when the second profile is blocked', async () => {
+      const { run, calls, file } = setup({
+         noConnect: ['ada-lovelace'],
+         messaged: ['ada-lovelace'],
+         blocked: ['grace-hopper'],
+      })
+
+      await expect(run(both)).resolves.toMatchObject({ outcome: 'BLOCKED' })
+      expect(calls.some(call => call.startsWith('send') || call.startsWith('connect'))).toBe(false)
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['ALREADY_CONNECTED', 'NOT_SENT'])
    })
 
    it('should hand over the invite sent before a block, warn about the block, and press nothing more', async () => {
       const { run, calls, context, file } = setup({ blocked: ['grace-hopper'] })
 
-      await expect(run(both)).resolves.toMatchObject({ outcome: 'PARTIAL' })
+      await expect(run(both)).resolves.toMatchObject({ outcome: 'BLOCKED' })
       expect(calls.filter(call => call.startsWith('send'))).toEqual(['send ada-lovelace'])
       expect(context.warn).toHaveBeenCalledWith(expect.stringContaining('blocked'))
       expect(file().sent[0]?.outcome).toBe('SENT')

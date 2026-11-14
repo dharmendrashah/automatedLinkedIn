@@ -35,7 +35,7 @@ import {
 import { PACE } from '../../linkedin/pace'
 import { SignedOut, createSession } from '../../linkedin/session'
 import { type AnswerWatch } from '../../scraping/driver'
-import { type TaskContext } from '../defineTask'
+import { type TaskContext, VisitError } from '../defineTask'
 import { kindOf } from '../linkedinLogin/accountValidator'
 
 type Context = Pick<TaskContext, 'browser' | 'visit' | 'pause' | 'log' | 'warn' | 'attach' | 'markAttempt'>
@@ -48,9 +48,10 @@ type DialogEnd = InviteSendOutcome | 'NO_NOTE'
 // DONE: every invite and withdrawal ended clearly, each sent or settled without a press. PARTIAL: some did not happen (no Connect
 // button, a step that did not show, a note refused), and nothing is unclear. UNKNOWN: a press may have landed and the page did not
 // say, or the command was delivered again after presses may have been made. LIMIT_REACHED: LinkedIn said the account may not invite
-// more now. RESTRICTED: LinkedIn showed its restriction notice. SIGNED_OUT: LinkedIn asked for a sign-in.
+// more now. RESTRICTED: LinkedIn showed its restriction notice. SIGNED_OUT: LinkedIn asked for a sign-in. BLOCKED: LinkedIn refused to
+// open a page (HTTP 999 or 429), so the run stopped; what it had settled is handed over.
 export type InviteRun = {
-   outcome: 'DONE' | 'PARTIAL' | 'UNKNOWN' | 'LIMIT_REACHED' | 'RESTRICTED' | 'SIGNED_OUT'
+   outcome: 'DONE' | 'PARTIAL' | 'UNKNOWN' | 'LIMIT_REACHED' | 'RESTRICTED' | 'SIGNED_OUT' | 'BLOCKED'
    sent: Sent[]
    withdrawn: Withdrawn[]
 }
@@ -679,7 +680,7 @@ export const runInvites = async (
    }
 
    // Settles first, so the verdict and the handed-over items agree.
-   const result = (verdict?: 'SIGNED_OUT' | 'RESTRICTED'): InviteRun => {
+   const result = (verdict?: 'SIGNED_OUT' | 'RESTRICTED' | 'BLOCKED'): InviteRun => {
       if (repeated) {
          settleRepeated()
       }
@@ -753,6 +754,14 @@ export const runInvites = async (
 
       if (error instanceof Restricted) {
          return result('RESTRICTED')
+      }
+
+      // LinkedIn asked the visitor to stop (999 or 429). Nothing more is opened; what was settled so far is handed over and the rest
+      // stays queued, so brain can rest the account instead of asking again at once.
+      if (error instanceof VisitError && error.reason === 'blocked') {
+         warn(describeError(error, 'LinkedIn refused to open a page'))
+
+         return result('BLOCKED')
       }
 
       // Once something was pressed, whatever went wrong may have come after it took.
