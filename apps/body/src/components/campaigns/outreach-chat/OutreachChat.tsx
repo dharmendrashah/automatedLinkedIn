@@ -86,48 +86,51 @@ export const OutreachChat = ({
    onEmpty,
    busy,
 }: Props) => {
-   const end = useRef<HTMLDivElement>(null)
+   const thread = useRef<HTMLDivElement>(null)
    const progress = progressOf(done)
    const at = STEPS.findIndex(({ id }) => id === current)
    const icpName = lists.icps.find(({ id }) => id === form.icpId)?.name ?? null
 
-   // The newest message scrolls into view, without motion when the user asked for none.
+   // The thread scrolls to the newest message (not the window), without motion when the user asked for none.
    useEffect(() => {
       const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-      end.current?.scrollIntoView({ block: 'end', behavior: calm ? 'auto' : 'smooth' })
+      thread.current?.scrollTo({ top: thread.current.scrollHeight, behavior: calm ? 'auto' : 'smooth' })
    }, [current, done.length, notice])
 
    return (
       // Cancels the layout padding and takes the rest of the window under the header.
       <div className="-my-4 flex h-[calc(100svh-var(--header-height))] min-h-0 flex-col md:-my-6 md:h-[calc(100svh-var(--header-height)-1rem)]">
-         <div className="flex items-center gap-3 border-b px-4 py-2 lg:px-6">
-            <span className="text-muted-foreground text-xs whitespace-nowrap">{`Step ${progress.current} of ${progress.total}`}</span>
+         <div className="relative flex items-center justify-center border-b px-4 py-2 lg:px-6">
             <Progress
-               className="h-1.5 flex-1"
+               className="h-1 w-28 bg-muted"
                value={progress.percent}
                aria-label="Setup progress"
+               aria-valuetext={`Step ${progress.current} of ${progress.total}`}
                aria-valuemin={0}
                aria-valuemax={100}
                aria-valuenow={progress.percent}
             />
-            <DropdownMenu>
-               <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon-sm" aria-label="More">
-                     <MoreHorizontal />
-                  </Button>
-               </DropdownMenuTrigger>
-               <DropdownMenuContent align="end">
-                  {onEditAll ? <DropdownMenuItem onSelect={onEditAll}>Edit all fields</DropdownMenuItem> : null}
-                  <DropdownMenuItem onSelect={onStartOver}>Start over</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                     <Link to="/workflows/new">Start a single workflow</Link>
-                  </DropdownMenuItem>
-               </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="absolute right-4 lg:right-6">
+               <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                     <Button variant="ghost" size="icon-sm" aria-label="More">
+                        <MoreHorizontal />
+                     </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                     {onEditAll ? <DropdownMenuItem onSelect={onEditAll}>Edit all fields</DropdownMenuItem> : null}
+                     <DropdownMenuItem onSelect={onStartOver}>Start over</DropdownMenuItem>
+                     <DropdownMenuSeparator />
+                     <DropdownMenuItem asChild>
+                        <Link to="/workflows/new">Start a single workflow</Link>
+                     </DropdownMenuItem>
+                  </DropdownMenuContent>
+               </DropdownMenu>
+            </div>
          </div>
          <div
+            ref={thread}
             role="log"
             aria-live="polite"
             aria-label="Campaign setup"
@@ -177,7 +180,6 @@ export const OutreachChat = ({
                   <AlertDescription>{notice}</AlertDescription>
                </Alert>
             ) : null}
-            <div ref={end} />
          </div>
          <div className="bg-background border-t px-4 py-3 lg:px-6">
             <StepInput
