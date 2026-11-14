@@ -28,6 +28,7 @@ const draftSchema = z.object({
       timeZone: z.string(),
       handOffUrl: z.string(),
       postsPerDay: z.number().nullable(),
+      replyValueUsd: z.number().nullable(),
    }),
    done: z.array(z.custom<StepId>(value => STEPS.some(({ id }) => id === value))),
 })

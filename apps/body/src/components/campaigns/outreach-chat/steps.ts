@@ -80,6 +80,13 @@ export const STEPS = [
       hint: 'A whole number from 1 to 50.',
       path: 'postsPerDay',
    },
+   {
+      id: 'worth',
+      required: false,
+      question: 'What is one positive reply worth to you, in USD a month?',
+      hint: 'Used for the revenue pipeline: positive replies x this x 12. You can set it later on the campaign page.',
+      path: 'replyValueUsd',
+   },
 ] as const
 
 export type StepId = (typeof STEPS)[number]['id']
@@ -103,6 +110,8 @@ export type Form = {
    timeZone: string
    handOffUrl: string
    postsPerDay: number | null
+   // Whole USD a month; null until the owner says.
+   replyValueUsd: number | null
 }
 
 export const emptyForm = (timeZone: string): Form => ({
@@ -123,6 +132,7 @@ export const emptyForm = (timeZone: string): Form => ({
    timeZone,
    handOffUrl: '',
    postsPerDay: null,
+   replyValueUsd: null,
 })
 
 export const answersOf = (form: Form, suggested: number): OutreachAnswers => ({
@@ -153,6 +163,7 @@ export const answersOf = (form: Form, suggested: number): OutreachAnswers => ({
    },
    handOffUrl: form.handOffUrl,
    postsPerDay: form.postsPerDay ?? suggested,
+   ...(form.replyValueUsd !== null && { replyValueUsd: form.replyValueUsd }),
 })
 
 const FIELDS: Record<StepId, Array<keyof Form>> = {
@@ -167,6 +178,7 @@ const FIELDS: Record<StepId, Array<keyof Form>> = {
    when: ['time', 'timeZone'],
    handOff: ['handOffUrl'],
    posts: ['postsPerDay'],
+   worth: ['replyValueUsd'],
 }
 
 // "Use default": puts one step's fields back to how a new chat starts.

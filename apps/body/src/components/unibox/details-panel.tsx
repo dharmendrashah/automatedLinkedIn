@@ -5,6 +5,7 @@ import { AccountAvatar, ContactAvatar } from './account-avatar'
 import { AccountChip } from './account-chip'
 import { stateLabel } from './account-state'
 import { type Index, type Row, otherAccountsOf } from './inbox'
+import { PositiveReply } from './positive-reply'
 import { useShared } from './shared'
 import { lastReplyAt } from './status'
 import { StatusChip } from './status-chip'
@@ -79,6 +80,7 @@ export const DetailsPanel = ({ row, index, onOpen, onClose, onPerson }: Props) =
                   </a>
                ) : null}
             </section>
+            {conversation.kind === 'DIRECT' ? <PositiveReply conversationId={conversation.id} /> : null}
             <section className="space-y-2">
                <h3 className="text-xs font-semibold text-muted-foreground uppercase">Account</h3>
                <div className="flex items-start gap-2">

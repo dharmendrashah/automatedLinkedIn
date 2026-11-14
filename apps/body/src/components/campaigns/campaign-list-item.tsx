@@ -7,11 +7,14 @@ import { Link } from 'react-router'
 import type { CampaignListRow } from '@automatedLinkedIn/contracts'
 
 import { STATE_META, acceptLabel } from './campaign-list-format'
+import { formatPipelineUsd } from './pipeline-format'
 import { ProjectionValue } from './projection-value'
 
 const Dash = () => <span className="text-muted-foreground">—</span>
 
-export const CampaignListItem = ({ campaign }: { campaign: CampaignListRow }) => {
+type Pipeline = { replies: number; pipelineUsd: number | null }
+
+export const CampaignListItem = ({ campaign, pipeline }: { campaign: CampaignListRow; pipeline?: Pipeline }) => {
    const meta = STATE_META[campaign.state]
    const StateIcon = meta.icon
    const numbers = campaign.numbers
@@ -41,7 +44,7 @@ export const CampaignListItem = ({ campaign }: { campaign: CampaignListRow }) =>
             </span>
          </TableCell>
          {campaign.state === 'NO_WORKFLOWS' ? (
-            <TableCell colSpan={5}>
+            <TableCell colSpan={6}>
                <Button asChild size="sm" variant="outline">
                   <Link to="/workflows/new">
                      <Plus />
@@ -55,6 +58,22 @@ export const CampaignListItem = ({ campaign }: { campaign: CampaignListRow }) =>
                <TableCell className="tabular-nums">{numbers ? numbers.invited : <Dash />}</TableCell>
                <TableCell className="tabular-nums">{numbers ? acceptLabel(numbers.acceptRate) : <Dash />}</TableCell>
                <TableCell className="tabular-nums">{numbers ? numbers.replied : <Dash />}</TableCell>
+               <TableCell>
+                  {pipeline && pipeline.replies > 0 ? (
+                     <div className="grid">
+                        {pipeline.pipelineUsd === null ? (
+                           <span className="text-muted-foreground text-xs">Set a worth</span>
+                        ) : (
+                           <span className="font-medium text-emerald-600 tabular-nums dark:text-emerald-400">
+                              {formatPipelineUsd(pipeline.pipelineUsd)}
+                           </span>
+                        )}
+                        <span className="text-muted-foreground text-xs tabular-nums">{`${pipeline.replies} positive`}</span>
+                     </div>
+                  ) : (
+                     <Dash />
+                  )}
+               </TableCell>
                <TableCell>
                   <ProjectionValue projection={campaign.projection} gate={campaign.gate} />
                </TableCell>

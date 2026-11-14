@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { CAMPAIGN_LIMITS, capacityOf } from '@automatedLinkedIn/contracts'
 
+import { parseWorth } from '../pipeline-format'
 import { ChoiceButtons } from './ChoiceButtons'
 import { type Form, STEPS, type StepId, parsePosts, stepProblems } from './steps'
 
@@ -42,6 +43,7 @@ type Props = {
 }
 
 const PROBLEM = 'Write a whole number from 1 to 50.'
+const WORTH_PROBLEM = 'Write a whole number of dollars a month, such as 100.'
 const AREA = 'max-h-40 min-h-10 resize-none'
 
 const Chip = ({ selected, ...props }: React.ComponentProps<typeof Button> & { selected?: boolean }) => (
@@ -60,14 +62,20 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
    const [shown, setShown] = useState(false)
    const [describing, setDescribing] = useState(form.icpId === '')
    const [draft, setDraft] = useState(String(form.postsPerDay ?? suggested))
+   const [worth, setWorth] = useState(form.replyValueUsd === null ? '' : String(form.replyValueUsd))
    const step = STEPS.find(each => each.id === id)
    const posts = parsePosts(draft)
+   const worthParsed = parseWorth(worth)
    const problems =
       id === 'posts'
          ? posts === null
             ? [PROBLEM]
             : stepProblems('posts', { ...form, postsPerDay: posts }, suggested)
-         : stepProblems(id, form, suggested)
+         : id === 'worth'
+           ? worthParsed === 'invalid'
+              ? [WORTH_PROBLEM]
+              : []
+           : stepProblems(id, form, suggested)
 
    // A new question gets the keyboard.
    useEffect(() => {
@@ -77,6 +85,12 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
    const submit = () => {
       if (problems.length > 0) {
          setShown(true)
+
+         return
+      }
+
+      if (id === 'worth') {
+         onDone({ replyValueUsd: worthParsed === 'invalid' ? null : worthParsed })
 
          return
       }
@@ -311,6 +325,24 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
                   />
                ),
             }
+         case 'worth':
+            return {
+               fields: (
+                  <div className="flex items-center gap-2">
+                     <span className="text-sm">$</span>
+                     <Input
+                        inputMode="numeric"
+                        aria-label="Worth of one positive reply, in USD a month"
+                        className="w-32"
+                        placeholder="100"
+                        value={worth}
+                        onChange={event => setWorth(event.target.value)}
+                        onKeyDown={enter}
+                     />
+                     <span className="text-sm">a month</span>
+                  </div>
+               ),
+            }
       }
    }
    const { options, fields } = parts()
@@ -336,7 +368,7 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
          {options || skippable ? (
             <div className="flex flex-wrap gap-2">
                {options}
-               {skippable ? <Chip onClick={onSkip}>Use default</Chip> : null}
+               {skippable ? <Chip onClick={onSkip}>{id === 'worth' ? 'Skip for now' : 'Use default'}</Chip> : null}
             </div>
          ) : null}
          {shown && problems.length > 0 ? (

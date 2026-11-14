@@ -35,5 +35,7 @@ export const answerText = (id: StepId, form: Form, context: { icpName: string | 
          return form.handOffUrl === '' ? 'The file only' : form.handOffUrl
       case 'posts':
          return `${form.postsPerDay ?? context.suggested} a day`
+      case 'worth':
+         return form.replyValueUsd === null ? 'Not set yet' : `$${form.replyValueUsd} a month`
    }
 }

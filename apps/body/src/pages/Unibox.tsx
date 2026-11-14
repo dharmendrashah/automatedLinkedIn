@@ -44,6 +44,7 @@ import { agoOf, sameDay } from '../components/unibox/time'
 import { ComposeButton, SearchBox, Toolbar } from '../components/unibox/toolbar'
 import { createTrpcSource } from '../components/unibox/trpcSource'
 import { createUpload } from '../components/unibox/upload'
+import { usePositiveReply } from '../components/unibox/use-positive-reply'
 import { UNDO_MS, useUnibox } from '../components/unibox/use-unibox'
 import { viewLabel } from '../components/unibox/views'
 import { ViewsList } from '../components/unibox/views-list'
@@ -302,6 +303,8 @@ const Board = ({
       },
       [rows]
    )
+
+   const positive = usePositiveReply(active?.conversation.kind === 'DIRECT' ? active.conversation.id : undefined)
 
    const markUnread = () => {
       if (activeId) {
@@ -588,6 +591,9 @@ const Board = ({
          case 'UNREAD':
             markUnread()
             break
+         case 'POSITIVE':
+            if (positive.canMark) positive.press()
+            break
          case 'SELECT':
             if (activeId) onToggle(activeId, false)
             break
@@ -667,6 +673,16 @@ const Board = ({
          label: 'Mark all read',
          run: markAllRead,
       },
+      ...(positive.canMark
+         ? [
+              {
+                 id: 'positive',
+                 label: positive.counted.size > 0 ? 'Remove the positive lead mark' : 'Mark as a positive lead',
+                 hint: 'P',
+                 run: positive.press,
+              },
+           ]
+         : []),
       {
          id: 'details',
          label: detailsOpen ? 'Close the details' : 'Open the details',
@@ -834,6 +850,7 @@ const Board = ({
                            {...(!sample && { onPerson: showPerson })}
                            onMarkUnread={markUnread}
                            onDone={doneAndNext}
+                           positive={positive}
                            onUndoSend={() => takeBack(active.conversation.id)}
                            canUndo={!flying.has(active.conversation.id)}
                            onRetry={() => retry(active.conversation.id)}

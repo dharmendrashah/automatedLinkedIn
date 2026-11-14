@@ -20,12 +20,14 @@ import { AccountChip } from './account-chip'
 import { type Row } from './inbox'
 import { MessageBubble } from './message-bubble'
 import { PersonCard } from './person-card'
+import { PositiveButton, PositiveChip } from './positive-reply'
 import { SendingBubble } from './sending-bubble'
 import { useShared } from './shared'
 import { lastReplyAt } from './status'
 import { StatusChip } from './status-chip'
 import { buildThread } from './thread-model'
 import { ageOf, formatFull } from './time'
+import { type PositiveState } from './use-positive-reply'
 
 type Props = {
    row: Row
@@ -38,6 +40,7 @@ type Props = {
    onPerson?: (slug: string) => void
    onMarkUnread: () => void
    onDone: () => void
+   positive: PositiveState
    onUndoSend: () => void
    // False once the reply has left: it can no longer be taken back.
    canUndo: boolean
@@ -58,6 +61,7 @@ export const Thread = ({
    onPerson,
    onMarkUnread,
    onDone,
+   positive,
    onUndoSend,
    canUndo,
    onRetry,
@@ -165,6 +169,7 @@ export const Thread = ({
                >
                   <MailOpen />
                </Button>
+               <PositiveButton positive={positive} />
                <Button
                   variant="outline"
                   size="sm"
@@ -188,6 +193,7 @@ export const Thread = ({
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                <AccountChip account={account} prefix={row.preview.from === 'THEM' ? 'To' : 'From'} />
                <StatusChip status={status} lastReplyAt={lastReplyAt(conversation)} now={now} long />
+               <PositiveChip positive={positive} />
                {otherAccounts > 0 ? (
                   <button
                      type="button"
