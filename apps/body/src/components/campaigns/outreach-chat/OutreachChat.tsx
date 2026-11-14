@@ -101,33 +101,31 @@ export const OutreachChat = ({
    return (
       // Cancels the layout padding and takes the rest of the window under the header.
       <div className="-my-4 flex h-[calc(100svh-var(--header-height))] min-h-0 flex-col md:-my-6 md:h-[calc(100svh-var(--header-height)-1rem)]">
-         <div className="relative flex items-center justify-center border-b px-4 py-2 lg:px-6">
-            <Progress
-               className="h-1 w-28 bg-muted"
-               value={progress.percent}
-               aria-label="Setup progress"
-               aria-valuetext={`Step ${progress.current} of ${progress.total}`}
-               aria-valuemin={0}
-               aria-valuemax={100}
-               aria-valuenow={progress.percent}
-            />
-            <div className="absolute right-4 lg:right-6">
-               <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                     <Button variant="ghost" size="icon-sm" aria-label="More">
-                        <MoreHorizontal />
-                     </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                     {onEditAll ? <DropdownMenuItem onSelect={onEditAll}>Edit all fields</DropdownMenuItem> : null}
-                     <DropdownMenuItem onSelect={onStartOver}>Start over</DropdownMenuItem>
-                     <DropdownMenuSeparator />
-                     <DropdownMenuItem asChild>
-                        <Link to="/workflows/new">Start a single workflow</Link>
-                     </DropdownMenuItem>
-                  </DropdownMenuContent>
-               </DropdownMenu>
-            </div>
+         <Progress
+            className="h-1 w-full shrink-0 rounded-none bg-muted"
+            value={progress.percent}
+            aria-label="Setup progress"
+            aria-valuetext={`Step ${progress.current} of ${progress.total}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress.percent}
+         />
+         <div className="flex justify-end px-4 pt-1 lg:px-6">
+            <DropdownMenu>
+               <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" aria-label="More">
+                     <MoreHorizontal />
+                  </Button>
+               </DropdownMenuTrigger>
+               <DropdownMenuContent align="end">
+                  {onEditAll ? <DropdownMenuItem onSelect={onEditAll}>Edit all fields</DropdownMenuItem> : null}
+                  <DropdownMenuItem onSelect={onStartOver}>Start over</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                     <Link to="/workflows/new">Start a single workflow</Link>
+                  </DropdownMenuItem>
+               </DropdownMenuContent>
+            </DropdownMenu>
          </div>
          <div
             ref={thread}
