@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { WorkflowSummary } from './types'
 
-import { metricsOf, scheduleOf } from './workflow-row'
+import { metricsOf, scheduleOf, shortName } from './workflow-row'
 
 type Run = WorkflowSummary['runs'][number]
 
@@ -63,5 +63,23 @@ describe('scheduleOf', () => {
       expect(scheduleOf({ graph: graph('trigger.schedule'), enabled: true })).toBe('on')
       expect(scheduleOf({ graph: graph('trigger.schedule'), enabled: false })).toBe('off')
       expect(scheduleOf({ graph: graph('trigger.manual'), enabled: false })).toBe('manual')
+   })
+})
+
+describe('shortName', () => {
+   it('drops the campaign name a campaign workflow repeats', () => {
+      expect(shortName({ name: 'Acme · 6 No answer', campaign: { name: 'Acme' } })).toEqual({
+         name: '6 No answer',
+         stageInName: true,
+      })
+   })
+
+   it('keeps any other name whole', () => {
+      expect(shortName({ name: 'Intent radar', campaign: { name: 'Acme' } })).toEqual({
+         name: 'Intent radar',
+         stageInName: false,
+      })
+      expect(shortName({ name: 'Acme · ', campaign: { name: 'Acme' } }).name).toBe('Acme · ')
+      expect(shortName({ name: 'Acme · 1 Discover', campaign: null }).name).toBe('Acme · 1 Discover')
    })
 })

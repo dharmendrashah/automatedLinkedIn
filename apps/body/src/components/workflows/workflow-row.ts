@@ -26,3 +26,12 @@ export const metricsOf = (run: LastRun | undefined) => {
       perQualified: scored && run.qualified > 0 ? Math.round(run.costMicros / run.qualified) : null,
    }
 }
+
+// A workflow made by a campaign is named "<campaign> · 3 Warm up". Inside the campaign column the campaign name is already
+// there, so the workflow shows only "3 Warm up". Any other name is left as it is.
+export const shortName = (workflow: Pick<WorkflowSummary, 'name' | 'campaign'>) => {
+   const prefix = workflow.campaign ? `${workflow.campaign.name} · ` : null
+   const rest = prefix && workflow.name.startsWith(prefix) ? workflow.name.slice(prefix.length).trim() : ''
+
+   return rest === '' ? { name: workflow.name, stageInName: false } : { name: rest, stageInName: true }
+}

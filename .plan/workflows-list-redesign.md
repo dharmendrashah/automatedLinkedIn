@@ -89,4 +89,6 @@ Shipped: the Workflows list has icons in every header (with a hover explanation)
 
 Deviations: none from the locked plan. A run that scored nobody but added people to the list shows dashes for the counts, as planned (the list does not carry step results).
 
+Change (2026-11-14, owner feedback "I am seeing double information"): a campaign's workflows are named "<campaign> · 3 Warm up", so the name, the campaign and the stage were all shown twice. The Workflow column now shows only "3 Warm up" (`shortName` in `workflow-row.ts`; the full name is the link's title), with the icon of its step; the Campaign column shows the campaign name and, only when the workflow's own name does not already carry the step, the step chip. A workflow with any other name keeps its whole name.
+
 Follow-ups: look at the real signed-in page in light and dark and at 1440 px.

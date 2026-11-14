@@ -9,6 +9,7 @@ import {
    Heading,
    LastRunCell,
    ScheduleCell,
+   WorkflowCell,
 } from '@/components/workflows/workflow-list-cells'
 import { metricsOf } from '@/components/workflows/workflow-row'
 import {
@@ -122,20 +123,7 @@ export const Workflows = () => {
                      return (
                         <TableRow key={workflow.id}>
                            <TableCell>
-                              <div className="flex items-start gap-2">
-                                 <WorkflowIcon aria-hidden className="text-muted-foreground mt-0.5 size-4 shrink-0" />
-                                 <div className="grid min-w-0 gap-0.5">
-                                    <Link
-                                       to={`/workflows/${workflow.id}`}
-                                       className="max-w-80 font-medium underline-offset-4 hover:underline"
-                                    >
-                                       {workflow.name}
-                                    </Link>
-                                    {workflow.goal ? (
-                                       <p className="text-muted-foreground max-w-80 text-xs">{workflow.goal}</p>
-                                    ) : null}
-                                 </div>
-                              </div>
+                              <WorkflowCell workflow={workflow} />
                            </TableCell>
                            <TableCell>
                               <CampaignCell workflow={workflow} />

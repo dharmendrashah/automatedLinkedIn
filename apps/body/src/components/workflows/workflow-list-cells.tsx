@@ -18,6 +18,7 @@ import {
    Shapes,
    TriangleAlert,
    UserPlus,
+   Workflow as WorkflowIcon,
 } from 'lucide-react'
 import { Link } from 'react-router'
 
@@ -28,7 +29,7 @@ import { cn } from '@/lib/utils'
 import { type WorkflowSummary, formatUsd, runStatuses, whenText } from './types'
 
 import { isLive, runSentence } from './run-sentence'
-import { metricsOf, scheduleOf } from './workflow-row'
+import { metricsOf, scheduleOf, shortName } from './workflow-row'
 
 type LastRun = WorkflowSummary['runs'][number]
 
@@ -57,7 +58,29 @@ const STAGE_ICONS: Record<CampaignStage, LucideIcon> = {
    OTHER: Shapes,
 }
 
-// The campaign the workflow belongs to and its place in it, "3 Warm up".
+// The workflow: the icon of its step when it belongs to a campaign, its name without the campaign's name, and its goal.
+export const WorkflowCell = ({ workflow }: { workflow: WorkflowSummary }) => {
+   const { name } = shortName(workflow)
+   const Icon = workflow.campaign && workflow.stage !== 'OTHER' ? STAGE_ICONS[workflow.stage] : WorkflowIcon
+
+   return (
+      <div className="flex items-start gap-2">
+         <Icon aria-hidden className="text-muted-foreground mt-0.5 size-4 shrink-0" />
+         <div className="grid min-w-0 gap-0.5">
+            <Link
+               to={`/workflows/${workflow.id}`}
+               title={workflow.name}
+               className="max-w-80 font-medium underline-offset-4 hover:underline"
+            >
+               {name}
+            </Link>
+            {workflow.goal ? <p className="text-muted-foreground max-w-80 text-xs">{workflow.goal}</p> : null}
+         </div>
+      </div>
+   )
+}
+
+// The campaign the workflow belongs to, and its place in it, "3 Warm up", unless the workflow's own name already says it.
 export const CampaignCell = ({ workflow }: { workflow: WorkflowSummary }) => {
    if (!workflow.campaignId || !workflow.campaign) {
       return <span className="text-muted-foreground text-sm">No campaign</span>
@@ -77,7 +100,7 @@ export const CampaignCell = ({ workflow }: { workflow: WorkflowSummary }) => {
             >
                {workflow.campaign.name}
             </Link>
-            {workflow.stage === 'OTHER' ? null : (
+            {workflow.stage === 'OTHER' || shortName(workflow).stageInName ? null : (
                <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
                   <StageIcon aria-hidden className="size-3.5" />
                   {`${at} ${STAGE_LABELS[workflow.stage]}`}
