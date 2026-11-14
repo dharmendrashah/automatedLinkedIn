@@ -11,8 +11,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { readableError } from '@/lib/trpc-error'
-import { ArrowLeft, FolderPlus, Plus, Sparkles } from 'lucide-react'
+import { ArrowLeft, CircleHelp, FolderPlus, Plus, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 
@@ -23,7 +24,7 @@ import { trpc } from '../trpc'
 type CreateStep = 'choice' | 'name'
 
 const CHOICE_CLASS =
-   'flex w-full items-start gap-3 rounded-lg border p-4 text-left transition-colors outline-none hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
+   'flex w-full items-start gap-3 rounded-lg border p-4 pr-12 text-left transition-colors outline-none hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
 const ICON_CHIP = 'flex size-9 shrink-0 items-center justify-center rounded-md [&_svg]:size-4'
 const OUTREACH_EXAMPLES = [
    'A software vendor finds ops leaders who posted about a tool they outgrew.',
@@ -38,18 +39,30 @@ const EMPTY_EXAMPLES = [
    'Create it now and add workflows from their settings once you are ready.',
 ]
 
-const Examples = ({ items }: { items: string[] }) => (
-   <>
-      <span className="font-medium text-foreground text-xs">For example</span>
-      <span className="grid gap-1 text-xs">
-         {items.map(item => (
-            <span key={item} className="flex items-start gap-2">
-               <span aria-hidden className="mt-1.5 size-1 shrink-0 rounded-full bg-current" />
-               {item}
-            </span>
-         ))}
-      </span>
-   </>
+// Sits beside the option, not inside it: a button cannot nest in the option's link or button.
+const ExamplesTip = ({ label, items }: { label: string; items: string[] }) => (
+   <Tooltip>
+      <TooltipTrigger asChild>
+         <button
+            type="button"
+            aria-label={label}
+            className="absolute top-3 right-3 rounded-full p-1 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+         >
+            <CircleHelp aria-hidden className="size-4" />
+         </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">
+         <span className="grid gap-1.5">
+            <span className="font-semibold">For example</span>
+            {items.map(item => (
+               <span key={item} className="flex items-start gap-2">
+                  <span aria-hidden className="mt-1.5 size-1 shrink-0 rounded-full bg-current" />
+                  {item}
+               </span>
+            ))}
+         </span>
+      </TooltipContent>
+   </Tooltip>
 )
 
 // The campaigns of the owner (.plan/lead-pipeline-p5-campaign-page.md): a name, the workflows in it, and the page of each.
@@ -136,40 +149,44 @@ export const Campaigns = () => {
                         <DialogDescription>Choose how to start. You can change the workflows later.</DialogDescription>
                      </DialogHeader>
                      <div className="grid gap-3">
-                        <Link
-                           to="/campaigns/new"
-                           onClick={closeDialog}
-                           aria-describedby="campaign-outreach-desc"
-                           className={CHOICE_CLASS}
-                        >
-                           <span className={`${ICON_CHIP} bg-blue-500/10 text-blue-600 dark:text-blue-400`}>
-                              <Sparkles aria-hidden />
-                           </span>
-                           <span className="grid gap-1">
-                              <span className="font-medium">Outreach campaign</span>
-                              <span id="campaign-outreach-desc" className="grid gap-2 text-muted-foreground text-sm">
-                                 <span>Answer a few questions. We build six workflows for you, all switched off.</span>
-                                 <Examples items={OUTREACH_EXAMPLES} />
+                        <div className="relative">
+                           <Link
+                              to="/campaigns/new"
+                              onClick={closeDialog}
+                              aria-describedby="campaign-outreach-desc"
+                              className={CHOICE_CLASS}
+                           >
+                              <span className={`${ICON_CHIP} bg-blue-500/10 text-blue-600 dark:text-blue-400`}>
+                                 <Sparkles aria-hidden />
                               </span>
-                           </span>
-                        </Link>
-                        <button
-                           type="button"
-                           aria-describedby="campaign-empty-desc"
-                           className={CHOICE_CLASS}
-                           onClick={() => setStep('name')}
-                        >
-                           <span className={`${ICON_CHIP} bg-violet-500/10 text-violet-600 dark:text-violet-400`}>
-                              <FolderPlus aria-hidden />
-                           </span>
-                           <span className="grid gap-1">
-                              <span className="font-medium">Without campaign</span>
-                              <span id="campaign-empty-desc" className="grid gap-2 text-muted-foreground text-sm">
-                                 <span>An empty campaign. Add your own workflows to it later.</span>
-                                 <Examples items={EMPTY_EXAMPLES} />
+                              <span className="grid gap-1">
+                                 <span className="font-medium">Outreach campaign</span>
+                                 <span id="campaign-outreach-desc" className="text-muted-foreground text-sm">
+                                    Answer a few questions. We build six workflows for you, all switched off.
+                                 </span>
                               </span>
-                           </span>
-                        </button>
+                           </Link>
+                           <ExamplesTip label="Examples of outreach campaigns" items={OUTREACH_EXAMPLES} />
+                        </div>
+                        <div className="relative">
+                           <button
+                              type="button"
+                              aria-describedby="campaign-empty-desc"
+                              className={CHOICE_CLASS}
+                              onClick={() => setStep('name')}
+                           >
+                              <span className={`${ICON_CHIP} bg-violet-500/10 text-violet-600 dark:text-violet-400`}>
+                                 <FolderPlus aria-hidden />
+                              </span>
+                              <span className="grid gap-1">
+                                 <span className="font-medium">Without campaign</span>
+                                 <span id="campaign-empty-desc" className="text-muted-foreground text-sm">
+                                    An empty campaign. Add your own workflows to it later.
+                                 </span>
+                              </span>
+                           </button>
+                           <ExamplesTip label="Examples of campaigns without workflows" items={EMPTY_EXAMPLES} />
+                        </div>
                      </div>
                   </>
                ) : null}
@@ -178,8 +195,8 @@ export const Campaigns = () => {
                      <DialogHeader>
                         <DialogTitle>New campaign</DialogTitle>
                         <DialogDescription>
-                           Its people get a label made from the name. Deleting the campaign later keeps the workflows and
-                           the people.
+                           Its people get a label made from the name. Deleting the campaign later keeps the workflows
+                           and the people.
                         </DialogDescription>
                      </DialogHeader>
                      <Input

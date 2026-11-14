@@ -94,3 +94,10 @@ Assumed (the owner can change these before lock):
 - Outreach examples follow the six workflows in `packages/contracts/src/recipes.ts`: find people from posts, invite and message, warm up by reactions, hand off silent people, and hand off invites with no answer after 21 days.
 - Without campaign examples: a new market test, a partner referral list, a one-off event follow-up, and create now and add workflows later.
 - Verified: root gate passed (0 lint warnings, 0 errors). Browser layout check still pending.
+
+## Addendum: examples in tooltips (2026-11-14)
+
+- Request: "put example in the hover and on tooltip with question mark so it will look good". The examples leave the option text. Each option gets a circular help button (`CircleHelp`, top right, `aria-label` names the examples) that opens the shared tooltip with the "For example" list.
+- The help button sits beside the option, not inside it, because a button cannot nest in the option's link or button. The option text is now one line, and the option has right padding for the icon.
+- Uses the existing `components/ui/tooltip.tsx`; no new dependency.
+- Verified: root gate passed. Hover, keyboard focus and layout at 375 and 1440 px, light and dark, still to check in a browser.
