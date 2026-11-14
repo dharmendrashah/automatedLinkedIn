@@ -125,6 +125,8 @@ Deviations:
 - The hand-off question reads "Should the hand-off also go to a web address?"; the old "Also send it to an address" hint and "Written by AI comes with the next step" were removed. `sizes` and `industries` were dropped from the form state.
 - Time zone is checked with `Intl.DateTimeFormat` (accepts any IANA name and `UTC`), not a list.
 
+Redesign (2026-11-14, owner feedback "looks very weird", reference: screensdesign.com AI chat onboarding examples): the page header, intro and link row are gone (the site header already names the page). The chat fills the window under the header (`h-[calc(100svh-var(--header-height))]`, layout padding cancelled): a thin progress row with a "..." menu (Edit all fields, Start over, Start a single workflow), a thread that scrolls by itself, and a composer fixed at the bottom. Choices are tap chips above the composer (saved customers, accounts, "Use default", "Use N for M accounts"); typed answers use a field and a round send button (Enter sends, Shift+Enter is a new line in text areas). Checked in a throwaway preview harness (deleted), not on the real signed-in page.
+
 Follow-ups:
 - Not run in a browser: the local sign-in needs credentials. Walk it at 375 px and 1440 px, light and dark, with the keyboard, then a duplicate name, then one real create (six switched-off workflows).
 - Whether the scheduler accepts every zone `Intl` accepts is still unchecked.

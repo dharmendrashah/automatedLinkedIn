@@ -19,7 +19,7 @@ import { browserTimeZone } from '@/components/workflows/schedule-text'
 import { readableError } from '@/lib/trpc-error'
 import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { useNavigate } from 'react-router'
 
 import { STAGE_LABELS, buildOutreach, capacityOf, outreachAnswersSchema } from '@automatedLinkedIn/contracts'
 
@@ -139,56 +139,51 @@ export const NewCampaign = () => {
       )
    }
 
+   if (mode === 'chat' && current !== null) {
+      return (
+         <OutreachChat
+            form={form}
+            set={set}
+            done={done}
+            current={current}
+            lists={lists}
+            suggested={suggested}
+            used={used}
+            notice={notice}
+            onDone={finish}
+            onSkip={skip}
+            onReopen={forget}
+            onEditAll={() => setMode('form')}
+            onStartOver={startOver}
+         />
+      )
+   }
+
    return (
       <div className="grid w-full gap-4 px-4 lg:px-6">
-         <div className="grid gap-1">
-            <h2 className="text-lg font-semibold">New outreach campaign</h2>
-            <p className="text-muted-foreground text-sm">
-               Answer a few questions and six workflows are built for you, switched off. You can open and change every
-               one on the canvas. Prefer to build one yourself?{' '}
-               <Link className="underline" to="/workflows/new">
-                  Start a single workflow
-               </Link>
-               .
-            </p>
-            <p className="text-sm">
-               <button type="button" className="underline" onClick={() => setMode(mode === 'chat' ? 'form' : 'chat')}>
-                  {mode === 'chat' ? 'Edit all fields' : 'Back to the chat'}
-               </button>
-               {' \u00b7 '}
-               <button type="button" className="underline" onClick={startOver}>
+         <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold">Edit all fields</h2>
+            <div className="flex gap-2">
+               <Button variant="outline" size="sm" onClick={() => setMode('chat')}>
+                  Back to the chat
+               </Button>
+               <Button variant="ghost" size="sm" onClick={startOver}>
                   Start over
-               </button>
-            </p>
+               </Button>
+            </div>
          </div>
-         {mode === 'form' || current === null ? (
-            <AllFields
-               form={form}
-               set={set}
-               lists={lists}
-               suggested={suggested}
-               used={used}
-               problems={problems}
-               onReview={() => {
-                  setDraft(c => ({ ...c, done: STEPS.map(({ id }) => id) }))
-                  setMode('chat')
-               }}
-            />
-         ) : (
-            <OutreachChat
-               form={form}
-               set={set}
-               done={done}
-               current={current}
-               lists={lists}
-               suggested={suggested}
-               used={used}
-               notice={notice}
-               onDone={finish}
-               onSkip={skip}
-               onReopen={forget}
-            />
-         )}
+         <AllFields
+            form={form}
+            set={set}
+            lists={lists}
+            suggested={suggested}
+            used={used}
+            problems={problems}
+            onReview={() => {
+               setDraft(c => ({ ...c, done: STEPS.map(({ id }) => id) }))
+               setMode('chat')
+            }}
+         />
       </div>
    )
 }

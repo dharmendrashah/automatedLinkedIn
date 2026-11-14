@@ -1,7 +1,16 @@
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import {
+   DropdownMenu,
+   DropdownMenuContent,
+   DropdownMenuItem,
+   DropdownMenuSeparator,
+   DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Progress } from '@/components/ui/progress'
+import { MoreHorizontal } from 'lucide-react'
 import { useEffect, useRef } from 'react'
+import { Link } from 'react-router'
 
 import { type Lists, StepInput } from './StepInput'
 import { answerText } from './answer-text'
@@ -21,12 +30,23 @@ type Props = {
    onDone: (id: StepId) => void
    onSkip: (id: StepId) => void
    onReopen: (id: StepId) => void
+   onEditAll: () => void
+   onStartOver: () => void
 }
 
-const Bubble = ({ from, children }: { from: 'assistant' | 'user'; children: React.ReactNode }) => (
-   <div className={from === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+const Bubble = ({
+   from,
+   action,
+   children,
+}: {
+   from: 'assistant' | 'user'
+   action?: React.ReactNode
+   children: React.ReactNode
+}) => (
+   <div className={from === 'user' ? 'flex items-end justify-end gap-2' : 'flex justify-start'}>
+      {action}
       <div
-         className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm break-words whitespace-pre-wrap ${
+         className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm break-words whitespace-pre-wrap md:max-w-[70%] ${
             from === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'
          }`}
       >
@@ -35,7 +55,8 @@ const Bubble = ({ from, children }: { from: 'assistant' | 'user'; children: Reac
    </div>
 )
 
-// The chat: the assistant asks one question at a time, the answers stay in the thread, the current input sits under it.
+// A chat that fills the window: a thin progress bar on top, the thread in the middle, and the composer fixed at the bottom.
+// The assistant asks one question at a time and every answer stays in the thread.
 export const OutreachChat = ({
    form,
    set,
@@ -48,6 +69,8 @@ export const OutreachChat = ({
    onDone,
    onSkip,
    onReopen,
+   onEditAll,
+   onStartOver,
 }: Props) => {
    const end = useRef<HTMLDivElement>(null)
    const progress = progressOf(done)
@@ -62,72 +85,89 @@ export const OutreachChat = ({
    }, [current, done.length, notice])
 
    return (
-      <div className="grid gap-4">
-         <div className="grid gap-1">
-            <div className="flex items-center justify-between gap-2 text-sm">
-               <span className="font-medium">{`Step ${progress.current} of ${progress.total}`}</span>
-               <span className="text-muted-foreground">{`${progress.percent}%`}</span>
-            </div>
+      // Cancels the layout padding and takes the rest of the window under the header.
+      <div className="-my-4 flex h-[calc(100svh-var(--header-height))] min-h-0 flex-col md:-my-6 md:h-[calc(100svh-var(--header-height)-1rem)]">
+         <div className="flex items-center gap-3 border-b px-4 py-2 lg:px-6">
+            <span className="text-muted-foreground text-xs whitespace-nowrap">{`Step ${progress.current} of ${progress.total}`}</span>
             <Progress
+               className="h-1.5 flex-1"
                value={progress.percent}
                aria-label="Setup progress"
                aria-valuemin={0}
                aria-valuemax={100}
                aria-valuenow={progress.percent}
             />
+            <DropdownMenu>
+               <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" aria-label="More">
+                     <MoreHorizontal />
+                  </Button>
+               </DropdownMenuTrigger>
+               <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={onEditAll}>Edit all fields</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={onStartOver}>Start over</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                     <Link to="/workflows/new">Start a single workflow</Link>
+                  </DropdownMenuItem>
+               </DropdownMenuContent>
+            </DropdownMenu>
          </div>
-         <div className="rounded-xl border">
-            <div
-               role="log"
-               aria-live="polite"
-               aria-label="Campaign setup"
-               className="grid max-h-[55vh] gap-3 overflow-y-auto p-4"
-            >
-               <Bubble from="assistant">
-                  I will ask ten short questions and build six workflows for you, switched off. Nothing acts on LinkedIn
-                  until you switch it on.
-               </Bubble>
-               {STEPS.slice(0, at + 1).map(({ id, question, hint }) => (
-                  <div key={id} className="grid gap-3">
-                     <Bubble from="assistant">
-                        {question}
-                        <span className="text-muted-foreground mt-1 block text-xs">{hint}</span>
-                     </Bubble>
-                     {id !== current ? (
-                        <div className="flex items-end justify-end gap-2">
+         <div
+            role="log"
+            aria-live="polite"
+            aria-label="Campaign setup"
+            className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto px-4 py-4 lg:px-6"
+         >
+            <Bubble from="assistant">
+               Hi. I will ask ten short questions and build six workflows for you, switched off. Nothing acts on
+               LinkedIn until you switch it on.
+            </Bubble>
+            {STEPS.slice(0, at + 1).map(({ id, question, hint }) => (
+               <div key={id} className="grid gap-3">
+                  <Bubble from="assistant">
+                     {question}
+                     <span className="text-muted-foreground mt-1 block text-xs">{hint}</span>
+                  </Bubble>
+                  {id !== current ? (
+                     <Bubble
+                        from="user"
+                        action={
                            <Button
                               variant="ghost"
                               size="xs"
+                              className="text-muted-foreground"
                               aria-label={`Edit your answer: ${question}`}
                               onClick={() => onReopen(id)}
                            >
                               Edit
                            </Button>
-                           <Bubble from="user">{answerText(id, form, { icpName, suggested })}</Bubble>
-                        </div>
-                     ) : null}
-                  </div>
-               ))}
-               {notice ? (
-                  <Alert variant="destructive">
-                     <AlertDescription>{notice}</AlertDescription>
-                  </Alert>
-               ) : null}
-               <div ref={end} />
-            </div>
-            <div className="border-t p-4">
-               <StepInput
-                  key={current}
-                  id={current}
-                  form={form}
-                  set={set}
-                  lists={lists}
-                  suggested={suggested}
-                  used={used}
-                  onDone={() => onDone(current)}
-                  onSkip={() => onSkip(current)}
-               />
-            </div>
+                        }
+                     >
+                        {answerText(id, form, { icpName, suggested })}
+                     </Bubble>
+                  ) : null}
+               </div>
+            ))}
+            {notice ? (
+               <Alert variant="destructive">
+                  <AlertDescription>{notice}</AlertDescription>
+               </Alert>
+            ) : null}
+            <div ref={end} />
+         </div>
+         <div className="bg-background border-t px-4 py-3 lg:px-6">
+            <StepInput
+               key={current}
+               id={current}
+               form={form}
+               set={set}
+               lists={lists}
+               suggested={suggested}
+               used={used}
+               onDone={() => onDone(current)}
+               onSkip={() => onSkip(current)}
+            />
          </div>
       </div>
    )

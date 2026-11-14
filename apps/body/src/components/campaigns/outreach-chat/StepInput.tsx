@@ -3,6 +3,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { ChipsInput } from '@/components/workflows/setting-inputs'
+import { ArrowUp } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { CAMPAIGN_LIMITS, capacityOf } from '@automatedLinkedIn/contracts'
@@ -36,8 +37,19 @@ type Props = {
 }
 
 const PROBLEM = 'Write a whole number from 1 to 50.'
+const AREA = 'max-h-40 min-h-10 resize-none'
 
-// The input for the step the assistant just asked, shown under the thread. Options are buttons; typed answers are fields.
+const Chip = ({ selected, ...props }: React.ComponentProps<typeof Button> & { selected?: boolean }) => (
+   <Button
+      variant={selected ? 'secondary' : 'outline'}
+      size="sm"
+      className="rounded-full"
+      aria-pressed={selected}
+      {...props}
+   />
+)
+
+// The composer under the thread: option chips for choices, a field and a send button for typed answers.
 export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSkip }: Props) => {
    const root = useRef<HTMLDivElement>(null)
    const [shown, setShown] = useState(false)
@@ -70,115 +82,94 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
 
       onDone()
    }
+   // Enter sends; in a text area, Shift+Enter makes a new line.
    const enter = (event: React.KeyboardEvent) => {
-      if (event.key === 'Enter') {
+      if (event.key === 'Enter' && !event.shiftKey) {
          event.preventDefault()
          submit()
       }
    }
    const signedIn = lists.accounts.filter(account => account.status === 'ACTIVE')
 
-   const fields = () => {
+   // What can be chosen with one tap, and what can be typed.
+   const parts = (): { options?: React.ReactNode; fields?: React.ReactNode } => {
       switch (id) {
          case 'name':
-            return (
-               <Input
-                  aria-label="Campaign name"
-                  maxLength={CAMPAIGN_LIMITS.nameMax}
-                  placeholder="Outbound for agencies"
-                  value={form.name}
-                  onChange={event => set({ name: event.target.value })}
-                  onKeyDown={enter}
-               />
-            )
+            return {
+               fields: (
+                  <Input
+                     aria-label="Campaign name"
+                     maxLength={CAMPAIGN_LIMITS.nameMax}
+                     placeholder="Outbound for agencies"
+                     value={form.name}
+                     onChange={event => set({ name: event.target.value })}
+                     onKeyDown={enter}
+                  />
+               ),
+            }
          case 'phrases':
-            return <ChipsInput id="phrases" value={form.phrases} onChange={phrases => set({ phrases })} />
+            return { fields: <ChipsInput id="phrases" value={form.phrases} onChange={phrases => set({ phrases })} /> }
          case 'customer':
-            return (
-               <>
-                  {lists.icpsFailed ? (
-                     <p className="text-muted-foreground text-sm">
-                        Your saved ideal customers could not be loaded. Describe one instead.
-                     </p>
-                  ) : null}
-                  {lists.icps.length > 0 ? (
-                     <div className="flex flex-wrap gap-2">
+            return {
+               options:
+                  lists.icps.length > 0 ? (
+                     <>
                         {lists.icps.map(icp => (
-                           <Button
+                           <Chip
                               key={icp.id}
-                              variant="outline"
                               onClick={() => {
                                  set({ icpId: icp.id, titles: [], locations: [] })
                                  onDone()
                               }}
                            >
                               {icp.name}
-                           </Button>
+                           </Chip>
                         ))}
-                        <Button
-                           variant={describing ? 'secondary' : 'outline'}
-                           aria-pressed={describing}
+                        <Chip
+                           selected={describing}
                            onClick={() => {
                               setDescribing(true)
                               set({ icpId: '' })
                            }}
                         >
                            Describe a new one
-                        </Button>
-                     </div>
-                  ) : null}
-                  {describing ? (
-                     <>
-                        <ChipsInput
-                           id="titles"
-                           kind="titles"
-                           value={form.titles}
-                           onChange={titles => set({ titles })}
-                        />
-                        <ChipsInput
-                           id="locations"
-                           kind="locations"
-                           value={form.locations}
-                           onChange={locations => set({ locations })}
-                        />
+                        </Chip>
                      </>
-                  ) : null}
-               </>
-            )
+                  ) : null,
+               fields: describing ? (
+                  <>
+                     <ChipsInput id="titles" kind="titles" value={form.titles} onChange={titles => set({ titles })} />
+                     <ChipsInput
+                        id="locations"
+                        kind="locations"
+                        value={form.locations}
+                        onChange={locations => set({ locations })}
+                     />
+                  </>
+               ) : null,
+            }
          case 'accounts':
-            return (
-               <>
-                  {lists.accountsState === 'loading' ? <p className="text-sm">Loading accounts</p> : null}
-                  {lists.accountsState === 'error' ? (
-                     <p className="text-muted-foreground text-sm">
-                        Your accounts could not be loaded, so every signed-in account will be used.
-                     </p>
-                  ) : null}
-                  {lists.accountsState === 'ready' && signedIn.length === 0 ? (
-                     <p className="text-muted-foreground text-sm">{capacityOf(0, 1).sentence}</p>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
-                     <Button
-                        variant={form.accountMode === 'all' ? 'secondary' : 'outline'}
-                        aria-pressed={form.accountMode === 'all'}
+            return {
+               options: (
+                  <>
+                     <Chip
+                        selected={form.accountMode === 'all'}
                         onClick={() => {
                            set({ accountMode: 'all', accountIds: [] })
                            onDone()
                         }}
                      >
                         Every signed-in account
-                     </Button>
+                     </Chip>
                      {lists.accountsState === 'ready' && lists.accounts.length > 0 ? (
-                        <Button
-                           variant={form.accountMode === 'pick' ? 'secondary' : 'outline'}
-                           aria-pressed={form.accountMode === 'pick'}
-                           onClick={() => set({ accountMode: 'pick' })}
-                        >
+                        <Chip selected={form.accountMode === 'pick'} onClick={() => set({ accountMode: 'pick' })}>
                            Pick accounts
-                        </Button>
+                        </Chip>
                      ) : null}
-                  </div>
-                  {form.accountMode === 'pick'
+                  </>
+               ),
+               fields:
+                  form.accountMode === 'pick'
                      ? lists.accounts.map(account => (
                           <label key={account.id} className="flex items-center gap-2 text-sm">
                              <Checkbox
@@ -195,83 +186,104 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
                              {account.status === 'ACTIVE' ? account.email : `${account.email} (not signed in)`}
                           </label>
                        ))
-                     : null}
-               </>
-            )
+                     : null,
+            }
          case 'note':
-            return (
-               <Textarea
-                  aria-label="Connection note"
-                  maxLength={200}
-                  value={form.note}
-                  onChange={event => set({ note: event.target.value })}
-               />
-            )
+            return {
+               fields: (
+                  <Textarea
+                     aria-label="Connection note"
+                     className={AREA}
+                     maxLength={200}
+                     placeholder="Hi {first_name}, ..."
+                     value={form.note}
+                     onChange={event => set({ note: event.target.value })}
+                     onKeyDown={enter}
+                  />
+               ),
+            }
          case 'message':
-            return (
-               <Textarea
-                  aria-label="First message"
-                  value={form.message}
-                  onChange={event => set({ message: event.target.value })}
-               />
-            )
+            return {
+               fields: (
+                  <Textarea
+                     aria-label="First message"
+                     className={AREA}
+                     placeholder="Write the first message"
+                     value={form.message}
+                     onChange={event => set({ message: event.target.value })}
+                     onKeyDown={enter}
+                  />
+               ),
+            }
          case 'warmUp':
-            return (
-               <>
-                  <label className="flex items-center gap-2 text-sm">
-                     <Checkbox checked={form.reactions} onCheckedChange={on => set({ reactions: on === true })} />
-                     React to their posts
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                     <Checkbox
-                        checked={form.comments === 'texts'}
-                        onCheckedChange={on => set({ comments: on === true ? 'texts' : 'off' })}
-                     />
-                     Comment with my texts
-                  </label>
-                  {form.comments === 'texts' ? (
-                     <Textarea
-                        aria-label="Comment texts, one on each line"
-                        placeholder="One text on each line. {author_first_name} works."
-                        value={form.texts}
-                        onChange={event => set({ texts: event.target.value })}
-                     />
-                  ) : null}
-               </>
-            )
+            return {
+               fields: (
+                  <>
+                     <div className="flex flex-wrap gap-4">
+                        <label className="flex items-center gap-2 text-sm">
+                           <Checkbox checked={form.reactions} onCheckedChange={on => set({ reactions: on === true })} />
+                           React to their posts
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                           <Checkbox
+                              checked={form.comments === 'texts'}
+                              onCheckedChange={on => set({ comments: on === true ? 'texts' : 'off' })}
+                           />
+                           Comment with my texts
+                        </label>
+                     </div>
+                     {form.comments === 'texts' ? (
+                        <Textarea
+                           aria-label="Comment texts, one on each line"
+                           className={AREA}
+                           placeholder="One text on each line. {author_first_name} works."
+                           value={form.texts}
+                           onChange={event => set({ texts: event.target.value })}
+                        />
+                     ) : null}
+                  </>
+               ),
+            }
          case 'when':
-            return (
-               <div className="flex flex-wrap items-center gap-2">
-                  <Input
-                     type="time"
-                     aria-label="Time of day"
-                     className="w-32"
-                     value={form.time}
-                     onChange={event => set({ time: event.target.value })}
-                     onKeyDown={enter}
-                  />
-                  <Input
-                     aria-label="Time zone"
-                     className="w-56"
-                     value={form.timeZone}
-                     onChange={event => set({ timeZone: event.target.value })}
-                     onKeyDown={enter}
-                  />
-               </div>
-            )
+            return {
+               fields: (
+                  <div className="flex flex-wrap items-center gap-2">
+                     <Input
+                        type="time"
+                        aria-label="Time of day"
+                        className="w-32"
+                        value={form.time}
+                        onChange={event => set({ time: event.target.value })}
+                        onKeyDown={enter}
+                     />
+                     <Input
+                        aria-label="Time zone"
+                        className="w-56"
+                        value={form.timeZone}
+                        onChange={event => set({ timeZone: event.target.value })}
+                        onKeyDown={enter}
+                     />
+                  </div>
+               ),
+            }
          case 'handOff':
-            return (
-               <Input
-                  aria-label="Hand-off address"
-                  placeholder="https://"
-                  value={form.handOffUrl}
-                  onChange={event => set({ handOffUrl: event.target.value })}
-                  onKeyDown={enter}
-               />
-            )
+            return {
+               fields: (
+                  <Input
+                     aria-label="Hand-off address"
+                     placeholder="https://"
+                     value={form.handOffUrl}
+                     onChange={event => set({ handOffUrl: event.target.value })}
+                     onKeyDown={enter}
+                  />
+               ),
+            }
          case 'posts':
-            return (
-               <>
+            return {
+               options: (
+                  <Chip onClick={onSkip}>{`Use ${suggested} for ${used} ${used === 1 ? 'account' : 'accounts'}`}</Chip>
+               ),
+               fields: (
                   <Input
                      type="number"
                      aria-label="Posts a day"
@@ -282,17 +294,36 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
                      onChange={event => setDraft(event.target.value)}
                      onKeyDown={enter}
                   />
-                  <p className="text-muted-foreground text-xs">
-                     {`We suggest ${suggested} for ${used} ${used === 1 ? 'account' : 'accounts'}.`}
-                  </p>
-               </>
-            )
+               ),
+            }
       }
    }
+   const { options, fields } = parts()
+   const skippable = !step?.required && id !== 'posts'
 
    return (
-      <div ref={root} className="grid gap-3">
-         {fields()}
+      <div ref={root} className="grid gap-2">
+         {id === 'accounts' && lists.accountsState !== 'ready' ? (
+            <p className="text-muted-foreground text-sm">
+               {lists.accountsState === 'loading'
+                  ? 'Loading accounts'
+                  : 'Your accounts could not be loaded, so every signed-in account will be used.'}
+            </p>
+         ) : null}
+         {id === 'accounts' && lists.accountsState === 'ready' && signedIn.length === 0 ? (
+            <p className="text-muted-foreground text-sm">{capacityOf(0, 1).sentence}</p>
+         ) : null}
+         {id === 'customer' && lists.icpsFailed ? (
+            <p className="text-muted-foreground text-sm">
+               Your saved ideal customers could not be loaded. Describe one instead.
+            </p>
+         ) : null}
+         {options || skippable ? (
+            <div className="flex flex-wrap gap-2">
+               {options}
+               {skippable ? <Chip onClick={onSkip}>Use default</Chip> : null}
+            </div>
+         ) : null}
          {shown && problems.length > 0 ? (
             <ul className="text-destructive grid gap-1 text-sm" role="alert">
                {problems.map(problem => (
@@ -300,14 +331,14 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
                ))}
             </ul>
          ) : null}
-         <div className="flex flex-wrap gap-2">
-            <Button onClick={submit}>Continue</Button>
-            {step?.required ? null : (
-               <Button variant="ghost" onClick={onSkip}>
-                  Use default
+         {fields ? (
+            <div className="flex items-end gap-2">
+               <div className="grid min-w-0 flex-1 gap-2">{fields}</div>
+               <Button size="icon" className="rounded-full" aria-label="Send" onClick={submit}>
+                  <ArrowUp />
                </Button>
-            )}
-         </div>
+            </div>
+         ) : null}
       </div>
    )
 }
