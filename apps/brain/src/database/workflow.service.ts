@@ -52,6 +52,7 @@ const workflowSelect = {
    maybeEnabled: true,
    enabled: true,
    campaignId: true,
+   campaign: { select: { name: true } },
    stage: true,
    nextRunAt: true,
    createdAt: true,

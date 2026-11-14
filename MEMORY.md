@@ -334,6 +334,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Changelog
 
+- 2026-11-14: Workflows list redesigned (`.plan/workflows-list-redesign.md`): icons, a Campaign column (name from `workflow.list`, which now selects `campaign.name`), and the last run's Found, Qualified, Maybe and Cost in their own columns (`workflow-row.ts`, `workflow-list-cells.tsx`); List and Started columns removed; not seen signed in.
+
 - 2026-11-14: Sidebar groups are collapsible and start closed except the group of the current page (`activeGroupLabel` in `nav-groups.ts`); a closed group shows the sum of its badges so pending approvals stay visible.
 
 - 2026-11-14: Sidebar menu is grouped (Work, Outreach, LinkedIn, Settings) with one icon colour per group; data and the admin/badge rules live in `apps/body/src/components/nav-groups.ts` (`.plan/sidebar-groups-and-colour.md`); LinkedIn labels shortened to Accounts, Companies, Posts (page titles unchanged); not seen signed in or in dark theme.

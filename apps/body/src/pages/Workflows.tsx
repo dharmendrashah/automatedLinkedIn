@@ -1,29 +1,34 @@
 import { StateRows } from '@/components/links/state-rows'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { isLive, runSentence } from '@/components/workflows/run-sentence'
-import { RunStatusBadge } from '@/components/workflows/runs'
-import { Plus, Workflow as WorkflowIcon } from 'lucide-react'
+import { isLive } from '@/components/workflows/run-sentence'
+import {
+   CampaignCell,
+   CostCell,
+   CountCell,
+   Heading,
+   LastRunCell,
+   ScheduleCell,
+   WorkflowCell,
+} from '@/components/workflows/workflow-list-cells'
+import { metricsOf } from '@/components/workflows/workflow-row'
+import {
+   CalendarClock,
+   CircleHelp,
+   History,
+   Megaphone,
+   Plus,
+   UserCheck,
+   Users,
+   Wallet,
+   Workflow as WorkflowIcon,
+} from 'lucide-react'
 import { Link } from 'react-router'
-
-import { type WorkflowSummary, formatUsd } from '@/components/workflows/types'
 
 import { trpc } from '../trpc'
 
-const COLUMNS = 5
+const COLUMNS = 8
 const POLL_MS = 3_000
-
-// The last run in a few words; a live run shows its spend so far.
-const lastRunText = (run: WorkflowSummary['runs'][number]) =>
-   run.status === 'RUNNING'
-      ? `${run.stopRequestedAt ? 'Stopping' : 'Running'} · about ${formatUsd(run.costMicros)} spent of up to ${formatUsd(run.estimateMicros)}`
-      : runSentence(
-           {
-              ...run,
-              steps: [],
-           },
-           type => type
-        )
 
 export const Workflows = () => {
    const list = trpc.workflow.list.useQuery(undefined, {
@@ -48,15 +53,58 @@ export const Workflows = () => {
                </Link>
             </Button>
          </div>
-         <div className="overflow-hidden rounded-lg border">
+         <div className="overflow-x-auto rounded-lg border">
             <Table>
                <TableHeader className="bg-muted/50">
                   <TableRow>
-                     <TableHead>Workflow</TableHead>
-                     <TableHead>Runs</TableHead>
-                     <TableHead>Last run</TableHead>
-                     <TableHead>List</TableHead>
-                     <TableHead>Started</TableHead>
+                     <TableHead>
+                        <Heading icon={WorkflowIcon} label="Workflow" hint="The workflow and what it is for." />
+                     </TableHead>
+                     <TableHead>
+                        <Heading
+                           icon={Megaphone}
+                           label="Campaign"
+                           hint="The campaign this workflow belongs to and its step in it."
+                        />
+                     </TableHead>
+                     <TableHead>
+                        <Heading
+                           icon={CalendarClock}
+                           label="Schedule"
+                           hint="On: it starts by itself. Off: its schedule is switched off. By hand: it only runs when you start it."
+                        />
+                     </TableHead>
+                     <TableHead>
+                        <Heading icon={History} label="Last run" hint="How its latest run ended and when it started." />
+                     </TableHead>
+                     <TableHead className="text-right">
+                        <Heading
+                           icon={Users}
+                           label="Found"
+                           hint="People the last run scored: qualified, maybe and the ones it left out."
+                        />
+                     </TableHead>
+                     <TableHead className="text-right">
+                        <Heading
+                           icon={UserCheck}
+                           label="Qualified"
+                           hint="People who matched your ideal customer well enough to keep."
+                        />
+                     </TableHead>
+                     <TableHead className="text-right">
+                        <Heading
+                           icon={CircleHelp}
+                           label="Maybe"
+                           hint="People who might match: close to the bar but not over it."
+                        />
+                     </TableHead>
+                     <TableHead className="text-right">
+                        <Heading
+                           icon={Wallet}
+                           label="Cost"
+                           hint="What the last run cost, and what each qualified person cost."
+                        />
+                     </TableHead>
                   </TableRow>
                </TableHeader>
                <TableBody>
@@ -70,39 +118,33 @@ export const Workflows = () => {
                   />
                   {list.data?.map(workflow => {
                      const [last] = workflow.runs
-                     const scheduled = workflow.graph.nodes.some(({ type }) => type === 'trigger.schedule')
+                     const { found, qualified, maybe } = metricsOf(last)
 
                      return (
                         <TableRow key={workflow.id}>
                            <TableCell>
-                              <Link
-                                 to={`/workflows/${workflow.id}`}
-                                 className="font-medium underline-offset-4 hover:underline"
-                              >
-                                 {workflow.name}
-                              </Link>
-                              {workflow.goal ? <p className="text-muted-foreground text-xs">{workflow.goal}</p> : null}
+                              <WorkflowCell workflow={workflow} />
                            </TableCell>
                            <TableCell>
-                              {scheduled ? (workflow.enabled ? 'On its schedule' : 'Schedule switched off') : 'By hand'}
+                              <CampaignCell workflow={workflow} />
                            </TableCell>
                            <TableCell>
-                              {last ? (
-                                 isLive(last.status) ? (
-                                    <div className="grid gap-1">
-                                       <RunStatusBadge status={last.status} />
-                                       <span className="text-muted-foreground text-xs">{lastRunText(last)}</span>
-                                    </div>
-                                 ) : (
-                                    <span className="text-sm">{lastRunText(last)}</span>
-                                 )
-                              ) : (
-                                 '–'
-                              )}
+                              <ScheduleCell workflow={workflow} />
                            </TableCell>
-                           <TableCell>{workflow.outputList.name}</TableCell>
-                           <TableCell className="text-muted-foreground">
-                              {last ? new Date(last.startedAt).toLocaleString() : '–'}
+                           <TableCell>
+                              <LastRunCell run={last} />
+                           </TableCell>
+                           <TableCell className="text-right">
+                              <CountCell value={found} />
+                           </TableCell>
+                           <TableCell className="text-right">
+                              <CountCell value={qualified} tone="good" />
+                           </TableCell>
+                           <TableCell className="text-right">
+                              <CountCell value={maybe} />
+                           </TableCell>
+                           <TableCell className="text-right">
+                              <CostCell run={last} />
                            </TableCell>
                         </TableRow>
                      )
