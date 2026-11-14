@@ -36,7 +36,7 @@ export const positiveReply = router({
       .input(
          z.object({
             conversationId: id,
-            campaignId: id,
+            campaignId: id.nullable(),
          })
       )
       .mutation(async ({ ctx, input }) =>
@@ -50,7 +50,7 @@ export const positiveReply = router({
       .input(
          z.object({
             conversationId: id,
-            campaignId: id,
+            campaignId: id.nullable(),
          })
       )
       .mutation(async ({ ctx, input }) =>
@@ -59,6 +59,8 @@ export const positiveReply = router({
             'Conversation or campaign not found'
          )
       ),
+
+   leads: ownerProcedure.query(({ ctx }) => PositiveReplyService.leads(ctx.user.id)),
 
    aiReads: ownerProcedure.query(({ ctx }) => PositiveReplyService.aiReads(ctx.user.id)),
 

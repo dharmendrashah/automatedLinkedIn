@@ -108,6 +108,7 @@ export class PositiveReplyService {
       })
    }
 
+   // Counts a person for a campaign. A lead the owner had marked with no campaign moves into it (as marked by them), so nobody counts twice.
    private static count(
       userId: string,
       campaignId: string,
@@ -115,17 +116,28 @@ export class PositiveReplyService {
       source: PositiveReplySource,
       conversationId: string | null
    ) {
-      return PrismaService.client.positiveReply.createMany({
-         data: [
-            {
+      return PrismaService.client.$transaction(async tx => {
+         const { count: moved } = await tx.positiveReply.deleteMany({
+            where: {
                userId,
-               campaignId,
                slug,
-               source,
-               conversationId,
+               campaignId: null,
+               state: 'COUNTED',
             },
-         ],
-         skipDuplicates: true,
+         })
+
+         return tx.positiveReply.createMany({
+            data: [
+               {
+                  userId,
+                  campaignId,
+                  slug,
+                  source: moved > 0 ? 'MARKED' : source,
+                  conversationId,
+               },
+            ],
+            skipDuplicates: true,
+         })
       })
    }
 
@@ -390,6 +402,7 @@ export class PositiveReplyService {
          select: {
             id: true,
             name: true,
+            replyValueUsd: true,
          },
       })
       const replies = slug
@@ -414,20 +427,20 @@ export class PositiveReplyService {
       }
    }
 
-   // The owner counts a person for a campaign by hand; a removed one comes back, and it is theirs from now on.
-   public static async mark(userId: string, conversationId: string, campaignId: string) {
+   // The owner counts a person for a campaign by hand, or for no campaign yet (null); a removed one comes back, and it is theirs from now on.
+   public static async mark(userId: string, conversationId: string, campaignId: string | null) {
       return this.setByHand(userId, conversationId, campaignId, 'COUNTED')
    }
 
-   // The owner takes a person out; the row stays, so no detection counts them again.
-   public static async unmark(userId: string, conversationId: string, campaignId: string) {
+   // The owner takes a person out. A campaign row stays, so no detection counts them again; a lead with no campaign is simply deleted.
+   public static async unmark(userId: string, conversationId: string, campaignId: string | null) {
       return this.setByHand(userId, conversationId, campaignId, 'REMOVED')
    }
 
    private static async setByHand(
       userId: string,
       conversationId: string,
-      campaignId: string,
+      campaignId: string | null,
       state: 'COUNTED' | 'REMOVED'
    ) {
       const db = PrismaService.client
@@ -439,43 +452,111 @@ export class PositiveReplyService {
             },
             select: { contactProfileUrl: true },
          }),
-         db.campaign.findFirst({
-            where: {
-               id: campaignId,
-               userId,
-            },
-            select: { id: true },
-         }),
+         campaignId
+            ? db.campaign.findFirst({
+                 where: {
+                    id: campaignId,
+                    userId,
+                 },
+                 select: { id: true },
+              })
+            : null,
       ])
       const slug = slugOfProfileUrl(conversation?.contactProfileUrl)
 
-      if (!campaign || !slug) {
+      if ((campaignId && !campaign) || !slug) {
          return false
       }
 
-      await db.positiveReply.upsert({
-         where: {
-            campaignId_slug: {
+      if (!campaignId) {
+         await this.setUnassigned(userId, slug, conversationId, state)
+
+         return true
+      }
+
+      await db.$transaction([
+         db.positiveReply.upsert({
+            where: {
+               campaignId_slug: {
+                  campaignId,
+                  slug,
+               },
+            },
+            create: {
+               userId,
                campaignId,
                slug,
+               state,
+               source: 'MARKED',
+               conversationId,
             },
-         },
-         create: {
+            update: {
+               state,
+               source: 'MARKED',
+               conversationId,
+            },
+         }),
+         ...(state === 'COUNTED'
+            ? [
+                 db.positiveReply.deleteMany({
+                    where: {
+                       userId,
+                       slug,
+                       campaignId: null,
+                    },
+                 }),
+              ]
+            : []),
+      ])
+
+      return true
+   }
+
+   // A person counted nowhere becomes a positive lead of no campaign; one already counted in a campaign is left alone, and removing
+   // deletes the row. The partial unique index stops two presses from making two rows.
+   private static async setUnassigned(
+      userId: string,
+      slug: string,
+      conversationId: string,
+      state: 'COUNTED' | 'REMOVED'
+   ) {
+      const db = PrismaService.client
+
+      if (state === 'REMOVED') {
+         await db.positiveReply.deleteMany({
+            where: {
+               userId,
+               slug,
+               campaignId: null,
+            },
+         })
+
+         return
+      }
+
+      const counted = await db.positiveReply.count({
+         where: {
             userId,
-            campaignId,
             slug,
-            state,
-            source: 'MARKED',
-            conversationId,
-         },
-         update: {
-            state,
-            source: 'MARKED',
-            conversationId,
+            state: 'COUNTED',
          },
       })
 
-      return true
+      if (counted > 0) {
+         return
+      }
+
+      await db.positiveReply.createMany({
+         data: [
+            {
+               userId,
+               slug,
+               source: 'MARKED',
+               conversationId,
+            },
+         ],
+         skipDuplicates: true,
+      })
    }
 
    // Counted replies per campaign and where they came from. A campaign with none is absent from the map.
@@ -492,6 +573,10 @@ export class PositiveReplyService {
       const stats = new Map<string, PipelineStats>()
 
       for (const row of rows) {
+         if (!row.campaignId) {
+            continue
+         }
+
          const one = stats.get(row.campaignId) ?? {
             replies: 0,
             rules: 0,
@@ -547,7 +632,28 @@ export class PositiveReplyService {
       return {
          campaigns: rows,
          totalUsd: priced.length > 0 ? priced.reduce((sum, one) => sum + one, 0) : null,
+         unassigned: await PrismaService.client.positiveReply.count({
+            where: {
+               userId,
+               campaignId: null,
+               state: 'COUNTED',
+            },
+         }),
       }
+   }
+
+   // The slugs of everyone counted positive in any campaign or in none, for the marker in the Unibox list.
+   public static async leads(userId: string) {
+      const rows = await PrismaService.client.positiveReply.findMany({
+         where: {
+            userId,
+            state: 'COUNTED',
+         },
+         select: { slug: true },
+         distinct: ['slug'],
+      })
+
+      return rows.map(({ slug }) => slug)
    }
 
    // What one positive reply of the campaign is worth a month; null clears it. False for a campaign that is not the owner's.

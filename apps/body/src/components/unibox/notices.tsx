@@ -105,6 +105,7 @@ const SHORTCUTS: [string, string][] = [
    ['C', 'Write a new message to a connection'],
    ['E', 'Done, and go to the next that needs a reply'],
    ['U', 'Mark unread'],
+   ['P', 'Count the lead as a positive reply, or remove it'],
    ['X', 'Select the conversation'],
    ['/', 'Search'],
    ['Ctrl or Cmd K', 'Go to or do anything'],

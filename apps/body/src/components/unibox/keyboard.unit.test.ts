@@ -21,6 +21,7 @@ describe('commandFor', () => {
       expect(commandFor(key('r'), false)).toBe('REPLY')
       expect(commandFor(key('e'), false)).toBe('DONE')
       expect(commandFor(key('u'), false)).toBe('UNREAD')
+      expect(commandFor(key('p'), false)).toBe('POSITIVE')
       expect(commandFor(key('x'), false)).toBe('SELECT')
       expect(commandFor(key('/'), false)).toBe('SEARCH')
       expect(commandFor(key('c'), false)).toBe('COMPOSE')
@@ -28,7 +29,7 @@ describe('commandFor', () => {
    })
 
    it('should do nothing with a single key while a text box has the focus', () => {
-      for (const name of ['j', 'k', 'r', 'e', 'u', 'x', 'c', '/', 'Enter', 'ArrowDown']) {
+      for (const name of ['j', 'k', 'r', 'e', 'u', 'p', 'x', 'c', '/', 'Enter', 'ArrowDown']) {
          expect(commandFor(key(name), true)).toBeUndefined()
       }
    })

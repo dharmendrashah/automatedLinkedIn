@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { AvatarPair } from './account-avatar'
 import { AccountChip } from './account-chip'
 import { type Row } from './inbox'
+import { PositiveMark } from './positive-reply'
 import { Marked } from './rich-text'
 import { lastReplyAt } from './status'
 import { StatusChip } from './status-chip'
@@ -97,6 +98,9 @@ const ConversationRowView = ({
                      </span>
                   ) : null}
                </span>
+               {conversation.kind === 'DIRECT' && conversation.contactSlug ? (
+                  <PositiveMark slug={conversation.contactSlug} />
+               ) : null}
                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                   {row.lastAt ? formatListTime(row.lastAt, now) : ''}
                </span>

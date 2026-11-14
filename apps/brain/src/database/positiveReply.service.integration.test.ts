@@ -277,6 +277,41 @@ describe('PositiveReplyService (database)', () => {
       })
    })
 
+   it('should count a lead of no campaign once, add no USD, and move it into a campaign without counting twice', async () => {
+      const { conversationId } = await heard('nina-nowhere', ['Hello'])
+      const unassigned = () =>
+         db.positiveReply.findMany({
+            where: {
+               userId,
+               slug: 'nina-nowhere',
+               campaignId: null,
+            },
+         })
+      const before = (await PositiveReplyService.pipeline(userId)).unassigned
+
+      await PositiveReplyService.mark(userId, conversationId, null)
+      await PositiveReplyService.mark(userId, conversationId, null)
+      expect(await unassigned()).toHaveLength(1)
+      expect((await PositiveReplyService.pipeline(userId)).unassigned).toBe(before + 1)
+      expect(await PositiveReplyService.leads(userId)).toContain('nina-nowhere')
+
+      await PositiveReplyService.mark(userId, conversationId, campaignId)
+      expect(await unassigned()).toHaveLength(0)
+      expect(await replyOf('nina-nowhere')).toMatchObject({
+         state: 'COUNTED',
+         source: 'MARKED',
+      })
+
+      await PositiveReplyService.mark(userId, conversationId, null)
+      expect(await unassigned()).toHaveLength(0)
+
+      await PositiveReplyService.unmark(userId, conversationId, campaignId)
+      await PositiveReplyService.mark(userId, conversationId, null)
+      await PositiveReplyService.unmark(userId, conversationId, null)
+      expect(await unassigned()).toHaveLength(0)
+      expect(await PositiveReplyService.leads(userId)).not.toContain('nina-nowhere')
+   })
+
    it('should keep every call to the owner: a foreign conversation or campaign is not found', async () => {
       const { conversationId } = await heard('eve-private', ['Let us talk'])
 

@@ -12,6 +12,7 @@ export const Campaigns = () => {
    const list = trpc.campaign.list.useQuery(undefined, { retry: false })
    const campaigns = list.data ?? []
    const pipeline = trpc.positiveReply.pipeline.useQuery(undefined, { retry: false })
+   const unassigned = pipeline.data?.unassigned ?? 0
    const pipelineOf = new Map((pipeline.data?.campaigns ?? []).map(row => [row.id, row]))
 
    return (
@@ -38,6 +39,14 @@ export const Campaigns = () => {
          {list.data && campaigns.length === 0 ? (
             <p className="text-muted-foreground text-sm">
                No campaign yet. Make one, then put workflows in it from their settings.
+            </p>
+         ) : null}
+
+         {unassigned > 0 ? (
+            <p className="text-sm">
+               {unassigned === 1 ? '1 positive lead is' : `${unassigned} positive leads are`} in no campaign, so{' '}
+               {unassigned === 1 ? 'it adds' : 'they add'} no money to a pipeline. Open the lead in the Unibox and pick
+               a campaign to count {unassigned === 1 ? 'it' : 'them'}.
             </p>
          ) : null}
 

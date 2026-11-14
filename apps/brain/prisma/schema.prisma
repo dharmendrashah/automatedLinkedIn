@@ -2396,8 +2396,10 @@ model PositiveReply {
   id             String              @id @default(uuid(7))
   userId         String
   user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  campaignId     String
-  campaign       Campaign            @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  // Null: a lead the owner marked positive that belongs to no campaign yet (a partial unique index in the migration allows one per person).
+  // It has no worth, so it never adds USD.
+  campaignId     String?
+  campaign       Campaign?           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   slug           String
   state          PositiveReplyState  @default(COUNTED)
   source         PositiveReplySource
