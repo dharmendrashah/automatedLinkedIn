@@ -11,6 +11,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 
 ## Decisions
 
+- 2026-11-14: `/campaigns/new` is a scripted chat (no LLM) with a progress bar (`.plan/campaign-outreach-chat-onboarding.md`): the pure `components/campaigns/outreach-chat/steps.ts` holds the ten steps, `answersOf`, per-step problems (the `outreachAnswersSchema` issues filtered by path) and `nextStep`; a step counts as done only while its own answer still validates, so a removed account or ICP reopens its step. Answers live in `sessionStorage` (`draft.ts`, cleared on create and "Start over"); "Edit all fields" is the old form on the same state; a `CONFLICT` from `createOutreach` returns to the name question with answers kept. Not checked in a browser (sign-in needed); the time zone is only checked with `Intl.DateTimeFormat`, not against the scheduler.
+
 - 2026-11-08: Structured logging uses `packages/logger` (`@automatedLinkedIn/logger`): servers wrap pino and write one JSON line with the envelope fields and Cloud Logging `severity`; the body writes console objects with the same fields and keeps its errors in the browser console (no body error endpoint). The correlation ID travels in the `x-correlation-id` header (CORS `allowedHeaders` in brain) and the RabbitMQ message header, and is stored on `TaskDispatch.correlationId`. Accepted residual risks: third-party stdout writes, no per-user cap, no stdout write timeout, no total cap on `CORRELATION_ID_REPLACED`, JSON-style passwords in free text, library error text up to 500 characters. Design and reviews: `.plan/egm/logging_design_draft.md`.
 
 - 2026-11-08: Run output rows open the app's own pages (`.plan/run-output-open-in-app.md`, in progress: repo gate and a Postgres integration test pass; staging not checked). Brain adds `personId` (profile items, null outside My network) and `inApp` (company items, not archived) to the `workflow.output` and `workflow.input` responses only; the CSV is unchanged. A post's Details shows the stored author name, never the URL. The review trail is in `.plan/egm/`.
@@ -331,6 +333,8 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - Logging (`.plan/plan.md`, open): the code is done; the staging checks (G7 event, Cloud Run stdout line, dry-run counts) and the staging overhead are not run. The devtools CLI stays on `console` by decision. The brain result schema (`taskResultSchema`) is strict and has `correlation_id`: deploy brain before spider, and roll back spider before brain. Render errors (`reportError`) still have no request ID.
 
 ## Changelog
+
+- 2026-11-14: New outreach campaign page became a one-question-at-a-time chat with a progress bar, answers kept in `sessionStorage`, and the old form behind "Edit all fields" (`.plan/campaign-outreach-chat-onboarding.md`); repo gate passes, browser walk not done.
 
 - 2026-11-14: Campaign list and detail state, numbers and 30-day projection (`.plan/campaign-list-and-detail-icons.md`): `campaign.list` returns the 14-day numbers and the gated projection per campaign (`CampaignListService`, one grouped read per list call). Verified: lint, ts:check, unit tests, build, brain integration (606 passed). Browser check at 375 and 1440 px not run.
 
