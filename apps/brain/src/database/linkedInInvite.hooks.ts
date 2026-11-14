@@ -20,17 +20,30 @@ const NOTHING_PRESSED = new Set([
 ])
 
 // The verdicts the task hands its file over with.
-const HANDS_OVER = new Set(['DONE', 'PARTIAL', 'UNKNOWN', 'LIMIT_REACHED', 'RESTRICTED', 'SIGNED_OUT'])
+const HANDS_OVER = new Set(['DONE', 'PARTIAL', 'UNKNOWN', 'LIMIT_REACHED', 'RESTRICTED', 'SIGNED_OUT', 'BLOCKED'])
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+// How long an account's invites rest after LinkedIn refused to open a page (HTTP 999 or 429): the site asked the visitor to stop, so
+// the next run must not come a few minutes later.
+export const BLOCKED_REST_MS = 2 * 60 * 60 * 1000
 
 const STOPS: Record<string, string> = {
    SIGNED_OUT: 'LinkedIn signed the account out. Invites go on after the next good sign-in.',
    RESTRICTED: 'LinkedIn restricted the account. Invites go on after the next good sign-in.',
    LIMIT_REACHED: 'LinkedIn said the account may not invite more for now. Invites go on when its week rolls.',
+   BLOCKED: 'LinkedIn refused to open a profile. Invites go on in 2 hours.',
 }
 
-// Stops the account's invites: until its next good sign-in, or for LinkedIn's limit until a week after the oldest invite of its week.
+const stopUntil = (verdict: string, oldest: Date | null | undefined, now: Date) => {
+   if (verdict === 'LIMIT_REACHED') {
+      return new Date((oldest ?? now).getTime() + WEEK_MS)
+   }
+
+   return verdict === 'BLOCKED' ? new Date(now.getTime() + BLOCKED_REST_MS) : null
+}
+
+// Stops the account's invites: until its next good sign-in, for LinkedIn's limit until a week after the oldest invite of its week, or
+// for a blocked page for a couple of hours.
 const stop = async (tx: Prisma.TransactionClient, accountId: string, verdict: string, now: Date) => {
    const oldest =
       verdict === 'LIMIT_REACHED'
@@ -49,8 +62,7 @@ const stop = async (tx: Prisma.TransactionClient, accountId: string, verdict: st
       data: {
          invitesStoppedAt: now,
          invitesStopReason: STOPS[verdict] ?? null,
-         invitesStopUntil:
-            verdict === 'LIMIT_REACHED' ? new Date((oldest?.startedAt ?? now).getTime() + WEEK_MS) : null,
+         invitesStopUntil: stopUntil(verdict, oldest?.startedAt, now),
       },
    })
 }

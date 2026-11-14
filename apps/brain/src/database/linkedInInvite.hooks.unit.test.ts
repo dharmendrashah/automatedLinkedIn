@@ -4,7 +4,7 @@ import { type Prisma } from 'generated/prisma/client'
 
 import { type TaskResult } from '@automatedLinkedIn/contracts'
 
-import { linkedInInviteHooks } from './linkedInInvite.hooks'
+import { BLOCKED_REST_MS, linkedInInviteHooks } from './linkedInInvite.hooks'
 
 const session = {
    id: 's1',
@@ -96,5 +96,22 @@ describe('linkedin-invite hooks', () => {
       const [[{ data }]] = update.mock.calls as Array<[{ data: { invitesStopUntil: Date } }]>
 
       expect(data.invitesStopUntil.getTime()).toBeGreaterThan(Date.now() + 6 * 24 * 60 * 60 * 1000)
+   })
+
+   it('should rest the account for a couple of hours when LinkedIn blocked a page, and settle the run from its file', async () => {
+      const { invites, update, imports } = await finish('BLOCKED')
+      const [[{ data }]] = update.mock.calls as Array<[{ data: { invitesStopUntil: Date; invitesStopReason: string } }]>
+
+      expect(data.invitesStopUntil.getTime()).toBeGreaterThan(Date.now() + BLOCKED_REST_MS - 60_000)
+      expect(data.invitesStopUntil.getTime()).toBeLessThan(Date.now() + BLOCKED_REST_MS + 60_000)
+      expect(data.invitesStopReason).toContain('refused to open a profile')
+      // Not "nothing pressed": a press before the block is settled by the file, so the run's invites wait as unsure until it lands.
+      expect(invites).toHaveBeenCalledWith(
+         expect.objectContaining({ data: expect.objectContaining({ state: 'UNKNOWN' }) })
+      )
+      expect(imports).toHaveBeenCalledWith({
+         data: [{ sessionId: 's1' }],
+         skipDuplicates: true,
+      })
    })
 })
