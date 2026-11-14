@@ -1,6 +1,8 @@
 import { CampaignFunnel } from '@/components/campaigns/campaign-funnel'
+import { STATE_META } from '@/components/campaigns/campaign-list-format'
 import { CampaignSummaryTiles } from '@/components/campaigns/campaign-summary-tiles'
 import { GoLive } from '@/components/campaigns/go-live'
+import { ProjectionValue } from '@/components/campaigns/projection-value'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,6 +34,7 @@ import {
    type CampaignTrendPeriod,
    HEALTH_WORDS,
    STAGE_LABELS,
+   campaignListStateOf,
    isSmallSample,
    rateOf,
 } from '@automatedLinkedIn/contracts'
@@ -164,6 +167,10 @@ export const Campaign = () => {
    const passing = histogram.slice(Math.floor(line / 10)).reduce((sum, count) => sum + count, 0)
    const filters = encodeURIComponent(JSON.stringify({ labels: [campaign.label] }))
    const tabbed = period !== 'today' && insights.data !== undefined && insights.data.state !== 'empty'
+   // Waits for insights so the header never shows a state the trend has not confirmed yet.
+   const stateMeta = insights.data
+      ? STATE_META[campaignListStateOf({ workflows: workflows.length, paused, since: insights.data.since })]
+      : null
 
    const renderInsights = () => {
       if (period === 'today') return null
@@ -185,10 +192,12 @@ export const Campaign = () => {
          <Card>
             <CardHeader>
                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={paused ? 'secondary' : 'default'}>
-                     {paused ? <Pause aria-hidden /> : <Play aria-hidden />}
-                     {paused ? 'Paused' : 'Running'}
-                  </Badge>
+                  {stateMeta && (
+                     <Badge variant="outline" className={`gap-1.5 ${stateMeta.className}`}>
+                        <stateMeta.icon aria-hidden />
+                        {stateMeta.label}
+                     </Badge>
+                  )}
                   <Link
                      className="text-muted-foreground inline-flex items-center gap-1 text-xs underline"
                      to="/campaigns"
@@ -199,6 +208,12 @@ export const Campaign = () => {
                </div>
                <CardTitle className="text-lg">{campaign.name}</CardTitle>
                <CardDescription>Campaign: {campaign.label}</CardDescription>
+               {insights.data && (
+                  <p className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
+                     Next 30 days:
+                     <ProjectionValue projection={insights.data.projection} gate={insights.data.gate} />
+                  </p>
+               )}
                <CardAction className="flex flex-wrap items-center gap-3">
                   <ToggleGroup
                      type="single"

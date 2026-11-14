@@ -1,3 +1,4 @@
+import { CampaignListItem } from '@/components/campaigns/campaign-list-item'
 import { Button } from '@/components/ui/button'
 import {
    Dialog,
@@ -9,13 +10,13 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { readableError } from '@/lib/trpc-error'
-import { timeAgo } from '@/lib/time-ago'
-import { CAMPAIGN_LIMITS } from '@automatedLinkedIn/contracts'
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
+
+import { CAMPAIGN_LIMITS } from '@automatedLinkedIn/contracts'
 
 import { trpc } from '../trpc'
 
@@ -65,32 +66,33 @@ export const Campaigns = () => {
          ) : null}
 
          {campaigns.length > 0 ? (
-            <div className="overflow-hidden rounded-lg border">
-               <Table>
-                  <TableHeader className="bg-muted/50">
-                     <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Workflows</TableHead>
-                        <TableHead>State</TableHead>
-                        <TableHead>Made</TableHead>
-                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                     {campaigns.map(campaign => (
-                        <TableRow key={campaign.id}>
-                           <TableCell>
-                              <Link className="font-medium underline-offset-4 hover:underline" to={`/campaigns/${campaign.id}`}>
-                                 {campaign.name}
-                              </Link>
-                           </TableCell>
-                           <TableCell>{campaign.workflows}</TableCell>
-                           <TableCell>{campaign.pausedAt ? 'Paused' : 'Running'}</TableCell>
-                           <TableCell>{timeAgo(campaign.createdAt)}</TableCell>
+            <>
+               <p className="text-muted-foreground text-xs">
+                  Qualified, invited, accepted and replied cover the last 14 complete days. Next 30 days is a projection
+                  and shows once a campaign has enough history.
+               </p>
+               <div className="overflow-x-auto rounded-lg border">
+                  <Table>
+                     <TableHeader className="bg-muted/50">
+                        <TableRow>
+                           <TableHead>Campaign</TableHead>
+                           <TableHead>State</TableHead>
+                           <TableHead>Qualified</TableHead>
+                           <TableHead>Invited</TableHead>
+                           <TableHead>Accepted</TableHead>
+                           <TableHead>Replied</TableHead>
+                           <TableHead>Next 30 days</TableHead>
+                           <TableHead>Made</TableHead>
                         </TableRow>
-                     ))}
-                  </TableBody>
-               </Table>
-            </div>
+                     </TableHeader>
+                     <TableBody>
+                        {campaigns.map(campaign => (
+                           <CampaignListItem key={campaign.id} campaign={campaign} />
+                        ))}
+                     </TableBody>
+                  </Table>
+               </div>
+            </>
          ) : null}
 
          <Dialog open={name !== null} onOpenChange={open => (open ? undefined : setName(null))}>
@@ -113,7 +115,10 @@ export const Campaigns = () => {
                   <Button variant="outline" onClick={() => setName(null)}>
                      Cancel
                   </Button>
-                  <Button disabled={(name ?? '').trim() === '' || create.isPending} onClick={() => create.mutate({ name: name ?? '' })}>
+                  <Button
+                     disabled={(name ?? '').trim() === '' || create.isPending}
+                     onClick={() => create.mutate({ name: name ?? '' })}
+                  >
                      Create
                   </Button>
                </DialogFooter>

@@ -29,6 +29,7 @@ export {
 export { VoiceService } from './voice.service'
 export { ApprovalStartService } from './approvalStart.service'
 export { CampaignService } from './campaign.service'
+export { CampaignListService } from './campaignList.service'
 export { CampaignRollupService } from './campaignRollup.service'
 export { CampaignStarterService } from './campaignStarter.service'
 export { type Cut, type NeedsYou, CampaignStatsService } from './campaignStats.service'

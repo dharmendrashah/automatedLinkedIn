@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import {
    AutomationService,
+   CampaignListService,
    CampaignService,
    CampaignStarterService,
    CampaignStatsService,
@@ -31,7 +32,7 @@ const id = z.string().min(1).max(100)
 // Campaigns and the page that reads them (.plan/lead-pipeline-p5-campaign-page.md). Every procedure is scoped to ctx.user.id, so a
 // foreign id is answered as a missing one.
 export const campaign = router({
-   list: ownerProcedure.query(({ ctx }) => CampaignService.list(ctx.user.id)),
+   list: ownerProcedure.query(({ ctx }) => CampaignListService.list(ctx.user.id)),
 
    create: ownerProcedure
       .input(campaignInputSchema)
