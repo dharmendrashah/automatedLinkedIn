@@ -230,4 +230,45 @@ describe('CampaignTrendService.insights', () => {
       expect(result?.capacity.usableAccounts).toBe(1)
       expect(result?.capacity.missing).not.toContain('noAccounts')
    })
+   it('counts the people still waiting to be invited, and names the Discover workflow', async () => {
+      const userId = await makeUser()
+      const campaign = await makeCampaign(userId)
+      const person = (slug: string, extra: Record<string, unknown> = {}) =>
+         PrismaService.client.person.create({
+            data: {
+               userId,
+               slug,
+               labels: [campaign.label],
+               lastTouchAt: NOW,
+               ...extra,
+            },
+         })
+
+      await person('waiting-1')
+      await person('waiting-2')
+      await person('invited', { inviteState: 'PENDING' })
+      await person('ended', { inviteState: 'ENDED' })
+      await person('connected', { connectedAt: NOW })
+      await person('blocked', { doNotContact: true })
+      await PrismaService.client.person.create({
+         data: {
+            userId,
+            slug: 'other-campaign',
+            labels: ['lead-other'],
+            lastTouchAt: NOW,
+         },
+      })
+      const discover = await WorkflowService.create(userId, {
+         name: `Discover ${randomUUID()}`,
+         goal: null,
+         graph: EMPTY,
+      })
+
+      await CampaignService.place(userId, discover.id, campaign.id, 'DISCOVER')
+
+      const result = await insights(userId, campaign.id)
+
+      expect(result?.capacity.waiting).toBe(2)
+      expect(result?.capacity.discoverWorkflowId).toBe(discover.id)
+   })
 })

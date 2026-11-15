@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { CONNECTED_REASON } from './inviteRules'
 import { type ConnectionRow, type ConversationRow, type InviteRow, type Sources, draftPerson } from './peopleIndex'
 
 const at = (day: string) => new Date(`${day}T10:00:00.000Z`)
@@ -41,6 +42,8 @@ const invite = (rest: Partial<InviteRow>): InviteRow => ({
    invitedAt: at('2026-10-05'),
    acceptedAt: null,
    createdAt: at('2026-10-04'),
+   reason: null,
+   startedAt: null,
    ...rest,
 })
 
@@ -263,6 +266,24 @@ describe('draftPerson filter fields', () => {
             invites: [...invites],
          }).inviteState
       ).toBe(state)
+   })
+
+   it('should read an invite skipped for a menu that offers Remove connection as a connection, and not the old guess or another skip', () => {
+      const skipped = (reason: string | null, startedAt: Date | null) =>
+         draft({
+            invites: [
+               invite({
+                  state: 'SKIPPED',
+                  reason,
+                  startedAt,
+               }),
+            ],
+         }).connectedAt
+
+      expect(skipped(CONNECTED_REASON, at('2026-11-16'))).toEqual(at('2026-11-16'))
+      expect(skipped(CONNECTED_REASON, null)).toEqual(at('2026-10-04'))
+      expect(skipped('Already connected on LinkedIn.', at('2026-11-16'))).toBeNull()
+      expect(skipped("Does not fit in the next 1 days of this account's room.", at('2026-11-16'))).toBeNull()
    })
 
    it('should take the title, the country, Premium, the skills, the company slug and a missing company from the profile read', () => {

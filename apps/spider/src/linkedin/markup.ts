@@ -193,8 +193,21 @@ export const connectionMenuButton = (slug: string) => {
 // box counting to 200, Cancel, and a Send that waits for words; the same request as without a note.
 // NOT SEEN: the note box's markup, the email and weekly-limit notices, a month with no notes left, the Sent list and Withdraw.
 // Updated 2026-11: LinkedIn changed to use button elements with aria-label="Invite ... to connect" instead of anchor tags.
-export const CONNECT_LINK = 'a[href*="/preload/custom-invite/"], button[aria-label*="Invite"][aria-label*="to connect"]'
+// Recorded 2026-11-15 (dharmendrashaheagle, sessions 2026-11-15T04-56-24-101Z, T04-58-21-298Z and T05-00-46-452Z, English): the person's
+// own Connect is now an `a` with the profile's own address as its `href` (not a custom-invite link) and the same `componentkey`: in the
+// "Connect if you know each other" card it carries `aria-label="Invite <name> to connect"`; in the More menu it is `a[role="menuitem"]`
+// with no label, the label being on an inner `div`. The people suggested beside the profile keep a labelled `button` with no `href`.
+// After the invite the card's link turns into `...<number>_pending` with `aria-label="Pending, click to withdraw invitation sent to
+// <name>"` and no `_connect` of the person is left. "Add a note" in the window is now an `a` (the window is a `<dialog>`), and "Send
+// without a note" a `button` whose text is in nested spans. NOT SEEN: a regular top card's own Connect (assumed the same `a`), a
+// connection's profile, the note box after the link, other languages.
+export const CONNECT_LINK =
+   'a[href*="/preload/custom-invite/"], button[aria-label*="Invite"][aria-label*="to connect"], a[componentkey^="ConnectButtonstate:invitation:urn:li:member:"][componentkey$="_connect"]'
 export const CONNECT_MEMBER = /^ConnectButtonstate:invitation:urn:li:member:(\d{1,20})_connect$/
+export const PENDING_MEMBER = /^ConnectButtonstate:invitation:urn:li:member:\d{1,20}_pending$/
+// A connection's More menu offers this item (seen on the connections list, 2026-10-27, as `div[role="menuitem"]` > `p`); not yet seen
+// in a profile's menu.
+export const REMOVE_CONNECTION_WORDS = 'Remove connection'
 export const INVITE_REQUEST = ['voyagerRelationshipsDashMemberRelationships', 'verifyQuotaAndCreate']
 export const INVITE_BUTTON = 'button'
 export const INVITE_NOTE_BOX = 'textarea'

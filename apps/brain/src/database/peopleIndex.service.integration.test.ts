@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { CONNECTED_REASON } from './inviteRules'
 import { PeopleIndexService } from './peopleIndex.service'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
@@ -258,6 +259,31 @@ describe('PeopleIndexService (database)', () => {
             links: [],
          },
       ])
+   })
+
+   it('should know a person as a connection once a run skipped them for a menu that offers Remove connection, and not for the old guess', async () => {
+      const skipped = (slug: string, reason: string) =>
+         db.linkedInInvite.create({
+            data: {
+               userId,
+               accountId: ownAccountId,
+               slug,
+               name: 'Sam Skipped',
+               state: 'SKIPPED',
+               reason,
+               plannedAt: new Date(),
+               startedAt: new Date('2026-11-16T10:00:00.000Z'),
+            },
+         })
+
+      await skipped('sam-connected', CONNECTED_REASON)
+      await skipped('sam-guessed', 'Already connected on LinkedIn.')
+      await PeopleIndexService.refresh(userId, ['sam-connected', 'sam-guessed'])
+
+      expect((await people('sam-connected')).map(({ connectedAt }) => connectedAt)).toEqual([
+         new Date('2026-11-16T10:00:00.000Z'),
+      ])
+      expect((await people('sam-guessed')).map(({ connectedAt }) => connectedAt)).toEqual([null])
    })
 
    it('should mark the person of a profile Do not contact when the owner suppresses it', async () => {

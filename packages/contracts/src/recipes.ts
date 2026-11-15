@@ -135,9 +135,12 @@ export const outreachAnswersSchema = z
 
 export type OutreachAnswers = z.input<typeof outreachAnswersSchema>
 
-// What each step of the funnel is assumed to give (measure in week one).
-const PEOPLE_PER_POST = 15
-const QUALIFIED_PER_POST = 7
+// What one post gives, measured on staging campaign "Release preview 2026" (3 phrases, posts of the last 24 hours, 2026-11-10 to
+// 2026-11-15, 56 posts): 556 people, 91 qualified and 33 maybe (both reach the Invite block), $3.22. One campaign, one ideal customer
+// and six days, so re-measure (.plan/discover-supply-calibration.md). Before this the starter assumed 15 people and 7 qualified a post.
+const PEOPLE_PER_POST = 10
+const FIT_PER_POST = 2
+const COST_PER_POST_USD = 0.06
 // The share of its platform limit an account is held to: a seeded 65 to 80 percent (see the limits module).
 const SHARE = {
    low: 0.65,
@@ -150,20 +153,22 @@ export const capacityOf = (accounts: number, postsPerDay: number) => {
    const low = Math.floor(accounts * perAccount * SHARE.low)
    const high = Math.floor(accounts * perAccount * SHARE.high)
    const found = postsPerDay * PEOPLE_PER_POST
+   const fit = postsPerDay * FIT_PER_POST
+   const costPerDayUsd = Math.round(postsPerDay * COST_PER_POST_USD * 100) / 100
 
    return {
       invitesLow: low,
       invitesHigh: high,
       found,
-      suggestedPosts: Math.min(50, Math.max(1, Math.ceil(high / QUALIFIED_PER_POST))),
+      fit,
+      costPerDayUsd,
+      suggestedPosts: Math.min(50, Math.max(1, Math.ceil(high / FIT_PER_POST))),
       sentence:
          accounts === 0
             ? 'No account is signed in, so nothing can be sent yet. You can still create the campaign.'
-            : `${accounts} ${accounts === 1 ? 'account' : 'accounts'} can send about ${low} to ${high} invites a day. At ${postsPerDay} posts a day you will find about ${found} people a day${
-                 found > high
-                    ? ', more than you can invite, so only the best are invited.'
-                    : ', fewer than you can invite.'
-              }`,
+            : `${accounts} ${accounts === 1 ? 'account' : 'accounts'} can send about ${low} to ${high} invites a day. At ${postsPerDay} posts a day you will find about ${found} people a day, about ${fit} of them a fit${
+                 fit > high ? ', more than you can invite, so only the best are invited' : ', fewer than you can invite'
+              }. That costs about $${costPerDayUsd.toFixed(2)} a day (an estimate from one campaign's first week).`,
    }
 }
 

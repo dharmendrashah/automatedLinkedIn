@@ -313,16 +313,21 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
                   <Chip onClick={onSkip}>{`Use ${suggested} for ${used} ${used === 1 ? 'account' : 'accounts'}`}</Chip>
                ),
                fields: (
-                  <Input
-                     type="number"
-                     aria-label="Posts a day"
-                     className="w-28"
-                     min={1}
-                     max={50}
-                     value={draft}
-                     onChange={event => setDraft(event.target.value)}
-                     onKeyDown={enter}
-                  />
+                  <div className="grid gap-1">
+                     <Input
+                        type="number"
+                        aria-label="Posts a day"
+                        className="w-28"
+                        min={1}
+                        max={50}
+                        value={draft}
+                        onChange={event => setDraft(event.target.value)}
+                        onKeyDown={enter}
+                     />
+                     {used > 0 ? (
+                        <p className="text-muted-foreground text-xs">{capacityOf(used, posts ?? suggested).sentence}</p>
+                     ) : null}
+                  </div>
                ),
             }
          case 'worth':

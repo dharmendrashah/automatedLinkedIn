@@ -14,6 +14,7 @@ import { handsOf } from '../../browsing/hands'
 import { createReader } from '../../browsing/reader'
 import { compactHtml } from '../../browsing/snapshot'
 import {
+   menuShowsConnection,
    moreButtons,
    parseInviteDialog,
    parseProfileActions,
@@ -353,7 +354,8 @@ export const runInvites = async (
    }
 
    // A top card with only Follow, Message and More keeps Connect in the More menu. Opening it changes nothing on LinkedIn. Resolves
-   // to the menu's Connect links, or none (the menu is closed again).
+   // to the menu's Connect links, or none (the menu is closed again), and to whether the menu offers Remove connection, which only a
+   // connection's does.
    const openMenu = async (invite: InviteSend) => {
       for (const more of moreButtons(await hands.html())) {
          if (!(await pressButton(more))) {
@@ -362,20 +364,35 @@ export const runInvites = async (
 
          const html = await until(
             MENU_LOOKS,
-            page => parseProfileActions(page, invite.slug, invite.name).menu.length > 0
+            page => parseProfileActions(page, invite.slug, invite.name).menu.length > 0 || menuShowsConnection(page)
          )
          const { menu } = parseProfileActions(html, invite.slug, invite.name)
 
          if (menu.length > 0) {
             log('Opened the More menu')
 
-            return menu
+            return {
+               menu,
+               connected: false,
+            }
          }
 
+         const connected = menuShowsConnection(html)
+
          await hands.press('Escape')
+
+         if (connected) {
+            return {
+               menu: [],
+               connected,
+            }
+         }
       }
 
-      return []
+      return {
+         menu: [],
+         connected: false,
+      }
    }
 
    // After the note was refused and its offer dismissed: Send without a note in the window when it is still open, else Connect once
@@ -398,7 +415,7 @@ export const runInvites = async (
 
       await reader.wait(PAUSES.step)
 
-      const connects = actions.connects.length > 0 ? actions.connects : await openMenu(invite)
+      const connects = actions.connects.length > 0 ? actions.connects : (await openMenu(invite)).menu
 
       if (!(await pressConnect(connects))) {
          log('The Connect button could not be pressed again')
@@ -442,15 +459,16 @@ export const runInvites = async (
 
       let { connects } = actions
       let fromMenu = false
+      let connected = false
 
       if (connects.length === 0) {
-         connects = await openMenu(invite)
+         ;({ menu: connects, connected } = await openMenu(invite))
          fromMenu = true
       }
 
       if (connects.length === 0) {
-         if (actions.messaged) {
-            log('The profile shows a Message button and no Connect, so it is already a connection')
+         if (connected) {
+            log('The More menu offers Remove connection, so it is already a connection')
             sent[index] = {
                id: invite.id,
                outcome: 'ALREADY_CONNECTED',
@@ -490,7 +508,7 @@ export const runInvites = async (
 
          // Every copy on the page was out of reach: the one in the More menu is.
          if (!pressed && !fromMenu) {
-            pressed = await pressConnect(await openMenu(invite))
+            pressed = await pressConnect((await openMenu(invite)).menu)
          }
 
          if (!pressed) {

@@ -6,7 +6,7 @@ import { Link } from 'react-router'
 
 import type { CampaignInsights } from '@automatedLinkedIn/contracts'
 
-import { missingSetupItems, projectionNote } from './campaign-insights'
+import { missingSetupItems, projectionNote, supplyNote } from './campaign-insights'
 
 const Capacity = ({ value, label }: { value: number; label: string }) => (
    <div className="grid gap-1 rounded-lg border p-3">
@@ -19,6 +19,7 @@ export const CampaignCapacity = ({ insights }: { insights: CampaignInsights }) =
    const { capacity, projection, gate } = insights
    const setup = missingSetupItems(capacity.missing)
    const reason = projection.status === 'hidden' ? projectionNote(projection, gate) : null
+   const supply = supplyNote(capacity)
    return (
       <Card>
          <CardHeader>
@@ -28,15 +29,33 @@ export const CampaignCapacity = ({ insights }: { insights: CampaignInsights }) =
             </CardDescription>
          </CardHeader>
          <CardContent className="grid gap-4">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                <Capacity value={capacity.perDay} label="Invites a day" />
                <Capacity value={capacity.perWeek} label="Invites a week" />
                <Capacity value={capacity.usableAccounts} label="Usable accounts" />
+               <Capacity value={capacity.waiting} label="Waiting to be invited" />
             </div>
             <p className="text-muted-foreground flex items-center gap-2 text-sm">
                <Gauge aria-hidden className="size-4" />
                This campaign's share: {capacity.share.perDay} a day, {capacity.share.perWeek} a week.
             </p>
+            {supply && (
+               <Alert>
+                  <TriangleAlert aria-hidden />
+                  <AlertTitle>Not enough new people</AlertTitle>
+                  <AlertDescription>
+                     {supply}
+                     {capacity.discoverWorkflowId && (
+                        <Button variant="outline" size="sm" className="mt-2" asChild>
+                           <Link to={`/workflows/${capacity.discoverWorkflowId}`}>
+                              <Settings2 aria-hidden />
+                              Open the Discover workflow
+                           </Link>
+                        </Button>
+                     )}
+                  </AlertDescription>
+               </Alert>
+            )}
             {reason && (
                <Alert>
                   <TriangleAlert aria-hidden />

@@ -9,14 +9,25 @@
 const connect = (_slug: string, name: string, member: string, href?: string) =>
    `<button type="button" componentkey="ConnectButtonstate:invitation:urn:li:member:${member}_connect" aria-label="Invite ${name} to connect"${href ? ` href="${href}"` : ''}><span>Connect</span></button>`
 
+// The layout recorded 2026-11-15: the person's own Connect, Pending and menu Connect are links to the profile's own address named
+// by a `componentkey`; the menu item carries its label on an inner div.
+const own = (slug: string) => `https://www.linkedin.com/in/${slug}/`
+const linkConnect = (slug: string, name: string, member: string) =>
+   `<a aria-disabled="false" href="${own(slug)}" componentkey="ConnectButtonstate:invitation:urn:li:member:${member}_connect" aria-label="Invite ${name} to connect"><span>Connect</span></a>`
+const linkPending = (slug: string, name: string, member: string) =>
+   `<a aria-disabled="false" href="${own(slug)}" componentkey="ConnectButtonstate:invitation:urn:li:member:${member}_pending" aria-label="Pending, click to withdraw invitation sent to ${name}"><span><span>Pending</span></span></a>`
+const linkMenuConnect = (slug: string, name: string, member: string) =>
+   `<a role="menuitem" tabindex="0" href="${own(slug)}" componentkey="ConnectButtonstate:invitation:urn:li:member:${member}_connect"><div componentkey="ConnectButtonstate:invitation:urn:li:member:${member}_connect" aria-label="Invite ${name} to connect"><div><p>Connect</p></div></div></a>`
+
 export const profileMarkup = ({
    slug: _slug = 'ada-lovelace',
    name = 'Ada Lovelace',
-   own = true,
+   own: ownConnect = true,
    pending = false,
    menuOpen = false,
    menuConnect = true,
-   messaged = false,
+   connected = false,
+   links = false,
 }: {
    slug?: string
    name?: string
@@ -24,15 +35,18 @@ export const profileMarkup = ({
    pending?: boolean
    menuOpen?: boolean
    menuConnect?: boolean
-   messaged?: boolean
+   // The open More menu offers Remove connection, as a connection's does.
+   connected?: boolean
+   // The layout of 2026-11-15 (links) instead of the one before it (buttons).
+   links?: boolean
 } = {}) => `<main>
    <nav><ul><li><button aria-label="More" aria-expanded="false">More</button></li></ul></nav>
-   <header>${own ? connect(_slug, name, '736436677') : ''}</header>
+   <header>${ownConnect && !links ? connect(_slug, name, '736436677') : ''}</header>
    <section><h1>${name}</h1>
-      ${own ? connect(_slug, name, '736436677', `https://www.linkedin.com/preload/custom-invite/?vanityName=${encodeURIComponent(_slug)}&amp;lipi=urn%3Ali%3Apage`) : ''}
-      ${own ? connect(_slug, name, '736436677') : ''}
-      ${pending ? `<button aria-label="Pending, click to withdraw invitation sent to ${name}">Pending</button>` : ''}
-      ${messaged ? '<a href="/messaging/compose/?profileUrn=x">Message</a>' : ''}
+      ${ownConnect && !links ? connect(_slug, name, '736436677', `https://www.linkedin.com/preload/custom-invite/?vanityName=${encodeURIComponent(_slug)}&amp;lipi=urn%3Ali%3Apage`) : ''}
+      ${ownConnect ? (links ? linkConnect(_slug, name, '736436677') : connect(_slug, name, '736436677')) : ''}
+      ${pending ? (links ? linkPending(_slug, name, '736436677') : `<button aria-label="Pending, click to withdraw invitation sent to ${name}">Pending</button>`) : ''}
+      <a href="/messaging/compose/?profileUrn=x">Message</a>
       <button componentkey="top-card-more" aria-expanded="${menuOpen}" type="button"><span>More</span></button>
    </section>
    <aside>
@@ -43,9 +57,13 @@ export const profileMarkup = ({
    ${
       menuOpen
          ? `<div role="menu"><div role="menuitem">Save to PDF</div>${
-              menuConnect
-                 ? `<button type="button" role="menuitem" componentkey="ConnectButtonstate:invitation:urn:li:member:1011546170_connect" aria-label="Invite ${name.toLowerCase()} to connect"><p>Connect</p></button>`
-                 : ''
+              connected
+                 ? '<div role="menuitem" tabindex="0"><div><div><p>Remove connection</p></div></div></div>'
+                 : menuConnect
+                   ? links
+                      ? linkMenuConnect(_slug, name, '1011546170')
+                      : `<button type="button" role="menuitem" componentkey="ConnectButtonstate:invitation:urn:li:member:1011546170_connect" aria-label="Invite ${name.toLowerCase()} to connect"><p>Connect</p></button>`
+                   : ''
            }<a href="https://www.linkedin.com/in/ada-lovelace/" role="menuitem">Report</a></div>`
          : ''
    }

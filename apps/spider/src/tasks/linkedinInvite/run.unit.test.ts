@@ -45,8 +45,10 @@ type Page = {
    // Slugs whose top card shows only More, with Connect in its menu (recorded 2026-10-30).
    menuOnly?: string[]
    pending?: string[]
-   // Slugs whose profile shows a Message link with no Connect: a connection (or someone else on some layouts).
-   messaged?: string[]
+   // Slugs whose More menu offers Remove connection and no Connect, as a connection's does.
+   connected?: string[]
+   // The layout recorded 2026-11-15: the person's own Connect, Pending and menu Connect are links, not buttons.
+   links?: boolean
    // Slugs whose profile answers HTTP 999, LinkedIn's block for too many visits.
    blocked?: string[]
    // The note's words do not land in the box, so Send stays greyed.
@@ -85,7 +87,7 @@ const setup = (page: Page = {}) => {
       noConnect = [],
       menuOnly = [],
       pending = [],
-      messaged = [],
+      connected = [],
       blocked = [],
       lands = {},
       afterSend = 'answered',
@@ -129,7 +131,8 @@ const setup = (page: Page = {}) => {
          pending: pending.includes(slug) || shownPending,
          menuOpen,
          menuConnect: !noConnect.includes(slug),
-         messaged: messaged.includes(slug),
+         connected: connected.includes(slug),
+         links: page.links ?? false,
       })}${dialogHtml()}</body></html>`
    }
    const send = () => {
@@ -367,10 +370,10 @@ describe('runInvites', () => {
       expect(file().sent.map(({ outcome }) => outcome)).toEqual(['NO_CONNECT', 'ALREADY_PENDING'])
    })
 
-   it('should call a profile with a Message link and no Connect ALREADY_CONNECTED, and press nothing for it', async () => {
+   it('should call a profile whose More menu offers Remove connection ALREADY_CONNECTED, and press nothing for it', async () => {
       const { run, calls, context, file } = setup({
          noConnect: ['ada-lovelace'],
-         messaged: ['ada-lovelace'],
+         connected: ['ada-lovelace'],
       })
 
       await run(both)
@@ -392,7 +395,7 @@ describe('runInvites', () => {
    it('should keep what a first profile settled without a press when the second profile is blocked', async () => {
       const { run, calls, file } = setup({
          noConnect: ['ada-lovelace'],
-         messaged: ['ada-lovelace'],
+         connected: ['ada-lovelace'],
          blocked: ['grace-hopper'],
       })
 
@@ -544,6 +547,60 @@ describe('runInvites', () => {
       expect(calls.indexOf('markAttempt')).toBe(calls.indexOf('connect ada-lovelace') - 1)
       expect(calls).toContain(`type ${ADA.note.length}`)
       expect(file().sent[0]?.outcome).toBe('SENT')
+   })
+
+   it('should press the own Connect link of the 2026-11-15 layout, then the More menu one when the card has none, and never a suggested one', async () => {
+      const card = setup({ links: true })
+
+      await card.run({
+         send: [ADA],
+         withdraw: [],
+      })
+      expect(card.calls.filter(call => call.startsWith('connect'))).toEqual(['connect ada-lovelace'])
+      expect(card.file().sent[0]?.outcome).toBe('SENT')
+
+      const menu = setup({
+         links: true,
+         menuOnly: ['grace-hopper'],
+      })
+
+      await menu.run({
+         send: [GRACE],
+         withdraw: [],
+      })
+      expect(menu.calls.indexOf('more')).toBeLessThan(menu.calls.indexOf('connect grace-hopper'))
+      expect(menu.calls.filter(call => call.startsWith('connect'))).toEqual(['connect grace-hopper'])
+      expect(menu.file().sent[0]?.outcome).toBe('SENT')
+   })
+
+   it('should answer ALREADY_PENDING for the pending link of the 2026-11-15 layout, and press nothing', async () => {
+      const { run, calls, context, file } = setup({
+         links: true,
+         pending: ['ada-lovelace'],
+      })
+
+      await run({
+         send: [ADA],
+         withdraw: [],
+      })
+      expect(file().sent[0]?.outcome).toBe('ALREADY_PENDING')
+      expect(calls.some(call => call.startsWith('connect'))).toBe(false)
+      expect(context.markAttempt).not.toHaveBeenCalled()
+   })
+
+   it('should never call a profile connected for its Message link alone: no Connect, no Pending and no Remove connection is NO_CONNECT', async () => {
+      const { run, calls, attached, file } = setup({
+         links: true,
+         noConnect: ['ada-lovelace'],
+      })
+
+      await run({
+         send: [ADA],
+         withdraw: [],
+      })
+      expect(file().sent[0]?.outcome).toBe('NO_CONNECT')
+      expect(calls).toContain('more')
+      expect(attached.some(({ name }) => name.startsWith('no-connect'))).toBe(true)
    })
 
    it('should send nothing when Send stays greyed after the note was typed', async () => {

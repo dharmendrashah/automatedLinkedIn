@@ -63,7 +63,10 @@ export class CampaignTrendService {
             userId,
             campaignId,
          },
-         select: { id: true },
+         select: {
+            id: true,
+            stage: true,
+         },
       })
       const workflowIds = workflows.map(({ id }) => id)
       const people = {
@@ -71,7 +74,7 @@ export class CampaignTrendService {
          labels: { has: campaign.label },
       }
 
-      const [dayTotals, liveFound, liveInvited, lastRun, capacity, runningCampaigns, walletLow, lists] =
+      const [dayTotals, liveFound, liveInvited, lastRun, capacity, runningCampaigns, walletLow, lists, waiting] =
          await Promise.all([
             db.campaignDay.aggregate({
                where: { campaignId },
@@ -128,6 +131,14 @@ export class CampaignTrendService {
                   },
                }),
             ]),
+            db.person.count({
+               where: {
+                  ...people,
+                  connectedAt: null,
+                  inviteState: 'NONE',
+                  doNotContact: false,
+               },
+            }),
          ])
 
       const hasRows = dayTotals._min.day !== null
@@ -206,6 +217,8 @@ export class CampaignTrendService {
             usableAccounts: capacity.usableAccounts,
             share,
             missing,
+            waiting,
+            discoverWorkflowId: workflows.find(({ stage }) => stage === 'DISCOVER')?.id ?? null,
          },
       }
    }
