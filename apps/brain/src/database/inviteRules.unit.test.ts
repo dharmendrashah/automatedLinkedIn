@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
    CONNECTED_REASON,
+   STOPPED_RUNS,
    askable,
    fillNote,
    inviteSentence,
@@ -234,6 +235,7 @@ describe('sendChange and withdrawChange', () => {
       })
       expect(sendChange('NOT_SENT', 0, NOW)).toEqual({
          state: 'QUEUED',
+         reason: null,
          tries: 1,
       })
       expect(sendChange('NOT_SENT', 2, NOW).state).toBe('FAILED')
@@ -245,6 +247,20 @@ describe('sendChange and withdrawChange', () => {
          memberId: '42',
       })
       expect(sendChange('REFUSED', 0, NOW).state).toBe('FAILED')
+   })
+
+   it('should not use a try of an invite that never had its turn in a run LinkedIn stopped, and clear the unsure sentence', () => {
+      for (const verdict of ['BLOCKED', 'LIMIT_REACHED', 'RESTRICTED', 'SIGNED_OUT']) {
+         expect(STOPPED_RUNS.has(verdict)).toBe(true)
+      }
+
+      expect(STOPPED_RUNS.has('DONE')).toBe(false)
+      expect(sendChange('NOT_SENT', 2, NOW, undefined, true)).toEqual({
+         state: 'QUEUED',
+         reason: null,
+      })
+      expect(sendChange('NOT_SENT', 2, NOW)).toMatchObject({ state: 'FAILED' })
+      expect(sendChange('SENT', 2, NOW, undefined, true)).toMatchObject({ state: 'SENT' })
    })
 
    it('should skip a connection with the sentence the people index reads, never the old guess', () => {

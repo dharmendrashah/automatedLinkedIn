@@ -253,7 +253,17 @@ export const notesBackAt = (now: Date) => new Date(Date.UTC(now.getUTCFullYear()
 export const CONNECTED_REASON = 'Already connected on LinkedIn: its menu offers Remove connection.'
 
 // What one outcome of a run makes of an invite. NOT_SENT and LIMIT_REACHED keep it in the queue (a few times for the first).
-export const sendChange = (outcome: InviteSendOutcome, tries: number, now: Date, memberId?: string): InviteChange => {
+// The verdicts of a run LinkedIn stopped (it refused a page, said the limit was reached, restricted the account or signed it out). The
+// invites such a run never opened were not tried, so they keep their tries.
+export const STOPPED_RUNS = new Set(['BLOCKED', 'LIMIT_REACHED', 'RESTRICTED', 'SIGNED_OUT'])
+
+export const sendChange = (
+   outcome: InviteSendOutcome,
+   tries: number,
+   now: Date,
+   memberId?: string,
+   stopped = false
+): InviteChange => {
    const member = memberId ? { memberId } : {}
 
    switch (outcome) {
@@ -323,6 +333,14 @@ export const sendChange = (outcome: InviteSendOutcome, tries: number, now: Date,
             ...member,
          }
       case 'NOT_SENT':
+         // An invite that never had its turn in a stopped run goes back in the queue as it was.
+         if (stopped) {
+            return {
+               state: 'QUEUED',
+               reason: null,
+            }
+         }
+
          return tries + 1 >= GIVE_UP_AFTER
             ? {
                  state: 'FAILED',
@@ -331,6 +349,7 @@ export const sendChange = (outcome: InviteSendOutcome, tries: number, now: Date,
               }
             : {
                  state: 'QUEUED',
+                 reason: null,
                  tries: tries + 1,
               }
    }
