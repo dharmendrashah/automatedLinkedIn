@@ -120,7 +120,7 @@ describe('LinkedInInviteService (database)', () => {
          skipped: { REQUEST: 1 },
       })
       expect(plan.sentence).toBe(
-         `You can safely send ${limit} today. 4 selected: all today. Skipped: 1 with a request pending.`
+         `You can safely send ${limit} today. 4 selected: all today, over about 1 hour. Skipped: 1 with a request pending.`
       )
       expect(await db.linkedInInvite.count({ where: { userId } })).toBe(0)
       await expect(LinkedInInviteService.plan(otherUserId, { personIds: ids })).rejects.toThrow(
@@ -141,6 +141,26 @@ describe('LinkedInInviteService (database)', () => {
          state: 'QUEUED',
          note: 'Hi {first_name}',
          accountId,
+      })
+      const planned = (
+         await db.linkedInInvite.findMany({
+            where: {
+               userId,
+               state: 'QUEUED',
+            },
+            orderBy: { plannedAt: 'asc' },
+            select: { plannedAt: true },
+         })
+      ).map(({ plannedAt }) => plannedAt.getTime())
+
+      expect(planned.slice(1).map((at, index) => at - (planned[index] ?? 0))).toEqual([30 * 60 * 1000, 30 * 60 * 1000])
+      // The later tests send them, so they are all due now.
+      await db.linkedInInvite.updateMany({
+         where: {
+            userId,
+            state: 'QUEUED',
+         },
+         data: { plannedAt: new Date(Date.now() - 1000) },
       })
       expect((await LinkedInInviteService.invite(userId, { personIds: ids })).queued).toBe(0)
       expect((await invitesOf('ada-l'))[1]).toMatchObject({ state: 'SKIPPED' })
@@ -217,6 +237,7 @@ describe('LinkedInInviteService (database)', () => {
       expect((await invitesOf('grace-h'))[0]).toMatchObject({
          state: 'QUEUED',
          tries: 1,
+         reason: null,
       })
       expect((await invitesOf('alan-t'))[0]).toMatchObject({ state: 'FAILED' })
 
@@ -494,6 +515,73 @@ describe('LinkedInInviteService (database)', () => {
          perWeek: limitOf('invitesPerWeek', usable.id, now, 'UTC'),
          usableAccounts: 1,
       })
+   })
+
+   it('should record an invite already pending, and put the ones a blocked run never opened back as they were, with no try used', async () => {
+      const sessionId = randomUUID()
+
+      await db.spiderSession.create({
+         data: {
+            id: sessionId,
+            userId,
+            linkedInAccountId: accountId,
+            kind: 'TASK',
+            task: 'linkedin-invite',
+            status: 'SUCCEEDED',
+            verdict: 'BLOCKED',
+            requestParams: {},
+         },
+      })
+
+      const made = await Promise.all(
+         ['pending-p', 'unopened-u', 'tried-t'].map(slug =>
+            db.linkedInInvite.create({
+               data: {
+                  userId,
+                  accountId,
+                  slug,
+                  name: slug,
+                  state: 'UNKNOWN',
+                  reason: 'LinkedIn did not show whether it was sent. It is not sent again.',
+                  tries: 2,
+                  sessionId,
+                  plannedAt: new Date(),
+               },
+            })
+         )
+      )
+      const [pending, unopened, tried] = made
+
+      await LinkedInInviteService.store(sessionId, {
+         contract: 2,
+         captured_at: new Date().toISOString(),
+         sent: [
+            {
+               id: pending?.id ?? '',
+               outcome: 'ALREADY_PENDING',
+            },
+            {
+               id: unopened?.id ?? '',
+               outcome: 'NOT_SENT',
+            },
+            {
+               id: tried?.id ?? '',
+               outcome: 'NO_CONNECT',
+            },
+         ],
+         withdrawn: [],
+      })
+
+      expect((await invitesOf('pending-p'))[0]).toMatchObject({
+         state: 'SENT',
+         reason: 'An invite was already waiting on LinkedIn.',
+      })
+      expect((await invitesOf('unopened-u'))[0]).toMatchObject({
+         state: 'QUEUED',
+         tries: 2,
+         reason: null,
+      })
+      expect((await invitesOf('tried-t'))[0]).toMatchObject({ state: 'FAILED' })
    })
 })
 

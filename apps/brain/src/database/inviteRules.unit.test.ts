@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
    CONNECTED_REASON,
+   STOPPED_RUNS,
    askable,
    fillNote,
    inviteSentence,
@@ -64,6 +65,52 @@ describe('planInvites', () => {
       expect(daysOut(times).slice(0, 10)).toEqual(Array(10).fill(1))
    })
 
+   it("should space one account's planned invites 30 minutes apart from now, and start each next day at its own 24-hour mark", () => {
+      const { times } = planInvites({
+         now: NOW,
+         started: [],
+         planned: [],
+         count: 6,
+         limits: {
+            perDay: 4,
+            perWeek: 70,
+         },
+      })
+      const minutes = times.map(at => (at.getTime() - NOW.getTime()) / (60 * 1000))
+
+      expect(minutes).toEqual([0, 30, 60, 90, 24 * 60, 24 * 60 + 30])
+   })
+
+   it('should plan new invites after the ones already waiting, and keep a full day inside its 24 hours', () => {
+      const waiting = planInvites({
+         now: NOW,
+         started: [],
+         planned: [new Date(NOW.getTime() + 60 * 60 * 1000)],
+         count: 2,
+         limits: PLATFORM,
+      })
+
+      expect(waiting.times.map(at => (at.getTime() - NOW.getTime()) / (60 * 1000))).toEqual([90, 120])
+
+      const crowded = planInvites({
+         now: NOW,
+         started: [],
+         planned: [],
+         count: 200,
+         limits: {
+            perDay: 100,
+            perWeek: 700,
+         },
+         days: 1,
+      }).times
+
+      expect(crowded).toHaveLength(100)
+      expect(Math.max(...crowded.map(at => at.getTime())) - NOW.getTime()).toBeLessThan(24 * HOUR)
+      expect(
+         Math.min(...crowded.slice(1).map((at, index) => at.getTime() - (crowded[index]?.getTime() ?? 0)))
+      ).toBeGreaterThanOrEqual(10 * 60 * 1000)
+   })
+
    it('should leave out what 14 days cannot hold', () => {
       expect(
          planInvites({
@@ -119,6 +166,15 @@ describe('inviteSentence', () => {
             skipped: {},
          })
       ).toBe('You can safely send 20 today. 1 selected: all today.')
+      expect(
+         inviteSentence({
+            now: NOW,
+            today: 14,
+            times: Array.from({ length: 14 }, (_, index) => new Date(NOW.getTime() + index * 30 * 60 * 1000)),
+            selected: 14,
+            skipped: {},
+         })
+      ).toBe('You can safely send 14 today. 14 selected: all today, over about 7 hours.')
    })
 })
 
@@ -179,6 +235,7 @@ describe('sendChange and withdrawChange', () => {
       })
       expect(sendChange('NOT_SENT', 0, NOW)).toEqual({
          state: 'QUEUED',
+         reason: null,
          tries: 1,
       })
       expect(sendChange('NOT_SENT', 2, NOW).state).toBe('FAILED')
@@ -190,6 +247,20 @@ describe('sendChange and withdrawChange', () => {
          memberId: '42',
       })
       expect(sendChange('REFUSED', 0, NOW).state).toBe('FAILED')
+   })
+
+   it('should not use a try of an invite that never had its turn in a run LinkedIn stopped, and clear the unsure sentence', () => {
+      for (const verdict of ['BLOCKED', 'LIMIT_REACHED', 'RESTRICTED', 'SIGNED_OUT']) {
+         expect(STOPPED_RUNS.has(verdict)).toBe(true)
+      }
+
+      expect(STOPPED_RUNS.has('DONE')).toBe(false)
+      expect(sendChange('NOT_SENT', 2, NOW, undefined, true)).toEqual({
+         state: 'QUEUED',
+         reason: null,
+      })
+      expect(sendChange('NOT_SENT', 2, NOW)).toMatchObject({ state: 'FAILED' })
+      expect(sendChange('SENT', 2, NOW, undefined, true)).toMatchObject({ state: 'SENT' })
    })
 
    it('should skip a connection with the sentence the people index reads, never the old guess', () => {

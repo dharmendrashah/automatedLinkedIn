@@ -9,6 +9,7 @@ import {
    COUNTED,
    LIVE,
    PENDING,
+   STOPPED_RUNS,
    type SkipReason,
    UNUSABLE_INVITE_SENTENCE,
    UNUSABLE_WITHDRAW_SENTENCE,
@@ -908,6 +909,13 @@ export class LinkedInInviteService {
          },
       })
       const byId = new Map(rows.map(row => [row.id, row]))
+      const verdict = (
+         await db.spiderSession.findUnique({
+            where: { id: sessionId },
+            select: { verdict: true },
+         })
+      )?.verdict
+      const stopped = verdict != null && STOPPED_RUNS.has(verdict)
       let changed = 0
 
       await db.$transaction(async tx => {
@@ -931,7 +939,7 @@ export class LinkedInInviteService {
                await apply(
                   id,
                   {
-                     ...sendChange(outcome, row.tries, now, memberId),
+                     ...sendChange(outcome, row.tries, now, memberId, stopped),
                      ...noteSentOf(outcome, row.note),
                   },
                   ['SENDING', 'UNKNOWN']
