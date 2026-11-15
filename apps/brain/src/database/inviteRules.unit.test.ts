@@ -64,6 +64,52 @@ describe('planInvites', () => {
       expect(daysOut(times).slice(0, 10)).toEqual(Array(10).fill(1))
    })
 
+   it("should space one account's planned invites 30 minutes apart from now, and start each next day at its own 24-hour mark", () => {
+      const { times } = planInvites({
+         now: NOW,
+         started: [],
+         planned: [],
+         count: 6,
+         limits: {
+            perDay: 4,
+            perWeek: 70,
+         },
+      })
+      const minutes = times.map(at => (at.getTime() - NOW.getTime()) / (60 * 1000))
+
+      expect(minutes).toEqual([0, 30, 60, 90, 24 * 60, 24 * 60 + 30])
+   })
+
+   it('should plan new invites after the ones already waiting, and keep a full day inside its 24 hours', () => {
+      const waiting = planInvites({
+         now: NOW,
+         started: [],
+         planned: [new Date(NOW.getTime() + 60 * 60 * 1000)],
+         count: 2,
+         limits: PLATFORM,
+      })
+
+      expect(waiting.times.map(at => (at.getTime() - NOW.getTime()) / (60 * 1000))).toEqual([90, 120])
+
+      const crowded = planInvites({
+         now: NOW,
+         started: [],
+         planned: [],
+         count: 200,
+         limits: {
+            perDay: 100,
+            perWeek: 700,
+         },
+         days: 1,
+      }).times
+
+      expect(crowded).toHaveLength(100)
+      expect(Math.max(...crowded.map(at => at.getTime())) - NOW.getTime()).toBeLessThan(24 * HOUR)
+      expect(
+         Math.min(...crowded.slice(1).map((at, index) => at.getTime() - (crowded[index]?.getTime() ?? 0)))
+      ).toBeGreaterThanOrEqual(10 * 60 * 1000)
+   })
+
    it('should leave out what 14 days cannot hold', () => {
       expect(
          planInvites({
@@ -119,6 +165,15 @@ describe('inviteSentence', () => {
             skipped: {},
          })
       ).toBe('You can safely send 20 today. 1 selected: all today.')
+      expect(
+         inviteSentence({
+            now: NOW,
+            today: 14,
+            times: Array.from({ length: 14 }, (_, index) => new Date(NOW.getTime() + index * 30 * 60 * 1000)),
+            selected: 14,
+            skipped: {},
+         })
+      ).toBe('You can safely send 14 today. 14 selected: all today, over about 7 hours.')
    })
 })
 

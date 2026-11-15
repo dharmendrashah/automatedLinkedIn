@@ -61,6 +61,9 @@ export const skipReasonOf = (facts: InviteFacts): SkipReason | undefined => {
    return facts.invitedRecently ? 'INVITED' : undefined
 }
 
+const SPACING_MS = INVITE_LIMITS.spacingMinutes * 60 * 1000
+const MIN_SPACING_MS = INVITE_LIMITS.minSpacingMinutes * 60 * 1000
+
 // The 24-hour block a time falls in, counted from now (the last 24 hours are -1).
 const blockOf = (now: Date, at: Date) => Math.floor((at.getTime() - now.getTime()) / DAY_MS)
 
@@ -105,9 +108,19 @@ export const planInvites = ({
 
    for (let block = 0; block < days && times.length < count; block += 1) {
       const fits = Math.min(room(block), count - times.length)
+      const blockStart = now.getTime() + block * DAY_MS
+      const blockEnd = blockStart + DAY_MS
+      // Invites already planned in this block keep their times; the new ones follow the latest of them.
+      const latest = planned.reduce((last, at) => {
+         const time = at.getTime()
+
+         return time >= blockStart && time < blockEnd ? Math.max(last, time) : last
+      }, Number.NEGATIVE_INFINITY)
+      const start = Math.max(blockStart, latest + SPACING_MS)
+      const step = Math.max(MIN_SPACING_MS, Math.min(SPACING_MS, Math.floor((blockEnd - start) / Math.max(1, fits))))
 
       for (let one = 0; one < fits; one += 1) {
-         times.push(new Date(now.getTime() + block * DAY_MS))
+         times.push(new Date(Math.min(start + one * step, blockEnd - 1)))
       }
 
       add(block, fits)
@@ -143,9 +156,12 @@ export const inviteSentence = ({
    const parts = [`You can safely send ${today} today.`]
 
    if (toInvite > 0) {
+      const firstDay = times.map(at => at.getTime()).filter(at => at - now0 < DAY_MS)
+      const hours = Math.round((Math.max(...firstDay) - Math.min(...firstDay)) / (60 * 60 * 1000))
+      const over = hours >= 1 ? `, over about ${plural(hours, 'hour')}` : ''
       const spread =
          onFirstDay === times.length
-            ? 'all today'
+            ? `all today${over}`
             : `${onFirstDay === 0 ? 'none' : onFirstDay} today, the rest over the next ${plural(lastDay, 'day')}`
 
       parts.push(`${selected} selected: ${spread}.`)

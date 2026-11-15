@@ -120,7 +120,7 @@ describe('LinkedInInviteService (database)', () => {
          skipped: { REQUEST: 1 },
       })
       expect(plan.sentence).toBe(
-         `You can safely send ${limit} today. 4 selected: all today. Skipped: 1 with a request pending.`
+         `You can safely send ${limit} today. 4 selected: all today, over about 1 hour. Skipped: 1 with a request pending.`
       )
       expect(await db.linkedInInvite.count({ where: { userId } })).toBe(0)
       await expect(LinkedInInviteService.plan(otherUserId, { personIds: ids })).rejects.toThrow(
@@ -141,6 +141,26 @@ describe('LinkedInInviteService (database)', () => {
          state: 'QUEUED',
          note: 'Hi {first_name}',
          accountId,
+      })
+      const planned = (
+         await db.linkedInInvite.findMany({
+            where: {
+               userId,
+               state: 'QUEUED',
+            },
+            orderBy: { plannedAt: 'asc' },
+            select: { plannedAt: true },
+         })
+      ).map(({ plannedAt }) => plannedAt.getTime())
+
+      expect(planned.slice(1).map((at, index) => at - (planned[index] ?? 0))).toEqual([30 * 60 * 1000, 30 * 60 * 1000])
+      // The later tests send them, so they are all due now.
+      await db.linkedInInvite.updateMany({
+         where: {
+            userId,
+            state: 'QUEUED',
+         },
+         data: { plannedAt: new Date(Date.now() - 1000) },
       })
       expect((await LinkedInInviteService.invite(userId, { personIds: ids })).queued).toBe(0)
       expect((await invitesOf('ada-l'))[1]).toMatchObject({ state: 'SKIPPED' })

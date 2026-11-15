@@ -27,6 +27,11 @@ export const INVITE_LIMITS = {
    pendingDays: 21,
    // How many days ahead one request may plan.
    planDays: 14,
+   // How far apart one account's planned invites are, so a day's room goes out a few at a time and not in one burst of profile visits
+   // (LinkedIn answered HTTP 999 on 2026-11-14 and 11-15, always about 40 minutes into the burst that started when the day's invites
+   // were all planned for the same moment). A day that cannot hold the spacing shrinks it, never below the minimum.
+   spacingMinutes: 30,
+   minSpacingMinutes: 10,
 } as const
 
 // Brain's own id of an invite: the task only hands it back.
