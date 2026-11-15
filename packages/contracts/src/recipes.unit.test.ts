@@ -236,20 +236,25 @@ describe('the answers', () => {
 })
 
 describe('capacityOf', () => {
-   it('should say what the accounts can send and how many posts fill it', () => {
+   it('should say what the accounts can send, how many posts fill it, and what that costs a day', () => {
       expect(capacityOf(5, 8)).toMatchObject({
          invitesLow: 46,
          invitesHigh: 57,
-         found: 120,
-         suggestedPosts: 9,
+         found: 80,
+         fit: 16,
+         costPerDayUsd: 0.48,
+         suggestedPosts: 29,
       })
       expect(capacityOf(5, 8).sentence).toBe(
-         '5 accounts can send about 46 to 57 invites a day. At 8 posts a day you will find about 120 people a day, more than you can invite, so only the best are invited.'
+         "5 accounts can send about 46 to 57 invites a day. At 8 posts a day you will find about 80 people a day, about 16 of them a fit, fewer than you can invite. That costs about $0.48 a day (an estimate from one campaign's first week)."
       )
+      expect(capacityOf(3, 1).suggestedPosts).toBe(17)
    })
 
-   it('should say so when no account can send, and when the posts do not fill the room', () => {
+   it('should say so when no account can send, when the posts fill the room, and never suggest more than 50 posts', () => {
       expect(capacityOf(0, 8).sentence).toContain('No account is signed in')
       expect(capacityOf(10, 1).sentence).toContain('fewer than you can invite')
+      expect(capacityOf(3, 30).sentence).toContain('more than you can invite, so only the best are invited')
+      expect(capacityOf(30, 1).suggestedPosts).toBe(50)
    })
 })

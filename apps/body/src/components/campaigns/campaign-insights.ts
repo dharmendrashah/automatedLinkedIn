@@ -54,6 +54,12 @@ export const trendPoints = (history: CampaignTrendDay[]) =>
          : { day: entry.day, invited: null, accepted: null }
    )
 
+// Said when fewer people wait than the campaign can invite in a day: the posts a day on Discover are what feeds the Invite workflow.
+export const supplyNote = (capacity: Pick<CampaignInsights['capacity'], 'waiting' | 'share' | 'usableAccounts'>) =>
+   capacity.usableAccounts > 0 && capacity.waiting < capacity.share.perDay
+      ? `${capacity.waiting === 1 ? '1 person is' : `${capacity.waiting} people are`} waiting to be invited, fewer than the ${capacity.share.perDay} this campaign can invite in a day. Raise the posts a day on its Discover workflow.`
+      : null
+
 const SETUP: Record<CampaignCapacityMissing, { label: string; to: string }> = {
    noAccounts: { label: 'Connect a signed-in LinkedIn account', to: '/accounts' },
    noWorkflow: { label: 'Add a workflow that sends invites', to: '/workflows' },

@@ -6,7 +6,7 @@ import { LOCATIONS, TITLES } from '@/components/workflows/chip-values'
 import { Chips, ChipsInput } from '@/components/workflows/setting-inputs'
 import { Loader2 } from 'lucide-react'
 
-import { CAMPAIGN_LIMITS } from '@automatedLinkedIn/contracts'
+import { CAMPAIGN_LIMITS, capacityOf } from '@automatedLinkedIn/contracts'
 
 import { parseWorth } from '../pipeline-format'
 import { ChoiceButtons } from './ChoiceButtons'
@@ -170,7 +170,7 @@ export const AllFields = ({
       </Field>
       <Field
          label="10. Posts a day"
-         hint={`We suggest ${suggested} for ${used} ${used === 1 ? 'account' : 'accounts'}.`}
+         hint={`We suggest ${suggested} for ${used} ${used === 1 ? 'account' : 'accounts'}. ${used > 0 ? capacityOf(used, form.postsPerDay ?? suggested).sentence : ''}`.trim()}
       >
          <Input
             type="number"

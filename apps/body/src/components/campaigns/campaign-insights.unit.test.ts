@@ -12,6 +12,7 @@ import {
    projectionBasis,
    projectionNote,
    sparklineSeries,
+   supplyNote,
    trendPoints,
 } from './campaign-insights'
 
@@ -63,6 +64,26 @@ describe('projectionNote', () => {
       expect(projectionNote({ status: 'hidden', reason: 'paused' }, gate())).toBe(
          'Paused, so runs may stop and the pace would not hold.'
       )
+   })
+})
+
+describe('supplyNote', () => {
+   const capacity = (waiting: number, perDay: number, usableAccounts = 2) => ({
+      waiting,
+      usableAccounts,
+      share: {
+         perDay,
+         perWeek: perDay * 7,
+      },
+   })
+
+   it('should say so when fewer people wait than the campaign can invite in a day, and nothing otherwise', () => {
+      expect(supplyNote(capacity(5, 34))).toBe(
+         '5 people are waiting to be invited, fewer than the 34 this campaign can invite in a day. Raise the posts a day on its Discover workflow.'
+      )
+      expect(supplyNote(capacity(1, 34))).toContain('1 person is waiting')
+      expect(supplyNote(capacity(34, 34))).toBeNull()
+      expect(supplyNote(capacity(0, 34, 0))).toBeNull()
    })
 })
 

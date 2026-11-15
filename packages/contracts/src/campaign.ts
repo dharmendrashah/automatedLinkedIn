@@ -240,6 +240,11 @@ export type CampaignInsights = {
       usableAccounts: number
       share: { perDay: number; perWeek: number }
       missing: CampaignCapacityMissing[]
+      // People with the campaign's label who are not connected, have no invite yet and are not on Do not contact: the ones the Invite
+      // workflow can still take (.plan/discover-supply-calibration.md).
+      waiting: number
+      // The campaign's Discover workflow, where the posts a day are set; null when it has none.
+      discoverWorkflowId: string | null
    }
 }
 
