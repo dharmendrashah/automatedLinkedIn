@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { inviteDialogMarkup, notesOutMarkup, profileMarkup, sentMarkup, withdrawDialogMarkup } from './inviteFixture'
 import {
+   menuShowsConnection,
    moreButtons,
    parseInviteDialog,
    parseProfileActions,
@@ -21,25 +22,8 @@ describe('parseProfileActions', () => {
          memberId: '736436677',
          pending: false,
          drawn: true,
-         messaged: false,
       })
       expect(parseProfileActions(profileMarkup(), 'grace-hopper', 'Grace Hopper').connects).toEqual([3])
-   })
-
-   it('should say messaged only when the profile has its own unnamed Message link', () => {
-      expect(
-         parseProfileActions(
-            profileMarkup({
-               own: false,
-               messaged: true,
-            }),
-            'ada-lovelace',
-            'Ada Lovelace'
-         )
-      ).toMatchObject({
-         connects: [],
-         messaged: true,
-      })
    })
 
    it('should match a slug written percent-encoded or in another case', () => {
@@ -58,7 +42,6 @@ describe('parseProfileActions', () => {
          menu: [],
          pending: false,
          drawn: true,
-         messaged: false,
       })
    })
 
@@ -124,8 +107,70 @@ describe('parseProfileActions', () => {
       expect(parseProfileActions(html, 'ada-lovelace', 'Ada Lovelace').connects).toEqual([1, 0])
    })
 
+   it("should take the person's own Connect link of the 2026-11-15 layout by the address it points at, and not a suggested person's button", () => {
+      const html = profileMarkup({ links: true })
+      const actions = parseProfileActions(html, 'ada-lovelace', 'Ada Lovelace')
+
+      expect(actions).toMatchObject({
+         connects: [0],
+         menu: [],
+         memberId: '736436677',
+         pending: false,
+      })
+      expect(parseProfileActions(html, 'grace-hopper', 'Grace Hopper').connects).toEqual([1])
+   })
+
+   it("should read the More menu's Connect link of the 2026-11-15 layout as the menu's, with the label on an inner element", () => {
+      const html = profileMarkup({
+         links: true,
+         own: false,
+         menuOpen: true,
+      })
+
+      expect(parseProfileActions(html, 'ada-lovelace', 'Ada Lovelace')).toMatchObject({
+         connects: [],
+         menu: [2],
+         memberId: '1011546170',
+      })
+   })
+
+   it('should read a pending link of this profile by its address even when the label spells the name another way', () => {
+      const html = profileMarkup({
+         links: true,
+         own: false,
+         pending: true,
+         name: 'Ada Lovelace',
+      })
+
+      expect(parseProfileActions(html, 'ada-lovelace', 'Ada K. Lovelace').pending).toBe(true)
+      expect(
+         parseProfileActions(
+            profileMarkup({
+               links: true,
+               own: false,
+            }),
+            'ada-lovelace',
+            'Ada'
+         ).pending
+      ).toBe(false)
+   })
+
    it('should say not drawn for a page with no buttons yet', () => {
       expect(parseProfileActions('<main><h1>Ada</h1></main>', 'ada', 'Ada').drawn).toBe(false)
+   })
+})
+
+describe('menuShowsConnection', () => {
+   it("should see Remove connection only in a connection's open menu", () => {
+      const menu = (connected: boolean) =>
+         profileMarkup({
+            own: false,
+            menuOpen: true,
+            connected,
+         })
+
+      expect(menuShowsConnection(menu(true))).toBe(true)
+      expect(menuShowsConnection(menu(false))).toBe(false)
    })
 })
 

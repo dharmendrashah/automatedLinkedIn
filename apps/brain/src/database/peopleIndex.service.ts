@@ -222,6 +222,8 @@ export class PeopleIndexService {
                invitedAt: true,
                acceptedAt: true,
                createdAt: true,
+               reason: true,
+               startedAt: true,
             },
          }),
          db.personSnapshot.findMany({

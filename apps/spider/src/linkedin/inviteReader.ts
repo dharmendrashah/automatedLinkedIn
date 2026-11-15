@@ -13,7 +13,8 @@ import {
    NOTES_OUT_WORDS,
    NOTE_UPSELL,
    PENDING_LABEL,
-   PROFILE_MESSAGE,
+   PENDING_MEMBER,
+   REMOVE_CONNECTION_WORDS,
    SEND_INVITE_WORDS,
    SEND_WITHOUT_NOTE_WORDS,
    SENT_ROW,
@@ -47,6 +48,9 @@ const vanityOf = (href: string) => {
    return new URLSearchParams(query).get('vanityName') ?? ''
 }
 
+// The slug in a profile address ("/in/<slug>/"), as written; empty for any other address.
+const profileSlugOf = (href: string) => /\/in\/([^/?#]+)/.exec(href)?.[1] ?? ''
+
 export type ProfileActions = {
    // Where the person's own Connect links stand among CONNECT_LINK (the numbers `clickNth` takes); the page holds the same link
    // more than once (2026-10-30: three times), and only one of them may be in view. Empty when none shows.
@@ -58,8 +62,6 @@ export type ProfileActions = {
    pending: boolean
    // Something that only shows once the page has drawn its buttons.
    drawn: boolean
-   // The profile's own Message link, which carries no name (see PROFILE_MESSAGE). Connected people have it, and so may others.
-   messaged: boolean
 }
 
 export const parseProfileActions = (html: string, slug: string, name: string): ProfileActions => {
@@ -69,7 +71,8 @@ export const parseProfileActions = (html: string, slug: string, name: string): P
    const fullName = clean(name).toLowerCase()
    const ownButtonLabel = clean(`invite ${fullName} to connect`)
    const own = links.flatMap((link, index) => {
-      const hrefSlug = vanityOf(link.getAttribute('href') ?? '')
+      const href = link.getAttribute('href') ?? ''
+      const hrefSlug = vanityOf(href) || (link.tagName === 'A' ? profileSlugOf(href) : '')
       if (hrefSlug) {
          return slugKey(hrefSlug) === slugKey_slug ? [index] : []
       }
@@ -89,7 +92,12 @@ export const parseProfileActions = (html: string, slug: string, name: string): P
    const pending = root.querySelectorAll('button, a').some(element => {
       const label = element.getAttribute('aria-label') ?? element.text.trim()
 
-      return PENDING_LABEL.test(label) && fullName !== '' && label.toLowerCase().includes(fullName)
+      return (
+         (PENDING_LABEL.test(label) && fullName !== '' && label.toLowerCase().includes(fullName)) ||
+         // The pending link of this profile is named by its member number and points at the profile's own address (2026-11-15).
+         (PENDING_MEMBER.test(element.getAttribute('componentkey') ?? '') &&
+            slugKey(profileSlugOf(element.getAttribute('href') ?? '')) === slugKey_slug)
+      )
    })
 
    return {
@@ -98,7 +106,6 @@ export const parseProfileActions = (html: string, slug: string, name: string): P
       ...(memberId && { memberId }),
       pending,
       drawn: links.length > 0 || pending || root.querySelector('a[href*="/messaging/compose/"]') !== null,
-      messaged: root.querySelector(PROFILE_MESSAGE) !== null,
    }
 }
 
@@ -114,6 +121,12 @@ export const moreButtons = (html: string) =>
             ? [index]
             : []
       )
+
+// A connection's More menu offers "Remove connection"; a profile that is not one does not (English; unverified on a profile).
+export const menuShowsConnection = (html: string) =>
+   parse(html)
+      .querySelectorAll('[role="menuitem"]')
+      .some(item => clean(item.text) === REMOVE_CONNECTION_WORDS)
 
 export type InviteDialog = {
    open: boolean

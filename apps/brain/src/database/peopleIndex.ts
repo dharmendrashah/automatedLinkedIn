@@ -1,5 +1,7 @@
 import { type PersonFit, type PersonInviteState, type PersonLinkKind, type PersonStatus } from 'generated/prisma/client'
 
+import { CONNECTED_REASON } from './inviteRules'
+
 // The pure part of My network's index (.plan/network-hub.md): from the rows that tie one profile to the owner, one draft person.
 // Tested without a database.
 
@@ -79,6 +81,8 @@ export type InviteRow = {
    invitedAt: Date | null
    acceptedAt: Date | null
    createdAt: Date
+   reason: string | null
+   startedAt: Date | null
 }
 
 // What the owner's newest profile read says (`profileFacts`).
@@ -192,6 +196,9 @@ const open = (row: ConversationRow) => row.doneAt === null
 
 // Sent and not answered yet, so the owner waits on them.
 const invitePending = (row: InviteRow) => ['SENT', 'UNKNOWN', 'WITHDRAW_QUEUED', 'WITHDRAWING'].includes(row.state)
+
+// An invite the run skipped because the profile showed the person is already a connection.
+const inviteShowedConnection = (row: InviteRow) => row.state === 'SKIPPED' && row.reason === CONNECTED_REASON
 
 const inviteWent = (row: InviteRow) => invitePending(row) || row.state === 'ACCEPTED' || row.state === 'WITHDRAWN'
 
@@ -452,10 +459,10 @@ const draftOf = (rows: Rows, profileUrl: string, facts: ProfileFacts | null): Om
       premium: facts?.premium ?? null,
       skills: facts?.skills ?? [],
       profileRead: facts !== null,
-      connectedAt: rows.connections
-         .filter(connected)
-         .map(row => row.connectedOn ?? row.createdAt)
-         .reduce<Date | null>((best, date) => (!best || date < best ? date : best), null),
+      connectedAt: [
+         ...rows.connections.filter(connected).map(row => row.connectedOn ?? row.createdAt),
+         ...rows.invites.filter(inviteShowedConnection).map(row => row.startedAt ?? row.createdAt),
+      ].reduce<Date | null>((best, date) => (!best || date < best ? date : best), null),
       lastSentAt: latest(rows.conversations.map(row => row.lastReplyAt)),
       lastReceivedAt: latest(rows.conversations.map(row => row.theirLastAt)),
       invitedAt: latest(rows.invites.filter(inviteWent).map(row => row.invitedAt)),

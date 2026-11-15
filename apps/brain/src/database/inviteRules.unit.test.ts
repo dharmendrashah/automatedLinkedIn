@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+   CONNECTED_REASON,
    askable,
    fillNote,
    inviteSentence,
@@ -189,6 +190,14 @@ describe('sendChange and withdrawChange', () => {
          memberId: '42',
       })
       expect(sendChange('REFUSED', 0, NOW).state).toBe('FAILED')
+   })
+
+   it('should skip a connection with the sentence the people index reads, never the old guess', () => {
+      expect(sendChange('ALREADY_CONNECTED', 0, NOW)).toEqual({
+         state: 'SKIPPED',
+         reason: CONNECTED_REASON,
+      })
+      expect(CONNECTED_REASON).not.toBe('Already connected on LinkedIn.')
    })
 
    it('should keep the free notes out until the first day of the next month', () => {

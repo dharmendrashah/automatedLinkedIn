@@ -231,6 +231,11 @@ export const noteSentOf = (outcome: InviteSendOutcome, note: string | null): { n
 // LinkedIn gives free accounts a few invite notes a month; once they are used up, notes come back on the 1st (UTC, the closest known).
 export const notesBackAt = (now: Date) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
 
+// The sentence of an invite skipped because the profile's More menu offered Remove connection, which only a connection's does
+// (2026-11-15). The people index reads it as a connection. Invites skipped before that carry the old sentence "Already connected on
+// LinkedIn.", a guess made from a Message link, and are not trusted.
+export const CONNECTED_REASON = 'Already connected on LinkedIn: its menu offers Remove connection.'
+
 // What one outcome of a run makes of an invite. NOT_SENT and LIMIT_REACHED keep it in the queue (a few times for the first).
 export const sendChange = (outcome: InviteSendOutcome, tries: number, now: Date, memberId?: string): InviteChange => {
    const member = memberId ? { memberId } : {}
@@ -260,7 +265,7 @@ export const sendChange = (outcome: InviteSendOutcome, tries: number, now: Date,
       case 'ALREADY_CONNECTED':
          return {
             state: 'SKIPPED',
-            reason: 'Already connected on LinkedIn.',
+            reason: CONNECTED_REASON,
          }
       case 'NO_CONNECT':
          return {
