@@ -2310,12 +2310,14 @@ const BLOCKS = {
       },
       label: 'Remove duplicates',
       summary:
-         'Keeps each person once and leaves out people you already have. Posts you already processed go to Else. Do-not-contact people always go.',
+         'Keeps each person once and leaves out people you already have, are connected to or invited, or read in the last 30 days. Posts you already processed go to Else. Do-not-contact people always go.',
       input: 'profile',
       output: 'profile',
       config: z.object({
          skipListed: toggle(true),
          skipProfiles: toggle(true),
+         skipConnected: toggle(true),
+         skipRead: toggle(true),
          skipDone: toggle(true),
          skipCompanyLabel: z.string().trim().toLowerCase().max(30).default(''),
       }),
@@ -2329,6 +2331,18 @@ const BLOCKS = {
             key: 'skipProfiles',
             label: 'Leave out people in my LinkedIn profiles',
             kind: 'toggle',
+         },
+         {
+            key: 'skipConnected',
+            label: 'Leave out people I am already connected to or have invited',
+            kind: 'toggle',
+            hint: 'Uses what your accounts\u2019 daily connection read and your invites already know.',
+         },
+         {
+            key: 'skipRead',
+            label: 'Leave out people whose profile I read in the last 30 days',
+            kind: 'toggle',
+            hint: 'They were judged then. They can come back after 30 days.',
          },
          {
             key: 'skipDone',

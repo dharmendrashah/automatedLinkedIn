@@ -11,6 +11,7 @@ import {
    WalletService,
    WorkflowRunService,
    WorkflowService,
+   readGraph,
 } from 'database'
 
 import { flagshipGraph } from '@automatedLinkedIn/contracts'
@@ -264,6 +265,25 @@ describe('workflow engine (database)', () => {
    })
 
    it('should use a full profile read in the last 30 days instead of paying for it again', async () => {
+      // Remove duplicates would leave a person read in the last 30 days out before this step; this test is about the step's own reuse.
+      const stored = readGraph((await WorkflowService.get(userId, workflowId))?.graph)
+
+      await WorkflowService.update(userId, workflowId, {
+         graph: {
+            ...stored,
+            nodes: stored.nodes.map(each =>
+               each.type === 'process.dedupe'
+                  ? {
+                       ...each,
+                       config: {
+                          ...each.config,
+                          skipRead: false,
+                       },
+                    }
+                  : each
+            ),
+         },
+      })
       await PrismaService.client.workflowListMember.deleteMany({ where: { listId: outputListId } })
       await PrismaService.client.linkedInPost.updateMany({
          where: { userId },

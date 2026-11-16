@@ -1077,3 +1077,23 @@ describe('Wait, Task result and Retry', () => {
       expect(validateGraph(split).some(({ nodeId }) => nodeId === 'list')).toBe(false)
    })
 })
+
+describe('Remove duplicates', () => {
+   it('should leave out connected, invited and recently read people unless the block says otherwise', () => {
+      const parse = (config: NodeConfig) => blockOf('process.dedupe').config.safeParse(config).data
+
+      expect(parse({})).toMatchObject({
+         skipConnected: true,
+         skipRead: true,
+      })
+      expect(
+         parse({
+            skipConnected: false,
+            skipRead: false,
+         })
+      ).toMatchObject({
+         skipConnected: false,
+         skipRead: false,
+      })
+   })
+})

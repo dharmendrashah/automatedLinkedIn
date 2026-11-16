@@ -164,6 +164,14 @@ const campaignRun = async (
    trigger: 'MANUAL' | 'PREVIEW',
    options: { profileLimit?: number; waitForProfiles?: boolean } = {}
 ) => {
+   // Each case is a fresh Discover day: a clean run marks its posts processed and Remove duplicates leaves out a person read in the
+   // last 30 days, so what earlier cases did goes.
+   await PrismaService.client.personSnapshot.deleteMany({ where: { userId } })
+   await PrismaService.client.linkedInPost.updateMany({
+      where: { userId },
+      data: { status: 'UNPROCESSED' },
+   })
+
    const made = await CampaignStarterService.createOutreach(userId, {
       ...answers,
       name,

@@ -399,6 +399,19 @@ export class LinkedInPostService {
       return count
    }
 
+   // The same, for the posts that have these slugs: the way a run marks the posts it found, which have no row id on their items.
+   public static async setStatusBySlugs(userId: string, slugs: string[], status: LinkedInPostStatus) {
+      const { count } = await PrismaService.client.linkedInPost.updateMany({
+         where: {
+            userId,
+            slug: { in: slugs },
+         },
+         data: { status },
+      })
+
+      return count
+   }
+
    // The status of the owner's posts that have these slugs, by slug; a post the owner does not have is missing.
    public static async statusBySlug(userId: string, slugs: string[]) {
       if (slugs.length === 0) {
