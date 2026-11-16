@@ -4,6 +4,7 @@ import { CampaignSummaryTiles } from '@/components/campaigns/campaign-summary-ti
 import { GoLive } from '@/components/campaigns/go-live'
 import { PipelineCard } from '@/components/campaigns/pipeline-card'
 import { ProjectionValue } from '@/components/campaigns/projection-value'
+import { StartCampaign } from '@/components/campaigns/start-campaign'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -165,6 +166,10 @@ export const Campaign = () => {
 
    const { campaign, lastDiscoverRun, funnel, cuts, warmUp, histogram, needsYou, accounts, workflows } = page.data
    const paused = campaign.pausedAt !== null
+   // Nothing finds or connects yet: one action starts both.
+   const canStart =
+      workflows.some(({ stage }) => stage === 'INVITE') &&
+      !workflows.some(({ stage, enabled }) => enabled && (stage === 'DISCOVER' || stage === 'INVITE'))
    const passing = histogram.slice(Math.floor(line / 10)).reduce((sum, count) => sum + count, 0)
    const filters = encodeURIComponent(JSON.stringify({ labels: [campaign.label] }))
    const tabbed = period !== 'today' && insights.data !== undefined && insights.data.state !== 'empty'
@@ -236,6 +241,8 @@ export const Campaign = () => {
                         <Play aria-hidden />
                         Resume
                      </Button>
+                  ) : canStart ? (
+                     <StartCampaign id={id} onStarted={() => void refresh()} />
                   ) : (
                      <Button variant="outline" onClick={() => setPausing(true)}>
                         <Pause aria-hidden />

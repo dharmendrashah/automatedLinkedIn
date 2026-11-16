@@ -16,7 +16,7 @@ Note on location: advisor plans live in `.plan/`, the repo's one folder for plan
 | 004  | `task.run` starts only read tasks, so acts go through the domain services | P2 | S–M | — | DONE (PR #229) |
 | 005  | Fix the agent-facing docs and the root `start` script | P2 | S | — | DONE (PR #229) |
 | 006  | A campaign's Invite workflow also runs on a daily clock, so waiting leads are invited on days Discover finds nobody or fails | P1 | S | — | DONE (PR for `feat/find-and-connect`) |
-| 007  | One "Start" action turns on finding and connecting for a campaign | P1 | M | — (best after 006) | TODO |
+| 007  | One "Start" action turns on finding and connecting for a campaign | P1 | M | — (best after 006) | DONE (PR for `feat/find-and-connect`) |
 | 008  | A campaign can be just "find leads and connect": two workflows, nine questions | P2 | M | — (pairs with 006 and 007) | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
