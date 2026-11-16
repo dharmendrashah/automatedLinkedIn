@@ -127,6 +127,38 @@ describe('Remove duplicates on posts, and Find posts that never repeats a short 
       expect(await slugsAt(second, 'else')).toHaveLength(1)
    })
 
+   it('should mark the posts a clean run kept as processed, so the next run leaves them out', async () => {
+      const marking: Graph = {
+         nodes: [FIND('week'), node('dedupe', 'process.dedupe'), node('done', 'output.markPosts')],
+         edges: [line('find', 'dedupe'), line('dedupe', 'done')],
+      }
+      await PrismaService.client.linkedInPost.updateMany({
+         where: { userId },
+         data: { status: 'UNPROCESSED' },
+      })
+
+      const first = await run(marking)
+      const steps = await PrismaService.client.workflowStepRun.findMany({ where: { runId: first } })
+
+      expect(steps.find(({ nodeId }) => nodeId === 'done')?.message).toBe('1 posts marked done.')
+      expect(
+         await PrismaService.client.linkedInPost.count({
+            where: {
+               userId,
+               status: 'PROCESSED',
+            },
+         })
+      ).toBe(1)
+
+      const second = await run({
+         nodes: [...marking.nodes, node('else', 'logic.else')],
+         edges: [...marking.edges, line('dedupe', 'else')],
+      })
+
+      expect(await slugsAt(second, 'dedupe')).toEqual([])
+      expect(await slugsAt(second, 'else')).toHaveLength(1)
+   })
+
    it('should ask again for a search of the last 24 hours, but remember a search of a month', async () => {
       asked = 0
       await run(chain('24h'))

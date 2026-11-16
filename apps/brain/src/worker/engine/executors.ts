@@ -35,6 +35,8 @@ import {
    PersonSnapshotService,
    PostPageService,
    RECENT_DAYS,
+   SeenPeopleService,
+   type SeenRules,
    type SeenSkip,
    TAKEN_KIND,
    WorkflowListService,
@@ -775,10 +777,13 @@ const enrich = async (ctx: Context): Promise<StepResult> => {
 
 const SEEN_CHUNK = 1_000
 
-// Drops people the owner already has, as the block says, or must not contact. Known people (picked by the owner or
-// handed over by another workflow) are dropped only when they must not be contacted.
-const notSeen = async (userId: string, people: PersonItem[], skip: SeenSkip) => {
+// Drops people the owner already has, as the block says, or must not contact; and, as the block says, people the owner is
+// connected to or has invited, or whose profile was read in the last 30 days. Known people (picked by the owner or handed over
+// by another workflow) are dropped only when they must not be contacted. The two counts are what the last two rules left out.
+const notSeen = async (userId: string, people: PersonItem[], skip: SeenSkip, rules: SeenRules) => {
    const seen = new Set<string>()
+   const connected = new Set<string>()
+   const read = new Set<string>()
 
    for (const known of [false, true]) {
       const group = people.filter(item => item.known === known)
@@ -788,6 +793,12 @@ const notSeen = async (userId: string, people: PersonItem[], skip: SeenSkip) => 
               profiles: false,
            }
          : skip
+      const groupRules = known
+         ? {
+              connected: false,
+              read: false,
+           }
+         : rules
 
       for (let start = 0; start < group.length; start += SEEN_CHUNK) {
          const chunk = group.slice(start, start + SEEN_CHUNK).map(({ slug }) => slug)
@@ -795,10 +806,21 @@ const notSeen = async (userId: string, people: PersonItem[], skip: SeenSkip) => 
          for (const slug of await WorkflowListService.seenAmong(userId, chunk, groupSkip)) {
             seen.add(slug)
          }
+
+         const had = await SeenPeopleService.among(userId, chunk, groupRules)
+
+         had.connected.forEach(slug => connected.add(slug))
+         had.read.forEach(slug => read.add(slug))
       }
    }
 
-   return people.filter(({ slug }) => !seen.has(slug))
+   const kept = people.filter(({ slug }) => !seen.has(slug) && !connected.has(slug) && !read.has(slug))
+
+   return {
+      kept,
+      connected: people.filter(({ slug }) => !seen.has(slug) && connected.has(slug)).length,
+      read: people.filter(({ slug }) => !seen.has(slug) && !connected.has(slug) && read.has(slug)).length,
+   }
 }
 
 // Adds everyone it gets to the workflow's list: Qualified or Maybe after scoring, Unscored without it. What it got
@@ -863,14 +885,15 @@ const addToList = async (ctx: Context): Promise<StepResult> => {
 
 const markPosts = async (ctx: Context): Promise<StepResult> => {
    const posts = postsOf(ctx.inputs)
-   const ids = posts.flatMap(({ postId }) => (postId ? [postId] : []))
+   // By slug, not by row id: a post that Find posts found has no row id on its item, and the dedupe reads the status by slug too.
+   const slugs = [...new Set(posts.map(({ slug }) => slug))]
 
    await keepItems(ctx, posts, posts.length)
 
    if (ctx.preview) {
       return {
          status: 'DONE',
-         itemsIn: ids.length,
+         itemsIn: slugs.length,
          itemsOut: posts.length,
          message: 'A preview leaves your posts as they are.',
       }
@@ -879,17 +902,17 @@ const markPosts = async (ctx: Context): Promise<StepResult> => {
    if (ctx.run.steps.some(step => step.id !== ctx.step.id && step.status !== 'DONE')) {
       return {
          status: 'DONE',
-         itemsIn: ids.length,
+         itemsIn: slugs.length,
          itemsOut: posts.length,
          message: 'The posts stay not done because the run did not finish fully.',
       }
    }
 
-   const marked = await LinkedInPostService.setStatusMany(ctx.run.userId, ids, 'PROCESSED')
+   const marked = await LinkedInPostService.setStatusBySlugs(ctx.run.userId, slugs, 'PROCESSED')
 
    return {
       status: 'DONE',
-      itemsIn: ids.length,
+      itemsIn: slugs.length,
       itemsOut: posts.length,
       message: `${marked} posts marked done.`,
    }
@@ -1790,9 +1813,11 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
 
       const label = textIn(config, 'skipCompanyLabel')
       const customers = label === '' ? new Set<string>() : await ColleaguesService.labelled(ctx.run.userId, label)
-      const fresh = (await notSeen(ctx.run.userId, people, skip)).filter(
-         ({ company }) => !customers.has(company?.trim().toLowerCase() ?? '')
-      )
+      const unseen = await notSeen(ctx.run.userId, people, skip, {
+         connected: config.skipConnected !== false,
+         read: config.skipRead !== false,
+      })
+      const fresh = unseen.kept.filter(({ company }) => !customers.has(company?.trim().toLowerCase() ?? ''))
       const result = await keepItems(
          ctx,
          [...fresh, ...posts.filter(post => !done.includes(post)), ...other],
@@ -1801,10 +1826,18 @@ export const EXECUTORS: Record<GraphNode['type'], Executor> = {
 
       return {
          ...result,
-         ...(done.length + unknown > 0 && {
+         ...(done.length + unknown + unseen.connected + unseen.read > 0 && {
             message: [
                done.length > 0 ? `${done.length} posts already processed went to Else.` : undefined,
                unknown > 0 ? 'Turn on Keep in Find posts to remember posts.' : undefined,
+               unseen.connected + unseen.read > 0
+                  ? `${[
+                       unseen.connected > 0 ? `${unseen.connected} already connected or invited` : undefined,
+                       unseen.read > 0 ? `${unseen.read} read in the last 30 days` : undefined,
+                    ]
+                       .filter(Boolean)
+                       .join(' and ')} were left out.`
+                  : undefined,
             ]
                .filter(Boolean)
                .join(' '),
