@@ -21,7 +21,7 @@ import { Usage } from './pages/Usage'
 import { WorkflowNew } from './pages/WorkflowNew'
 import { Workflows } from './pages/Workflows'
 
-// The dashboard carries the charts and the data table, the heaviest code in the app.
+// The dashboard carries the overview cards, the chart and the tabbed table.
 const Dashboard = lazy(() => import('./pages/Dashboard').then(({ Dashboard: page }) => ({ default: page })))
 // The canvas carries React Flow, the next heaviest.
 const WorkflowPage = lazy(() => import('./pages/Workflow').then(({ WorkflowPage: page }) => ({ default: page })))

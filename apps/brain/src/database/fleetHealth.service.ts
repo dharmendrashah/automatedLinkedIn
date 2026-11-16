@@ -1,4 +1,4 @@
-import { type Health, healthOf } from '@automatedLinkedIn/contracts'
+import { type AccountStatus, type Health, healthOf } from '@automatedLinkedIn/contracts'
 
 import { AccountRoomService } from './accountRoom.service'
 import { PrismaService } from './prisma.service'
@@ -12,14 +12,31 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const stoppedNow = (at: Date | null, until: Date | null, verifiedAt: Date | null, now: Date) =>
    at === null ? false : until ? until > now : !(verifiedAt && verifiedAt > at)
 
+const latest = (dates: Array<Date | null>) =>
+   dates.reduce<Date | null>((best, date) => (date && (!best || date > best) ? date : best), null)
+
 export type AccountHealth = {
    accountId: string
    name: string
-   status: string
+   email: string
+   status: AccountStatus
+   createdAt: Date
+   statusUpdatedAt: Date
    health: Health
    reasons: string[]
    invites: { limit: number; used: number }
    pending: { count: number; share: number }
+   // Rolling 14 days that include today, from the groupBys the health word already reads.
+   invitedLast14: number
+   acceptedLast14: number
+   invitesStopped: boolean
+   engageStopped: boolean
+   // A stop is active and has no end: it lasts until the next sign-in.
+   stopOpenEnded: boolean
+   // The latest end among the active stops; null when one is open-ended or none is active.
+   stopUntil: Date | null
+   // The latest start among the active stops.
+   stopAt: Date | null
 }
 
 const countBy = (rows: Array<{ accountId: string; _count: { _all: number } }>) =>
@@ -36,6 +53,7 @@ export class FleetHealthService {
             email: true,
             displayName: true,
             status: true,
+            createdAt: true,
             statusUpdatedAt: true,
             lastVerifiedAt: true,
             invitesStoppedAt: true,
@@ -106,10 +124,29 @@ export class FleetHealthService {
       return accounts.map(account => {
          const room = rooms.get(account.id)
          const pending = room?.pending.count ?? 0
+         const stops = [
+            {
+               invites: true,
+               at: account.invitesStoppedAt,
+               until: account.invitesStopUntil,
+            },
+            {
+               invites: false,
+               at: account.engageStoppedAt,
+               until: account.engageStopUntil,
+            },
+         ].map(stop => ({
+            ...stop,
+            active: stoppedNow(stop.at, stop.until, account.lastVerifiedAt, now),
+         }))
+         const active = stops.filter(({ active: on }) => on)
+         const invitesStopped = active.some(({ invites }) => invites)
+         const engageStopped = active.some(({ invites }) => !invites)
+         const stopOpenEnded = active.some(({ until }) => until === null)
          const { word, reasons } = healthOf({
             status: account.status,
-            invitesStopped: stoppedNow(account.invitesStoppedAt, account.invitesStopUntil, account.lastVerifiedAt, now),
-            engageStopped: stoppedNow(account.engageStoppedAt, account.engageStopUntil, account.lastVerifiedAt, now),
+            invitesStopped,
+            engageStopped,
             pending,
             invitesNow: now14?.get(account.id) ?? 0,
             acceptedNow: accepted14?.get(account.id) ?? 0,
@@ -124,7 +161,10 @@ export class FleetHealthService {
          return {
             accountId: account.id,
             name: account.displayName ?? account.email,
+            email: account.email,
             status: account.status,
+            createdAt: account.createdAt,
+            statusUpdatedAt: account.statusUpdatedAt,
             health: word,
             reasons,
             invites: room?.invites ?? {
@@ -135,6 +175,13 @@ export class FleetHealthService {
                count: pending,
                share: room?.pending.share ?? 0,
             },
+            invitedLast14: now14?.get(account.id) ?? 0,
+            acceptedLast14: accepted14?.get(account.id) ?? 0,
+            invitesStopped,
+            engageStopped,
+            stopOpenEnded,
+            stopUntil: stopOpenEnded ? null : latest(active.map(({ until }) => until)),
+            stopAt: latest(active.map(({ at }) => at)),
          }
       })
    }
