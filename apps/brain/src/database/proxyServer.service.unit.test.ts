@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
    seal: vi.fn(),
    open: vi.fn(),
    lookupThroughProxy: vi.fn(),
+   isPublicHost: vi.fn(),
    IpInfoError: class IpInfoError extends Error {},
 }))
 
@@ -42,6 +43,7 @@ vi.mock('core', () => ({
    },
    IpInfoError: mocks.IpInfoError,
    IpInfoService: { lookupThroughProxy: mocks.lookupThroughProxy },
+   isPublicHost: mocks.isPublicHost,
 }))
 
 vi.mock('./proxyScoring.service', () => ({ ProxyScoringService: { scoreSoon: mocks.scoreSoon } }))
@@ -137,6 +139,7 @@ describe('ProxyServerService', () => {
       vi.resetAllMocks()
       mocks.findManySession.mockResolvedValue([])
       mocks.isConfigured.mockReturnValue(true)
+      mocks.isPublicHost.mockResolvedValue(true)
       mocks.transaction.mockImplementation((operations: Promise<unknown>[]) => Promise.all(operations))
       mocks.createTest.mockResolvedValue({})
       mocks.deleteManyTest.mockResolvedValue({ count: 0 })
@@ -233,6 +236,29 @@ describe('ProxyServerService', () => {
             isPrimary: false,
          })
          expect(data.detectedCountryCode).toBeUndefined()
+      })
+
+      it('should refuse a host that is not on the public internet without connecting to it', async () => {
+         mocks.findFirstAccount.mockResolvedValue({ id: 'acc1' })
+         mocks.findManyProxy.mockResolvedValue([])
+         mocks.countProxy.mockResolvedValue(0)
+         mocks.isPublicHost.mockResolvedValue(false)
+         mocks.createProxy.mockResolvedValue(storedRow)
+
+         await ProxyServerService.create('u1', {
+            ...input,
+            host: '10.0.0.5',
+         })
+
+         const [[{ data }]] = mocks.createProxy.mock.calls
+
+         expect(data).toMatchObject({
+            status: 'UNREACHABLE',
+            statusMessage: 'This address is not on the public internet, so it cannot be used as a proxy.',
+            isPrimary: false,
+         })
+         expect(mocks.isPublicHost).toHaveBeenCalledWith('10.0.0.5')
+         expect(mocks.lookupThroughProxy).not.toHaveBeenCalled()
       })
 
       it('should store how long the test took, when the proxy works', async () => {

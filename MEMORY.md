@@ -281,6 +281,7 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - On a LinkedIn profile, a Message link with no Connect can mean a 1st-degree connection (`inviteReader.ts` `messaged`), but suggested people's Message links are named `Send a message to <name>`; the profile's own Message link is unnamed (`markup.ts` `PROFILE_MESSAGE`). Test the fixture with `messaged` opt-in (`inviteFixture.ts`).
 - tRPC: an unexpected resolver error (tRPC sets `cause`, code `INTERNAL_SERVER_ERROR`) is logged once by `trpc/onError.ts` and the browser gets only `INTERNAL_MESSAGE` (`trpc/errorShape.ts`). A resolver that wants its own message for an unexpected error must wrap it with no `cause` (the `asTrpcError` pattern) and log it itself.
 - `pnpm-workspace.yaml` has an `overrides` block (`body-parser >=2.4.0`, `basic-ftp >=6.2.1`) that clears two high advisories reached through express and proxy-agent; remove it when express itself needs `body-parser >=2.4.0`. `pnpm audit --prod --audit-level high` is clean after plan 002 (7 moderate and 7 low remain). basic-ftp moved from 5.3.1 to 6.2.6 (major, only reached through `proxy-agent`'s FTP PAC loader).
+- Proxy test (`ProxyServerService.test`, the one place brain connects through a proxy) refuses a host that is, or resolves to, a non-public address with the fixed sentence `PRIVATE_HOST` before any connection (`core/publicHost.ts`, built on `isPublicAddress`). A name that does not resolve passes. DNS rebinding between the check and the connect is not closed (deferred, `.plan/003-refuse-non-public-proxy-hosts.md`). The spider worker's own proxy use is not covered.
 
 ## Open items
 
@@ -855,3 +856,4 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - 2026-11-16: Added the shadcn improve skill (`.github/skills/improve`, with `.claude/skills/improve` as a gitignored symlink to it) and its audit plans `.plan/001` to `005` plus index `.plan/README.md`; the skill is edited to use `.plan/` only (`skills update` would overwrite that edit, `skills-lock.json` keeps the upstream hash)
 - 2026-11-16: Unexpected tRPC errors are logged by `onError` and show a fixed sentence to the browser (`.plan/001-hide-and-log-internal-trpc-errors.md`)
 - 2026-11-16: Cleared the three high dependency advisories: `zod ^4.6.7` in the four manifests, `overrides` for `body-parser` and `basic-ftp` (`.plan/002-clear-high-dependency-advisories.md`)
+- 2026-11-16: Brain refuses non-public proxy hosts before testing a proxy (`.plan/003-refuse-non-public-proxy-hosts.md`)
