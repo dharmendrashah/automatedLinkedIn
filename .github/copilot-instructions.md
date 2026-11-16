@@ -46,7 +46,10 @@ Plans are committed with the work; they are the record of locked product decisio
 - Node `v25.9.0` (`.nvmrc`), pnpm `12.10.1`, Turborepo 2, TypeScript 7, Vitest 5, ESLint 10 (flat config), Prettier 3.
 - `apps/brain`: Express 5 + tRPC 11 + Prisma 7 + PostgreSQL 18. CommonJS output (`module: commonjs`).
 - `apps/body`: React + Vite 8 frontend. Linted with `oxlint` (not ESLint).
+- `apps/spider`: the browser worker (Camoufox and RabbitMQ).
+- `packages/contracts`: types and schemas shared by brain, body and spider (CJS `dist`).
 - `packages/config`: shared `HttpService` URLs, built with `tsup` to `dist/` (CJS).
+- `packages/logger`: the shared structured logger.
 - `packages/ui`: shared React components.
 - `packages/eslint-config`: shared flat ESLint config (`eslint.js`).
 - `packages/tsconfig`: `base.json`, `node.json`, `react.json`.
@@ -146,7 +149,7 @@ Turborepo behaviour differs between versions: read the docs bundled in the insta
 - `.github/workflows/ci.yml`: job `check` only (install, lint, `ts:check`, unit tests, integration tests, build); it publishes nothing. The workflow is reusable (`workflow_call`) and is called by `staging.yml` and `release.yml`.
 - `.github/workflows/staging.yml`: on pushes to `main`, job `check` then job `publish` builds and pushes the staging images (`-brain`, `-brain-migrate`, `-body`, `-spider`, `-spider-worker`; tags `staging` and `sha-<commit>`, body built with the staging `VITE_*` values), and job `deploy` applies them to the cluster. Only the apps a push changed are built and deployed (`deploy/scripts/changed-apps.sh`, tested by `changed-apps.test.sh`); the others keep the tag live on the cluster, and shared or unknown paths or a run by hand deploy everything. A new app or top-level path needs a line in that script.
 - `.github/workflows/release.yml`: when a GitHub release is published it re-runs `ci.yml`, then builds and pushes the same two images tagged with the release version (`X.Y.Z`, `X.Y`, `X`, and the exact tag; `latest` only for stable releases, never pre-releases). `linux/amd64` only.
-- Integration and e2e tests are not run in CI.
+- Brain and spider integration tests run in CI (PostgreSQL and RabbitMQ service containers, after the migrations are applied); end-to-end tests do not, so run them yourself when you change the browser or the real server path.
 
 ## Custom agents (`.github/agents`)
 

@@ -859,3 +859,4 @@ Living notes for people and AI agents working on automatedLinkedIn. Read this be
 - 2026-11-16: Cleared the three high dependency advisories: `zod ^4.6.7` in the four manifests, `overrides` for `body-parser` and `basic-ftp` (`.plan/002-clear-high-dependency-advisories.md`)
 - 2026-11-16: Brain refuses non-public proxy hosts before testing a proxy (`.plan/003-refuse-non-public-proxy-hosts.md`)
 - 2026-11-16: `task.run` refuses act tasks (`webTaskRefusal` in contracts); the Sessions drawer no longer offers "Run again" for them (`.plan/004-task-run-read-only.md`)
+- 2026-11-16: Root `pnpm start` now targets the brain; the agent-facing docs say brain and spider integration tests run in CI (e2e does not) and list `apps/spider`, `packages/contracts` and `packages/logger` (`.plan/005-fix-agent-facing-docs-and-start-script.md`)
