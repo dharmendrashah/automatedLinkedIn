@@ -35,6 +35,19 @@ const PERIOD_DAYS: Record<Exclude<CampaignTrendPeriod, 'all'>, number> = {
 }
 
 export class CampaignTrendService {
+   // People with the campaign label who are not connected, have no invite yet and are not on Do not contact. It does not check fit.
+   public static waiting(userId: string, label: string) {
+      return PrismaService.client.person.count({
+         where: {
+            userId,
+            labels: { has: label },
+            connectedAt: null,
+            inviteState: 'NONE',
+            doNotContact: false,
+         },
+      })
+   }
+
    public static async insights(
       userId: string,
       campaignId: string,
@@ -131,14 +144,7 @@ export class CampaignTrendService {
                   },
                }),
             ]),
-            db.person.count({
-               where: {
-                  ...people,
-                  connectedAt: null,
-                  inviteState: 'NONE',
-                  doNotContact: false,
-               },
-            }),
+            CampaignTrendService.waiting(userId, campaign.label),
          ])
 
       const hasRows = dayTotals._min.day !== null

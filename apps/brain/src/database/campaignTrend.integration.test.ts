@@ -272,3 +272,31 @@ describe('CampaignTrendService.insights', () => {
       expect(result?.capacity.discoverWorkflowId).toBe(discover.id)
    })
 })
+
+describe('CampaignTrendService.waiting', () => {
+   it('counts the label people not yet invited, connected or blocked, for this owner only', async () => {
+      const userId = await makeUser()
+      const otherId = await makeUser()
+      const label = `lead-${randomUUID().slice(0, 8)}`
+      const person = (owner: string, slug: string, extra: Record<string, unknown> = {}) =>
+         PrismaService.client.person.create({
+            data: {
+               userId: owner,
+               slug,
+               labels: [label],
+               lastTouchAt: NOW,
+               ...extra,
+            },
+         })
+
+      await person(userId, 'waiting-1')
+      await person(userId, 'waiting-2')
+      await person(userId, 'invited', { inviteState: 'PENDING' })
+      await person(userId, 'connected', { connectedAt: NOW })
+      await person(userId, 'blocked', { doNotContact: true })
+      await person(otherId, 'someone-else')
+
+      expect(await CampaignTrendService.waiting(userId, label)).toBe(2)
+      expect(await CampaignTrendService.waiting(userId, 'lead-nobody')).toBe(0)
+   })
+})

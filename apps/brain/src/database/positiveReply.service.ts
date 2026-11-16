@@ -595,6 +595,26 @@ export class PositiveReplyService {
       return stats
    }
 
+   // Replies counted in [from, to) for the campaigns asked, or for any campaign when the list is null. A reply with no campaign is never
+   // counted here, and an empty list asks nothing.
+   public static async countedBetween(userId: string, from: Date, to: Date, campaignIds: string[] | null) {
+      if (campaignIds?.length === 0) {
+         return 0
+      }
+
+      return PrismaService.client.positiveReply.count({
+         where: {
+            userId,
+            state: 'COUNTED',
+            campaignId: campaignIds ? { in: campaignIds } : { not: null },
+            createdAt: {
+               gte: from,
+               lt: to,
+            },
+         },
+      })
+   }
+
    // Every campaign of the owner with its positive replies, what one is worth a month, and the pipeline they make in USD a year (null while
    // no worth is set). `totalUsd` adds the campaigns that have a worth.
    public static async pipeline(userId: string) {

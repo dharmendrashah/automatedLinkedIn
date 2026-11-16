@@ -437,4 +437,49 @@ describe('PositiveReplyService (database)', () => {
 
       await db.user.delete({ where: { id: fresh.id } })
    })
+
+   it('should count the replies of a time range [from, to) for the asked campaigns only, never an unassigned one', async () => {
+      const fresh = await UserService.create({ email: `${randomUUID()}@elitale.com` })
+      const first = await CampaignService.create(fresh.id, { name: `Range ${randomUUID().slice(0, 8)}` })
+      const second = await CampaignService.create(fresh.id, { name: `Range ${randomUUID().slice(0, 8)}` })
+      const foreign = await CampaignService.create(otherUserId, { name: `Range ${randomUUID().slice(0, 8)}` })
+      const from = new Date('2026-11-01T00:00:00Z')
+      const to = new Date('2026-11-08T00:00:00Z')
+      const reply = (
+         owner: string,
+         campaign: string | null,
+         slug: string,
+         createdAt: Date,
+         state: 'COUNTED' | 'REMOVED' = 'COUNTED'
+      ) => ({
+         userId: owner,
+         campaignId: campaign,
+         slug,
+         createdAt,
+         state,
+         source: 'MARKED' as const,
+      })
+
+      await db.positiveReply.createMany({
+         data: [
+            reply(fresh.id, first.id, 'at-from', from),
+            reply(fresh.id, first.id, 'inside', new Date('2026-11-04T10:00:00Z')),
+            reply(fresh.id, first.id, 'at-to', to),
+            reply(fresh.id, first.id, 'before', new Date('2026-10-31T23:59:59Z')),
+            reply(fresh.id, first.id, 'removed', new Date('2026-11-05T10:00:00Z'), 'REMOVED'),
+            reply(fresh.id, second.id, 'second-inside', new Date('2026-11-06T10:00:00Z')),
+            reply(fresh.id, null, 'unassigned', new Date('2026-11-06T10:00:00Z')),
+            reply(otherUserId, foreign.id, 'foreign', new Date('2026-11-06T10:00:00Z')),
+         ],
+      })
+
+      await expect(PositiveReplyService.countedBetween(fresh.id, from, to, [first.id])).resolves.toBe(2)
+      await expect(PositiveReplyService.countedBetween(fresh.id, from, to, [second.id])).resolves.toBe(1)
+      await expect(PositiveReplyService.countedBetween(fresh.id, from, to, [first.id, second.id])).resolves.toBe(3)
+      await expect(PositiveReplyService.countedBetween(fresh.id, from, to, null)).resolves.toBe(3)
+      await expect(PositiveReplyService.countedBetween(fresh.id, from, to, [])).resolves.toBe(0)
+      await expect(PositiveReplyService.countedBetween(fresh.id, from, to, [foreign.id])).resolves.toBe(0)
+
+      await db.user.delete({ where: { id: fresh.id } })
+   })
 })
