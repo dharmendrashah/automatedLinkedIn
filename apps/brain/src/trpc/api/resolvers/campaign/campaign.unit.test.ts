@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => {
       ConflictError,
       TaskRefusedError,
       insights: vi.fn(),
+      start: vi.fn(),
    }
 })
 
@@ -20,6 +21,7 @@ vi.mock('database', () => ({
    ConflictError: mocks.ConflictError,
    TaskRefusedError: mocks.TaskRefusedError,
    CampaignTrendService: { insights: mocks.insights },
+   CampaignService: { start: mocks.start },
 }))
 
 vi.mock('env', () => ({
@@ -103,5 +105,64 @@ describe('campaign insights resolver', () => {
       ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
 
       expect(mocks.insights).not.toHaveBeenCalled()
+   })
+})
+
+describe('campaign start resolver', () => {
+   beforeEach(() => {
+      vi.resetAllMocks()
+   })
+
+   it('should start the owner campaign and say whether the invites were armed', async () => {
+      mocks.start.mockResolvedValueOnce({
+         switchedOn: 2,
+         armed: 1,
+      })
+
+      await expect(
+         caller().start({
+            id: 'c1',
+            sendInvites: true,
+         })
+      ).resolves.toEqual({
+         switchedOn: 2,
+         armed: 1,
+      })
+      expect(mocks.start).toHaveBeenCalledWith('u1', 'c1', { sendInvites: true })
+   })
+
+   it('should answer not found for a campaign that is not the owners, and its sentence for a refusal', async () => {
+      mocks.start.mockResolvedValueOnce(null)
+      mocks.start.mockRejectedValueOnce(new mocks.ConflictError('This campaign is paused. Resume it first.'))
+
+      await expect(
+         caller().start({
+            id: 'c1',
+            sendInvites: false,
+         })
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      await expect(
+         caller().start({
+            id: 'c1',
+            sendInvites: false,
+         })
+      ).rejects.toMatchObject({
+         code: 'CONFLICT',
+         message: 'This campaign is paused. Resume it first.',
+      })
+   })
+
+   it('should not let an anonymous caller start a campaign', async () => {
+      const anonymous = router({ campaign }).createCaller({
+         auth: null,
+         user: null,
+      } as unknown as Context)
+
+      await expect(
+         anonymous.campaign.start({
+            id: 'c1',
+            sendInvites: true,
+         })
+      ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
    })
 })

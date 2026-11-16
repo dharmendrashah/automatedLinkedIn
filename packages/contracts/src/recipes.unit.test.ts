@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { type OutreachAnswers, buildOutreach, capacityOf, outreachAnswersSchema } from './recipes'
-import { type Graph, validateGraph } from './workflow'
+import { type Graph, scheduleOf, validateGraph } from './workflow'
 import { blockOf } from './workflow'
 
 const answers: OutreachAnswers = {
@@ -48,17 +48,31 @@ describe('the Discover stage', () => {
 })
 
 describe('the Invite trigger', () => {
-   it('should start on Discover, not on a clock, when Discover is given, in both branches', () => {
+   it('should start on Discover and on a daily clock four hours later, in both branches', () => {
       for (const extra of [{}, { note: '' }]) {
          const invite = build(extra, 'discover-1').workflows[1]?.graph
          const triggers = invite?.nodes.filter(({ type }) => type.startsWith('trigger.')) ?? []
 
          expect(triggers).toEqual([
             expect.objectContaining({
+               id: 'trigger',
                type: 'trigger.workflow',
                config: { workflowId: 'discover-1' },
             }),
+            expect.objectContaining({
+               id: 'clock',
+               type: 'trigger.schedule',
+               config: {
+                  every: 'day',
+                  at: '13:00',
+                  timeZone: 'UTC',
+               },
+            }),
          ])
+         expect(linked(invite, 'trigger', 'people')).toBe(true)
+         expect(linked(invite, 'clock', 'people')).toBe(true)
+         expect(invite && validateGraph(invite).filter(({ level }) => level === 'error')).toEqual([])
+         expect(invite && scheduleOf(invite)).not.toBeNull()
          expect(invite?.nodes.find(({ id }) => id === 'people')?.config).toMatchObject({
             howMany: 100,
             added: 'any',
@@ -179,6 +193,64 @@ describe('the outreach recipe', () => {
          fromPort: 'else',
       })
       expect(warm?.nodes.find(({ id }) => id === 'split')?.config).toEqual({ percent: 90 })
+   })
+})
+
+describe('the connect-only recipe', () => {
+   const connectOnly = () =>
+      build(
+         {
+            followUp: false,
+            message: '',
+         },
+         'discover-1'
+      )
+
+   it('should build only Discover and Invite, with no message, warm-up or hand-off block', () => {
+      const { workflows } = connectOnly()
+
+      expect(workflows.map(({ stage }) => stage)).toEqual(['DISCOVER', 'INVITE'])
+      expect(workflows.map(({ name }) => name)).toEqual([
+         'Outbound for agencies \u00b7 1 Discover',
+         'Outbound for agencies \u00b7 2 Invite',
+      ])
+
+      for (const { stage, graph } of workflows) {
+         expect(
+            validateGraph(graph).filter(({ level }) => level === 'error'),
+            stage
+         ).toEqual([])
+
+         for (const each of graph.nodes) {
+            expect(blockOf(each.type).config.safeParse(each.config).success, `${stage} ${each.id}`).toBe(true)
+            expect(['account.sendMessage', 'account.reactToPost', 'output.csv']).not.toContain(each.type)
+         }
+      }
+
+      expect(workflows[1]?.graph.nodes.find(({ id }) => id === 'trigger')?.config).toEqual({ workflowId: 'discover-1' })
+   })
+
+   it('should ask for the first message only when the follow-up is wanted', () => {
+      const { message: _message, ...withoutMessage } = answers
+
+      expect(
+         outreachAnswersSchema.safeParse({
+            ...withoutMessage,
+            followUp: true,
+         }).error?.issues
+      ).toEqual([
+         expect.objectContaining({
+            path: ['message'],
+            message: 'Write the first message.',
+         }),
+      ])
+      expect(
+         outreachAnswersSchema.safeParse({
+            ...withoutMessage,
+            followUp: false,
+         }).success
+      ).toBe(true)
+      expect(outreachAnswersSchema.safeParse(withoutMessage).success).toBe(false)
    })
 })
 

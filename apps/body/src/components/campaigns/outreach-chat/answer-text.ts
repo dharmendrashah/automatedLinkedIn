@@ -19,6 +19,8 @@ export const answerText = (id: StepId, form: Form, context: { icpName: string | 
             : `${form.accountIds.length} ${form.accountIds.length === 1 ? 'account' : 'accounts'} picked`
       case 'note':
          return form.note === '' ? 'No note' : form.note
+      case 'followUp':
+         return form.followUp ? 'Yes, also follow up' : 'No, just find and connect'
       case 'message':
          return form.message
       case 'warmUp': {

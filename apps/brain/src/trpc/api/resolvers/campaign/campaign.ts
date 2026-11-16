@@ -98,6 +98,21 @@ export const campaign = router({
          present(await orConflict(CampaignService.resume(ctx.user.id, input.id)), MISSING)
       ),
 
+   // Switches on finding and connecting; `sendInvites` arms the Send invite blocks (the owner confirmed it on the page).
+   start: ownerProcedure
+      .input(
+         z.object({
+            id,
+            sendInvites: z.boolean(),
+         })
+      )
+      .mutation(async ({ ctx, input }) =>
+         present(
+            await orConflict(CampaignService.start(ctx.user.id, input.id, { sendInvites: input.sendInvites })),
+            MISSING
+         )
+      ),
+
    // How each account is doing, for the strip and the account drawers.
    fleet: ownerProcedure.query(({ ctx }) => FleetHealthService.forUser(ctx.user.id)),
 

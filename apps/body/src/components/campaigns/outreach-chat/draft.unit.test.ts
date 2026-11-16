@@ -9,6 +9,13 @@ describe('parseDraft', () => {
       expect(parseDraft(JSON.stringify(saved), 'Asia/Kolkata')).toEqual(saved)
    })
 
+   it('loads a draft saved before the follow-up question as a No', () => {
+      const saved = freshDraft('UTC')
+      const { followUp: _followUp, ...older } = saved.form
+
+      expect(parseDraft(JSON.stringify({ ...saved, form: older }), 'Asia/Kolkata')).toEqual(saved)
+   })
+
    it('starts a fresh chat when the stored text is missing, broken, or from an older shape', () => {
       const fresh = freshDraft('Asia/Kolkata')
 

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
+import { outreachAnswersSchema } from '@automatedLinkedIn/contracts'
+
 import {
    type Form,
    type StepId,
+   answersOf,
    emptyForm,
    isComplete,
    nextStep,
@@ -10,6 +13,7 @@ import {
    progressOf,
    reconcile,
    stepProblems,
+   stepsFor,
    suggestedPostsOf,
 } from './steps'
 
@@ -19,12 +23,13 @@ describe('nextStep and progressOf', () => {
    it('goes back to a reopened step, then on to the first one not done', () => {
       const done: StepId[] = ['name', 'kind', 'phrases', 'accounts']
 
-      expect(nextStep(done)).toBe('customer')
-      expect(nextStep(['name', 'kind', 'accounts'])).toBe('phrases')
+      expect(nextStep(done, form())).toBe('customer')
+      expect(nextStep(['name', 'kind', 'accounts'], form())).toBe('phrases')
    })
 
    it('counts a skipped step as done and reaches Review after the last question', () => {
-      expect(progressOf(['name', 'kind'])).toMatchObject({ done: 2, current: 3, total: 13, percent: 15 })
+      expect(progressOf(['name', 'kind'], form())).toMatchObject({ done: 2, current: 3, total: 10, percent: 20 })
+      expect(progressOf(['name', 'kind'], form({ followUp: true }))).toMatchObject({ done: 2, current: 3, total: 14 })
 
       const all: StepId[] = [
          'name',
@@ -33,6 +38,7 @@ describe('nextStep and progressOf', () => {
          'customer',
          'accounts',
          'note',
+         'followUp',
          'message',
          'warmUp',
          'when',
@@ -41,14 +47,14 @@ describe('nextStep and progressOf', () => {
          'worth',
       ]
 
-      expect(nextStep(all)).toBeNull()
-      expect(progressOf(all)).toMatchObject({ done: 12, current: 13 })
+      expect(nextStep(all, form({ followUp: true }))).toBeNull()
+      expect(progressOf(all, form({ followUp: true }))).toMatchObject({ done: 13, current: 14 })
    })
 })
 
 describe('kind', () => {
    it('is asked after the name and counts as answered only after choosing yes', () => {
-      expect(nextStep(['name'])).toBe('kind')
+      expect(nextStep(['name'], form())).toBe('kind')
       expect(stepProblems('kind', form(), 8)).toEqual(['Choose yes or no.'])
       expect(stepProblems('kind', form({ outreach: true }), 8)).toEqual([])
    })
@@ -62,6 +68,7 @@ describe('isComplete', () => {
       'customer',
       'accounts',
       'note',
+      'followUp',
       'message',
       'warmUp',
       'when',
@@ -69,7 +76,14 @@ describe('isComplete', () => {
       'posts',
       'worth',
    ]
-   const filled = form({ name: 'Acme', outreach: true, phrases: ['need leads'], titles: ['CEO'], message: 'Hi' })
+   const filled = form({
+      name: 'Acme',
+      outreach: true,
+      followUp: true,
+      phrases: ['need leads'],
+      titles: ['CEO'],
+      message: 'Hi',
+   })
 
    it('is true only when every question is answered and every answer holds', () => {
       expect(isComplete(all, filled, 8)).toBe(true)
@@ -82,6 +96,56 @@ describe('isComplete', () => {
       ).toBe(false)
       expect(isComplete(all, { ...filled, message: '' }, 8)).toBe(false)
       expect(isComplete(all, { ...filled, outreach: false }, 8)).toBe(false)
+   })
+})
+
+describe('the follow-up question', () => {
+   const order = (followUp: boolean) => stepsFor(form({ followUp })).map(({ id }) => id)
+
+   it('keeps the first message, warm-up, hand-off and reply worth for a Yes, and hides them for a No', () => {
+      expect(order(false)).toEqual([
+         'name',
+         'kind',
+         'phrases',
+         'customer',
+         'accounts',
+         'note',
+         'followUp',
+         'when',
+         'posts',
+      ])
+      expect(order(true)).toEqual([
+         'name',
+         'kind',
+         'phrases',
+         'customer',
+         'accounts',
+         'note',
+         'followUp',
+         'message',
+         'warmUp',
+         'when',
+         'handOff',
+         'posts',
+         'worth',
+      ])
+   })
+
+   it('skips the hidden steps and is complete without a message once the nine questions are answered', () => {
+      const nine: StepId[] = ['name', 'kind', 'phrases', 'customer', 'accounts', 'note', 'followUp', 'when', 'posts']
+      const connectOnly = form({ name: 'Acme', outreach: true, phrases: ['need leads'], titles: ['CEO'] })
+
+      expect(nextStep(['name', 'kind', 'phrases', 'customer', 'accounts', 'note', 'followUp'], connectOnly)).toBe(
+         'when'
+      )
+      expect(isComplete(nine, connectOnly, 8)).toBe(true)
+      expect(isComplete(nine.slice(0, 8), connectOnly, 8)).toBe(false)
+      expect(answersOf(connectOnly, 8)).toMatchObject({ followUp: false })
+      expect(outreachAnswersSchema.safeParse(answersOf(connectOnly, 8)).success).toBe(true)
+   })
+
+   it('asks for the first message again once the follow-up is wanted', () => {
+      expect(stepProblems('message', form({ followUp: true }), 8)).toEqual(['Write the first message.'])
    })
 })
 

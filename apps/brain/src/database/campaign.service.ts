@@ -2,7 +2,7 @@ import { CAMPAIGN_LIMITS, type CampaignStage, campaignInputSchema, campaignLabel
 
 import { ConflictError, isUniqueViolation } from './conflict'
 import { PrismaService } from './prisma.service'
-import { WorkflowService } from './workflow.service'
+import { WorkflowService, readGraph } from './workflow.service'
 
 // Campaigns group workflows and name the label their people carry (.plan/lead-pipeline-p5-campaign-page.md). Every call is scoped to the
 // owner. Deleting a campaign keeps its workflows, people and labels.
@@ -235,5 +235,95 @@ export class CampaignService {
       })
 
       return { switchedOn }
+   }
+
+   // Switches on what finds and connects (the Discover and Invite workflows) and, only when asked, arms their Send invite blocks.
+   // The other stages and every limit are untouched. A failure part way switches back off what this call switched on. Safe to call
+   // again (.plan/007-start-finding-and-connecting-in-one-action.md).
+   public static async start(userId: string, id: string, options: { sendInvites: boolean }) {
+      const campaign = await this.get(userId, id)
+
+      if (!campaign) {
+         return null
+      }
+
+      if (campaign.pausedAt) {
+         throw new ConflictError('This campaign is paused. Resume it first.')
+      }
+
+      const workflows = await this.workflowsOf(userId, id)
+      const discover = workflows.find(({ stage }) => stage === 'DISCOVER')
+      const invite = workflows.find(({ stage }) => stage === 'INVITE')
+
+      if (!invite) {
+         throw new ConflictError('This campaign has nothing to start.')
+      }
+
+      const turnedOn: string[] = []
+      let armed = 0
+
+      try {
+         for (const workflow of [discover, invite]) {
+            if (workflow && !workflow.enabled) {
+               await WorkflowService.update(userId, workflow.id, { enabled: true })
+               turnedOn.push(workflow.id)
+            }
+         }
+
+         if (options.sendInvites) {
+            armed = await this.armInvites(userId, invite.id)
+         }
+      } catch (error) {
+         for (const workflowId of turnedOn) {
+            await WorkflowService.update(userId, workflowId, { enabled: false }).catch(() => undefined)
+         }
+
+         throw error
+      }
+
+      return {
+         switchedOn: turnedOn.length,
+         armed,
+      }
+   }
+
+   // Sets "Act for real" on every Send invite block of the workflow, saved only if nobody saved it since it was read. Returns how many
+   // blocks are armed afterwards.
+   private static async armInvites(userId: string, workflowId: string) {
+      const current = await WorkflowService.get(userId, workflowId)
+
+      if (!current) {
+         return 0
+      }
+
+      const graph = readGraph(current.graph)
+      const sends = graph.nodes.filter(({ type }) => type === 'account.sendInvite')
+      const toArm = sends.filter(({ config }) => config.actForReal !== true)
+
+      if (toArm.length > 0) {
+         await WorkflowService.update(
+            userId,
+            workflowId,
+            {
+               graph: {
+                  ...graph,
+                  nodes: graph.nodes.map(node =>
+                     toArm.includes(node)
+                        ? {
+                             ...node,
+                             config: {
+                                ...node.config,
+                                actForReal: true,
+                             },
+                          }
+                        : node
+                  ),
+               },
+            },
+            { expectedUpdatedAt: current.updatedAt }
+         )
+      }
+
+      return sends.length
    }
 }

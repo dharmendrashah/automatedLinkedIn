@@ -1,14 +1,16 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { type Graph } from '@automatedLinkedIn/contracts'
 
 import { CampaignService } from './campaign.service'
 import { CampaignRollupService } from './campaignRollup.service'
+import { CampaignStarterService } from './campaignStarter.service'
 import { CampaignStatsService } from './campaignStats.service'
+import { ConflictError } from './conflict'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
-import { WorkflowService } from './workflow.service'
+import { WorkflowService, readGraph } from './workflow.service'
 
 // Needs PostgreSQL. Two campaigns of one owner and one of another: the funnel, the cuts, pause and resume, and the rollup.
 
@@ -311,5 +313,142 @@ describe('campaigns (database)', () => {
             },
          })
       ).toBe(2)
+   })
+})
+
+describe('starting a campaign (database)', () => {
+   const starter = `${randomUUID()}@elitale.com`
+   const answers = {
+      phrases: ['onboarding too slow'],
+      customer: { includeTitles: ['Founder'] },
+      message: 'Hi {first_name}, thanks for connecting.',
+   }
+   let owner: string
+
+   const make = async (name: string, note: string) =>
+      (
+         await CampaignStarterService.createOutreach(owner, {
+            ...answers,
+            name,
+            note,
+         })
+      ).campaignId
+   const stages = async (campaignId: string) =>
+      Object.fromEntries(
+         (await db.workflow.findMany({ where: { campaignId } })).map(workflowRow => [workflowRow.stage, workflowRow])
+      )
+   const armed = (graphJson: unknown) => readGraph(graphJson).nodes.filter(({ config }) => config.actForReal === true)
+
+   beforeAll(async () => {
+      owner = (await UserService.create({ email: starter })).id
+   })
+
+   afterAll(async () => {
+      await db.user.deleteMany({ where: { email: starter } })
+   })
+
+   it('should switch on Discover and Invite and arm every Send invite block, and nothing else', async () => {
+      const id = await make('Start with a note', 'Hi {first_name}, I liked your post.')
+
+      await expect(CampaignService.start(owner, id, { sendInvites: true })).resolves.toEqual({
+         switchedOn: 2,
+         armed: 2,
+      })
+
+      const byStage = await stages(id)
+
+      expect([byStage.DISCOVER?.enabled, byStage.INVITE?.enabled]).toEqual([true, true])
+      expect(
+         [byStage.WARM_UP, byStage.FIRST_MESSAGE, byStage.HAND_OFF, byStage.NO_ANSWER].map(each => each?.enabled)
+      ).toEqual([false, false, false, false])
+      expect(armed(byStage.INVITE?.graph).map(({ type }) => type)).toEqual(['account.sendInvite', 'account.sendInvite'])
+
+      for (const stage of ['DISCOVER', 'WARM_UP', 'FIRST_MESSAGE', 'HAND_OFF', 'NO_ANSWER']) {
+         expect(armed(byStage[stage]?.graph), stage).toEqual([])
+      }
+   })
+
+   it('should arm the one Send invite block of a campaign without a note, and arm nothing when not asked', async () => {
+      const plain = await make('Start without a note', '')
+      const careful = await make('Start without arming', '')
+
+      await expect(CampaignService.start(owner, plain, { sendInvites: true })).resolves.toMatchObject({ armed: 1 })
+      await expect(CampaignService.start(owner, careful, { sendInvites: false })).resolves.toEqual({
+         switchedOn: 2,
+         armed: 0,
+      })
+      expect(armed((await stages(careful)).INVITE?.graph)).toEqual([])
+      expect((await stages(careful)).INVITE?.enabled).toBe(true)
+   })
+
+   it('should change nothing when it is called again', async () => {
+      const id = await make('Start twice', 'Hi {first_name}.')
+
+      await CampaignService.start(owner, id, { sendInvites: true })
+
+      const before = await stages(id)
+
+      await expect(CampaignService.start(owner, id, { sendInvites: true })).resolves.toEqual({
+         switchedOn: 0,
+         armed: 2,
+      })
+      expect((await stages(id)).INVITE?.updatedAt).toEqual(before.INVITE?.updatedAt)
+   })
+
+   it('should refuse a paused campaign, a campaign with nothing to start, and one that is not the owners', async () => {
+      const paused = await make('Start paused', '')
+      const empty = await CampaignService.create(owner, { name: 'Start empty' })
+
+      await CampaignService.pause(owner, paused, false)
+      await expect(CampaignService.start(owner, paused, { sendInvites: true })).rejects.toThrow('Resume it first')
+      expect((await stages(paused)).INVITE?.enabled).toBe(false)
+      await expect(CampaignService.start(owner, empty.id, { sendInvites: true })).rejects.toThrow('nothing to start')
+      await expect(CampaignService.start(userId, paused, { sendInvites: true })).resolves.toBeNull()
+   })
+
+   it('should not overwrite a workflow that was saved elsewhere while it was being armed', async () => {
+      const id = await make('Start stale', '')
+      const invite = (await stages(id)).INVITE
+      const update = WorkflowService.update.bind(WorkflowService)
+      const spy = vi.spyOn(WorkflowService, 'update').mockImplementation(async (...args) => {
+         if (args[2].graph) {
+            await new Promise(resolve => setTimeout(resolve, 5))
+            await db.workflow.update({
+               where: { id: args[1] },
+               data: { goal: 'saved elsewhere' },
+            })
+         }
+
+         return update(...args)
+      })
+
+      try {
+         await expect(CampaignService.start(owner, id, { sendInvites: true })).rejects.toBeInstanceOf(ConflictError)
+      } finally {
+         spy.mockRestore()
+      }
+
+      expect(armed((await db.workflow.findUniqueOrThrow({ where: { id: invite?.id ?? '' } })).graph)).toEqual([])
+   })
+
+   it('should switch Discover off again when Invite cannot be switched on', async () => {
+      const id = await make('Start rolls back', '')
+      const invite = (await stages(id)).INVITE
+      const update = WorkflowService.update.bind(WorkflowService)
+      const spy = vi.spyOn(WorkflowService, 'update').mockImplementation((...args) => {
+         if (args[1] === invite?.id && args[2].enabled === true) {
+            return Promise.reject(new ConflictError('Fix the problems in the workflow before switching it on.'))
+         }
+
+         return update(...args)
+      })
+
+      try {
+         await expect(CampaignService.start(owner, id, { sendInvites: true })).rejects.toThrow('Fix the problems')
+      } finally {
+         spy.mockRestore()
+      }
+
+      expect([(await stages(id)).DISCOVER?.enabled, (await stages(id)).INVITE?.enabled]).toEqual([false, false])
    })
 })

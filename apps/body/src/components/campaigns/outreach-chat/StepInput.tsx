@@ -135,6 +135,19 @@ export const StepInput = ({ id, form, set, lists, suggested, used, onDone, onSki
                   </>
                ),
             }
+         case 'followUp':
+            return {
+               options: (
+                  <>
+                     <Chip selected={!form.followUp} onClick={() => onDone({ followUp: false })}>
+                        No, just find and connect
+                     </Chip>
+                     <Chip selected={form.followUp} onClick={() => onDone({ followUp: true })}>
+                        Yes, also follow up
+                     </Chip>
+                  </>
+               ),
+            }
          case 'phrases':
             return { fields: <ChipsInput id="phrases" value={form.phrases} onChange={phrases => set({ phrases })} /> }
          case 'customer':

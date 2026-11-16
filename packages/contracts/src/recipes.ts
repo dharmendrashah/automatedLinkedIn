@@ -59,7 +59,10 @@ export const outreachAnswersSchema = z
             ids: [],
          }),
       note: z.string().trim().max(200, 'A note has up to 200 characters.').default(''),
-      message: z.string().trim().min(1, 'Write the first message.').max(4000),
+      // Whether the campaign goes on after the connection: the first message, the warm-up and the two hand-offs. Off: only Discover and
+      // Invite are built and no message is needed.
+      followUp: z.boolean().default(true),
+      message: z.string().trim().max(4000).default(''),
       warmUp: z
          .object({
             reactions: z.boolean().default(true),
@@ -107,6 +110,14 @@ export const outreachAnswersSchema = z
             code: 'custom',
             path: ['warmUp'],
             message: 'Write at least one comment text, or turn comments off.',
+         })
+      }
+
+      if (answers.followUp && answers.message === '') {
+         context.addIssue({
+            code: 'custom',
+            path: ['message'],
+            message: 'Write the first message.',
          })
       }
 
@@ -221,7 +232,8 @@ export const recipeParts = {
    profiles,
 }
 
-// The recipe: six workflows, switched off, in the order a person moves through them.
+// The recipe: six workflows, switched off, in the order a person moves through them; two (Discover and Invite) when the follow-up is
+// not wanted.
 export const buildOutreach = (input: OutreachAnswers, icpId: string, discoverId?: string): RecipeBuild => {
    const answers = outreachAnswersSchema.parse(input)
    const label = campaignLabelOf(answers.name)
@@ -290,21 +302,31 @@ export const buildOutreach = (input: OutreachAnswers, icpId: string, discoverId?
    }
 
    // 2 Invite: the newest qualified people who are not connected yet, inside today's limit; the best carry the note.
-   // With Discover's id it starts when Discover finishes; without one it keeps its clock time.
+   // With Discover's id it starts when Discover finishes and again on a daily clock, so the people waiting are invited on a day
+   // Discover found nobody or failed (the clock run finds nothing to do on a day the chained run used the room); without one it
+   // keeps its clock time.
    const invite = (id: string, column: number, row: number, note: string) =>
       node(id, 'account.sendInvite', column, row, {
          note,
          planDays: 1,
       })
-   const inviteStart =
+   const inviteStarts =
       discoverId === undefined
-         ? schedule(shift(time, 1))
-         : node('trigger', 'trigger.workflow', 0, 0, { workflowId: discoverId })
+         ? [schedule(shift(time, 1))]
+         : [
+              node('trigger', 'trigger.workflow', 0, 0, { workflowId: discoverId }),
+              node('clock', 'trigger.schedule', 0, 1, {
+                 every: 'day',
+                 at: shift(time, 4),
+                 timeZone,
+              }),
+           ]
+   const startEdges: Array<[string, string]> = inviteStarts.map(({ id }) => [id, 'people'])
    const inviteGraph: Graph =
       answers.note === ''
          ? {
               nodes: [
-                 inviteStart,
+                 ...inviteStarts,
                  node(
                     'people',
                     'input.profiles',
@@ -328,7 +350,7 @@ export const buildOutreach = (input: OutreachAnswers, icpId: string, discoverId?
                  invite('send', 5, 0, ''),
               ],
               edges: wire([
-                 ['trigger', 'people'],
+                 ...startEdges,
                  ['people', 'state'],
                  ['state', 'accounts'],
                  ['accounts', 'room'],
@@ -337,7 +359,7 @@ export const buildOutreach = (input: OutreachAnswers, icpId: string, discoverId?
            }
          : {
               nodes: [
-                 inviteStart,
+                 ...inviteStarts,
                  node(
                     'people',
                     'input.profiles',
@@ -363,7 +385,7 @@ export const buildOutreach = (input: OutreachAnswers, icpId: string, discoverId?
                  invite('withoutNote', 6, 1, ''),
               ],
               edges: wire([
-                 ['trigger', 'people'],
+                 ...startEdges,
                  ['people', 'state'],
                  ['state', 'accounts'],
                  ['accounts', 'room'],
@@ -529,72 +551,75 @@ export const buildOutreach = (input: OutreachAnswers, icpId: string, discoverId?
       ]),
    })
 
+   const stages: RecipeWorkflow[] = [
+      {
+         stage: 'DISCOVER',
+         name: `${answers.name} \u00b7 1 Discover`,
+         graph: discover,
+      },
+      {
+         stage: 'INVITE',
+         name: `${answers.name} \u00b7 2 Invite`,
+         graph: inviteGraph,
+      },
+      {
+         stage: 'WARM_UP',
+         name: `${answers.name} \u00b7 3 Warm up`,
+         graph: {
+            nodes: warmNodes,
+            edges: wire(warmEdges),
+         },
+      },
+      {
+         stage: 'FIRST_MESSAGE',
+         name: `${answers.name} \u00b7 4 First message`,
+         graph: message,
+      },
+      {
+         stage: 'HAND_OFF',
+         name: `${answers.name} \u00b7 5 Hand off`,
+         graph: handOff(
+            shift(time, 2),
+            {
+               labels: [label],
+               waiting: true,
+            },
+            {
+               dateField: 'lastSent',
+               added: 'olderThan',
+               days: CAMPAIGN_LIMITS.silentDays,
+               withoutLabels: ['handed-off'],
+            },
+            'handed-off'
+         ),
+      },
+      {
+         stage: 'NO_ANSWER',
+         name: `${answers.name} \u00b7 6 No answer`,
+         graph: handOff(
+            shift(time, 3),
+            {
+               labels: [label],
+               invites: ['PENDING'],
+            },
+            {
+               dateField: 'invitedOn',
+               added: 'olderThan',
+               days: 21,
+               withoutLabels: ['no-answer'],
+            },
+            'no-answer'
+         ),
+      },
+   ]
+
    return {
       campaign: {
          name: answers.name,
          label,
       },
-      workflows: [
-         {
-            stage: 'DISCOVER',
-            name: `${answers.name} \u00b7 1 Discover`,
-            graph: discover,
-         },
-         {
-            stage: 'INVITE',
-            name: `${answers.name} \u00b7 2 Invite`,
-            graph: inviteGraph,
-         },
-         {
-            stage: 'WARM_UP',
-            name: `${answers.name} \u00b7 3 Warm up`,
-            graph: {
-               nodes: warmNodes,
-               edges: wire(warmEdges),
-            },
-         },
-         {
-            stage: 'FIRST_MESSAGE',
-            name: `${answers.name} \u00b7 4 First message`,
-            graph: message,
-         },
-         {
-            stage: 'HAND_OFF',
-            name: `${answers.name} \u00b7 5 Hand off`,
-            graph: handOff(
-               shift(time, 2),
-               {
-                  labels: [label],
-                  waiting: true,
-               },
-               {
-                  dateField: 'lastSent',
-                  added: 'olderThan',
-                  days: CAMPAIGN_LIMITS.silentDays,
-                  withoutLabels: ['handed-off'],
-               },
-               'handed-off'
-            ),
-         },
-         {
-            stage: 'NO_ANSWER',
-            name: `${answers.name} \u00b7 6 No answer`,
-            graph: handOff(
-               shift(time, 3),
-               {
-                  labels: [label],
-                  invites: ['PENDING'],
-               },
-               {
-                  dateField: 'invitedOn',
-                  added: 'olderThan',
-                  days: 21,
-                  withoutLabels: ['no-answer'],
-               },
-               'no-answer'
-            ),
-         },
-      ],
+      // Find and connect are the first two; the rest follow the connection and are built only when asked for.
+      workflows: answers.followUp ? stages : stages.slice(0, 2),
    }
 }
 
@@ -605,7 +630,7 @@ export const RECIPES = {
    outreach: {
       title: 'Outreach campaign',
       summary:
-         'Find people who post about your problem, invite them, warm them up, message the ones who accept and hand off the rest.',
+         'Find people who post about your problem and connect with them. Optionally message the ones who accept, warm them up and hand off the rest.',
       schema: outreachAnswersSchema,
    },
 } as const
