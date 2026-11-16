@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { type OutreachAnswers } from '@automatedLinkedIn/contracts'
 
 import { CampaignStarterService } from './campaignStarter.service'
+import { CampaignStatsService } from './campaignStats.service'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
 import { WorkflowService, readGraph } from './workflow.service'
@@ -169,6 +170,24 @@ describe('the Starter (database)', () => {
          }),
          expect.objectContaining({ type: 'trigger.schedule' }),
       ])
+   })
+
+   it('should make only Discover and Invite, with no message, when the follow-up is not wanted', async () => {
+      const { message: _message, ...withoutMessage } = answers
+      const made = await CampaignStarterService.createOutreach(userId, {
+         ...withoutMessage,
+         name: 'Connect only',
+         followUp: false,
+      })
+      const [discover, invite] = made.workflows
+
+      expect(made.workflows.map(({ stage }) => stage)).toEqual(['DISCOVER', 'INVITE'])
+      expect(
+         (await db.workflow.findMany({ where: { campaignId: made.campaignId } })).map(({ enabled }) => enabled)
+      ).toEqual([false, false])
+      await WorkflowService.update(userId, invite?.id ?? '', { enabled: true })
+      await expect(WorkflowService.listeners(userId, discover?.id ?? '')).resolves.toEqual([invite?.id])
+      await expect(CampaignStatsService.overview(userId, made.campaignId, '7d')).resolves.toBeTruthy()
    })
 
    it('should remove every workflow, the campaign and the ideal customer when the fifth one cannot be made', async () => {

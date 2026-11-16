@@ -20,6 +20,8 @@ const draftSchema = z.object({
       accountMode: z.enum(['all', 'pick']),
       accountIds: z.array(z.string()),
       note: z.string(),
+      // A draft saved before the follow-up question has no answer: that is a No.
+      followUp: z.boolean().default(false),
       message: z.string(),
       reactions: z.boolean(),
       comments: z.enum(['off', 'texts']),

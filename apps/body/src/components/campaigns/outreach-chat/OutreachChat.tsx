@@ -16,7 +16,7 @@ import { Link } from 'react-router'
 
 import { type Lists, StepInput } from './StepInput'
 import { answerText } from './answer-text'
-import { type Form, STEPS, type StepId, progressOf } from './steps'
+import { type Form, type StepId, progressOf, stepsFor } from './steps'
 
 type Props = {
    form: Form
@@ -91,8 +91,9 @@ export const OutreachChat = ({
    busy,
 }: Props) => {
    const thread = useRef<HTMLDivElement>(null)
-   const progress = progressOf(done)
-   const at = current === null ? STEPS.length - 1 : STEPS.findIndex(({ id }) => id === current)
+   const steps = stepsFor(form)
+   const progress = progressOf(done, form)
+   const at = current === null ? steps.length - 1 : steps.findIndex(({ id }) => id === current)
    const icpName = lists.icps.find(({ id }) => id === form.icpId)?.name ?? null
 
    // The thread scrolls to the newest message (not the window), without motion when the user asked for none.
@@ -138,7 +139,7 @@ export const OutreachChat = ({
             aria-label="Campaign setup"
             className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto px-4 py-4 lg:px-6"
          >
-            {STEPS.slice(0, at + 1).map(({ id, question, hint }) => (
+            {steps.slice(0, at + 1).map(({ id, question, hint }) => (
                <div key={id} className="grid gap-3">
                   <Bubble from="assistant">
                      <span className="flex items-center gap-1.5">

@@ -59,7 +59,10 @@ export const outreachAnswersSchema = z
             ids: [],
          }),
       note: z.string().trim().max(200, 'A note has up to 200 characters.').default(''),
-      message: z.string().trim().min(1, 'Write the first message.').max(4000),
+      // Whether the campaign goes on after the connection: the first message, the warm-up and the two hand-offs. Off: only Discover and
+      // Invite are built and no message is needed.
+      followUp: z.boolean().default(true),
+      message: z.string().trim().max(4000).default(''),
       warmUp: z
          .object({
             reactions: z.boolean().default(true),
@@ -107,6 +110,14 @@ export const outreachAnswersSchema = z
             code: 'custom',
             path: ['warmUp'],
             message: 'Write at least one comment text, or turn comments off.',
+         })
+      }
+
+      if (answers.followUp && answers.message === '') {
+         context.addIssue({
+            code: 'custom',
+            path: ['message'],
+            message: 'Write the first message.',
          })
       }
 
@@ -221,7 +232,8 @@ export const recipeParts = {
    profiles,
 }
 
-// The recipe: six workflows, switched off, in the order a person moves through them.
+// The recipe: six workflows, switched off, in the order a person moves through them; two (Discover and Invite) when the follow-up is
+// not wanted.
 export const buildOutreach = (input: OutreachAnswers, icpId: string, discoverId?: string): RecipeBuild => {
    const answers = outreachAnswersSchema.parse(input)
    const label = campaignLabelOf(answers.name)
@@ -539,72 +551,75 @@ export const buildOutreach = (input: OutreachAnswers, icpId: string, discoverId?
       ]),
    })
 
+   const stages: RecipeWorkflow[] = [
+      {
+         stage: 'DISCOVER',
+         name: `${answers.name} \u00b7 1 Discover`,
+         graph: discover,
+      },
+      {
+         stage: 'INVITE',
+         name: `${answers.name} \u00b7 2 Invite`,
+         graph: inviteGraph,
+      },
+      {
+         stage: 'WARM_UP',
+         name: `${answers.name} \u00b7 3 Warm up`,
+         graph: {
+            nodes: warmNodes,
+            edges: wire(warmEdges),
+         },
+      },
+      {
+         stage: 'FIRST_MESSAGE',
+         name: `${answers.name} \u00b7 4 First message`,
+         graph: message,
+      },
+      {
+         stage: 'HAND_OFF',
+         name: `${answers.name} \u00b7 5 Hand off`,
+         graph: handOff(
+            shift(time, 2),
+            {
+               labels: [label],
+               waiting: true,
+            },
+            {
+               dateField: 'lastSent',
+               added: 'olderThan',
+               days: CAMPAIGN_LIMITS.silentDays,
+               withoutLabels: ['handed-off'],
+            },
+            'handed-off'
+         ),
+      },
+      {
+         stage: 'NO_ANSWER',
+         name: `${answers.name} \u00b7 6 No answer`,
+         graph: handOff(
+            shift(time, 3),
+            {
+               labels: [label],
+               invites: ['PENDING'],
+            },
+            {
+               dateField: 'invitedOn',
+               added: 'olderThan',
+               days: 21,
+               withoutLabels: ['no-answer'],
+            },
+            'no-answer'
+         ),
+      },
+   ]
+
    return {
       campaign: {
          name: answers.name,
          label,
       },
-      workflows: [
-         {
-            stage: 'DISCOVER',
-            name: `${answers.name} \u00b7 1 Discover`,
-            graph: discover,
-         },
-         {
-            stage: 'INVITE',
-            name: `${answers.name} \u00b7 2 Invite`,
-            graph: inviteGraph,
-         },
-         {
-            stage: 'WARM_UP',
-            name: `${answers.name} \u00b7 3 Warm up`,
-            graph: {
-               nodes: warmNodes,
-               edges: wire(warmEdges),
-            },
-         },
-         {
-            stage: 'FIRST_MESSAGE',
-            name: `${answers.name} \u00b7 4 First message`,
-            graph: message,
-         },
-         {
-            stage: 'HAND_OFF',
-            name: `${answers.name} \u00b7 5 Hand off`,
-            graph: handOff(
-               shift(time, 2),
-               {
-                  labels: [label],
-                  waiting: true,
-               },
-               {
-                  dateField: 'lastSent',
-                  added: 'olderThan',
-                  days: CAMPAIGN_LIMITS.silentDays,
-                  withoutLabels: ['handed-off'],
-               },
-               'handed-off'
-            ),
-         },
-         {
-            stage: 'NO_ANSWER',
-            name: `${answers.name} \u00b7 6 No answer`,
-            graph: handOff(
-               shift(time, 3),
-               {
-                  labels: [label],
-                  invites: ['PENDING'],
-               },
-               {
-                  dateField: 'invitedOn',
-                  added: 'olderThan',
-                  days: 21,
-                  withoutLabels: ['no-answer'],
-               },
-               'no-answer'
-            ),
-         },
-      ],
+      // Find and connect are the first two; the rest follow the connection and are built only when asked for.
+      workflows: answers.followUp ? stages : stages.slice(0, 2),
    }
 }
 
@@ -615,7 +630,7 @@ export const RECIPES = {
    outreach: {
       title: 'Outreach campaign',
       summary:
-         'Find people who post about your problem, invite them, warm them up, message the ones who accept and hand off the rest.',
+         'Find people who post about your problem and connect with them. Optionally message the ones who accept, warm them up and hand off the rest.',
       schema: outreachAnswersSchema,
    },
 } as const

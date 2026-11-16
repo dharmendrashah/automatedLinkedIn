@@ -147,8 +147,7 @@ export const WorkflowNew = () => {
          <section className="max-w-xl rounded-xl border px-4 py-3 text-sm">
             <p className="font-medium">Outreach campaign</p>
             <p className="text-muted-foreground">
-               Find people who post about your problem, invite them, warm them up, message the ones who accept and hand
-               off the rest. One form builds six workflows for you.
+               Find people who post about your problem and connect with them. One form builds the workflows for you.
             </p>
             <Link className="text-primary underline" to="/campaigns/new">
                Start an outreach campaign

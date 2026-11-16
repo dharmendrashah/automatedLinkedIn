@@ -44,7 +44,7 @@ export const AllFields = ({
    onCreate: () => void
 }) => (
    <div className="grid gap-6">
-      <Field label="1. Name" hint="1 to 60 characters. The people it finds get a label made from it.">
+      <Field label="Name" hint="1 to 60 characters. The people it finds get a label made from it.">
          <Input
             maxLength={CAMPAIGN_LIMITS.nameMax}
             value={form.name}
@@ -52,10 +52,10 @@ export const AllFields = ({
             onChange={event => set({ name: event.target.value })}
          />
       </Field>
-      <Field label="2. What problem do you solve?" hint="Words people use when they post about it. 1 to 5 phrases.">
+      <Field label="What problem do you solve?" hint="Words people use when they post about it. 1 to 5 phrases.">
          <ChipsInput id="phrases" value={form.phrases} onChange={phrases => set({ phrases })} />
       </Field>
-      <Field label="3. Who is your ideal customer?" hint="Job titles are enough. Or use one you saved.">
+      <Field label="Who is your ideal customer?" hint="Job titles are enough. Or use one you saved.">
          {lists.icps.length > 0 ? (
             <Chips
                id="saved-customer"
@@ -84,7 +84,7 @@ export const AllFields = ({
             onChange={locations => set({ locations })}
          />
       </Field>
-      <Field label="4. Which accounts?">
+      <Field label="Which accounts?">
          <Chips
             id="account-mode"
             options={[
@@ -110,41 +110,59 @@ export const AllFields = ({
          ) : null}
       </Field>
       <Field
-         label="5. Connection note (optional)"
+         label="Connection note (optional)"
          hint="Up to 200 characters. {first_name} works. Only the best-scored people carry it."
       >
          <Textarea maxLength={200} value={form.note} onChange={event => set({ note: event.target.value })} />
       </Field>
-      <Field label="6. First message" hint="Sent to people who accept, after a wait, if you have not talked before.">
-         <Textarea value={form.message} onChange={event => set({ message: event.target.value })} />
-      </Field>
       <Field
-         label="7. Warm-up"
-         hint="While an invite is pending, the account reacts to their posts. A comment waits for your approval."
+         label="After they accept"
+         hint="No: we only find leads and connect with them. Yes: we also message the ones who accept, warm up the pending ones and hand off the silent ones."
       >
          <Chips
-            id="warm-up"
+            id="follow-up"
             options={[
-               { value: 'reactions', label: 'React to their posts' },
-               { value: 'comments', label: 'Comment with my texts' },
+               { value: 'no', label: 'Just find and connect' },
+               { value: 'yes', label: 'Also follow up' },
             ]}
-            isOn={each => (each === 'reactions' ? form.reactions : form.comments === 'texts')}
-            onToggle={each =>
-               each === 'reactions'
-                  ? set({ reactions: !form.reactions })
-                  : set({ comments: form.comments === 'texts' ? 'off' : 'texts' })
-            }
+            isOn={each => (each === 'yes') === form.followUp}
+            onToggle={each => set({ followUp: each === 'yes' })}
          />
-         {form.comments === 'texts' ? (
-            <Textarea
-               aria-label="Comment texts, one on each line"
-               placeholder="One text on each line. {author_first_name} works."
-               value={form.texts}
-               onChange={event => set({ texts: event.target.value })}
-            />
-         ) : null}
       </Field>
-      <Field label="8. When should it run?">
+      {form.followUp ? (
+         <>
+            <Field label="First message" hint="Sent to people who accept, after a wait, if you have not talked before.">
+               <Textarea value={form.message} onChange={event => set({ message: event.target.value })} />
+            </Field>
+            <Field
+               label="Warm-up"
+               hint="While an invite is pending, the account reacts to their posts. A comment waits for your approval."
+            >
+               <Chips
+                  id="warm-up"
+                  options={[
+                     { value: 'reactions', label: 'React to their posts' },
+                     { value: 'comments', label: 'Comment with my texts' },
+                  ]}
+                  isOn={each => (each === 'reactions' ? form.reactions : form.comments === 'texts')}
+                  onToggle={each =>
+                     each === 'reactions'
+                        ? set({ reactions: !form.reactions })
+                        : set({ comments: form.comments === 'texts' ? 'off' : 'texts' })
+                  }
+               />
+               {form.comments === 'texts' ? (
+                  <Textarea
+                     aria-label="Comment texts, one on each line"
+                     placeholder="One text on each line. {author_first_name} works."
+                     value={form.texts}
+                     onChange={event => set({ texts: event.target.value })}
+                  />
+               ) : null}
+            </Field>
+         </>
+      ) : null}
+      <Field label="When should it run?">
          <div className="flex flex-wrap items-center gap-2">
             <Input
                type="time"
@@ -161,15 +179,17 @@ export const AllFields = ({
             />
          </div>
       </Field>
-      <Field label="9. Hand-off" hint="A daily file of the people to follow up by hand.">
-         <Input
-            placeholder="https://"
-            value={form.handOffUrl}
-            onChange={event => set({ handOffUrl: event.target.value })}
-         />
-      </Field>
+      {form.followUp ? (
+         <Field label="Hand-off" hint="A daily file of the people to follow up by hand.">
+            <Input
+               placeholder="https://"
+               value={form.handOffUrl}
+               onChange={event => set({ handOffUrl: event.target.value })}
+            />
+         </Field>
+      ) : null}
       <Field
-         label="10. Posts a day"
+         label="Posts a day"
          hint={`We suggest ${suggested} for ${used} ${used === 1 ? 'account' : 'accounts'}. ${used > 0 ? capacityOf(used, form.postsPerDay ?? suggested).sentence : ''}`.trim()}
       >
          <Input
@@ -182,28 +202,29 @@ export const AllFields = ({
          />
       </Field>
 
-      <Field
-         label="11. What one positive reply is worth"
-         hint="Whole USD a month. The revenue pipeline is positive replies x this x 12. You can set it later on the campaign page."
-      >
-         <div className="flex items-center gap-2">
-            <span className="text-sm">$</span>
-            <Input
-               inputMode="numeric"
-               aria-label="Worth of one positive reply, in USD a month"
-               className="w-32"
-               placeholder="100"
-               value={form.replyValueUsd ?? ''}
-               onChange={event => {
-                  const worth = parseWorth(event.target.value)
+      {form.followUp ? (
+         <Field
+            label="What one positive reply is worth"
+            hint="Whole USD a month. The revenue pipeline is positive replies x this x 12. You can set it later on the campaign page."
+         >
+            <div className="flex items-center gap-2">
+               <span className="text-sm">$</span>
+               <Input
+                  inputMode="numeric"
+                  aria-label="Worth of one positive reply, in USD a month"
+                  className="w-32"
+                  placeholder="100"
+                  value={form.replyValueUsd ?? ''}
+                  onChange={event => {
+                     const worth = parseWorth(event.target.value)
 
-                  set({ replyValueUsd: worth === 'invalid' ? form.replyValueUsd : worth })
-               }}
-            />
-            <span className="text-sm">a month</span>
-         </div>
-      </Field>
-
+                     set({ replyValueUsd: worth === 'invalid' ? form.replyValueUsd : worth })
+                  }}
+               />
+               <span className="text-sm">a month</span>
+            </div>
+         </Field>
+      ) : null}
       {error ? <p className="text-destructive text-sm">{error}</p> : null}
       {problems.length > 0 ? (
          <ul className="text-destructive grid gap-1 text-sm">

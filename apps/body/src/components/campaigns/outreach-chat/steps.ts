@@ -1,7 +1,8 @@
 import { type OutreachAnswers, capacityOf, outreachAnswersSchema } from '@automatedLinkedIn/contracts'
 
-// The questions of the campaign chat, in order: a name, whether it runs outreach, then the ten outreach questions. Review is the
-// last step (.plan/campaign-outreach-chat-onboarding.md, .plan/campaign-create-in-chat.md).
+// The questions of the campaign chat, in order: a name, whether it runs outreach, then the outreach questions. The four that only
+// matter after a connection are asked only when the owner wants the follow-up (.plan/campaign-outreach-chat-onboarding.md,
+// .plan/campaign-create-in-chat.md, .plan/008-find-and-connect-campaign-without-follow-up.md).
 export const STEPS = [
    {
       id: 'name',
@@ -14,7 +15,7 @@ export const STEPS = [
       id: 'kind',
       required: true,
       question: 'Should this campaign run outreach?',
-      hint: 'Yes: we build six workflows for you, all switched off. No: an empty campaign, and you add your own workflows later.',
+      hint: 'Yes: we build the workflows for you, all switched off. No: an empty campaign, and you add your own workflows later.',
       path: 'outreach',
    },
    {
@@ -44,6 +45,13 @@ export const STEPS = [
       question: 'Want a connection note?',
       hint: 'Up to 200 characters. {first_name} works. Only the best-scored people carry it.',
       path: 'note',
+   },
+   {
+      id: 'followUp',
+      required: false,
+      question: 'After they accept, should we also message them?',
+      hint: 'No: we only find leads and connect with them. Yes: we also write to the ones who accept, warm up the pending ones and hand off the silent ones.',
+      path: 'followUp',
    },
    {
       id: 'message',
@@ -91,6 +99,12 @@ export const STEPS = [
 
 export type StepId = (typeof STEPS)[number]['id']
 
+const FOLLOW_UP_STEPS: readonly StepId[] = ['message', 'warmUp', 'handOff', 'worth']
+
+// The questions this form still has to answer: the follow-up ones only when the follow-up is wanted.
+export const stepsFor = (form: Form) =>
+   form.followUp ? STEPS : STEPS.filter(({ id }) => !FOLLOW_UP_STEPS.includes(id))
+
 export type Form = {
    name: string
    // True once "Yes" is chosen. "No" makes an empty campaign and ends the chat, so it is never stored.
@@ -102,6 +116,8 @@ export type Form = {
    accountMode: 'all' | 'pick'
    accountIds: string[]
    note: string
+   // Whether the campaign goes on after the connection (a first message, warm-up, hand-off). Off until the owner says yes.
+   followUp: boolean
    message: string
    reactions: boolean
    comments: 'off' | 'texts'
@@ -124,6 +140,7 @@ export const emptyForm = (timeZone: string): Form => ({
    accountMode: 'all',
    accountIds: [],
    note: '',
+   followUp: false,
    message: '',
    reactions: true,
    comments: 'off',
@@ -148,6 +165,7 @@ export const answersOf = (form: Form, suggested: number): OutreachAnswers => ({
       ids: form.accountIds,
    },
    note: form.note,
+   followUp: form.followUp,
    message: form.message,
    warmUp: {
       reactions: form.reactions,
@@ -173,6 +191,7 @@ const FIELDS: Record<StepId, Array<keyof Form>> = {
    customer: ['icpId', 'titles', 'locations'],
    accounts: ['accountMode', 'accountIds'],
    note: ['note'],
+   followUp: ['followUp'],
    message: ['message'],
    warmUp: ['reactions', 'comments', 'texts'],
    when: ['time', 'timeZone'],
@@ -248,20 +267,22 @@ export const stepProblems = (id: StepId, form: Form, suggested: number) => {
 
 // Every question answered and every answer valid: the campaign can be made, with no review in between.
 export const isComplete = (done: StepId[], form: Form, suggested: number) =>
-   STEPS.every(({ id }) => done.includes(id) && stepProblems(id, form, suggested).length === 0)
+   stepsFor(form).every(({ id }) => done.includes(id) && stepProblems(id, form, suggested).length === 0)
 
 // Done steps are the ones answered or skipped. The next one is the first not done.
-export const nextStep = (done: StepId[]) => STEPS.find(({ id }) => !done.includes(id))?.id ?? null
+export const nextStep = (done: StepId[], form: Form) => stepsFor(form).find(({ id }) => !done.includes(id))?.id ?? null
 
 // The step in front of the user (one past the last question once all are answered), and how much is done.
-export const progressOf = (done: StepId[]) => {
-   const total = STEPS.length + 1
-   const at = STEPS.findIndex(({ id }) => !done.includes(id))
+export const progressOf = (done: StepId[], form: Form) => {
+   const steps = stepsFor(form)
+   const total = steps.length + 1
+   const at = steps.findIndex(({ id }) => !done.includes(id))
+   const answered = steps.filter(({ id }) => done.includes(id)).length
 
    return {
-      done: done.length,
+      done: answered,
       current: at === -1 ? total : at + 1,
       total,
-      percent: Math.round((done.length / total) * 100),
+      percent: Math.round((answered / total) * 100),
    }
 }

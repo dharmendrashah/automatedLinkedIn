@@ -4,7 +4,6 @@ import type { Lists } from '@/components/campaigns/outreach-chat/StepInput'
 import { clearDraft, freshDraft, loadDraft, saveDraft } from '@/components/campaigns/outreach-chat/draft'
 import {
    type Form,
-   STEPS,
    type StepId,
    answersOf,
    isComplete,
@@ -12,6 +11,7 @@ import {
    reconcile,
    resetStep,
    stepProblems,
+   stepsFor,
    suggestedPostsOf,
 } from '@/components/campaigns/outreach-chat/steps'
 import { Button } from '@/components/ui/button'
@@ -72,7 +72,7 @@ export const NewCampaign = () => {
    const { used, suggested } = suggestedPostsOf(form, signedInIds)
    // A step whose answer no longer holds (an account was removed, say) is asked again.
    const done = draft.done.filter(id => stepProblems(id, form, suggested).length === 0)
-   const current = nextStep(done)
+   const current = nextStep(done, form)
    const lists: Lists = {
       accounts: accountList,
       accountsState: accounts.isError ? 'error' : accounts.data ? 'ready' : 'loading',
@@ -158,7 +158,7 @@ export const NewCampaign = () => {
             busy={busy}
             onCreate={() => {
                setNotice(null)
-               setDraft(c => ({ ...c, done: STEPS.map(({ id }) => id) }))
+               setDraft(c => ({ ...c, done: stepsFor(form).map(({ id }) => id) }))
 
                if (parsed.success) {
                   create.mutate(parsed.data)

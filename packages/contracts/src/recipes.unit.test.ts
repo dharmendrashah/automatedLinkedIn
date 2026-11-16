@@ -196,6 +196,64 @@ describe('the outreach recipe', () => {
    })
 })
 
+describe('the connect-only recipe', () => {
+   const connectOnly = () =>
+      build(
+         {
+            followUp: false,
+            message: '',
+         },
+         'discover-1'
+      )
+
+   it('should build only Discover and Invite, with no message, warm-up or hand-off block', () => {
+      const { workflows } = connectOnly()
+
+      expect(workflows.map(({ stage }) => stage)).toEqual(['DISCOVER', 'INVITE'])
+      expect(workflows.map(({ name }) => name)).toEqual([
+         'Outbound for agencies \u00b7 1 Discover',
+         'Outbound for agencies \u00b7 2 Invite',
+      ])
+
+      for (const { stage, graph } of workflows) {
+         expect(
+            validateGraph(graph).filter(({ level }) => level === 'error'),
+            stage
+         ).toEqual([])
+
+         for (const each of graph.nodes) {
+            expect(blockOf(each.type).config.safeParse(each.config).success, `${stage} ${each.id}`).toBe(true)
+            expect(['account.sendMessage', 'account.reactToPost', 'output.csv']).not.toContain(each.type)
+         }
+      }
+
+      expect(workflows[1]?.graph.nodes.find(({ id }) => id === 'trigger')?.config).toEqual({ workflowId: 'discover-1' })
+   })
+
+   it('should ask for the first message only when the follow-up is wanted', () => {
+      const { message: _message, ...withoutMessage } = answers
+
+      expect(
+         outreachAnswersSchema.safeParse({
+            ...withoutMessage,
+            followUp: true,
+         }).error?.issues
+      ).toEqual([
+         expect.objectContaining({
+            path: ['message'],
+            message: 'Write the first message.',
+         }),
+      ])
+      expect(
+         outreachAnswersSchema.safeParse({
+            ...withoutMessage,
+            followUp: false,
+         }).success
+      ).toBe(true)
+      expect(outreachAnswersSchema.safeParse(withoutMessage).success).toBe(false)
+   })
+})
+
 describe('the answers', () => {
    const refused = (extra: Record<string, unknown>) =>
       outreachAnswersSchema
