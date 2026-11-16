@@ -3,6 +3,7 @@ import type { Application } from 'express'
 
 import { router } from 'trpc'
 
+import { onError } from '../onError'
 import { createContext } from './context'
 import {
    acceptRisk,
@@ -86,6 +87,7 @@ export const initializeTrpc = async (app: Application) => {
       createExpressMiddleware({
          router: appRouter,
          createContext,
+         onError,
       })
    )
 }

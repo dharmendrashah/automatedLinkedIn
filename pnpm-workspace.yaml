@@ -9,6 +9,10 @@ allowBuilds:
   '@swc/core': true
   esbuild: true
   protobufjs: true
+# Remove when express itself needs body-parser >=2.4.0 (plan 002).
+overrides:
+  body-parser: '>=2.4.0'
+  basic-ftp: '>=6.2.1'
 minimumReleaseAgeExclude:
   - dotenv@18.0.7
   - express@5.3.0

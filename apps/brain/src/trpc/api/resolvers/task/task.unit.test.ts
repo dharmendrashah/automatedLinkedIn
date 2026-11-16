@@ -107,7 +107,7 @@ describe('task resolvers', () => {
       mocks.request.mockResolvedValueOnce({ id: 's3' })
 
       await caller().run({
-         task: 'linkedin-post',
+         task: 'linkedin-browse',
          startAnyway: true,
       })
 
@@ -129,6 +129,31 @@ describe('task resolvers', () => {
       })
 
       expect(mocks.request).toHaveBeenLastCalledWith(expect.objectContaining({ confirmed: true }))
+   })
+
+   it.each([
+      ['an act task', { task: 'linkedin-invite' }],
+      [
+         'a read task carrying answers',
+         {
+            task: 'linkedin-invitations',
+            input: {
+               answers: [
+                  {
+                     id: 'x',
+                     answer: 'ACCEPT',
+                  },
+               ],
+            },
+         },
+      ],
+      ['a task nobody listed', { task: 'linkedin-new-thing' }],
+   ])('should refuse to start %s, and start nothing', async (_name, input) => {
+      await expect(caller().run(input)).rejects.toMatchObject({
+         code: 'PRECONDITION_FAILED',
+         message: expect.stringContaining('cannot be started'),
+      })
+      expect(mocks.request).not.toHaveBeenCalled()
    })
 
    it('should answer not found for a proxy or account that is not the users', async () => {

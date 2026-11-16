@@ -4,7 +4,7 @@
   "description": "Automate your linkedin outreach",
   "main": "index.js",
   "scripts": {
-    "start": "pnpm -F @automatedLinkedIn/server start",
+    "start": "pnpm -F @automatedLinkedIn/brain start",
     "record": "pnpm -F @automatedLinkedIn/spider dev:record",
     "dev": "turbo run dev",
     "lint": "turbo run lint",

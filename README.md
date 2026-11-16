@@ -43,7 +43,10 @@ Monorepo managed with [pnpm](https://pnpm.io) workspaces and [Turborepo](https:/
 | --- | --- |
 | `apps/brain` | Node.js backend exposing a tRPC API |
 | `apps/body` | React + Vite frontend |
+| `apps/spider` | The browser worker: Camoufox and RabbitMQ |
+| `packages/contracts` | Types and schemas shared by brain, body and spider |
 | `packages/config` | Shared configuration and services |
+| `packages/logger` | Shared structured logger |
 | `packages/ui` | Shared UI components |
 | `packages/eslint-config` | Shared ESLint configuration |
 | `packages/tsconfig` | Shared TypeScript configuration |

@@ -26,6 +26,7 @@ export {
    scorePerson,
 } from './icpScore'
 export { IpInfoError, IpInfoService, type ProxyExchange } from './ipInfo.service'
+export { isPublicHost } from './publicHost'
 export { type LinkKind, type LinkedInLink, TooManyLinksError, parseLinkedInUrl, parseLinkedInUrls } from './linkedInUrl'
 export { MessageBroker } from './messageBroker'
 export { MessageFiles } from './messageFiles'
