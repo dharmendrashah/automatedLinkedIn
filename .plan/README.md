@@ -13,7 +13,7 @@ Note on location: advisor plans live in `.plan/`, the repo's one folder for plan
 | 001  | Unexpected server errors are logged and never show internal text to the browser | P1 | S | — | DONE (PR #229) |
 | 002  | Clear the three high-severity dependency advisories (zod, body-parser, basic-ftp) | P1 | S | — | DONE (PR #229) |
 | 003  | Refuse non-public proxy addresses before brain connects through a proxy | P1 | S | — | DONE (PR #229) |
-| 004  | `task.run` starts only read tasks, so acts go through the domain services | P2 | S–M | — | TODO |
+| 004  | `task.run` starts only read tasks, so acts go through the domain services | P2 | S–M | — | DONE (PR #229) |
 | 005  | Fix the agent-facing docs and the root `start` script | P2 | S | — | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)

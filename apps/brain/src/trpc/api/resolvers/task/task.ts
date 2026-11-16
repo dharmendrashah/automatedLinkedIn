@@ -1,8 +1,9 @@
+import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 
 import { TaskService } from 'database'
 
-import { RUNNER_VERDICTS, TASK_NAME_PATTERN } from '@automatedLinkedIn/contracts'
+import { RUNNER_VERDICTS, TASK_NAME_PATTERN, webTaskRefusal } from '@automatedLinkedIn/contracts'
 
 import { ownerProcedure, router } from 'trpc'
 
@@ -25,7 +26,8 @@ const runInput = z.object({
    startAnyway: z.boolean().optional(),
 })
 
-// Every task goes through these two procedures; a new task needs nothing here. Everything is scoped to ctx.user.id.
+// Every task the web may start goes through these two procedures; `run` starts reads only (acts keep their limits in the domain
+// services), and a new task is refused here until it is listed in contracts `webTasks`. Everything is scoped to ctx.user.id.
 export const task = router({
    // The tasks the worker announced (titles, verdict labels, what each one needs) and the labels of the answers the runner
    // gives when a task could not even start.
@@ -35,6 +37,15 @@ export const task = router({
    })),
 
    run: ownerProcedure.input(runInput).mutation(async ({ ctx, input }) => {
+      const refusal = webTaskRefusal(input.task, input.input)
+
+      if (refusal) {
+         throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message: refusal,
+         })
+      }
+
       try {
          return await TaskService.request({
             userId: ctx.user.id,

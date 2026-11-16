@@ -32,6 +32,7 @@ import { StepsTab } from './steps-tab'
 import { SummaryTab } from './summary-tab'
 import { useTaskCatalog } from './use-task-catalog'
 import { VideoTab } from './video-tab'
+import { webTaskRefusal } from './web-tasks'
 
 type Props = {
    sessionId: string | null
@@ -47,6 +48,19 @@ const retryOf = (session: SessionDetail) => {
          reason: session.retry.allowed
             ? 'Run the same check again, through another proxy of this account.'
             : session.retry.reason,
+      }
+   }
+
+   // A task that acts is never started from here again: its own flow keeps the limits.
+   const refusal =
+      session.requestParams.action === 'TASK'
+         ? webTaskRefusal(session.requestParams.task, session.requestParams.input)
+         : null
+
+   if (refusal) {
+      return {
+         allowed: false,
+         reason: refusal,
       }
    }
 
