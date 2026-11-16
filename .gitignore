@@ -36,3 +36,4 @@ apps/spider/.devtools-staging.env
 # Elephant-Goldfish Model: pinned upstream checkout and working drafts (approved plans are kept).
 vendor/elephant-goldfish-model/
 .plan/egm/
+.claude/skills/improve
