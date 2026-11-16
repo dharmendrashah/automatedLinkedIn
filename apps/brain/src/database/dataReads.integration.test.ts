@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { DATA_READS } from './dataReads'
+import { PersonSnapshotService } from './personSnapshot.service'
 import { PrismaService } from './prisma.service'
 import { UserService } from './user.service'
 
@@ -84,6 +85,30 @@ describe('DATA_READS.PROFILE (database)', () => {
 
       expect((await companies())[0]?.archivedAt).toEqual(archivedAt)
       expect(await db.personSnapshot.count({ where: { userId } })).toBe(2)
+   })
+
+   it('should save a profile whose long text has an emoji where it is cut, and read back the same text', async () => {
+      const emoji = '\u{1F600}'
+
+      await DATA_READS.PROFILE.store(
+         {
+            userId,
+            slug: 'emoji-ada',
+            params: {},
+         },
+         [
+            {
+               firstName: 'Ada',
+               headline: 'Engines \uD83D',
+               about: `${'a'.repeat(2_599)}${emoji}`,
+            },
+         ]
+      )
+
+      const saved = (await PersonSnapshotService.forSlugs(userId, ['emoji-ada'])).get('emoji-ada')
+
+      expect(saved?.about).toBe('a'.repeat(2_599))
+      expect(saved?.headline).toBe('Engines')
    })
 
    it('should save no company when the read gives no LinkedIn company link', async () => {

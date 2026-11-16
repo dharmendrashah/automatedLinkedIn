@@ -95,6 +95,20 @@ describe('snapshotFrom', () => {
    it('should refuse a photo that is not an https link', () => {
       expect(snapshotFrom({ photo: 'javascript:alert(1)' }).photo).toBeNull()
    })
+
+   it('should keep every long text storable as JSON when an emoji sits where it is cut', () => {
+      const emoji = '\u{1F600}'
+      const snapshot = snapshotFrom({
+         about: `${'a'.repeat(2_599)}${emoji}`,
+         headline: `${'h'.repeat(299)}${emoji}`,
+         experience: [{ description: `${'d'.repeat(599)}${emoji}` }],
+      })
+
+      expect(snapshot.about).toBe('a'.repeat(2_599))
+      expect(snapshot.headline).toBe('h'.repeat(299))
+      expect(snapshot.experience[0]?.description).toBe('d'.repeat(599))
+      expect(JSON.stringify(snapshot)).not.toMatch(/\\ud[89ab]/i)
+   })
 })
 
 describe('profileFacts', () => {

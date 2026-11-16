@@ -2,8 +2,19 @@
 
 export type Row = Record<string, unknown>
 
-export const text = (value: unknown, max = 300) =>
-   typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : null
+// Postgres JSON refuses half of a surrogate pair (a cut inside an emoji, or one the data service sent) and a null character.
+// eslint-disable-next-line no-control-regex -- the null character is what the pattern is for
+const UNSTORABLE = /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g
+
+export const text = (value: unknown, max = 300) => {
+   if (typeof value !== 'string') {
+      return null
+   }
+
+   const cut = value.trim().slice(0, max).replace(UNSTORABLE, '').trim()
+
+   return cut || null
+}
 
 export const count = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null)
 

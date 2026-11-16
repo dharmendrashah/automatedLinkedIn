@@ -450,6 +450,35 @@ describe('collect blocks (database)', () => {
          expect([...reread.asked].sort()).toEqual(['companies', 'profiles'])
       })
 
+      it('should finish a run, and keep the profile, when an emoji sits where the long text is cut', async () => {
+         const [ada] = ROWS.profiles ?? []
+         const before = ada?.about
+
+         if (ada) {
+            ada.about = `${'a'.repeat(2_599)}\u{1F600}`
+         }
+
+         try {
+            const { runId } = await runOnce(read({ reread: true }))
+            const run = await PrismaService.client.workflowRun.findUniqueOrThrow({ where: { id: runId } })
+            const snapshot = await PrismaService.client.personSnapshot.findUniqueOrThrow({
+               where: {
+                  userId_slug: {
+                     userId,
+                     slug: 'ada',
+                  },
+               },
+            })
+
+            expect(run.status).toBe('SUCCEEDED')
+            expect(snapshot.data).toMatchObject({ about: 'a'.repeat(2_599) })
+         } finally {
+            if (ada) {
+               ada.about = before
+            }
+         }
+      })
+
       it('should keep nothing of a company when the tick is off, and leave people out that are on Do not contact', async () => {
          await PrismaService.client.linkedInCompany.deleteMany({ where: { userId } })
          await PrismaService.client.pageSnapshot.deleteMany({ where: { userId } })
