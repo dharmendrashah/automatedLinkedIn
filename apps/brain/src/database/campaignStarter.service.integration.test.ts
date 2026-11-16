@@ -79,6 +79,26 @@ describe('the Starter (database)', () => {
       }
    })
 
+   it('should start Invite on Discover and on its own daily clock', async () => {
+      const campaign = await db.campaign.findFirstOrThrow({ where: { userId } })
+      const discover = await db.workflow.findFirstOrThrow({
+         where: {
+            campaignId: campaign.id,
+            stage: 'DISCOVER',
+         },
+      })
+      const invite = await db.workflow.findFirstOrThrow({
+         where: {
+            campaignId: campaign.id,
+            stage: 'INVITE',
+         },
+      })
+
+      expect(invite.enabled).toBe(true)
+      expect(invite.nextRunAt).not.toBeNull()
+      await expect(WorkflowService.listeners(userId, discover.id)).resolves.toContain(invite.id)
+   })
+
    it('should refuse a name that is taken, and make nothing the second time', async () => {
       const before = await db.workflow.count({ where: { userId } })
 
@@ -132,7 +152,7 @@ describe('the Starter (database)', () => {
       expect(await db.icp.count({ where: { userId } })).toBe(before.icps)
    })
 
-   it('should make Discover first and start Invite when Discover finishes, not on a clock', async () => {
+   it('should make Discover first and start Invite when Discover finishes and on a daily clock', async () => {
       const made = await CampaignStarterService.createOutreach(userId, {
          ...answers,
          name: 'Chained',
@@ -147,6 +167,7 @@ describe('the Starter (database)', () => {
             type: 'trigger.workflow',
             config: { workflowId: discover?.id },
          }),
+         expect.objectContaining({ type: 'trigger.schedule' }),
       ])
    })
 

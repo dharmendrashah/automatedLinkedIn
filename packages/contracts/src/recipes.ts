@@ -290,21 +290,31 @@ export const buildOutreach = (input: OutreachAnswers, icpId: string, discoverId?
    }
 
    // 2 Invite: the newest qualified people who are not connected yet, inside today's limit; the best carry the note.
-   // With Discover's id it starts when Discover finishes; without one it keeps its clock time.
+   // With Discover's id it starts when Discover finishes and again on a daily clock, so the people waiting are invited on a day
+   // Discover found nobody or failed (the clock run finds nothing to do on a day the chained run used the room); without one it
+   // keeps its clock time.
    const invite = (id: string, column: number, row: number, note: string) =>
       node(id, 'account.sendInvite', column, row, {
          note,
          planDays: 1,
       })
-   const inviteStart =
+   const inviteStarts =
       discoverId === undefined
-         ? schedule(shift(time, 1))
-         : node('trigger', 'trigger.workflow', 0, 0, { workflowId: discoverId })
+         ? [schedule(shift(time, 1))]
+         : [
+              node('trigger', 'trigger.workflow', 0, 0, { workflowId: discoverId }),
+              node('clock', 'trigger.schedule', 0, 1, {
+                 every: 'day',
+                 at: shift(time, 4),
+                 timeZone,
+              }),
+           ]
+   const startEdges: Array<[string, string]> = inviteStarts.map(({ id }) => [id, 'people'])
    const inviteGraph: Graph =
       answers.note === ''
          ? {
               nodes: [
-                 inviteStart,
+                 ...inviteStarts,
                  node(
                     'people',
                     'input.profiles',
@@ -328,7 +338,7 @@ export const buildOutreach = (input: OutreachAnswers, icpId: string, discoverId?
                  invite('send', 5, 0, ''),
               ],
               edges: wire([
-                 ['trigger', 'people'],
+                 ...startEdges,
                  ['people', 'state'],
                  ['state', 'accounts'],
                  ['accounts', 'room'],
@@ -337,7 +347,7 @@ export const buildOutreach = (input: OutreachAnswers, icpId: string, discoverId?
            }
          : {
               nodes: [
-                 inviteStart,
+                 ...inviteStarts,
                  node(
                     'people',
                     'input.profiles',
@@ -363,7 +373,7 @@ export const buildOutreach = (input: OutreachAnswers, icpId: string, discoverId?
                  invite('withoutNote', 6, 1, ''),
               ],
               edges: wire([
-                 ['trigger', 'people'],
+                 ...startEdges,
                  ['people', 'state'],
                  ['state', 'accounts'],
                  ['accounts', 'room'],

@@ -15,10 +15,15 @@ Note on location: advisor plans live in `.plan/`, the repo's one folder for plan
 | 003  | Refuse non-public proxy addresses before brain connects through a proxy | P1 | S | — | DONE (PR #229) |
 | 004  | `task.run` starts only read tasks, so acts go through the domain services | P2 | S–M | — | DONE (PR #229) |
 | 005  | Fix the agent-facing docs and the root `start` script | P2 | S | — | DONE (PR #229) |
+| 006  | A campaign's Invite workflow also runs on a daily clock, so waiting leads are invited on days Discover finds nobody or fails | P1 | S | — | DONE (PR for `feat/find-and-connect`) |
+| 007  | One "Start" action turns on finding and connecting for a campaign | P1 | M | — (best after 006) | TODO |
+| 008  | A campaign can be just "find leads and connect": two workflows, nine questions | P2 | M | — (pairs with 006 and 007) | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
 ## Dependency notes
+
+- Plans 006 to 008 come from a second, focused audit (below). 006 touches only the Starter recipe; 007 adds `CampaignService.start`, one procedure and the campaign page; 008 changes the recipe schema and the campaign chat. 006 and 008 both edit `packages/contracts/src/recipes.ts` (different parts), so merge one before starting the other and rebase.
 
 - No plan depends on another. 001, 003 and 004 each touch different files in `apps/brain`; 002 touches only manifests and the lockfile and is best merged alone (it changes `pnpm-lock.yaml`); 005 touches docs, the root `package.json` and one line of `.plan/dashboard-analytics.md`.
 - If 002 and another plan are executed at the same time, run 002 first and rebase: the lockfile conflicts are noisy.
@@ -62,3 +67,47 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 - The pinned authentik version's `email_verified` behaviour; RabbitMQ message confidentiality (commands carry secrets in-cluster).
 - Moderate and low dependency advisories (16 of 19 reported; only the 3 high ones are planned).
 - The `deploy/` manifests and the GitHub workflow caching.
+
+---
+
+# Second audit: workflow and campaign runs, simplified to "find new leads and connect with them" (2026-11-16)
+
+Written against commit `3ce071d` (branch `fix/trpc-internal-errors`, PR #229 open). Focus audit, run non-interactively: recon of the Starter recipe, the engine's step loop and chain, the campaign service, the campaign chat and the campaign page, read by the advisor directly (no subagents). Plans were written for the three findings with the most leverage and are listed in the table above.
+
+**Not measured:** the advisor's cluster login had expired, so no run, invite or supply number was re-read from staging. Every number below is quoted from `MEMORY.md` or `.plan/` files and is marked as such. Re-measure before trusting a threshold.
+
+## Findings (vetted: every cited location was opened and read)
+
+| # | Finding | Category | Effort | Confidence | Evidence | Plan |
+|---|---------|----------|--------|------------|----------|------|
+| 1 | Invite starts only when Discover finishes with at least one person; a no-find day or a failed Discover sends no invites although earlier leads wait and accounts have room. The chain plan itself accepts this. Staging supply per day was 22, 18, 11, 38, 2, 0 (quoted from `MEMORY.md`) and the 2026-11-16 Discover run failed | bug (product gap) | S | HIGH on the mechanism, MED on the size | `engine.ts:454-460`, `workflowTrigger.service.ts:116`, `recipes.ts:299`, `.plan/campaign-finds-nobody.md` ("A day with no new people does not start Invite") | 006 |
+| 2 | A new campaign sends nothing until the owner switches on each workflow and then, on the canvas, switches "Act for real" on in each Send invite block (two blocks when a note is set); there is no single start | direction (activation) | M | HIGH | `campaignStarter.service.ts` (all off), `actFrame.ts:67`, `block-settings.tsx:113,254`, `go-live.tsx`, `Campaign.tsx:401` | 007 |
+| 3 | The chat asks thirteen questions and builds six workflows; the first message is required although connecting is the goal, and four questions are about steps after the connection | direction (simplify) | M | HIGH | `steps.ts` (`STEPS`, `message.required`), `recipes.ts` (`outreachAnswersSchema.message.min(1)`, six-entry return) | 008 |
+
+## Findings audited and vetted but not planned (ask to plan any of them)
+
+| # | Finding | Category | Effort | Confidence | Evidence |
+|---|---------|----------|--------|------------|----------|
+| J | `output.markPosts` marks no post "done" on most runs (`MEMORY.md` says 0 on every run). The executor requires every other step to be `DONE`, while the engine itself treats `PARTIAL` and `SKIPPED` as passed, so one partial profile read or one block nothing reached stops the mark. Impact is small: Discover reads posts of the last 24 hours once a day, so the same post rarely returns; the visible cost is the Posts page "to work" count staying high. Cause not proven (no run data) | bug | S | MED | `executors.ts:864-890`, `engine.ts:54-55, 528-560`, `recipes.ts` (`postedWithin: '24h'`) |
+| K | Invite reads the 100 newest waiting people, then the Fit block ranks them by score. When more than 100 wait, the best-scored of the older ones are never seen. Not a problem at today's measured supply (capacity about 30 a day) but it appears if the owner raises posts a day | tech debt | S | MED | `recipes.ts` (`input.profiles` `howMany: 100`, `order: 'newest'`), `workflow.ts:920` (an `order: 'score'` exists), `process.room` default `orderBy: 'score'` |
+| L | The Starter never rewrites a saved graph, so campaigns made before plan 006 keep waiting on Discover. A manual step (add a Schedule trigger to the Invite workflow) is in plan 006's maintenance notes; a one-off data migration was not planned because it edits saved graphs of live campaigns | tech debt | M | HIGH | `campaignStarter.service.ts` header comment |
+| M | The note flow of the invite task is partly unverified on the real page (LinkedIn now draws "Add a note" as a link); a note invite may answer `NOT_SENT` and the best-scored leads carry the note. Needs a real-page check, not a plan | bug (unverified) | M | LOW | `MEMORY.md` (invites slowed entry, "Still open: the note flow"), `apps/spider/src/linkedin/markup.ts:201-213` |
+
+## Direction (options for the maintainer, not ranked against the bugs)
+
+1. **A second source of leads: search people by who they are.** The chat already asks for job titles, places and sizes, but the only finder in the campaign is "people who commented on or reacted to a post about your problem", which needs the owner to guess phrases and whose daily supply swung from 38 to 0. The catalog has `collect.searchPeople` (about $0.004 per person plus $0.10 per 25, i.e. about $0.008 a person; `workflow.ts:3483`). The posts finder measured about $0.026 per invite-eligible lead (quoted: $3.22 for 124 qualified or maybe over 56 posts). The fit rate of a title search is unknown. Trade-off: steady supply and no phrases question versus leads who showed no interest signal. Start as a spike: run one title search on a staging campaign and compare the qualified share.
+2. **Tell the owner when finding or connecting stalls.** The invite slowdown on staging was found by hand (`MEMORY.md`, 2026-11-15). A "no new leads in N days" or "accounts have room but sent nothing today" line in the dashboard's Needs attention tab would catch it. It needs the same read as plan 006's backlog count (`insights.capacity.waiting`).
+3. **Add the follow-up steps to a connect-only campaign later** (an "Add follow-up steps" action) once plan 008 lands; see its maintenance notes.
+
+## Findings considered and rejected (this audit)
+
+- "Replace the six workflows with one": the engine runs one workflow at a time per workflow and chains by design; a single graph would make pause, run history and limits coarser. Two workflows (find, connect) is the right split.
+- "Drop Discover's profile read": it is what makes the Score meaningful (`.plan/campaign-finds-nobody.md`, 173 in and 2 out before it); keep.
+- "Start Discover and Invite on one clock only": rejected for the chain's benefit on a good day; plan 006 keeps the chain and adds the clock.
+
+## What was not audited (this audit)
+
+- Any live number: staging was unreachable (cluster login expired); no run, cost or acceptance figure was re-measured.
+- The spider's LinkedIn page logic (selectors and the note flow), the cost of the paid data reads beyond the figures quoted, and the people index's other states.
+- The run page, the cron monitor and the dashboard's run tables for clarity (read only where they touched the plans above).
+- Whether a connect-only campaign reads well on the campaign page and the list (plan 008 asks the executor to check it).

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { type OutreachAnswers, buildOutreach, capacityOf, outreachAnswersSchema } from './recipes'
-import { type Graph, validateGraph } from './workflow'
+import { type Graph, scheduleOf, validateGraph } from './workflow'
 import { blockOf } from './workflow'
 
 const answers: OutreachAnswers = {
@@ -48,17 +48,31 @@ describe('the Discover stage', () => {
 })
 
 describe('the Invite trigger', () => {
-   it('should start on Discover, not on a clock, when Discover is given, in both branches', () => {
+   it('should start on Discover and on a daily clock four hours later, in both branches', () => {
       for (const extra of [{}, { note: '' }]) {
          const invite = build(extra, 'discover-1').workflows[1]?.graph
          const triggers = invite?.nodes.filter(({ type }) => type.startsWith('trigger.')) ?? []
 
          expect(triggers).toEqual([
             expect.objectContaining({
+               id: 'trigger',
                type: 'trigger.workflow',
                config: { workflowId: 'discover-1' },
             }),
+            expect.objectContaining({
+               id: 'clock',
+               type: 'trigger.schedule',
+               config: {
+                  every: 'day',
+                  at: '13:00',
+                  timeZone: 'UTC',
+               },
+            }),
          ])
+         expect(linked(invite, 'trigger', 'people')).toBe(true)
+         expect(linked(invite, 'clock', 'people')).toBe(true)
+         expect(invite && validateGraph(invite).filter(({ level }) => level === 'error')).toEqual([])
+         expect(invite && scheduleOf(invite)).not.toBeNull()
          expect(invite?.nodes.find(({ id }) => id === 'people')?.config).toMatchObject({
             howMany: 100,
             added: 'any',
