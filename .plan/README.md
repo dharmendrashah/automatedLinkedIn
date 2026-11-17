@@ -20,7 +20,7 @@ Note on location: advisor plans live in `.plan/`, the repo's one folder for plan
 | 008  | A campaign can be just "find leads and connect": two workflows, nine questions | P2 | M | — (pairs with 006 and 007) | DONE (PR for `feat/find-and-connect`) |
 | 009  | The invite task scrolls to More, never calls an undrawn page "no Connect", and names a run that did nothing correctly | P1 | S | PR #232 | DONE |
 | 010  | Rest an account's invites when six profiles in a row show "no Connect" | P1 | M | PR #232 | DONE |
-| 011  | A command that runs the invite readers over kept pages | P2 | S | — | TODO |
+| 011  | A command that runs the invite readers over kept pages | P2 | S | — | DONE |
 | 012  | One table-driven test that runs the invite task over every profile shape of every degree | P2 | S | PR #232 (best after 009) | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
