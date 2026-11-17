@@ -78,6 +78,8 @@ type Page = {
    moreBelowFold?: boolean
    // The profile never draws its buttons (a slow proxy): nothing but a loading line shows.
    neverDraws?: boolean
+   // The top card's More: an icon with only a label (narrow layout) or the word More (wide layout).
+   more?: 'icon' | 'text'
 }
 
 const wordsOf = (html: string, index: number) => {
@@ -141,6 +143,7 @@ const setup = (page: Page = {}) => {
          menuConnect: !noConnect.includes(slug),
          connected: connected.includes(slug),
          links: page.links ?? false,
+         more: page.more ?? 'icon',
       })}${dialogHtml()}</body></html>`
    }
    const send = () => {
@@ -804,6 +807,106 @@ describe('runInvites', () => {
       ).resolves.toMatchObject({ outcome: 'NONE_SENT' })
       expect(calls.some(call => call.startsWith('send'))).toBe(false)
       expect(file().sent.map(({ outcome }) => outcome)).toEqual(['NOT_SENT'])
+   })
+})
+
+describe('every profile shape', () => {
+   const [ada] = ['ada-lovelace']
+   const ONLY = {
+      send: [ADA],
+      withdraw: [],
+   }
+
+   it.each<{ shape: string; page: Page; outcome: string; pressed: boolean; kept?: boolean }>([
+      {
+         shape: '1st degree, icon More, menu offers Remove connection',
+         page: {
+            noConnect: [ada],
+            connected: [ada],
+            more: 'icon',
+         },
+         outcome: 'ALREADY_CONNECTED',
+         pressed: false,
+      },
+      {
+         shape: '1st degree, text More, menu offers Remove connection',
+         page: {
+            noConnect: [ada],
+            connected: [ada],
+            more: 'text',
+         },
+         outcome: 'ALREADY_CONNECTED',
+         pressed: false,
+      },
+      {
+         shape: '2nd degree, Connect on the card, buttons',
+         page: {},
+         outcome: 'SENT',
+         pressed: true,
+      },
+      {
+         shape: '2nd degree, Connect on the card, links layout',
+         page: { links: true },
+         outcome: 'SENT',
+         pressed: true,
+      },
+      {
+         shape: '2nd degree, Connect only in the menu, icon More',
+         page: {
+            menuOnly: [ada],
+            more: 'icon',
+         },
+         outcome: 'SENT',
+         pressed: true,
+      },
+      {
+         shape: '2nd degree, Connect only in the menu, text More, links layout',
+         page: {
+            menuOnly: [ada],
+            links: true,
+            more: 'text',
+         },
+         outcome: 'SENT',
+         pressed: true,
+      },
+      {
+         shape: '3rd degree, Follow and More, Connect in the menu, icon More',
+         page: {
+            menuOnly: [ada],
+            more: 'icon',
+         },
+         outcome: 'SENT',
+         pressed: true,
+      },
+      {
+         shape: '3rd degree, no Connect anywhere',
+         page: { noConnect: [ada] },
+         outcome: 'NO_CONNECT',
+         pressed: false,
+         kept: true,
+      },
+      {
+         shape: 'any degree, invite already pending',
+         page: {
+            pending: [ada],
+            noConnect: [ada],
+         },
+         outcome: 'ALREADY_PENDING',
+         pressed: false,
+      },
+      {
+         shape: 'any degree, Connect pressed but LinkedIn refuses the request',
+         page: { afterSend: 'refused' },
+         outcome: 'REFUSED',
+         pressed: true,
+      },
+   ])('should answer $outcome for $shape', async ({ page, outcome, pressed, kept }) => {
+      const { run, calls, file, attached } = setup(page)
+
+      await run(ONLY)
+      expect(file().sent[0]?.outcome).toBe(outcome)
+      expect(calls.some(call => call === `connect ${ada}`)).toBe(pressed)
+      expect(attached.some(({ name }) => name.startsWith('no-connect'))).toBe(kept ?? false)
    })
 })
 
