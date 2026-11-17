@@ -681,3 +681,119 @@ describe('LinkedInInviteService.dispatchNext with a profile address the invite t
       await db.user.delete({ where: { id: only.id } })
    })
 })
+
+describe('LinkedInInviteService.store no-Connect streak (database)', () => {
+   let owner: string
+   let account: string
+
+   const run = async (outcomes: ('NO_CONNECT' | 'SENT')[]) => {
+      const sessionId = randomUUID()
+
+      await db.spiderSession.create({
+         data: {
+            id: sessionId,
+            userId: owner,
+            linkedInAccountId: account,
+            kind: 'TASK',
+            task: 'linkedin-invite',
+            status: 'SUCCEEDED',
+            requestParams: {},
+         },
+      })
+
+      const rows = await Promise.all(
+         outcomes.map(() =>
+            db.linkedInInvite.create({
+               data: {
+                  userId: owner,
+                  accountId: account,
+                  slug: `streak-${randomUUID()}`,
+                  name: 'Streak',
+                  state: 'SENDING',
+                  sessionId,
+                  plannedAt: new Date(),
+               },
+            })
+         )
+      )
+
+      await LinkedInInviteService.store(sessionId, {
+         contract: 2,
+         captured_at: new Date().toISOString(),
+         sent: rows.map(({ id }, at) => ({
+            id,
+            outcome: outcomes[at] ?? 'NO_CONNECT',
+         })),
+         withdrawn: [],
+      })
+
+      return db.linkedInAccount.findUniqueOrThrow({ where: { id: account } })
+   }
+
+   const setAccount = (data: { noConnectStreak: number; invitesStopUntil?: Date | null }) =>
+      db.linkedInAccount.update({
+         where: { id: account },
+         data: {
+            invitesStopUntil: null,
+            invitesStopReason: null,
+            invitesStoppedAt: null,
+            ...data,
+         },
+      })
+
+   beforeAll(async () => {
+      owner = (await UserService.create({ email: `${randomUUID()}@elitale.com` })).id
+      account = (
+         await db.linkedInAccount.create({
+            data: {
+               userId: owner,
+               email: `${randomUUID()}@example.com`,
+               secret: 'x',
+               secretIv: 'x',
+               secretTag: 'x',
+               status: 'ACTIVE',
+               lastVerifiedAt: new Date(),
+            },
+         })
+      ).id
+   })
+
+   afterAll(async () => {
+      await db.user.deleteMany({ where: { id: owner } })
+   })
+
+   it('should rest the invites for six hours when the sixth no-Connect in a row is stored', async () => {
+      await setAccount({ noConnectStreak: 5 })
+
+      const after = await run(['NO_CONNECT'])
+
+      expect(after.noConnectStreak).toBe(0)
+      expect(after.invitesStoppedAt).not.toBeNull()
+      expect(after.invitesStopReason).toContain('six times')
+      expect((after.invitesStopUntil?.getTime() ?? 0) - Date.now()).toBeGreaterThan(5.9 * 60 * 60 * 1000)
+   })
+
+   it('should keep a streak short of six without stopping, and reset it when an invite is sent', async () => {
+      await setAccount({ noConnectStreak: 0 })
+
+      expect(await run(['NO_CONNECT', 'NO_CONNECT'])).toMatchObject({
+         noConnectStreak: 2,
+         invitesStopUntil: null,
+      })
+      expect(await run(['SENT'])).toMatchObject({
+         noConnectStreak: 0,
+         invitesStopUntil: null,
+      })
+   })
+
+   it('should keep a later stop that is already set', async () => {
+      const later = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+
+      await setAccount({
+         noConnectStreak: 5,
+         invitesStopUntil: later,
+      })
+
+      expect((await run(['NO_CONNECT'])).invitesStopUntil?.getTime()).toBe(later.getTime())
+   })
+})

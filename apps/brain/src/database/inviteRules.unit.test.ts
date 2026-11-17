@@ -10,6 +10,7 @@ import {
    planInvites,
    sendChange,
    skipReasonOf,
+   streakAfter,
    withdrawChange,
 } from './inviteRules'
 
@@ -350,5 +351,43 @@ describe('askable', () => {
             []
          ).sends
       ).toHaveLength(1)
+   })
+})
+
+describe('streakAfter', () => {
+   it('should count no-Connect answers and trip at six, then start again', () => {
+      expect(streakAfter(4, ['NO_CONNECT', 'NO_CONNECT'])).toEqual({
+         streak: 0,
+         trip: true,
+      })
+      expect(streakAfter(2, ['NO_CONNECT'])).toEqual({
+         streak: 3,
+         trip: false,
+      })
+   })
+
+   it('should reset on an answer that proves the page was read, in file order', () => {
+      for (const outcome of ['SENT', 'SENT_WITHOUT_NOTE', 'ALREADY_PENDING', 'ALREADY_CONNECTED'] as const) {
+         expect(streakAfter(5, [outcome])).toEqual({
+            streak: 0,
+            trip: false,
+         })
+      }
+
+      expect(streakAfter(4, ['NO_CONNECT', 'SENT', 'NO_CONNECT'])).toEqual({
+         streak: 1,
+         trip: false,
+      })
+   })
+
+   it('should leave the streak alone for answers that say nothing about the page', () => {
+      expect(streakAfter(3, ['NOT_SENT', 'NOT_AVAILABLE'])).toEqual({
+         streak: 3,
+         trip: false,
+      })
+      expect(streakAfter(0, [])).toEqual({
+         streak: 0,
+         trip: false,
+      })
    })
 })
