@@ -179,7 +179,7 @@ export const runInvites = async (
       return true
    }
 
-   const pressButton = (index: number) => hands.clickNth(INVITE_BUTTON, index, '', false)
+   const pressButton = (index: number, bringIntoView = false) => hands.clickNth(INVITE_BUTTON, index, '', bringIntoView)
 
    const closeDialog = async () => {
       await hands.press('Escape')
@@ -359,7 +359,8 @@ export const runInvites = async (
    // connection's does.
    const openMenu = async (invite: InviteSend) => {
       for (const more of moreButtons(await hands.html())) {
-         if (!(await pressButton(more))) {
+         // The top card's More can sit below the bottom of the window (a long headline, a banner), so it is brought into view first.
+         if (!(await pressButton(more, true))) {
             continue
          }
 
@@ -448,6 +449,14 @@ export const runInvites = async (
          invite.name
       )
       const member = actions.memberId ? { memberId: actions.memberId } : {}
+
+      // A page that did not draw says nothing about Connect: it is not sent (brain tries it again) and the page is kept.
+      if (!actions.drawn) {
+         log('The profile did not draw its buttons')
+         await keepPage('undrawn')
+
+         return
+      }
 
       if (actions.pending) {
          sent[index] = {

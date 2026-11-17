@@ -1,4 +1,4 @@
-# Open the profile's More menu for real, and call a run that sent nothing "No invite sent"
+# Open the profile's More menu for real, and call a run that sent nothing "Nothing sent or withdrawn"
 
 - Status: in progress <!-- draft | locked | in progress | done -->
 - Created: 2026-11-17
@@ -23,7 +23,7 @@ Session `1a512f2c-49f7-4f9e-802a-b86f50311661` (account tripti.verma, build `ebc
 Confirmed (stated by the owner, or settled by reading the code):
 
 - When the top card shows no Connect, the task opens the profile's More menu and presses Connect there if it is offered, as the existing code already intends.
-- A run in which no invite was sent and no withdrawal was done, and nothing was settled without a press (already pending or already connected), is not "Partly done". It reads as a failure.
+- A run in which no invite was sent and no withdrawal was done, and nothing was settled without a press (already pending or already connected), is not "Partly done". It reads as a failure ("Nothing sent or withdrawn").
 - A person answered "no Connect" because the menu was never opened must be asked again once.
 
 Open questions (must be empty before locking):
@@ -39,7 +39,7 @@ Open questions (must be empty before locking):
 
 - [x] 1. Tests first. In `inviteReader.unit.test.ts`: `moreButtons` finds the real button shape (`aria-label="More"`, no text, `aria-expanded`), still finds the old shape, and leaves out a More inside `nav` or `header` (the site's top bar). Update `inviteFixture.ts` to the real shape for the top card and keep the nav one as the named distractor. In the task test: a profile whose only Connect is in the menu is pressed; a profile whose menu has no Connect ends `NO_CONNECT` with the page kept.
 - [x] 2. `moreButtons`: accept a `button[aria-expanded]` that has a `componentkey` and whose name is "More" (visible text or `aria-label`, trimmed, case-insensitive). The `componentkey` is what leaves out the top bar's More (recorded 2026-11-17), instead of looking at `nav` or `header` ancestors, which the kept pages do not show. Keep the position-among-buttons contract so `pressButton` and `clickNth` keep working; hidden copies (the sticky header's) fail to press and the loop goes on to the next, as today.
-- [x] 3. Verdict: when `sent` and `withdrawn` are not empty and no entry is `SENT`, `SENT_WITHOUT_NOTE`, `WITHDRAWN`, or in `DONE_WITHOUT_PRESS` or `NOT_PENDING`, and nothing is unsure, the outcome is `NONE_SENT`. Add the verdict to the task: label "No invite sent", tone failure; `answerFor` gives status `FAILED`, message "No invite could be sent; each says why.", the same headline report, and no `commitSession`. A mixed run stays `PARTIAL`.
+- [x] 3. Verdict: when `sent` and `withdrawn` are not empty and no entry is `SENT`, `SENT_WITHOUT_NOTE`, `WITHDRAWN`, or in `DONE_WITHOUT_PRESS` or `NOT_PENDING`, and nothing is unsure, the outcome is `NONE_SENT`. Add the verdict to the task: label "Nothing sent or withdrawn", tone failure; `answerFor` gives status `FAILED`, message "No invite could be sent; each says why.", the same headline report, and no `commitSession`. A mixed run stays `PARTIAL`.
 - [x] 4. Brain: add `NONE_SENT` to `HANDS_OVER` in `apps/brain/src/database/linkedInInvite.hooks.ts` so each invite is still settled from the file, and make sure it is not in `NOTHING_PRESSED` (a press was not the problem: a visit was made). Test in `linkedInInvite.hooks.unit.test.ts`.
 - [x] 5. Data: a data-only migration that turns the invite rows with state `FAILED` and the reason "LinkedIn showed no Connect button on the profile. Nothing was sent." created on or after 2026-11-10 into `SKIPPED` with a fixed reason ("Asked again after the More menu fix."), so those people are `NONE` again and the Invite workflow picks them up once. A person who truly has no Connect ends again after one more visit. Do this only after open question 1 is answered yes.
 - [ ] 6. Staging check after deploy (read only): the next invite sessions show clicks on More in the steps, `SENT` rows for people who were `FAILED` before, and `NONE_SENT` (red) for a run of only truly impossible people.
@@ -48,7 +48,7 @@ Open questions (must be empty before locking):
 
 - The menu can be opened on a profile that has no Connect in it: the existing code closes it with Escape and answers `NO_CONNECT` (or `ALREADY_CONNECTED` when it offers Remove connection).
 - Opening More is a click on LinkedIn that changes nothing; the existing "irreversible step" rules apply only to Connect and Send.
-- A more visible fix of the verdict means more red runs: sessions of one person with no Connect become "No invite sent". That is intended, but the dashboard's "Recent runs" and the failure counts will show them; check the account-health rules do not treat a `FAILED` invite session as a sign-in or block problem (only `SIGNED_OUT`, `RESTRICTED`, `BLOCKED`, `LIMIT_REACHED` stop an account's invites today).
+- A more visible fix of the verdict means more red runs: sessions of one person with no Connect become "Nothing sent or withdrawn". That is intended, but the dashboard's "Recent runs" and the failure counts will show them; check the account-health rules do not treat a `FAILED` invite session as a sign-in or block problem (only `SIGNED_OUT`, `RESTRICTED`, `BLOCKED`, `LIMIT_REACHED` stop an account's invites today).
 - Deploy order: spider and brain must go together (brain must know `NONE_SENT` before a spider hands it over); the selective deploy builds both when `apps/spider` and `apps/brain` change.
 - Re-asking 63 people is a burst of profile visits on the owner's accounts; invites are already spread 30 minutes apart and limited per day and week, so they come back through the normal Invite run and its limits.
 - Rollback: revert the commits; the re-asked rows stay `SKIPPED`/`FAILED` as they end.
@@ -63,7 +63,7 @@ Open questions (must be empty before locking):
 
 Built on `fix/invite-open-more-menu`; not deployed. Step 6 is for after the deploy.
 
-- Shipped: `moreButtons` recognises the icon-only and the wide-layout More by `aria-label` or text plus a `componentkey`; the synthetic fixture now defaults to the icon-only shape (and has a `more: 'text'` option); a new verdict `NONE_SENT` ("No invite sent", failure tone, status `FAILED`, message "No invite could be sent; each says why.") in the task, and in brain's `HANDS_OVER` so each invite is still settled from the file; migration `20261117100000_reopen_invites_without_more_menu` turns the "no Connect" FAILED rows since 10 Nov into SKIPPED (askable again) and marks the people index dirty.
+- Shipped: `moreButtons` recognises the icon-only and the wide-layout More by `aria-label` or text plus a `componentkey`; the synthetic fixture now defaults to the icon-only shape (and has a `more: 'text'` option); a new verdict `NONE_SENT` ("Nothing sent or withdrawn", failure tone, status `FAILED`, message "Nothing was sent or withdrawn; each says why.") in the task, and in brain's `HANDS_OVER` so each invite is still settled from the file; migration `20261117100000_reopen_invites_without_more_menu` turns the "no Connect" FAILED rows since 10 Nov into SKIPPED (askable again) and marks the people index dirty.
 - Tests: the real-shape fixture reproduced the bug first (5 failing cases); reader cases for both layouts and the top bar; task cases for `NONE_SENT` versus `PARTIAL`; an answer case; a hook case; a migration case that runs the migration text.
 - The recordings stay local (`.devtools-recordings` is gitignored); no real name or page was added to the repo.
 - Not done: step 6; no run on live LinkedIn.

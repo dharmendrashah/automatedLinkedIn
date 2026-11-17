@@ -74,6 +74,10 @@ type Page = {
    throwAfter?: 'connect' | 'confirm'
    // No copy of the Connect link can be pressed.
    unpressable?: boolean
+   // The top card's More sits below the bottom of the window: it can be pressed only after it was scrolled into view.
+   moreBelowFold?: boolean
+   // The profile never draws its buttons (a slow proxy): nothing but a loading line shows.
+   neverDraws?: boolean
 }
 
 const wordsOf = (html: string, index: number) => {
@@ -121,6 +125,10 @@ const setup = (page: Page = {}) => {
          return `<html><body>${sentMarkup([...rows].slice(0, shown))}${withdrawing ? withdrawDialogMarkup : ''}</body></html>`
       }
 
+      if (page.neverDraws) {
+         return '<html><body><p>Loading</p></body></html>'
+      }
+
       const name = slug === ADA.slug ? ADA.name : GRACE.name
       const shownPending = (afterSend === 'pendingLater' && invited.has(slug)) || pendingNow.has(slug)
 
@@ -161,7 +169,7 @@ const setup = (page: Page = {}) => {
          controls: [],
          blocks: [],
       })),
-      clickNth: vi.fn(async (selector: string, index: number) => {
+      clickNth: vi.fn(async (selector: string, index: number, _avoid?: string, bringIntoView = false) => {
          if (selector === CONNECT_LINK) {
             if (page.unpressable || (page.headerHidden && index === 0)) {
                return false
@@ -214,6 +222,10 @@ const setup = (page: Page = {}) => {
                calls.push('add note')
                dialog = page.upsell ? 'upsell' : 'note'
             } else if (words === 'More|' || words.endsWith('|More')) {
+               if (page.moreBelowFold && !bringIntoView) {
+                  return false
+               }
+
                calls.push('more')
                menuOpen = true
             } else if (words.endsWith('|Send') && !typed) {
@@ -620,6 +632,57 @@ describe('runInvites', () => {
       })
 
       await expect(mixed.run(both)).resolves.toMatchObject({ outcome: 'PARTIAL' })
+   })
+
+   it('should scroll the More button into view, so a top card below the fold still opens its menu', async () => {
+      const { run, file } = setup({
+         menuOnly: ['ada-lovelace'],
+         moreBelowFold: true,
+      })
+
+      await expect(
+         run({
+            send: [ADA],
+            withdraw: [],
+         })
+      ).resolves.toMatchObject({ outcome: 'DONE' })
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['SENT'])
+   })
+
+   it('should not call a profile that never drew no Connect: it is not sent, kept to be read, and tried again later', async () => {
+      const { run, calls, context, attached, file } = setup({ neverDraws: true })
+
+      await expect(
+         run({
+            send: [ADA],
+            withdraw: [],
+         })
+      ).resolves.toMatchObject({ outcome: 'NONE_SENT' })
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['NOT_SENT'])
+      expect(calls.some(call => call === 'more' || call.startsWith('connect'))).toBe(false)
+      expect(context.markAttempt).not.toHaveBeenCalled()
+      expect(attached.some(({ name }) => name.startsWith('undrawn'))).toBe(true)
+   })
+
+   it('should say nothing was sent or withdrawn when a run that only withdraws does nothing', async () => {
+      const { run, file } = setup({ sentRows: [] })
+      const outcome = await run({
+         send: [],
+         withdraw: [
+            {
+               id: ID_A,
+               slug: 'ada-lovelace',
+               name: 'Ada Lovelace',
+            },
+         ],
+      })
+
+      expect(file().withdrawn.map(({ outcome: one }) => one)).toEqual(['NOT_CLICKED'])
+      expect(outcome).toMatchObject({ outcome: 'NONE_SENT' })
+      expect(answerFor(outcome)).toMatchObject({
+         status: 'FAILED',
+         message: 'Nothing was sent or withdrawn; each says why.',
+      })
    })
 
    it('should send nothing when Send stays greyed after the note was typed', async () => {

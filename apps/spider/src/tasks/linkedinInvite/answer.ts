@@ -35,7 +35,7 @@ export const answerFor = (run: InviteRun): TaskOutcome => {
          return {
             status: 'FAILED',
             verdict: 'NONE_SENT',
-            message: 'No invite could be sent; each says why.',
+            message: 'Nothing was sent or withdrawn; each says why.',
             report: counted(run),
          }
       case 'UNKNOWN':
