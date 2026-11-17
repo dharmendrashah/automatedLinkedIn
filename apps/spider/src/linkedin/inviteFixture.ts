@@ -28,6 +28,7 @@ export const profileMarkup = ({
    menuConnect = true,
    connected = false,
    links = false,
+   more = 'icon',
 }: {
    slug?: string
    name?: string
@@ -39,6 +40,9 @@ export const profileMarkup = ({
    connected?: boolean
    // The layout of 2026-11-15 (links) instead of the one before it (buttons).
    links?: boolean
+   // The top card's More: an icon with only an aria-label (the narrower layout, seen on staging 2026-11-16 and the default), or the
+   // button that shows the word More (the wide layout, recorded 2026-11-17). The site's top bar has its own named More.
+   more?: 'icon' | 'text'
 } = {}) => `<main>
    <nav><ul><li><button aria-label="More" aria-expanded="false">More</button></li></ul></nav>
    <header>${ownConnect && !links ? connect(_slug, name, '736436677') : ''}</header>
@@ -47,7 +51,11 @@ export const profileMarkup = ({
       ${ownConnect ? (links ? linkConnect(_slug, name, '736436677') : connect(_slug, name, '736436677')) : ''}
       ${pending ? (links ? linkPending(_slug, name, '736436677') : `<button aria-label="Pending, click to withdraw invitation sent to ${name}">Pending</button>`) : ''}
       <a href="/messaging/compose/?profileUrn=x">Message</a>
-      <button componentkey="top-card-more" aria-expanded="${menuOpen}" type="button"><span>More</span></button>
+      ${
+         more === 'icon'
+            ? `<button componentkey="top-card-more" aria-label="More" aria-expanded="${menuOpen}" type="button"><span><svg/></span></button>`
+            : `<button componentkey="top-card-more" aria-expanded="${menuOpen}" type="button"><span><span>More</span></span></button>`
+      }
    </section>
    <aside>
       <a href="https://www.linkedin.com/in/grace-hopper/">Grace Hopper</a>${connect('grace-hopper', 'Grace Hopper', '1006887718')}

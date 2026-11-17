@@ -31,6 +31,13 @@ export const answerFor = (run: InviteRun): TaskOutcome => {
             commitSession: true,
             report: counted(run),
          }
+      case 'NONE_SENT':
+         return {
+            status: 'FAILED',
+            verdict: 'NONE_SENT',
+            message: 'Nothing was sent or withdrawn; each says why.',
+            report: counted(run),
+         }
       case 'UNKNOWN':
          return {
             status: 'FAILED',

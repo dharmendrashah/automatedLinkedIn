@@ -6,6 +6,7 @@
       "dev": "tsx watch src/server.ts",
       "dev:worker": "tsx watch src/worker.ts",
       "dev:record": "tsc -b && node dist/src/devtools/index.js",
+      "check:invite-pages": "tsc -b && node dist/src/devtools/checkInvitePages.js",
       "build": "tsc -b",
       "start": "node dist/src/server.js",
       "start:worker": "node dist/src/worker.js",

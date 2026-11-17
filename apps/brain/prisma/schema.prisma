@@ -1091,6 +1091,8 @@ model LinkedInAccount {
   invitesStopUntil      DateTime?
   // The account used its free invite notes this month (.plan/invite-note-fallback.md): until then invites go without their note.
   notesOutUntil         DateTime?
+  // No-Connect answers in a row; six rest the invites (plan 010).
+  noConnectStreak       Int                   @default(0)
   nextAcceptReadAt      DateTime?
   // Engaging (reactions and comments) stopped by trouble (.plan/lead-pipeline-p3-engage.md): when, why, and until when; with no end it
   // waits for the next good sign-in after `engageStoppedAt`.

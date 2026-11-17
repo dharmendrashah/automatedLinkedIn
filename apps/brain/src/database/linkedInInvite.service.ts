@@ -8,6 +8,8 @@ import { AccountLimitsService } from './accountLimits.service'
 import {
    COUNTED,
    LIVE,
+   NO_CONNECT_REST_MS,
+   NO_CONNECT_STOP_REASON,
    PENDING,
    STOPPED_RUNS,
    type SkipReason,
@@ -22,6 +24,7 @@ import {
    sendChange,
    sendInput,
    skipReasonOf,
+   streakAfter,
    withdrawChange,
 } from './inviteRules'
 import { pendingLevel } from './limits'
@@ -967,6 +970,43 @@ export class LinkedInInviteService {
                where: { id: { in: [...notesOut] } },
                data: { notesOutUntil: notesBackAt(now) },
             })
+         }
+
+         // A run belongs to one account; its no-Connect answers are counted across runs (plan 010).
+         const [accountOfRun] = [...new Set(rows.map(({ accountId }) => accountId))]
+
+         if (accountOfRun && file.sent.length > 0) {
+            const account = await tx.linkedInAccount.findUnique({
+               where: { id: accountOfRun },
+               select: {
+                  noConnectStreak: true,
+                  invitesStopUntil: true,
+               },
+            })
+
+            if (account) {
+               const { streak, trip } = streakAfter(
+                  account.noConnectStreak,
+                  file.sent.filter(({ id }) => byId.has(id)).map(({ outcome }) => outcome)
+               )
+               const restUntil = new Date(now.getTime() + NO_CONNECT_REST_MS)
+
+               if (trip || streak !== account.noConnectStreak) {
+                  await tx.linkedInAccount.update({
+                     where: { id: accountOfRun },
+                     data: {
+                        noConnectStreak: streak,
+                        ...(trip && !(account.invitesStopUntil && account.invitesStopUntil > restUntil)
+                           ? {
+                                invitesStoppedAt: now,
+                                invitesStopReason: NO_CONNECT_STOP_REASON,
+                                invitesStopUntil: restUntil,
+                             }
+                           : {}),
+                     },
+                  })
+               }
+            }
          }
       })
 

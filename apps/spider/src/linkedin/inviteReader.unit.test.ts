@@ -53,6 +53,23 @@ describe('parseProfileActions', () => {
       })
 
       expect(moreButtons(closed)).toHaveLength(1)
+      // The wide layout shows the word, the narrow one only the label; the top bar's named More with no component key is neither.
+      expect(
+         moreButtons(
+            profileMarkup({
+               own: false,
+               more: 'text',
+            })
+         )
+      ).toHaveLength(1)
+      expect(
+         moreButtons(
+            profileMarkup({
+               own: false,
+               more: 'icon',
+            })
+         )
+      ).toHaveLength(1)
       expect(parseProfileActions(open, 'ada-lovelace', 'Ada Lovelace')).toMatchObject({
          connects: [],
          menu: [2],

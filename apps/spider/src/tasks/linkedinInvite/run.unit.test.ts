@@ -74,6 +74,12 @@ type Page = {
    throwAfter?: 'connect' | 'confirm'
    // No copy of the Connect link can be pressed.
    unpressable?: boolean
+   // The top card's More sits below the bottom of the window: it can be pressed only after it was scrolled into view.
+   moreBelowFold?: boolean
+   // The profile never draws its buttons (a slow proxy): nothing but a loading line shows.
+   neverDraws?: boolean
+   // The top card's More: an icon with only a label (narrow layout) or the word More (wide layout).
+   more?: 'icon' | 'text'
 }
 
 const wordsOf = (html: string, index: number) => {
@@ -121,6 +127,10 @@ const setup = (page: Page = {}) => {
          return `<html><body>${sentMarkup([...rows].slice(0, shown))}${withdrawing ? withdrawDialogMarkup : ''}</body></html>`
       }
 
+      if (page.neverDraws) {
+         return '<html><body><p>Loading</p></body></html>'
+      }
+
       const name = slug === ADA.slug ? ADA.name : GRACE.name
       const shownPending = (afterSend === 'pendingLater' && invited.has(slug)) || pendingNow.has(slug)
 
@@ -133,6 +143,7 @@ const setup = (page: Page = {}) => {
          menuConnect: !noConnect.includes(slug),
          connected: connected.includes(slug),
          links: page.links ?? false,
+         more: page.more ?? 'icon',
       })}${dialogHtml()}</body></html>`
    }
    const send = () => {
@@ -161,7 +172,7 @@ const setup = (page: Page = {}) => {
          controls: [],
          blocks: [],
       })),
-      clickNth: vi.fn(async (selector: string, index: number) => {
+      clickNth: vi.fn(async (selector: string, index: number, _avoid?: string, bringIntoView = false) => {
          if (selector === CONNECT_LINK) {
             if (page.unpressable || (page.headerHidden && index === 0)) {
                return false
@@ -213,7 +224,11 @@ const setup = (page: Page = {}) => {
             if (words.endsWith('|Add a note')) {
                calls.push('add note')
                dialog = page.upsell ? 'upsell' : 'note'
-            } else if (words.endsWith('|More')) {
+            } else if (words === 'More|' || words.endsWith('|More')) {
+               if (page.moreBelowFold && !bringIntoView) {
+                  return false
+               }
+
                calls.push('more')
                menuOpen = true
             } else if (words.endsWith('|Send') && !typed) {
@@ -500,7 +515,7 @@ describe('runInvites', () => {
    it('should take a refusal of the invite request as not sent and press nothing more', async () => {
       const { run, context, file } = setup({ afterSend: 'refused' })
 
-      await expect(run(both)).resolves.toMatchObject({ outcome: 'PARTIAL' })
+      await expect(run(both)).resolves.toMatchObject({ outcome: 'NONE_SENT' })
       expect(context.visit).toHaveBeenCalledTimes(1)
       expect(file().sent.map(({ outcome }) => outcome)).toEqual(['REFUSED', 'NOT_SENT'])
    })
@@ -601,6 +616,112 @@ describe('runInvites', () => {
       expect(file().sent[0]?.outcome).toBe('NO_CONNECT')
       expect(calls).toContain('more')
       expect(attached.some(({ name }) => name.startsWith('no-connect'))).toBe(true)
+   })
+
+   it('should say no invite was sent when every profile had no Connect, and keep Partly done for a run that settled some', async () => {
+      const none = setup({ noConnect: ['ada-lovelace'] })
+
+      await expect(
+         none.run({
+            send: [ADA],
+            withdraw: [],
+         })
+      ).resolves.toMatchObject({ outcome: 'NONE_SENT' })
+      expect(none.file().sent.map(({ outcome }) => outcome)).toEqual(['NO_CONNECT'])
+
+      const mixed = setup({
+         noConnect: ['ada-lovelace'],
+         pending: ['grace-hopper'],
+      })
+
+      await expect(mixed.run(both)).resolves.toMatchObject({ outcome: 'PARTIAL' })
+   })
+
+   it('should scroll the More button into view, so a top card below the fold still opens its menu', async () => {
+      const { run, file } = setup({
+         menuOnly: ['ada-lovelace'],
+         moreBelowFold: true,
+      })
+
+      await expect(
+         run({
+            send: [ADA],
+            withdraw: [],
+         })
+      ).resolves.toMatchObject({ outcome: 'DONE' })
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['SENT'])
+   })
+
+   it('should not call a profile that never drew no Connect: it is not sent, kept to be read, and tried again later', async () => {
+      const { run, calls, context, attached, file } = setup({ neverDraws: true })
+
+      await expect(
+         run({
+            send: [ADA],
+            withdraw: [],
+         })
+      ).resolves.toMatchObject({ outcome: 'NONE_SENT' })
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['NOT_SENT'])
+      expect(calls.some(call => call === 'more' || call.startsWith('connect'))).toBe(false)
+      expect(context.markAttempt).not.toHaveBeenCalled()
+      expect(attached.some(({ name }) => name.startsWith('undrawn'))).toBe(true)
+   })
+
+   it('should scroll the More button into view in the other layouts too, and still send', async () => {
+      for (const page of [
+         {
+            more: 'text',
+            links: false,
+         },
+         {
+            more: 'icon',
+            links: true,
+         },
+      ] as const) {
+         const { run, calls, file } = setup({
+            ...page,
+            menuOnly: ['ada-lovelace'],
+            moreBelowFold: true,
+         })
+
+         await run({
+            send: [ADA],
+            withdraw: [],
+         })
+         expect(calls).toContain('more')
+         expect(file().sent.map(({ outcome }) => outcome)).toEqual(['SENT'])
+      }
+   })
+
+   it('should answer every person of a run NOT_SENT, press nothing and keep each page, when no profile draws', async () => {
+      const { run, calls, context, attached, file } = setup({ neverDraws: true })
+
+      await expect(run(both)).resolves.toMatchObject({ outcome: 'NONE_SENT' })
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['NOT_SENT', 'NOT_SENT'])
+      expect(calls.some(call => call === 'more' || call.startsWith('connect'))).toBe(false)
+      expect(context.markAttempt).not.toHaveBeenCalled()
+      expect(attached.filter(({ name }) => name.startsWith('undrawn'))).toHaveLength(2)
+   })
+
+   it('should say nothing was sent or withdrawn when a run that only withdraws does nothing', async () => {
+      const { run, file } = setup({ sentRows: [] })
+      const outcome = await run({
+         send: [],
+         withdraw: [
+            {
+               id: ID_A,
+               slug: 'ada-lovelace',
+               name: 'Ada Lovelace',
+            },
+         ],
+      })
+
+      expect(file().withdrawn.map(({ outcome: one }) => one)).toEqual(['NOT_CLICKED'])
+      expect(outcome).toMatchObject({ outcome: 'NONE_SENT' })
+      expect(answerFor(outcome)).toMatchObject({
+         status: 'FAILED',
+         message: 'Nothing was sent or withdrawn; each says why.',
+      })
    })
 
    it('should send nothing when Send stays greyed after the note was typed', async () => {
@@ -719,9 +840,109 @@ describe('runInvites', () => {
             send: [ADA],
             withdraw: [],
          })
-      ).resolves.toMatchObject({ outcome: 'PARTIAL' })
+      ).resolves.toMatchObject({ outcome: 'NONE_SENT' })
       expect(calls.some(call => call.startsWith('send'))).toBe(false)
       expect(file().sent.map(({ outcome }) => outcome)).toEqual(['NOT_SENT'])
+   })
+})
+
+describe('every profile shape', () => {
+   const [ada] = ['ada-lovelace']
+   const ONLY = {
+      send: [ADA],
+      withdraw: [],
+   }
+
+   it.each<{ shape: string; page: Page; outcome: string; pressed: boolean; kept?: boolean }>([
+      {
+         shape: '1st degree, icon More, menu offers Remove connection',
+         page: {
+            noConnect: [ada],
+            connected: [ada],
+            more: 'icon',
+         },
+         outcome: 'ALREADY_CONNECTED',
+         pressed: false,
+      },
+      {
+         shape: '1st degree, text More, menu offers Remove connection',
+         page: {
+            noConnect: [ada],
+            connected: [ada],
+            more: 'text',
+         },
+         outcome: 'ALREADY_CONNECTED',
+         pressed: false,
+      },
+      {
+         shape: '2nd degree, Connect on the card, buttons',
+         page: {},
+         outcome: 'SENT',
+         pressed: true,
+      },
+      {
+         shape: '2nd degree, Connect on the card, links layout',
+         page: { links: true },
+         outcome: 'SENT',
+         pressed: true,
+      },
+      {
+         shape: '2nd degree, Connect only in the menu, icon More',
+         page: {
+            menuOnly: [ada],
+            more: 'icon',
+         },
+         outcome: 'SENT',
+         pressed: true,
+      },
+      {
+         shape: '2nd degree, Connect only in the menu, text More, links layout',
+         page: {
+            menuOnly: [ada],
+            links: true,
+            more: 'text',
+         },
+         outcome: 'SENT',
+         pressed: true,
+      },
+      {
+         shape: '3rd degree, Follow and More, Connect in the menu, icon More',
+         page: {
+            menuOnly: [ada],
+            more: 'icon',
+         },
+         outcome: 'SENT',
+         pressed: true,
+      },
+      {
+         shape: '3rd degree, no Connect anywhere',
+         page: { noConnect: [ada] },
+         outcome: 'NO_CONNECT',
+         pressed: false,
+         kept: true,
+      },
+      {
+         shape: 'any degree, invite already pending',
+         page: {
+            pending: [ada],
+            noConnect: [ada],
+         },
+         outcome: 'ALREADY_PENDING',
+         pressed: false,
+      },
+      {
+         shape: 'any degree, Connect pressed but LinkedIn refuses the request',
+         page: { afterSend: 'refused' },
+         outcome: 'REFUSED',
+         pressed: true,
+      },
+   ])('should answer $outcome for $shape', async ({ page, outcome, pressed, kept }) => {
+      const { run, calls, file, attached } = setup(page)
+
+      await run(ONLY)
+      expect(file().sent[0]?.outcome).toBe(outcome)
+      expect(calls.some(call => call === `connect ${ada}`)).toBe(pressed)
+      expect(attached.some(({ name }) => name.startsWith('no-connect'))).toBe(kept ?? false)
    })
 })
 

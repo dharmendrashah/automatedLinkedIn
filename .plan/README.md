@@ -18,6 +18,10 @@ Note on location: advisor plans live in `.plan/`, the repo's one folder for plan
 | 006  | A campaign's Invite workflow also runs on a daily clock, so waiting leads are invited on days Discover finds nobody or fails | P1 | S | — | DONE (PR for `feat/find-and-connect`) |
 | 007  | One "Start" action turns on finding and connecting for a campaign | P1 | M | — (best after 006) | DONE (PR for `feat/find-and-connect`) |
 | 008  | A campaign can be just "find leads and connect": two workflows, nine questions | P2 | M | — (pairs with 006 and 007) | DONE (PR for `feat/find-and-connect`) |
+| 009  | The invite task scrolls to More, never calls an undrawn page "no Connect", and names a run that did nothing correctly | P1 | S | PR #232 | DONE |
+| 010  | Rest an account's invites when six profiles in a row show "no Connect" | P1 | M | PR #232 | DONE |
+| 011  | A command that runs the invite readers over kept pages | P2 | S | — | DONE |
+| 012  | One table-driven test that runs the invite task over every profile shape of every degree | P2 | S | PR #232 (best after 009) | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
@@ -111,3 +115,45 @@ Written against commit `3ce071d` (branch `fix/trpc-internal-errors`, PR #229 ope
 - The spider's LinkedIn page logic (selectors and the note flow), the cost of the paid data reads beyond the figures quoted, and the people index's other states.
 - The run page, the cron monitor and the dashboard's run tables for clarity (read only where they touched the plans above).
 - Whether a connect-only campaign reads well on the campaign page and the list (plan 008 asks the executor to check it).
+
+---
+
+# Third audit: the invite flow for 1st, 2nd and 3rd degree profiles, branch `fix/invite-open-more-menu` (PR #232), 2026-11-17
+
+Written against commit `3d9feaf`. Branch-mode audit with a focus on corner cases (the owner asked for loopholes in the plan and for invites that work for every degree at all times). Read directly, no subagents; staging was read with queries that change nothing, and the kept pages of 7 runs were run through the branch's readers. Plans 009 to 012 were written for the findings with the most leverage; nothing was executed and no source file was changed.
+
+**Evidence gathered.** The branch's `moreButtons` finds the More button on 19 of 19 kept "no Connect" pages from 11 to 16 Nov (3 buttons each, 0 before the fix), and all 19 pages draw (`drawn` true), so the 63 lost people are explained by the More button, not by an undrawn page. "No Connect" rows exist only from 10 Nov (10, 25, 15, 13 a day), so the migration's cutoff date is right. Invites sent a day on staging: 16, 0, 0, 1, 0, 21, 2 (10 to 16 Nov); the rest of the days are lost to other causes (the wrong "already connected" guess, four LinkedIn blocks on 15 Nov, a weekly limit on one account, two accounts that need a sign-in, one blocked), which is a capacity question separate from the layout.
+
+## Findings (vetted: every cited location was opened and read)
+
+| # | Finding | Tag | Category | Effort | Confidence | Evidence | Plan |
+|---|---------|-----|----------|--------|------------|----------|------|
+| 1 | The More press does not scroll the button into view. A top card pushed below the 720 px window by a long headline or a banner has no clickable spot, so the loop ends in "no Connect" (final) | introduced | bug | S | MED (code read; no tall top card recorded) | `run.ts:182` (`bringIntoView` false), `camoufoxDriver.ts:646-686` | 009 |
+| 2 | A profile that never draws within the wait is answered "no Connect" (final) instead of `NOT_SENT` (retried three times): `sendOne` never looks at `drawn` after the wait | pre-existing | bug | S | MED (code read; none seen yet) | `run.ts:445-448`, `inviteRules.ts:336-355` | 009 |
+| 3 | The new verdict reads "No invite sent" for a run that only withdraws and fails | introduced | bug | S | HIGH | `run.ts:702-735`, `index.ts`, `answer.ts` | 009 |
+| 4 | Nothing detects a layout change: six days, 63 people, no alert; each answer is final and the only trace is the Sessions list | pre-existing | reliability | M | HIGH | `inviteRules.ts:296`, `linkedInInvite.hooks.ts:44-70`, `dashboardRules.ts` (its "run failed" alert is for workflow runs, not sessions) | 010 |
+| 5 | Diagnosing a layout change needed a hand-written script over downloaded pages | pre-existing | dx | S | HIGH | this audit | 011 |
+| 6 | Every profile shape is covered by a one-off case written after an incident; there is no table of shapes, so a missing shape (the icon-only More) went unseen | pre-existing | tests | S | HIGH | `run.unit.test.ts`, `inviteFixture.ts` | 012 |
+
+## Loopholes in `.plan/invite-open-more-menu.md` (what it did not cover)
+
+- It fixes the More button but not the three ways a More press can still miss (findings 1 and 2) and says nothing about a page that does not draw.
+- Its verdict (finding 3) was written for the case that hurt, not for a withdraw-only run.
+- It repairs the past (the migration) and adds nothing that notices the next change (findings 4 and 5), although the layout changed three times in three weeks.
+- Rollout order: brain migrates before the new spider runs, so the old spider can still write "no Connect" rows after the migration. After both are deployed, run the migration's `UPDATE` once more by hand (it is safe to repeat), or the people it ended in that window stay ended.
+- It trusts `componentkey` to tell the profile's More from the top bar's. That is an implementation detail of LinkedIn's page; plans 010 and 011 are the safety net, not a fallback in the reader.
+- Degrees: the 1st degree answer ("Remove connection" in the menu) was never recorded; the 2nd and 3rd are covered by recordings. Ask the owner for one 1st degree recording with the menu open.
+
+## Findings audited and vetted but not planned (ask to plan any of them)
+
+| # | Finding | Category | Effort | Confidence | Why not planned |
+|---|---------|----------|--------|------------|-----------------|
+| K | "No Connect" could get a second look after a week instead of ending the person at once | product | M | MED | A future-dated queued row may shift how the planner spaces other invites (`usage.planned`, `linkedInInvite.service.ts:1066-1088`); check that first. Plan 010 limits the damage in the meantime |
+| L | A renamed profile address (LinkedIn redirects to the new one) makes the own-Connect match by address fail; a button-type Connect is matched by the stored name, which can differ from the profile's (a nickname, a credential) | bug | S | LOW (no case seen; all 19 pages have no own Connect at all) | `parseProfileActions` could compare against the landed address and the page's own name; worth doing when one is seen |
+| M | The words "More", "Remove connection", "Pending" and "Connect" are English; the device locale is en-US but a LinkedIn account's language is its own setting | risk | M | LOW | The product assumes English accounts today (`MEMORY.md` notes it); say so on the Accounts page if a non-English account is ever added |
+| N | When there is no Connect, up to three More buttons are tried, each with a menu open and close | risk | S | LOW | The hidden duplicates have no clickable spot, so usually one menu opens; revisit if the pace looks robotic |
+| O | Sessions that end "no Connect" cost a profile visit with nothing to show, and visits are what LinkedIn blocked four times on 15 Nov | risk | M | MED | Plan 010 is the first step; a per-day visit budget is a separate design |
+
+## Direction (options for the maintainer)
+
+1. **A daily canary**: one read-only visit (no press) to a reference profile of each degree from the owner's own accounts, parsed with the current readers, so a layout change alerts before a real invite is lost. It needs a list of reference profiles and a place to show the result; plan 011's command is its offline half.

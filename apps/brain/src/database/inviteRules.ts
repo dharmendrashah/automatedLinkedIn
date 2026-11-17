@@ -382,3 +382,35 @@ export const withdrawChange = (outcome: InviteWithdrawOutcome, tries: number, no
               }
    }
 }
+
+// Six no-Connect answers with no sent or settled invite between them look like a page the task cannot read, so the account rests.
+export const NO_CONNECT_STREAK = 6
+export const NO_CONNECT_REST_MS = 6 * 60 * 60 * 1000
+export const NO_CONNECT_STOP_REASON =
+   'LinkedIn showed no Connect button six times in a row, so invites rest for 6 hours. The page may have changed.'
+
+const PAGE_READ: InviteSendOutcome[] = ['SENT', 'SENT_WITHOUT_NOTE', 'ALREADY_PENDING', 'ALREADY_CONNECTED']
+
+// The no-Connect streak of an account after a run's answers, taken in file order; it starts again at 0 after it trips.
+export const streakAfter = (streak: number, outcomes: InviteSendOutcome[]) => {
+   let count = streak
+   let trip = false
+
+   for (const outcome of outcomes) {
+      if (outcome === 'NO_CONNECT') {
+         count += 1
+
+         if (count >= NO_CONNECT_STREAK) {
+            trip = true
+            count = 0
+         }
+      } else if (PAGE_READ.includes(outcome)) {
+         count = 0
+      }
+   }
+
+   return {
+      streak: count,
+      trip,
+   }
+}

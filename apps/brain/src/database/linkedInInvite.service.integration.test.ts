@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import { type InviteSendOutcome, type InvitesFile } from '@automatedLinkedIn/contracts'
+
 import { limitOf } from './limits'
 import { LinkedInInviteService } from './linkedInInvite.service'
 import { PeopleService } from './people.service'
@@ -679,5 +681,184 @@ describe('LinkedInInviteService.dispatchNext with a profile address the invite t
       expect(await db.linkedInInvite.findUniqueOrThrow({ where: { id: bad.id } })).toMatchObject({ state: 'FAILED' })
       request.mockRestore()
       await db.user.delete({ where: { id: only.id } })
+   })
+})
+
+describe('LinkedInInviteService.store no-Connect streak (database)', () => {
+   let owner: string
+   let account: string
+
+   const runFile = async (outcomes: InviteSendOutcome[]) => {
+      const sessionId = randomUUID()
+
+      await db.spiderSession.create({
+         data: {
+            id: sessionId,
+            userId: owner,
+            linkedInAccountId: account,
+            kind: 'TASK',
+            task: 'linkedin-invite',
+            status: 'SUCCEEDED',
+            requestParams: {},
+         },
+      })
+
+      const rows = await Promise.all(
+         outcomes.map(() =>
+            db.linkedInInvite.create({
+               data: {
+                  userId: owner,
+                  accountId: account,
+                  slug: `streak-${randomUUID()}`,
+                  name: 'Streak',
+                  state: 'SENDING',
+                  sessionId,
+                  plannedAt: new Date(),
+               },
+            })
+         )
+      )
+      const file = {
+         contract: 2,
+         captured_at: new Date().toISOString(),
+         sent: rows.map(({ id }, at) => ({
+            id,
+            outcome: outcomes[at] ?? 'NO_CONNECT',
+         })),
+         withdrawn: [],
+      } satisfies InvitesFile
+
+      await LinkedInInviteService.store(sessionId, file)
+
+      return {
+         sessionId,
+         file,
+      }
+   }
+
+   const run = async (outcomes: InviteSendOutcome[]) => {
+      await runFile(outcomes)
+
+      return db.linkedInAccount.findUniqueOrThrow({ where: { id: account } })
+   }
+
+   const setAccount = (data: { noConnectStreak: number; invitesStopUntil?: Date | null }) =>
+      db.linkedInAccount.update({
+         where: { id: account },
+         data: {
+            invitesStopUntil: null,
+            invitesStopReason: null,
+            invitesStoppedAt: null,
+            ...data,
+         },
+      })
+
+   beforeAll(async () => {
+      owner = (await UserService.create({ email: `${randomUUID()}@elitale.com` })).id
+      account = (
+         await db.linkedInAccount.create({
+            data: {
+               userId: owner,
+               email: `${randomUUID()}@example.com`,
+               secret: 'x',
+               secretIv: 'x',
+               secretTag: 'x',
+               status: 'ACTIVE',
+               lastVerifiedAt: new Date(),
+            },
+         })
+      ).id
+   })
+
+   afterAll(async () => {
+      await db.user.deleteMany({ where: { id: owner } })
+   })
+
+   it('should rest the invites for six hours when the sixth no-Connect in a row is stored', async () => {
+      await setAccount({ noConnectStreak: 5 })
+
+      const after = await run(['NO_CONNECT'])
+
+      expect(after.noConnectStreak).toBe(0)
+      expect(after.invitesStoppedAt).not.toBeNull()
+      expect(after.invitesStopReason).toContain('six times')
+      expect((after.invitesStopUntil?.getTime() ?? 0) - Date.now()).toBeGreaterThan(5.9 * 60 * 60 * 1000)
+   })
+
+   it('should keep a streak short of six without stopping, and reset it when an invite is sent', async () => {
+      await setAccount({ noConnectStreak: 0 })
+
+      expect(await run(['NO_CONNECT', 'NO_CONNECT'])).toMatchObject({
+         noConnectStreak: 2,
+         invitesStopUntil: null,
+      })
+      expect(await run(['SENT'])).toMatchObject({
+         noConnectStreak: 0,
+         invitesStopUntil: null,
+      })
+   })
+
+   it('should leave the streak alone for answers that say nothing about the page, and for an empty file', async () => {
+      await setAccount({ noConnectStreak: 3 })
+
+      expect(await run(['NOT_SENT', 'REFUSED'])).toMatchObject({
+         noConnectStreak: 3,
+         invitesStopUntil: null,
+      })
+
+      const sessionId = randomUUID()
+
+      await db.spiderSession.create({
+         data: {
+            id: sessionId,
+            userId: owner,
+            linkedInAccountId: account,
+            kind: 'TASK',
+            task: 'linkedin-invite',
+            status: 'SUCCEEDED',
+            requestParams: {},
+         },
+      })
+      await LinkedInInviteService.store(sessionId, {
+         contract: 2,
+         captured_at: new Date().toISOString(),
+         sent: [],
+         withdrawn: [],
+      })
+      expect((await db.linkedInAccount.findUniqueOrThrow({ where: { id: account } })).noConnectStreak).toBe(3)
+   })
+
+   it('should not count a run twice when its file is stored again', async () => {
+      await setAccount({ noConnectStreak: 0 })
+
+      const { sessionId, file } = await runFile(['NO_CONNECT', 'NO_CONNECT'])
+
+      expect((await db.linkedInAccount.findUniqueOrThrow({ where: { id: account } })).noConnectStreak).toBe(2)
+      await LinkedInInviteService.store(sessionId, file)
+      expect((await db.linkedInAccount.findUniqueOrThrow({ where: { id: account } })).noConnectStreak).toBe(2)
+   })
+
+   it('should stop asking the account for invites once the streak trips, and ask again when the rest is over', async () => {
+      await setAccount({ noConnectStreak: 5 })
+      await run(['NO_CONNECT'])
+
+      expect(await LinkedInInviteService.dispatchNext(account)).toEqual({
+         asked: false,
+         reason: 'Invites of the account are stopped',
+      })
+      expect(
+         (await LinkedInInviteService.dispatchNext(account, new Date(Date.now() + 7 * 60 * 60 * 1000))).reason
+      ).not.toBe('Invites of the account are stopped')
+   })
+
+   it('should keep a later stop that is already set', async () => {
+      const later = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+
+      await setAccount({
+         noConnectStreak: 5,
+         invitesStopUntil: later,
+      })
+
+      expect((await run(['NO_CONNECT'])).invitesStopUntil?.getTime()).toBe(later.getTime())
    })
 })
