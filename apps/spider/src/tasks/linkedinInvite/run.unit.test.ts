@@ -667,6 +667,42 @@ describe('runInvites', () => {
       expect(attached.some(({ name }) => name.startsWith('undrawn'))).toBe(true)
    })
 
+   it('should scroll the More button into view in the other layouts too, and still send', async () => {
+      for (const page of [
+         {
+            more: 'text',
+            links: false,
+         },
+         {
+            more: 'icon',
+            links: true,
+         },
+      ] as const) {
+         const { run, calls, file } = setup({
+            ...page,
+            menuOnly: ['ada-lovelace'],
+            moreBelowFold: true,
+         })
+
+         await run({
+            send: [ADA],
+            withdraw: [],
+         })
+         expect(calls).toContain('more')
+         expect(file().sent.map(({ outcome }) => outcome)).toEqual(['SENT'])
+      }
+   })
+
+   it('should answer every person of a run NOT_SENT, press nothing and keep each page, when no profile draws', async () => {
+      const { run, calls, context, attached, file } = setup({ neverDraws: true })
+
+      await expect(run(both)).resolves.toMatchObject({ outcome: 'NONE_SENT' })
+      expect(file().sent.map(({ outcome }) => outcome)).toEqual(['NOT_SENT', 'NOT_SENT'])
+      expect(calls.some(call => call === 'more' || call.startsWith('connect'))).toBe(false)
+      expect(context.markAttempt).not.toHaveBeenCalled()
+      expect(attached.filter(({ name }) => name.startsWith('undrawn'))).toHaveLength(2)
+   })
+
    it('should say nothing was sent or withdrawn when a run that only withdraws does nothing', async () => {
       const { run, file } = setup({ sentRows: [] })
       const outcome = await run({

@@ -380,6 +380,24 @@ describe('streakAfter', () => {
       })
    })
 
+   it('should go on counting after a trip inside one run', () => {
+      expect(streakAfter(0, Array<'NO_CONNECT'>(7).fill('NO_CONNECT'))).toEqual({
+         streak: 1,
+         trip: true,
+      })
+      expect(streakAfter(5, ['NO_CONNECT', 'SENT'])).toEqual({
+         streak: 0,
+         trip: true,
+      })
+   })
+
+   it('should not count answers that were never about a profile', () => {
+      expect(streakAfter(2, ['NOT_SENT', 'NO_CONNECT', 'REFUSED', 'NOT_AVAILABLE'])).toEqual({
+         streak: 3,
+         trip: false,
+      })
+   })
+
    it('should leave the streak alone for answers that say nothing about the page', () => {
       expect(streakAfter(3, ['NOT_SENT', 'NOT_AVAILABLE'])).toEqual({
          streak: 3,

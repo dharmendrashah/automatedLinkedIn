@@ -67,6 +67,58 @@ describe('checkPages', () => {
       })
    })
 
+   it('should leave a page without a person when there are more pages than people', () => {
+      const rows = checkPages(
+         [
+            {
+               name: 'a.html',
+               html: profileMarkup(),
+            },
+            {
+               name: 'b.html',
+               html: profileMarkup(),
+            },
+         ],
+         [PERSON]
+      )
+
+      expect(rows.map(({ slug }) => slug)).toEqual([PERSON.slug, ''])
+   })
+
+   it('should see Pending and the Connect in an open menu', () => {
+      expect(
+         checkPages(
+            [
+               {
+                  name: 'p.html',
+                  html: profileMarkup({
+                     own: false,
+                     pending: true,
+                  }),
+               },
+            ],
+            [PERSON]
+         )[0]
+      ).toMatchObject({ pending: true })
+      expect(
+         checkPages(
+            [
+               {
+                  name: 'm.html',
+                  html: profileMarkup({
+                     own: false,
+                     menuOpen: true,
+                  }),
+               },
+            ],
+            [PERSON]
+         )[0]
+      ).toMatchObject({
+         connects: 0,
+         menu: 1,
+      })
+   })
+
    it('should read a page that has no person by its Connect links only', () => {
       expect(
          checkPages(
@@ -136,6 +188,82 @@ describe('pair', () => {
             },
          ],
          pages: ['no-connect-1.html', 'no-connect-2.html'],
+      })
+   })
+
+   it('should order the kept pages by their number, not by their letters, and ignore other files', () => {
+      const many = Array.from({ length: 10 }, (_, at) => ({
+         id: `p${at}`,
+         slug: `s${at}`,
+         name: `N${at}`,
+      }))
+      const result = pair(
+         JSON.stringify({ send: many }),
+         JSON.stringify({
+            sent: many.map(({ id }) => ({
+               id,
+               outcome: 'NO_CONNECT',
+            })),
+         }),
+         [...Array.from({ length: 10 }, (_, at) => `no-connect-${at + 1}.html`), 'video.webm', 'notes.html'].reverse()
+      )
+
+      expect(result).toMatchObject({ pages: Array.from({ length: 10 }, (_, at) => `no-connect-${at + 1}.html`) })
+   })
+
+   it('should skip an answer whose person is not in the input, and take a missing name as empty', () => {
+      expect(
+         pair(
+            JSON.stringify({
+               send: [
+                  {
+                     id: 'a',
+                     slug: 'one',
+                  },
+               ],
+            }),
+            JSON.stringify({
+               sent: [
+                  {
+                     id: 'ghost',
+                     outcome: 'NO_CONNECT',
+                  },
+                  {
+                     id: 'a',
+                     outcome: 'NO_CONNECT',
+                  },
+               ],
+            }),
+            ['no-connect-1.html']
+         )
+      ).toEqual({
+         people: [
+            {
+               slug: 'one',
+               name: '',
+            },
+         ],
+         pages: ['no-connect-1.html'],
+      })
+   })
+
+   it('should pair nothing when no answer was no Connect and no page was kept', () => {
+      expect(
+         pair(
+            input,
+            JSON.stringify({
+               sent: [
+                  {
+                     id: 'a',
+                     outcome: 'SENT',
+                  },
+               ],
+            }),
+            []
+         )
+      ).toEqual({
+         people: [],
+         pages: [],
       })
    })
 
