@@ -47,12 +47,13 @@ type Withdrawn = { id: string; outcome: InviteWithdrawOutcome }
 type DialogEnd = InviteSendOutcome | 'NO_NOTE'
 
 // DONE: every invite and withdrawal ended clearly, each sent or settled without a press. PARTIAL: some did not happen (no Connect
-// button, a step that did not show, a note refused), and nothing is unclear. UNKNOWN: a press may have landed and the page did not
+// button, a step that did not show, a note refused), and nothing is unclear. NONE_SENT: nothing was sent or withdrawn and nothing was
+// settled without a press either (every profile had no Connect, say), and nothing is unclear. UNKNOWN: a press may have landed and the page did not
 // say, or the command was delivered again after presses may have been made. LIMIT_REACHED: LinkedIn said the account may not invite
 // more now. RESTRICTED: LinkedIn showed its restriction notice. SIGNED_OUT: LinkedIn asked for a sign-in. BLOCKED: LinkedIn refused to
 // open a page (HTTP 999 or 429), so the run stopped; what it had settled is handed over.
 export type InviteRun = {
-   outcome: 'DONE' | 'PARTIAL' | 'UNKNOWN' | 'LIMIT_REACHED' | 'RESTRICTED' | 'SIGNED_OUT' | 'BLOCKED'
+   outcome: 'DONE' | 'PARTIAL' | 'NONE_SENT' | 'UNKNOWN' | 'LIMIT_REACHED' | 'RESTRICTED' | 'SIGNED_OUT' | 'BLOCKED'
    sent: Sent[]
    withdrawn: Withdrawn[]
 }
@@ -709,12 +710,24 @@ export const runInvites = async (
          ({ outcome: one }) => one === 'SENT' || one === 'SENT_WITHOUT_NOTE' || DONE_WITHOUT_PRESS.includes(one)
       )
       const allWithdrawn = withdrawn.every(({ outcome: one }) => one === 'WITHDRAWN' || one === 'NOT_PENDING')
+      const happened =
+         sent.some(
+            ({ outcome: one }) => one === 'SENT' || one === 'SENT_WITHOUT_NOTE' || DONE_WITHOUT_PRESS.includes(one)
+         ) || withdrawn.some(({ outcome: one }) => one === 'WITHDRAWN' || one === 'NOT_PENDING')
+      const asked = sent.length + withdrawn.length > 0
 
       return {
          outcome:
             repeated || isUnsure()
                ? 'UNKNOWN'
-               : (verdict ?? (limited ? 'LIMIT_REACHED' : settled && allWithdrawn ? 'DONE' : 'PARTIAL')),
+               : (verdict ??
+                 (limited
+                    ? 'LIMIT_REACHED'
+                    : settled && allWithdrawn
+                      ? 'DONE'
+                      : asked && !happened
+                        ? 'NONE_SENT'
+                        : 'PARTIAL')),
          sent,
          withdrawn,
       }

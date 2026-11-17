@@ -35,6 +35,10 @@ export const createLinkedinInvite = ({ baseUrl }: Options) =>
             label: 'Partly done',
             tone: 'neutral',
          },
+         NONE_SENT: {
+            label: 'No invite sent',
+            tone: 'failure',
+         },
          UNKNOWN: {
             label: 'Not sure an invite took',
             tone: 'neutral',

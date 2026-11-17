@@ -75,6 +75,19 @@ describe('linkedin-invite hooks', () => {
       })
    })
 
+   it('should queue the file of a run that sent nothing, and not stop the account', async () => {
+      const { invites, imports, update } = await finish('NONE_SENT')
+
+      expect(invites).toHaveBeenCalledWith(
+         expect.objectContaining({ data: expect.objectContaining({ state: 'UNKNOWN' }) })
+      )
+      expect(imports).toHaveBeenCalledWith({
+         data: [{ sessionId: 's1' }],
+         skipDuplicates: true,
+      })
+      expect(update).not.toHaveBeenCalled()
+   })
+
    it('should stop the account until its next sign-in when signed out, and ask for the sign-in check', async () => {
       const { update, updateMany } = await finish('SIGNED_OUT')
 

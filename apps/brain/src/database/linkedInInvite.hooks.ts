@@ -20,7 +20,16 @@ const NOTHING_PRESSED = new Set([
 ])
 
 // The verdicts the task hands its file over with.
-const HANDS_OVER = new Set(['DONE', 'PARTIAL', 'UNKNOWN', 'LIMIT_REACHED', 'RESTRICTED', 'SIGNED_OUT', 'BLOCKED'])
+const HANDS_OVER = new Set([
+   'DONE',
+   'PARTIAL',
+   'NONE_SENT',
+   'UNKNOWN',
+   'LIMIT_REACHED',
+   'RESTRICTED',
+   'SIGNED_OUT',
+   'BLOCKED',
+])
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 // How long an account's invites rest after LinkedIn refused to open a page (HTTP 999 or 429): the site asked the visitor to stop, so

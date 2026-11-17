@@ -109,15 +109,19 @@ export const parseProfileActions = (html: string, slug: string, name: string): P
    }
 }
 
-// The profile's own More buttons (sticky header and top card), as positions among INVITE_BUTTON. They open a menu and carry no name;
-// the More of the site's top bar is named and is left out (2026-10-30).
+// The profile's own More buttons (sticky header and top card), as positions among INVITE_BUTTON. They open a menu. The wide layout
+// shows the word More on them, the narrow one only an icon with the label "More" (seen on staging 2026-11-16, recorded 2026-11-17),
+// so either names it. The More of the site's top bar is named too but has no `componentkey`, as the profile's own controls do, and
+// is left out (2026-10-30).
 export const moreButtons = (html: string) =>
    parse(html)
       .querySelectorAll(INVITE_BUTTON)
       .flatMap((button, index) =>
-         clean(button.text) === MORE_WORDS &&
          button.getAttribute('aria-expanded') !== undefined &&
-         !button.getAttribute('aria-label')
+         button.getAttribute('componentkey') !== undefined &&
+         [clean(button.text), clean(button.getAttribute('aria-label') ?? '')].some(
+            name => name.toLowerCase() === MORE_WORDS.toLowerCase()
+         )
             ? [index]
             : []
       )

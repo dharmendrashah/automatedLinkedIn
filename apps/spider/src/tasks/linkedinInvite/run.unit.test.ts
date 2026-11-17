@@ -213,7 +213,7 @@ const setup = (page: Page = {}) => {
             if (words.endsWith('|Add a note')) {
                calls.push('add note')
                dialog = page.upsell ? 'upsell' : 'note'
-            } else if (words.endsWith('|More')) {
+            } else if (words === 'More|' || words.endsWith('|More')) {
                calls.push('more')
                menuOpen = true
             } else if (words.endsWith('|Send') && !typed) {
@@ -500,7 +500,7 @@ describe('runInvites', () => {
    it('should take a refusal of the invite request as not sent and press nothing more', async () => {
       const { run, context, file } = setup({ afterSend: 'refused' })
 
-      await expect(run(both)).resolves.toMatchObject({ outcome: 'PARTIAL' })
+      await expect(run(both)).resolves.toMatchObject({ outcome: 'NONE_SENT' })
       expect(context.visit).toHaveBeenCalledTimes(1)
       expect(file().sent.map(({ outcome }) => outcome)).toEqual(['REFUSED', 'NOT_SENT'])
    })
@@ -601,6 +601,25 @@ describe('runInvites', () => {
       expect(file().sent[0]?.outcome).toBe('NO_CONNECT')
       expect(calls).toContain('more')
       expect(attached.some(({ name }) => name.startsWith('no-connect'))).toBe(true)
+   })
+
+   it('should say no invite was sent when every profile had no Connect, and keep Partly done for a run that settled some', async () => {
+      const none = setup({ noConnect: ['ada-lovelace'] })
+
+      await expect(
+         none.run({
+            send: [ADA],
+            withdraw: [],
+         })
+      ).resolves.toMatchObject({ outcome: 'NONE_SENT' })
+      expect(none.file().sent.map(({ outcome }) => outcome)).toEqual(['NO_CONNECT'])
+
+      const mixed = setup({
+         noConnect: ['ada-lovelace'],
+         pending: ['grace-hopper'],
+      })
+
+      await expect(mixed.run(both)).resolves.toMatchObject({ outcome: 'PARTIAL' })
    })
 
    it('should send nothing when Send stays greyed after the note was typed', async () => {
@@ -719,7 +738,7 @@ describe('runInvites', () => {
             send: [ADA],
             withdraw: [],
          })
-      ).resolves.toMatchObject({ outcome: 'PARTIAL' })
+      ).resolves.toMatchObject({ outcome: 'NONE_SENT' })
       expect(calls.some(call => call.startsWith('send'))).toBe(false)
       expect(file().sent.map(({ outcome }) => outcome)).toEqual(['NOT_SENT'])
    })
