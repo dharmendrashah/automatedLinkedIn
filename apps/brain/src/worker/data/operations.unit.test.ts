@@ -65,6 +65,24 @@ describe('operations', () => {
       expect(JSON.stringify(people)).not.toContain('licdn')
    })
 
+   it('should drop the first half of an emoji the excerpt cut lands inside, so it can be stored as JSON', () => {
+      // 139 chars then an emoji (two UTF-16 code units): cutting at 140 (EXCERPT_LENGTH) lands inside it.
+      const comment = `${'x'.repeat(139)}\u{1F600}y`
+      const [commenter] = commentersFrom(
+         [
+            {
+               commenterUrl: 'https://www.linkedin.com/in/ada',
+               commenterType: 'profile',
+               comment,
+            },
+         ],
+         post
+      )
+
+      expect(() => JSON.parse(JSON.stringify(commenter))).not.toThrow()
+      expect(commenter.signals[0].excerpt).toBe('x'.repeat(139))
+   })
+
    it('should keep reactors with their location', () => {
       expect(
          reactorsFrom(
