@@ -11,14 +11,13 @@ import {
    person,
    postSnapshotFrom,
 } from 'core'
+import { count, text } from 'core/snapshotFields'
 
 // Turns the data service's rows into workflow items. Only the allow-listed fields survive; photos, ids and the
-// supplier's field names stop here.
+// supplier's field names stop here. Text goes through `text()` (trimmed, cut to a length, stray surrogates and null
+// characters dropped) so it can always be stored as JSON.
 
 type Row = Record<string, unknown>
-
-const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null)
-const count = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null)
 
 const linkOf = (url: unknown) => {
    const raw = text(url)
@@ -81,7 +80,7 @@ export const commentersFrom = (rows: Row[], post: PostItem): PersonItem[] =>
                   type: 'commented',
                   via: post.url,
                   at: text(row.commentedAt),
-                  excerpt: text(row.comment)?.slice(0, EXCERPT_LENGTH) ?? null,
+                  excerpt: text(row.comment, EXCERPT_LENGTH),
                   post: post.preview ?? null,
                },
             ],
@@ -579,7 +578,7 @@ export const adsFrom = (rows: Row[]): AdItem[] =>
                  url,
                  advertiser: text(row.paidBy),
                  headline: text(row.headline),
-                 body: text(row.body)?.slice(0, AD_BODY_LENGTH) ?? null,
+                 body: text(row.body, AD_BODY_LENGTH),
                  format: text(row.format),
                  started: text(row.started),
                  ended: text(row.ended),
