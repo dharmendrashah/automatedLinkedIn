@@ -54,6 +54,7 @@ import {
    isHookPhase,
    hasLoop,
    newNodeId,
+   outputsOf,
    portOfHandle,
    startConfig,
    toFlow,
@@ -208,6 +209,7 @@ const Editor = ({
               nodes.map(node => node.position)
            )
          : viewCentre()
+      const config = startConfig(block.type)
 
       commit(canvas => ({
          nodes: [
@@ -218,7 +220,8 @@ const Editor = ({
                position,
                data: {
                   block,
-                  config: startConfig(block.type),
+                  config,
+                  outputs: outputsOf(block.type, config, block),
                   version: block.version > 1 ? block.version : undefined,
                   step: null,
                   invalid: false,
@@ -257,9 +260,15 @@ const Editor = ({
    const setConfig = (patch: Record<string, ConfigValue>) =>
       commit(canvas => ({
          ...canvas,
-         nodes: canvas.nodes.map(node =>
-            node.id === openId ? { ...node, data: { ...node.data, config: { ...node.data.config, ...patch } } } : node
-         ),
+         nodes: canvas.nodes.map(node => {
+            if (node.id !== openId) {
+               return node
+            }
+
+            const config = { ...node.data.config, ...patch }
+
+            return { ...node, data: { ...node.data, config, outputs: outputsOf(node.data.block.type, config, node.data.block) } }
+         }),
       }))
 
    const setData = (patch: Partial<Pick<FlowNode['data'], 'label' | 'hooks'>>) =>

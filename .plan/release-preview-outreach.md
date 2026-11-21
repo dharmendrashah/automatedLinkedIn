@@ -36,19 +36,33 @@ Open questions (must be empty before locking; recommended answer in brackets):
 
 Spintax: `{a|b|c}` picks one option for each send, and `{first_name:there}` fills a variable with a fallback. Both templates below were rendered with the product's own renderer and checked with its length and content rules (`templateProblems`, 2026-11-06): no missing variables, under the limits on the longest variant. The first message's only link is the booking link, which the checks accept.
 
-Invite note (sent only while the account has notes left this month, 5 a month at most):
+**Superseded 2026-11-22** (`.plan/release-preview-value-led-message.md`, locked): the owner asked to lead with value instead of a call booking link. Both blocks below were edited live in the app (this plan itself stayed `rejected`/not done; the campaign had already sent 80 real invites and 1 real first message with the wording below before the edit — see that plan's Outcome). Kept here for history.
+
+Invite note (sent only while the account has notes left this month, 5 a month at most), until 2026-11-22:
 
 ```text
 {Hi|Hello|Hey} {first_name:there}, {I came across|I noticed} what you are building{ at {company}|}. {Would love to connect|Happy to connect|Glad to connect}.
 ```
 
-First message (sent after acceptance, one line):
+First message (sent after acceptance, one line), until 2026-11-22:
 
 ```text
 {Hi|Hello|Hey} {first_name:there}, {thanks for connecting|good to be connected|glad we are connected}. {We work with|We help|We support} {founders|agency owners|GTM teams} {who run|that run} their own LinkedIn outreach, and what you are building{ at {company}|} {caught my eye|stood out to me}. We are opening a small release preview for {five|a handful of} teams. {Would it be useful to try it first|Would you like an early look|Would you be open to a quick look}? {Book a call with this link|Pick a 30-minute slot here|Grab a time here}: https://cal.com/elitale/30min
 ```
 
 Variants: the invite note has 36 versions and the first message about 11,700. Each send draws one at random.
+
+Invite note and first message from 2026-11-22 on (value-led, no booking link, personalized with company, title, headline, previous company and top skill):
+
+```text
+{Hi|Hello|Hey} {first_name:there}, {I noticed|I came across} your work at {company:your company}{ as {title:a founder}|} and had an idea that could {grow your leads|double your pipeline}. {Would love to connect|Happy to connect|Glad to connect}.
+```
+
+```text
+{Hi|Hello|Hey} {first_name:there}, {thanks for connecting|good to be connected|glad we are connected}. {We've built|We built|We have put together} something specifically for you and {company:your business}{, especially given your work as {title:a founder}|, especially given {headline:your profile}| and what you're building}: {it can help you|it's built to help you} {double|roughly double} your weekly lead pipeline and grow revenue without spending more on ads.{ Your move from {previous_company:your last role} and your focus on {top_skill:your craft} is exactly why this fits.|} {If you want|If it helps|Just say the word and} I can send over the {detailed research|full research} we did on {company:your business} along with a {lead list|ready-made list} of people who are {actually interested|genuinely interested} in {your services|what you offer}, and why.
+```
+
+Variants: the invite note has 72 versions (longest 139 of 200 characters) and the first message 31,104 (longest 503 of 4,000 characters).
 
 Message order for one prospect:
 

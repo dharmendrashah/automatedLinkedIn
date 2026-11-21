@@ -145,7 +145,7 @@ export const MessageBubble = ({ message, tokens }: Props) => {
          >
             {message.text ? (
                <p>
-                  <RichText text={message.text} tokens={tokens} />
+                  <RichText text={message.text} tokens={tokens} own={own} />
                </p>
             ) : null}
             {message.attachments.length > 0 ? (

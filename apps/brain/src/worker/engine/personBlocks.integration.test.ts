@@ -414,4 +414,38 @@ describe('If person state, Get our chat with them and Split people (database)', 
       expect(on.length).toBeLessThan(32)
       expect(new Set([...on, ...rest]).size).toBe(40)
    })
+
+   it('should divide into as many about-equal parts as it is set to, one connector each, with nobody left out or doubled', async () => {
+      const slugs = Array.from({ length: 45 }, (_, index) => `p${index}`)
+      const graph: Graph = {
+         nodes: [
+            node('people', 'input.profiles', { links: slugs.map(profile) }),
+            node('split', 'logic.split', { parts: 3 }),
+            node('b', 'logic.else'),
+            node('c', 'logic.else'),
+         ],
+         edges: [
+            line('people', 'split'),
+            {
+               from: 'split',
+               to: 'b',
+               fromPort: 'else',
+            },
+            {
+               from: 'split',
+               to: 'c',
+               fromPort: 'else2',
+            },
+         ],
+      }
+      const runId = await run(graph)
+      const [a, b, c] = await Promise.all([slugsAt(runId, 'split'), slugsAt(runId, 'b'), slugsAt(runId, 'c')])
+
+      expect(a.length + b.length + c.length).toBe(45)
+      expect(new Set([...a, ...b, ...c]).size).toBe(45)
+      for (const part of [a, b, c]) {
+         expect(part.length).toBeGreaterThan(3)
+         expect(part.length).toBeLessThan(27)
+      }
+   })
 })

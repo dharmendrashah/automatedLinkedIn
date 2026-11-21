@@ -5114,22 +5114,26 @@ const BLOCKS = {
          takesAnything: true,
          keepsAside: true,
       },
-      flow: 'Takes anything, passes a stable share on; an Else after it gets the rest',
+      flow: 'Takes anything, gives each part a connector; the same person always lands in the same part',
       label: 'Split people',
       summary:
-         'Sends a share of what reaches it on and the rest to Else. The same person always lands on the same side of this block, so a control group stays a control group. The share is exact only on big batches.',
+         'Divides what reaches it into about-equal parts, one connector each. The same person always lands in the same part, so a control group stays a control group. The share is exact only on big batches.',
       costHint: 'free',
       input: 'profile',
       output: 'profile',
-      config: z.object({ percent: z.number().int().min(1).max(99).default(50) }),
+      // `percent` is kept only so a block saved before "parts" existed still parses and still runs on its saved share.
+      config: z.object({
+         parts: z.number().int().min(1).max(10).default(2),
+         percent: z.number().int().min(1).max(99).default(50),
+      }),
       fields: [
          {
-            key: 'percent',
-            label: 'Share that goes on (percent)',
+            key: 'parts',
+            label: 'Parts to split into',
             kind: 'int',
             min: 1,
-            max: 99,
-            hint: 'Exact only on big batches.',
+            max: 10,
+            hint: 'Each part gets about an equal, stable share, with its own connector below.',
          },
       ],
    },
@@ -6790,6 +6794,14 @@ export const ELSE_SOURCES: Set<BlockType> = withFlag('keepsAside')
 // The outputs a block has: `main`, and `else` for what a block that keeps items aside did not pass on.
 export const outputsOf = (type: BlockType): string[] => (ELSE_SOURCES.has(type) ? ['main', 'else'] : ['main'])
 
+// Split people's outputs when it is set to divide into several parts: `main`, then `else`, `else2`, ... one per extra
+// part (`parts: 1` is a no-op: everyone stays on `main`, nothing kept aside). A Split block saved before "parts"
+// existed only ever has `outputsOf`'s plain `['main', 'else']`.
+export const splitOutputs = (parts: number): string[] =>
+   Array.from({ length: Math.max(1, Math.min(10, Math.trunc(parts))) }, (_unused, index) =>
+      index === 0 ? 'main' : index === 1 ? 'else' : `else${index}`
+   )
+
 // Blocks that take items of every kind as they are, so any line into them is fine.
 export const TAKES_ANYTHING: Set<BlockType> = withFlag('takesAnything')
 
@@ -7421,8 +7433,16 @@ const validateFlow = (graph: Graph): GraphError[] => {
 
    for (const edge of graph.edges) {
       const from = byId.get(edge.from)
+      // A Split block set to divide into parts has one output per part; one saved before "parts" existed, or set to 2,
+      // only ever has the plain `outputsOf` pair.
+      const outputs =
+         from?.type === 'logic.split' && typeof from.config.parts === 'number'
+            ? splitOutputs(from.config.parts)
+            : from
+              ? outputsOf(from.type)
+              : []
 
-      if (from && edge.fromPort !== undefined && !outputsOf(from.type).includes(edge.fromPort)) {
+      if (from && edge.fromPort !== undefined && !outputs.includes(edge.fromPort)) {
          problems.push({
             nodeId: from.id,
             level: 'error',

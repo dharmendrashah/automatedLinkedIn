@@ -61,12 +61,18 @@ const Reason = ({ code, failed }: { code: string | null; failed: boolean }) => {
 // One block: icon, title and settings in a line, during a run its state, and a "+" on each side to add a block there. Lines
 // leave and enter on any side.
 export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
-   const { block, config, step, invalid, noted, faded, icpName, disabled, label } = data
+   const { block, config, outputs, step, invalid, noted, faded, icpName, disabled, label } = data
    const { addNextTo, removeNode, toggleOff } = useContext(CanvasActions)
    const edges = useEdges()
    const Icon = BLOCK_ICONS[block.type]
    const StepIcon = step ? STEP_ICONS[step.status] : null
    const progress = step?.progress
+   const extraOutputs = outputs.filter(output => output !== 'main')
+   // A Split block set to several parts shows one dot per part, main included, so the count on the canvas always
+   // matches "Parts to split into" exactly; any other block keeps its single Else dot, main on the plain bottom side.
+   const isSplitRow = block.type === 'logic.split' && outputs.length > 1
+   const dotCount = isSplitRow ? outputs.length : extraOutputs.length
+   const dotLeft = (slot: number) => (dotCount <= 1 ? '85%' : `${45 + (slot / (dotCount - 1)) * 54}%`)
 
    return (
       <div className={cn('group relative', faded && 'opacity-40', disabled && 'opacity-60')} style={{ width: NODE_WIDTH }}>
@@ -85,22 +91,25 @@ export const BlockNode = ({ id, data, selected }: NodeProps<FlowNode>) => {
                   id={side}
                   type="source"
                   position={POSITIONS[side]}
-                  className="size-3! opacity-0 transition-opacity group-hover:opacity-100"
+                  className={
+                     isSplitRow && side === 'bottom'
+                        ? 'bg-foreground! size-2.5! border-0!'
+                        : 'size-3! opacity-0 transition-opacity group-hover:opacity-100'
+                  }
+                  style={isSplitRow && side === 'bottom' ? { left: dotLeft(0) } : undefined}
                />
             ))}
-            {block.outputs
-               .filter(output => output !== 'main')
-               .map(output => (
-                  <Handle
-                     key={output}
-                     id={handleOfPort(output)}
-                     type="source"
-                     position={Position.Bottom}
-                     title="Drag from here to take what this block did not pass on"
-                     className="bg-warning! size-3! border-0!"
-                     style={{ left: '85%' }}
-                  />
-               ))}
+            {extraOutputs.map((output, index) => (
+               <Handle
+                  key={output}
+                  id={handleOfPort(output)}
+                  type="source"
+                  position={Position.Bottom}
+                  title="Drag from here to take what this block did not pass on"
+                  className="bg-foreground! size-2.5! border-0!"
+                  style={{ left: dotLeft(isSplitRow ? index + 1 : index) }}
+               />
+            ))}
             {HOOK_PHASES.map((phase, index) => {
                const chains = edges.filter(edge => edge.source === id && edge.sourceHandle === handleOfPort(phase)).length
 

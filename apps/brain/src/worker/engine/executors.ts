@@ -102,7 +102,6 @@ import {
    elseKey,
    keepItems,
    numberIn,
-   parentsOf,
    peopleOf,
    postsOf,
    rulesOf,
@@ -934,13 +933,19 @@ const ifBlock = async (ctx: Context): Promise<StepResult> => {
 }
 
 const elseBlock = async (ctx: Context): Promise<StepResult> => {
-   const sources = parentsOf(ctx.graph, ctx.node.id).filter(id =>
-      ctx.graph.nodes.some(node => node.id === id && ELSE_SOURCES.has(node.type))
-   )
-   const rest = await WorkflowRunService.items(
-      ctx.run.id,
-      sources.map(id => elseKey(ctx, id))
-   )
+   // Each line's own output, not always "else": a Split block set to several parts keeps more than one, named
+   // `else`, `else2`, ... (an older line with no `fromPort` still reads `else`, same as before).
+   const sources = ctx.graph.edges
+      .filter(
+         edge =>
+            edge.to === ctx.node.id &&
+            ctx.graph.nodes.some(node => node.id === edge.from && ELSE_SOURCES.has(node.type))
+      )
+      .map(edge => ({
+         ...ctx.at,
+         nodeId: portKey(edge.from, portOfEdge(ctx.graph, edge)),
+      }))
+   const rest = await WorkflowRunService.items(ctx.run.id, sources)
    const people = mergeBySlug(peopleOf(rest))
 
    return keepItems(ctx, [...people, ...rest.filter(({ kind }) => kind !== 'profile')], rest.length)

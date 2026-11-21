@@ -14,6 +14,9 @@ import { browserTimeZone, describeSchedule } from './schedule-text'
 export type BlockData = {
    block: Block
    config: GraphNode['config']
+   // A Split block set to divide into several parts has one output per part; anything else keeps the catalog's plain
+   // `block.outputs`.
+   outputs: string[]
    // The version of the block the settings were saved for; sent back on save so they are not upgraded again.
    version?: number
    step: StepRun | null
@@ -138,6 +141,28 @@ export const combineRounds = (steps: StepRun[]) => {
    return byNode
 }
 
+// A Split block's outputs when set to divide into several parts (mirrors contracts' `splitOutputs`, kept local on
+// purpose: this file already avoids pulling in the contracts package's runtime bundle for a couple of values, see
+// `DEFAULT_LOOP_ROUNDS` below). `parts: 1` is a no-op: everyone stays on `main`, nothing kept aside.
+export const splitPorts = (parts: number): string[] =>
+   Array.from({ length: Math.max(1, Math.min(10, Math.trunc(parts))) }, (_unused, index) =>
+      index === 0 ? 'main' : index === 1 ? 'else' : `else${index}`
+   )
+
+// A node's live outputs: a Split block set to divide into several parts has one per part, anything else keeps the
+// catalog's plain `block.outputs`.
+export const outputsOf = (type: string, config: GraphNode['config'], block: Block): string[] =>
+   type === 'logic.split' && typeof config.parts === 'number' ? splitPorts(config.parts) : block.outputs
+
+// The word shown on a line that leaves an Else-style output: "Else" for the first, "Else 2" for the next, and so on.
+const elseWordOf = (port: string) => (port === 'else' ? 'Else' : `Else ${port.slice('else'.length)}`)
+
+// A Split block's lines are better read by their share than by "Else", "Else 2", ... since every part is about equal.
+const splitWordOf = (node: GraphNode, port: string) =>
+   node.type === 'logic.split' && typeof node.config.parts === 'number'
+      ? `${Math.round(100 / node.config.parts)}%`
+      : elseWordOf(port)
+
 export const toFlow = (
    graph: Graph,
    catalog: Block[],
@@ -156,6 +181,7 @@ export const toFlow = (
                  data: {
                     block,
                     config: node.config,
+                    outputs: outputsOf(node.type, node.config, block),
                     version: node.version,
                     disabled: node.disabled,
                     label: node.label,
@@ -172,7 +198,8 @@ export const toFlow = (
    })
    const edges = graph.edges.map(({ from, to, fromSide, toSide, fromPort }) => {
       const source = stepOf.get(from)
-      const kind = blockOf(catalog, graph.nodes.find(({ id }) => id === from)?.type ?? '')?.output
+      const fromNode = graph.nodes.find(({ id }) => id === from)
+      const kind = blockOf(catalog, fromNode?.type ?? '')?.output
 
       return {
          // A hook line and the main line between the same two blocks are different lines.
@@ -185,8 +212,8 @@ export const toFlow = (
          ...(isHookPhase(fromPort) && { style: { strokeDasharray: '6 4' } }),
          label: isHookPhase(fromPort)
             ? `${HOOK_WORDS[fromPort]} hook`
-            : fromPort && fromPort !== 'main'
-              ? 'Else'
+            : fromPort && fromPort !== 'main' && fromNode
+              ? splitWordOf(fromNode, fromPort)
               : source && kind
                 ? `${source.itemsOut} ${KIND_WORDS[kind]}`
                 : undefined,
@@ -345,6 +372,12 @@ export const startConfig = (type: string, timeZone: string = browserTimeZone()):
       return { scope: 'all' }
    }
 
+   // A new Split block is set to 2 equal parts; a block saved before "parts" existed keeps its saved percent (and only
+   // gets this explicit value once someone opens its settings and changes it).
+   if (type === 'logic.split') {
+      return { parts: 2 }
+   }
+
    // Blocks that can keep what they find in the owner's lists start with that on and with 10; saved blocks keep theirs.
    if (KEEPING_BLOCKS.has(type)) {
       return {
@@ -471,6 +504,14 @@ const pickOf = (values: Record<string, ConfigValue | undefined>) => {
 // One line under the block's title that says what it is set to.
 export const summaryOf = (block: Block, config: GraphNode['config'], icpName?: string) => {
    const values = { ...block.defaults, ...config }
+
+   if (block.type === 'logic.split') {
+      // The raw config, not the defaulted "values": a block saved before "parts" existed has none, so it still shows
+      // its real, saved percent-based behaviour instead of a misleading "2 parts".
+      return typeof config.parts === 'number'
+         ? `Splits into ${config.parts} about-equal parts`
+         : `Sends about ${show(values.percent)}% on, the rest to Else`
+   }
 
    if (block.type === 'score.icp') {
       return icpName ? `Against "${icpName}"` : 'Pick an ideal customer'

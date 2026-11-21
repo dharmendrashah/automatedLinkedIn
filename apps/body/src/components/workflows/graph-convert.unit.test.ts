@@ -158,6 +158,7 @@ describe('input blocks', () => {
          readCompany: true,
       })
       expect(startConfig('account.select', 'Asia/Kolkata')).toEqual({ scope: 'all' })
+      expect(startConfig('logic.split', 'Asia/Kolkata')).toEqual({ parts: 2 })
       expect(startConfig('collect.commenters', 'Asia/Kolkata')).toEqual({})
       // A block that existed before the "keep" box starts with it on and with 10; a saved one keeps what it has.
       expect(startConfig('collect.searchPeople', 'Asia/Kolkata')).toEqual({
@@ -229,6 +230,49 @@ describe('graph-convert', () => {
       ])
       expect(portOfHandle('bottom')).toBeUndefined()
       expect(portOfHandle('port:else')).toBe('else')
+   })
+
+   it('should give a Split block set to several parts one connector per part, and label each line by its equal share', () => {
+      const split = { ...block('logic.split', 'profile', 'profile'), outputs: ['main', 'else'] }
+      const threeParts: Graph = {
+         nodes: [
+            { id: 'split', type: 'logic.split', config: { parts: 3 }, position: { x: 0, y: 0 } },
+            { id: 'a', type: 'collect.commenters', config: {}, position: { x: 240, y: 0 } },
+            { id: 'b', type: 'collect.commenters', config: {}, position: { x: 480, y: 0 } },
+         ],
+         edges: [
+            { from: 'split', to: 'a', fromPort: 'else' },
+            { from: 'split', to: 'b', fromPort: 'else2' },
+         ],
+      }
+      const { nodes, edges } = toFlow(threeParts, [split, ...catalog])
+
+      expect(nodes[0]?.data.outputs).toEqual(['main', 'else', 'else2'])
+      // Each part is about equal, so every line reads its share rather than "Else"/"Else 2".
+      expect(edges.map(({ label }) => label)).toEqual(['33%', '33%'])
+   })
+
+   it('should still say "Else" for a block that keeps items aside but is not a Split (If, Wait per person, ...)', () => {
+      const ifBlock = { ...block('logic.if', 'profile', 'profile'), outputs: ['main', 'else'] }
+      const withElse: Graph = {
+         nodes: [
+            { id: 'check', type: 'logic.if', config: {}, position: { x: 0, y: 0 } },
+            { id: 'a', type: 'collect.commenters', config: {}, position: { x: 240, y: 0 } },
+         ],
+         edges: [{ from: 'check', to: 'a', fromPort: 'else' }],
+      }
+
+      expect(toFlow(withElse, [ifBlock, ...catalog]).edges.map(({ label }) => label)).toEqual(['Else'])
+   })
+
+   it('should keep the plain main/else outputs for a Split block saved before "parts" existed', () => {
+      const split = { ...block('logic.split', 'profile', 'profile'), outputs: ['main', 'else'] }
+      const legacy: Graph = {
+         nodes: [{ id: 'split', type: 'logic.split', config: { percent: 90 }, position: { x: 0, y: 0 } }],
+         edges: [],
+      }
+
+      expect(toFlow(legacy, [split, ...catalog]).nodes[0]?.data.outputs).toEqual(['main', 'else'])
    })
 
    it('should carry a block that is switched off through the canvas and back, and leave the flag out when it is on', () => {
@@ -469,5 +513,12 @@ describe('Logic blocks', () => {
       expect(summaryOf(wait, { mode: 'between', unit: 'days', minAmount: 2, maxAmount: 4 })).toBe('Waits 2 to 4 days')
       expect(summaryOf(retry, { times: 3, waitSeconds: 0 })).toBe('Tries up to 3 more times')
       expect(summaryOf(retry, { times: 1, waitSeconds: 30 })).toBe('Tries once more, after 30 seconds')
+   })
+
+   it('should say how many about-equal parts a Split block divides into, or its saved percent for one from before "parts" existed', () => {
+      const split = block('logic.split', 'profile', 'profile')
+
+      expect(summaryOf(split, { parts: 3 })).toBe('Splits into 3 about-equal parts')
+      expect(summaryOf(split, { percent: 90 })).toBe('Sends about 90% on, the rest to Else')
    })
 })
