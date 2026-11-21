@@ -1,6 +1,8 @@
 import { ExternalLink } from 'lucide-react'
 import { Fragment } from 'react'
 
+import { cn } from '@/lib/utils'
+
 import { linkify } from './links'
 import { highlight } from './search'
 
@@ -8,6 +10,9 @@ type Props = {
    text: string
    // Words to mark (the search), when there are any.
    tokens?: string[]
+   // Ours sit on a blue bubble, so a link needs the bubble's own text colour instead of the usual blue, or it reads as
+   // blue on blue and disappears.
+   own?: boolean
 }
 
 const Marked = ({ text, tokens }: { text: string; tokens: string[] }) => (
@@ -26,7 +31,7 @@ const Marked = ({ text, tokens }: { text: string; tokens: string[] }) => (
 
 // A message's words as text. Nothing is ever put in as markup: a link is made only for an http or https address, shows its real host,
 // opens in a new tab without telling the page it came from, and is never fetched here.
-export const RichText = ({ text, tokens = [] }: Props) => (
+export const RichText = ({ text, tokens = [], own = false }: Props) => (
    <>
       {linkify(text).map((piece, index) =>
          piece.type === 'text' ? (
@@ -38,7 +43,10 @@ export const RichText = ({ text, tokens = [] }: Props) => (
                target="_blank"
                rel="noopener noreferrer nofollow"
                title={piece.shortened ? `Shortened link to ${piece.domain}: the real address is hidden` : piece.href}
-               className="inline-flex max-w-full items-center gap-0.5 break-all text-primary underline underline-offset-2"
+               className={cn(
+                  'inline-flex max-w-full items-center gap-0.5 break-all underline underline-offset-2',
+                  own ? 'text-primary-foreground' : 'text-primary'
+               )}
             >
                {piece.text}
                <ExternalLink className="size-3 shrink-0" aria-hidden />
@@ -52,3 +60,4 @@ export const RichText = ({ text, tokens = [] }: Props) => (
 )
 
 export { Marked }
+
