@@ -1,4 +1,4 @@
-import { type PersonItem, mergeBySlug } from 'core'
+import { type PersonItem, type WorkflowItemData, mergeBySlug } from 'core'
 
 import { PersonStateService, VisitPoolService, WorkflowRunService } from 'database'
 
@@ -9,6 +9,8 @@ import {
    personConditionsOf,
    personFactOf,
    personReason,
+   portKey,
+   splitOutputs,
 } from '@automatedLinkedIn/contracts'
 
 import { accountIdsOf } from './accountPool'
@@ -23,7 +25,7 @@ import {
    peopleOf,
    textIn,
 } from './context'
-import { onMainSide } from './splitRules'
+import { onMainSide, splitBin } from './splitRules'
 
 // "If person state", "Get our chat with them" and "Split people" (.plan/lead-pipeline-p2-checks.md). The first two read only what is
 // stored; none opens LinkedIn or costs anything.
@@ -147,16 +149,50 @@ export const getChat = async (ctx: Context, now = new Date()): Promise<StepResul
 }
 
 export const splitPeople = async (ctx: Context): Promise<StepResult> => {
-   const percent = numberIn(configOf(ctx.node), 'percent') || 50
-   const on = ctx.inputs.filter(({ slug }) => onMainSide(slug, ctx.node.id, percent))
-   const rest = ctx.inputs.filter(({ slug }) => !onMainSide(slug, ctx.node.id, percent))
+   const rawParts = ctx.node.config.parts
+   // A block saved before "parts" existed never has it in its raw config (it only has `percent`), so it keeps running
+   // on its saved percent, two outputs, until someone opens its settings and sets a part count themselves.
+   if (typeof rawParts !== 'number') {
+      const percent = numberIn(configOf(ctx.node), 'percent') || 50
+      const on = ctx.inputs.filter(({ slug }) => onMainSide(slug, ctx.node.id, percent))
+      const rest = ctx.inputs.filter(({ slug }) => !onMainSide(slug, ctx.node.id, percent))
 
-   await WorkflowRunService.replaceItems(elseKey(ctx, ctx.node.id), rest)
+      await WorkflowRunService.replaceItems(elseKey(ctx, ctx.node.id), rest)
 
-   const result = await keepItems(ctx, on, ctx.inputs.length)
+      const result = await keepItems(ctx, on, ctx.inputs.length)
+
+      return {
+         ...result,
+         message: `${ctx.inputs.length} in, ${on.length} on, ${rest.length} to Else (about ${percent} percent go on).`,
+      }
+   }
+
+   const outputs = splitOutputs(rawParts)
+   const bins: WorkflowItemData[][] = outputs.map(() => [])
+
+   for (const item of ctx.inputs) {
+      bins[splitBin(item.slug, ctx.node.id, outputs.length)].push(item)
+   }
+
+   for (const [index, output] of outputs.entries()) {
+      if (output !== 'main') {
+         await WorkflowRunService.replaceItems(
+            {
+               ...ctx.at,
+               nodeId: portKey(ctx.node.id, output),
+            },
+            bins[index]
+         )
+      }
+   }
+
+   const result = await keepItems(ctx, bins[0], ctx.inputs.length)
 
    return {
       ...result,
-      message: `${ctx.inputs.length} in, ${on.length} on, ${rest.length} to Else (about ${percent} percent go on).`,
+      emit: outputs.filter((_output, index) => bins[index].length > 0),
+      message: `${ctx.inputs.length} in, split into ${outputs.length} parts of about ${Math.round(
+         ctx.inputs.length / outputs.length
+      )} each.`,
    }
 }

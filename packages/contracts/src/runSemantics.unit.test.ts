@@ -9,6 +9,7 @@ import {
    outputsOf,
    portKey,
    portOfEdge,
+   splitOutputs,
    validateGraph,
 } from './workflow'
 
@@ -160,6 +161,27 @@ describe('outputs', () => {
       expect(catalog().find(({ type }) => type === 'logic.if')?.outputs).toEqual(['main', 'else'])
    })
 
+   it('should give Split people one output per part when it is set to divide into several', () => {
+      expect(splitOutputs(2)).toEqual(['main', 'else'])
+      expect(splitOutputs(3)).toEqual(['main', 'else', 'else2'])
+      expect(splitOutputs(10)).toEqual([
+         'main',
+         'else',
+         'else2',
+         'else3',
+         'else4',
+         'else5',
+         'else6',
+         'else7',
+         'else8',
+         'else9',
+      ])
+      // Clamped to the field's own min and max, in case anything ever calls it with an out-of-range value.
+      expect(splitOutputs(1)).toEqual(['main'])
+      expect(splitOutputs(0)).toEqual(['main'])
+      expect(splitOutputs(99)).toHaveLength(10)
+   })
+
    it('should key main under the block and any other output under the block and its name', () => {
       expect(portKey('ok', 'main')).toBe('ok')
       expect(portKey('ok', 'else')).toBe('ok~else')
@@ -194,5 +216,39 @@ describe('outputs', () => {
             ],
          }).filter(({ level }) => level === 'error')
       ).toHaveLength(1)
+   })
+
+   it('should validate a Split block set to parts against its actual outputs, and a legacy one against main/else only', () => {
+      const withParts = (parts?: number): Graph => ({
+         nodes: [
+            {
+               ...node('split', 'logic.split'),
+               config: parts === undefined ? {} : { parts },
+            },
+            node('next', 'output.csv'),
+         ],
+         edges: [
+            {
+               ...line('split', 'next'),
+               fromPort: 'else2',
+            },
+         ],
+      })
+
+      // No "parts" ever saved (or saved before this field existed): only main/else exist, so else2 is refused.
+      expect(validateGraph(withParts(undefined)).filter(({ level }) => level === 'error')).toEqual([
+         expect.objectContaining({
+            nodeId: 'split',
+            message: 'Split people has no "else2" output.',
+         }),
+      ])
+      expect(validateGraph(withParts(2)).filter(({ level }) => level === 'error')).toEqual([
+         expect.objectContaining({
+            nodeId: 'split',
+            message: 'Split people has no "else2" output.',
+         }),
+      ])
+      // Set to 3 parts, else2 is the third connector and is accepted.
+      expect(validateGraph(withParts(3)).filter(({ level }) => level === 'error')).toEqual([])
    })
 })

@@ -162,14 +162,27 @@ describe('If person state', () => {
 })
 
 describe('Split people', () => {
-   it('should take 1 to 99 percent, starting on half, anything with a slug, and keep the rest for Else', () => {
-      expect(blockOf('logic.split').config.parse({})).toEqual({ percent: 50 })
-      expect(blockOf('logic.split').config.safeParse({ percent: 0 }).success).toBe(false)
-      expect(blockOf('logic.split').config.safeParse({ percent: 100 }).success).toBe(false)
+   it('should start with 2 parts, take 1 to 10, anything with a slug, and keep a connector per extra part', () => {
+      expect(blockOf('logic.split').config.parse({})).toEqual({
+         parts: 2,
+         percent: 50,
+      })
+      expect(blockOf('logic.split').config.safeParse({ parts: 1 }).success).toBe(true)
+      expect(blockOf('logic.split').config.safeParse({ parts: 0 }).success).toBe(false)
+      expect(blockOf('logic.split').config.safeParse({ parts: 11 }).success).toBe(false)
       expect(blockOf('logic.split').flags).toMatchObject({
          takesAnything: true,
          keepsAside: true,
       })
+   })
+
+   it('should still parse a block saved before "parts" existed, keeping its saved percent', () => {
+      expect(blockOf('logic.split').config.parse({ percent: 90 })).toEqual({
+         parts: 2,
+         percent: 90,
+      })
+      expect(blockOf('logic.split').config.safeParse({ percent: 0 }).success).toBe(false)
+      expect(blockOf('logic.split').config.safeParse({ percent: 100 }).success).toBe(false)
    })
 })
 
