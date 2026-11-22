@@ -43,8 +43,9 @@ const asTrpcError = (error: unknown) => {
    })
 }
 
-// Human takeover (.plan/foxprofile-adoption.md, phase 4): the owner sees the page a worker holds for their run and finishes a
-// security check themselves. Every call is scoped to ctx.user.id, so nobody can watch or steer another user's browser.
+// Human takeover: when a background browser run gets stuck on something it cannot finish on its own (for example a
+// LinkedIn security check), the owner can watch its live screen here and complete that step themselves. Every call
+// is scoped to ctx.user.id, so nobody can watch or control another user's browser session.
 export const takeover = router({
    // The runs waiting for the user now.
    list: ownerProcedure.query(async ({ ctx }) => {

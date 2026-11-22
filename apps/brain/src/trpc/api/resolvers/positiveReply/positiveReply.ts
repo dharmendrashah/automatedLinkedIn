@@ -10,8 +10,8 @@ import { present } from '../owned'
 
 const id = z.string().min(1).max(100)
 
-// Positive replies and the revenue pipeline (.plan/campaign-revenue-pipeline.md). Every procedure is scoped to ctx.user.id, so a foreign
-// id is answered as a missing one.
+// Positive replies and the revenue pipeline they build up per campaign. Every procedure is scoped to ctx.user.id,
+// so a campaign or conversation id that belongs to someone else is answered as not found.
 export const positiveReply = router({
    // Every campaign with its positive replies, its worth per reply and its pipeline in USD a year.
    pipeline: ownerProcedure.query(({ ctx }) => PositiveReplyService.pipeline(ctx.user.id)),

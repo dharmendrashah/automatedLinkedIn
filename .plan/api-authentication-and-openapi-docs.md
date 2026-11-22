@@ -268,3 +268,38 @@ brain's full unit suite stayed green (192 files, 2056 tests) after wiring `resol
 module comment, `apiKey.create`'s two fields show their real `.describe()` text, and unrelated procedures with no
 hand-written comment or `.describe()` (e.g. `campaign.list`, `accountProfile.get`'s `accountId`) show the humanized
 fallback instead of nothing.
+
+## Follow-up 2026-11-22 (same day): clean up what the resolver comments actually say
+
+The user noticed the live `GET /api/docs` page showing a `.plan/*.md` reference as part of the `apiKey` tag's
+description (a screenshot of the Swagger UI with the plan-file text highlighted) and asked to remove every comment
+like it across the whole API, and to rewrite these comments going forward so "any developer or coding agent can
+read and implement" against them.
+
+- Removed all 27 `.plan/*.md` references found across 20 resolver files (`grep -rn '\.plan/' apps/brain/src/trpc/
+  api/resolvers`), not only the ones that happened to reach the generated doc, for source hygiene. Rewrote each
+  affected comment (module-level and the handful of procedure-level ones) as a self-contained description of what
+  the endpoint is for and how to use it, dropping internal-only jargon alongside the plan links where it appeared in
+  the same sentence (phase/wave numbers like "phase 4"/"P8", a feature codename like "FoxProfile adoption"); kept
+  genuinely useful behavioral facts (ownership scoping, refusal/error shape, side effects) that were already there.
+- `linkedInCompany.ts`'s `import` procedure gained a real comment of its own (the existing description lived on an
+  unrelated local `const importInput`, too far from the router property to be picked up by `resolverComments.ts` at
+  all) — a second, pre-existing instance of the same "comment exists but isn't actually read" gap the next bullet
+  fixes for `dashboard`.
+- `dashboard.ts`: its module comment sat above a local `const overview = ...`, one blank line above the
+  `export const dashboard = router({ overview })` line itself — `resolverComments.ts` only reads a comment with zero
+  blank lines directly above the line it decorates, so this one was silently never extracted (confirmed: the
+  `dashboard` tag had no description in `dist/openapi.json` before this fix). Moved the comment to sit directly
+  above the `router({...})` call so it is now picked up.
+- Wrote the convention into `.github/copilot-instructions.md` (tRPC section): a resolver's module/procedure comments
+  and a field's Zod `.describe()` are read verbatim into the public Swagger doc, so they must read as documentation
+  for someone calling the API — never an internal engineering note, and never a `.plan` file reference, a
+  phase/wave number, or a feature codename. This is the standing rule for every future resolver, not just the ones
+  touched here.
+
+Verified: `rm -rf apps/brain/dist && pnpm build` regenerated `dist/openapi.json`; scanned the whole file for the
+string `.plan` and found zero matches (down from the `apiKey` tag leak the user reported); spot-checked the
+`apiKey`/`browse`/`dashboard`/`jobs`/`takeover`/`campaign`/`people`/`connections`/`unibox` tag descriptions by hand
+to confirm each reads as plain API documentation with no internal references. Full gate green: `pnpm lint`,
+`pnpm ts:check`, `pnpm test:unit:run` (192 files, 2056 tests, unchanged — comment-only and one minor structural
+change in `dashboard.ts`).

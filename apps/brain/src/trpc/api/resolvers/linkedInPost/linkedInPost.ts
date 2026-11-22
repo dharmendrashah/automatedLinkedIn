@@ -10,7 +10,7 @@ import { byId, createInput, found, ids, labelInput, listInput, readLinks, tags }
 
 const postStatus = z.enum(['UNPROCESSED', 'PROCESSED'])
 
-// Posts have their own statuses and are never archived (.plan/posts-page-redesign.md).
+// Posts have their own statuses (unprocessed/processed) and are never archived, unlike companies and people.
 const postListInput = listInput
    .omit({
       status: true,

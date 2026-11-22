@@ -54,9 +54,11 @@ const refused = <T>(work: Promise<T>) =>
       throw asTrpcError(error)
    })
 
-// My network (.plan/network-hub.md): the owner's people, the Today line, and the owner's own changes to them. Every call is
-// scoped to ctx.user.id; a foreign person answers like a missing one. LinkedIn actions stay on their own routers
-// (network.answer, unibox, connections, workflowList).
+// "My network": the owner's imported and discovered people, the Today line (who is new or changed today), and the
+// owner's own changes to them (status, labels, notes). Every call is scoped to ctx.user.id; a person id that
+// belongs to someone else is answered as not found. Actions that happen on LinkedIn itself live on their own
+// routers instead (network.answer for invitations, unibox for messages, connections for the connections list,
+// workflowList for automated outreach).
 export const people = router({
    workspace: ownerProcedure.query(({ ctx }) => PeopleService.workspace(ctx.user.id)),
 

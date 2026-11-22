@@ -10,8 +10,9 @@ import { orConflict, orRefused, present } from '../owned'
 const draftId = z.object({ draftId: z.string().min(1).max(64) })
 const byId = z.object({ id: z.string().min(1).max(64) })
 
-// The posts the owner sent for posting or planned (.plan/posting-send-task.md). Every call is scoped to ctx.user.id; a foreign id
-// answers exactly like a missing one. Refused with a sentence when the limits, the account or the post itself do not allow it.
+// Posts the owner has published, scheduled or queued through brain. Every call is scoped to ctx.user.id; a post id
+// that belongs to someone else is answered exactly like a missing one. Refused with a sentence when the account's
+// limits, its state, or the post itself do not allow the action.
 export const postPublication = router({
    list: ownerProcedure.query(({ ctx }) => PostPublicationService.list(ctx.user.id)),
 

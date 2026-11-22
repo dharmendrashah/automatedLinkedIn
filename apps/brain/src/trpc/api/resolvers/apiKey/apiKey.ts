@@ -18,8 +18,9 @@ const createInput = z.object({
 
 const byId = z.object({ id: z.string().describe('The id of one of the owner\u2019s own API keys.') })
 
-// Lets the signed-in user generate, list and revoke their own API keys (.plan/api-authentication-and-openapi-
-// docs.md). Every procedure is scoped to ctx.user.id, so a foreign key id is answered as a missing one.
+// Personal access tokens for calling this API directly (outside the browser session), one per label, each shown in
+// full only once at creation. Every procedure is scoped to ctx.user.id, so a key id that belongs to someone else is
+// answered as not found.
 export const apiKey = router({
    // The owner's keys, newest first. Never the key itself or its hash.
    list: ownerProcedure.query(({ ctx }) => ApiKeyService.list(ctx.user.id)),

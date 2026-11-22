@@ -29,8 +29,9 @@ import { orConflict, present } from '../owned'
 const MISSING = 'Campaign not found'
 const id = z.string().min(1).max(100)
 
-// Campaigns and the page that reads them (.plan/lead-pipeline-p5-campaign-page.md). Every procedure is scoped to ctx.user.id, so a
-// foreign id is answered as a missing one.
+// Campaigns and the data behind the campaign page (overview stats, trends, the account fleet, and the automations
+// a campaign can be built from). Every procedure is scoped to ctx.user.id, so a campaign id that belongs to
+// someone else is answered as not found.
 export const campaign = router({
    list: ownerProcedure.query(({ ctx }) => CampaignListService.list(ctx.user.id)),
 
@@ -116,12 +117,14 @@ export const campaign = router({
    // How each account is doing, for the strip and the account drawers.
    fleet: ownerProcedure.query(({ ctx }) => FleetHealthService.forUser(ctx.user.id)),
 
-   // The Starter: one form makes the campaign and its six workflows, switched off (.plan/lead-pipeline-p6-campaign-starter.md).
+   // Creates a new campaign in one step, pre-built with a standard set of six outreach workflows (discover, invite,
+   // warm up, first message, hand off, follow up), all switched off until the owner turns them on.
    createOutreach: ownerProcedure
       .input(outreachAnswersSchema)
       .mutation(({ ctx, input }) => orConflict(CampaignStarterService.createOutreach(ctx.user.id, input))),
 
-   // The sixteen automations and what each still waits for (.plan/lead-pipeline-p10-automations.md).
+   // The catalog of ready-made automations the owner can turn into workflows with `createAutomation`, with what
+   // each one still needs (for example a saved list of target companies) before it can be created.
    automations: ownerProcedure.query(() => AUTOMATIONS),
 
    // One form makes the workflows of one automation, switched off.

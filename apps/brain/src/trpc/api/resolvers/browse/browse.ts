@@ -20,8 +20,9 @@ const hoursSchema = z.object({
    timeZone: z.string().min(1).max(64),
 })
 
-// Browsing time of the owner's accounts (.plan/account-browsing-ui.md). Every call is scoped to ctx.user.id; an account that is
-// not the owner's is answered like a missing one, or left out of a change.
+// Browsing-time settings for the owner's LinkedIn accounts (which hours and days each account is allowed to be
+// active). Every call is scoped to ctx.user.id; an account id that belongs to someone else is answered as not
+// found, or silently left out of a bulk change.
 export const browse = router({
    overview: ownerProcedure.query(({ ctx }) => BrowseService.overview(ctx.user.id)),
 

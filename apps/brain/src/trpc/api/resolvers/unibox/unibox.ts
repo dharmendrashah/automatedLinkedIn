@@ -21,8 +21,9 @@ const WORDS_OR_FILES = { message: 'A reply needs words or files.' }
 const id = z.string().min(1).max(100)
 const ids = z.array(id).min(1).max(MAX_IDS)
 
-// The Unibox: the owner's conversations as the spider read them, and the owner's own marks on them. Every call is scoped to
-// ctx.user.id, so a foreign id answers like a missing one. See .plan/unibox-backend.md.
+// The owner's LinkedIn conversations, as last read by the spider, plus the owner's own marks on them (read/unread,
+// done). Every call is scoped to ctx.user.id, so a conversation or account id that belongs to someone else is
+// answered as not found.
 export const unibox = router({
    accounts: ownerProcedure.query(({ ctx }) => LinkedInConversationService.accounts(ctx.user.id)),
 
@@ -127,7 +128,7 @@ export const unibox = router({
             .object({
                conversationId: id,
                text: z.string().trim().max(REPLY_LIMITS.maxChars),
-               // The files of the reply, kept by brain since the page uploaded them (.plan/unibox-send-attachments.md).
+               // A file attached to the reply, already uploaded through `uploadForm` and kept by brain.
                uploadId: z.string().regex(UPLOAD_ID).optional(),
             })
             .refine(({ text, uploadId }) => text !== '' || uploadId !== undefined, WORDS_OR_FILES)
@@ -140,8 +141,9 @@ export const unibox = router({
          )
       ),
 
-   // A message to a connection from New message (.plan/message-connections.md): it goes on in the conversation the account has with the
-   // person, or begins one. Answers at once with the message to follow, like `send`. Refused with a sentence when it cannot go now.
+   // Starts a first message to a connection who has no conversation yet (or continues the existing one, if there is
+   // one already). Answers at once with the message to follow, like `send`. Refused with a sentence when it cannot
+   // go now.
    start: ownerProcedure
       .input(
          z.object({

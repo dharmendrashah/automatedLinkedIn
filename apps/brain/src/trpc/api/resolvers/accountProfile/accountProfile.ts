@@ -10,8 +10,9 @@ import { present } from '../owned'
 const byAccount = z.object({ accountId: z.string().min(1).max(100) })
 const NOT_FOUND = 'Account not found'
 
-// The profile of one of the owner's accounts (.plan/account-profile-backend.md). Every call is scoped to ctx.user.id; a foreign
-// account is answered like a missing one.
+// A read-only snapshot of one of the owner's LinkedIn accounts' own profile (headline, about, experience, and so
+// on), captured by the spider on request. Every call is scoped to ctx.user.id; an account id that belongs to
+// someone else is answered as not found.
 export const accountProfile = router({
    // Light and without profile content: the page asks it every few seconds while a read goes on.
    state: ownerProcedure
