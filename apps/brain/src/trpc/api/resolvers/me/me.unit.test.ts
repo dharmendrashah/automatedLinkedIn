@@ -9,11 +9,13 @@ import { me } from './me'
 const mocks = vi.hoisted(() => ({
    loadIdentity: vi.fn(),
    provisionUser: vi.fn(),
+   identityOfUser: vi.fn(),
 }))
 
 vi.mock('../../identity', () => ({
    loadIdentity: mocks.loadIdentity,
    provisionUser: mocks.provisionUser,
+   identityOfUser: mocks.identityOfUser,
 }))
 
 vi.mock('env', () => ({
@@ -142,5 +144,31 @@ describe('me', () => {
             user: row as never,
          }).me()
       ).rejects.toMatchObject({ code: 'BAD_GATEWAY' })
+   })
+
+   it('should build the identity from the local user for an API-key session, without calling authentik', async () => {
+      const synthetic = {
+         id: 'u1',
+         name: 'Ada',
+         username: undefined,
+         email: 'ada@elitale.com',
+         emailVerified: true,
+         groups: [],
+      }
+
+      mocks.identityOfUser.mockReturnValueOnce(synthetic)
+
+      await expect(
+         caller({
+            auth: null,
+            user: row as never,
+         }).me()
+      ).resolves.toEqual({
+         identity: synthetic,
+         user: projection,
+      })
+
+      expect(mocks.identityOfUser).toHaveBeenCalledWith(row)
+      expect(mocks.loadIdentity).not.toHaveBeenCalled()
    })
 })

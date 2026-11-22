@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server'
 
 import { ADMIN_EMAIL } from 'env'
 
-import { AuthService, type AuthenticatedRequest } from 'auth'
+import { AuthService, type AuthenticatedRequest, type Identity } from 'auth'
 
 import { AccountConflictError, UserService } from 'database'
 
@@ -13,6 +13,17 @@ export const loadIdentity = (auth: AuthenticatedRequest) =>
          message: 'Could not load the profile from the identity provider',
       })
    })
+
+// An API-key session has no identity provider to ask, so its "identity" is built straight from the local user the
+// key belongs to.
+export const identityOfUser = (user: { id: string; email: string; name: string | null }): Identity => ({
+   id: user.id,
+   name: user.name ?? undefined,
+   username: undefined,
+   email: user.email,
+   emailVerified: true,
+   groups: [],
+})
 
 // Finds, links or creates the local user for a caller who has none yet.
 export const provisionUser = async (auth: AuthenticatedRequest) => {

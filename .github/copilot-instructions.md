@@ -50,6 +50,7 @@ Plans are committed with the work; they are the record of locked product decisio
 - `packages/contracts`: types and schemas shared by brain, body and spider (CJS `dist`).
 - `packages/config`: shared `HttpService` URLs, built with `tsup` to `dist/` (CJS).
 - `packages/logger`: the shared structured logger.
+- `packages/trpc-openapi`: generic `router -> OpenAPI document` generator for any tRPC v11 router (no per-procedure annotations, built from the live router and each procedure's Zod `.input()`); brain is its first caller, not its only one.
 - `packages/ui`: shared React components.
 - `packages/eslint-config`: shared flat ESLint config (`eslint.js`).
 - `packages/tsconfig`: `base.json`, `node.json`, `react.json`.
@@ -85,6 +86,8 @@ Turborepo behaviour differs between versions: read the docs bundled in the insta
 - A task is never published from `TaskService.request` directly: it saves the session and a `TaskDispatch` row in one transaction (the task's `onRequest` gets the `tx`), then `TaskDispatchService.dispatch` publishes, and the worker job `task-dispatch` retries. Build a command only with `buildTaskCommand`.
 - Express 5: no bare `'*'` routes. Use `'/{*splat}'`.
 - tRPC: `trpc/trpc.ts` defines `router` and procedures. `trpc/api/router.ts` exports `AppRouter`. Resolvers live in `trpc/api/resolvers/<name>/<name>.ts` with their tests next to them.
+- A caller authenticates with either an authentik access token or an account-level API key (`alk_...`, created from the Profile page, `apiKey` resolver, `ApiKeyService`): `trpc/api/context.ts` tries an `alk_`-prefixed Bearer value against `ApiKeyService` first and skips authentik entirely; otherwise it verifies the token as an authentik JWT as before. Both populate the same `ctx.user`, so a procedure never needs to care which one a caller used; `me` is the one resolver that reads `ctx.auth` directly, and builds a synthetic identity (`identityOfUser`) when there is none.
+- Every tRPC procedure is documented as OpenAPI 3.1 automatically: `src/generateOpenApi.ts` builds it from the live `appRouter` with `@automatedLinkedIn/trpc-openapi` (`packages/trpc-openapi`, a generic `router -> OpenAPI document` function, not brain-specific) and writes `dist/openapi.json` as part of the brain `build` script (after `tsc -b`), grouped by resolver folder; `GET /api/openapi.json` and the Swagger UI page at `GET /api/docs` just read that file (`src/middlewares/openApiDocs.ts`), falling back to building it live only when the file is missing (a dev checkout that has not run `pnpm build`). A new procedure needs no manual doc step as long as it has a Zod `.input()`. The one REST route outside the router, `POST /api/workflows/{id}/run`, is merged in by hand (shared options in `src/trpc/openApiOptions.ts`); a new non-tRPC REST route belongs there too.
 - `apps/body` consumes `AppRouter` as a type by importing brain source directly (`apps/body/src/trpc/trpc.ts`). `apps/body/tsconfig.app.json` maps `trpc`, `trpc/*`, `auth`, `database`, `env` and `generated/*` to brain so brain's bare imports resolve. A new bare alias used by the router chain needs the same mapping.
 
 ## Spider tasks and the sign-in page (`apps/spider`)

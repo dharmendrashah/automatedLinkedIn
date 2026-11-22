@@ -13,7 +13,7 @@ This block is written and re-added by `turbo` before repository-scoped commands 
 
 The full project guide is [.github/copilot-instructions.md](.github/copilot-instructions.md). Read it before changing code, and read [MEMORY.md](MEMORY.md) before every task and update it when the task is done. The essentials:
 
-- pnpm + Turborepo monorepo: `apps/brain` (Express 5, tRPC, Prisma 7, PostgreSQL 18), `apps/body` (React, Vite), `apps/spider` (browser worker), `packages/{contracts,config,logger,ui,eslint-config,tsconfig}`.
+- pnpm + Turborepo monorepo: `apps/brain` (Express 5, tRPC, Prisma 7, PostgreSQL 18), `apps/body` (React, Vite), `apps/spider` (browser worker), `packages/{contracts,config,logger,trpc-openapi,ui,eslint-config,tsconfig}`.
 - Non-trivial tasks start with a plan in `.plan/<name>.md` (template: `.plan/_template.md`): double-check it, list edge cases, ask the user to lock any unconfirmed requirement, and only then execute. Mark it `done` and update `MEMORY.md` at the end.
 - Run everything from the repo root. Definition of done: `pnpm lint && pnpm ts:check && pnpm test:unit:run && pnpm build`.
 - Brain imports top-level `src` folders as bare modules through `module-alias`. `./aliases` must load before them in `server.ts`, and a new top-level folder must be added to `importOrder` in `.prettierrc`.

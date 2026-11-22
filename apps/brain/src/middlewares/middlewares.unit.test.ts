@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
    initializeTrpc: vi.fn(),
    configHealth: vi.fn(),
    configWorkflowApi: vi.fn(),
+   configOpenApiDocs: vi.fn(),
    configCdn: vi.fn(),
    env: { CORS_ORIGINS: ' http://localhost:3000 ,http://localhost:5173,, ' },
 }))
@@ -21,6 +22,8 @@ vi.mock('trpc/api/router', () => ({ initializeTrpc: mocks.initializeTrpc }))
 vi.mock('./health', () => ({ Health: { config: mocks.configHealth } }))
 
 vi.mock('./workflowApi', () => ({ WorkflowApi: { config: mocks.configWorkflowApi } }))
+
+vi.mock('./openApiDocs', () => ({ OpenApiDocs: { config: mocks.configOpenApiDocs } }))
 
 vi.mock('./cdn', () => ({ Cdn: { config: mocks.configCdn } }))
 
@@ -61,7 +64,7 @@ describe('Middlewares', () => {
       })
    })
 
-   it('should register the health routes, the workflow API and the file cache', () => {
+   it('should register the health routes, the workflow API, the API docs and the file cache', () => {
       const app = {
          use: vi.fn(),
          set: vi.fn(),
@@ -71,6 +74,7 @@ describe('Middlewares', () => {
 
       expect(mocks.configHealth).toHaveBeenCalledWith(app)
       expect(mocks.configWorkflowApi).toHaveBeenCalledWith(app)
+      expect(mocks.configOpenApiDocs).toHaveBeenCalledWith(app)
       expect(mocks.configCdn).toHaveBeenCalledWith(app)
    })
 

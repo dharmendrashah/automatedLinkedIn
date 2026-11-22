@@ -11,6 +11,7 @@ import { initializeTrpc } from 'trpc/api/router'
 import { Cdn } from './cdn'
 import { inCorrelation } from './correlation'
 import { Health } from './health'
+import { OpenApiDocs } from './openApiDocs'
 import { WorkflowApi } from './workflowApi'
 
 export class Middlewares {
@@ -39,6 +40,8 @@ export class Middlewares {
       Health.config(app)
 
       WorkflowApi.config(app)
+
+      OpenApiDocs.config(app)
 
       Cdn.config(app)
 

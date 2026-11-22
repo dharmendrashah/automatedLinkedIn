@@ -13,50 +13,18 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { readableError } from '@/lib/trpc-error'
-import { Check, CircleCheck, CircleDashed, Copy, KeyRound, Loader2, TriangleAlert } from 'lucide-react'
-import { useState } from 'react'
+import { CircleCheck, CircleDashed, KeyRound, Loader2, TriangleAlert } from 'lucide-react'
 
 import { type Block, type Graph } from './types'
 
+import { CopyButton, Code } from '../copy-code'
 import { createApiUrl } from '../../trpc/config'
 import { apiInputsOf, curlOf, sampleBody } from './api-sample'
 import { type ApiToken, useApiToken } from './use-api-token'
 
 // The pieces of "start this workflow from another system", shared by the workflow's API tab and the Input tab of the
-// "When called by API" block (.plan/api-trigger-input.md).
-
-const COPIED_MS = 1_500
-
-export const CopyButton = ({ text, label }: { text: string; label: string }) => {
-   const [copied, setCopied] = useState(false)
-
-   return (
-      <Button
-         type="button"
-         variant="ghost"
-         size="icon"
-         aria-label={copied ? 'Copied' : label}
-         onClick={() =>
-            void navigator.clipboard.writeText(text).then(() => {
-               setCopied(true)
-               setTimeout(() => setCopied(false), COPIED_MS)
-            })
-         }
-      >
-         {copied ? <Check className="text-success" /> : <Copy />}
-      </Button>
-   )
-}
-
-// A block of code with a copy button.
-export const Code = ({ text, label }: { text: string; label: string }) => (
-   <div className="bg-muted relative min-w-0 rounded-md">
-      <pre className="overflow-x-auto p-3 pr-12 font-mono text-xs leading-relaxed">{text}</pre>
-      <div className="absolute top-1 right-1">
-         <CopyButton text={text} label={label} />
-      </div>
-   </div>
-)
+// "When called by API" block (.plan/api-trigger-input.md). CopyButton/Code live in ../copy-code, shared with the
+// account API keys on the Profile page.
 
 // Creates or replaces the token. A new token is shown once; replacing one asks first, because the old one stops working.
 export const TokenControl = ({ workflowId, api }: { workflowId: string; api: ApiToken }) => {

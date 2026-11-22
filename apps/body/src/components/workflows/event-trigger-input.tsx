@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { type ConfigValue } from './types'
 
 import { trpc } from '../../trpc'
-import { Code } from './api-request'
+import { Code } from '../copy-code'
 import { EventTryout } from './event-tryout'
 import { timeOf } from './run-sentence'
 

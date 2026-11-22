@@ -1,9 +1,10 @@
 import { userProcedure } from 'trpc'
 
-import { loadIdentity } from '../../identity'
+import { identityOfUser, loadIdentity } from '../../identity'
+import { present } from '../owned'
 
 export const me = userProcedure.query(async ({ ctx }) => ({
-   identity: await loadIdentity(ctx.auth),
+   identity: ctx.auth ? await loadIdentity(ctx.auth) : identityOfUser(present(ctx.user, 'No session to read')),
    user: ctx.user && {
       id: ctx.user.id,
       email: ctx.user.email,
