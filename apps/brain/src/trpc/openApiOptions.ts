@@ -2,6 +2,8 @@ import { GIT_SHA } from 'env'
 
 import { type GenerateOptions } from '@automatedLinkedIn/trpc-openapi'
 
+import { resolverComments } from 'trpc/resolverComments'
+
 // Shared by the build-time generator (generateOpenApi.ts) and the runtime fallback in openApiDocs.ts, so the two
 // can never disagree on what the document looks like.
 
@@ -48,9 +50,15 @@ const WORKFLOW_RUN_PATH = {
    },
 }
 
-export const openApiOptions = (): GenerateOptions => ({
-   title: 'automatedLinkedIn API',
-   version: GIT_SHA,
-   basePath: '/trpc',
-   extraPaths: { '/api/workflows/{id}/run': WORKFLOW_RUN_PATH },
-})
+export const openApiOptions = (): GenerateOptions => {
+   const { operations, modules } = resolverComments()
+
+   return {
+      title: 'automatedLinkedIn API',
+      version: GIT_SHA,
+      basePath: '/trpc',
+      extraPaths: { '/api/workflows/{id}/run': WORKFLOW_RUN_PATH },
+      operationSummaries: operations,
+      moduleDescriptions: modules,
+   }
+}

@@ -221,3 +221,50 @@ Verified: `rm -rf apps/brain/dist && pnpm build` (root, Turborepo) writes `dist/
 repeated with `.env` moved aside and `DATABASE_URL`/`NODE_ENV` unset to confirm it also works with nothing but the
 inline fallbacks, matching Docker's `build` stage; the already-running dev server's `/api/openapi.json` response is
 byte-identical to the written file. Full gate (`lint`/`ts:check`/`test:unit:run`/`build`) green again afterward.
+
+## Follow-up 2026-11-22 (same day): real per-operation and per-field documentation
+
+Requested in the same PR: "there are so many documentation is missing for each api and input values for each key,
+do proper comments and document them in swagger doc." Before this, every operation showed only its path as an id,
+and no input field had a description — the comments already written above each procedure were not read at all.
+
+- Considered the TypeScript Compiler API for a real AST-based extractor first and ruled it out: TS 7.0.2's npm
+  package no longer exposes the classic synchronous API (`createSourceFile`, `forEachChild`, ...) from
+  `require('typescript')` — only `{version, versionMajorMinor}`. The replacement lives under `typescript/unstable/
+  ast` and `typescript/unstable/sync`, both explicitly marked unstable and shaped around a different
+  Project/Program/Checker model, too risky to depend on for this.
+- `apps/brain/src/trpc/resolverComments.ts` (new) reads the comment an engineer already wrote above each procedure
+  and above each resolver's own `router({...})`, line-based rather than a full parse: every resolver file under
+  `src/trpc/api/resolvers` is Prettier-formatted the same way (one `router({...})` or one bare procedure export per
+  block, procedures at exactly 3-space indentation, no nested `router({` calls), so position alone tells a
+  procedure property from an unrelated comment (e.g. one inside a chained `.input(z.object({...}))`) apart.
+  Confirmed against the real tree: 123 operation comments and 30 module comments extracted, zero false positives.
+  `resolverComments.unit.test.ts` covers router- and procedure-level comments, multi-line joining, a bare procedure
+  export, two routers in one file, the zod-field exclusion, the no-comment case and the test-file exclusion.
+- `packages/trpc-openapi/src/generate.ts`: `GenerateOptions` gained `operationSummaries` and `moduleDescriptions`
+  (both `Record<string, string>`, keyed the same way as `resolverComments()`'s output); an operation's `summary`
+  prefers the real comment, a tag's `description` likewise. Deliberately **not** done: per-field documentation is
+  not extracted from code comments — reliably tying a field-level comment to the right zod schema across inline
+  objects, named local consts and schemas imported from `@automatedLinkedIn/contracts` would need the same
+  AST/type-checker access just ruled out above. Instead every input field without a real `.describe()` gets a
+  humanized label from its own property name (`expiresInDays` -> "Expires in days"), recursing into nested object
+  and array-of-object fields and leaving any existing `.describe()` untouched.
+- `apps/brain/src/trpc/openApiOptions.ts` calls `resolverComments()` once and passes `operations`/`modules` straight
+  through as `operationSummaries`/`moduleDescriptions`, so both the build-time generator and the dev-only live
+  fallback pick up the same enriched descriptions with zero manual wiring per procedure.
+- Added a handful of real `.describe()` calls to the newest resolver's (`apiKey`) own zod schemas and a one-line
+  module comment above its `router({...})`, as a working example of real field-level documentation when an
+  engineer takes the extra line to write one (see `apps/brain/src/trpc/api/resolvers/apiKey/apiKey.ts`).
+
+Known scope limit, by design: operation summaries and tag descriptions reuse real engineer-written comments;
+per-field descriptions are a humanized guess from the property name unless the engineer added a real `.describe()`
+on that field's own zod schema.
+
+Verified: `packages/trpc-openapi`'s unit tests grew from 7 to 13 (summary override, humanized summary fallback, tag
+description, humanized field fallback, a real `.describe()` winning over the fallback, and a nested object field);
+brain's full unit suite stayed green (192 files, 2056 tests) after wiring `resolverComments()` in; `pnpm lint`,
+`ts:check` clean; `rm -rf apps/brain/dist && pnpm build` regenerated `dist/openapi.json` and was inspected by hand —
+`apiKey.create`/`apiKey.revoke`/`apiKey.list` show their real one-line summaries, the `apiKey` tag shows its real
+module comment, `apiKey.create`'s two fields show their real `.describe()` text, and unrelated procedures with no
+hand-written comment or `.describe()` (e.g. `campaign.list`, `accountProfile.get`'s `accountId`) show the humanized
+fallback instead of nothing.

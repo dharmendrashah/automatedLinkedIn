@@ -32,11 +32,70 @@ export type GenerateOptions = {
    servers?: { url: string; description?: string }[]
    /** Extra paths to merge in as-is, for routes outside the router (a raw REST endpoint, say). */
    extraPaths?: Record<string, Record<string, unknown>>
+   /** A procedure's own summary, by its dot path (e.g. "workflow.rotateToken"). Missing: a readable guess from the
+    *  path itself, so nothing is left with no summary at all. */
+   operationSummaries?: Record<string, string>
+   /** A tag's (a resolver module's) own description, by its name (e.g. "workflow"). */
+   moduleDescriptions?: Record<string, string>
 }
 
 type JsonSchema = Record<string, unknown>
 
 const isZodObject = (schema: unknown): schema is z.ZodObject => schema instanceof z.ZodObject
+
+// "expiresInDays" -> "Expires in days". Used only where a field has no real description (no Zod `.describe()`
+// today, and none written for this field by hand), so every input value still shows something readable rather than
+// a bare type.
+const humanize = (text: string) =>
+   text
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .toLowerCase()
+      .replace(/^./, first => first.toUpperCase())
+
+// Walks a generated JSON Schema and fills in a `description` for every object property and array item that does not
+// already have one (a real Zod `.describe()` always wins; this only fills the gap).
+const withFieldDescriptions = (schema: JsonSchema): JsonSchema => {
+   if (schema.type === 'object' && schema.properties && typeof schema.properties === 'object') {
+      const properties = schema.properties as Record<string, JsonSchema>
+
+      return {
+         ...schema,
+         properties: Object.fromEntries(
+            Object.entries(properties).map(([key, value]) => [
+               key,
+               withFieldDescriptions(
+                  value.description
+                     ? value
+                     : {
+                          ...value,
+                          description: humanize(key),
+                       }
+               ),
+            ])
+         ),
+      }
+   }
+
+   if (schema.type === 'array' && schema.items && typeof schema.items === 'object') {
+      return {
+         ...schema,
+         items: withFieldDescriptions(schema.items as JsonSchema),
+      }
+   }
+
+   for (const key of ['anyOf', 'oneOf', 'allOf']) {
+      const branches = schema[key]
+
+      if (Array.isArray(branches)) {
+         return {
+            ...schema,
+            [key]: branches.map(branch => withFieldDescriptions(branch as JsonSchema)),
+         }
+      }
+   }
+
+   return schema
+}
 
 // Multiple chained `.input()` calls are read by tRPC as separate schemas, not a merged one. When every one is a
 // plain object, their shapes are combined; otherwise only the last is used (noted in its description) rather than
@@ -58,7 +117,7 @@ const mergedInput = (inputs: unknown[]): z.ZodType | null => {
 }
 
 const jsonSchemaOf = (schema: z.ZodType, note?: string): JsonSchema => {
-   const body = z.toJSONSchema(schema, { unrepresentable: 'any' }) as JsonSchema
+   const body = withFieldDescriptions(z.toJSONSchema(schema, { unrepresentable: 'any' }) as JsonSchema)
 
    return note
       ? {
@@ -70,7 +129,12 @@ const jsonSchemaOf = (schema: z.ZodType, note?: string): JsonSchema => {
 
 const tagOf = (path: string) => path.split('.')[0] ?? path
 
-const operationOf = (path: string, procedure: RawProcedure) => {
+// A path's own last segment, humanized, when no real summary was written for it (e.g. "rotateToken" -> "Rotate
+// token"). The tag already carries the module, so only the leaf is used.
+const summaryOf = (path: string, summaries: Record<string, string> | undefined) =>
+   summaries?.[path] ?? humanize(path.split('.').at(-1) ?? path)
+
+const operationOf = (path: string, procedure: RawProcedure, options: GenerateOptions) => {
    const schema = mergedInput(procedure._def.inputs)
    const note =
       procedure._def.inputs.length > 1 && !procedure._def.inputs.every(isZodObject)
@@ -80,6 +144,7 @@ const operationOf = (path: string, procedure: RawProcedure) => {
 
    const base = {
       operationId: path,
+      summary: summaryOf(path, options.operationSummaries),
       tags: [tagOf(path)],
       responses: {
          '200': { description: "The procedure's result, in tRPC's envelope (`result.data`)." },
@@ -130,7 +195,7 @@ export const generateOpenApiDocument = (router: RawRouter, options: GenerateOpti
 
       const base = options.basePath ?? ''
 
-      paths[`${base}/${path}`] = operationOf(path, procedure)
+      paths[`${base}/${path}`] = operationOf(path, procedure, options)
    }
 
    return {
@@ -142,7 +207,10 @@ export const generateOpenApiDocument = (router: RawRouter, options: GenerateOpti
       servers: options.servers,
       tags: [...new Set(Object.keys(procedures).map(tagOf))]
          .sort((left, right) => left.localeCompare(right))
-         .map(name => ({ name })),
+         .map(name => ({
+            name,
+            ...(options.moduleDescriptions?.[name] ? { description: options.moduleDescriptions[name] } : {}),
+         })),
       paths,
       components: {
          securitySchemes: {

@@ -119,4 +119,90 @@ describe('generateOpenApiDocument', () => {
          })
       ).not.toThrow()
    })
+
+   it('uses the given summary for an operation, by its dot path', () => {
+      const doc = generateOpenApiDocument(appRouter as never, {
+         title: 'Test API',
+         version: '1.0.0',
+         operationSummaries: { 'workflow.rotateToken': 'A new token for the workflow\u2019s API address.' },
+      })
+
+      const op = doc.paths['/workflow.rotateToken'] as { post: { summary: string } }
+
+      expect(op.post.summary).toBe('A new token for the workflow\u2019s API address.')
+   })
+
+   it('falls back to a humanized summary from the path when none is given', () => {
+      const doc = generateOpenApiDocument(appRouter as never, {
+         title: 'Test API',
+         version: '1.0.0',
+      })
+
+      const op = doc.paths['/workflow.rotateToken'] as { post: { summary: string } }
+
+      expect(op.post.summary).toBe('Rotate token')
+   })
+
+   it('uses the given description for a tag, by its name', () => {
+      const doc = generateOpenApiDocument(appRouter as never, {
+         title: 'Test API',
+         version: '1.0.0',
+         moduleDescriptions: { workflow: 'A saved workflow and its runs.' },
+      })
+
+      expect(doc.tags).toContainEqual({
+         name: 'workflow',
+         description: 'A saved workflow and its runs.',
+      })
+      expect(doc.tags).toContainEqual({ name: 'me' })
+   })
+
+   it('fills in a readable description for an input field with no Zod .describe()', () => {
+      const doc = generateOpenApiDocument(appRouter as never, {
+         title: 'Test API',
+         version: '1.0.0',
+      })
+
+      const op = doc.paths['/chained.both'] as { get: { parameters: { schema: Record<string, unknown> }[] } }
+      const properties = op.get.parameters[0]?.schema.properties as Record<string, { description: string }>
+
+      expect(properties.a.description).toBe('A')
+      expect(properties.b.description).toBe('B')
+   })
+
+   it('keeps a field\u2019s real Zod .describe() instead of the humanized fallback', () => {
+      const doc = generateOpenApiDocument(appRouter as never, {
+         title: 'Test API',
+         version: '1.0.0',
+      })
+
+      const op = doc.paths['/workflow.rotateToken'] as {
+         post: { requestBody: { content: { 'application/json': { schema: Record<string, unknown> } } } }
+      }
+      const schema = op.post.requestBody.content['application/json'].schema as {
+         properties: Record<string, unknown>
+      }
+
+      expect(schema.properties.id).toMatchObject({ description: 'the workflow id' })
+   })
+
+   it('fills in descriptions for fields nested inside an object field', () => {
+      const addressSchema = z.object({ address: z.object({ postalCode: z.string() }) })
+      const nested = t.router({ settings: t.procedure.input(addressSchema).mutation(() => null) })
+
+      const doc = generateOpenApiDocument(nested as never, {
+         title: 'Test API',
+         version: '1.0.0',
+      })
+
+      const op = doc.paths['/settings'] as {
+         post: { requestBody: { content: { 'application/json': { schema: Record<string, unknown> } } } }
+      }
+      const schema = op.post.requestBody.content['application/json'].schema as {
+         properties: { address: { description: string; properties: { postalCode: { description: string } } } }
+      }
+
+      expect(schema.properties.address.description).toBe('Address')
+      expect(schema.properties.address.properties.postalCode.description).toBe('Postal code')
+   })
 })
