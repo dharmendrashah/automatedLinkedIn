@@ -24,6 +24,12 @@ export type RawRouter = {
    }
 }
 
+export type SecurityScheme = {
+   type: 'http'
+   scheme: 'bearer'
+   description: string
+}
+
 export type GenerateOptions = {
    title: string
    version: string
@@ -37,6 +43,9 @@ export type GenerateOptions = {
    operationSummaries?: Record<string, string>
    /** A tag's (a resolver module's) own description, by its name (e.g. "workflow"). */
    moduleDescriptions?: Record<string, string>
+   /** Security schemes beyond the router's own `apiToken`, for a hand-written path in `extraPaths` that needs its
+    *  own credential (a workflow's own trigger token, say) — merged into `components.securitySchemes` as given. */
+   extraSecuritySchemes?: Record<string, SecurityScheme>
 }
 
 type JsonSchema = Record<string, unknown>
@@ -214,13 +223,16 @@ export const generateOpenApiDocument = (router: RawRouter, options: GenerateOpti
       paths,
       components: {
          securitySchemes: {
-            bearerAuth: {
+            apiToken: {
                type: 'http',
                scheme: 'bearer',
-               description: 'Either an authentik access token or an "alk_"-prefixed API key, both as a Bearer token.',
+               description:
+                  'Your API token (create one from Profile \u2192 API keys). An authentik access token (the ' +
+                  "browser session's own token) also works, as a second, internal way to reach the same procedures.",
             },
+            ...options.extraSecuritySchemes,
          },
       },
-      security: [{ bearerAuth: [] }],
+      security: [{ apiToken: [] }],
    }
 }

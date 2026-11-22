@@ -58,6 +58,15 @@ export const openApiOptions = (): GenerateOptions => {
       version: GIT_SHA,
       basePath: '/trpc',
       extraPaths: { '/api/workflows/{id}/run': WORKFLOW_RUN_PATH },
+      extraSecuritySchemes: {
+         workflowToken: {
+            type: 'http',
+            scheme: 'bearer',
+            description:
+               "One workflow's own API token (shown once on that workflow's API tab when it is switched on to run " +
+               'by API) \u2014 not the account-wide API token, and only valid for that one workflow.',
+         },
+      },
       operationSummaries: operations,
       moduleDescriptions: modules,
    }

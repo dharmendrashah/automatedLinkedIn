@@ -303,3 +303,48 @@ string `.plan` and found zero matches (down from the `apiKey` tag leak the user 
 to confirm each reads as plain API documentation with no internal references. Full gate green: `pnpm lint`,
 `pnpm ts:check`, `pnpm test:unit:run` (192 files, 2056 tests, unchanged — comment-only and one minor structural
 change in `dashboard.ts`).
+
+## Follow-up 2026-11-22 (third one today): name the credential "API token" in the Swagger UI, not "Bearer"
+
+Status: locked (narrow, unambiguous, zero runtime behavior change — documentation/schema labeling only).
+
+The user clicked "Authorize" on `GET /api/docs` and saw a scheme literally named `bearerAuth`, titled
+`bearerAuth (http, Bearer)`, asking for a generic "Bearer" value — reads like any OAuth bearer token is expected, not
+specifically the API token a caller actually has (the one created on the Profile page). Request: "it should ask api
+token in the swagger json."
+
+Two separate credentials exist in the generated document today, and only one of them is even defined:
+
+- `packages/trpc-openapi/src/generate.ts` hardcodes one scheme, key `bearerAuth`, applied globally
+  (`security: [{ bearerAuth: [] }]`) to every tRPC path — this is the one the user hit on `me`.
+- `apps/brain/src/trpc/openApiOptions.ts`'s hand-written `WORKFLOW_RUN_PATH` (the one REST route outside the tRPC
+  router) references `security: [{ workflowToken: [] }]`, but no `workflowToken` entry exists in
+  `securitySchemes` anywhere — a second, independent bug (an OpenAPI document that references an undefined security
+  scheme name), found while fixing the first one.
+
+### Approach
+
+- `packages/trpc-openapi/src/generate.ts`: rename the scheme key from `bearerAuth` to `apiToken` (still
+  `type: "http", scheme: "bearer"`, so Swagger UI keeps auto-prefixing "Bearer " and a caller still only pastes the
+  raw token — no behavior change, no new way to get the double-"Bearer" mistake). Reword its `description` to lead
+  with "Your API token" (created on the Profile page) and mention the authentik access token second, as the
+  secondary/internal option it is for an external caller. Add a new optional `GenerateOptions.extraSecuritySchemes`
+  (merged into `components.securitySchemes`, the same pattern as the existing `extraPaths`), so a caller like brain
+  can contribute a security scheme for a hand-written path without the generic package knowing anything
+  workflow-specific.
+- `apps/brain/src/trpc/openApiOptions.ts`: pass `extraSecuritySchemes: { workflowToken: {...} }`, written the same
+  way (`type: "http", scheme: "bearer"`), with its own description explaining it is one workflow's own token (from
+  that workflow's API tab), not the account-wide one — fixing the dangling-reference bug alongside the renaming.
+- Update `packages/trpc-openapi/src/generate.unit.test.ts` for the renamed scheme and the new option.
+- Rebuild `dist/openapi.json` and confirm by hand: the Authorize dialog's heading reads `apiToken (http, Bearer)`
+  with the API-token-first description; `/api/workflows/{id}/run`'s own security no longer points at an undefined
+  scheme.
+
+Verified: `packages/trpc-openapi` unit tests grew from 14 to 15 (renamed-scheme assertion plus a new
+`extraSecuritySchemes` merge test); brain's full unit suite stayed green (192 files, 2056 tests); `pnpm lint`,
+`pnpm ts:check` clean repo-wide; `rm -rf apps/brain/dist packages/trpc-openapi/dist && pnpm build` regenerated
+`dist/openapi.json` with both schemes present (`apiToken`, `workflowToken`, neither dangling); opened the real
+`/api/docs` page in a browser, clicked Authorize, and confirmed the dialog shows `apiToken (http, Bearer)` leading
+with "Your API token (create one from Profile → API keys)...", with `workflowToken (http, Bearer)` listed as its own
+separate entry right below it.
+
