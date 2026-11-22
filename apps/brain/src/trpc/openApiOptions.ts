@@ -13,8 +13,9 @@ const WORKFLOW_RUN_PATH = {
    post: {
       operationId: 'workflows.run',
       tags: ['workflows'],
-      summary: 'Starts a workflow switched on to run by API, using its own token.',
-      security: [{ workflowToken: [] }],
+      summary:
+         'Starts a workflow switched on to run by API. Takes your API token, like every other endpoint (that ' +
+         "workflow's own token from its API tab also works).",
       parameters: [
          {
             name: 'id',
@@ -43,7 +44,7 @@ const WORKFLOW_RUN_PATH = {
       },
       responses: {
          '202': { description: 'The run was started (or, with a repeated Idempotency-Key, already running).' },
-         '401': { description: "Missing or invalid Authorization header (that workflow's own token)." },
+         '401': { description: "Missing or invalid Authorization header, or the token is not the workflow owner's." },
          '409': { description: 'The workflow is switched off or not started by API.' },
          '429': { description: 'Too many calls this hour.' },
       },
@@ -58,15 +59,6 @@ export const openApiOptions = (): GenerateOptions => {
       version: GIT_SHA,
       basePath: '/trpc',
       extraPaths: { '/api/workflows/{id}/run': WORKFLOW_RUN_PATH },
-      extraSecuritySchemes: {
-         workflowToken: {
-            type: 'http',
-            scheme: 'bearer',
-            description:
-               "One workflow's own API token (shown once on that workflow's API tab when it is switched on to run " +
-               'by API) \u2014 not the account-wide API token, and only valid for that one workflow.',
-         },
-      },
       operationSummaries: operations,
       moduleDescriptions: modules,
    }

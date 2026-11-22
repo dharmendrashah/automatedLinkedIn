@@ -109,29 +109,6 @@ describe('generateOpenApiDocument', () => {
       expect(doc.security).toEqual([{ apiToken: [] }])
    })
 
-   it('merges extra security schemes in for a hand-written path, alongside apiToken', () => {
-      const doc = generateOpenApiDocument(appRouter as never, {
-         title: 'Test API',
-         version: '1.0.0',
-         extraSecuritySchemes: {
-            workflowToken: {
-               type: 'http',
-               scheme: 'bearer',
-               description: "One workflow's own token.",
-            },
-         },
-      })
-
-      const schemes = doc.components.securitySchemes as Record<string, unknown>
-
-      expect(schemes.apiToken).toBeDefined()
-      expect(schemes.workflowToken).toMatchObject({
-         type: 'http',
-         scheme: 'bearer',
-         description: "One workflow's own token.",
-      })
-   })
-
    it('does not throw on a router with no procedures', () => {
       const empty = t.router({})
 

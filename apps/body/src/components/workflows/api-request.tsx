@@ -155,7 +155,10 @@ export const ApiTriggerInput = ({
 
    return (
       <div className="grid min-w-0 gap-4 text-sm *:min-w-0">
-         <p>Another system starts this workflow by sending a request. Each call starts one run.</p>
+         <p>
+            Another system starts this workflow by sending a request. Each call starts one run. Use your API token
+            (Profile, API keys) or this workflow&apos;s own token below.
+         </p>
          <ul className="grid gap-1">
             <Readiness done={enabled}>The workflow is switched on (the switch at the top of the page)</Readiness>
             <Readiness done={api.hasToken}>A token is set</Readiness>

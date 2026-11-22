@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 
 import { type Prisma } from 'generated/prisma/client'
 
+import { API_KEY_PREFIX, ApiKeyService } from './apiKey.service'
 import { ConflictError } from './conflict'
 import { PrismaService } from './prisma.service'
 import { MAX_CHAIN_DEPTH, WorkflowService } from './workflow.service'
@@ -55,7 +56,8 @@ export class WorkflowTriggerService {
          : null
    }
 
-   // The workflow this token opens, or null. Compared in constant time.
+   // The workflow this token opens, or null. Either the owner's account API token (`alk_...`, the same one every
+   // other endpoint takes) or the workflow's own token; both compared in constant time.
    public static async authorize(id: string, token: string) {
       const workflow = await PrismaService.client.workflow.findUnique({
          where: { id },
@@ -67,6 +69,13 @@ export class WorkflowTriggerService {
             apiTokenHash: true,
          },
       })
+
+      if (token.startsWith(API_KEY_PREFIX)) {
+         const userId = await ApiKeyService.authenticate(token)
+
+         return workflow && userId === workflow.userId ? workflow : null
+      }
+
       const expected = workflow?.apiTokenHash ? Buffer.from(workflow.apiTokenHash, 'hex') : null
       const given = digest(token)
 

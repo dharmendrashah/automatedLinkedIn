@@ -348,3 +348,16 @@ Verified: `packages/trpc-openapi` unit tests grew from 14 to 15 (renamed-scheme 
 with "Your API token (create one from Profile → API keys)...", with `workflowToken (http, Bearer)` listed as its own
 separate entry right below it.
 
+
+### Correction (same day, locked by the user's correction)
+
+The follow-up above was wrong: the user wants the account API token to work across the whole API, like the
+authentik bearer token, not a second `workflowToken` credential for one route. Redone as:
+
+- `WorkflowTriggerService.authorize(id, token)`: an `alk_` token is checked with `ApiKeyService.authenticate`, and the
+  workflow opens when its owner is that key's user. A workflow's own token still works, so existing integrations keep
+  running (assumption, not asked).
+- Swagger has one scheme, `apiToken`, used by every path including `POST /api/workflows/{id}/run`. The
+  `workflowToken` scheme and the `extraSecuritySchemes` option added for it are removed (no other caller).
+- Tests first: integration cases in `triggers.integration.test.ts` for the owner's key (opens), another user's key
+  (refused) and a revoked key (refused).

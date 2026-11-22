@@ -13,6 +13,7 @@ const bodySchema = apiBodySchema(API_LIMITS.items)
 
 const KEY = /^[\w-]{1,100}$/
 const MAX_BODY = 64 * 1024
+const UNAUTHORIZED = 'A valid API token of the workflow\u2019s owner, or the workflow\u2019s own token, is required.'
 
 // Read by hand: the body parser's types do not match Express 5's handler types here. An empty body is {}: a workflow
 // that finds its own input needs nothing. Undefined when too big or not JSON.
@@ -48,7 +49,7 @@ export class WorkflowApi {
          const workflow = token ? await WorkflowTriggerService.authorize(request.params.id, token) : null
 
          if (!workflow) {
-            return response.status(401).json({ error: 'A valid token for this workflow is required.' })
+            return response.status(401).json({ error: UNAUTHORIZED })
          }
 
          if (!workflow.enabled || !readGraph(workflow.graph).nodes.some(({ type }) => type === 'trigger.api')) {

@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { fakeDataClient } from 'core/fakeDataClient'
 
 import {
+   ApiKeyService,
    IcpService,
    PrismaService,
    RetentionService,
@@ -161,6 +162,20 @@ describe('workflow triggers and retention (database)', () => {
       await expect(WorkflowTriggerService.authorize(first.id, old ?? '')).resolves.toBeNull()
       await expect(WorkflowTriggerService.authorize(first.id, token ?? '')).resolves.toMatchObject({ id: first.id })
       await expect(WorkflowTriggerService.rotateToken(randomUUID(), first.id)).resolves.toBeNull()
+   })
+
+   it('should open the workflow with its owner\u2019s account API token, and only theirs', async () => {
+      const own = await ApiKeyService.create(userId, `Run ${randomUUID().slice(0, 8)}`, null)
+      const stranger = (await UserService.create({ email: `${randomUUID()}@elitale.com` })).id
+      const foreign = await ApiKeyService.create(stranger, 'Other', null)
+
+      await expect(WorkflowTriggerService.authorize(first.id, own.key)).resolves.toMatchObject({ id: first.id })
+      await expect(WorkflowTriggerService.authorize(first.id, foreign.key)).resolves.toBeNull()
+
+      await ApiKeyService.revoke(userId, own.row.id)
+      await expect(WorkflowTriggerService.authorize(first.id, own.key)).resolves.toBeNull()
+
+      await PrismaService.client.user.delete({ where: { id: stranger } })
    })
 
    it('should refuse a chain that would start itself', async () => {
