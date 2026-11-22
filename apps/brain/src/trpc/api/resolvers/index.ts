@@ -1,4 +1,5 @@
 export { accountProfile } from './accountProfile/accountProfile'
+export { apiKey } from './apiKey/apiKey'
 export { browse } from './browse/browse'
 export { campaign } from './campaign/campaign'
 export { connections } from './connections/connections'

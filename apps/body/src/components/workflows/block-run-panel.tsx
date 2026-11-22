@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { type Block, type ConfigValue, type StepRun, formatUsd, resumeText } from './types'
 
 import { trpc } from '../../trpc'
-import { Code } from './api-request'
+import { Code } from '../copy-code'
 import { KIND_WORDS, sampleOf, sampleOutOf } from './api-sample'
 import { type BlockRun, adviceOf } from './block-run'
 import { isInputType } from './input-kinds'

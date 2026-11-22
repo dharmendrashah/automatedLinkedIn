@@ -71,6 +71,30 @@ model User {
   workflows            Workflow[]
   people               Person[]
   messageTemplates     MessageTemplate[]
+  apiKeys              ApiKey[]
+}
+
+// An account-level API key (`alk_...`), lets its owner call the whole API as themselves instead of an authentik
+// session token (.plan/api-authentication-and-openapi-docs.md). Only the SHA-256 hash is stored; the key itself is
+// shown once at creation. `keyPrefix` is the first 11 characters in the clear (not secret, just enough entropy to
+// look up the matching row without scanning every key's hash), shown in the list so the owner can tell keys apart.
+model ApiKey {
+  id         String    @id @default(uuid(7))
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  keyHash    String
+  keyPrefix  String
+  createdAt  DateTime  @default(now())
+  // Null: never expires on its own, only by revoke.
+  expiresAt  DateTime?
+  // Null: still active. Set once, never cleared.
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@index([keyPrefix])
 }
 
 enum WorkflowListMemberState {

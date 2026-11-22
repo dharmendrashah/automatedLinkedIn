@@ -8,17 +8,19 @@ const t = initTRPC.context<Context>().create({ errorFormatter: errorShape })
 
 export const { middleware, router } = t
 
-// Requires a valid authentik access token and gives the caller a local user, linking or creating it on first use.
+// Requires a valid authentik access token or API key, and gives the caller a local user: linking or creating one on
+// first use for an authentik login, or the key's already-existing owner for an API key (an API key can only ever
+// belong to an existing account, so there is nothing to provision).
 export const userProcedure = t.procedure.use(
    middleware(async ({ ctx, next }) => {
-      if (!ctx.auth) {
+      if (!ctx.auth && !ctx.user) {
          throw new TRPCError({
             code: 'UNAUTHORIZED',
-            message: 'A valid access token is required',
+            message: 'A valid access token or API key is required',
          })
       }
 
-      const user = ctx.user ?? (await provisionUser(ctx.auth))
+      const user = ctx.user ?? (ctx.auth ? await provisionUser(ctx.auth) : null)
 
       return next({
          ctx: {

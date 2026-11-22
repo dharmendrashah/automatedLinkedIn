@@ -5,7 +5,8 @@ import { JobMonitorService, PlatformSettingService } from 'database'
 
 import { adminProcedure, router } from 'trpc'
 
-// The admin's cron monitor (.plan/cron-monitor.md): what the brain worker's jobs did and whether they ran on time. Read only.
+// The admin's cron monitor: what the brain worker's scheduled jobs did on each run, and whether they ran on time.
+// Read-only, and restricted to the platform admin account.
 export const jobs = router({
    overview: adminProcedure.query(() => JobMonitorService.overview()),
 
@@ -42,14 +43,15 @@ export const jobs = router({
 
    messageReads: adminProcedure.query(() => JobMonitorService.messageReads()),
 
-   // The switch that stops every reaction and comment (.plan/lead-pipeline-p3-engage.md, P8), with who changed it and when.
+   // The platform-wide switch that turns off every automated reaction and comment ("Acts"), with who last changed it
+   // and when.
    acts: adminProcedure.query(() => PlatformSettingService.actsSwitch()),
 
    setActs: adminProcedure
       .input(z.object({ on: z.boolean() }))
       .mutation(({ ctx, input }) => PlatformSettingService.setActs(input.on, ctx.user.email)),
 
-   // The switch and the caps of With AI (.plan/lead-pipeline-p4-ai-drafts.md).
+   // The platform-wide switch and usage caps for "With AI" (AI-drafted comments and replies).
    ai: adminProcedure.query(() => PlatformSettingService.ai()),
 
    setAi: adminProcedure

@@ -47,7 +47,7 @@ const updateInput = z.object({
 
 const NOUN = 'company'
 
-// The Filters drawer (.plan/companies-filter-drawer.md), shared with the Companies input block.
+// Filters shared by the company list and company count endpoints.
 const companyListInput = listInput.extend({
    ...companyFiltersSchema.shape,
    cursor: z.number().int().min(1).nullish(),
@@ -92,8 +92,9 @@ const viewInput = z.object({
 
 const companyUrl = z.string().trim().min(1).max(500)
 
-// The import of pasted links or a CSV (.plan/companies-import-csv.md), sent in batches. `read`: none, only the companies that
-// were new or archived, or all of them; any read in the last 30 days is skipped.
+// Import a batch of company links (pasted or from a CSV). `read` controls which of the imported companies get an
+// immediate paid profile read: none, only the ones that are newly added or were previously archived, or all of
+// them; a company read in the last 30 days is always skipped regardless of this setting.
 const importInput = z.object({
    companies: z
       .array(
@@ -136,6 +137,10 @@ export const linkedInCompany = router({
          }
       }),
 
+   // Imports a batch of company links (pasted or from a CSV) and adds them as companies the owner is tracking.
+   // `read` controls which imported companies get an immediate paid profile read: none, only the ones that are
+   // newly added or were previously archived, or all of them; a company read in the last 30 days is always
+   // skipped regardless of this setting.
    import: ownerProcedure.input(importInput).mutation(async ({ ctx, input }) => {
       const { slugs, fresh, ...saved } = await LinkedInCompanyService.importMany(
          ctx.user.id,

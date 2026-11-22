@@ -10,7 +10,8 @@ import { orConflict, present } from '../owned'
 
 const MISSING = 'Voice not found'
 
-// How the owner's words sound (.plan/lead-pipeline-p4-ai-drafts.md). Every procedure is scoped to ctx.user.id.
+// The owner's saved writing voices (tone and style presets used when AI drafts a comment or reply in their name).
+// Every procedure is scoped to ctx.user.id.
 export const voice = router({
    list: ownerProcedure.query(({ ctx }) => VoiceService.list(ctx.user.id)),
 

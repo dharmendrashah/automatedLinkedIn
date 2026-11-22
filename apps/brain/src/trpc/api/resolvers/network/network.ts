@@ -13,10 +13,10 @@ const id = z.string().min(1).max(100)
 const byAccounts = z.object({ accountIds: z.array(id).min(1).max(100) })
 const NOT_FOUND = 'Account not found'
 
-// "My network": the connection requests the owner's accounts received, and the two things the owner can ask (a read, and answers).
-// Every call is scoped to ctx.user.id, so a foreign account or request answers like a missing one
-// (.plan/my-network-invitations.md, .plan/my-network-all-accounts.md). Requests are named by brain's id; LinkedIn's own number never
-// leaves brain.
+// "My network": the connection requests received by the owner's LinkedIn accounts, and the two actions available
+// on them (reading the current list, and answering a request). Every call is scoped to ctx.user.id, so an account
+// or request id that belongs to someone else is answered as not found. Requests are addressed by brain's own id;
+// LinkedIn's own request number never leaves brain.
 export const network = router({
    // How many requests wait for each of the owner's accounts.
    waiting: ownerProcedure

@@ -9,8 +9,10 @@ import { ownerProcedure, router } from 'trpc'
 const kind = z.enum(DRAFT_KINDS)
 const ids = z.array(z.string().min(1).max(100)).min(1).max(50)
 
-// The inbox of words that wait for the owner (.plan/lead-pipeline-p4-ai-drafts.md). It only decides: approving never acts, the job
-// `approval-start` goes on with what was approved. Every procedure is scoped to ctx.user.id, so a foreign id is answered as a missing one.
+// AI-drafted comments and replies waiting for the owner's decision. Approving a draft only records the decision
+// here; it does not post or send anything by itself — a background job picks up approved drafts and acts on them
+// separately. Every procedure is scoped to ctx.user.id, so a draft id that belongs to someone else is answered as
+// not found.
 export const draft = router({
    list: ownerProcedure
       .input(

@@ -56,6 +56,19 @@ describe('userProcedure', () => {
       expect(mocks.provisionUser).not.toHaveBeenCalled()
    })
 
+   it('should use an API-key-resolved user with no auth, without provisioning', async () => {
+      const user = { id: 'u-key' }
+
+      await expect(
+         caller({
+            auth: null,
+            user: user as never,
+         }).whoAmI()
+      ).resolves.toBe(user)
+
+      expect(mocks.provisionUser).not.toHaveBeenCalled()
+   })
+
    it('should provision a user for a caller who has none', async () => {
       const user = { id: 'u2' }
 

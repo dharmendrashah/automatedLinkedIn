@@ -354,6 +354,9 @@ importers:
       '@automatedLinkedIn/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@automatedLinkedIn/trpc-openapi':
+        specifier: workspace:*
+        version: link:../../packages/trpc-openapi
       '@google-cloud/run':
         specifier: ^4.2.0
         version: 4.2.0(supports-color@5.5.0)
@@ -617,6 +620,31 @@ importers:
       '@automatedLinkedIn/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@automatedLinkedIn/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@automatedLinkedIn/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: ^26.6.4
+        version: 26.6.4
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@swc/core@1.16.13)(jiti@2.7.0)(postcss@8.5.29)(supports-color@10.2.2)(tsx@4.23.15)(typescript@7.0.2)(yaml@2.9.1)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
+  packages/trpc-openapi:
+    dependencies:
+      '@trpc/server':
+        specifier: ^11.19.0
+        version: 11.19.0(typescript@7.0.2)
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
       '@automatedLinkedIn/eslint-config':
         specifier: workspace:*
         version: link:../eslint-config

@@ -29,8 +29,8 @@ const orRefused = async <T>(work: Promise<T>) => {
    }
 }
 
-// The files of the posts the owner is writing: a signed form to post one file straight to the bucket, the check that keeps it, and a
-// ten minute link to read it (.plan/posting-file-uploads.md). Every call is scoped to ctx.user.id.
+// Files attached to a post the owner is writing: a signed form to upload one file straight to the storage bucket,
+// a check that confirms and keeps it, and a ten-minute link to read it back. Every call is scoped to ctx.user.id.
 export const postFile = router({
    form: ownerProcedure
       .input(file.extend({ bytes: z.number().int().min(1).max(MOST) }))

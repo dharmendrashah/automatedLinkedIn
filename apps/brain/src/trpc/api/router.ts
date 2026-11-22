@@ -8,6 +8,7 @@ import { createContext } from './context'
 import {
    acceptRisk,
    accountProfile,
+   apiKey,
    browse,
    campaign,
    companyPage,
@@ -47,6 +48,7 @@ export type AppRouter = typeof appRouter
 export const appRouter = router({
    me,
    acceptRisk,
+   apiKey,
    network,
    connections,
    accountProfile,

@@ -10,9 +10,10 @@ import { present } from '../owned'
 const id = z.string().min(1).max(100)
 const NOT_FOUND = 'Account or connection not found'
 
-// "Connections": the people one of the owner's accounts is connected to, and the two things the owner can ask (a read, and the removal of
-// one). Every call is scoped to ctx.user.id, so a foreign account or connection answers like a missing one (.plan/my-connections.md).
-// A connection is named by brain's id; the address of its profile goes to the spider only.
+// "Connections": the people one of the owner's LinkedIn accounts is already connected to, and the two actions
+// available on them (reading the current list, and removing a connection). Every call is scoped to ctx.user.id,
+// so an account or connection id that belongs to someone else is answered as not found. A connection is addressed
+// by brain's own id; the address of its LinkedIn profile is only ever sent to the spider.
 export const connections = router({
    // The connections of one account as the last read found them, with the state of a removal asked for and how the account stands;
    // light enough to ask every couple of seconds while a read or a removal goes on.

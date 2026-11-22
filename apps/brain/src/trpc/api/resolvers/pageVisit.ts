@@ -25,8 +25,8 @@ const NOUN = {
    COMPANY: 'company',
 } as const
 
-// Views a profile or a company page as one of the owner's accounts: waits a few seconds and scrolls the page
-// (.plan/visit-profile-task.md, .plan/visit-company-task.md). Every call is scoped to ctx.user.id.
+// Views a profile or a company page as one of the owner's LinkedIn accounts: opens the page, waits a few seconds
+// and scrolls it, the way a person browsing LinkedIn would. Every call is scoped to ctx.user.id.
 export const visitProcedure = (kind: keyof typeof NOUN) =>
    ownerProcedure.input(visitInput).mutation(async ({ ctx, input }) => {
       const saved = kind === 'PROFILE' ? { profileId: input.id ?? '' } : { companyId: input.id ?? '' }

@@ -9,6 +9,7 @@ import { useAuth } from 'react-oidc-context'
 
 import { authConfig } from '../auth/authConfig'
 import { toProfile } from '../auth/profile'
+import { ApiKeysCard } from '../components/api-keys/api-keys-card'
 import { trpc } from '../trpc'
 
 const Row = ({ label, children }: { label: string; children: ReactNode }) => (
@@ -111,6 +112,8 @@ export const Profile = () => {
                ) : null}
             </CardContent>
          </Card>
+
+         <ApiKeysCard />
       </div>
    )
 }

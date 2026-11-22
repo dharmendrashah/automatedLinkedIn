@@ -126,7 +126,8 @@ export const session = router({
       }
    }),
 
-   // New runs and finished ones for an open Sessions page, every few seconds (.plan/sessions-page.md).
+   // New and finished spider sessions since `since`, for an open Sessions page to poll every few seconds instead
+   // of re-fetching the whole list.
    changes: ownerProcedure.input(changesInput).query(async ({ ctx, input }) => {
       const { since, watch, ...filters } = input
 
